@@ -71,7 +71,7 @@ export class PublisherClient {
   status(): PublisherStatus {
     return {
       mode: this.config.mode,
-      queueSize: this.data.items.filter((item) => item.state !== "SENT").length,
+      queueSize: this.data.items.filter((item) => !isDeliveredState(item.state)).length,
       deadLetterSize: this.data.items.filter((item) => item.state === "DEAD_LETTER").length,
       publishingEnabled: this.data.publishingEnabled,
       lastSuccessAt: this.data.lastSuccessAt,
@@ -199,6 +199,21 @@ export class PublisherClient {
     return candidates.length;
   }
 
+  async retryDueQueue(now: Date = new Date()): Promise<number> {
+    const candidates = this.data.items.filter((item) => {
+      if (item.state !== "PENDING" && item.state !== "RETRY_SCHEDULED") {
+        return false;
+      }
+      return !item.nextAttemptAt || new Date(item.nextAttemptAt).getTime() <= now.getTime();
+    });
+
+    for (const item of candidates) {
+      await this.processItem(item.queueId);
+    }
+
+    return candidates.length;
+  }
+
   async testConnection(): Promise<{ ok: boolean; mode: PublisherMode; latencyMs: number }> {
     const start = performance.now();
     if (this.config.mode === "LIVE" && !this.config.mainCopBaseUrl) {
@@ -258,6 +273,10 @@ function backoffMs(attempts: number): number {
   const base = Math.min(60_000, 1000 * 2 ** attempts);
   const jitter = Math.round(base * 0.1);
   return base + jitter;
+}
+
+function isDeliveredState(state: QueueState): boolean {
+  return state === "SENT" || state === "DRY_RUN_VALIDATED";
 }
 
 async function mockCopResponse(event: CanonicalEventEnvelope): Promise<unknown> {

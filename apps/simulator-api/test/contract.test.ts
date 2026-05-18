@@ -68,10 +68,14 @@ describe("SIM API contract baseline", () => {
     expect(runtime.body.generatedEvents).toBeGreaterThan(0);
     expect(runtime.body.tick).toBe(0);
     expect(runtime.body.activeObjects).toBe(2);
+    expect(runtime.body.queuedEvents).toBe(0);
 
     const queue = await request(app).get("/api/v1/publisher/queue").expect(200);
     expect(queue.body.items[0].state).toBe("DRY_RUN_VALIDATED");
     expect(queue.body.items[0].event.classification.handlingCaveats).toContain("SYNTHETIC");
+
+    const publisher = await request(app).get("/api/v1/runtime/publisher").expect(200);
+    expect(publisher.body.queueSize).toBe(0);
   });
 
   it("scopes published event counts to the active runtime", async () => {
@@ -94,6 +98,8 @@ describe("SIM API contract baseline", () => {
   it("recovers a running runtime after API restart", async () => {
     const created = await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(201);
     await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({}).expect(200);
+    context.store.data.runtime.publishedEvents = 999;
+    await context.store.save();
     context.runtimeRunner.dispose();
 
     ({ app, context } = await createApp(config));

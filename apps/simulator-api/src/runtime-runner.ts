@@ -33,6 +33,7 @@ export class RuntimeRunner {
   ) {}
 
   async recover(): Promise<void> {
+    this.normalizeRuntimeCounters();
     const status = this.currentStatus();
     this.speedMultiplier = status.speedMultiplier ?? this.speedMultiplier;
     this.tickIntervalSeconds = status.tickIntervalSeconds ?? this.tickIntervalSeconds;
@@ -202,6 +203,7 @@ export class RuntimeRunner {
 
     try {
       this.inFlight = true;
+      await this.publisher.retryDueQueue();
       await this.publishTick(scenario, nextTick);
       await this.store.save();
     } catch {
@@ -267,6 +269,19 @@ export class RuntimeRunner {
       if (scenario.scenarioId !== activeScenario.scenarioId && (scenario.status === "RUNNING" || scenario.status === "PAUSED")) {
         scenario.status = "STOPPED";
       }
+    }
+  }
+
+  private normalizeRuntimeCounters(): void {
+    const status = this.currentStatus();
+    const generatedEvents = Math.max(0, status.generatedEvents ?? 0);
+    const publishedEvents = Math.max(0, Math.min(status.publishedEvents ?? 0, generatedEvents));
+    if (generatedEvents !== status.generatedEvents || publishedEvents !== status.publishedEvents) {
+      this.store.data.runtime = {
+        ...status,
+        generatedEvents,
+        publishedEvents
+      };
     }
   }
 
