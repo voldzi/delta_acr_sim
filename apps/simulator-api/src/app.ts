@@ -38,6 +38,7 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
 
   const validators = createValidators(config.schemaDir);
   const runtimeRunner = new RuntimeRunner(config, store, publisher);
+  await runtimeRunner.recover();
   const context: AppContext = { config, store, publisher, runtimeRunner, validators };
   const app = express();
   app.locals.runtimeRunner = runtimeRunner;
@@ -157,7 +158,6 @@ function registerRuntimeRoutes(app: Express, context: AppContext): void {
   app.get("/api/v1/runtime/status", (_req, res) => {
     res.json({
       ...context.store.data.runtime,
-      publishedEvents: countDelivered(context),
       queuedEvents: context.publisher.status().queueSize
     });
   });
@@ -166,7 +166,7 @@ function registerRuntimeRoutes(app: Express, context: AppContext): void {
     const publisherStatus = context.publisher.status();
     res.json({
       generatedEvents: context.store.data.runtime.generatedEvents,
-      publishedEvents: countDelivered(context),
+      publishedEvents: context.store.data.runtime.publishedEvents,
       failedEvents: publisherStatus.deadLetterSize,
       publisherQueueSize: publisherStatus.queueSize,
       activeScenarioRuntime: context.store.data.runtime.state === "RUNNING" ? 1 : 0,
@@ -422,8 +422,4 @@ function registerMockCopRoutes(app: Express, context: AppContext): void {
 
 function findScenario(context: AppContext, scenarioId: string | undefined): Scenario | undefined {
   return context.store.data.scenarios.find((scenario) => scenario.scenarioId === scenarioId);
-}
-
-function countDelivered(context: AppContext): number {
-  return context.publisher.listQueue().filter((item) => item.state === "SENT" || item.state === "DRY_RUN_VALIDATED").length;
 }

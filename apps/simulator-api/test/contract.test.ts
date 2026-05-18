@@ -32,10 +32,11 @@ describe("SIM API contract baseline", () => {
   let dataDir: string;
   let app: Awaited<ReturnType<typeof createApp>>["app"];
   let context: Awaited<ReturnType<typeof createApp>>["context"];
+  let config: ApiConfig;
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "delta-acr-sim-"));
-    const config: ApiConfig = {
+    config = {
       port: 0,
       dataDir,
       schemaDir: resolve("../../docs/api/schemas"),
@@ -71,6 +72,37 @@ describe("SIM API contract baseline", () => {
     const queue = await request(app).get("/api/v1/publisher/queue").expect(200);
     expect(queue.body.items[0].state).toBe("DRY_RUN_VALIDATED");
     expect(queue.body.items[0].event.classification.handlingCaveats).toContain("SYNTHETIC");
+  });
+
+  it("scopes published event counts to the active runtime", async () => {
+    const [sample] = generateScenarioEvents(
+      { ...scenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000001" },
+      { sourceSystemId: "sim-air-situation-001", adapterVersion: "0.1.0" }
+    );
+    await request(app).post("/api/v1/publisher/send-sample").send(sample).expect(200);
+
+    const created = await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(201);
+    const runtime = await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({}).expect(200);
+
+    expect(runtime.body.generatedEvents).toBe(2);
+    expect(runtime.body.publishedEvents).toBe(2);
+
+    const status = await request(app).get("/api/v1/runtime/status").expect(200);
+    expect(status.body.publishedEvents).toBe(2);
+  });
+
+  it("recovers a running runtime after API restart", async () => {
+    const created = await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(201);
+    await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({}).expect(200);
+    context.runtimeRunner.dispose();
+
+    ({ app, context } = await createApp(config));
+    const status = await request(app).get("/api/v1/runtime/status").expect(200);
+
+    expect(status.body.state).toBe("RUNNING");
+    expect(status.body.scenarioId).toBe(created.body.scenarioId);
+    expect(status.body.generatedEvents).toBe(2);
+    expect(status.body.publishedEvents).toBe(2);
   });
 
   it("generates stable moving tracks across ticks", () => {

@@ -32,12 +32,40 @@ export class RuntimeRunner {
     private readonly publisher: PublisherClient
   ) {}
 
+  async recover(): Promise<void> {
+    const status = this.currentStatus();
+    this.speedMultiplier = status.speedMultiplier ?? this.speedMultiplier;
+    this.tickIntervalSeconds = status.tickIntervalSeconds ?? this.tickIntervalSeconds;
+
+    if (status.state !== "RUNNING" && status.state !== "PAUSED") {
+      return;
+    }
+
+    const scenario = this.findRuntimeScenario();
+    if (!scenario) {
+      this.store.data.runtime = {
+        ...status,
+        state: "ERROR",
+        completedAt: new Date().toISOString()
+      };
+      await this.store.save();
+      return;
+    }
+
+    scenario.status = status.state;
+    if (status.state === "RUNNING") {
+      this.schedule(scenario.scenarioId);
+    }
+    await this.store.save();
+  }
+
   async start(scenario: Scenario, options: RuntimeStartOptions = {}): Promise<ExtendedRuntimeStatus> {
     this.clearTimer();
     this.speedMultiplier = clamp(Number(options.speedMultiplier ?? 1), 0.1, 20);
     this.tickIntervalSeconds = clamp(Number(options.tickIntervalSeconds ?? 1), 0.25, 10);
 
     const startedAt = new Date().toISOString();
+    this.stopOtherScenarios(scenario);
     scenario.status = "RUNNING";
     this.store.data.runtime = {
       scenarioId: scenario.scenarioId,
@@ -45,7 +73,7 @@ export class RuntimeRunner {
       state: "RUNNING",
       startedAt,
       generatedEvents: 0,
-      publishedEvents: this.countDelivered(),
+      publishedEvents: 0,
       queuedEvents: this.publisher.status().queueSize,
       tick: 0,
       elapsedSeconds: 0,
@@ -75,7 +103,6 @@ export class RuntimeRunner {
       ...this.currentStatus(),
       scenarioId: scenario.scenarioId,
       state: "PAUSED",
-      publishedEvents: this.countDelivered(),
       queuedEvents: this.publisher.status().queueSize
     };
     await this.store.save();
@@ -91,7 +118,6 @@ export class RuntimeRunner {
       ...status,
       scenarioId: scenario.scenarioId,
       state: "RUNNING",
-      publishedEvents: this.countDelivered(),
       queuedEvents: this.publisher.status().queueSize
     };
     this.schedule(scenario.scenarioId);
@@ -106,7 +132,6 @@ export class RuntimeRunner {
       ...this.currentStatus(),
       scenarioId: scenario.scenarioId,
       state: "STOPPED",
-      publishedEvents: this.countDelivered(),
       queuedEvents: this.publisher.status().queueSize,
       completedAt: new Date().toISOString()
     };
@@ -122,7 +147,7 @@ export class RuntimeRunner {
       runtimeId: randomUUID(),
       state: "READY",
       generatedEvents: 0,
-      publishedEvents: this.countDelivered(),
+      publishedEvents: 0,
       queuedEvents: this.publisher.status().queueSize,
       tick: 0,
       elapsedSeconds: 0,
@@ -157,6 +182,13 @@ export class RuntimeRunner {
     const scenario = this.store.data.scenarios.find((item) => item.scenarioId === scenarioId);
     if (!scenario) {
       this.clearTimer();
+      this.store.data.runtime = {
+        ...this.currentStatus(),
+        scenarioId,
+        state: "ERROR",
+        completedAt: new Date().toISOString()
+      };
+      await this.store.save();
       return;
     }
 
@@ -179,7 +211,6 @@ export class RuntimeRunner {
         ...this.currentStatus(),
         scenarioId,
         state: "ERROR",
-        publishedEvents: this.countDelivered(),
         queuedEvents: this.publisher.status().queueSize
       };
       await this.store.save();
@@ -199,8 +230,12 @@ export class RuntimeRunner {
       speedMultiplier: this.speedMultiplier
     });
 
+    let deliveredEvents = 0;
     for (const event of events) {
-      await this.publisher.publishEvent(event);
+      const item = await this.publisher.publishEvent(event);
+      if (item.state === "SENT" || item.state === "DRY_RUN_VALIDATED") {
+        deliveredEvents += 1;
+      }
     }
 
     this.store.data.runtime = {
@@ -208,7 +243,7 @@ export class RuntimeRunner {
       scenarioId: scenario.scenarioId,
       state: scenario.status ?? "RUNNING",
       generatedEvents: this.currentStatus().generatedEvents + events.length,
-      publishedEvents: this.countDelivered(),
+      publishedEvents: this.currentStatus().publishedEvents + deliveredEvents,
       queuedEvents: this.publisher.status().queueSize,
       tick,
       elapsedSeconds: Math.round(elapsedSeconds * this.speedMultiplier),
@@ -223,8 +258,16 @@ export class RuntimeRunner {
     return this.store.data.runtime as ExtendedRuntimeStatus;
   }
 
-  private countDelivered(): number {
-    return this.publisher.listQueue().filter((item) => item.state === "SENT" || item.state === "DRY_RUN_VALIDATED").length;
+  private findRuntimeScenario(): Scenario | undefined {
+    return this.store.data.scenarios.find((scenario) => scenario.scenarioId === this.currentStatus().scenarioId);
+  }
+
+  private stopOtherScenarios(activeScenario: Scenario): void {
+    for (const scenario of this.store.data.scenarios) {
+      if (scenario.scenarioId !== activeScenario.scenarioId && (scenario.status === "RUNNING" || scenario.status === "PAUSED")) {
+        scenario.status = "STOPPED";
+      }
+    }
   }
 
   private clearTimer(): void {
