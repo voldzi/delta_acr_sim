@@ -31,6 +31,7 @@ const scenarioPayload = {
 describe("SIM API contract baseline", () => {
   let dataDir: string;
   let app: Awaited<ReturnType<typeof createApp>>["app"];
+  let context: Awaited<ReturnType<typeof createApp>>["context"];
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "delta-acr-sim-"));
@@ -44,10 +45,11 @@ describe("SIM API contract baseline", () => {
       mainCopBaseUrl: "http://localhost/mock-cop",
       externalAiAllowed: false
     };
-    ({ app } = await createApp(config));
+    ({ app, context } = await createApp(config));
   });
 
   afterEach(async () => {
+    context.runtimeRunner.dispose();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -63,10 +65,34 @@ describe("SIM API contract baseline", () => {
     const runtime = await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({ dryRun: true }).expect(200);
     expect(runtime.body.state).toBe("RUNNING");
     expect(runtime.body.generatedEvents).toBeGreaterThan(0);
+    expect(runtime.body.tick).toBe(0);
+    expect(runtime.body.activeObjects).toBe(2);
 
     const queue = await request(app).get("/api/v1/publisher/queue").expect(200);
     expect(queue.body.items[0].state).toBe("DRY_RUN_VALIDATED");
     expect(queue.body.items[0].event.classification.handlingCaveats).toContain("SYNTHETIC");
+  });
+
+  it("generates stable moving tracks across ticks", () => {
+    const scenario = { ...scenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000001" };
+    const [created] = generateScenarioEvents(scenario, {
+      sourceSystemId: "sim-air-situation-001",
+      adapterVersion: "0.1.0",
+      tick: 0,
+      elapsedSeconds: 0
+    });
+    const [updated] = generateScenarioEvents(scenario, {
+      sourceSystemId: "sim-air-situation-001",
+      adapterVersion: "0.1.0",
+      tick: 1,
+      elapsedSeconds: 1
+    });
+
+    expect(created.eventType).toBe("track.created");
+    expect(updated.eventType).toBe("track.updated");
+    expect(updated.payload.objectId).toBe(created.payload.objectId);
+    expect(updated.geo?.lat).not.toBe(created.geo?.lat);
+    expect(updated.geo?.lon).not.toBe(created.geo?.lon);
   });
 
   it("rejects a canonical event without synthetic marking", async () => {

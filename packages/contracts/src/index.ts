@@ -143,6 +143,13 @@ export interface RuntimeStatus {
   generatedEvents: number;
   publishedEvents: number;
   queuedEvents: number;
+  tick?: number;
+  elapsedSeconds?: number;
+  speedMultiplier?: number;
+  tickIntervalSeconds?: number;
+  activeObjects?: number;
+  lastTickAt?: string;
+  completedAt?: string;
 }
 
 export interface AiScenarioDraft {

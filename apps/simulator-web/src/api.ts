@@ -19,8 +19,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const demoScenario: Scenario = {
-  name: "Air Situation Basic",
-  description: "Synthetic aircraft, UAV and missile-track events for COP ingest validation.",
+  name: "Moving COP Tracks Demo",
+  description: "Synthetic moving aircraft, UAV and missile-track events for COP display validation.",
   area: {
     type: "BBOX",
     bbox: [14.0, 49.8, 15.0, 50.3]
@@ -28,9 +28,9 @@ export const demoScenario: Scenario = {
   durationSeconds: 900,
   seed: 123456,
   blocks: [
-    { blockId: "air-sim-aircraft", enabled: true, objectCount: 20, updateRateHz: 1, patterns: ["DIRECT", "PATROL"] },
-    { blockId: "air-sim-uav", enabled: true, objectCount: 50, updateRateHz: 1, patterns: ["LOITER", "SURVEY"] },
-    { blockId: "air-sim-missile", enabled: true, objectCount: 5, updateRateHz: 1, patterns: ["SHORT_LIVED_TRACK"] }
+    { blockId: "air-sim-aircraft", enabled: true, objectCount: 4, updateRateHz: 1, patterns: ["DIRECT", "PATROL"] },
+    { blockId: "air-sim-uav", enabled: true, objectCount: 3, updateRateHz: 1, patterns: ["LOITER", "SURVEY"] },
+    { blockId: "air-sim-missile", enabled: true, objectCount: 1, updateRateHz: 1, patterns: ["SHORT_LIVED_TRACK"] }
   ],
   faults: []
 };
@@ -55,10 +55,14 @@ export async function createScenario(payload: Scenario) {
   });
 }
 
-export async function runtimeAction(scenarioId: string, action: "start" | "pause" | "resume" | "stop" | "reset" | "step") {
+export async function runtimeAction(
+  scenarioId: string,
+  action: "start" | "pause" | "resume" | "stop" | "reset" | "step",
+  payload: Record<string, unknown> = {}
+) {
   return api<RuntimeStatus>(`/api/v1/scenarios/${scenarioId}/${action}`, {
     method: "POST",
-    body: JSON.stringify({ dryRun: true, reason: "UI pilot action" })
+    body: JSON.stringify({ reason: "UI pilot action", ...payload })
   });
 }
 

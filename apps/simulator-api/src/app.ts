@@ -1,13 +1,14 @@
 import { aiProviders, createMockScenarioDraft, type AiDraftRequest } from "@delta-acr/ai-assistant";
 import { CONTRACT_VERSION, type CanonicalEventEnvelope, type FaultInjection, type Scenario } from "@delta-acr/contracts";
 import { PublisherClient } from "@delta-acr/publisher-client";
-import { availableBlocks, generateScenarioEvents } from "@delta-acr/simulation-core";
+import { availableBlocks } from "@delta-acr/simulation-core";
 import cors from "cors";
 import express, { type Express } from "express";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ApiConfig } from "./config.js";
 import { problem } from "./http.js";
+import { RuntimeRunner } from "./runtime-runner.js";
 import { JsonStore } from "./store.js";
 import { createValidators, type Validators } from "./validation.js";
 
@@ -15,6 +16,7 @@ export interface AppContext {
   config: ApiConfig;
   store: JsonStore;
   publisher: PublisherClient;
+  runtimeRunner: RuntimeRunner;
   validators: Validators;
 }
 
@@ -35,8 +37,10 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
   await publisher.load();
 
   const validators = createValidators(config.schemaDir);
-  const context: AppContext = { config, store, publisher, validators };
+  const runtimeRunner = new RuntimeRunner(config, store, publisher);
+  const context: AppContext = { config, store, publisher, runtimeRunner, validators };
   const app = express();
+  app.locals.runtimeRunner = runtimeRunner;
 
   app.use(cors());
   app.use(express.json({ limit: "2mb" }));
@@ -126,26 +130,8 @@ function registerRuntimeRoutes(app: Express, context: AppContext): void {
     if (!scenario) {
       return problem(req, res, 404, "NOT_FOUND", "Scenario not found.");
     }
-    const events = generateScenarioEvents(scenario, {
-      sourceSystemId: context.config.sourceSystemId,
-      adapterVersion: context.config.adapterVersion,
-      tick: 0
-    });
-    for (const event of events) {
-      await context.publisher.publishEvent(event);
-    }
-    scenario.status = "RUNNING";
-    context.store.data.runtime = {
-      scenarioId: scenario.scenarioId,
-      runtimeId: randomUUID(),
-      state: "RUNNING",
-      startedAt: new Date().toISOString(),
-      generatedEvents: events.length,
-      publishedEvents: countDelivered(context),
-      queuedEvents: context.publisher.status().queueSize
-    };
-    await context.store.save();
-    res.json(context.store.data.runtime);
+    const runtime = await context.runtimeRunner.start(scenario, req.body);
+    res.json(runtime);
   });
 
   app.post("/api/v1/scenarios/:scenarioId/step", async (req, res) => {
@@ -153,25 +139,8 @@ function registerRuntimeRoutes(app: Express, context: AppContext): void {
     if (!scenario) {
       return problem(req, res, 404, "NOT_FOUND", "Scenario not found.");
     }
-    const tick = context.store.data.runtime.generatedEvents + 1;
-    const events = generateScenarioEvents(scenario, {
-      sourceSystemId: context.config.sourceSystemId,
-      adapterVersion: context.config.adapterVersion,
-      tick
-    });
-    for (const event of events) {
-      await context.publisher.publishEvent(event);
-    }
-    context.store.data.runtime = {
-      ...context.store.data.runtime,
-      scenarioId: scenario.scenarioId,
-      state: scenario.status ?? "RUNNING",
-      generatedEvents: context.store.data.runtime.generatedEvents + events.length,
-      publishedEvents: countDelivered(context),
-      queuedEvents: context.publisher.status().queueSize
-    };
-    await context.store.save();
-    res.json(context.store.data.runtime);
+    const runtime = await context.runtimeRunner.step(scenario);
+    res.json(runtime);
   });
 
   for (const action of ["pause", "resume", "stop", "reset"] as const) {
@@ -180,22 +149,8 @@ function registerRuntimeRoutes(app: Express, context: AppContext): void {
       if (!scenario) {
         return problem(req, res, 404, "NOT_FOUND", "Scenario not found.");
       }
-      const stateByAction = {
-        pause: "PAUSED",
-        resume: "RUNNING",
-        stop: "STOPPED",
-        reset: "READY"
-      } as const;
-      scenario.status = stateByAction[action];
-      context.store.data.runtime = {
-        ...context.store.data.runtime,
-        scenarioId: scenario.scenarioId,
-        state: stateByAction[action],
-        publishedEvents: countDelivered(context),
-        queuedEvents: context.publisher.status().queueSize
-      };
-      await context.store.save();
-      res.json(context.store.data.runtime);
+      const runtime = await context.runtimeRunner[action](scenario);
+      res.json(runtime);
     });
   }
 

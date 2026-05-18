@@ -65,18 +65,22 @@ export function App() {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
   const [aiPrompt, setAiPrompt] = useState("Create a 15 minute synthetic air situation latency test with aircraft, UAV and missile tracks.");
   const [draft, setDraft] = useState<AiDraft | null>(null);
-  const [notice, setNotice] = useState<string>("Ready in dry-run mode.");
+  const [notice, setNotice] = useState<string>("Ready for continuous synthetic movement.");
   const [loading, setLoading] = useState(false);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
 
   const selectedScenario = useMemo(
     () => data.scenarios.find((scenario) => scenario.scenarioId === selectedScenarioId) ?? data.scenarios[0],
     [data.scenarios, selectedScenarioId]
   );
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (preferredScenarioId?: string) => {
     const next = await loadDashboard();
     setData(next);
-    if (!selectedScenarioId && next.scenarios[0]?.scenarioId) {
+    const nextSelection = preferredScenarioId || selectedScenarioId || next.runtime.scenarioId;
+    if (nextSelection && next.scenarios.some((scenario) => scenario.scenarioId === nextSelection)) {
+      setSelectedScenarioId(nextSelection);
+    } else if (next.scenarios[0]?.scenarioId) {
       setSelectedScenarioId(next.scenarios[0].scenarioId);
     }
   }, [selectedScenarioId]);
@@ -92,9 +96,9 @@ export function App() {
   async function runAction<T>(message: string, action: () => Promise<T>) {
     setLoading(true);
     try {
-      await action();
+      const result = await action();
       setNotice(message);
-      await refresh();
+      await refresh(typeof result === "string" ? result : undefined);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Operation failed.");
     } finally {
@@ -103,7 +107,10 @@ export function App() {
   }
 
   const totalObjects = selectedScenario?.blocks.reduce((sum, block) => sum + (block.enabled ? block.objectCount : 0), 0) ?? 0;
-  const syntheticQueueCount = data.queue.filter((item) => item.event.classification.handlingCaveats.includes("SYNTHETIC")).length;
+  const displayedBlocks = selectedScenario?.blocks ?? data.blocks;
+  const simulationClock = formatDuration(data.runtime.elapsedSeconds ?? 0);
+  const isRunning = data.runtime.state === "RUNNING";
+  const effectiveSpeedMultiplier = isRunning ? (data.runtime.speedMultiplier ?? speedMultiplier) : speedMultiplier;
 
   return (
     <main className="app-shell">
@@ -155,8 +162,8 @@ export function App() {
         <section id="dashboard" className="metrics-grid" aria-label="Runtime metrics">
           <Metric icon={<Activity />} label="Generated events" value={data.runtime.generatedEvents} />
           <Metric icon={<RadioTower />} label="Published / validated" value={data.runtime.publishedEvents} />
-          <Metric icon={<Database />} label="Publisher queue" value={data.publisher.queueSize} />
-          <Metric icon={<ShieldCheck />} label="Synthetic queued" value={syntheticQueueCount} />
+          <Metric icon={<Database />} label="Active tracks" value={data.runtime.activeObjects ?? totalObjects} />
+          <Metric icon={<ShieldCheck />} label="Simulation time" value={simulationClock} />
         </section>
 
         <section className="main-grid">
@@ -178,6 +185,7 @@ export function App() {
                   runAction("Demo scenario created.", async () => {
                     const created = await createScenario(demoScenario);
                     setSelectedScenarioId(created.scenarioId);
+                    return created.scenarioId;
                   })
                 }
                 disabled={loading}
@@ -204,26 +212,69 @@ export function App() {
                   <span>Seed</span>
                   <strong>{selectedScenario.seed}</strong>
                 </div>
+                <div>
+                  <span>Tick</span>
+                  <strong>{data.runtime.tick ?? 0}</strong>
+                </div>
+                <div>
+                  <span>Speed</span>
+                  <strong>{effectiveSpeedMultiplier}x</strong>
+                </div>
+                <div>
+                  <span>Update</span>
+                  <strong>{data.runtime.tickIntervalSeconds ?? 1}s</strong>
+                </div>
+                <div>
+                  <span>Last tick</span>
+                  <strong>{formatTime(data.runtime.lastTickAt)}</strong>
+                </div>
               </div>
             ) : (
               <div className="empty-state">Create the demo scenario to start the pilot runtime.</div>
             )}
 
+            <div className="runtime-options" aria-label="Runtime speed">
+              <span>Runtime speed</span>
+              <div className="segmented">
+                {[1, 5, 10].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={effectiveSpeedMultiplier === value ? "selected" : ""}
+                    disabled={isRunning}
+                    onClick={() => setSpeedMultiplier(value)}
+                  >
+                    {value}x
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="button-strip">
-              <ActionButton icon={<Play />} label="Start" disabled={!selectedScenario || loading} onClick={() => selectedScenario?.scenarioId && runAction("Scenario started in dry-run mode.", () => runtimeAction(selectedScenario.scenarioId!, "start"))} />
+              <ActionButton
+                icon={<Play />}
+                label="Start"
+                disabled={!selectedScenario || loading}
+                onClick={() =>
+                  selectedScenario?.scenarioId &&
+                  runAction("Scenario started. Moving tracks are published every second.", () =>
+                    runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
+                  )
+                }
+              />
               <ActionButton icon={<Pause />} label="Pause" disabled={!selectedScenario || loading} onClick={() => selectedScenario?.scenarioId && runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))} />
               <ActionButton icon={<Play />} label="Resume" disabled={!selectedScenario || loading} onClick={() => selectedScenario?.scenarioId && runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))} />
               <ActionButton icon={<Square />} label="Stop" disabled={!selectedScenario || loading} onClick={() => selectedScenario?.scenarioId && runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))} />
-              <ActionButton icon={<RotateCcw />} label="Step" disabled={!selectedScenario || loading} onClick={() => selectedScenario?.scenarioId && runAction("One deterministic step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))} />
+              <ActionButton icon={<RotateCcw />} label="Step" disabled={!selectedScenario || loading || isRunning} onClick={() => selectedScenario?.scenarioId && runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))} />
               <ActionButton icon={<Zap />} label="Fault" disabled={!selectedScenario || loading} onClick={() => selectedScenario?.scenarioId && runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))} />
             </div>
 
             <div className="block-list">
-              {data.blocks.map((block) => (
+              {displayedBlocks.map((block) => (
                 <div key={block.blockId} className="block-row">
                   <span>{block.blockId}</span>
                   <strong>{block.objectCount} objects</strong>
-                  <em>{block.updateRateHz} Hz</em>
+                  <em>{block.patterns?.join(", ") ?? "DIRECT"}</em>
                 </div>
               ))}
             </div>
@@ -304,12 +355,12 @@ export function App() {
   );
 }
 
-function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number | string }) {
   return (
     <div className="metric">
       <div className="metric-icon">{icon}</div>
       <span>{label}</span>
-      <strong>{value.toLocaleString("cs-CZ")}</strong>
+      <strong>{typeof value === "number" ? value.toLocaleString("cs-CZ") : value}</strong>
     </div>
   );
 }
@@ -336,4 +387,22 @@ function ActionButton({ icon, label, disabled, onClick }: { icon: ReactNode; lab
       {icon} {label}
     </button>
   );
+}
+
+function formatDuration(value: number): string {
+  const totalSeconds = Math.max(0, Math.round(value));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatTime(value: string | undefined): string {
+  if (!value) {
+    return "-";
+  }
+  return new Intl.DateTimeFormat("cs-CZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date(value));
 }

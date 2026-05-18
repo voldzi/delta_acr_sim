@@ -318,6 +318,50 @@ button svg {
   margin-bottom: 14px;
 }
 
+.runtime-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfb;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.runtime-options span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.segmented {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 48px);
+  border: 1px solid #c8d7d4;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.segmented button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.segmented button + button {
+  border-left: 1px solid #d8e3e1;
+}
+
+.segmented button.selected {
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .button-strip.compact {
   margin: 14px 0;
 }
@@ -470,8 +514,19 @@ button svg {
   }
 
   .control-row,
+  .runtime-options,
   .block-row,
   .provider-row {
     grid-template-columns: 1fr;
+  }
+
+  .runtime-options {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .segmented {
+    width: 100%;
+    grid-template-columns: repeat(3, 1fr);
   }
 }
