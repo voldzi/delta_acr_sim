@@ -26,6 +26,10 @@ Výchozí port web/API gateway je `5020`:
 http://localhost:5020
 ```
 
+## Pilot na docker.home.cz
+
+Deployment poznámky jsou v [deploy/docker-home.md](deploy/docker-home.md). Cílový port je `5020` a výchozí publisher režim je `DRY_RUN`.
+
 ## Bezpečnostní hranice
 
 - Všechna generovaná data jsou syntetická.
