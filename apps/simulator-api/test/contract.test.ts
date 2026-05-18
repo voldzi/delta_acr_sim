@@ -71,8 +71,14 @@ describe("SIM API contract baseline", () => {
     expect(runtime.body.queuedEvents).toBe(0);
 
     const queue = await request(app).get("/api/v1/publisher/queue").expect(200);
+    expect(queue.body.totalCount).toBe(2);
+    expect(queue.body.limit).toBe(50);
     expect(queue.body.items[0].state).toBe("DRY_RUN_VALIDATED");
     expect(queue.body.items[0].event.classification.handlingCaveats).toContain("SYNTHETIC");
+
+    const limitedQueue = await request(app).get("/api/v1/publisher/queue?limit=1").expect(200);
+    expect(limitedQueue.body.totalCount).toBe(2);
+    expect(limitedQueue.body.items).toHaveLength(1);
 
     const publisher = await request(app).get("/api/v1/runtime/publisher").expect(200);
     expect(publisher.body.queueSize).toBe(0);

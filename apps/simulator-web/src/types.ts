@@ -59,11 +59,21 @@ export interface QueueItem {
   eventId: string;
   state: string;
   attempts: number;
+  createdAt?: string;
   updatedAt: string;
+  lastError?: string;
   event: {
     eventType: string;
     classification: { handlingCaveats: string[] };
-    payload: { objectId: string; objectType: string; status: string };
+    geo?: { lat?: number; lon?: number; altitudeM?: number; accuracyM?: number };
+    payload: {
+      objectId: string;
+      objectType: string;
+      affiliation?: string;
+      status: string;
+      speedMps?: number;
+      headingDeg?: number;
+    };
     simulation: { synthetic: boolean; blockId: string };
   };
 }

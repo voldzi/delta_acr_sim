@@ -61,12 +61,20 @@ export async function loadDashboard() {
     api<{ items: Scenario[] }>("/api/v1/scenarios"),
     api<RuntimeStatus>("/api/v1/runtime/status"),
     api<PublisherStatus>("/api/v1/runtime/publisher"),
-    api<{ items: QueueItem[] }>("/api/v1/publisher/queue"),
+    api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20"),
     api<{ blocks: ScenarioBlock[] }>("/api/v1/runtime/blocks"),
     api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers")
   ]);
 
-  return { scenarios: scenarios.items, runtime, publisher, queue: queue.items, blocks: blocks.blocks, providers: providers.providers };
+  return {
+    scenarios: scenarios.items,
+    runtime,
+    publisher,
+    queue: queue.items,
+    queueTotalCount: queue.totalCount ?? queue.items.length,
+    blocks: blocks.blocks,
+    providers: providers.providers
+  };
 }
 
 export async function createScenario(payload: Scenario) {

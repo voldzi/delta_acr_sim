@@ -248,8 +248,10 @@ function registerPublisherRoutes(app: Express, context: AppContext): void {
     }
   });
 
-  app.get("/api/v1/publisher/queue", (_req, res) => {
-    res.json({ items: context.publisher.listQueue() });
+  app.get("/api/v1/publisher/queue", (req, res) => {
+    const queue = context.publisher.listQueue();
+    const limit = parseQueryInteger(req.query.limit, 50, 100);
+    res.json({ items: queue.slice(0, limit), totalCount: queue.length, limit });
   });
 
   app.post("/api/v1/publisher/queue/retry", async (req, res) => {
@@ -422,4 +424,16 @@ function registerMockCopRoutes(app: Express, context: AppContext): void {
 
 function findScenario(context: AppContext, scenarioId: string | undefined): Scenario | undefined {
   return context.store.data.scenarios.find((scenario) => scenario.scenarioId === scenarioId);
+}
+
+function parseQueryInteger(value: unknown, fallback: number, max: number): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(1, Math.trunc(parsed)));
 }
