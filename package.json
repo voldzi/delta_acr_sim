@@ -1,0 +1,23 @@
+{
+  "name": "delta-acr-sim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "COP Air & Situation Simulator - standalone synthetic data simulator.",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @delta-acr/simulator-api --filter @delta-acr/simulator-web dev",
+    "dev:api": "pnpm --filter @delta-acr/simulator-api dev",
+    "dev:web": "pnpm --filter @delta-acr/simulator-web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r --filter './packages/**' build && pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:contract": "pnpm --filter @delta-acr/simulator-api test",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  }
+}

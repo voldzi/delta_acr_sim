@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/sim/ai-scenario-draft.schema.json",
+  "title": "AI Scenario Draft",
+  "type": "object",
+  "required": [
+    "draftId",
+    "title",
+    "purpose",
+    "safetyScope",
+    "scenarioPatch",
+    "policyCheck",
+    "prohibitedContentCheck"
+  ],
+  "properties": {
+    "draftId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "title": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string",
+      "enum": [
+        "LATENCY_TEST",
+        "LOAD_TEST",
+        "CONFLICT_TEST",
+        "DEGRADED_CONNECTIVITY",
+        "DEMO",
+        "DOCUMENTATION"
+      ]
+    },
+    "safetyScope": {
+      "const": "SYNTHETIC_COP_TEST_ONLY"
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "openai",
+        "codex",
+        "local",
+        "mock"
+      ]
+    },
+    "scenarioPatch": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "expectedObservations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "policyCheck": {
+      "type": "object",
+      "required": [
+        "allowed",
+        "reasons"
+      ],
+      "properties": {
+        "allowed": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "prohibitedContentCheck": {
+      "type": "object",
+      "required": [
+        "targeting",
+        "weaponGuidance",
+        "realOperationalAdvice"
+      ],
+      "properties": {
+        "targeting": {
+          "const": false
+        },
+        "weaponGuidance": {
+          "const": false
+        },
+        "realOperationalAdvice": {
+          "const": false
+        },
+        "useOfForceRecommendation": {
+          "const": false
+        },
+        "attackOptimization": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "schemaValid": {
+          "type": "boolean"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "explanation": {
+      "type": "string"
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "humanReviewStatus": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "ACCEPTED",
+            "REJECTED"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

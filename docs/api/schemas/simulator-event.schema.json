@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/sim/simulator-event.schema.json",
+  "title": "Simulator Event",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "scenarioId",
+    "blockId",
+    "producerTimestamp",
+    "synthetic",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "type": "string"
+    },
+    "scenarioId": {
+      "type": "string"
+    },
+    "blockId": {
+      "type": "string"
+    },
+    "producerTimestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "objectId": {
+      "type": "string"
+    },
+    "synthetic": {
+      "const": true
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "candidateEnvelope": {
+      "$ref": "./canonical-event-envelope.schema.json"
+    }
+  },
+  "additionalProperties": false
+}

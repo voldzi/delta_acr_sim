@@ -1,0 +1,40 @@
+services:
+  sim-api:
+    build:
+      context: .
+      dockerfile: apps/simulator-api/Dockerfile
+    container_name: delta-acr-sim-api
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      SIM_DATA_DIR: /data
+      SIM_PUBLISHER_MODE: ${SIM_PUBLISHER_MODE:-DRY_RUN}
+      SIM_SOURCE_SYSTEM_ID: ${SIM_SOURCE_SYSTEM_ID:-sim-air-situation-001}
+      SIM_ADAPTER_VERSION: ${SIM_ADAPTER_VERSION:-0.1.0}
+      MAIN_COP_BASE_URL: ${MAIN_COP_BASE_URL:-http://sim-api:4000/mock-cop}
+      EXTERNAL_AI_ALLOWED: ${EXTERNAL_AI_ALLOWED:-false}
+    volumes:
+      - sim-data:/data
+    expose:
+      - "4000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  sim-web:
+    build:
+      context: .
+      dockerfile: apps/simulator-web/Dockerfile
+    container_name: delta-acr-sim-web
+    depends_on:
+      sim-api:
+        condition: service_healthy
+    ports:
+      - "${SIM_WEB_PORT:-5020}:80"
+    restart: unless-stopped
+
+volumes:
+  sim-data:

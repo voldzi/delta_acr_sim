@@ -1,0 +1,1237 @@
+openapi: 3.1.0
+info:
+  title: COP Air & Situation Simulator API
+  version: 0.1.0
+  description: API skeleton pro samostatný SIM systém generující výhradně syntetická data.
+servers:
+  - url: http://localhost:3000
+    description: Lokální vývoj
+tags:
+  - name: Scenarios
+  - name: Runtime
+  - name: Faults
+  - name: Publisher
+  - name: AI
+  - name: Health
+paths:
+  /api/v1/scenarios:
+    get:
+      tags: [Scenarios]
+      summary: Vrátí seznam scénářů.
+      operationId: listScenarios
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioListResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags: [Scenarios]
+      summary: Vytvoří scénář.
+      operationId: createScenario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/scenario.schema.json'
+      responses:
+        '201':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}:
+    get:
+      tags: [Scenarios]
+      summary: Vrátí detail scénáře.
+      operationId: getScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/scenario.schema.json'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags: [Scenarios]
+      summary: Upraví draft scénáře.
+      operationId: updateScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/scenario.schema.json'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/scenario.schema.json'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags: [Scenarios]
+      summary: Smaže scénář, pokud není spuštěný.
+      operationId: deleteScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Smazáno
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/start:
+    post:
+      tags: [Runtime]
+      summary: Spustí validovaný scénář.
+      operationId: startScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCommandRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/pause:
+    post:
+      tags: [Runtime]
+      summary: Pozastaví běžící scénář.
+      operationId: pauseScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCommandRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/resume:
+    post:
+      tags: [Runtime]
+      summary: Obnoví pozastavený scénář.
+      operationId: resumeScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCommandRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/stop:
+    post:
+      tags: [Runtime]
+      summary: Zastaví scénář.
+      operationId: stopScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCommandRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/reset:
+    post:
+      tags: [Runtime]
+      summary: Resetuje scénář do READY stavu.
+      operationId: resetScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCommandRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/step:
+    post:
+      tags: [Runtime]
+      summary: Provede jeden step v režimu krokování.
+      operationId: stepScenario
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeCommandRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/faults:
+    post:
+      tags: [Faults]
+      summary: Přidá fault injection do scénáře.
+      operationId: addFault
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/fault-injection.schema.json'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/fault-injection.schema.json'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+    get:
+      tags: [Faults]
+      summary: Vrátí faults pro scénář.
+      operationId: listFaults
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaultListResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/scenarios/{scenarioId}/faults/{faultId}:
+    delete:
+      tags: [Faults]
+      summary: Odstraní fault injection.
+      operationId: deleteFault
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          description: Identifikátor scénáře.
+          schema:
+            type: string
+            format: uuid
+        - name: faultId
+          in: path
+          required: true
+          description: Identifikátor fault injection.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Smazáno
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/runtime/status:
+    get:
+      tags: [Runtime]
+      summary: Vrátí runtime status.
+      operationId: getRuntimeStatus
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/runtime/metrics:
+    get:
+      tags: [Runtime]
+      summary: Vrátí runtime metriky.
+      operationId: getRuntimeMetrics
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/runtime/blocks:
+    get:
+      tags: [Runtime]
+      summary: Vrátí dostupné simulační bloky.
+      operationId: getRuntimeBlocks
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlocksResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/runtime/publisher:
+    get:
+      tags: [Publisher]
+      summary: Vrátí stav publisheru pro runtime.
+      operationId: getRuntimePublisher
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/test-connection:
+    post:
+      tags: [Publisher]
+      summary: Otestuje spojení na COP nebo mock endpoint.
+      operationId: testPublisherConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/publisher-config.schema.json'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherTestResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/send-sample:
+    post:
+      tags: [Publisher]
+      summary: Odešle sample syntetický event nebo dry-run validaci.
+      operationId: sendPublisherSample
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './schemas/canonical-event-envelope.schema.json'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherSendResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/status:
+    get:
+      tags: [Publisher]
+      summary: Vrátí stav publisheru.
+      operationId: getPublisherStatus
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/queue:
+    get:
+      tags: [Publisher]
+      summary: Vrátí položky publisher queue.
+      operationId: getPublisherQueue
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherQueueResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/queue/retry:
+    post:
+      tags: [Publisher]
+      summary: Naplánuje retry queue položek.
+      operationId: retryPublisherQueue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueueActionRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueActionResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/queue/clear:
+    post:
+      tags: [Publisher]
+      summary: Vyčistí queue v povoleném režimu.
+      operationId: clearPublisherQueue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueueActionRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueActionResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/publisher/stop:
+    post:
+      tags: [Publisher]
+      summary: Okamžitě zastaví live publikaci bez smazání queue.
+      operationId: stopPublisher
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherStatus'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/scenario-drafts:
+    post:
+      tags: [AI]
+      summary: Vytvoří AI draft syntetického scénáře.
+      operationId: createScenarioDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiDraftRequest'
+      responses:
+        '201':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/ai-scenario-draft.schema.json'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/scenario-drafts/{draftId}:
+    get:
+      tags: [AI]
+      summary: Vrátí AI draft.
+      operationId: getScenarioDraft
+      parameters:
+        - name: draftId
+          in: path
+          required: true
+          description: Identifikátor AI draftu.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/ai-scenario-draft.schema.json'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/scenario-drafts/{draftId}/validate:
+    post:
+      tags: [AI]
+      summary: Validuje AI draft.
+      operationId: validateScenarioDraft
+      parameters:
+        - name: draftId
+          in: path
+          required: true
+          description: Identifikátor AI draftu.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/scenario-drafts/{draftId}/accept:
+    post:
+      tags: [AI]
+      summary: Přijme AI draft jako scénář.
+      operationId: acceptScenarioDraft
+      parameters:
+        - name: draftId
+          in: path
+          required: true
+          description: Identifikátor AI draftu.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/scenario-drafts/{draftId}/reject:
+    post:
+      tags: [AI]
+      summary: Odmítne AI draft.
+      operationId: rejectScenarioDraft
+      parameters:
+        - name: draftId
+          in: path
+          required: true
+          description: Identifikátor AI draftu.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectDraftRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiDraftActionResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/providers:
+    get:
+      tags: [AI]
+      summary: Vrátí AI providery a jejich stav.
+      operationId: listAiProviders
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiProvidersResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /api/v1/ai/config:
+    patch:
+      tags: [AI]
+      summary: Upraví AI konfiguraci.
+      operationId: updateAiConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiConfigRequest'
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiConfigResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe.
+      operationId: liveHealth
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe.
+      operationId: readyHealth
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /health/dependencies:
+    get:
+      tags: [Health]
+      summary: Dependency health.
+      operationId: dependenciesHealth
+      responses:
+        '200':
+          description: Úspěšná odpověď
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DependenciesHealthResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus-style metrics endpoint.
+      operationId: metrics
+      responses:
+        '200':
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Problem:
+      description: Standardizovaná chybová odpověď.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlationId]
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, RATE_LIMITED, SOURCE_REVOKED, CONFLICT, INTERNAL_ERROR, DEPENDENCY_UNAVAILABLE]
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+            correlationId:
+              type: string
+              format: uuid
+    ScenarioResponse:
+      type: object
+      required: [scenarioId, status, createdAt]
+      properties:
+        scenarioId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [DRAFT, READY, RUNNING, PAUSED, STOPPED, ERROR]
+        createdAt:
+          type: string
+          format: date-time
+    ScenarioListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: './schemas/scenario.schema.json'
+    DeleteResponse:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+    RuntimeCommandRequest:
+      type: object
+      properties:
+        dryRun:
+          type: boolean
+        reason:
+          type: string
+    RuntimeStatus:
+      type: object
+      required: [state, generatedEvents, publishedEvents, queuedEvents]
+      properties:
+        scenarioId:
+          type: string
+          format: uuid
+        runtimeId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [DRAFT, READY, RUNNING, PAUSED, STOPPED, ERROR]
+        startedAt:
+          type: string
+          format: date-time
+        generatedEvents:
+          type: integer
+          minimum: 0
+        publishedEvents:
+          type: integer
+          minimum: 0
+        queuedEvents:
+          type: integer
+          minimum: 0
+    MetricsResponse:
+      type: object
+      additionalProperties:
+        type: number
+    BlocksResponse:
+      type: object
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: './schemas/scenario-block.schema.json'
+    FaultListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: './schemas/fault-injection.schema.json'
+    PublisherStatus:
+      type: object
+      required: [mode, queueSize, deadLetterSize, publishingEnabled]
+      properties:
+        mode:
+          type: string
+          enum: [DRY_RUN, MOCK, LIVE]
+        queueSize:
+          type: integer
+          minimum: 0
+        deadLetterSize:
+          type: integer
+          minimum: 0
+        publishingEnabled:
+          type: boolean
+        lastSuccessAt:
+          type: string
+          format: date-time
+        lastFailureAt:
+          type: string
+          format: date-time
+    PublisherTestResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        mode:
+          type: string
+        latencyMs:
+          type: integer
+    PublisherSendResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        dryRun:
+          type: boolean
+        eventId:
+          type: string
+          format: uuid
+        correlationId:
+          type: string
+          format: uuid
+    PublisherQueueResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              queueId:
+                type: string
+              eventId:
+                type: string
+              state:
+                type: string
+                enum: [PENDING, SENDING, SENT, RETRY_SCHEDULED, DEAD_LETTER, DRY_RUN_VALIDATED]
+              attempts:
+                type: integer
+    QueueActionRequest:
+      type: object
+      properties:
+        queueIds:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+    QueueActionResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        affectedCount:
+          type: integer
+    AiDraftRequest:
+      type: object
+      required: [prompt, purpose, allowedBlocks, limits]
+      properties:
+        prompt:
+          type: string
+        purpose:
+          type: string
+          enum: [LATENCY_TEST, LOAD_TEST, CONFLICT_TEST, DEGRADED_CONNECTIVITY, DEMO, DOCUMENTATION]
+        allowedBlocks:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          properties:
+            maxObjects:
+              type: integer
+            maxDurationSeconds:
+              type: integer
+            externalProviderAllowed:
+              type: boolean
+        providerPreference:
+          type: string
+          enum: [openai, codex, local, mock, auto]
+    ValidationResponse:
+      type: object
+      properties:
+        schemaValid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            type: object
+    RejectDraftRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+    AiDraftActionResponse:
+      type: object
+      properties:
+        draftId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [ACCEPTED, REJECTED]
+    AiProvidersResponse:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              enabled:
+                type: boolean
+              external:
+                type: boolean
+              healthy:
+                type: boolean
+    AiConfigRequest:
+      type: object
+      properties:
+        providerMode:
+          type: string
+          enum: [openai, codex, local, mock, auto]
+        externalProviderAllowed:
+          type: boolean
+    AiConfigResponse:
+      type: object
+      properties:
+        saved:
+          type: boolean
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        timestamp:
+          type: string
+          format: date-time
+    DependenciesHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+security:
+  - bearerAuth: []

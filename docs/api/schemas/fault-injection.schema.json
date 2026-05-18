@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/sim/fault-injection.schema.json",
+  "title": "Fault Injection",
+  "type": "object",
+  "required": [
+    "type",
+    "targetBlockId",
+    "startAtSecond",
+    "durationSeconds"
+  ],
+  "properties": {
+    "faultId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "DELAY",
+        "DUPLICATE",
+        "SOURCE_OUTAGE",
+        "CONFLICT",
+        "DEGRADED_ACCURACY",
+        "RECONNECT_BURST",
+        "BATCH_REPLAY"
+      ]
+    },
+    "targetBlockId": {
+      "type": "string"
+    },
+    "startAtSecond": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

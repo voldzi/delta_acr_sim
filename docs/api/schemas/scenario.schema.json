@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/sim/scenario.schema.json",
+  "title": "Scenario",
+  "type": "object",
+  "required": [
+    "name",
+    "area",
+    "durationSeconds",
+    "seed",
+    "blocks"
+  ],
+  "properties": {
+    "scenarioId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "READY",
+        "RUNNING",
+        "PAUSED",
+        "STOPPED",
+        "ERROR"
+      ]
+    },
+    "area": {
+      "type": "object",
+      "required": [
+        "type",
+        "bbox"
+      ],
+      "properties": {
+        "type": {
+          "const": "BBOX"
+        },
+        "bbox": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            }
+          ],
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "additionalProperties": false
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "./scenario-block.schema.json"
+      },
+      "minItems": 1
+    },
+    "faults": {
+      "type": "array",
+      "items": {
+        "$ref": "./fault-injection.schema.json"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "syntheticOnly": {
+          "const": true
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

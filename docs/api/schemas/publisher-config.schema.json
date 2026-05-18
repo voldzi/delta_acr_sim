@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/sim/publisher-config.schema.json",
+  "title": "Publisher Config",
+  "type": "object",
+  "required": [
+    "sourceSystemId",
+    "adapterVersion",
+    "mode",
+    "contractVersion"
+  ],
+  "properties": {
+    "mainCopBaseUrl": {
+      "type": "string",
+      "format": "uri"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "DRY_RUN",
+        "MOCK",
+        "LIVE"
+      ]
+    },
+    "authMode": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "BEARER_TOKEN",
+        "MTLS",
+        "OIDC_CLIENT_CREDENTIALS"
+      ]
+    },
+    "tokenSecretRef": {
+      "type": "string"
+    },
+    "sourceSystemId": {
+      "type": "string",
+      "minLength": 3
+    },
+    "adapterId": {
+      "type": "string",
+      "default": "simulation-adapter"
+    },
+    "adapterVersion": {
+      "type": "string"
+    },
+    "contractVersion": {
+      "const": "cop-ingest-v1"
+    },
+    "batchSize": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "maxRetries": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "rateLimitPerSecond": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "defaultClassification": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string"
+        },
+        "releasability": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "handlingCaveats": {
+          "type": "array",
+          "contains": {
+            "const": "SYNTHETIC"
+          },
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "level",
+        "handlingCaveats"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

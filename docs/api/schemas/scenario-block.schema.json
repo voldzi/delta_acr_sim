@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/sim/scenario-block.schema.json",
+  "title": "Scenario Block",
+  "type": "object",
+  "required": [
+    "blockId",
+    "enabled",
+    "objectCount",
+    "updateRateHz"
+  ],
+  "properties": {
+    "blockId": {
+      "type": "string",
+      "enum": [
+        "air-sim-aircraft",
+        "air-sim-uav",
+        "air-sim-missile",
+        "ground-sim-friendly",
+        "rescue-sim",
+        "report-sim"
+      ]
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "objectCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+    },
+    "updateRateHz": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 100
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "DIRECT",
+          "PATROL",
+          "CIRCULAR",
+          "ENTRY_EXIT",
+          "LOITER",
+          "SURVEY",
+          "LOW_SPEED",
+          "SHORT_LIVED_TRACK",
+          "SOURCE_LOSS",
+          "RESTORATION",
+          "STATIC_REPORT"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
