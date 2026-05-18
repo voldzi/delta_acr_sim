@@ -16,6 +16,7 @@ export interface ScenarioBlock {
   objectCount: number;
   updateRateHz: number;
   patterns?: string[];
+  parameters?: Record<string, unknown>;
 }
 
 export interface FaultInjection {

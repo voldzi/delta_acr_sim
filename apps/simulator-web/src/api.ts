@@ -28,9 +28,30 @@ export const demoScenario: Scenario = {
   durationSeconds: 900,
   seed: 123456,
   blocks: [
-    { blockId: "air-sim-aircraft", enabled: true, objectCount: 4, updateRateHz: 1, patterns: ["DIRECT", "PATROL"] },
-    { blockId: "air-sim-uav", enabled: true, objectCount: 3, updateRateHz: 1, patterns: ["LOITER", "SURVEY"] },
-    { blockId: "air-sim-missile", enabled: true, objectCount: 1, updateRateHz: 1, patterns: ["SHORT_LIVED_TRACK"] }
+    {
+      blockId: "air-sim-aircraft",
+      enabled: true,
+      objectCount: 4,
+      updateRateHz: 1,
+      patterns: ["DIRECT", "PATROL"],
+      parameters: { affiliations: ["FRIEND", "HOSTILE", "ASSUMED_FRIEND", "SUSPECT"] }
+    },
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 3,
+      updateRateHz: 1,
+      patterns: ["LOITER", "SURVEY"],
+      parameters: { affiliations: ["HOSTILE", "SUSPECT", "FRIEND"] }
+    },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 1,
+      updateRateHz: 1,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: { affiliations: ["HOSTILE"] }
+    }
   ],
   faults: []
 };

@@ -132,7 +132,7 @@ function buildEventForBlock(
     payload: {
       objectId,
       objectType,
-      affiliation: block.blockId === "ground-sim-friendly" ? "FRIEND" : "UNKNOWN",
+      affiliation: profile.affiliation,
       domain,
       status: movement.status,
       speedMps: movement.status === "LOST" ? 0 : Number(profile.speedMps.toFixed(1)),
@@ -170,6 +170,7 @@ interface TrackProfile {
   pattern: string;
   domain: CanonicalEventEnvelope["payload"]["domain"];
   objectType: CanonicalEventEnvelope["payload"]["objectType"];
+  affiliation: NonNullable<CanonicalEventEnvelope["payload"]["affiliation"]>;
   originLat: number;
   originLon: number;
   headingDeg: number;
@@ -224,6 +225,7 @@ function createTrackProfile(
     pattern,
     domain,
     objectType,
+    affiliation: affiliationForBlock(block, index, objectType),
     originLat,
     originLon,
     headingDeg: rng.range(0, 359),
@@ -236,6 +238,44 @@ function createTrackProfile(
     loiterAngularDegPerSecond: rng.range(1.5, 4.5),
     ttlSeconds: objectType === "MISSILE_TRACK" ? Math.round(rng.range(45, 120)) : scenario.durationSeconds
   };
+}
+
+function affiliationForBlock(
+  block: ScenarioBlock,
+  index: number,
+  objectType: CanonicalEventEnvelope["payload"]["objectType"]
+): NonNullable<CanonicalEventEnvelope["payload"]["affiliation"]> {
+  const configuredAffiliations = Array.isArray(block.parameters?.affiliations) ? block.parameters.affiliations : undefined;
+  const validConfigured = configuredAffiliations?.filter(isAffiliation);
+  if (validConfigured?.length) {
+    return validConfigured[index % validConfigured.length]!;
+  }
+
+  if (block.blockId === "ground-sim-friendly") {
+    return index % 3 === 0 ? "ASSUMED_FRIEND" : "FRIEND";
+  }
+  if (objectType === "MISSILE_TRACK") {
+    return "HOSTILE";
+  }
+  if (block.blockId === "air-sim-aircraft") {
+    return ["FRIEND", "HOSTILE", "ASSUMED_FRIEND", "SUSPECT"][index % 4] as NonNullable<CanonicalEventEnvelope["payload"]["affiliation"]>;
+  }
+  if (block.blockId === "air-sim-uav") {
+    return ["HOSTILE", "SUSPECT", "FRIEND"][index % 3] as NonNullable<CanonicalEventEnvelope["payload"]["affiliation"]>;
+  }
+  return "UNKNOWN";
+}
+
+function isAffiliation(value: unknown): value is NonNullable<CanonicalEventEnvelope["payload"]["affiliation"]> {
+  return (
+    value === "FRIEND" ||
+    value === "ASSUMED_FRIEND" ||
+    value === "NEUTRAL" ||
+    value === "UNKNOWN" ||
+    value === "SUSPECT" ||
+    value === "HOSTILE" ||
+    value === "PENDING"
+  );
 }
 
 function computeTrackPosition(

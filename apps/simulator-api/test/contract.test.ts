@@ -95,6 +95,17 @@ describe("SIM API contract baseline", () => {
     expect(updated.geo?.lon).not.toBe(created.geo?.lon);
   });
 
+  it("generates COP-compatible own and foreign affiliations", () => {
+    const events = generateScenarioEvents(
+      { ...scenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000001" },
+      { sourceSystemId: "sim-air-situation-001", adapterVersion: "0.1.0" }
+    );
+    const affiliations = events.map((event) => event.payload.affiliation);
+
+    expect(affiliations).toContain("FRIEND");
+    expect(affiliations).toContain("HOSTILE");
+  });
+
   it("rejects a canonical event without synthetic marking", async () => {
     const [event] = generateScenarioEvents(
       { ...scenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000001" },
