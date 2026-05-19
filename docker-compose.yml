@@ -29,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: apps/simulator-web/Dockerfile
+      args:
+        VITE_COP_DISPLAY_URL: ${VITE_COP_DISPLAY_URL:-https://cop.zeleznalady.cz}
     container_name: delta-acr-sim-web
     depends_on:
       sim-api:

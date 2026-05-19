@@ -58,7 +58,7 @@ interface AffiliationSummaryItem {
   detail: string;
 }
 
-const copDisplayUrl = "http://docker.home.cz:4311";
+const copDisplayUrl = import.meta.env.VITE_COP_DISPLAY_URL ?? "https://cop.zeleznalady.cz";
 const ownAffiliations = new Set(["FRIEND", "ASSUMED_FRIEND"]);
 const foreignAffiliations = new Set(["HOSTILE", "SUSPECT"]);
 

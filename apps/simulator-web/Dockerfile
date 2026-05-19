@@ -1,4 +1,6 @@
 FROM node:24-alpine AS build
+ARG VITE_COP_DISPLAY_URL=https://cop.zeleznalady.cz
+ENV VITE_COP_DISPLAY_URL=$VITE_COP_DISPLAY_URL
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
