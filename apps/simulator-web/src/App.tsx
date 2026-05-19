@@ -48,6 +48,7 @@ interface DashboardData {
   queueTotalCount: number;
   blocks: ScenarioBlock[];
   providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }>;
+  warnings: string[];
 }
 
 interface AffiliationSummaryItem {
@@ -83,7 +84,8 @@ export function App() {
     queue: [],
     queueTotalCount: 0,
     blocks: [],
-    providers: []
+    providers: [],
+    warnings: []
   });
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
   const [aiPrompt, setAiPrompt] = useState("Create a 15 minute synthetic air situation latency test with aircraft, UAV and missile tracks.");
@@ -110,6 +112,7 @@ export function App() {
   const deliveryRate = formatPercent(data.runtime.publishedEvents, data.runtime.generatedEvents);
   const queueTone: Tone = data.publisher.deadLetterSize > 0 ? "danger" : data.publisher.queueSize > 0 ? "warn" : "safe";
   const runtimeTone = runtimeStateTone(data.runtime.state);
+  const publisherTone: Tone = data.publisher.publishingEnabled ? (data.publisher.mode === "LIVE" ? "active" : "safe") : "danger";
   const activeScenarioName = selectedScenario?.name ?? "No scenario selected";
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
@@ -126,7 +129,7 @@ export function App() {
       icon: <RadioTower />,
       label: "Publisher",
       value: data.publisher.mode,
-      tone: data.publisher.publishingEnabled ? (data.publisher.mode === "LIVE" ? "active" : "safe") : "danger",
+      tone: publisherTone,
       detail: data.publisher.publishingEnabled ? "adapter enabled" : "adapter stopped"
     },
     {
@@ -153,6 +156,9 @@ export function App() {
     const next = await loadDashboard();
     setData(next);
     setLastRefreshAt(new Date().toISOString());
+    if (next.warnings.length > 0) {
+      setNotice(`Dashboard degraded: ${next.warnings[0]}`);
+    }
     const nextSelection = preferredScenarioId || selectedScenarioId || next.runtime.scenarioId;
     if (nextSelection && next.scenarios.some((scenario) => scenario.scenarioId === nextSelection)) {
       setSelectedScenarioId(nextSelection);
@@ -231,7 +237,7 @@ export function App() {
             <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
               COP display <ExternalLink size={15} />
             </a>
-            <StatusPill label={data.publisher.mode} tone={data.publisher.mode === "LIVE" ? "active" : "safe"} />
+            <StatusPill label={data.publisher.mode} tone={publisherTone} />
             <StatusPill label={data.runtime.state} tone={runtimeTone} />
           </div>
         </header>
@@ -669,11 +675,11 @@ function runtimeStateTone(state: string): Tone {
   if (state === "RUNNING") {
     return "active";
   }
+  if (state === "ERROR" || state === "UNAVAILABLE") {
+    return "danger";
+  }
   if (state === "PAUSED" || state === "READY") {
     return "warn";
-  }
-  if (state === "ERROR") {
-    return "danger";
   }
   return "neutral";
 }

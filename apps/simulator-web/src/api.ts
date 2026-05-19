@@ -1,21 +1,37 @@
 import type { AiDraft, PublisherStatus, QueueItem, RuntimeStatus, Scenario, ScenarioBlock } from "./types";
 
+const API_TIMEOUT_MS = 5_000;
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {})
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        ...(init?.headers ?? {})
+      }
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`API request timed out after ${API_TIMEOUT_MS / 1000}s: ${path}`);
+      }
+      throw error;
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+      throw new Error(error.error?.message ?? response.statusText);
     }
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
-    throw new Error(error.error?.message ?? response.statusText);
+    if (response.status === 204) {
+      return undefined as T;
+    }
+    return (await response.json()) as T;
+  } finally {
+    window.clearTimeout(timeout);
   }
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  return (await response.json()) as T;
 }
 
 export const demoScenario: Scenario = {
@@ -94,8 +110,19 @@ export const denseDemoScenario: Scenario = {
   faults: []
 };
 
-export async function loadDashboard() {
-  const [scenarios, runtime, publisher, queue, blocks, providers] = await Promise.all([
+export interface DashboardLoadResult {
+  scenarios: Scenario[];
+  runtime: RuntimeStatus;
+  publisher: PublisherStatus;
+  queue: QueueItem[];
+  queueTotalCount: number;
+  blocks: ScenarioBlock[];
+  providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }>;
+  warnings: string[];
+}
+
+export async function loadDashboard(): Promise<DashboardLoadResult> {
+  const results = await Promise.allSettled([
     api<{ items: Scenario[] }>("/api/v1/scenarios"),
     api<RuntimeStatus>("/api/v1/runtime/status"),
     api<PublisherStatus>("/api/v1/runtime/publisher"),
@@ -104,6 +131,24 @@ export async function loadDashboard() {
     api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers")
   ]);
 
+  const warnings: string[] = [];
+  const scenarios = unwrapDashboardResult(results[0], { items: [] }, "scenarios", warnings);
+  const runtime = unwrapDashboardResult(results[1], {
+    state: "UNAVAILABLE",
+    generatedEvents: 0,
+    publishedEvents: 0,
+    queuedEvents: 0
+  }, "runtime", warnings);
+  const publisher = unwrapDashboardResult(results[2], {
+    mode: "DRY_RUN",
+    queueSize: 0,
+    deadLetterSize: 0,
+    publishingEnabled: false
+  }, "publisher", warnings);
+  const queue = unwrapDashboardResult(results[3], { items: [], totalCount: 0 }, "publisher queue", warnings);
+  const blocks = unwrapDashboardResult(results[4], { blocks: [] }, "runtime blocks", warnings);
+  const providers = unwrapDashboardResult(results[5], { providers: [] }, "AI providers", warnings);
+
   return {
     scenarios: scenarios.items,
     runtime,
@@ -111,8 +156,18 @@ export async function loadDashboard() {
     queue: queue.items,
     queueTotalCount: queue.totalCount ?? queue.items.length,
     blocks: blocks.blocks,
-    providers: providers.providers
+    providers: providers.providers,
+    warnings
   };
+}
+
+function unwrapDashboardResult<T>(result: PromiseSettledResult<T>, fallback: T, label: string, warnings: string[]): T {
+  if (result.status === "fulfilled") {
+    return result.value;
+  }
+  const message = result.reason instanceof Error ? result.reason.message : "unknown error";
+  warnings.push(`${label}: ${message}`);
+  return fallback;
 }
 
 export async function createScenario(payload: Scenario) {

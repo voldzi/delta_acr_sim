@@ -232,13 +232,8 @@ export class RuntimeRunner {
       speedMultiplier: this.speedMultiplier
     });
 
-    let deliveredEvents = 0;
-    for (const event of events) {
-      const item = await this.publisher.publishEvent(event);
-      if (item.state === "SENT" || item.state === "DRY_RUN_VALIDATED") {
-        deliveredEvents += 1;
-      }
-    }
+    const publishedItems = await this.publisher.publishEvents(events);
+    const deliveredEvents = publishedItems.filter((item) => item.state === "SENT" || item.state === "DRY_RUN_VALIDATED").length;
 
     this.store.data.runtime = {
       ...this.currentStatus(),

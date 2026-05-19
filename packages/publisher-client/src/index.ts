@@ -54,9 +54,11 @@ export interface PublisherStoreData {
 const LIVE_PUBLISH_TIMEOUT_MS = 10_000;
 const MAX_RETAINED_DELIVERED_ITEMS = 500;
 const MAX_DUE_RETRIES_PER_TICK = 25;
+const BATCH_PUBLISH_CONCURRENCY = 25;
 
 export class PublisherClient {
   private data: PublisherStoreData = { items: [], publishingEnabled: true };
+  private persistChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly config: PublisherConfig,
@@ -109,19 +111,7 @@ export class PublisherClient {
   }
 
   async enqueue(event: CanonicalEventEnvelope): Promise<PublisherQueueItem> {
-    assertSynthetic(event);
-    const now = new Date().toISOString();
-    const item: PublisherQueueItem = {
-      queueId: randomUUID(),
-      eventId: event.eventId,
-      idempotencyKey: event.eventId,
-      payloadHash: hashPayload(event),
-      state: "PENDING",
-      attempts: 0,
-      createdAt: now,
-      updatedAt: now,
-      event
-    };
+    const item = this.createQueueItem(event);
     this.data.items.push(item);
     await this.persist();
     return item;
@@ -132,6 +122,26 @@ export class PublisherClient {
     return this.processExistingItem(item);
   }
 
+  async publishEvents(events: CanonicalEventEnvelope[]): Promise<PublisherQueueItem[]> {
+    if (events.length === 0) {
+      return [];
+    }
+
+    const items = events.map((event) => this.createQueueItem(event));
+    this.data.items.push(...items);
+    await this.persist();
+
+    const results: PublisherQueueItem[] = [];
+    for (let index = 0; index < items.length; index += BATCH_PUBLISH_CONCURRENCY) {
+      const chunk = items.slice(index, index + BATCH_PUBLISH_CONCURRENCY);
+      const processed = await Promise.all(chunk.map((item) => this.processExistingItem(item, { deferPersist: true })));
+      results.push(...processed);
+      await this.persist();
+    }
+
+    return results;
+  }
+
   async processItem(queueId: string): Promise<PublisherQueueItem> {
     const item = this.data.items.find((entry) => entry.queueId === queueId);
     if (!item) {
@@ -140,13 +150,13 @@ export class PublisherClient {
     return this.processExistingItem(item);
   }
 
-  private async processExistingItem(item: PublisherQueueItem): Promise<PublisherQueueItem> {
+  private async processExistingItem(item: PublisherQueueItem, options: { deferPersist?: boolean } = {}): Promise<PublisherQueueItem> {
     if (!this.data.publishingEnabled) {
       item.state = "RETRY_SCHEDULED";
       item.lastError = "Publishing is stopped";
       item.nextAttemptAt = new Date(Date.now() + 60_000).toISOString();
       item.updatedAt = new Date().toISOString();
-      await this.persist();
+      await this.persistUnlessDeferred(options.deferPersist);
       return item;
     }
 
@@ -160,14 +170,14 @@ export class PublisherClient {
       };
       item.updatedAt = new Date().toISOString();
       this.data.lastSuccessAt = item.updatedAt;
-      await this.persist();
+      await this.persistUnlessDeferred(options.deferPersist);
       return item;
     }
 
     item.state = "SENDING";
     item.attempts += 1;
     item.updatedAt = new Date().toISOString();
-    await this.persist();
+    await this.persistUnlessDeferred(options.deferPersist);
 
     try {
       const response =
@@ -177,7 +187,7 @@ export class PublisherClient {
       item.state = "SENT";
       item.updatedAt = new Date().toISOString();
       this.data.lastSuccessAt = item.updatedAt;
-      await this.persist();
+      await this.persistUnlessDeferred(options.deferPersist);
       return item;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown publisher error";
@@ -192,7 +202,7 @@ export class PublisherClient {
         item.nextAttemptAt = new Date(Date.now() + backoffMs(item.attempts)).toISOString();
       }
 
-      await this.persist();
+      await this.persistUnlessDeferred(options.deferPersist);
       return item;
     }
   }
@@ -282,11 +292,21 @@ export class PublisherClient {
   }
 
   private async persist(): Promise<void> {
-    this.pruneRetainedItems();
-    await mkdir(dirname(this.storePath), { recursive: true });
-    const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, JSON.stringify(this.data), "utf8");
-    await rename(tempPath, this.storePath);
+    const nextPersist = this.persistChain.catch(() => undefined).then(async () => {
+      this.pruneRetainedItems();
+      await mkdir(dirname(this.storePath), { recursive: true });
+      const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
+      await writeFile(tempPath, JSON.stringify(this.data), "utf8");
+      await rename(tempPath, this.storePath);
+    });
+    this.persistChain = nextPersist;
+    return this.persistChain;
+  }
+
+  private async persistUnlessDeferred(deferPersist: boolean | undefined): Promise<void> {
+    if (!deferPersist) {
+      await this.persist();
+    }
   }
 
   private pruneRetainedItems(): void {
@@ -308,6 +328,22 @@ export class PublisherClient {
         item.updatedAt = now;
       }
     }
+  }
+
+  private createQueueItem(event: CanonicalEventEnvelope): PublisherQueueItem {
+    assertSynthetic(event);
+    const now = new Date().toISOString();
+    return {
+      queueId: randomUUID(),
+      eventId: event.eventId,
+      idempotencyKey: event.eventId,
+      payloadHash: hashPayload(event),
+      state: "PENDING",
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+      event
+    };
   }
 }
 
