@@ -42,6 +42,11 @@ class SeededRandom {
 
 export const MAX_OBJECTS_PER_BLOCK = 500;
 
+const MIN_ROUTE_MARGIN_M = 300;
+const MIN_LOITER_RADIUS_M = 250;
+const MAX_LOITER_RADIUS_M = 5500;
+const MIN_SURVEY_SPAN_M = 1200;
+
 const objectTypesByBlock: Record<string, CanonicalEventEnvelope["payload"]["objectType"]> = {
   "air-sim-aircraft": "AIRCRAFT",
   "air-sim-uav": "UAV",
@@ -180,6 +185,8 @@ function buildEventForBlock(
       verticalRateMps: movement.verticalRateMps,
       attributes: {
         syntheticPattern: profile.pattern,
+        motionModel: profile.pattern === "SHORT_LIVED_TRACK" ? "STRAIGHT_TRANSIT" : "CONTINUOUS_KINEMATIC",
+        sampleIntervalSeconds: tickIntervalSeconds,
         trackAgeSeconds: Math.round(elapsedSeconds * speedMultiplier),
         tick,
         simplifiedTrack: objectType === "MISSILE_TRACK",
@@ -221,6 +228,10 @@ interface TrackProfile {
   confidence: number;
   loiterRadiusM: number;
   loiterAngularDegPerSecond: number;
+  loiterDirection: 1 | -1;
+  surveyWidthM: number;
+  surveyHeightM: number;
+  surveyRows: number;
   ttlSeconds: number;
 }
 
@@ -233,6 +244,21 @@ interface TrackPosition {
   accuracyM: number;
   status: "ACTIVE" | "LOST";
   expired: boolean;
+}
+
+interface AreaProjection {
+  minLon: number;
+  minLat: number;
+  maxLon: number;
+  maxLat: number;
+  refLat: number;
+  widthM: number;
+  heightM: number;
+}
+
+interface LocalPoint {
+  xM: number;
+  yM: number;
 }
 
 function shouldEmitBlock(block: ScenarioBlock, tick: number, tickIntervalSeconds: number): boolean {
@@ -254,11 +280,65 @@ function createTrackProfile(
   domain: CanonicalEventEnvelope["payload"]["domain"]
 ): TrackProfile {
   const rng = new SeededRandom(scenario.seed + hashString(block.blockId) * 17 + index * 7919);
-  const [minLon, minLat, maxLon, maxLat] = scenario.area.bbox;
+  const area = projectArea(scenario);
   const pattern = block.patterns?.[index % Math.max(1, block.patterns.length)] ?? defaultPatternFor(block.blockId);
-  const originLat = Number(rng.range(minLat, maxLat).toFixed(6));
-  const originLon = Number(rng.range(minLon, maxLon).toFixed(6));
   const speedMps = speedFor(block.blockId, rng);
+  let origin = randomPointWithinMargins(area, rng, 0, 0);
+  let headingDeg = rng.range(0, 359);
+  let loiterRadiusM = rng.range(1000, MAX_LOITER_RADIUS_M);
+  let surveyWidthM = rng.range(8000, 18_000);
+  let surveyHeightM = rng.range(5000, 12_000);
+  const surveyRows = Math.max(3, Math.round(rng.range(4, 7)));
+
+  if (pattern === "LOITER") {
+    const maxRadiusForArea = Math.max(
+      MIN_LOITER_RADIUS_M,
+      Math.min(MAX_LOITER_RADIUS_M, area.widthM * 0.22, area.heightM * 0.22)
+    );
+    loiterRadiusM = Math.min(loiterRadiusM, maxRadiusForArea);
+    const margin = Math.max(loiterRadiusM + MIN_ROUTE_MARGIN_M, MIN_ROUTE_MARGIN_M);
+    origin = randomPointWithinMargins(area, rng, margin, margin);
+    const availableRadiusM = Math.max(
+      0,
+      Math.min(
+        origin.xM - MIN_ROUTE_MARGIN_M,
+        area.widthM - origin.xM - MIN_ROUTE_MARGIN_M,
+        origin.yM - MIN_ROUTE_MARGIN_M,
+        area.heightM - origin.yM - MIN_ROUTE_MARGIN_M
+      )
+    );
+    loiterRadiusM = Math.max(
+      Math.min(MIN_LOITER_RADIUS_M, availableRadiusM),
+      Math.min(loiterRadiusM, availableRadiusM)
+    );
+  }
+
+  if (pattern === "SURVEY") {
+    surveyWidthM = Math.max(MIN_SURVEY_SPAN_M, Math.min(surveyWidthM, area.widthM * 0.42));
+    surveyHeightM = Math.max(MIN_SURVEY_SPAN_M, Math.min(surveyHeightM, area.heightM * 0.42));
+    origin = randomPointWithinMargins(area, rng, surveyWidthM / 2 + MIN_ROUTE_MARGIN_M, surveyHeightM / 2 + MIN_ROUTE_MARGIN_M);
+  }
+
+  if (objectType === "MISSILE_TRACK" && pattern === "SHORT_LIVED_TRACK") {
+    const edge = index % 4;
+    const edgeInsetM = MIN_ROUTE_MARGIN_M;
+    if (edge === 0) {
+      origin = { xM: edgeInsetM, yM: rng.range(edgeInsetM, Math.max(edgeInsetM, area.heightM - edgeInsetM)) };
+      headingDeg = normalizeHeading(90 + rng.range(-12, 12));
+    } else if (edge === 1) {
+      origin = { xM: Math.max(edgeInsetM, area.widthM - edgeInsetM), yM: rng.range(edgeInsetM, Math.max(edgeInsetM, area.heightM - edgeInsetM)) };
+      headingDeg = normalizeHeading(270 + rng.range(-12, 12));
+    } else if (edge === 2) {
+      origin = { xM: rng.range(edgeInsetM, Math.max(edgeInsetM, area.widthM - edgeInsetM)), yM: edgeInsetM };
+      headingDeg = normalizeHeading(rng.range(-12, 12));
+    } else {
+      origin = { xM: rng.range(edgeInsetM, Math.max(edgeInsetM, area.widthM - edgeInsetM)), yM: Math.max(edgeInsetM, area.heightM - edgeInsetM) };
+      headingDeg = normalizeHeading(180 + rng.range(-12, 12));
+    }
+  }
+
+  const originGeo = fromLocalPoint(area, origin);
+  const loiterDirection = rng.next() >= 0.5 ? 1 : -1;
 
   return {
     blockId: block.blockId,
@@ -266,16 +346,20 @@ function createTrackProfile(
     domain,
     objectType,
     affiliation: affiliationForBlock(block, index, objectType),
-    originLat,
-    originLon,
-    headingDeg: rng.range(0, 359),
+    originLat: originGeo.lat,
+    originLon: originGeo.lon,
+    headingDeg,
     speedMps,
     altitudeM: domain === "AIR" ? Math.round(rng.range(900, objectType === "MISSILE_TRACK" ? 4500 : 9500)) : 0,
     verticalRateMps: domain === "AIR" ? Number(rng.range(-3, 3).toFixed(1)) : 0,
     accuracyM: Math.round(rng.range(15, 140)),
     confidence: Number(rng.range(0.79, 0.98).toFixed(2)),
-    loiterRadiusM: rng.range(1000, 5500),
-    loiterAngularDegPerSecond: rng.range(1.5, 4.5),
+    loiterRadiusM,
+    loiterAngularDegPerSecond: speedMps > 0 && loiterRadiusM > 0 ? toDegrees(speedMps / loiterRadiusM) * loiterDirection : 0,
+    loiterDirection,
+    surveyWidthM,
+    surveyHeightM,
+    surveyRows,
     ttlSeconds: objectType === "MISSILE_TRACK" ? Math.round(rng.range(45, 120)) : scenario.durationSeconds
   };
 }
@@ -344,7 +428,7 @@ function computeTrackPosition(
   const motionSeconds = Math.min(elapsedSeconds, profile.ttlSeconds);
   const position =
     profile.pattern === "LOITER"
-      ? loiterPosition(profile, motionSeconds)
+      ? loiterPosition(scenario, profile, motionSeconds)
       : profile.pattern === "SURVEY"
         ? surveyPosition(scenario, profile, motionSeconds)
         : profile.pattern === "PATROL"
@@ -363,55 +447,290 @@ function computeTrackPosition(
 
 function directPosition(scenario: Scenario, profile: TrackProfile, elapsedSeconds: number): Pick<TrackPosition, "lat" | "lon" | "headingDeg"> {
   const distanceM = profile.speedMps * elapsedSeconds;
-  const moved = moveMeters(profile.originLat, profile.originLon, profile.headingDeg, distanceM);
+  if (profile.pattern === "SHORT_LIVED_TRACK") {
+    const moved = moveMeters(profile.originLat, profile.originLon, profile.headingDeg, distanceM);
+    return {
+      ...moved,
+      headingDeg: profile.headingDeg
+    };
+  }
+
+  const area = projectArea(scenario);
+  const origin = toLocalPoint(area, profile.originLat, profile.originLon);
+  const moved = moveLocal(origin, profile.headingDeg, distanceM);
+  const reflected = reflectPointWithinArea(area, moved, profile.headingDeg);
+  const geo = fromLocalPoint(area, reflected.point);
+
   return {
-    ...wrapToBbox(scenario, moved.lat, moved.lon),
-    headingDeg: profile.headingDeg
+    ...geo,
+    headingDeg: reflected.headingDeg
   };
 }
 
 function patrolPosition(scenario: Scenario, profile: TrackProfile, elapsedSeconds: number): Pick<TrackPosition, "lat" | "lon" | "headingDeg"> {
-  const segmentMeters = Math.max(10_000, profile.speedMps * 160);
-  const start = moveMeters(profile.originLat, profile.originLon, profile.headingDeg + 180, segmentMeters / 2);
-  const end = moveMeters(profile.originLat, profile.originLon, profile.headingDeg, segmentMeters / 2);
-  const cycleSeconds = Math.max(60, (segmentMeters * 2) / profile.speedMps);
-  const cyclePosition = (elapsedSeconds % cycleSeconds) / cycleSeconds;
-  const forward = cyclePosition <= 0.5;
-  const ratio = forward ? cyclePosition * 2 : (1 - cyclePosition) * 2;
+  const area = projectArea(scenario);
+  const origin = toLocalPoint(area, profile.originLat, profile.originLon);
+  const desiredHalfSegmentM = Math.max(5000, profile.speedMps * 80);
+  const forwardLimitM = distanceToAreaEdge(area, origin, profile.headingDeg);
+  const backwardLimitM = distanceToAreaEdge(area, origin, profile.headingDeg + 180);
+  const halfSegmentM = Math.min(desiredHalfSegmentM, forwardLimitM * 0.85, backwardLimitM * 0.85);
+
+  if (!Number.isFinite(halfSegmentM) || halfSegmentM < 1000 || profile.speedMps <= 0) {
+    return directPosition(scenario, profile, elapsedSeconds);
+  }
+
+  const start = moveLocal(origin, profile.headingDeg + 180, halfSegmentM);
+  const end = moveLocal(origin, profile.headingDeg, halfSegmentM);
+  const legLengthM = halfSegmentM * 2;
+  const roundTripM = legLengthM * 2;
+  const distanceOnRouteM = positiveModulo(profile.speedMps * elapsedSeconds, roundTripM);
+  const forward = distanceOnRouteM <= legLengthM;
+  const ratio = forward ? distanceOnRouteM / legLengthM : (distanceOnRouteM - legLengthM) / legLengthM;
+  const point = forward ? interpolatePoint(start, end, ratio) : interpolatePoint(end, start, ratio);
+  const geo = fromLocalPoint(area, point);
 
   return {
-    ...wrapToBbox(scenario, interpolate(start.lat, end.lat, ratio), interpolate(start.lon, end.lon, ratio)),
+    ...geo,
     headingDeg: normalizeHeading(forward ? profile.headingDeg : profile.headingDeg + 180)
   };
 }
 
-function loiterPosition(profile: TrackProfile, elapsedSeconds: number): Pick<TrackPosition, "lat" | "lon" | "headingDeg"> {
+function loiterPosition(scenario: Scenario, profile: TrackProfile, elapsedSeconds: number): Pick<TrackPosition, "lat" | "lon" | "headingDeg"> {
+  const area = projectArea(scenario);
+  const center = toLocalPoint(area, profile.originLat, profile.originLon);
   const angleDeg = normalizeHeading(profile.headingDeg + elapsedSeconds * profile.loiterAngularDegPerSecond);
-  const latOffset = metersToLat(profile.loiterRadiusM * Math.sin(toRadians(angleDeg)));
-  const lonOffset = metersToLon(profile.loiterRadiusM * Math.cos(toRadians(angleDeg)), profile.originLat);
+  const angle = toRadians(angleDeg);
+  const point = {
+    xM: center.xM + profile.loiterRadiusM * Math.sin(angle),
+    yM: center.yM + profile.loiterRadiusM * Math.cos(angle)
+  };
+  const geo = fromLocalPoint(area, point);
 
   return {
-    lat: Number((profile.originLat + latOffset).toFixed(6)),
-    lon: Number((profile.originLon + lonOffset).toFixed(6)),
-    headingDeg: normalizeHeading(angleDeg + 90)
+    ...geo,
+    headingDeg: normalizeHeading(angleDeg + (profile.loiterDirection >= 0 ? 90 : -90))
   };
 }
 
 function surveyPosition(scenario: Scenario, profile: TrackProfile, elapsedSeconds: number): Pick<TrackPosition, "lat" | "lon" | "headingDeg"> {
-  const [minLon, minLat, maxLon, maxLat] = scenario.area.bbox;
-  const rowCount = 6;
-  const cycleSeconds = 180;
-  const rowPhase = ((elapsedSeconds % cycleSeconds) / cycleSeconds) * rowCount;
-  const rowIndex = Math.min(rowCount - 1, Math.floor(rowPhase));
-  const rowProgress = rowPhase - rowIndex;
-  const x = rowIndex % 2 === 0 ? rowProgress : 1 - rowProgress;
-  const y = (rowIndex + 0.5) / rowCount;
+  const area = projectArea(scenario);
+  const center = toLocalPoint(area, profile.originLat, profile.originLon);
+  const halfWidthM = Math.min(profile.surveyWidthM / 2, area.widthM / 2);
+  const halfHeightM = Math.min(profile.surveyHeightM / 2, area.heightM / 2);
+  const minX = clamp(center.xM - halfWidthM, 0, Math.max(0, area.widthM - halfWidthM * 2));
+  const minY = clamp(center.yM - halfHeightM, 0, Math.max(0, area.heightM - halfHeightM * 2));
+  const maxX = Math.min(area.widthM, minX + halfWidthM * 2);
+  const maxY = Math.min(area.heightM, minY + halfHeightM * 2);
+  const route = buildSurveyRoute(minX, minY, maxX, maxY, profile.surveyRows);
+  const position = pointAlongPolyline(route, profile.speedMps * elapsedSeconds);
+  const geo = fromLocalPoint(area, position.point);
 
   return {
-    lat: Number(interpolate(minLat, maxLat, y).toFixed(6)),
-    lon: Number(interpolate(minLon, maxLon, x).toFixed(6)),
-    headingDeg: rowIndex % 2 === 0 ? 90 : 270
+    ...geo,
+    headingDeg: position.headingDeg
   };
+}
+
+function moveMeters(lat: number, lon: number, headingDeg: number, distanceM: number): { lat: number; lon: number } {
+  const heading = toRadians(headingDeg);
+  const northM = Math.cos(heading) * distanceM;
+  const eastM = Math.sin(heading) * distanceM;
+  return {
+    lat: Number((lat + metersToLat(northM)).toFixed(6)),
+    lon: Number((lon + metersToLon(eastM, lat)).toFixed(6))
+  };
+}
+
+function projectArea(scenario: Scenario): AreaProjection {
+  const [minLon, minLat, maxLon, maxLat] = scenario.area.bbox;
+  const refLat = (minLat + maxLat) / 2;
+  return {
+    minLon,
+    minLat,
+    maxLon,
+    maxLat,
+    refLat,
+    widthM: Math.max(1, lonToMeters(maxLon - minLon, refLat)),
+    heightM: Math.max(1, latToMeters(maxLat - minLat))
+  };
+}
+
+function toLocalPoint(area: AreaProjection, lat: number, lon: number): LocalPoint {
+  return {
+    xM: lonToMeters(lon - area.minLon, area.refLat),
+    yM: latToMeters(lat - area.minLat)
+  };
+}
+
+function fromLocalPoint(area: AreaProjection, point: LocalPoint): { lat: number; lon: number } {
+  return {
+    lat: Number((area.minLat + metersToLat(point.yM)).toFixed(6)),
+    lon: Number((area.minLon + metersToLon(point.xM, area.refLat)).toFixed(6))
+  };
+}
+
+function randomPointWithinMargins(area: AreaProjection, rng: SeededRandom, marginX: number, marginY: number): LocalPoint {
+  const safeMarginX = Math.min(Math.max(0, marginX), area.widthM / 2);
+  const safeMarginY = Math.min(Math.max(0, marginY), area.heightM / 2);
+  const minX = safeMarginX;
+  const maxX = Math.max(minX, area.widthM - safeMarginX);
+  const minY = safeMarginY;
+  const maxY = Math.max(minY, area.heightM - safeMarginY);
+
+  return {
+    xM: maxX === minX ? area.widthM / 2 : rng.range(minX, maxX),
+    yM: maxY === minY ? area.heightM / 2 : rng.range(minY, maxY)
+  };
+}
+
+function moveLocal(point: LocalPoint, headingDeg: number, distanceM: number): LocalPoint {
+  const heading = toRadians(headingDeg);
+  return {
+    xM: point.xM + Math.sin(heading) * distanceM,
+    yM: point.yM + Math.cos(heading) * distanceM
+  };
+}
+
+function reflectPointWithinArea(area: AreaProjection, point: LocalPoint, headingDeg: number): { point: LocalPoint; headingDeg: number } {
+  const reflectedX = reflectCoordinate(point.xM, 0, area.widthM);
+  const reflectedY = reflectCoordinate(point.yM, 0, area.heightM);
+  const heading = toRadians(headingDeg);
+  const eastComponent = Math.sin(heading) * (reflectedX.reversed ? -1 : 1);
+  const northComponent = Math.cos(heading) * (reflectedY.reversed ? -1 : 1);
+
+  return {
+    point: {
+      xM: reflectedX.value,
+      yM: reflectedY.value
+    },
+    headingDeg: normalizeHeading(toDegrees(Math.atan2(eastComponent, northComponent)))
+  };
+}
+
+function reflectCoordinate(value: number, min: number, max: number): { value: number; reversed: boolean } {
+  const width = max - min;
+  if (width <= 0) {
+    return { value: min, reversed: false };
+  }
+  const offset = positiveModulo(value - min, width * 2);
+  if (offset <= width) {
+    return { value: min + offset, reversed: false };
+  }
+  return { value: max - (offset - width), reversed: true };
+}
+
+function distanceToAreaEdge(area: AreaProjection, point: LocalPoint, headingDeg: number): number {
+  const heading = toRadians(headingDeg);
+  const dx = Math.sin(heading);
+  const dy = Math.cos(heading);
+  const distances: number[] = [];
+
+  if (dx > 0) {
+    distances.push((area.widthM - point.xM) / dx);
+  } else if (dx < 0) {
+    distances.push((0 - point.xM) / dx);
+  }
+
+  if (dy > 0) {
+    distances.push((area.heightM - point.yM) / dy);
+  } else if (dy < 0) {
+    distances.push((0 - point.yM) / dy);
+  }
+
+  const positiveDistances = distances.filter((distance) => Number.isFinite(distance) && distance > 0);
+  return positiveDistances.length ? Math.min(...positiveDistances) : Number.POSITIVE_INFINITY;
+}
+
+function buildSurveyRoute(minX: number, minY: number, maxX: number, maxY: number, rows: number): LocalPoint[] {
+  const route: LocalPoint[] = [];
+  const rowCount = Math.max(2, rows);
+  for (let row = 0; row < rowCount; row += 1) {
+    const yM = interpolate(minY, maxY, row / (rowCount - 1));
+    if (row % 2 === 0) {
+      route.push({ xM: minX, yM }, { xM: maxX, yM });
+    } else {
+      route.push({ xM: maxX, yM }, { xM: minX, yM });
+    }
+  }
+  return route;
+}
+
+function pointAlongPolyline(route: LocalPoint[], distanceM: number): { point: LocalPoint; headingDeg: number } {
+  if (route.length < 2 || distanceM <= 0) {
+    return { point: route[0] ?? { xM: 0, yM: 0 }, headingDeg: 90 };
+  }
+
+  const segments: Array<{ start: LocalPoint; end: LocalPoint; lengthM: number }> = [];
+  let totalLengthM = 0;
+  for (let index = 0; index < route.length - 1; index += 1) {
+    const start = route[index]!;
+    const end = route[index + 1]!;
+    const lengthM = distanceBetweenPoints(start, end);
+    if (lengthM > 0) {
+      segments.push({ start, end, lengthM });
+      totalLengthM += lengthM;
+    }
+  }
+
+  if (totalLengthM <= 0) {
+    return { point: route[0]!, headingDeg: 90 };
+  }
+
+  let remainingM = positiveModulo(distanceM, totalLengthM);
+  for (const segment of segments) {
+    if (remainingM <= segment.lengthM) {
+      const ratio = remainingM / segment.lengthM;
+      return {
+        point: interpolatePoint(segment.start, segment.end, ratio),
+        headingDeg: headingBetweenPoints(segment.start, segment.end)
+      };
+    }
+    remainingM -= segment.lengthM;
+  }
+
+  const finalSegment = segments[segments.length - 1]!;
+  return {
+    point: finalSegment.end,
+    headingDeg: headingBetweenPoints(finalSegment.start, finalSegment.end)
+  };
+}
+
+function interpolatePoint(start: LocalPoint, end: LocalPoint, ratio: number): LocalPoint {
+  return {
+    xM: interpolate(start.xM, end.xM, ratio),
+    yM: interpolate(start.yM, end.yM, ratio)
+  };
+}
+
+function distanceBetweenPoints(start: LocalPoint, end: LocalPoint): number {
+  return Math.hypot(end.xM - start.xM, end.yM - start.yM);
+}
+
+function headingBetweenPoints(start: LocalPoint, end: LocalPoint): number {
+  return normalizeHeading(toDegrees(Math.atan2(end.xM - start.xM, end.yM - start.yM)));
+}
+
+function latToMeters(degrees: number): number {
+  return degrees * 111_320;
+}
+
+function lonToMeters(degrees: number, lat: number): number {
+  return degrees * 111_320 * Math.max(0.2, Math.cos(toRadians(lat)));
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  if (divisor <= 0) {
+    return 0;
+  }
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function toDegrees(value: number): number {
+  return (value * 180) / Math.PI;
 }
 
 function eventTypeFor(
@@ -450,38 +769,12 @@ function cappedObjectCount(block: ScenarioBlock): number {
   return Math.min(MAX_OBJECTS_PER_BLOCK, Math.max(0, Math.trunc(block.objectCount)));
 }
 
-function moveMeters(lat: number, lon: number, headingDeg: number, distanceM: number): { lat: number; lon: number } {
-  const heading = toRadians(headingDeg);
-  const northM = Math.cos(heading) * distanceM;
-  const eastM = Math.sin(heading) * distanceM;
-  return {
-    lat: Number((lat + metersToLat(northM)).toFixed(6)),
-    lon: Number((lon + metersToLon(eastM, lat)).toFixed(6))
-  };
-}
-
-function wrapToBbox(scenario: Scenario, lat: number, lon: number): { lat: number; lon: number } {
-  const [minLon, minLat, maxLon, maxLat] = scenario.area.bbox;
-  return {
-    lat: Number(wrapValue(lat, minLat, maxLat).toFixed(6)),
-    lon: Number(wrapValue(lon, minLon, maxLon).toFixed(6))
-  };
-}
-
 function metersToLat(meters: number): number {
   return meters / 111_320;
 }
 
 function metersToLon(meters: number, lat: number): number {
   return meters / (111_320 * Math.max(0.2, Math.cos(toRadians(lat))));
-}
-
-function wrapValue(value: number, min: number, max: number): number {
-  const width = max - min;
-  if (width <= 0) {
-    return min;
-  }
-  return ((((value - min) % width) + width) % width) + min;
 }
 
 function interpolate(start: number, end: number, ratio: number): number {

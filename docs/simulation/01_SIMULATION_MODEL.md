@@ -33,6 +33,18 @@ Rychlosti v `payload.speedMps` jsou syntetické, ale drží se realistických ob
 - `ground-sim-friendly`: 2-12 m/s.
 - `rescue-sim` a `report-sim`: statické záznamy bez pohybu.
 
+## Kinematika a historie poloh
+
+Generátor poloh je určený pro COP zobrazení, které vykresluje i minulé body stopy. Následné body jednoho `payload.objectId` proto musí tvořit plynulou trajektorii:
+
+- `DIRECT` používá souvislý pohyb podle rychlosti a kurzu. Běžné nemissilové stopy se na hraně scénáře odrážejí, aby nevznikal skok z jedné strany BBOX na druhou.
+- `PATROL` používá obousměrný segment uvnitř BBOX. Obrat mění heading, ale poloha zůstává souvislá.
+- `LOITER` používá kruhovou stopu, kde úhlová rychlost vychází z `speedMps` a poloměru, takže vykreslená dráha odpovídá rychlosti objektu.
+- `SURVEY` používá souvislou lawnmower trasu přes menší pracovní oblast. Přechod mezi řádky je modelovaný jako spojovací úsek, ne jako skok.
+- `SHORT_LIVED_TRACK` je přímý krátkodobý syntetický transit bez wrapování přes BBOX; po TTL přechází do `track.lost`.
+
+Každý track event nese v `payload.attributes.motionModel` použitý pohybový model a `sampleIntervalSeconds`, aby bylo možné při ladění COP historie rozlišit modelované polohy od problémů ve vizualizaci.
+
 ## Typy dat
 
 - Aircraft tracks: poloha, altitude, speed, heading, vertical rate, status, accuracy, confidence.

@@ -66,6 +66,41 @@ const highDensityScenarioPayload = {
   faults: []
 };
 
+const trajectoryScenarioPayload = {
+  name: "Continuous trajectory validation",
+  description: "Synthetic scenario used to verify that COP history polylines do not contain position jumps.",
+  area: {
+    type: "BBOX",
+    bbox: [14.0, 49.8, 14.08, 49.86]
+  },
+  durationSeconds: 360,
+  seed: 20260520,
+  blocks: [
+    {
+      blockId: "air-sim-aircraft",
+      enabled: true,
+      objectCount: 2,
+      updateRateHz: 1,
+      patterns: ["DIRECT", "PATROL"]
+    },
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 2,
+      updateRateHz: 1,
+      patterns: ["LOITER", "SURVEY"]
+    },
+    {
+      blockId: "ground-sim-friendly",
+      enabled: true,
+      objectCount: 1,
+      updateRateHz: 1,
+      patterns: ["DIRECT"]
+    }
+  ],
+  faults: []
+};
+
 describe("SIM API contract baseline", () => {
   let dataDir: string;
   let app: Awaited<ReturnType<typeof createApp>>["app"];
@@ -215,6 +250,37 @@ describe("SIM API contract baseline", () => {
     }
   });
 
+  it("keeps generated historical positions kinematically continuous", () => {
+    const scenario = { ...trajectoryScenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000003" };
+    const previousByObjectId = new Map<string, NonNullable<ReturnType<typeof generateScenarioEvents>[number]["geo"]>>();
+
+    for (let tick = 0; tick <= 240; tick += 1) {
+      const events = generateScenarioEvents(scenario, {
+        sourceSystemId: "sim-air-situation-001",
+        adapterVersion: "0.1.0",
+        tick,
+        elapsedSeconds: tick,
+        tickIntervalSeconds: 1
+      });
+
+      expect(events).toHaveLength(5);
+
+      for (const event of events) {
+        expect(event.geo?.lat).toBeTypeOf("number");
+        expect(event.geo?.lon).toBeTypeOf("number");
+        expectPositionInsideBbox(event.geo!, trajectoryScenarioPayload.area.bbox);
+
+        const previous = previousByObjectId.get(event.payload.objectId);
+        if (previous) {
+          const displacementM = distanceMeters(previous, event.geo!);
+          const expectedMaxM = (event.payload.speedMps ?? 0) * 1.15 + 10;
+          expect(displacementM).toBeLessThanOrEqual(expectedMaxM);
+        }
+        previousByObjectId.set(event.payload.objectId, event.geo!);
+      }
+    }
+  });
+
   it("starts high-density scenarios with hundreds of active synthetic objects", async () => {
     const created = await request(app).post("/api/v1/scenarios").send(highDensityScenarioPayload).expect(201);
     const runtime = await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({ dryRun: true }).expect(200);
@@ -293,3 +359,24 @@ describe("SIM API contract baseline", () => {
     expect(accepted.body.scenarioId).toBeTruthy();
   });
 });
+
+function expectPositionInsideBbox(geo: { lat?: number; lon?: number }, bbox: number[]): void {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  expect(geo.lat).toBeGreaterThanOrEqual(minLat);
+  expect(geo.lat).toBeLessThanOrEqual(maxLat);
+  expect(geo.lon).toBeGreaterThanOrEqual(minLon);
+  expect(geo.lon).toBeLessThanOrEqual(maxLon);
+}
+
+function distanceMeters(start: { lat?: number; lon?: number }, end: { lat?: number; lon?: number }): number {
+  const lat1 = toRadians(start.lat ?? 0);
+  const lat2 = toRadians(end.lat ?? 0);
+  const dLat = toRadians((end.lat ?? 0) - (start.lat ?? 0));
+  const dLon = toRadians((end.lon ?? 0) - (start.lon ?? 0));
+  const haversine = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
