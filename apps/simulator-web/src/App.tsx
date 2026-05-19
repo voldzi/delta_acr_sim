@@ -720,9 +720,26 @@ function summarizeAffiliations(blocks: ScenarioBlock[]): AffiliationSummaryItem[
 function readAffiliations(block: ScenarioBlock): string[] {
   const value = block.parameters?.affiliations;
   if (!Array.isArray(value)) {
-    return [];
+    return defaultAffiliationsForBlock(block);
   }
-  return value.filter((item): item is string => typeof item === "string");
+  const configured = value.filter((item): item is string => typeof item === "string");
+  return configured.length > 0 ? configured : defaultAffiliationsForBlock(block);
+}
+
+function defaultAffiliationsForBlock(block: ScenarioBlock): string[] {
+  if (block.blockId === "ground-sim-friendly") {
+    return ["ASSUMED_FRIEND", "FRIEND", "FRIEND"];
+  }
+  if (block.blockId === "air-sim-missile") {
+    return ["HOSTILE"];
+  }
+  if (block.blockId === "air-sim-aircraft") {
+    return ["FRIEND", "HOSTILE", "ASSUMED_FRIEND", "SUSPECT"];
+  }
+  if (block.blockId === "air-sim-uav") {
+    return ["HOSTILE", "SUSPECT", "FRIEND"];
+  }
+  return ["UNKNOWN"];
 }
 
 function classifyAffiliation(affiliation: string): AffiliationCategory {
