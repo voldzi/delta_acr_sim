@@ -1,6 +1,6 @@
 import type { CanonicalEventEnvelope, PublisherMode } from "@delta-acr/contracts";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 export type QueueState =
@@ -50,6 +50,10 @@ export interface PublisherStoreData {
   lastFailureAt?: string;
 }
 
+const LIVE_PUBLISH_TIMEOUT_MS = 10_000;
+const MAX_RETAINED_DELIVERED_ITEMS = 2000;
+const MAX_DUE_RETRIES_PER_TICK = 25;
+
 export class PublisherClient {
   private data: PublisherStoreData = { items: [], publishingEnabled: true };
 
@@ -62,6 +66,8 @@ export class PublisherClient {
     try {
       const raw = await readFile(this.storePath, "utf8");
       this.data = JSON.parse(raw) as PublisherStoreData;
+      this.pruneRetainedItems();
+      await this.persist();
     } catch {
       this.data = { items: [], publishingEnabled: true };
       await this.persist();
@@ -199,13 +205,13 @@ export class PublisherClient {
     return candidates.length;
   }
 
-  async retryDueQueue(now: Date = new Date()): Promise<number> {
+  async retryDueQueue(now: Date = new Date(), limit = MAX_DUE_RETRIES_PER_TICK): Promise<number> {
     const candidates = this.data.items.filter((item) => {
       if (item.state !== "PENDING" && item.state !== "RETRY_SCHEDULED") {
         return false;
       }
       return !item.nextAttemptAt || new Date(item.nextAttemptAt).getTime() <= now.getTime();
-    });
+    }).slice(0, limit);
 
     for (const item of candidates) {
       await this.processItem(item.queueId);
@@ -230,18 +236,32 @@ export class PublisherClient {
     if (!this.config.mainCopBaseUrl) {
       throw new Error("MAIN_COP_BASE_URL is not configured");
     }
-    const response = await fetch(`${this.config.mainCopBaseUrl.replace(/\/$/, "")}/api/v1/ingest/events`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: "Bearer local-pilot-token",
-        "x-source-system-id": this.config.sourceSystemId,
-        "x-idempotency-key": idempotencyKey,
-        "x-contract-version": event.contractVersion,
-        "x-correlation-id": event.correlationId
-      },
-      body: JSON.stringify(event)
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), LIVE_PUBLISH_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.mainCopBaseUrl.replace(/\/$/, "")}/api/v1/ingest/events`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer local-pilot-token",
+          "x-source-system-id": this.config.sourceSystemId,
+          "x-idempotency-key": idempotencyKey,
+          "x-contract-version": event.contractVersion,
+          "x-correlation-id": event.correlationId
+        },
+        body: JSON.stringify(event)
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`COP ingest timed out after ${LIVE_PUBLISH_TIMEOUT_MS}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -251,8 +271,20 @@ export class PublisherClient {
   }
 
   private async persist(): Promise<void> {
+    this.pruneRetainedItems();
     await mkdir(dirname(this.storePath), { recursive: true });
-    await writeFile(this.storePath, JSON.stringify(this.data, null, 2), "utf8");
+    const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
+    await writeFile(tempPath, JSON.stringify(this.data, null, 2), "utf8");
+    await rename(tempPath, this.storePath);
+  }
+
+  private pruneRetainedItems(): void {
+    const activeItems = this.data.items.filter((item) => !isDeliveredState(item.state));
+    const retainedDeliveredItems = this.data.items
+      .filter((item) => isDeliveredState(item.state))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, MAX_RETAINED_DELIVERED_ITEMS);
+    this.data.items = [...activeItems, ...retainedDeliveredItems];
   }
 }
 
