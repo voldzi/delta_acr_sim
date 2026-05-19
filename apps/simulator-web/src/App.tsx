@@ -112,6 +112,7 @@ export function App() {
   const runtimeTone = runtimeStateTone(data.runtime.state);
   const activeScenarioName = selectedScenario?.name ?? "No scenario selected";
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
+  const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
 
   const readinessItems = [
     {
@@ -136,11 +137,15 @@ export function App() {
       detail: `${data.publisher.deadLetterSize} dead-letter, ${data.queueTotalCount} retained`
     },
     {
-      icon: data.publisher.lastFailureAt ? <AlertTriangle /> : <CheckCircle2 />,
+      icon: activePublishFailure ? <AlertTriangle /> : <CheckCircle2 />,
       label: "Last publish",
       value: formatTime(data.publisher.lastSuccessAt),
-      tone: data.publisher.lastFailureAt && !data.publisher.lastSuccessAt ? "danger" : "neutral",
-      detail: data.publisher.lastFailureAt ? `failure ${formatTime(data.publisher.lastFailureAt)}` : "no failures reported"
+      tone: activePublishFailure ? "danger" : data.publisher.lastSuccessAt ? "safe" : "neutral",
+      detail: activePublishFailure
+        ? `failure ${formatTime(data.publisher.lastFailureAt)}`
+        : data.publisher.lastSuccessAt
+          ? "latest delivery succeeded"
+          : "no publish attempts yet"
     }
   ];
 
@@ -702,6 +707,16 @@ function formatTime(value: string | undefined): string {
     minute: "2-digit",
     second: "2-digit"
   }).format(new Date(value));
+}
+
+function isAfter(candidate: string | undefined, baseline: string | undefined): boolean {
+  if (!candidate) {
+    return false;
+  }
+  if (!baseline) {
+    return true;
+  }
+  return new Date(candidate).getTime() > new Date(baseline).getTime();
 }
 
 function formatPercent(part: number, total: number): string {
