@@ -111,6 +111,7 @@ export function App() {
   const queueTone: Tone = data.publisher.deadLetterSize > 0 ? "danger" : data.publisher.queueSize > 0 ? "warn" : "safe";
   const runtimeTone = runtimeStateTone(data.runtime.state);
   const activeScenarioName = selectedScenario?.name ?? "No scenario selected";
+  const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
 
   const readinessItems = [
     {
@@ -277,7 +278,7 @@ export function App() {
                 {data.scenarios.length === 0 ? <option>No scenarios yet</option> : null}
                 {data.scenarios.map((scenario) => (
                   <option key={scenario.scenarioId} value={scenario.scenarioId}>
-                    {scenario.name}
+                    {formatScenarioOption(scenario, data.runtime)}
                   </option>
                 ))}
               </select>
@@ -311,7 +312,7 @@ export function App() {
 
             {selectedScenario ? (
               <div className="scenario-summary">
-                <SummaryItem label="Status" value={selectedScenario.status ?? "DRAFT"} />
+                <SummaryItem label="Status" value={selectedScenarioState} />
                 <SummaryItem label="Duration" value={`${Math.round(selectedScenario.durationSeconds / 60)} min`} />
                 <SummaryItem label="Objects" value={totalObjects.toLocaleString("cs-CZ")} />
                 <SummaryItem label="Seed" value={selectedScenario.seed.toString()} />
@@ -625,6 +626,33 @@ function classifyAffiliation(affiliation: string): AffiliationCategory {
     return "foreign";
   }
   return "other";
+}
+
+function formatScenarioOption(scenario: Scenario, runtime: RuntimeStatus): string {
+  const state = scenarioDisplayState(scenario, runtime);
+  const activePrefix = isActiveRuntimeScenario(scenario, runtime) ? "ACTIVE " : "";
+  const objectCount = countScenarioObjects(scenario);
+  const shortId = scenario.scenarioId ? scenario.scenarioId.slice(0, 8) : "new";
+  return `${activePrefix}${state} - ${scenario.name} (${objectCount.toLocaleString("cs-CZ")} tracks, ${shortId})`;
+}
+
+function scenarioDisplayState(scenario: Scenario | undefined, runtime: RuntimeStatus): string {
+  if (scenario && isRuntimeScenario(scenario, runtime)) {
+    return runtime.state;
+  }
+  return scenario?.status ?? "DRAFT";
+}
+
+function isActiveRuntimeScenario(scenario: Scenario, runtime: RuntimeStatus): boolean {
+  return isRuntimeScenario(scenario, runtime) && (runtime.state === "RUNNING" || runtime.state === "PAUSED");
+}
+
+function isRuntimeScenario(scenario: Scenario, runtime: RuntimeStatus): boolean {
+  return Boolean(scenario.scenarioId && runtime.scenarioId === scenario.scenarioId);
+}
+
+function countScenarioObjects(scenario: Scenario): number {
+  return scenario.blocks.reduce((sum, block) => sum + (block.enabled ? block.objectCount : 0), 0);
 }
 
 function formatAffiliations(block: ScenarioBlock): string {
