@@ -51,7 +51,7 @@ export interface PublisherStoreData {
 }
 
 const LIVE_PUBLISH_TIMEOUT_MS = 10_000;
-const MAX_RETAINED_DELIVERED_ITEMS = 2000;
+const MAX_RETAINED_DELIVERED_ITEMS = 500;
 const MAX_DUE_RETRIES_PER_TICK = 25;
 
 export class PublisherClient {
@@ -274,7 +274,7 @@ export class PublisherClient {
     this.pruneRetainedItems();
     await mkdir(dirname(this.storePath), { recursive: true });
     const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
-    await writeFile(tempPath, JSON.stringify(this.data, null, 2), "utf8");
+    await writeFile(tempPath, JSON.stringify(this.data), "utf8");
     await rename(tempPath, this.storePath);
   }
 
