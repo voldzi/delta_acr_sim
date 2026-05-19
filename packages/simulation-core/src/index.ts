@@ -17,6 +17,12 @@ export interface GenerateOptions {
   speedMultiplier?: number;
 }
 
+export interface ActiveObjectCountOptions {
+  elapsedSeconds?: number;
+  tickIntervalSeconds?: number;
+  speedMultiplier?: number;
+}
+
 class SeededRandom {
   private state: number;
 
@@ -33,6 +39,8 @@ class SeededRandom {
     return min + this.next() * (max - min);
   }
 }
+
+export const MAX_OBJECTS_PER_BLOCK = 500;
 
 const objectTypesByBlock: Record<string, CanonicalEventEnvelope["payload"]["objectType"]> = {
   "air-sim-aircraft": "AIRCRAFT",
@@ -52,6 +60,15 @@ const domainsByBlock: Record<string, CanonicalEventEnvelope["payload"]["domain"]
   "report-sim": "OTHER"
 };
 
+const speedProfilesByBlock: Record<string, { minMps: number; maxMps: number }> = {
+  "air-sim-aircraft": { minMps: 130, maxMps: 260 },
+  "air-sim-uav": { minMps: 22, maxMps: 75 },
+  "air-sim-missile": { minMps: 250, maxMps: 900 },
+  "ground-sim-friendly": { minMps: 2, maxMps: 12 },
+  "rescue-sim": { minMps: 0, maxMps: 0 },
+  "report-sim": { minMps: 0, maxMps: 0 }
+};
+
 export function generateScenarioEvents(
   scenario: Scenario,
   options: GenerateOptions
@@ -68,7 +85,7 @@ export function generateScenarioEvents(
     if (!shouldEmitBlock(block, tick, tickIntervalSeconds)) {
       continue;
     }
-    const count = Math.min(block.objectCount, 25);
+    const count = cappedObjectCount(block);
     for (let index = 0; index < count; index += 1) {
       const event = buildEventForBlock(scenario, scenarioId, block, index, tick, elapsedSeconds, speedMultiplier, tickIntervalSeconds, timestamp, options);
       if (event) {
@@ -78,6 +95,29 @@ export function generateScenarioEvents(
   }
 
   return events;
+}
+
+export function countActiveScenarioObjects(scenario: Scenario, options: ActiveObjectCountOptions = {}): number {
+  const elapsedSeconds = Math.max(0, options.elapsedSeconds ?? 0);
+  const speedMultiplier = Math.max(0.1, options.speedMultiplier ?? 1);
+  const tickIntervalSeconds = Math.max(0.1, options.tickIntervalSeconds ?? 1);
+  let count = 0;
+
+  for (const block of scenario.blocks.filter((item) => item.enabled)) {
+    const objectType = objectTypesByBlock[block.blockId] ?? "UNKNOWN";
+    const domain = domainsByBlock[block.blockId] ?? "OTHER";
+    const blockCount = cappedObjectCount(block);
+
+    for (let index = 0; index < blockCount; index += 1) {
+      const profile = createTrackProfile(scenario, block, index, objectType, domain);
+      const movement = computeTrackPosition(scenario, profile, elapsedSeconds * speedMultiplier, tickIntervalSeconds * speedMultiplier);
+      if (!movement.expired) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
 }
 
 function buildEventForBlock(
@@ -402,19 +442,12 @@ function defaultPatternFor(blockId: string): string {
 }
 
 function speedFor(blockId: string, rng: SeededRandom): number {
-  if (blockId === "air-sim-uav") {
-    return rng.range(28, 72);
-  }
-  if (blockId === "air-sim-missile") {
-    return rng.range(260, 430);
-  }
-  if (blockId === "ground-sim-friendly") {
-    return rng.range(2, 12);
-  }
-  if (blockId === "rescue-sim" || blockId === "report-sim") {
-    return 0;
-  }
-  return rng.range(120, 245);
+  const profile = speedProfilesByBlock[blockId] ?? speedProfilesByBlock["air-sim-aircraft"]!;
+  return rng.range(profile.minMps, profile.maxMps);
+}
+
+function cappedObjectCount(block: ScenarioBlock): number {
+  return Math.min(MAX_OBJECTS_PER_BLOCK, Math.max(0, Math.trunc(block.objectCount)));
 }
 
 function moveMeters(lat: number, lon: number, headingDeg: number, distanceM: number): { lat: number; lon: number } {

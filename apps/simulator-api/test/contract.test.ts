@@ -1,4 +1,4 @@
-import { generateScenarioEvents } from "@delta-acr/simulation-core";
+import { countActiveScenarioObjects, generateScenarioEvents } from "@delta-acr/simulation-core";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -23,6 +23,44 @@ const scenarioPayload = {
       objectCount: 2,
       updateRateHz: 1,
       patterns: ["DIRECT", "PATROL"]
+    }
+  ],
+  faults: []
+};
+
+const highDensityScenarioPayload = {
+  name: "High density air situation",
+  description: "Synthetic high-density air situation for COP ingest load test",
+  area: {
+    type: "BBOX",
+    bbox: [13.85, 49.65, 15.35, 50.45]
+  },
+  durationSeconds: 1800,
+  seed: 20260519,
+  blocks: [
+    {
+      blockId: "air-sim-aircraft",
+      enabled: true,
+      objectCount: 120,
+      updateRateHz: 0.5,
+      patterns: ["DIRECT", "PATROL"],
+      parameters: { affiliations: ["FRIEND", "HOSTILE", "ASSUMED_FRIEND", "SUSPECT"] }
+    },
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 160,
+      updateRateHz: 0.5,
+      patterns: ["LOITER", "SURVEY"],
+      parameters: { affiliations: ["HOSTILE", "SUSPECT", "FRIEND", "UNKNOWN"] }
+    },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 20,
+      updateRateHz: 0.2,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: { affiliations: ["HOSTILE"] }
     }
   ],
   faults: []
@@ -148,6 +186,46 @@ describe("SIM API contract baseline", () => {
 
     expect(affiliations).toContain("FRIEND");
     expect(affiliations).toContain("HOSTILE");
+  });
+
+  it("generates realistic speed envelopes by object type", () => {
+    const events = generateScenarioEvents(
+      { ...highDensityScenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000002" },
+      { sourceSystemId: "sim-air-situation-001", adapterVersion: "0.1.0" }
+    );
+
+    expect(events.filter((event) => event.payload.objectType === "AIRCRAFT")).toHaveLength(120);
+    expect(events.filter((event) => event.payload.objectType === "UAV")).toHaveLength(160);
+    expect(events.filter((event) => event.payload.objectType === "MISSILE_TRACK")).toHaveLength(20);
+
+    for (const event of events) {
+      const speedMps = event.payload.speedMps ?? 0;
+      if (event.payload.objectType === "AIRCRAFT") {
+        expect(speedMps).toBeGreaterThanOrEqual(130);
+        expect(speedMps).toBeLessThanOrEqual(260);
+      }
+      if (event.payload.objectType === "UAV") {
+        expect(speedMps).toBeGreaterThanOrEqual(22);
+        expect(speedMps).toBeLessThanOrEqual(75);
+      }
+      if (event.payload.objectType === "MISSILE_TRACK") {
+        expect(speedMps).toBeGreaterThanOrEqual(250);
+        expect(speedMps).toBeLessThanOrEqual(900);
+      }
+    }
+  });
+
+  it("starts high-density scenarios with hundreds of active synthetic objects", async () => {
+    const created = await request(app).post("/api/v1/scenarios").send(highDensityScenarioPayload).expect(201);
+    const runtime = await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({ dryRun: true }).expect(200);
+
+    expect(runtime.body.generatedEvents).toBe(300);
+    expect(runtime.body.activeObjects).toBe(300);
+    expect(countActiveScenarioObjects({ ...highDensityScenarioPayload, scenarioId: created.body.scenarioId })).toBe(300);
+
+    const queue = await request(app).get("/api/v1/publisher/queue?limit=5").expect(200);
+    expect(queue.body.totalCount).toBe(300);
+    expect(queue.body.items).toHaveLength(5);
   });
 
   it("rejects a canonical event without synthetic marking", async () => {

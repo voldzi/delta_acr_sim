@@ -56,6 +56,44 @@ export const demoScenario: Scenario = {
   faults: []
 };
 
+export const denseDemoScenario: Scenario = {
+  name: "High Density COP Tracks Demo",
+  description: "Synthetic high-density moving air picture with hundreds of COP-compatible tracks.",
+  area: {
+    type: "BBOX",
+    bbox: [13.85, 49.65, 15.35, 50.45]
+  },
+  durationSeconds: 1800,
+  seed: 20260519,
+  blocks: [
+    {
+      blockId: "air-sim-aircraft",
+      enabled: true,
+      objectCount: 120,
+      updateRateHz: 0.5,
+      patterns: ["DIRECT", "PATROL"],
+      parameters: { affiliations: ["FRIEND", "HOSTILE", "ASSUMED_FRIEND", "SUSPECT"] }
+    },
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 160,
+      updateRateHz: 0.5,
+      patterns: ["LOITER", "SURVEY"],
+      parameters: { affiliations: ["HOSTILE", "SUSPECT", "FRIEND", "UNKNOWN"] }
+    },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 20,
+      updateRateHz: 0.2,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: { affiliations: ["HOSTILE"] }
+    }
+  ],
+  faults: []
+};
+
 export async function loadDashboard() {
   const [scenarios, runtime, publisher, queue, blocks, providers] = await Promise.all([
     api<{ items: Scenario[] }>("/api/v1/scenarios"),

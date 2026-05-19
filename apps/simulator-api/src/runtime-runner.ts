@@ -1,6 +1,6 @@
 import type { RuntimeStatus, Scenario } from "@delta-acr/contracts";
 import type { PublisherClient } from "@delta-acr/publisher-client";
-import { generateScenarioEvents } from "@delta-acr/simulation-core";
+import { countActiveScenarioObjects, generateScenarioEvents } from "@delta-acr/simulation-core";
 import { randomUUID } from "node:crypto";
 import type { ApiConfig } from "./config.js";
 import type { JsonStore } from "./store.js";
@@ -251,7 +251,7 @@ export class RuntimeRunner {
       elapsedSeconds: Math.round(elapsedSeconds * this.speedMultiplier),
       speedMultiplier: this.speedMultiplier,
       tickIntervalSeconds: this.tickIntervalSeconds,
-      activeObjects: events.filter((event) => event.payload.status === "ACTIVE").length,
+      activeObjects: countActiveScenarioObjects(scenario, { elapsedSeconds, speedMultiplier: this.speedMultiplier, tickIntervalSeconds: this.tickIntervalSeconds }),
       lastTickAt: new Date().toISOString()
     };
   }

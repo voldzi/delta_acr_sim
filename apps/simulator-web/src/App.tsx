@@ -30,6 +30,7 @@ import {
   createAiDraft,
   createScenario,
   demoScenario,
+  denseDemoScenario,
   loadDashboard,
   runtimeAction,
   testPublisher
@@ -292,6 +293,19 @@ export function App() {
                 disabled={loading}
               >
                 <Plus size={16} /> Demo
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  runAction("High-density demo scenario created.", async () => {
+                    const created = await createScenario(denseDemoScenario);
+                    setSelectedScenarioId(created.scenarioId);
+                    return created.scenarioId;
+                  })
+                }
+                disabled={loading}
+              >
+                <Database size={16} /> 300 tracks
               </button>
             </div>
 
@@ -681,7 +695,7 @@ function formatGeo(geo: QueueItem["event"]["geo"]): string {
 }
 
 function formatMotion(speedMps: number | undefined, headingDeg: number | undefined): string {
-  const speed = typeof speedMps === "number" ? `${Math.round(speedMps)} m/s` : "speed n/a";
+  const speed = typeof speedMps === "number" ? `${Math.round(speedMps)} m/s (${Math.round(speedMps * 3.6)} km/h)` : "speed n/a";
   const heading = typeof headingDeg === "number" ? `${Math.round(headingDeg)} deg` : "heading n/a";
   return `${speed}, ${heading}`;
 }

@@ -21,6 +21,17 @@ Area je v MVP BBOX `[minLon, minLat, maxLon, maxLat]`. Duration je v sekundách.
 ## Object count
 
 Object count je počet syntetických objektů generovaných blokem. Limity jsou konfigurovatelné a AI návrhy je nesmí překročit.
+Runtime chrání pilotní prostředí horním limitem 500 objektů na jeden blok; scénáře se stovkami objektů jsou podporované, ale extrémní hodnoty ze schématu se v generátoru ořežou.
+
+## Rychlostní profily
+
+Rychlosti v `payload.speedMps` jsou syntetické, ale drží se realistických obálek pro COP zobrazení:
+
+- `air-sim-aircraft`: 130-260 m/s, přibližně 468-936 km/h.
+- `air-sim-uav`: 22-75 m/s, přibližně 79-270 km/h.
+- `air-sim-missile`: 250-900 m/s, přibližně 900-3240 km/h, pouze jako zjednodušený krátkodobý track bez taktických detailů.
+- `ground-sim-friendly`: 2-12 m/s.
+- `rescue-sim` a `report-sim`: statické záznamy bez pohybu.
 
 ## Typy dat
 
