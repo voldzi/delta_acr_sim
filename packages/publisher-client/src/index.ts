@@ -129,7 +129,7 @@ export class PublisherClient {
 
   async publishEvent(event: CanonicalEventEnvelope): Promise<PublisherQueueItem> {
     const item = await this.enqueue(event);
-    return this.processItem(item.queueId);
+    return this.processExistingItem(item);
   }
 
   async processItem(queueId: string): Promise<PublisherQueueItem> {
@@ -137,7 +137,10 @@ export class PublisherClient {
     if (!item) {
       throw new Error(`Queue item not found: ${queueId}`);
     }
+    return this.processExistingItem(item);
+  }
 
+  private async processExistingItem(item: PublisherQueueItem): Promise<PublisherQueueItem> {
     if (!this.data.publishingEnabled) {
       item.state = "RETRY_SCHEDULED";
       item.lastError = "Publishing is stopped";
@@ -201,7 +204,7 @@ export class PublisherClient {
     });
 
     for (const item of candidates) {
-      await this.processItem(item.queueId);
+      await this.processExistingItem(item);
     }
 
     return candidates.length;
@@ -216,7 +219,7 @@ export class PublisherClient {
     }).slice(0, limit);
 
     for (const item of candidates) {
-      await this.processItem(item.queueId);
+      await this.processExistingItem(item);
     }
 
     return candidates.length;
