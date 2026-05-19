@@ -99,6 +99,17 @@ export function App() {
     () => data.scenarios.find((scenario) => scenario.scenarioId === selectedScenarioId) ?? data.scenarios[0],
     [data.scenarios, selectedScenarioId]
   );
+  const scenarioList = useMemo(
+    () =>
+      [...data.scenarios].sort((first, second) => {
+        const activeDelta = Number(isActiveRuntimeScenario(second, data.runtime)) - Number(isActiveRuntimeScenario(first, data.runtime));
+        if (activeDelta !== 0) {
+          return activeDelta;
+        }
+        return scenarioCreatedAt(second) - scenarioCreatedAt(first);
+      }),
+    [data.runtime, data.scenarios]
+  );
   const displayedBlocks = selectedScenario?.blocks ?? data.blocks;
   const totalObjects = useMemo(
     () => displayedBlocks.reduce((sum, block) => sum + (block.enabled ? block.objectCount : 0), 0),
@@ -115,6 +126,8 @@ export function App() {
   const publisherTone: Tone = data.publisher.publishingEnabled ? (data.publisher.mode === "LIVE" ? "active" : "safe") : "danger";
   const activeScenarioName = selectedScenario?.name ?? "No scenario selected";
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
+  const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
+  const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
 
   const readinessItems = [
@@ -284,15 +297,11 @@ export function App() {
           <section id="scenario" className="panel scenario-panel">
             <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COP display validation." />
 
-            <div className="control-row">
-              <select value={selectedScenario?.scenarioId ?? ""} onChange={(event) => setSelectedScenarioId(event.target.value)}>
-                {data.scenarios.length === 0 ? <option>No scenarios yet</option> : null}
-                {data.scenarios.map((scenario) => (
-                  <option key={scenario.scenarioId} value={scenario.scenarioId}>
-                    {formatScenarioOption(scenario, data.runtime)}
-                  </option>
-                ))}
-              </select>
+            <div className="scenario-toolbar">
+              <div>
+                <strong>Scenario library</strong>
+                <span>{data.scenarios.length.toLocaleString("cs-CZ")} prepared scenarios</span>
+              </div>
               <button
                 type="button"
                 onClick={() =>
@@ -319,6 +328,19 @@ export function App() {
               >
                 <Database size={16} /> 300 tracks
               </button>
+            </div>
+
+            <div className="scenario-picker" aria-label="Scenario library">
+              {scenarioList.length === 0 ? <div className="empty-state">Create the demo scenario to start the pilot runtime.</div> : null}
+              {scenarioList.map((scenario) => (
+                <ScenarioCard
+                  key={scenario.scenarioId}
+                  scenario={scenario}
+                  runtime={data.runtime}
+                  selected={scenario.scenarioId === selectedScenario?.scenarioId}
+                  onSelect={() => scenario.scenarioId && setSelectedScenarioId(scenario.scenarioId)}
+                />
+              ))}
             </div>
 
             {selectedScenario ? (
@@ -353,52 +375,91 @@ export function App() {
               </div>
             </div>
 
-            <div className="button-strip">
-              <ActionButton
-                icon={<Play />}
-                label="Start"
-                disabled={!selectedScenario || loading || isRunning}
-                onClick={() =>
-                  selectedScenario?.scenarioId &&
-                  runAction("Scenario started. Moving tracks are published every second.", () =>
-                    runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
-                  )
-                }
-              />
-              <ActionButton
-                icon={<Pause />}
-                label="Pause"
-                disabled={!selectedScenario || loading || !isRunning}
-                onClick={() => selectedScenario?.scenarioId && runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))}
-              />
-              <ActionButton
-                icon={<Play />}
-                label="Resume"
-                disabled={!selectedScenario || loading || !isPaused}
-                onClick={() => selectedScenario?.scenarioId && runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))}
-              />
-              <ActionButton
-                icon={<Square />}
-                label="Stop"
-                disabled={!selectedScenario || loading || (data.runtime.state !== "RUNNING" && data.runtime.state !== "PAUSED")}
-                onClick={() => selectedScenario?.scenarioId && runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))}
-              />
-              <ActionButton
-                icon={<RotateCcw />}
-                label="Step"
-                disabled={!selectedScenario || loading || isRunning}
-                onClick={() =>
-                  selectedScenario?.scenarioId &&
-                  runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))
-                }
-              />
-              <ActionButton
-                icon={<Zap />}
-                label="Fault"
-                disabled={!selectedScenario || loading}
-                onClick={() => selectedScenario?.scenarioId && runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))}
-              />
-            </div>
+            {selectedScenario ? (
+              <div className="runtime-command-bar">
+                <div>
+                  <strong>{runtimeCommandTitle(selectedScenario, data.runtime)}</strong>
+                  <span>{runtimeCommandDetail(selectedScenario, data.runtime)}</span>
+                </div>
+                <div className="button-strip runtime-actions">
+                  {otherScenarioIsActive ? <span className="command-note">Select the active scenario to control the running runtime.</span> : null}
+                  {!isRunning && !isPaused ? (
+                    <ActionButton
+                      icon={<Play />}
+                      label="Start"
+                      disabled={loading}
+                      onClick={() =>
+                        selectedScenario.scenarioId &&
+                        runAction("Scenario started. Moving tracks are published every second.", () =>
+                          runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
+                        )
+                      }
+                    />
+                  ) : null}
+                  {selectedScenarioIsRuntime && isRunning ? (
+                    <>
+                      <ActionButton
+                        icon={<Pause />}
+                        label="Pause"
+                        disabled={loading}
+                        onClick={() => selectedScenario.scenarioId && runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))}
+                      />
+                      <ActionButton
+                        icon={<Square />}
+                        label="Stop"
+                        disabled={loading}
+                        onClick={() => selectedScenario.scenarioId && runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))}
+                      />
+                      <ActionButton
+                        icon={<Zap />}
+                        label="Fault"
+                        disabled={loading}
+                        onClick={() => selectedScenario.scenarioId && runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))}
+                      />
+                    </>
+                  ) : null}
+                  {selectedScenarioIsRuntime && isPaused ? (
+                    <>
+                      <ActionButton
+                        icon={<Play />}
+                        label="Resume"
+                        disabled={loading}
+                        onClick={() => selectedScenario.scenarioId && runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))}
+                      />
+                      <ActionButton
+                        icon={<Square />}
+                        label="Stop"
+                        disabled={loading}
+                        onClick={() => selectedScenario.scenarioId && runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))}
+                      />
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {selectedScenario ? (
+              <details className="advanced-controls">
+                <summary>Advanced controls</summary>
+                <div className="button-strip compact">
+                  <ActionButton
+                    icon={<RotateCcw />}
+                    label="Step"
+                    disabled={loading || isRunning}
+                    onClick={() =>
+                      selectedScenario.scenarioId &&
+                      runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))
+                    }
+                  />
+                  <ActionButton
+                    icon={<Zap />}
+                    label="Fault"
+                    disabled={loading || otherScenarioIsActive}
+                    onClick={() => selectedScenario.scenarioId && runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))}
+                  />
+                </div>
+              </details>
+            ) : null}
 
             <div id="manifest" className="section-head">
               <div>
@@ -548,6 +609,41 @@ function StatusPill({ label, tone }: { label: string; tone: Tone }) {
   return <span className={`status-pill ${tone}`}>{label}</span>;
 }
 
+function ScenarioCard({
+  scenario,
+  runtime,
+  selected,
+  onSelect
+}: {
+  scenario: Scenario;
+  runtime: RuntimeStatus;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const state = scenarioDisplayState(scenario, runtime);
+  const active = isActiveRuntimeScenario(scenario, runtime);
+  const objectCount = countScenarioObjects(scenario);
+
+  return (
+    <button type="button" className={`scenario-card ${selected ? "selected" : ""} ${active ? "active-runtime" : ""}`} onClick={onSelect}>
+      <span className="scenario-card-main">
+        <strong>{scenario.name}</strong>
+        <span>{scenario.description ?? "Synthetic COP scenario"}</span>
+      </span>
+      <span className="scenario-card-tags">
+        {active ? <StatusPill label="active" tone="active" /> : null}
+        <StatusPill label={state} tone={runtimeStateTone(state)} />
+      </span>
+      <span className="scenario-card-meta">
+        <span>{objectCount.toLocaleString("cs-CZ")} tracks</span>
+        <span>{formatScenarioDuration(scenario.durationSeconds)}</span>
+        <span>seed {scenario.seed}</span>
+        <span>{scenario.scenarioId?.slice(0, 8) ?? "new"}</span>
+      </span>
+    </button>
+  );
+}
+
 function ActionButton({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled: boolean; onClick: () => void }) {
   return (
     <button type="button" disabled={disabled} onClick={onClick}>
@@ -639,14 +735,6 @@ function classifyAffiliation(affiliation: string): AffiliationCategory {
   return "other";
 }
 
-function formatScenarioOption(scenario: Scenario, runtime: RuntimeStatus): string {
-  const state = scenarioDisplayState(scenario, runtime);
-  const activePrefix = isActiveRuntimeScenario(scenario, runtime) ? "ACTIVE " : "";
-  const objectCount = countScenarioObjects(scenario);
-  const shortId = scenario.scenarioId ? scenario.scenarioId.slice(0, 8) : "new";
-  return `${activePrefix}${state} - ${scenario.name} (${objectCount.toLocaleString("cs-CZ")} tracks, ${shortId})`;
-}
-
 function scenarioDisplayState(scenario: Scenario | undefined, runtime: RuntimeStatus): string {
   if (scenario && isRuntimeScenario(scenario, runtime)) {
     return runtime.state;
@@ -664,6 +752,42 @@ function isRuntimeScenario(scenario: Scenario, runtime: RuntimeStatus): boolean 
 
 function countScenarioObjects(scenario: Scenario): number {
   return scenario.blocks.reduce((sum, block) => sum + (block.enabled ? block.objectCount : 0), 0);
+}
+
+function scenarioCreatedAt(scenario: Scenario): number {
+  const createdAt = scenario.metadata?.createdAt;
+  return createdAt ? new Date(createdAt).getTime() || 0 : 0;
+}
+
+function formatScenarioDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return `${minutes} min`;
+}
+
+function runtimeCommandTitle(scenario: Scenario, runtime: RuntimeStatus): string {
+  if (isRuntimeScenario(scenario, runtime) && runtime.state === "RUNNING") {
+    return "Runtime is publishing";
+  }
+  if (isRuntimeScenario(scenario, runtime) && runtime.state === "PAUSED") {
+    return "Runtime is paused";
+  }
+  if (runtime.scenarioId && (runtime.state === "RUNNING" || runtime.state === "PAUSED")) {
+    return "Another scenario is active";
+  }
+  return "Ready to start";
+}
+
+function runtimeCommandDetail(scenario: Scenario, runtime: RuntimeStatus): string {
+  if (isRuntimeScenario(scenario, runtime) && runtime.state === "RUNNING") {
+    return "Pause or stop the active feed, or inject a test connectivity fault.";
+  }
+  if (isRuntimeScenario(scenario, runtime) && runtime.state === "PAUSED") {
+    return "Resume live publishing, stop the runtime, or use deterministic step in advanced controls.";
+  }
+  if (runtime.scenarioId && (runtime.state === "RUNNING" || runtime.state === "PAUSED")) {
+    return "The selected scenario is not the one currently controlled by the runtime.";
+  }
+  return "Start this scenario with the selected runtime speed.";
 }
 
 function formatAffiliations(block: ScenarioBlock): string {

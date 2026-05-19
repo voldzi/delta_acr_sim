@@ -8,6 +8,11 @@ export interface Scenario {
   seed: number;
   blocks: ScenarioBlock[];
   faults?: FaultInjection[];
+  metadata?: {
+    syntheticOnly?: boolean;
+    createdAt?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface ScenarioBlock {

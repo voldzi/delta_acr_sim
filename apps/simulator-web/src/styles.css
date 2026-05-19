@@ -423,11 +423,108 @@ button svg {
   font-size: 18px;
 }
 
-.control-row {
+.scenario-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.scenario-toolbar strong,
+.scenario-toolbar span,
+.scenario-card-main strong,
+.scenario-card-main span,
+.scenario-card-meta span,
+.runtime-command-bar strong,
+.runtime-command-bar span {
+  display: block;
+}
+
+.scenario-toolbar strong {
+  font-size: 14px;
+}
+
+.scenario-toolbar span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.scenario-picker {
+  display: grid;
+  gap: 8px;
+  max-height: 330px;
+  overflow: auto;
+  padding: 2px;
   margin-bottom: 14px;
+}
+
+.scenario-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px 12px;
+  align-items: start;
+  width: 100%;
+  min-height: 0;
+  border-color: var(--line);
+  background: var(--panel-soft);
+  padding: 12px;
+  text-align: left;
+}
+
+.scenario-card:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.scenario-card.selected {
+  border-color: var(--accent);
+  background: #ffffff;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.scenario-card.active-runtime {
+  border-color: rgba(49, 93, 154, 0.38);
+}
+
+.scenario-card-main {
+  min-width: 0;
+}
+
+.scenario-card-main strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.scenario-card-main span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.scenario-card-tags {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scenario-card-meta {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scenario-card-meta span {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--muted);
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .scenario-summary {
@@ -508,6 +605,64 @@ button svg {
 
 .button-strip.compact {
   margin: 14px 0;
+}
+
+.runtime-command-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.runtime-command-bar strong {
+  font-size: 14px;
+}
+
+.runtime-command-bar span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.runtime-actions {
+  justify-content: flex-end;
+  margin-bottom: 0;
+}
+
+.command-note {
+  align-self: center;
+  max-width: 260px;
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.advanced-controls {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfb;
+  margin-bottom: 14px;
+  padding: 0 12px;
+}
+
+.advanced-controls summary {
+  min-height: 40px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  list-style-position: inside;
+  padding: 11px 0;
+}
+
+.advanced-controls .button-strip {
+  padding-bottom: 12px;
 }
 
 .section-head {
@@ -792,11 +947,22 @@ button svg {
     grid-template-columns: 1fr;
   }
 
-  .control-row,
+  .scenario-toolbar,
+  .runtime-command-bar,
   .runtime-options,
   .provider-row,
   .queue-main {
     grid-template-columns: 1fr;
+  }
+
+  .scenario-card,
+  .scenario-card-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-card-tags,
+  .runtime-actions {
+    justify-content: flex-start;
   }
 
   .runtime-options {
