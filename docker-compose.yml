@@ -12,6 +12,7 @@ services:
       SIM_SOURCE_SYSTEM_ID: ${SIM_SOURCE_SYSTEM_ID:-sim-air-situation-001}
       SIM_ADAPTER_VERSION: ${SIM_ADAPTER_VERSION:-0.1.0}
       MAIN_COP_BASE_URL: ${MAIN_COP_BASE_URL:-http://sim-api:4000/mock-cop}
+      MAIN_COP_BEARER_TOKEN: ${MAIN_COP_BEARER_TOKEN:-dev-lab-token}
       EXTERNAL_AI_ALLOWED: ${EXTERNAL_AI_ALLOWED:-false}
     volumes:
       - sim-data:/data

@@ -14,6 +14,7 @@ POST {MAIN_COP_BASE_URL}/api/v1/ingest/batches
 ## API konfigurace
 
 - `mainCopBaseUrl`: base URL cílového COP prostředí.
+- `mainCopBearerToken`: bearer token pro cílový COP ingest. V pilotním lab režimu musí odpovídat hodnotě `COP_LAB_TOKEN` v COP.
 - `contractVersion`: výchozí `cop-ingest-v1`.
 - `sourceSystemId`: stabilní identifikátor SIM instance.
 - `adapterId`: výchozí `simulation-adapter`.

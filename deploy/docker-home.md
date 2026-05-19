@@ -31,6 +31,7 @@ SIM_SOURCE_SYSTEM_ID=sim-air-situation-001
 SIM_ADAPTER_VERSION=0.1.0
 SIM_DATA_DIR=/data
 MAIN_COP_BASE_URL=http://sim-api:4000/mock-cop
+MAIN_COP_BEARER_TOKEN=dev-lab-token
 EXTERNAL_AI_ALLOWED=false
 EOF
 
@@ -48,5 +49,6 @@ http://docker.home.cz:5020
 ## Poznámky
 
 - Výchozí režim je `DRY_RUN`.
+- Pro LIVE publikování do COP nastav `SIM_PUBLISHER_MODE=LIVE`, `MAIN_COP_BASE_URL=http://172.17.0.1:4310` a `MAIN_COP_BEARER_TOKEN` na stejnou hodnotu jako `COP_LAB_TOKEN` v COP.
 - Perzistentní data jsou v Docker volume `sim-data`.
 - Web kontejner přes nginx proxy předává `/api`, `/health`, `/metrics` a `/mock-cop` do API kontejneru.

@@ -28,6 +28,7 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
     {
       mode: config.publisherMode,
       mainCopBaseUrl: config.mainCopBaseUrl,
+      mainCopBearerToken: config.mainCopBearerToken,
       sourceSystemId: config.sourceSystemId,
       adapterVersion: config.adapterVersion,
       maxRetries: 5

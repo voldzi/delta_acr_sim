@@ -12,6 +12,7 @@ export interface ApiConfig {
   sourceSystemId: string;
   adapterVersion: string;
   mainCopBaseUrl?: string;
+  mainCopBearerToken?: string;
   externalAiAllowed: boolean;
 }
 
@@ -28,6 +29,7 @@ export async function loadConfig(): Promise<ApiConfig> {
     sourceSystemId: process.env.SIM_SOURCE_SYSTEM_ID ?? DEFAULT_SOURCE_SYSTEM_ID,
     adapterVersion: process.env.SIM_ADAPTER_VERSION ?? "0.1.0",
     mainCopBaseUrl: process.env.MAIN_COP_BASE_URL,
+    mainCopBearerToken: process.env.MAIN_COP_BEARER_TOKEN ?? "dev-lab-token",
     externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true"
   };
 }

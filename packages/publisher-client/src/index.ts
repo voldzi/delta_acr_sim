@@ -29,6 +29,7 @@ export interface PublisherQueueItem {
 export interface PublisherConfig {
   mode: PublisherMode;
   mainCopBaseUrl?: string;
+  mainCopBearerToken?: string;
   sourceSystemId: string;
   adapterVersion: string;
   maxRetries: number;
@@ -66,6 +67,7 @@ export class PublisherClient {
     try {
       const raw = await readFile(this.storePath, "utf8");
       this.data = JSON.parse(raw) as PublisherStoreData;
+      this.recoverInterruptedSends();
       this.pruneRetainedItems();
       await this.persist();
     } catch {
@@ -225,6 +227,9 @@ export class PublisherClient {
     if (this.config.mode === "LIVE" && !this.config.mainCopBaseUrl) {
       throw new Error("MAIN_COP_BASE_URL is required for LIVE mode");
     }
+    if (this.config.mode === "LIVE" && !this.config.mainCopBearerToken) {
+      throw new Error("MAIN_COP_BEARER_TOKEN is required for LIVE mode");
+    }
     return {
       ok: true,
       mode: this.config.mode,
@@ -236,6 +241,9 @@ export class PublisherClient {
     if (!this.config.mainCopBaseUrl) {
       throw new Error("MAIN_COP_BASE_URL is not configured");
     }
+    if (!this.config.mainCopBearerToken) {
+      throw new Error("MAIN_COP_BEARER_TOKEN is not configured");
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), LIVE_PUBLISH_TIMEOUT_MS);
 
@@ -246,7 +254,7 @@ export class PublisherClient {
         signal: controller.signal,
         headers: {
           "content-type": "application/json",
-          authorization: "Bearer local-pilot-token",
+          authorization: `Bearer ${this.config.mainCopBearerToken}`,
           "x-source-system-id": this.config.sourceSystemId,
           "x-idempotency-key": idempotencyKey,
           "x-contract-version": event.contractVersion,
@@ -285,6 +293,18 @@ export class PublisherClient {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, MAX_RETAINED_DELIVERED_ITEMS);
     this.data.items = [...activeItems, ...retainedDeliveredItems];
+  }
+
+  private recoverInterruptedSends(): void {
+    const now = new Date().toISOString();
+    for (const item of this.data.items) {
+      if (item.state === "SENDING") {
+        item.state = "RETRY_SCHEDULED";
+        item.lastError = "Publish interrupted by service restart";
+        item.nextAttemptAt = now;
+        item.updatedAt = now;
+      }
+    }
   }
 }
 
