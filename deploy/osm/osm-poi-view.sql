@@ -65,7 +65,7 @@ from classified
 where category is not null
   and geom is not null;
 
-create unique index osm_poi_uidx on public.osm_poi(osm_type, osm_id, category);
+create index osm_poi_identity_idx on public.osm_poi(osm_type, osm_id, category);
 create index osm_poi_geom_gix on public.osm_poi using gist(geom);
 create index osm_poi_layer_idx on public.osm_poi(layer);
 create index osm_poi_category_idx on public.osm_poi(category);
