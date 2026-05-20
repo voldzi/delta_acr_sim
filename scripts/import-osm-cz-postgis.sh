@@ -49,7 +49,6 @@ docker compose --profile osm --profile osm-import run --rm osm-importer \
   --slim \
   --drop \
   --latlong \
-  --hstore \
   --hstore-all \
   --prefix osm \
   --number-processes "$OSM2PGSQL_PROCESSES" \
