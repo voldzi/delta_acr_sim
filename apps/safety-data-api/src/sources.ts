@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import type { SafetyDataConfig } from "./config.js";
-import { requestJson, requestText } from "./http.js";
+import { HttpRequestError, requestJson, requestText } from "./http.js";
 import { ManagedResponseCache } from "./response-cache.js";
 import type {
   BoundingBox,
@@ -154,6 +154,7 @@ class ChmiHydroSource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly metadataCache: ManagedResponseCache<HydroStation[]>;
   private readonly stationDataCache: ManagedResponseCache<HydroNowResponse>;
+  private readonly missingStationDataUntilMs = new Map<string, number>();
 
   constructor(private readonly config: SafetyDataConfig) {
     this.metadataCache = new ManagedResponseCache<HydroStation[]>({
@@ -192,28 +193,72 @@ class ChmiHydroSource implements SafetyDataSource {
 
     const features: SafetyFeature[] = [];
     const warnings: string[] = [];
+    let missingCurrentDataCount = 0;
+    let failedStationCount = 0;
     for (let index = 0; index < selectedStations.length; index += 8) {
       const batch = selectedStations.slice(index, index + 8);
       const settled = await Promise.allSettled(batch.map((station) => this.fetchStationFeature(station, query.includeRaw, fetchedAt)));
       for (const item of settled) {
         if (item.status === "fulfilled") {
-          if (item.value) {
-            features.push(item.value);
+          if (item.value.feature) {
+            features.push(item.value.feature);
+          }
+          if (item.value.missingCurrentData) {
+            missingCurrentDataCount += 1;
           }
         } else {
-          warnings.push(item.reason instanceof Error ? item.reason.message : "Unknown CHMI hydrological station fetch failure.");
+          failedStationCount += 1;
         }
       }
+    }
+
+    if (failedStationCount > 0) {
+      warnings.push(`chmi_hydro: ${failedStationCount} station observation fetches failed.`);
+    }
+    if (features.length === 0 && missingCurrentDataCount > 0) {
+      warnings.push(`chmi_hydro: no current observations are available for ${missingCurrentDataCount} selected stations.`);
     }
 
     return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings };
   }
 
-  private async fetchStationFeature(station: HydroStation, includeRaw: boolean, fetchedAt: string): Promise<SafetyFeature | undefined> {
+  private async fetchStationFeature(station: HydroStation, includeRaw: boolean, fetchedAt: string): Promise<HydroStationFetchResult> {
+    if (this.isMissingStationDataCached(station.objId)) {
+      return { missingCurrentData: true };
+    }
     const url = `${trimTrailingSlash(this.config.chmiHydroNowBaseUrl)}/${encodeURIComponent(station.objId)}.json`;
-    const payload = await this.stationDataCache.getOrLoad(url, () => requestJson<HydroNowResponse>(url, this.config.requestTimeoutMs));
-    return mapHydroStation(station, payload, includeRaw, fetchedAt);
+    try {
+      const payload = await this.stationDataCache.getOrLoad(url, () => requestJson<HydroNowResponse>(url, this.config.requestTimeoutMs));
+      return { feature: mapHydroStation(station, payload, includeRaw, fetchedAt) };
+    } catch (error) {
+      if (error instanceof HttpRequestError && error.status === 404) {
+        this.cacheMissingStationData(station.objId);
+        return { missingCurrentData: true };
+      }
+      throw error;
+    }
   }
+
+  private isMissingStationDataCached(stationId: string): boolean {
+    const expiresAtMs = this.missingStationDataUntilMs.get(stationId);
+    if (!expiresAtMs) {
+      return false;
+    }
+    if (expiresAtMs <= Date.now()) {
+      this.missingStationDataUntilMs.delete(stationId);
+      return false;
+    }
+    return true;
+  }
+
+  private cacheMissingStationData(stationId: string): void {
+    this.missingStationDataUntilMs.set(stationId, Date.now() + 6 * 60 * 60 * 1000);
+  }
+}
+
+interface HydroStationFetchResult {
+  feature?: SafetyFeature;
+  missingCurrentData?: boolean;
 }
 
 interface FeatureInput {
@@ -336,10 +381,16 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
   const infos = toArray(alert.info).map(asRecord).filter(Boolean) as Array<Record<string, unknown>>;
   const center = bboxCenter(query.bbox);
 
-  return infos.map((info, index) => {
+  return infos.flatMap((info, index) => {
     const event = optionalString(info.event) ?? "CHMI warning";
     const onset = normalizeTimestamp(optionalString(info.onset));
     const expires = normalizeTimestamp(optionalString(info.expires));
+    const description = optionalString(info.description);
+    const instruction = optionalString(info.instruction);
+    if (isInactiveCapInfo(event, description, optionalString(info.severity), optionalString(info.certainty))) {
+      return [];
+    }
+
     const severity = capSeverity(optionalString(info.severity), event);
     const areas = toArray(info.area).map(asRecord).filter(Boolean) as Array<Record<string, unknown>>;
     const affectedAreas = unique(
@@ -367,13 +418,13 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
       layer: "warnings",
       category,
       headline,
-      description: optionalString(info.description),
-      recommendedAction: optionalString(info.instruction),
+      description,
+      recommendedAction: instruction,
       sourceId: "chmi_alerts",
       license: CHMI_OPEN_DATA_LICENSE,
       observedAt: sent,
       effectiveAt: onset ?? sent,
-      expiresAt: expires,
+      expiresAt: expires ?? addSeconds(sent, 24 * 60 * 60),
       confidence: capConfidence(optionalString(info.certainty), severity),
       severity,
       urgency: capUrgency(optionalString(info.urgency)),
@@ -709,6 +760,14 @@ function hydroConfidence(observedAt: string): number {
 function isNoWarning(event: string | undefined, description?: string): boolean {
   const text = `${event ?? ""} ${description ?? ""}`.toLowerCase();
   return text.includes("žádná výstraha") || text.includes("zadna vystraha") || text.includes("no warning");
+}
+
+function isInactiveCapInfo(event: string | undefined, description: string | undefined, severity: string | undefined, certainty: string | undefined): boolean {
+  if (isNoWarning(event, description)) {
+    return true;
+  }
+  const normalizedEvent = (event ?? "").toLowerCase();
+  return !description && severity?.toLowerCase() === "minor" && certainty?.toLowerCase() === "unlikely" && normalizedEvent.includes("warning");
 }
 
 function stripRawIfNeeded(feature: SafetyFeature, includeRaw: boolean): SafetyFeature {

@@ -85,9 +85,12 @@ API používá řízenou cache:
 - stale-if-error fallback,
 - dlouhá cache hydrologických metadat,
 - per-station cache aktuálních hydrologických dat,
+- negativní cache pro hydrologické stanice, u kterých ČHMÚ vrací `404` pro aktuální data; pokud alespoň část stanic v bbox vrací platná data, jednotlivé `404` se neposílají jako COP warning,
 - limit `CHMI_HYDRO_MAX_STATIONS`.
 
 Veřejné zdroje se nesmí dotazovat při každém dotazu tisíců COP klientů. COP má dotazovat SIM, SIM drží cache a dotazuje původní zdroje s konzervativní kadencí.
+
+CAP soubory ČHMÚ mohou obsahovat informační záznamy typu „žádná výstraha“ i jazykové varianty bez reálné výstrahy. SIM tyto záznamy nepublikuje jako mapové warnings, aby COP nedegradoval kvůli neaktivním nebo administrativním CAP položkám.
 
 ## Health a metadata
 

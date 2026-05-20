@@ -1,5 +1,16 @@
 import type { Request, Response as ExpressResponse } from "express";
 
+export class HttpRequestError extends Error {
+  constructor(
+    message: string,
+    readonly url: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "HttpRequestError";
+  }
+}
+
 export function problem(req: Request, res: ExpressResponse, status: number, code: string, message: string): void {
   res.status(status).json({
     error: {
@@ -31,7 +42,7 @@ async function request(url: string, timeoutMs: number): Promise<globalThis.Respo
       }
     });
     if (!response.ok) {
-      throw new Error(`GET ${url} failed with ${response.status}`);
+      throw new HttpRequestError(`GET ${url} failed with ${response.status}`, url, response.status);
     }
     return response;
   } finally {

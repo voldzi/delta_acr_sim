@@ -1,4 +1,6 @@
+import { createServer, type Server } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
@@ -96,6 +98,56 @@ describe("Safety Data API contract", () => {
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("safety_data_cache_entries");
     expect(response.text).toContain("safety_data_cache_coalesced_hits");
+  });
+
+  it("skips CHMI hydro stations with missing current data without degrading a partial response", async () => {
+    await withFixtureServer(
+      {
+        "/meta.json": JSON.stringify(chmiHydroMetadataFixture()),
+        "/now/0-203-1-good.json": JSON.stringify(chmiHydroNowFixture("0-203-1-good")),
+        "/now/0-203-1-missing.json": { status: 404, body: "not found" }
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_hydro"],
+          chmiHydroMetadataUrl: `${baseUrl}/meta.json`,
+          chmiHydroNowBaseUrl: `${baseUrl}/now`
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=flood&source=chmi_hydro&limit=10")
+          .expect(200);
+
+        expect(response.body.summary.featureCount).toBe(1);
+        expect(response.body.warnings).toEqual([]);
+        expect(response.body.features[0].properties.tags.stationId).toBe("0-203-1-good");
+      }
+    );
+  });
+
+  it("does not publish inactive CHMI CAP no-warning entries as stale warnings", async () => {
+    await withFixtureServer(
+      {
+        "/cap/": '<html><body><a href="alert.xml">alert.xml</a> 20-May-2026 10:09</body></html>',
+        "/cap/alert.xml": chmiNoWarningCapFixture()
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_alerts"],
+          chmiAlertsCapBaseUrl: `${baseUrl}/cap/`
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=warnings&source=chmi_alerts&limit=10")
+          .expect(200);
+
+        expect(response.body.summary.featureCount).toBe(0);
+        expect(response.body.summary.staleFeatureCount).toBe(0);
+        expect(response.body.warnings).toEqual([]);
+      }
+    );
   });
 
   it("returns the COP GeoJSON projection", async () => {
@@ -211,3 +263,101 @@ describe("Safety Data API contract", () => {
     expect(service.cacheStats().coalescedHits).toBe(7);
   });
 });
+
+async function withFixtureServer(
+  routes: Record<string, string | { status: number; body: string }>,
+  fn: (baseUrl: string) => Promise<void>
+): Promise<void> {
+  const server = createServer((req, res) => {
+    const route = routes[req.url ?? ""];
+    if (route === undefined) {
+      res.writeHead(404).end("not found");
+      return;
+    }
+    if (typeof route === "string") {
+      res.writeHead(200, { "content-type": route.trim().startsWith("<") ? "application/xml" : "application/json" }).end(route);
+      return;
+    }
+    res.writeHead(route.status).end(route.body);
+  });
+  await listen(server);
+  try {
+    const address = server.address() as AddressInfo;
+    await fn(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await close(server);
+  }
+}
+
+function listen(server: Server): Promise<void> {
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+}
+
+function close(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+function chmiHydroMetadataFixture(): unknown {
+  return {
+    data: {
+      data: {
+        header: "objID,DBC,STATION_NAME,STREAM_NAME,GEOGR1,GEOGR2,SPA_TYP,DRYH,SPA1H,SPA2H,SPA3H,SPA4H",
+        values: [
+          ["0-203-1-good", "GOOD", "Good station", "Vltava", 50.05, 14.4, "H", 10, 100, 150, 200, 250],
+          ["0-203-1-missing", "MISS", "Missing station", "Vltava", 50.06, 14.41, "H", 10, 100, 150, 200, 250]
+        ]
+      }
+    }
+  };
+}
+
+function chmiHydroNowFixture(stationId: string): unknown {
+  return {
+    objList: [
+      {
+        objID: stationId,
+        tsList: [
+          {
+            tsConID: "H",
+            unit: "CM",
+            tsData: [{ dt: new Date().toISOString(), value: 42 }]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+function chmiNoWarningCapFixture(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>test-no-warning</identifier>
+  <sender>chmi@chmi.cz</sender>
+  <sent>2026-05-20T10:09:04+02:00</sent>
+  <status>Actual</status>
+  <msgType>Update</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>cs</language>
+    <event>Žádná výstraha před teplotou</event>
+    <urgency>Immediate</urgency>
+    <severity>Minor</severity>
+    <certainty>Unlikely</certainty>
+    <onset>2026-05-20T10:03:21+02:00</onset>
+    <description></description>
+    <area><areaDesc>Hlavní město Praha</areaDesc></area>
+  </info>
+  <info>
+    <language>en-GB</language>
+    <event>Minor Temperature Warning</event>
+    <urgency>Immediate</urgency>
+    <severity>Minor</severity>
+    <certainty>Unlikely</certainty>
+    <onset>2026-05-20T10:03:21+02:00</onset>
+    <description></description>
+    <area><areaDesc>Hlavní město Praha</areaDesc></area>
+  </info>
+</alert>`;
+}
