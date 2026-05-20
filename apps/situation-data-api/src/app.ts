@@ -170,6 +170,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
   const allowed = new Set<SituationDataSourceId>([
     "mock",
     "open_meteo",
+    "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
     "pid_gtfs_rt",
@@ -220,6 +221,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     requestTimeoutMs: config.requestTimeoutMs,
     sourceCacheTtlSeconds: {
       openMeteo: config.openMeteoCacheTtlSeconds,
+      osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,
       aviationWeather: config.aviationWeatherCacheTtlSeconds,
@@ -228,6 +230,11 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     providers: [
       { sourceId: "mock", authConfigured: true },
       { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
+      {
+        sourceId: "osm_postgis",
+        baseUrl: config.osmPostgisConnectionString ? "postgresql://osm-postgis" : undefined,
+        authConfigured: Boolean(config.osmPostgisConnectionString)
+      },
       { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
       { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },

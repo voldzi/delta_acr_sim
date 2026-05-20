@@ -104,7 +104,7 @@ components:
       required: false
       schema:
         type: string
-        example: open_meteo,ctu_nettest,pid_gtfs_rt,safety_data
+        example: open_meteo,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
     Limit:
       name: limit
       in: query
@@ -136,7 +136,7 @@ components:
       enum: [weather, ground, mobile, traffic, warnings, flood, air_quality]
     SourceId:
       type: string
-      enum: [mock, open_meteo, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
+      enum: [mock, open_meteo, osm_postgis, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
     BoundingBox:
       type: object
       required: [west, south, east, north]
@@ -249,9 +249,11 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, osmOverpass, safetyData, aviationWeather, ardosPartner]
+          required: [openMeteo, osmPostgis, osmOverpass, safetyData, aviationWeather, ardosPartner]
           properties:
             openMeteo:
+              type: integer
+            osmPostgis:
               type: integer
             osmOverpass:
               type: integer

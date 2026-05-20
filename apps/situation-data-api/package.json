@@ -15,11 +15,13 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "fflate": "^0.8.3",
-    "gtfs-realtime-bindings": "^1.1.1"
+    "gtfs-realtime-bindings": "^1.1.1",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.4",
     "tsx": "^4.21.0",

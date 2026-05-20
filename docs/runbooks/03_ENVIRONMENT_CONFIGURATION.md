@@ -131,6 +131,7 @@ SITUATION_DATA_CACHE_MAX_ENTRIES=10000
 SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES=0.18
 SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS=600
 SITUATION_DATA_OPEN_METEO_GRID_DEGREES=0.05
+SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
@@ -163,7 +164,26 @@ SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 OVERPASS_MAX_BBOX_DEGREES=1.6
 ```
 
-Produkční varianta musí použít lokální OSM import, typicky PostGIS tabulku z regionálního PBF extractu, a až poté zdroj pro pozemní POI znovu zapnout.
+Produkční varianta pro OSM používá lokální PostGIS import:
+
+```bash
+docker compose --profile osm up -d osm-postgis
+scripts/import-osm-cz-postgis.sh
+```
+
+Po úspěšném importu zapni `osm_postgis` místo veřejného Overpassu:
+
+```bash
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+OSM_POSTGIS_DB=sim_osm
+OSM_POSTGIS_USER=sim_osm
+OSM_POSTGIS_PASSWORD=...
+OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
+OSM_POSTGIS_TABLE=public.osm_poi
+SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+```
+
+Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COP features.
 
 ## Safety Data API
 

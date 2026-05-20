@@ -6,6 +6,7 @@
 2. Implementovat vrstvy:
    - `mock`: stabilní testovací features pro ground/mobile/traffic/weather,
    - `open_meteo`: live weather feature pro střed bbox,
+   - `osm_postgis`: lokální PostGIS provider nad OpenStreetMap extractem pro produkční ground/mobile reference,
    - `osm_overpass`: volitelný live ground provider pro malé bbox dotazy,
    - `ctu_nettest`: live/periodický ČTÚ NetTest ZIP export pro mobilní měření,
    - `pid_gtfs_rt`: live PID/Golemio GTFS-RT vozidla pro dopravní kontext,
@@ -22,7 +23,7 @@
    - `/situation-data/health/`
    - `/situation-data/metrics`
 5. Doplnit panel v SIM pro dohled nad stavem sběru, zdroji, licencemi, počtem features, warnings a preview.
-6. Doplnit server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem, kanonickým bbox klíčem pro COP výřezy a source-level cache pro Open-Meteo, ČTÚ NetTest, PID GTFS-RT, Safety Data, Aviation Weather, ARDOS a volitelný Overpass.
+6. Doplnit server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem, kanonickým bbox klíčem pro COP výřezy a source-level cache pro Open-Meteo, lokální OSM/PostGIS, ČTÚ NetTest, PID GTFS-RT, Safety Data, Aviation Weather, ARDOS a volitelný Overpass.
 
 ## Fáze 2: Další síťové a dopravní vrstvy
 
@@ -37,6 +38,6 @@
 
 - V každé feature musí být `sourceId`, licence, atribuce, `confidence`, `stale` a čas pozorování.
 - Veřejné API nesmí vracet žádné API klíče ani interní tajemství.
-- Public Overpass endpointy nepoužívat jako produkční runtime backend; pro vysoký provoz je nutný lokální OSM extract/PostGIS provider.
+- Public Overpass endpointy nepoužívat jako produkční runtime backend; pro vysoký provoz používat `osm_postgis` nad lokálním OSM extractem.
 - ČTÚ NetTest ZIP, PID GTFS-RT feed, Open-Meteo, Safety Data a případný Overpass se nesmí stahovat pro každý COP dotaz; SIM je drží ve source-level cache a sdílí probíhající fetch.
 - SIM má při výpadku jednotlivého zdroje vracet dostupná data z ostatních zdrojů a `warnings`, ne 500 pro celý agregát.

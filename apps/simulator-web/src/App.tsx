@@ -237,8 +237,11 @@ export function App() {
         requestTimeoutMs: 0,
         sourceCacheTtlSeconds: {
           openMeteo: 0,
+          osmPostgis: 0,
           osmOverpass: 0,
-          safetyData: 0
+          safetyData: 0,
+          aviationWeather: 0,
+          ardosPartner: 0
         },
         providers: []
       },
@@ -1538,7 +1541,13 @@ function formatBbox(bbox: SituationDataConfig["defaultBbox"]): string {
 }
 
 function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeconds"]): string {
-  return `weather ${ttls.openMeteo}s / safety ${ttls.safetyData}s / OSM ${ttls.osmOverpass}s`;
+  return [
+    `weather ${ttls.openMeteo}s`,
+    `aviation ${ttls.aviationWeather}s`,
+    `safety ${ttls.safetyData}s`,
+    `OSM DB ${ttls.osmPostgis}s`,
+    `Overpass ${ttls.osmOverpass}s`
+  ].join(" / ");
 }
 
 function formatAltitude(value: number | undefined): string {

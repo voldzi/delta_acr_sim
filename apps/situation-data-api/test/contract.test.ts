@@ -29,6 +29,9 @@ describe("Situation Data API contract", () => {
       openMeteoBaseUrl: "https://api.open-meteo.com",
       openMeteoCacheTtlSeconds: 600,
       openMeteoGridDegrees: 0.05,
+      osmPostgisConnectionString: undefined,
+      osmPostgisTable: "public.osm_poi",
+      osmPostgisCacheTtlSeconds: 21600,
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
       overpassCacheTtlSeconds: 21600,
       overpassMaxBboxDegrees: 1.6,
@@ -76,6 +79,10 @@ describe("Situation Data API contract", () => {
           license: expect.objectContaining({ name: "CC BY 4.0 / Open-Meteo Terms" })
         }),
         expect.objectContaining({
+          sourceId: "osm_postgis",
+          license: expect.objectContaining({ name: "ODbL 1.0" })
+        }),
+        expect.objectContaining({
           sourceId: "osm_overpass",
           license: expect.objectContaining({ name: "ODbL 1.0" })
         }),
@@ -117,6 +124,7 @@ describe("Situation Data API contract", () => {
         staleAfterSeconds: 900,
         sourceCacheTtlSeconds: {
           openMeteo: 600,
+          osmPostgis: 21600,
           osmOverpass: 21600,
           safetyData: 300,
           aviationWeather: 600,
@@ -125,6 +133,7 @@ describe("Situation Data API contract", () => {
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
+          expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
           expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
@@ -143,10 +152,11 @@ describe("Situation Data API contract", () => {
 
     const cachedSources = await createApp({
       ...config,
-      enabledSources: ["open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data", "aviation_weather", "ardos_partner"]
+      enabledSources: ["open_meteo", "osm_postgis", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data", "aviation_weather", "ardos_partner"]
     });
     const cachedSourceMetrics = await request(cachedSources.app).get("/metrics").expect(200);
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="open_meteo"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_postgis"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_overpass"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_stale_hits{source="ctu_nettest"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
@@ -264,6 +274,17 @@ describe("Situation Data API contract", () => {
 
     expect(response.body.features).toHaveLength(0);
     expect(response.body.warnings[0]).toContain("ARDOS_PARTNER_BASE_URL");
+  });
+
+  it("surfaces OSM PostGIS configuration warnings without opening a database connection", async () => {
+    const osmPostgisApp = await createApp({ ...config, enabledSources: ["osm_postgis"] });
+
+    const response = await request(osmPostgisApp.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(0);
+    expect(response.body.warnings[0]).toContain("OSM_POSTGIS_DATABASE_URL");
   });
 
   it("keeps layers represented when a low limit is requested", async () => {

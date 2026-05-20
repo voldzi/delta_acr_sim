@@ -2,6 +2,7 @@ export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic" | "wa
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
+  | "osm_postgis"
   | "osm_overpass"
   | "ctu_nettest"
   | "pid_gtfs_rt"
@@ -67,6 +68,7 @@ export interface SituationDataPublicConfig {
   requestTimeoutMs: number;
   sourceCacheTtlSeconds: {
     openMeteo: number;
+    osmPostgis: number;
     osmOverpass: number;
     safetyData: number;
     aviationWeather: number;

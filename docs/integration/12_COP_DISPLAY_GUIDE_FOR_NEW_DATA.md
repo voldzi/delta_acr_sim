@@ -1,4 +1,4 @@
-# COP display guide: SIM aviation and ARDOS data
+# COP display guide: SIM aviation, OSM and ARDOS data
 
 ## Účel
 
@@ -7,6 +7,7 @@ Tento dokument popisuje, jak má COP zobrazit nová data poskytovaná SIM:
 - letecké tracky z `flight-data`, včetně budoucích lokálních ADS-B přijímačů,
 - letiště z OurAirports reference,
 - letištní počasí METAR/TAF ze `situation-data` source `aviation_weather`,
+- pozemní referenční objekty a komunikační infrastrukturu ze `situation-data` source `osm_postgis`,
 - neveřejná partnerská data ARDOS ze `situation-data` source `ardos_partner`.
 
 COP nesmí volat NOAA AWC, ARDOS, ADS-B providery ani OurAirports přímo. Všechny dotazy jdou přes SIM, která řeší cache, licenci, fallback a normalizaci.
@@ -28,6 +29,7 @@ Příklad pro mapový výřez Prahy:
 
 ```http
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=weather&source=aviation_weather&limit=50
+GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=250
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile,traffic&source=ardos_partner&limit=250
 GET /flight-data/api/v1/cop/tracks?bbox=13.85,49.65,15.35,50.45&limit=500
 GET /flight-data/api/v1/airports?bbox=13.85,49.65,15.35,50.45&limit=200
@@ -118,6 +120,20 @@ Doporučené UI:
 - tooltip: `icaoId`, vítr, teplota, tlak,
 - detail panel: raw METAR/TAF pouze v technickém/detail režimu,
 - nezobrazovat jako pohybující se objekt.
+
+## OpenStreetMap/PostGIS zobrazení
+
+`osm_postgis` přichází jako `cop-situation-source-v1` GeoJSON features ve vrstvách `ground` a `mobile`.
+
+Doporučené kategorie:
+
+| Layer | Kategorie | Zobrazení |
+| --- | --- | --- |
+| `ground` | `hospital`, `clinic`, `doctors`, `pharmacy`, `police`, `fire_station`, `ambulance_station`, `shelter`, `townhall` | Referenční bezpečnostní a veřejná infrastruktura. |
+| `ground` | `fire_hydrant`, `defibrillator`, `siren`, `assembly_point` | Zobrazovat až při detailnějším zoomu. |
+| `mobile` | `communications_tower` | Komunikační infrastruktura, ne živý stav sítě. |
+
+COP má u OSM objektů zobrazit atribuci `OpenStreetMap contributors` a zdrojový badge `OSM`. Tyto objekty nejsou autoritativní operační evidence; slouží jako kontext mapy.
 
 ## ARDOS Partner zobrazení
 

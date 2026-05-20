@@ -84,11 +84,14 @@ services:
       SITUATION_DATA_STALE_AFTER_SECONDS: ${SITUATION_DATA_STALE_AFTER_SECONDS:-900}
       SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS: ${SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS:-600}
       SITUATION_DATA_OPEN_METEO_GRID_DEGREES: ${SITUATION_DATA_OPEN_METEO_GRID_DEGREES:-0.05}
+      SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS: ${SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS:-21600}
       SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS: ${SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS:-21600}
       SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS: ${SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS:-300}
       SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS: ${SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS:-600}
       SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS: ${SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS:-15}
       OPEN_METEO_BASE_URL: ${OPEN_METEO_BASE_URL:-https://api.open-meteo.com}
+      OSM_POSTGIS_DATABASE_URL: ${OSM_POSTGIS_DATABASE_URL:-postgresql://sim_osm:sim_osm_dev@osm-postgis:5432/sim_osm}
+      OSM_POSTGIS_TABLE: ${OSM_POSTGIS_TABLE:-public.osm_poi}
       OVERPASS_BASE_URL: ${OVERPASS_BASE_URL:-https://overpass-api.de/api/interpreter}
       OVERPASS_MAX_BBOX_DEGREES: ${OVERPASS_MAX_BBOX_DEGREES:-1.6}
       CTU_NETTEST_URL: ${CTU_NETTEST_URL:-https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip}
@@ -107,6 +110,36 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  osm-postgis:
+    profiles: ["osm"]
+    image: postgis/postgis:16-3.5
+    container_name: delta-acr-osm-postgis
+    environment:
+      POSTGRES_DB: ${OSM_POSTGIS_DB:-sim_osm}
+      POSTGRES_USER: ${OSM_POSTGIS_USER:-sim_osm}
+      POSTGRES_PASSWORD: ${OSM_POSTGIS_PASSWORD:-sim_osm_dev}
+    volumes:
+      - osm-postgis-data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  osm-importer:
+    profiles: ["osm-import"]
+    image: osm2pgsql/osm2pgsql:latest
+    container_name: delta-acr-osm-importer
+    depends_on:
+      osm-postgis:
+        condition: service_healthy
+    volumes:
+      - ./data/osm-import:/import
+    entrypoint: ["osm2pgsql"]
 
   safety-data-api:
     build:
@@ -164,3 +197,4 @@ volumes:
   flight-data:
   situation-data:
   safety-data:
+  osm-postgis-data:

@@ -204,7 +204,16 @@ export interface FlightDataTrackResponse {
 }
 
 export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic" | "warnings" | "flood" | "air_quality";
-export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass" | "ctu_nettest" | "pid_gtfs_rt" | "safety_data";
+export type SituationDataSourceId =
+  | "mock"
+  | "open_meteo"
+  | "osm_postgis"
+  | "osm_overpass"
+  | "ctu_nettest"
+  | "pid_gtfs_rt"
+  | "safety_data"
+  | "aviation_weather"
+  | "ardos_partner";
 
 export interface SituationDataHealth {
   status: string;
@@ -258,8 +267,11 @@ export interface SituationDataConfig {
   requestTimeoutMs: number;
   sourceCacheTtlSeconds: {
     openMeteo: number;
+    osmPostgis: number;
     osmOverpass: number;
     safetyData: number;
+    aviationWeather: number;
+    ardosPartner: number;
   };
   providers: Array<{
     sourceId: SituationDataSourceId;

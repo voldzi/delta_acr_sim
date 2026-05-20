@@ -3,6 +3,7 @@ import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
 import { canonicalizeBboxForCache, formatBboxKey, roundPointToGrid } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
+import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
@@ -130,6 +131,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
   const allSources: Record<SituationDataSourceId, SituationDataSource> = {
     mock: new MockSituationDataSource(),
     open_meteo: new OpenMeteoSource(config),
+    osm_postgis: new OsmPostgisSource(config),
     osm_overpass: new OsmOverpassSource(config),
     ctu_nettest: new CtuNettestSource(config),
     pid_gtfs_rt: new PidGtfsRtSource(config),
@@ -146,6 +148,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
   return [
     new MockSituationDataSource().descriptor,
     new OpenMeteoSource(config).descriptor,
+    new OsmPostgisSource(config).descriptor,
     new OsmOverpassSource(config).descriptor,
     new CtuNettestSource(config).descriptor,
     new PidGtfsRtSource(config).descriptor,

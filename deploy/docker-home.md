@@ -54,6 +54,7 @@ SITUATION_DATA_CACHE_MAX_ENTRIES=10000
 SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES=0.18
 SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS=600
 SITUATION_DATA_OPEN_METEO_GRID_DEGREES=0.05
+SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
@@ -61,6 +62,11 @@ SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
+OSM_POSTGIS_DB=sim_osm
+OSM_POSTGIS_USER=sim_osm
+OSM_POSTGIS_PASSWORD=sim_osm_dev
+OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:sim_osm_dev@osm-postgis:5432/sim_osm
+OSM_POSTGIS_TABLE=public.osm_poi
 OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
 OVERPASS_MAX_BBOX_DEGREES=1.6
 CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
@@ -77,6 +83,32 @@ curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic,warnings,flood&limit=20'
+```
+
+## Lokální OpenStreetMap/PostGIS import
+
+Veřejný Overpass nepoužívej pro produkční runtime. Pro pilot s tisíci uživatelů postav lokální PostGIS a zapni `osm_postgis` až po importu:
+
+```bash
+cd /srv/sim
+docker compose --profile osm up -d osm-postgis
+scripts/import-osm-cz-postgis.sh
+```
+
+Poté uprav `.env`:
+
+```bash
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
+OSM_POSTGIS_TABLE=public.osm_poi
+```
+
+A restartuj pouze situační API a web proxy:
+
+```bash
+docker compose up -d --build situation-data-api sim-web
+curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
 ```
 
 ## URL
@@ -97,7 +129,7 @@ http://docker.home.cz:5020
 - Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`.
 - Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800`, `SITUATION_DATA_CACHE_MAX_ENTRIES=10000`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
-- `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci; veřejné Overpass instance jsou sdílený zdroj.
+- `osm_postgis` je produkční OSM zdroj nad lokálním PostGIS importem; `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci.
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.

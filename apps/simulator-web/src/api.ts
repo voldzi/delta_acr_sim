@@ -249,8 +249,11 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       requestTimeoutMs: 0,
       sourceCacheTtlSeconds: {
         openMeteo: 0,
+        osmPostgis: 0,
         osmOverpass: 0,
-        safetyData: 0
+        safetyData: 0,
+        aviationWeather: 0,
+        ardosPartner: 0
       },
       providers: []
     },

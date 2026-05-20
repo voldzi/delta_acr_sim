@@ -88,7 +88,18 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `safety_data` | `warnings`, `flood` | Projekce Safety Data API do situačního kontraktu. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
+| `osm_postgis` | `ground`, `mobile` | Lokální OpenStreetMap extract v PostGIS. Produkční náhrada veřejného Overpassu pro nemocnice, IZS body, kryty, úřady a komunikační věže. |
 | `osm_overpass` | `ground`, `mobile` | Jen omezený vývoj/pilot; veřejný Overpass nesmí být runtime backend pro tisíce uživatelů. |
+
+## OpenStreetMap PostGIS
+
+`osm_postgis` vrací referenční OSM objekty jako bodové features:
+
+- `layer=ground`: nemocnice, lékárny, policie, hasičské stanice, ambulantní stanice, kryty, obecní úřady a vybrané nouzové body,
+- `layer=mobile`: komunikační věže a mobilní infrastruktura odvozená z OSM tagů,
+- `sourceId=osm_postgis`, licence `ODbL 1.0`, atribuce `OpenStreetMap contributors`.
+
+COP má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
 
 ## Aviation Weather
 

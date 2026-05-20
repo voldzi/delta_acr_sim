@@ -17,6 +17,9 @@ export interface SituationDataConfig {
   openMeteoBaseUrl: string;
   openMeteoCacheTtlSeconds: number;
   openMeteoGridDegrees: number;
+  osmPostgisConnectionString?: string;
+  osmPostgisTable: string;
+  osmPostgisCacheTtlSeconds: number;
   overpassBaseUrl: string;
   overpassCacheTtlSeconds: number;
   overpassMaxBboxDegrees: number;
@@ -55,6 +58,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     openMeteoBaseUrl: process.env.OPEN_METEO_BASE_URL ?? "https://api.open-meteo.com",
     openMeteoCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS, 600),
     openMeteoGridDegrees: parseFloatOr(process.env.SITUATION_DATA_OPEN_METEO_GRID_DEGREES, 0.05),
+    osmPostgisConnectionString: emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
+    osmPostgisTable: process.env.OSM_POSTGIS_TABLE ?? "public.osm_poi",
+    osmPostgisCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS, 21600),
     overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? "https://overpass-api.de/api/interpreter",
     overpassCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS, 21600),
     overpassMaxBboxDegrees: parseFloatOr(process.env.OVERPASS_MAX_BBOX_DEGREES, 1.6),
@@ -75,6 +81,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
   const allowed = new Set<SituationDataSourceId>([
     "mock",
     "open_meteo",
+    "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
     "pid_gtfs_rt",
