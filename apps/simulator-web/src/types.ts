@@ -93,3 +93,110 @@ export interface AiDraft {
   explanation?: string;
   scenarioPatch?: Partial<Scenario>;
 }
+
+export interface FlightDataHealth {
+  status: string;
+  timestamp?: string;
+  enabledSources: string[];
+}
+
+export interface FlightDataLicense {
+  name: string;
+  url?: string;
+  attribution: string;
+  commercialUse: "allowed" | "allowed_with_obligations" | "requires_license" | "unknown";
+  operationalUse: "allowed" | "allowed_with_obligations" | "requires_license" | "unknown";
+  notes: string[];
+}
+
+export interface FlightDataSource {
+  sourceId: "mock" | "adsb_lol" | "opensky";
+  label: string;
+  enabled: boolean;
+  mode: "live" | "mock" | "reference";
+  priority: number;
+  license: FlightDataLicense;
+  baseUrl?: string;
+}
+
+export interface FlightDataConfig {
+  enabledSources: Array<"mock" | "adsb_lol" | "opensky">;
+  defaultArea: {
+    lat: number;
+    lon: number;
+    radiusNm: number;
+  };
+  cacheTtlSeconds: number;
+  staleAfterSeconds: number;
+  requestTimeoutMs: number;
+  providers: Array<{
+    sourceId: "mock" | "adsb_lol" | "opensky";
+    baseUrl?: string;
+    authConfigured: boolean;
+  }>;
+}
+
+export interface FlightDataTrack {
+  trackId: string;
+  icao24: string;
+  callsign?: string;
+  registration?: string;
+  objectType: "AIRCRAFT" | "UAV" | "UNKNOWN";
+  domain: "AIR";
+  lat: number;
+  lon: number;
+  altitudeM?: number;
+  speedMps?: number;
+  headingDeg?: number;
+  verticalRateMps?: number;
+  lastSeenAt: string;
+  originCountry?: string;
+  aircraft?: {
+    typeDesignator?: string;
+    manufacturer?: string;
+    model?: string;
+    category?: string;
+    engineType?: string;
+    wakeTurbulenceCategory?: string;
+  };
+  sources: Array<{
+    sourceId: string;
+    sourceRecordId: string;
+    fetchedAt: string;
+    seenAt: string;
+  }>;
+  deduplication: {
+    key: "icao24";
+    mergedRecordCount: number;
+    primarySourceId: string;
+  };
+  quality: {
+    confidence: number;
+    stale: boolean;
+    positionAgeSeconds?: number;
+  };
+  metadata: {
+    onGround?: boolean;
+    squawk?: string;
+    emergency?: string;
+    sourceLicenses: string[];
+  };
+}
+
+export interface FlightDataTrackResponse {
+  contractVersion: "cop-flight-source-v1";
+  source: {
+    sourceId: string;
+    sourceType: "PUBLIC_FLIGHT_AGGREGATE";
+    generatedAt: string;
+  };
+  summary: {
+    rawObservationCount: number;
+    deduplicatedTrackCount: number;
+    droppedWithoutPositionCount: number;
+    staleTrackCount: number;
+  };
+  tracks: FlightDataTrack[];
+  sources: FlightDataSource[];
+  warnings: string[];
+}

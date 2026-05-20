@@ -26,6 +26,7 @@ GET /api/v1/airports/{ident}
 GET /api/v1/aircraft-types
 GET /api/v1/aircraft-types/{designator}
 GET /api/v1/sources
+GET /api/v1/config
 GET /health/ready
 ```
 
@@ -138,3 +139,12 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - Pracovat s `quality.stale`; stale tracky nezobrazovat jako aktuální bez varování.
 - Pokud `warnings` není prázdné, zobrazit stav zdroje jako degradovaný.
 - Pro historii poloh používat `trackId` a `lastSeenAt`.
+
+## Dohled v SIM
+
+SIM web čte pro dohled a nastavení tyto endpointy:
+
+- `/flight-data/health/ready` pro stav služby a enabled source list,
+- `/flight-data/api/v1/sources` pro zdroje, licence a produkční omezení,
+- `/flight-data/api/v1/config` pro aktuální non-secret env konfiguraci,
+- `/flight-data/api/v1/cop/tracks?limit=8` pro rychlý náhled dat, deduplikace a stale tracků.

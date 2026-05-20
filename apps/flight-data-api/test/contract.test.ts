@@ -59,6 +59,24 @@ describe("Flight Data API contract", () => {
     );
   });
 
+  it("exposes non-secret runtime configuration", async () => {
+    const response = await request(app).get("/api/v1/config").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        enabledSources: ["mock"],
+        defaultArea: { lat: 50.1008, lon: 14.2632, radiusNm: 120 },
+        cacheTtlSeconds: 1,
+        staleAfterSeconds: 120,
+        providers: expect.arrayContaining([
+          expect.objectContaining({ sourceId: "mock", authConfigured: true }),
+          expect.objectContaining({ sourceId: "opensky", authConfigured: false })
+        ])
+      })
+    );
+    expect(JSON.stringify(response.body)).not.toContain("clientSecret");
+  });
+
   it("returns deduplicated aircraft positions by icao24", async () => {
     const response = await request(app).get("/api/v1/aircraft/positions?source=mock&limit=10").expect(200);
 

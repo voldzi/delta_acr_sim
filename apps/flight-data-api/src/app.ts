@@ -5,7 +5,7 @@ import { FlightAggregationService } from "./aggregation.js";
 import { problem } from "./http.js";
 import { getAircraftType, getAirport, searchAircraftTypes, searchAirports } from "./reference-data.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
-import type { BoundingBox, FlightDataSourceId, FlightQuery } from "./types.js";
+import type { BoundingBox, FlightDataPublicConfig, FlightDataSourceId, FlightQuery } from "./types.js";
 
 export interface FlightDataAppContext {
   config: FlightDataConfig;
@@ -54,6 +54,10 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
 function registerSourceRoutes(app: Express, context: FlightDataAppContext): void {
   app.get("/api/v1/sources", (_req, res) => {
     res.json({ items: allSourceDescriptors(context.config) });
+  });
+
+  app.get("/api/v1/config", (_req, res) => {
+    res.json(publicConfig(context.config));
   });
 }
 
@@ -206,4 +210,27 @@ function asString(value: unknown): string | undefined {
     return asString(value[0]);
   }
   return typeof value === "string" ? value : undefined;
+}
+
+function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
+  return {
+    enabledSources: config.enabledSources,
+    defaultArea: {
+      lat: config.defaultLat,
+      lon: config.defaultLon,
+      radiusNm: config.defaultRadiusNm
+    },
+    cacheTtlSeconds: config.cacheTtlSeconds,
+    staleAfterSeconds: config.staleAfterSeconds,
+    requestTimeoutMs: config.requestTimeoutMs,
+    providers: [
+      { sourceId: "mock", authConfigured: true },
+      { sourceId: "adsb_lol", baseUrl: config.adsbLolBaseUrl, authConfigured: true },
+      {
+        sourceId: "opensky",
+        baseUrl: config.openskyBaseUrl,
+        authConfigured: Boolean(config.openskyAccessToken || (config.openskyClientId && config.openskyClientSecret))
+      }
+    ]
+  };
 }

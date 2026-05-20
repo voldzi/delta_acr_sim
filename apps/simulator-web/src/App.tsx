@@ -5,19 +5,19 @@ import {
   CheckCircle2,
   CirclePause,
   CirclePlay,
-  Clock3,
   Database,
   ExternalLink,
   FlaskConical,
   Gauge,
   Pause,
+  Plane,
   Play,
   Plus,
   RadioTower,
   RotateCcw,
-  Route,
   ShieldAlert,
   ShieldCheck,
+  Settings2,
   Square,
   Trash2,
   Zap
@@ -35,10 +35,23 @@ import {
   runtimeAction,
   testPublisher
 } from "./api";
-import type { AiDraft, PublisherStatus, QueueItem, RuntimeStatus, Scenario, ScenarioBlock } from "./types";
+import type {
+  AiDraft,
+  FlightDataConfig,
+  FlightDataHealth,
+  FlightDataSource,
+  FlightDataTrack,
+  FlightDataTrackResponse,
+  PublisherStatus,
+  QueueItem,
+  RuntimeStatus,
+  Scenario,
+  ScenarioBlock
+} from "./types";
 
 type Tone = "safe" | "danger" | "active" | "neutral" | "warn";
 type AffiliationCategory = "own" | "foreign" | "other";
+type AppSection = "overview" | "scenario" | "flight-data" | "publisher" | "ai" | "safety";
 
 interface DashboardData {
   scenarios: Scenario[];
@@ -48,6 +61,12 @@ interface DashboardData {
   queueTotalCount: number;
   blocks: ScenarioBlock[];
   providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }>;
+  flightData: {
+    health: FlightDataHealth;
+    sources: FlightDataSource[];
+    config: FlightDataConfig;
+    tracks: FlightDataTrackResponse;
+  };
   warnings: string[];
 }
 
@@ -76,6 +95,24 @@ const emptyPublisher: PublisherStatus = {
   publishingEnabled: true
 };
 
+const emptyFlightTracks: FlightDataTrackResponse = {
+  contractVersion: "cop-flight-source-v1",
+  source: {
+    sourceId: "flight-data-api",
+    sourceType: "PUBLIC_FLIGHT_AGGREGATE",
+    generatedAt: new Date(0).toISOString()
+  },
+  summary: {
+    rawObservationCount: 0,
+    deduplicatedTrackCount: 0,
+    droppedWithoutPositionCount: 0,
+    staleTrackCount: 0
+  },
+  tracks: [],
+  sources: [],
+  warnings: []
+};
+
 export function App() {
   const [data, setData] = useState<DashboardData>({
     scenarios: [],
@@ -85,9 +122,23 @@ export function App() {
     queueTotalCount: 0,
     blocks: [],
     providers: [],
+    flightData: {
+      health: { status: "unknown", enabledSources: [] },
+      sources: [],
+      config: {
+        enabledSources: [],
+        defaultArea: { lat: 0, lon: 0, radiusNm: 0 },
+        cacheTtlSeconds: 0,
+        staleAfterSeconds: 0,
+        requestTimeoutMs: 0,
+        providers: []
+      },
+      tracks: emptyFlightTracks
+    },
     warnings: []
   });
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
+  const [activeSection, setActiveSection] = useState<AppSection>("overview");
   const [aiPrompt, setAiPrompt] = useState("Create a 15 minute synthetic air situation latency test with aircraft, UAV and missile tracks.");
   const [draft, setDraft] = useState<AiDraft | null>(null);
   const [notice, setNotice] = useState<string>("Ready for continuous synthetic movement.");
@@ -124,11 +175,12 @@ export function App() {
   const queueTone: Tone = data.publisher.deadLetterSize > 0 ? "danger" : data.publisher.queueSize > 0 ? "warn" : "safe";
   const runtimeTone = runtimeStateTone(data.runtime.state);
   const publisherTone: Tone = data.publisher.publishingEnabled ? (data.publisher.mode === "LIVE" ? "active" : "safe") : "danger";
-  const activeScenarioName = selectedScenario?.name ?? "No scenario selected";
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
   const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
+  const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const activeSectionMeta = sectionMeta(activeSection);
 
   const readinessItems = [
     {
@@ -162,6 +214,13 @@ export function App() {
         : data.publisher.lastSuccessAt
           ? "latest delivery succeeded"
           : "no publish attempts yet"
+    },
+    {
+      icon: <Plane />,
+      label: "Flight Data",
+      value: data.flightData.health.status.toUpperCase(),
+      tone: flightDataTone,
+      detail: `${data.flightData.tracks.summary.deduplicatedTrackCount} dedup tracks, ${data.flightData.config.enabledSources.join(", ") || "no source"}`
     }
   ];
 
@@ -213,21 +272,12 @@ export function App() {
         </div>
 
         <nav className="nav-list" aria-label="Primary">
-          <a href="#readiness">
-            <Gauge size={17} /> Readiness
-          </a>
-          <a href="#scenario">
-            <Activity size={17} /> Scenario
-          </a>
-          <a href="#manifest">
-            <Route size={17} /> Manifest
-          </a>
-          <a href="#publisher">
-            <RadioTower size={17} /> Publisher
-          </a>
-          <a href="#ai">
-            <Bot size={17} /> AI Assistant
-          </a>
+          <NavButton section="overview" activeSection={activeSection} onSelect={setActiveSection} icon={<Gauge size={17} />} label="Overview" />
+          <NavButton section="scenario" activeSection={activeSection} onSelect={setActiveSection} icon={<Activity size={17} />} label="Scenario" />
+          <NavButton section="flight-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Plane size={17} />} label="Flight data" />
+          <NavButton section="publisher" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="Publisher" />
+          <NavButton section="ai" activeSection={activeSection} onSelect={setActiveSection} icon={<Bot size={17} />} label="AI Assistant" />
+          <NavButton section="safety" activeSection={activeSection} onSelect={setActiveSection} icon={<ShieldCheck size={17} />} label="Safety" />
         </nav>
 
         <div className="safety-panel">
@@ -242,9 +292,9 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Pilot control station</p>
-            <h1>Simulator runtime</h1>
-            <p>{activeScenarioName}</p>
+            <p className="eyebrow">{activeSectionMeta.kicker}</p>
+            <h1>{activeSectionMeta.title}</h1>
+            <p>{activeSectionMeta.description}</p>
           </div>
           <div className="topbar-actions">
             <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
@@ -255,45 +305,50 @@ export function App() {
           </div>
         </header>
 
-        <section id="dashboard" className="metrics-grid" aria-label="Runtime metrics">
-          <Metric icon={<Activity />} label="Generated events" value={data.runtime.generatedEvents} detail={`${data.runtime.tick ?? 0} ticks`} />
-          <Metric icon={<RadioTower />} label="Delivered events" value={data.runtime.publishedEvents} detail={`${deliveryRate} delivery`} />
-          <Metric icon={<Database />} label="Active tracks" value={data.runtime.activeObjects ?? totalObjects} detail={`${totalObjects} configured`} />
-          <Metric icon={<Clock3 />} label="Simulation time" value={simulationClock} detail={`${effectiveSpeedMultiplier}x runtime speed`} />
-        </section>
+        {activeSection === "overview" ? (
+          <>
+            <section id="dashboard" className="metrics-grid" aria-label="Runtime metrics">
+              <Metric icon={<Activity />} label="Generated events" value={data.runtime.generatedEvents} detail={`${data.runtime.tick ?? 0} ticks`} />
+              <Metric icon={<RadioTower />} label="Delivered events" value={data.runtime.publishedEvents} detail={`${deliveryRate} delivery`} />
+              <Metric icon={<Database />} label="Active tracks" value={data.runtime.activeObjects ?? totalObjects} detail={`${totalObjects} configured`} />
+              <Metric icon={<Plane />} label="Flight tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount} detail={`${data.flightData.tracks.summary.rawObservationCount} raw observations`} />
+            </section>
 
-        <section id="readiness" className="operations-grid" aria-label="Operational readiness">
-          <section className="ops-panel readiness-panel">
-            <PanelTitle icon={<ShieldCheck />} title="Operational readiness" subtitle={`Last refresh ${formatTime(lastRefreshAt)}`} />
-            <div className="readiness-list">
-              {readinessItems.map((item) => (
-                <div key={item.label} className={`readiness-item ${item.tone}`}>
-                  <div className="readiness-icon">{item.icon}</div>
-                  <div>
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                    <small>{item.detail}</small>
-                  </div>
+            <section id="readiness" className="operations-grid" aria-label="Operational readiness">
+              <section className="ops-panel readiness-panel">
+                <PanelTitle icon={<ShieldCheck />} title="Operational readiness" subtitle={`Last refresh ${formatTime(lastRefreshAt)}`} />
+                <div className="readiness-list">
+                  {readinessItems.map((item) => (
+                    <div key={item.label} className={`readiness-item ${item.tone}`}>
+                      <div className="readiness-icon">{item.icon}</div>
+                      <div>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                        <small>{item.detail}</small>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
+              </section>
 
-          <section className="ops-panel affiliation-panel">
-            <PanelTitle icon={<ShieldAlert />} title="Track ownership mix" subtitle="COP affiliation source" />
-            <div className="affiliation-grid">
-              {affiliationSummary.map((item) => (
-                <div key={item.category} className={`affiliation-card ${item.category}`}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                  <small>{item.detail}</small>
+              <section className="ops-panel affiliation-panel">
+                <PanelTitle icon={<ShieldAlert />} title="Track ownership mix" subtitle="COP affiliation source" />
+                <div className="affiliation-grid">
+                  {affiliationSummary.map((item) => (
+                    <div key={item.category} className={`affiliation-card ${item.category}`}>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                      <small>{item.detail}</small>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-        </section>
+              </section>
+            </section>
+          </>
+        ) : null}
 
-        <section className="main-grid">
+        <section className="section-layout">
+          {activeSection === "scenario" ? (
           <section id="scenario" className="panel scenario-panel">
             <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COP display validation." />
 
@@ -488,7 +543,77 @@ export function App() {
               ))}
             </div>
           </section>
+          ) : null}
 
+          {activeSection === "flight-data" ? (
+          <section id="flight-data" className="panel flight-data-panel">
+            <PanelTitle icon={<Plane />} title="Flight Data source" subtitle="Aggregated public or licensed flight tracks prepared for the COP layer." />
+
+            <div className="publisher-status">
+              <StatusPill label={data.flightData.health.status} tone={flightDataTone} />
+              <StatusPill label={data.flightData.tracks.contractVersion} tone="active" />
+              <StatusPill
+                label={`${data.flightData.tracks.warnings.length} warnings`}
+                tone={data.flightData.tracks.warnings.length > 0 ? "warn" : "neutral"}
+              />
+            </div>
+
+            <div className="publisher-stats flight-stats">
+              <PublisherStat label="Raw observations" value={data.flightData.tracks.summary.rawObservationCount.toLocaleString("cs-CZ")} tone="neutral" />
+              <PublisherStat label="Deduplicated tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount.toLocaleString("cs-CZ")} tone="safe" />
+              <PublisherStat label="Stale tracks" value={data.flightData.tracks.summary.staleTrackCount.toLocaleString("cs-CZ")} tone={data.flightData.tracks.summary.staleTrackCount > 0 ? "warn" : "neutral"} />
+              <PublisherStat label="Dropped positions" value={data.flightData.tracks.summary.droppedWithoutPositionCount.toLocaleString("cs-CZ")} tone={data.flightData.tracks.summary.droppedWithoutPositionCount > 0 ? "danger" : "neutral"} />
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration from /srv/sim .env." />
+                <div className="settings-grid">
+                  <SummaryItem label="Enabled sources" value={data.flightData.config.enabledSources.join(", ") || "-"} />
+                  <SummaryItem label="Default area" value={`${formatCoordinate(data.flightData.config.defaultArea.lat)}, ${formatCoordinate(data.flightData.config.defaultArea.lon)}`} />
+                  <SummaryItem label="Radius" value={`${data.flightData.config.defaultArea.radiusNm} NM`} />
+                  <SummaryItem label="Cache TTL" value={`${data.flightData.config.cacheTtlSeconds}s`} />
+                  <SummaryItem label="Stale after" value={`${data.flightData.config.staleAfterSeconds}s`} />
+                  <SummaryItem label="Timeout" value={`${data.flightData.config.requestTimeoutMs} ms`} />
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License and production suitability are visible before COP consumption." />
+                <div className="source-list">
+                  {data.flightData.sources.map((source) => (
+                    <FlightSourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.flightData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
+                  ))}
+                  {data.flightData.sources.length === 0 ? <div className="empty-state">Flight source metadata is not available.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            <div className="section-head compact-head">
+              <div>
+                <strong>COP track preview</strong>
+                <span>{data.flightData.tracks.tracks.length} shown from latest aggregate response</span>
+              </div>
+              <StatusPill label={formatTime(data.flightData.tracks.source.generatedAt)} tone="neutral" />
+            </div>
+
+            <div className="flight-track-list">
+              {data.flightData.tracks.tracks.map((track) => (
+                <FlightTrackRow key={track.trackId} track={track} />
+              ))}
+              {data.flightData.tracks.tracks.length === 0 ? <div className="empty-state">No flight tracks are available from the configured sources.</div> : null}
+            </div>
+
+            {data.flightData.tracks.warnings.length > 0 ? (
+              <div className="notice warn">
+                <AlertTriangle size={16} />
+                <span>{data.flightData.tracks.warnings.join(" ")}</span>
+              </div>
+            ) : null}
+          </section>
+          ) : null}
+
+          {activeSection === "publisher" ? (
           <section id="publisher" className="panel publisher-panel">
             <PanelTitle icon={<RadioTower />} title="COP publisher" subtitle="Delivery state and recent canonical events." />
             <div className="publisher-status">
@@ -525,7 +650,9 @@ export function App() {
               {data.queue.length === 0 ? <div className="empty-state">No queued events yet.</div> : null}
             </div>
           </section>
+          ) : null}
 
+          {activeSection === "ai" ? (
           <section id="ai" className="panel ai-panel">
             <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
             <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
@@ -550,7 +677,9 @@ export function App() {
               <div className="empty-state">Generate a draft to validate the AI guardrail path.</div>
             )}
           </section>
+          ) : null}
 
+          {activeSection === "safety" ? (
           <section className="panel">
             <PanelTitle icon={<ShieldCheck />} title="Safety and providers" subtitle="External AI is disabled by default in the pilot." />
             <div className="provider-list">
@@ -567,6 +696,7 @@ export function App() {
               <span>{notice}</span>
             </div>
           </section>
+          ) : null}
         </section>
       </section>
     </main>
@@ -596,11 +726,78 @@ function PanelTitle({ icon, title, subtitle }: { icon: ReactNode; title: string;
   );
 }
 
+function NavButton({
+  section,
+  activeSection,
+  onSelect,
+  icon,
+  label
+}: {
+  section: AppSection;
+  activeSection: AppSection;
+  onSelect: (section: AppSection) => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button type="button" className={`nav-item ${activeSection === section ? "selected" : ""}`} onClick={() => onSelect(section)} aria-current={activeSection === section ? "page" : undefined}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function SummaryItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function FlightSourceRow({ source, authConfigured }: { source: FlightDataSource; authConfigured: boolean }) {
+  return (
+    <div className="source-row">
+      <div>
+        <strong>{source.label}</strong>
+        <span>
+          {source.sourceId} · priority {source.priority}
+        </span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={source.enabled ? "enabled" : "disabled"} tone={source.enabled ? "safe" : "neutral"} />
+        <StatusPill label={source.mode} tone={source.mode === "live" ? "active" : "neutral"} />
+        <StatusPill label={authConfigured ? "auth ok" : "no auth"} tone={authConfigured ? "safe" : "warn"} />
+      </div>
+      <div className="source-license">
+        <span>{source.license.name}</span>
+        <StatusPill label={source.license.commercialUse.replaceAll("_", " ")} tone={licenseTone(source.license.commercialUse)} />
+      </div>
+      <small>{source.license.attribution}</small>
+    </div>
+  );
+}
+
+function FlightTrackRow({ track }: { track: FlightDataTrack }) {
+  return (
+    <div className={`flight-track-row ${track.quality.stale ? "stale" : ""}`}>
+      <div>
+        <strong>{formatTrackIdentity(track)}</strong>
+        <span>
+          {track.icao24} · {track.aircraft?.typeDesignator ?? "type n/a"} · {track.registration ?? "registration n/a"}
+        </span>
+      </div>
+      <div className="flight-track-metrics">
+        <span>{formatCoordinate(track.lat)}, {formatCoordinate(track.lon)}</span>
+        <span>{formatAltitude(track.altitudeM)}</span>
+        <span>{formatMotion(track.speedMps, track.headingDeg)}</span>
+        <span>{formatTime(track.lastSeenAt)}</span>
+      </div>
+      <div className="flight-track-tags">
+        <StatusPill label={`${track.deduplication.mergedRecordCount} merged`} tone={track.deduplication.mergedRecordCount > 1 ? "active" : "neutral"} />
+        <StatusPill label={track.quality.stale ? "stale" : "current"} tone={track.quality.stale ? "warn" : "safe"} />
+      </div>
     </div>
   );
 }
@@ -838,11 +1035,78 @@ function queueStateTone(state: string): Tone {
   return "neutral";
 }
 
+function licenseTone(value: string): Tone {
+  if (value === "allowed") {
+    return "safe";
+  }
+  if (value === "allowed_with_obligations") {
+    return "warn";
+  }
+  if (value === "requires_license") {
+    return "danger";
+  }
+  return "neutral";
+}
+
+function sectionMeta(section: AppSection): { kicker: string; title: string; description: string } {
+  switch (section) {
+    case "scenario":
+      return {
+        kicker: "Scenario control",
+        title: "Scenario execution",
+        description: "Start, pause and inspect deterministic synthetic movement for COP validation."
+      };
+    case "flight-data":
+      return {
+        kicker: "Public flight aggregate",
+        title: "Flight Data source",
+        description: "Monitor collected flight observations, deduplication, provider licenses and runtime settings."
+      };
+    case "publisher":
+      return {
+        kicker: "COP integration",
+        title: "COP publisher",
+        description: "Watch delivery state, retained events, retry queue and ingest failures."
+      };
+    case "ai":
+      return {
+        kicker: "Scenario drafting",
+        title: "AI Scenario Assistant",
+        description: "Generate guarded scenario drafts before human acceptance."
+      };
+    case "safety":
+      return {
+        kicker: "Governance",
+        title: "Safety and providers",
+        description: "Review synthetic-only controls, provider state and current operator notices."
+      };
+    case "overview":
+    default:
+      return {
+        kicker: "Pilot control station",
+        title: "Simulator overview",
+        description: "Compact operational status across runtime, COP publishing and Flight Data."
+      };
+  }
+}
+
 function formatDuration(value: number): string {
   const totalSeconds = Math.max(0, Math.round(value));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatCoordinate(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(4) : "-";
+}
+
+function formatAltitude(value: number | undefined): string {
+  return typeof value === "number" ? `${Math.round(value).toLocaleString("cs-CZ")} m` : "altitude n/a";
+}
+
+function formatTrackIdentity(track: FlightDataTrack): string {
+  return track.callsign || track.registration || track.trackId.replace("flight:icao24:", "");
 }
 
 function formatTime(value: string | undefined): string {

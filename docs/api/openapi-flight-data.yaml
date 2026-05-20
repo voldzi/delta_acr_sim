@@ -64,8 +64,19 @@ paths:
                 properties:
                   items:
                     type: array
-                    items:
-                      $ref: '#/components/schemas/SourceDescriptor'
+                  items:
+                    $ref: '#/components/schemas/SourceDescriptor'
+  /api/v1/config:
+    get:
+      tags: [Sources]
+      summary: Vrátí aktuální non-secret konfiguraci Flight Data API.
+      responses:
+        '200':
+          description: Public runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightDataConfig'
   /api/v1/airports:
     get:
       tags: [Reference]
@@ -365,6 +376,41 @@ components:
           type: integer
         license:
           type: object
+    FlightDataConfig:
+      type: object
+      properties:
+        enabledSources:
+          type: array
+          items:
+            type: string
+            enum: [mock, adsb_lol, opensky]
+        defaultArea:
+          type: object
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
+            radiusNm:
+              type: number
+        cacheTtlSeconds:
+          type: integer
+        staleAfterSeconds:
+          type: integer
+        requestTimeoutMs:
+          type: integer
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              sourceId:
+                type: string
+                enum: [mock, adsb_lol, opensky]
+              baseUrl:
+                type: string
+              authConfigured:
+                type: boolean
     Airport:
       type: object
       properties:

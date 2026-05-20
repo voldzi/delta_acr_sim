@@ -1,4 +1,15 @@
-import type { AiDraft, PublisherStatus, QueueItem, RuntimeStatus, Scenario, ScenarioBlock } from "./types";
+import type {
+  AiDraft,
+  FlightDataConfig,
+  FlightDataHealth,
+  FlightDataSource,
+  FlightDataTrackResponse,
+  PublisherStatus,
+  QueueItem,
+  RuntimeStatus,
+  Scenario,
+  ScenarioBlock
+} from "./types";
 
 const API_TIMEOUT_MS = 5_000;
 
@@ -118,6 +129,12 @@ export interface DashboardLoadResult {
   queueTotalCount: number;
   blocks: ScenarioBlock[];
   providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }>;
+  flightData: {
+    health: FlightDataHealth;
+    sources: FlightDataSource[];
+    config: FlightDataConfig;
+    tracks: FlightDataTrackResponse;
+  };
   warnings: string[];
 }
 
@@ -128,7 +145,11 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<PublisherStatus>("/api/v1/runtime/publisher"),
     api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20"),
     api<{ blocks: ScenarioBlock[] }>("/api/v1/runtime/blocks"),
-    api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers")
+    api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers"),
+    api<FlightDataHealth>("/flight-data/health/ready"),
+    api<{ items: FlightDataSource[] }>("/flight-data/api/v1/sources"),
+    api<FlightDataConfig>("/flight-data/api/v1/config"),
+    api<FlightDataTrackResponse>("/flight-data/api/v1/cop/tracks?limit=8")
   ]);
 
   const warnings: string[] = [];
@@ -148,6 +169,34 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
   const queue = unwrapDashboardResult(results[3], { items: [], totalCount: 0 }, "publisher queue", warnings);
   const blocks = unwrapDashboardResult(results[4], { blocks: [] }, "runtime blocks", warnings);
   const providers = unwrapDashboardResult(results[5], { providers: [] }, "AI providers", warnings);
+  const flightHealth = unwrapDashboardResult(results[6], { status: "unavailable", enabledSources: [] }, "flight data health", warnings);
+  const flightSources = unwrapDashboardResult(results[7], { items: [] }, "flight data sources", warnings);
+  const flightConfig = unwrapDashboardResult(
+    results[8],
+    {
+      enabledSources: [],
+      defaultArea: { lat: 0, lon: 0, radiusNm: 0 },
+      cacheTtlSeconds: 0,
+      staleAfterSeconds: 0,
+      requestTimeoutMs: 0,
+      providers: []
+    },
+    "flight data config",
+    warnings
+  );
+  const flightTracks = unwrapDashboardResult(
+    results[9],
+    {
+      contractVersion: "cop-flight-source-v1",
+      source: { sourceId: "flight-data-api", sourceType: "PUBLIC_FLIGHT_AGGREGATE", generatedAt: new Date(0).toISOString() },
+      summary: { rawObservationCount: 0, deduplicatedTrackCount: 0, droppedWithoutPositionCount: 0, staleTrackCount: 0 },
+      tracks: [],
+      sources: [],
+      warnings: []
+    },
+    "flight data tracks",
+    warnings
+  );
 
   return {
     scenarios: scenarios.items,
@@ -157,6 +206,12 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     queueTotalCount: queue.totalCount ?? queue.items.length,
     blocks: blocks.blocks,
     providers: providers.providers,
+    flightData: {
+      health: flightHealth,
+      sources: flightSources.items,
+      config: flightConfig,
+      tracks: flightTracks
+    },
     warnings
   };
 }

@@ -33,6 +33,23 @@ export interface SourceDescriptor {
   baseUrl?: string;
 }
 
+export interface FlightDataPublicConfig {
+  enabledSources: FlightDataSourceId[];
+  defaultArea: {
+    lat: number;
+    lon: number;
+    radiusNm: number;
+  };
+  cacheTtlSeconds: number;
+  staleAfterSeconds: number;
+  requestTimeoutMs: number;
+  providers: Array<{
+    sourceId: FlightDataSourceId;
+    baseUrl?: string;
+    authConfigured: boolean;
+  }>;
+}
+
 export interface RawFlightObservation {
   sourceId: FlightDataSourceId;
   sourceRecordId: string;
