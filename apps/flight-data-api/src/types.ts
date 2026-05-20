@@ -1,4 +1,4 @@
-export type FlightDataSourceId = "mock" | "adsb_lol" | "opensky";
+export type FlightDataSourceId = "mock" | "adsb_lol" | "opensky" | "local_adsb";
 
 export interface BoundingBox {
   west: number;
@@ -50,6 +50,11 @@ export interface FlightDataPublicConfig {
     baseUrl?: string;
     authConfigured: boolean;
   }>;
+  referenceData: {
+    ourAirportsEnabled: boolean;
+    ourAirportsCountries: string[];
+    ourAirportsCacheTtlSeconds: number;
+  };
 }
 
 export interface RawFlightObservation {
@@ -159,7 +164,7 @@ export interface AirportReference {
   name: string;
   municipality?: string;
   countryCode: string;
-  type: "large_airport" | "medium_airport" | "small_airport" | "heliport" | "closed_airport" | "seaplane_base";
+  type: "large_airport" | "medium_airport" | "small_airport" | "heliport" | "closed_airport" | "seaplane_base" | "balloonport";
   lat: number;
   lon: number;
   elevationFt?: number;

@@ -133,10 +133,10 @@ components:
   schemas:
     LayerId:
       type: string
-      enum: [weather, ground, mobile, traffic]
+      enum: [weather, ground, mobile, traffic, warnings, flood, air_quality]
     SourceId:
       type: string
-      enum: [mock, open_meteo, osm_overpass, ctu_nettest, pid_gtfs_rt]
+      enum: [mock, open_meteo, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
     BoundingBox:
       type: object
       required: [west, south, east, north]
@@ -249,13 +249,17 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, osmOverpass, safetyData]
+          required: [openMeteo, osmOverpass, safetyData, aviationWeather, ardosPartner]
           properties:
             openMeteo:
               type: integer
             osmOverpass:
               type: integer
             safetyData:
+              type: integer
+            aviationWeather:
+              type: integer
+            ardosPartner:
               type: integer
         providers:
           type: array

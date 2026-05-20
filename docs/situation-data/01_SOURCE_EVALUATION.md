@@ -7,9 +7,11 @@ SIM má poskytovat COPu doplňkové vrstvy, které rozšiřují vzdušný obraz 
 | Vrstva | Zdroj | Stav pro pilot | Licence / omezení |
 | --- | --- | --- | --- |
 | `weather` | Open-Meteo Forecast API | vhodné jako první live zdroj bez klíče | Free API je nekomerční, data pod CC BY 4.0 podmínkami, komerční použití přes placený tarif |
+| `weather` | NOAA Aviation Weather Center METAR/TAF | implementováno jako `aviation_weather` pro letištní počasí | Veřejné API bez klíče, ale s rate limity; SIM musí cacheovat a COP nesmí volat AWC přímo |
 | `ground` | OpenStreetMap přes lokální OSM extract/PostGIS; Overpass jen pro vývoj | vhodné pro referenční POI po lokálním importu; veřejný Overpass pouze pro malé testovací bbox dotazy | ODbL 1.0, atribuce a share-alike povinnosti pro databáze; veřejné Overpass instance nejsou produkční runtime backend |
 | `mobile` | ČTÚ NetTest open-data ZIP export | implementováno jako live/periodický zdroj `ctu_nettest`; vhodné pro kontext kvality mobilní sítě, ne pro real-time výpadky operátorů | CC BY 4.0 podle exportu; nutná atribuce a práce s anonymizací/accuracy |
 | `traffic` | PID/Golemio GTFS-RT vehicle positions | implementováno jako live zdroj `pid_gtfs_rt` pro pohyb veřejné dopravy v Praze a okolí | open-data podmínky PID/Golemio; nutná atribuce, bez garance operační dostupnosti |
+| `ground/mobile/traffic` | ARDOS partner feed | implementováno jako vypnutý `ardos_partner` konektor | Není open-data; vyžaduje partnerskou dohodu, token, datovou minimalizaci a oprávnění uživatele v COP |
 | `mobile` | OpenCellID, M-Lab | kandidáti pro další rozšíření | OpenCellID CC BY-SA 4.0; M-Lab CC0 |
 | `traffic` | JSDI/NDIC/DATEX II | kandidát pro dopravní incidenty po potvrzení licence a způsobu přístupu | podmínky je nutné ověřit pro konkrétní distribuci a způsob odběru |
 
@@ -34,6 +36,8 @@ Veřejný real-time zdroj stavu BTS nebo aktuálních výpadků mobilních oper�
 - ČTÚ NetTest dataset detail: https://data.ctu.gov.cz/dataset/nettest
 - ČTÚ NetTest Open Data: https://nettest.ctu.gov.cz/en/Opendata
 - PID/Golemio API docs: https://api.golemio.cz/pid/docs/openapi/
+- NOAA AWC Data API: https://aviationweather.gov/data/api/
+- ARDOS / RK AČR: https://radioklub.mo.gov.cz/ardos
 - OpenCellID licence: https://wiki.opencellid.org/wiki/Licensing:
 - M-Lab FAQ/licence: https://www.measurementlab.net/frequently-asked-questions/
 - PID Open Data: https://pid.cz/o-systemu/opendata/

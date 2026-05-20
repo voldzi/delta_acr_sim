@@ -1,5 +1,6 @@
 import type { FlightDataConfig } from "./config.js";
 import { ManagedResponseCache } from "./response-cache.js";
+import type { ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
   FlightDataLicense,
@@ -13,6 +14,11 @@ import type {
 export interface FlightDataSource {
   descriptor: SourceDescriptor;
   fetchObservations(query: FlightQuery): Promise<SourceFetchResult>;
+  cacheStats?(): SourceCacheStats[];
+}
+
+export interface SourceCacheStats extends ManagedResponseCacheStats {
+  sourceId: FlightDataSourceId;
 }
 
 const ADSB_LOL_LICENSE: FlightDataLicense = {
@@ -41,11 +47,24 @@ const MOCK_LICENSE: FlightDataLicense = {
   notes: ["Synthetic data only. No external aviation data is used by this source."]
 };
 
+const LOCAL_ADSB_LICENSE: FlightDataLicense = {
+  name: "Owner-operated ADS-B receiver feed",
+  attribution: "Local ADS-B receiver network",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Use only receivers operated by the project or by partners who explicitly allow redistribution.",
+    "Do not proxy third-party commercial/community feeds through this source unless their terms permit it.",
+    "ADS-B positions are situational context and can be incomplete for low altitude traffic."
+  ]
+};
+
 export function createFlightDataSources(config: FlightDataConfig): FlightDataSource[] {
   const allSources: Record<FlightDataSourceId, FlightDataSource> = {
     mock: new MockFlightDataSource(),
     adsb_lol: new AdsbLolSource(config),
-    opensky: new OpenSkySource(config)
+    opensky: new OpenSkySource(config),
+    local_adsb: new LocalAdsbSource(config)
   };
 
   return config.enabledSources.map((sourceId) => allSources[sourceId]);
@@ -56,8 +75,16 @@ export function allSourceDescriptors(config: FlightDataConfig): SourceDescriptor
   return [
     new MockFlightDataSource().descriptor,
     new AdsbLolSource(config).descriptor,
-    new OpenSkySource(config).descriptor
+    new OpenSkySource(config).descriptor,
+    new LocalAdsbSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
+}
+
+function cacheStatsFor<T>(sourceId: FlightDataSourceId, cache: ManagedResponseCache<T>): SourceCacheStats {
+  return {
+    sourceId,
+    ...cache.stats()
+  };
 }
 
 class MockFlightDataSource implements FlightDataSource {
@@ -178,6 +205,10 @@ class AdsbLolSource implements FlightDataSource {
     };
   }
 
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("adsb_lol", this.payloadCache)];
+  }
+
   async fetchObservations(query: FlightQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     const area = query.bbox ? bboxToPointRadius(query.bbox) : { lat: this.config.defaultLat, lon: this.config.defaultLon, radiusNm: this.config.defaultRadiusNm };
@@ -243,6 +274,10 @@ class OpenSkySource implements FlightDataSource {
     };
   }
 
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("opensky", this.payloadCache)];
+  }
+
   async fetchObservations(query: FlightQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     const url = new URL(`${this.config.openskyBaseUrl}/states/all`);
@@ -290,6 +325,76 @@ class OpenSkySource implements FlightDataSource {
   }
 }
 
+class LocalAdsbSource implements FlightDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<ReadsbAircraftResponse>;
+
+  constructor(private readonly config: FlightDataConfig) {
+    this.payloadCache = new ManagedResponseCache<ReadsbAircraftResponse>({
+      ttlMs: Math.max(1, config.cacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(10, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(1, Math.min(config.cacheMaxEntries, 64))
+    });
+    this.descriptor = {
+      sourceId: "local_adsb",
+      label: "Local readsb/dump1090 ADS-B receivers",
+      enabled: config.enabledSources.includes("local_adsb"),
+      mode: "live",
+      priority: 90,
+      license: LOCAL_ADSB_LICENSE,
+      baseUrl: config.localAdsbAircraftJsonUrls.length <= 1 ? config.localAdsbAircraftJsonUrls[0] : "multiple receivers"
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("local_adsb", this.payloadCache)];
+  }
+
+  async fetchObservations(query: FlightQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (this.config.localAdsbAircraftJsonUrls.length === 0) {
+      return {
+        source: this.descriptor,
+        fetchedAt,
+        observations: [],
+        warnings: ["local_adsb is enabled but LOCAL_ADSB_AIRCRAFT_JSON_URLS is not configured."]
+      };
+    }
+
+    const settled = await Promise.allSettled(
+      this.config.localAdsbAircraftJsonUrls.map((url) =>
+        this.payloadCache.getOrLoad(`local_adsb:${url}`, () =>
+          requestJson<ReadsbAircraftResponse>(url, this.config.requestTimeoutMs, { accept: "application/json" })
+        )
+      )
+    );
+    const observations: RawFlightObservation[] = [];
+    const warnings: string[] = [];
+
+    settled.forEach((item, index) => {
+      const url = this.config.localAdsbAircraftJsonUrls[index] ?? `receiver-${index + 1}`;
+      if (item.status === "rejected") {
+        warnings.push(item.reason instanceof Error ? `local_adsb ${receiverLabel(url)} failed: ${item.reason.message}` : `local_adsb ${receiverLabel(url)} failed.`);
+        return;
+      }
+      observations.push(
+        ...mapReadsbAircraftResponse(item.value, {
+          fetchedAt,
+          sourcePriority: this.descriptor.priority,
+          receiverId: receiverLabel(url)
+        })
+      );
+    });
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      observations: observations.filter((observation) => !query.bbox || isObservationInBbox(observation, query.bbox)),
+      warnings
+    };
+  }
+}
+
 interface AdsbLolResponse {
   now?: number;
   ac?: Array<{
@@ -315,6 +420,35 @@ interface AdsbLolResponse {
 interface OpenSkyResponse {
   time?: number;
   states?: unknown[][];
+}
+
+interface ReadsbAircraftResponse {
+  now?: number;
+  aircraft?: ReadsbAircraft[];
+}
+
+interface ReadsbAircraft {
+  hex?: string;
+  flight?: string | null;
+  r?: string | null;
+  t?: string | null;
+  dbFlags?: number | null;
+  lat?: number | null;
+  lon?: number | null;
+  alt_baro?: number | string | null;
+  alt_geom?: number | null;
+  gs?: number | null;
+  track?: number | null;
+  true_heading?: number | null;
+  mag_heading?: number | null;
+  baro_rate?: number | null;
+  geom_rate?: number | null;
+  squawk?: string | null;
+  emergency?: string | null;
+  category?: string | null;
+  seen?: number | null;
+  seen_pos?: number | null;
+  type?: string | null;
 }
 
 async function requestJson<T>(url: string, timeoutMs: number, headers: Record<string, string> = {}, body?: URLSearchParams): Promise<T> {
@@ -358,6 +492,46 @@ function mapOpenSkyState(state: unknown[], fetchedAt: string, baseTimeMs: number
     category: typeof state[17] === "number" ? `opensky:${state[17]}` : undefined,
     raw: state
   };
+}
+
+function mapReadsbAircraftResponse(
+  payload: ReadsbAircraftResponse,
+  context: { fetchedAt: string; sourcePriority: number; receiverId: string }
+): RawFlightObservation[] {
+  const baseTimeMs = epochLikeToMs(payload.now) ?? Date.now();
+  return (payload.aircraft ?? [])
+    .map((item): RawFlightObservation | undefined => {
+      const icao24 = normalizeIcao24(item.hex);
+      if (!icao24) {
+        return undefined;
+      }
+      const seenSeconds = optionalNumber(item.seen);
+      const seenAtMs = seenSeconds !== undefined ? baseTimeMs - seenSeconds * 1000 : baseTimeMs;
+      const typeDesignator = cleanString(item.t)?.toUpperCase();
+      return {
+        sourceId: "local_adsb",
+        sourceRecordId: `local_adsb:${context.receiverId}:${icao24}`,
+        sourcePriority: context.sourcePriority,
+        fetchedAt: context.fetchedAt,
+        seenAt: new Date(seenAtMs).toISOString(),
+        icao24,
+        callsign: cleanString(item.flight),
+        registration: cleanString(item.r),
+        typeDesignator,
+        lat: optionalNumber(item.lat),
+        lon: optionalNumber(item.lon),
+        altitudeM: altitudeToMeters(item.alt_baro ?? item.alt_geom),
+        speedMps: knotsToMps(optionalNumber(item.gs)),
+        headingDeg: optionalNumber(item.track) ?? optionalNumber(item.true_heading) ?? optionalNumber(item.mag_heading),
+        verticalRateMps: feetPerMinuteToMps(optionalNumber(item.baro_rate) ?? optionalNumber(item.geom_rate)),
+        onGround: item.alt_baro === "ground",
+        squawk: cleanString(item.squawk),
+        emergency: cleanString(item.emergency),
+        category: cleanString(item.category ?? item.type),
+        raw: item
+      };
+    })
+    .filter((item): item is RawFlightObservation => Boolean(item));
 }
 
 function bboxToPointRadius(bbox: BoundingBox): { lat: number; lon: number; radiusNm: number } {
@@ -423,6 +597,22 @@ function knotsToMps(value: number | null | undefined): number | undefined {
 
 function feetPerMinuteToMps(value: number | null | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? round(value * 0.00508, 2) : undefined;
+}
+
+function epochLikeToMs(value: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return value > 1_000_000_000_000 ? value : value * 1000;
+}
+
+function receiverLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname || parsed.protocol.replace(":", "") || "receiver";
+  } catch {
+    return "receiver";
+  }
 }
 
 function round(value: number, precision: number): number {

@@ -9,15 +9,17 @@ Stav: implementováno v první verzi.
 - Veřejný proxy prefix v SIM webu: `/flight-data/`.
 - Zdravotní endpointy a metriky.
 - Provider rozhraní pro `mock`, `adsb_lol`, `opensky`.
+- Provider `local_adsb` pro vlastní readsb/dump1090 `aircraft.json` přijímače.
 - Deduplikace podle normalizovaného `icao24`.
 - Referenční lookup letišť a typů letadel.
+- Cacheovaný OurAirports `airports.csv` import pro ČR a okolí s fallbackem na seed.
 - COP projekce `/api/v1/cop/tracks`.
 - Server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem a cache metrikami.
 - OpenAPI dokument `docs/api/openapi-flight-data.yaml`.
 
 ## Fáze 2: datová kvalita
 
-- Přidat import OurAirports CSV do persistentního úložiště.
+- Přidat persistentní snapshot OurAirports CSV a administraci poslední synchronizace.
 - Přidat verzování referenčních dat a timestamp poslední synchronizace.
 - Přidat úplnější aircraft type store z licencovaného zdroje.
 - Doplnit airline/route enrichment pouze ze zdrojů s jasnou licencí.
@@ -61,6 +63,14 @@ FLIGHT_DATA_CACHE_MAX_ENTRIES=512
 FLIGHT_DATA_STALE_AFTER_SECONDS=120
 ```
 
+Vlastní ADS-B přijímače:
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol
+LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://receiver-1.home.cz/tar1090/data/aircraft.json
+FLIGHT_DATA_CACHE_TTL_SECONDS=5
+```
+
 OpenSky jen po ověření oprávnění:
 
 ```bash
@@ -72,5 +82,5 @@ OPENSKY_CLIENT_SECRET=...
 Kombinovaný agregát:
 
 ```bash
-FLIGHT_DATA_ENABLED_SOURCES=adsb_lol,opensky
+FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol
 ```

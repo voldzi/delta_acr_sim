@@ -167,7 +167,16 @@ function parseLayers(value: unknown): SituationLayerId[] {
 }
 
 function parseSources(value: unknown, fallback: SituationDataSourceId[]): SituationDataSourceId[] {
-  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data"]);
+  const allowed = new Set<SituationDataSourceId>([
+    "mock",
+    "open_meteo",
+    "osm_overpass",
+    "ctu_nettest",
+    "pid_gtfs_rt",
+    "safety_data",
+    "aviation_weather",
+    "ardos_partner"
+  ]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -212,7 +221,9 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     sourceCacheTtlSeconds: {
       openMeteo: config.openMeteoCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
-      safetyData: config.safetyDataCacheTtlSeconds
+      safetyData: config.safetyDataCacheTtlSeconds,
+      aviationWeather: config.aviationWeatherCacheTtlSeconds,
+      ardosPartner: config.ardosPartnerCacheTtlSeconds
     },
     providers: [
       { sourceId: "mock", authConfigured: true },
@@ -220,7 +231,9 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
       { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
-      { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true }
+      { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true },
+      { sourceId: "aviation_weather", baseUrl: config.aviationWeatherBaseUrl, authConfigured: true },
+      { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }
     ]
   };
 }

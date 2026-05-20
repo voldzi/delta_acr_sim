@@ -64,8 +64,8 @@ paths:
                 properties:
                   items:
                     type: array
-                  items:
-                    $ref: '#/components/schemas/SourceDescriptor'
+                    items:
+                      $ref: '#/components/schemas/SourceDescriptor'
   /api/v1/config:
     get:
       tags: [Sources]
@@ -364,7 +364,7 @@ components:
       properties:
         sourceId:
           type: string
-          enum: [mock, adsb_lol, opensky]
+          enum: [mock, adsb_lol, opensky, local_adsb]
         label:
           type: string
         enabled:
@@ -383,7 +383,7 @@ components:
           type: array
           items:
             type: string
-            enum: [mock, adsb_lol, opensky]
+            enum: [mock, adsb_lol, opensky, local_adsb]
         defaultArea:
           type: object
           properties:
@@ -410,11 +410,22 @@ components:
             properties:
               sourceId:
                 type: string
-                enum: [mock, adsb_lol, opensky]
+                enum: [mock, adsb_lol, opensky, local_adsb]
               baseUrl:
                 type: string
               authConfigured:
                 type: boolean
+        referenceData:
+          type: object
+          properties:
+            ourAirportsEnabled:
+              type: boolean
+            ourAirportsCountries:
+              type: array
+              items:
+                type: string
+            ourAirportsCacheTtlSeconds:
+              type: integer
     Airport:
       type: object
       properties:

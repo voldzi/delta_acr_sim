@@ -42,11 +42,22 @@ FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
 FLIGHT_DATA_CACHE_MAX_ENTRIES=512
 FLIGHT_DATA_STALE_AFTER_SECONDS=120
 FLIGHT_DATA_REQUEST_TIMEOUT_MS=8000
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt
+LOCAL_ADSB_AIRCRAFT_JSON_URLS=
+OURAIRPORTS_ENABLED=true
+OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU
+OURAIRPORTS_CACHE_TTL_SECONDS=86400
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
-SITUATION_DATA_STALE_IF_ERROR_SECONDS=600
-SITUATION_DATA_CACHE_MAX_ENTRIES=512
+SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
+SITUATION_DATA_CACHE_MAX_ENTRIES=10000
+SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES=0.18
+SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS=600
+SITUATION_DATA_OPEN_METEO_GRID_DEGREES=0.05
+SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
+SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
+SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
@@ -54,6 +65,10 @@ OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
 OVERPASS_MAX_BBOX_DEGREES=1.6
 CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
 PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
+SAFETY_DATA_BASE_URL=http://safety-data-api:4030
+AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
+ARDOS_PARTNER_BASE_URL=
+ARDOS_PARTNER_TOKEN=
 EOF
 
 docker compose up -d --build
@@ -61,7 +76,7 @@ docker compose ps
 curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic,warnings,flood&limit=20'
 ```
 
 ## URL
@@ -75,14 +90,18 @@ http://docker.home.cz:5020
 - Výchozí režim je `DRY_RUN`.
 - Pro LIVE publikování do COP nastav `SIM_PUBLISHER_MODE=LIVE`, `MAIN_COP_BASE_URL=http://172.17.0.1:4310` a `MAIN_COP_BEARER_TOKEN` na stejnou hodnotu jako `COP_LAB_TOKEN` v COP.
 - Flight Data API pro integrační pilot COP běží proti ADSB.lol: `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
+- Vlastní readsb/dump1090 přijímače přidej přes `FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol` a `LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://.../aircraft.json`.
+- OurAirports import je zapnutý pro letiště v ČR a okolí: `OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU`.
 - Flight Data API používá server-side cache s in-flight deduplikací: `FLIGHT_DATA_CACHE_TTL_SECONDS=10`, `FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60`, `FLIGHT_DATA_CACHE_MAX_ENTRIES=512`.
 - Pro offline test nastav `FLIGHT_DATA_ENABLED_SOURCES=mock`.
-- Situation Data API ve výchozím pilotu používá reálné open-data zdroje `open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt`.
-- Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=600`, `SITUATION_DATA_CACHE_MAX_ENTRIES=512`.
+- Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`.
+- Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800`, `SITUATION_DATA_CACHE_MAX_ENTRIES=10000`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
 - `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci; veřejné Overpass instance jsou sdílený zdroj.
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
+- `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.
+- `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.
 - U komerčního použití musí být vyřešená ODbL atribuce a share-alike povinnosti.
 - OpenSky nezapínej bez ověření oprávnění nebo písemné licence.
 - Perzistentní data jsou v Docker volume `sim-data`, `flight-data` a `situation-data`.

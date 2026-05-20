@@ -21,6 +21,11 @@ export interface FlightDataConfig {
   openskyAccessToken?: string;
   openskyClientId?: string;
   openskyClientSecret?: string;
+  localAdsbAircraftJsonUrls: string[];
+  ourAirportsEnabled: boolean;
+  ourAirportsCsvUrl: string;
+  ourAirportsCountries: string[];
+  ourAirportsCacheTtlSeconds: number;
 }
 
 export async function loadConfig(): Promise<FlightDataConfig> {
@@ -46,17 +51,44 @@ export async function loadConfig(): Promise<FlightDataConfig> {
       process.env.OPENSKY_AUTH_URL ?? "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
     openskyAccessToken: emptyToUndefined(process.env.OPENSKY_ACCESS_TOKEN),
     openskyClientId: emptyToUndefined(process.env.OPENSKY_CLIENT_ID),
-    openskyClientSecret: emptyToUndefined(process.env.OPENSKY_CLIENT_SECRET)
+    openskyClientSecret: emptyToUndefined(process.env.OPENSKY_CLIENT_SECRET),
+    localAdsbAircraftJsonUrls: parseStringList(process.env.LOCAL_ADSB_AIRCRAFT_JSON_URLS ?? process.env.LOCAL_ADSB_AIRCRAFT_JSON_URL),
+    ourAirportsEnabled: parseBoolean(process.env.OURAIRPORTS_ENABLED, true),
+    ourAirportsCsvUrl: process.env.OURAIRPORTS_AIRPORTS_CSV_URL ?? "https://davidmegginson.github.io/ourairports-data/airports.csv",
+    ourAirportsCountries: parseStringList(process.env.OURAIRPORTS_COUNTRIES, ["CZ", "SK", "AT", "DE", "PL", "HU"]),
+    ourAirportsCacheTtlSeconds: parseInteger(process.env.OURAIRPORTS_CACHE_TTL_SECONDS, 24 * 60 * 60)
   };
 }
 
 function parseSourceList(value: string | undefined): FlightDataSourceId[] {
-  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky"]);
+  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky", "local_adsb"]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())
     .filter((item): item is FlightDataSourceId => allowed.has(item as FlightDataSourceId));
   return parsed.length > 0 ? parsed : ["mock"];
+}
+
+function parseStringList(value: string | undefined, fallback: string[] = []): string[] {
+  const parsed = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return parsed && parsed.length > 0 ? parsed : fallback;
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (!value) {
+    return fallback;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
 }
 
 function parseInteger(value: string | undefined, fallback: number): number {

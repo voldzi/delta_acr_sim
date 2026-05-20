@@ -10,7 +10,7 @@ Veřejná cesta přes SIM web:
 https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks
 ```
 
-Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený.
+Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený. Vlastní přijímače lze připojit přes `local_adsb`, který čte readsb/dump1090 `aircraft.json`.
 
 Lokální interní cesta v Docker síti:
 
@@ -37,7 +37,7 @@ GET /health/ready
 | Parametr | Příklad | Popis |
 | --- | --- | --- |
 | `bbox` | `13.5,49.5,15.5,50.6` | `west,south,east,north` ve WGS84. |
-| `source` | `mock` nebo `adsb_lol,opensky` | Požadované zdroje. Pokud není vyplněno, použije se serverová konfigurace. |
+| `source` | `mock`, `adsb_lol`, `local_adsb`, `opensky` | Požadované zdroje. Pokud není vyplněno, použije se serverová konfigurace. |
 | `limit` | `500` | Maximum vrácených deduplikovaných tracků. Max 1000. |
 | `includeStale` | `true` | Vrátí i stale tracky. Default `false`. |
 
@@ -134,6 +134,32 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - `sources` zachovává auditní stopu všech sloučených zdrojů,
 - COP používá `trackId` jako stabilní identifikátor.
 
+## Podporované zdroje
+
+| Source | Stav | Poznámka |
+| --- | --- | --- |
+| `adsb_lol` | live open-data pilot | ODbL; vhodné pro veřejný pilot se správnou atribucí. |
+| `local_adsb` | live vlastní/přátelská síť | Čte `aircraft.json` z readsb/dump1090 přes `LOCAL_ADSB_AIRCRAFT_JSON_URLS`; priorita je vyšší než veřejné agregátory. |
+| `opensky` | licencované / omezené | Nezapínat pro komerční nebo operativní použití bez písemného oprávnění. |
+| `mock` | syntetika | Pouze pro testy a fallback. |
+
+## Referenční data
+
+`GET /api/v1/airports` používá cacheovaný import OurAirports `airports.csv` pro státy v `OURAIRPORTS_COUNTRIES`. Výchozí sada je `CZ,SK,AT,DE,PL,HU`, aby COP dostal letiště v ČR a okolí bez ručního udržování seed seznamu. Při výpadku importu služba vrací seed fallback a `source.warnings`.
+
+Typy letadel zůstávají zatím seedované v SIM. Úplnější aircraft type store musí přijít z licencovaného nebo právně ověřeného zdroje.
+
+## Konfigurace lokální ADS-B sítě
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol
+LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://receiver-1.home.cz/tar1090/data/aircraft.json,http://receiver-2.home.cz/readsb/data/aircraft.json
+FLIGHT_DATA_CACHE_TTL_SECONDS=5
+FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
+```
+
+Používej jen přijímače provozované projektem nebo partnery, kteří výslovně povolí redistribuci do COP. Nepřeposílej komerční ani komunitní feedy, jejichž podmínky to neumožňují.
+
 ## Doporučení pro COP
 
 - Tracky z této služby ukládat jako samostatný typ zdroje, ne jako SIM syntetiku.
@@ -141,6 +167,7 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - Pracovat s `quality.stale`; stale tracky nezobrazovat jako aktuální bez varování.
 - Pokud `warnings` není prázdné, zobrazit stav zdroje jako degradovaný.
 - Pro historii poloh používat `trackId` a `lastSeenAt`.
+- Pro krátkou historii/predikci polohy dál používat COP buffer. SIM poskytuje aktuální agregovaný stav a zdrojová metadata.
 
 ## Dohled v SIM
 

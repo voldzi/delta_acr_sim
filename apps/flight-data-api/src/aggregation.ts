@@ -1,7 +1,7 @@
 import type { FlightDataConfig } from "./config.js";
 import { getAircraftType } from "./reference-data.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type { FlightDataSource } from "./sources.js";
+import type { FlightDataSource, SourceCacheStats } from "./sources.js";
 import type {
   AggregatedFlightTrack,
   BoundingBox,
@@ -29,6 +29,10 @@ export class FlightAggregationService {
 
   cacheStats(): ManagedResponseCacheStats {
     return this.cache.stats();
+  }
+
+  sourceCacheStats(): SourceCacheStats[] {
+    return this.sources.flatMap((source) => source.cacheStats?.() ?? []);
   }
 
   async getTracks(query: FlightQuery): Promise<FlightTrackResponse> {

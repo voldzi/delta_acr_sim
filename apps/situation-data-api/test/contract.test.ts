@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SituationDataConfig } from "../src/config.js";
@@ -35,12 +35,18 @@ describe("Situation Data API contract", () => {
       ctuNettestUrl: "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
       safetyDataBaseUrl: "http://127.0.0.1:4030",
-      safetyDataCacheTtlSeconds: 300
+      safetyDataCacheTtlSeconds: 300,
+      aviationWeatherBaseUrl: "https://aviationweather.gov",
+      aviationWeatherCacheTtlSeconds: 600,
+      ardosPartnerBaseUrl: undefined,
+      ardosPartnerToken: undefined,
+      ardosPartnerCacheTtlSeconds: 15
     };
     ({ app } = await createApp(config));
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -84,6 +90,14 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "safety_data",
           layers: expect.arrayContaining(["warnings", "flood"])
+        }),
+        expect.objectContaining({
+          sourceId: "aviation_weather",
+          layers: expect.arrayContaining(["weather"])
+        }),
+        expect.objectContaining({
+          sourceId: "ardos_partner",
+          license: expect.objectContaining({ name: "ARDOS partner data under MoU" })
         })
       ])
     );
@@ -104,14 +118,18 @@ describe("Situation Data API contract", () => {
         sourceCacheTtlSeconds: {
           openMeteo: 600,
           osmOverpass: 21600,
-          safetyData: 300
+          safetyData: 300,
+          aviationWeather: 600,
+          ardosPartner: 15
         },
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
-          expect.objectContaining({ sourceId: "safety_data", authConfigured: true })
+          expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
+          expect.objectContaining({ sourceId: "aviation_weather", authConfigured: true }),
+          expect.objectContaining({ sourceId: "ardos_partner", authConfigured: false })
         ])
       })
     );
@@ -125,7 +143,7 @@ describe("Situation Data API contract", () => {
 
     const cachedSources = await createApp({
       ...config,
-      enabledSources: ["open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data"]
+      enabledSources: ["open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data", "aviation_weather", "ardos_partner"]
     });
     const cachedSourceMetrics = await request(cachedSources.app).get("/metrics").expect(200);
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="open_meteo"}');
@@ -133,6 +151,8 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_stale_hits{source="ctu_nettest"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="ardos_partner"}');
   });
 
   it("returns the COP GeoJSON projection", async () => {
@@ -165,6 +185,85 @@ describe("Situation Data API contract", () => {
 
     expect(response.body.features.length).toBeGreaterThan(0);
     expect(response.body.features.every((feature: { properties: { layer: string } }) => feature.properties.layer === "mobile")).toBe(true);
+  });
+
+  it("projects NOAA AWC METAR and TAF aviation weather as weather features", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | RequestInfo) => {
+        const url = String(input);
+        if (url.includes("/api/data/metar")) {
+          return new Response(
+            JSON.stringify([
+              {
+                icaoId: "LKPR",
+                reportTime: "2026-05-20T18:00:00.000Z",
+                temp: 18,
+                dewp: 8,
+                wdir: 290,
+                wspd: 11,
+                altim: 1022,
+                rawOb: "METAR LKPR 201800Z 29011KT CAVOK 18/08 Q1022 NOSIG",
+                lat: 50.101,
+                lon: 14.26,
+                elev: 364,
+                name: "Prague/Havel Arpt",
+                cover: "CAVOK",
+                fltCat: "VFR"
+              }
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        if (url.includes("/api/data/taf")) {
+          return new Response(
+            JSON.stringify([
+              {
+                icaoId: "LKPR",
+                issueTime: "2026-05-20T17:00:00.000Z",
+                validTimeFrom: 1779300000,
+                validTimeTo: 1779408000,
+                rawTAF: "TAF LKPR 201700Z 2018/2124 25010KT CAVOK",
+                lat: 50.101,
+                lon: 14.26,
+                name: "Prague/Havel Arpt"
+              }
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+    const aviationApp = await createApp({ ...config, enabledSources: ["aviation_weather"] });
+
+    const response = await request(aviationApp.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=weather&source=aviation_weather&limit=20")
+      .expect(200);
+
+    expect(response.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "weather:aviation_weather:LKPR",
+        properties: expect.objectContaining({
+          sourceId: "aviation_weather",
+          category: "aviation_weather_station",
+          severity: "info",
+          metrics: expect.objectContaining({ temperatureC: 18, windSpeedMps: 5.66 }),
+          tags: expect.objectContaining({ icaoId: "LKPR", flightCategory: "VFR", tafAvailable: "true" })
+        })
+      })
+    );
+  });
+
+  it("surfaces ARDOS partner configuration warnings without leaking calls", async () => {
+    const ardosApp = await createApp({ ...config, enabledSources: ["ardos_partner"] });
+
+    const response = await request(ardosApp.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,traffic,mobile&source=ardos_partner&limit=20")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(0);
+    expect(response.body.warnings[0]).toContain("ARDOS_PARTNER_BASE_URL");
   });
 
   it("keeps layers represented when a low limit is requested", async () => {

@@ -101,6 +101,31 @@ const SAFETY_DATA_LICENSE: SituationDataLicense = {
   ]
 };
 
+const AVIATION_WEATHER_LICENSE: SituationDataLicense = {
+  name: "NOAA/NWS Aviation Weather Center public data",
+  url: "https://aviationweather.gov/data/api/",
+  attribution: "NOAA National Weather Service Aviation Weather Center",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "AWC Data API is rate limited; SIM caches requests and COP must not call AWC directly.",
+    "Use a custom user agent and keep requests limited in scope and frequency.",
+    "Aviation weather is context only and does not replace official aviation briefing products."
+  ]
+};
+
+const ARDOS_PARTNER_LICENSE: SituationDataLicense = {
+  name: "ARDOS partner data under MoU",
+  attribution: "ARDOS / Radioklub ACR partner feed",
+  commercialUse: "requires_license",
+  operationalUse: "requires_license",
+  notes: [
+    "Not open data; consume only through an explicit partner agreement.",
+    "Do not expose personal identifiers, exact volunteer identities, or sensitive mission details in public COP views.",
+    "SIM expects ARDOS to provide a filtered COP projection API with token authentication."
+  ]
+};
+
 export function createSituationDataSources(config: SituationDataConfig): SituationDataSource[] {
   const allSources: Record<SituationDataSourceId, SituationDataSource> = {
     mock: new MockSituationDataSource(),
@@ -108,7 +133,9 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     osm_overpass: new OsmOverpassSource(config),
     ctu_nettest: new CtuNettestSource(config),
     pid_gtfs_rt: new PidGtfsRtSource(config),
-    safety_data: new SafetyDataProjectionSource(config)
+    safety_data: new SafetyDataProjectionSource(config),
+    aviation_weather: new AviationWeatherSource(config),
+    ardos_partner: new ArdosPartnerSource(config)
   };
 
   return config.enabledSources.map((sourceId) => allSources[sourceId]);
@@ -122,7 +149,9 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new OsmOverpassSource(config).descriptor,
     new CtuNettestSource(config).descriptor,
     new PidGtfsRtSource(config).descriptor,
-    new SafetyDataProjectionSource(config).descriptor
+    new SafetyDataProjectionSource(config).descriptor,
+    new AviationWeatherSource(config).descriptor,
+    new ArdosPartnerSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
@@ -481,6 +510,138 @@ class SafetyDataProjectionSource implements SituationDataSource {
   }
 }
 
+class AviationWeatherSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<AviationWeatherBundle>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.payloadCache = new ManagedResponseCache<AviationWeatherBundle>({
+      ttlMs: Math.max(60, config.aviationWeatherCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.aviationWeatherCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(32, Math.min(config.cacheMaxEntries, 1024))
+    });
+    this.descriptor = {
+      sourceId: "aviation_weather",
+      label: "NOAA AWC METAR/TAF aviation weather",
+      enabled: config.enabledSources.includes("aviation_weather"),
+      mode: "live",
+      priority: 72,
+      layers: ["weather"],
+      license: AVIATION_WEATHER_LICENSE,
+      baseUrl: config.aviationWeatherBaseUrl,
+      updateCadenceSeconds: config.aviationWeatherCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("aviation_weather", this.payloadCache)];
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("weather")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
+    const cacheKey = `aviation_weather:${formatBboxKey(cacheBbox)}`;
+    const bundle = await this.payloadCache.getOrLoad(cacheKey, () => fetchAviationWeatherBundle(this.config, cacheBbox));
+    const tafByIcao = new Map(bundle.tafs.map((taf) => [normalizeIcaoId(taf.icaoId), taf]));
+    const features = bundle.metars
+      .map((metar) => mapAviationWeatherFeature(metar, tafByIcao.get(normalizeIcaoId(metar.icaoId)), query.includeRaw))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .filter((feature) => isFeatureInBbox(feature, query.bbox))
+      .slice(0, query.limit);
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features,
+      warnings: bundle.warnings
+    };
+  }
+}
+
+class ArdosPartnerSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<ArdosPartnerCollection>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.payloadCache = new ManagedResponseCache<ArdosPartnerCollection>({
+      ttlMs: Math.max(5, config.ardosPartnerCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(60, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(32, Math.min(config.cacheMaxEntries, 1024))
+    });
+    this.descriptor = {
+      sourceId: "ardos_partner",
+      label: "ARDOS partner field operations",
+      enabled: config.enabledSources.includes("ardos_partner"),
+      mode: "live",
+      priority: 90,
+      layers: ["ground", "mobile", "traffic"],
+      license: ARDOS_PARTNER_LICENSE,
+      baseUrl: config.ardosPartnerBaseUrl,
+      updateCadenceSeconds: config.ardosPartnerCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("ardos_partner", this.payloadCache)];
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    const layers = query.layers.filter((layer): layer is "ground" | "mobile" | "traffic" =>
+      layer === "ground" || layer === "mobile" || layer === "traffic"
+    );
+    if (layers.length === 0) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+    if (!this.config.ardosPartnerBaseUrl) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: ["ardos_partner is enabled but ARDOS_PARTNER_BASE_URL is not configured."] };
+    }
+    if (!this.config.ardosPartnerToken) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: ["ardos_partner is enabled but ARDOS_PARTNER_TOKEN is not configured."] };
+    }
+
+    const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
+    const url = new URL(`${trimTrailingSlash(this.config.ardosPartnerBaseUrl)}/api/v1/cop/features`);
+    url.searchParams.set("bbox", formatBbox(cacheBbox));
+    url.searchParams.set("layers", layers.join(","));
+    url.searchParams.set("limit", String(query.limit));
+    if (query.includeRaw) {
+      url.searchParams.set("includeRaw", "1");
+    }
+
+    const cacheKey = JSON.stringify({
+      bbox: formatBboxKey(cacheBbox),
+      layers: [...layers].sort(),
+      limit: query.limit,
+      includeRaw: query.includeRaw
+    });
+    const payload = await this.payloadCache.getOrLoad(cacheKey, () =>
+      requestJsonWithHeaders<ArdosPartnerCollection>(url.toString(), this.config.requestTimeoutMs, {
+        accept: "application/json",
+        authorization: `Bearer ${this.config.ardosPartnerToken}`,
+        "user-agent": "delta-acr-sim-ardos-partner/0.1"
+      })
+    );
+    const features = (payload.features ?? [])
+      .map((feature) => mapArdosPartnerFeature(feature, query.includeRaw))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .filter((feature) => query.layers.includes(feature.properties.layer))
+      .filter((feature) => isFeatureInBbox(feature, query.bbox))
+      .slice(0, query.limit);
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features,
+      warnings: (payload.warnings ?? []).map((warning) => `ardos_partner: ${warning}`)
+    };
+  }
+}
+
 interface FeatureInput {
   id: string;
   lon: number;
@@ -799,6 +960,96 @@ interface SafetyProjectionFeature {
   };
 }
 
+interface AviationWeatherBundle {
+  metars: AviationMetar[];
+  tafs: AviationTaf[];
+  warnings: string[];
+}
+
+interface AviationMetar {
+  icaoId?: string;
+  receiptTime?: string;
+  obsTime?: number;
+  reportTime?: string;
+  temp?: number;
+  dewp?: number;
+  wdir?: number | string;
+  wspd?: number;
+  wgst?: number;
+  visib?: number | string;
+  altim?: number;
+  metarType?: string;
+  rawOb?: string;
+  lat?: number;
+  lon?: number;
+  elev?: number;
+  name?: string;
+  cover?: string;
+  ceil?: number;
+  fltCat?: string;
+}
+
+interface AviationTaf {
+  icaoId?: string;
+  dbPopTime?: string;
+  bulletinTime?: string;
+  issueTime?: string;
+  validTimeFrom?: number;
+  validTimeTo?: number;
+  rawTAF?: string;
+  mostRecent?: number;
+  lat?: number;
+  lon?: number;
+  elev?: number;
+  name?: string;
+  fcsts?: Array<{
+    timeFrom?: number;
+    timeTo?: number;
+    fcstChange?: string | null;
+    probability?: number | null;
+    wdir?: number | null;
+    wspd?: number | null;
+    wgst?: number | null;
+    visib?: number | string | null;
+    wxString?: string | null;
+    clouds?: Array<{ cover?: string | null; base?: number | null; type?: string | null }>;
+  }>;
+}
+
+interface ArdosPartnerCollection {
+  features?: ArdosPartnerFeature[];
+  warnings?: string[];
+}
+
+interface ArdosPartnerFeature {
+  type: "Feature";
+  id?: string;
+  geometry?: {
+    type?: "Point" | "LineString" | "Polygon";
+    coordinates?: unknown;
+  };
+  properties?: {
+    featureId?: string;
+    layer?: SituationLayerId;
+    category?: string;
+    label?: string;
+    sourceId?: string;
+    observedAt?: string;
+    validUntil?: string;
+    confidence?: number;
+    stale?: boolean;
+    severity?: SituationSeverity;
+    license?: {
+      name?: string;
+      attribution?: string;
+      url?: string;
+    };
+    metrics?: Record<string, number | string | boolean>;
+    tags?: Record<string, string>;
+    raw?: unknown;
+  };
+}
+
 function mapSafetyProjectionFeature(
   feature: SafetyProjectionFeature,
   includeRaw: boolean,
@@ -868,12 +1119,185 @@ function mapSafetyProjectionGeometry(
   return undefined;
 }
 
+async function fetchAviationWeatherBundle(config: SituationDataConfig, bbox: BoundingBox): Promise<AviationWeatherBundle> {
+  const metarUrl = new URL(`${trimTrailingSlash(config.aviationWeatherBaseUrl)}/api/data/metar`);
+  metarUrl.searchParams.set("bbox", formatAviationWeatherBbox(bbox));
+  metarUrl.searchParams.set("format", "json");
+
+  const warnings: string[] = [];
+  const metars = await requestJsonArray<AviationMetar>(metarUrl.toString(), config.requestTimeoutMs, {
+    accept: "application/json",
+    "user-agent": "delta-acr-sim-aviation-weather/0.1"
+  });
+  const ids = Array.from(new Set(metars.map((metar) => normalizeIcaoId(metar.icaoId)).filter((id) => id.length > 0))).slice(0, 100);
+  let tafs: AviationTaf[] = [];
+  if (ids.length > 0) {
+    const tafUrl = new URL(`${trimTrailingSlash(config.aviationWeatherBaseUrl)}/api/data/taf`);
+    tafUrl.searchParams.set("ids", ids.join(","));
+    tafUrl.searchParams.set("format", "json");
+    try {
+      tafs = await requestJsonArray<AviationTaf>(tafUrl.toString(), config.requestTimeoutMs, {
+        accept: "application/json",
+        "user-agent": "delta-acr-sim-aviation-weather/0.1"
+      });
+    } catch (error) {
+      warnings.push(error instanceof Error ? `aviation_weather TAF fetch failed: ${error.message}` : "aviation_weather TAF fetch failed.");
+    }
+  }
+  return { metars, tafs, warnings };
+}
+
+function mapAviationWeatherFeature(metar: AviationMetar, taf: AviationTaf | undefined, includeRaw: boolean): SituationFeature | undefined {
+  const lat = optionalNumber(metar.lat);
+  const lon = optionalNumber(metar.lon);
+  const icaoId = normalizeIcaoId(metar.icaoId);
+  if (!icaoId || lat === undefined || lon === undefined) {
+    return undefined;
+  }
+  const observedAt = parseAviationTime(metar.reportTime) ?? epochSecondsToIso(metar.obsTime) ?? parseAviationTime(metar.receiptTime) ?? new Date().toISOString();
+  const validUntil = taf?.validTimeTo ? epochSecondsToIso(taf.validTimeTo) : addSeconds(observedAt, 90 * 60);
+  const flightCategory = optionalString(metar.fltCat)?.toUpperCase();
+  const severity = aviationWeatherSeverity(flightCategory, taf);
+
+  return makePointFeature({
+    id: `weather:aviation_weather:${icaoId}`,
+    lon,
+    lat,
+    layer: "weather",
+    category: "aviation_weather_station",
+    label: `${icaoId} ${flightCategory ?? "METAR"}`,
+    sourceId: "aviation_weather",
+    license: AVIATION_WEATHER_LICENSE,
+    observedAt,
+    validUntil,
+    confidence: flightCategory ? 0.88 : 0.8,
+    severity,
+    metrics: compactMetrics({
+      temperatureC: optionalNumber(metar.temp),
+      dewpointC: optionalNumber(metar.dewp),
+      windDirectionDeg: optionalNumber(metar.wdir),
+      windSpeedKt: optionalNumber(metar.wspd),
+      windSpeedMps: knotsToMps(optionalNumber(metar.wspd)),
+      windGustKt: optionalNumber(metar.wgst),
+      windGustMps: knotsToMps(optionalNumber(metar.wgst)),
+      visibilitySm: optionalNumber(metar.visib),
+      altimeterHpa: optionalNumber(metar.altim),
+      ceilingFt: optionalNumber(metar.ceil),
+      elevationM: optionalNumber(metar.elev)
+    }),
+    tags: compactTags({
+      icaoId,
+      stationName: optionalString(metar.name),
+      metarType: optionalString(metar.metarType),
+      flightCategory,
+      cloudCover: optionalString(metar.cover),
+      tafAvailable: taf ? "true" : undefined
+    }),
+    raw: includeRaw ? { metar, taf } : undefined
+  });
+}
+
+function mapArdosPartnerFeature(feature: ArdosPartnerFeature, includeRaw: boolean): SituationFeature | undefined {
+  const geometry = mapPartnerGeometry(feature.geometry);
+  const properties = feature.properties;
+  if (!geometry || !properties) {
+    return undefined;
+  }
+  const layer = properties.layer;
+  if (layer !== "ground" && layer !== "mobile" && layer !== "traffic") {
+    return undefined;
+  }
+  const observedAt = parseAviationTime(properties.observedAt) ?? new Date().toISOString();
+  const sourceFeatureId = optionalString(properties.featureId) ?? optionalString(feature.id) ?? stableToken(`${layer}:${properties.category ?? "feature"}:${observedAt}`);
+  const id = `ardos_partner:${sourceFeatureId}`;
+
+  return {
+    type: "Feature",
+    id,
+    geometry,
+    properties: {
+      featureId: id,
+      layer,
+      category: optionalString(properties.category) ?? "partner_feature",
+      label: optionalString(properties.label) ?? "ARDOS partner feature",
+      sourceId: "ardos_partner",
+      observedAt,
+      validUntil: parseAviationTime(properties.validUntil),
+      confidence: clamp(optionalNumber(properties.confidence) ?? 0.72, 0.1, 0.95),
+      stale: Boolean(properties.stale),
+      severity: parseSeverity(properties.severity),
+      license: {
+        name: properties.license?.name || ARDOS_PARTNER_LICENSE.name,
+        attribution: properties.license?.attribution || ARDOS_PARTNER_LICENSE.attribution,
+        url: properties.license?.url || ARDOS_PARTNER_LICENSE.url
+      },
+      metrics: compactMixedMetrics(properties.metrics ?? {}),
+      tags: compactTags({
+        ...(properties.tags ?? {}),
+        partnerSourceId: optionalString(properties.sourceId),
+        partnerFeatureId: sourceFeatureId
+      }),
+      raw: includeRaw ? feature : undefined
+    }
+  };
+}
+
+function mapPartnerGeometry(geometry: ArdosPartnerFeature["geometry"]): SituationFeature["geometry"] | undefined {
+  if (!geometry?.type || !geometry.coordinates) {
+    return undefined;
+  }
+  if (geometry.type === "Point" && Array.isArray(geometry.coordinates)) {
+    const [lon, lat] = geometry.coordinates;
+    if (typeof lon === "number" && typeof lat === "number") {
+      return { type: "Point", coordinates: [round(lon, 6), round(lat, 6)] };
+    }
+  }
+  if (geometry.type === "LineString" && Array.isArray(geometry.coordinates)) {
+    const coordinates = geometry.coordinates.filter(isLonLatPair).map(([lon, lat]) => [round(lon, 6), round(lat, 6)] as [number, number]);
+    return coordinates.length > 0 ? { type: "LineString", coordinates } : undefined;
+  }
+  if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
+    const rings = geometry.coordinates
+      .filter(Array.isArray)
+      .map((ring) => ring.filter(isLonLatPair).map(([lon, lat]) => [round(lon, 6), round(lat, 6)] as [number, number]))
+      .filter((ring) => ring.length >= 4);
+    return rings.length > 0 ? { type: "Polygon", coordinates: rings } : undefined;
+  }
+  return undefined;
+}
+
 async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
   }
   return (await response.json()) as T;
+}
+
+async function requestJsonWithHeaders<T>(url: string, timeoutMs: number, headers: Record<string, string>): Promise<T> {
+  const response = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  return (await response.json()) as T;
+}
+
+async function requestJsonArray<T>(url: string, timeoutMs: number, headers: Record<string, string>): Promise<T[]> {
+  const response = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (response.status === 204) {
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  const payload = (await response.json()) as unknown;
+  return Array.isArray(payload) ? (payload as T[]) : [];
 }
 
 async function requestBytes(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<Uint8Array> {
@@ -1366,6 +1790,70 @@ function trimTrailingSlash(value: string): string {
 
 function formatBbox(bbox: BoundingBox): string {
   return [bbox.west, bbox.south, bbox.east, bbox.north].map((value) => round(value, 6)).join(",");
+}
+
+function formatAviationWeatherBbox(bbox: BoundingBox): string {
+  return [bbox.south, bbox.west, bbox.north, bbox.east].map((value) => round(value, 6)).join(",");
+}
+
+function normalizeIcaoId(value: string | undefined): string {
+  return value?.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") ?? "";
+}
+
+function epochSecondsToIso(value: number | undefined): string | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const date = new Date(value * 1000);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function parseAviationTime(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function aviationWeatherSeverity(flightCategory: string | undefined, taf: AviationTaf | undefined): SituationSeverity {
+  if (flightCategory === "LIFR") {
+    return "critical";
+  }
+  if (flightCategory === "IFR") {
+    return "warning";
+  }
+  if (flightCategory === "MVFR") {
+    return "advisory";
+  }
+  const tafText = `${taf?.rawTAF ?? ""} ${(taf?.fcsts ?? []).map((forecast) => forecast.wxString ?? "").join(" ")}`.toUpperCase();
+  if (/\b(TS|TSRA|\+TSRA|FZ|GR|CB)\b/.test(tafText)) {
+    return "warning";
+  }
+  if (/\b(SHRA|SN|FG|BR|BKN00|OVC00)\b/.test(tafText)) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function parseSeverity(value: SituationSeverity | undefined): SituationSeverity {
+  switch (value) {
+    case "critical":
+    case "warning":
+    case "advisory":
+    case "info":
+      return value;
+    default:
+      return "info";
+  }
+}
+
+function knotsToMps(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? round(value * 0.514444, 2) : undefined;
+}
+
+function isLonLatPair(value: unknown): value is [number, number] {
+  return Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number";
 }
 
 function clamp(value: number, min: number, max: number): number {

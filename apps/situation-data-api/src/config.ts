@@ -24,6 +24,11 @@ export interface SituationDataConfig {
   pidGtfsRtVehiclePositionsUrl: string;
   safetyDataBaseUrl: string;
   safetyDataCacheTtlSeconds: number;
+  aviationWeatherBaseUrl: string;
+  aviationWeatherCacheTtlSeconds: number;
+  ardosPartnerBaseUrl?: string;
+  ardosPartnerToken?: string;
+  ardosPartnerCacheTtlSeconds: number;
 }
 
 export async function loadConfig(): Promise<SituationDataConfig> {
@@ -57,12 +62,26 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     pidGtfsRtVehiclePositionsUrl:
       process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
     safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030",
-    safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300)
+    safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300),
+    aviationWeatherBaseUrl: process.env.AVIATION_WEATHER_BASE_URL ?? "https://aviationweather.gov",
+    aviationWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS, 600),
+    ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
+    ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
+    ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15)
   };
 }
 
 function parseSourceList(value: string | undefined): SituationDataSourceId[] {
-  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data"]);
+  const allowed = new Set<SituationDataSourceId>([
+    "mock",
+    "open_meteo",
+    "osm_overpass",
+    "ctu_nettest",
+    "pid_gtfs_rt",
+    "safety_data",
+    "aviation_weather",
+    "ardos_partner"
+  ]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())
@@ -99,4 +118,8 @@ function parseFloatOr(value: string | undefined, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function emptyToUndefined(value: string | undefined): string | undefined {
+  return value && value.trim() !== "" ? value : undefined;
 }

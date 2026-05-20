@@ -3,19 +3,21 @@ import express, { type Express } from "express";
 import type { FlightDataConfig } from "./config.js";
 import { FlightAggregationService } from "./aggregation.js";
 import { problem } from "./http.js";
-import { getAircraftType, getAirport, searchAircraftTypes, searchAirports } from "./reference-data.js";
+import { getAircraftType, ReferenceDataService, searchAircraftTypes } from "./reference-data.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
 import type { BoundingBox, FlightDataPublicConfig, FlightDataSourceId, FlightQuery } from "./types.js";
 
 export interface FlightDataAppContext {
   config: FlightDataConfig;
   aggregation: FlightAggregationService;
+  referenceData: ReferenceDataService;
 }
 
 export async function createApp(config: FlightDataConfig): Promise<{ app: Express; context: FlightDataAppContext }> {
   const sources = createFlightDataSources(config);
   const aggregation = new FlightAggregationService(config, sources);
-  const context: FlightDataAppContext = { config, aggregation };
+  const referenceData = new ReferenceDataService(config);
+  const context: FlightDataAppContext = { config, aggregation, referenceData };
   const app = express();
 
   app.use(cors());
@@ -24,7 +26,7 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
   registerHealthRoutes(app, context);
   registerSourceRoutes(app, context);
   registerFlightRoutes(app, context);
-  registerReferenceRoutes(app);
+  registerReferenceRoutes(app, context);
 
   app.use((req, res) => {
     problem(req, res, 404, "NOT_FOUND", "Endpoint not found.");
@@ -48,6 +50,17 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
 
   app.get("/metrics", (_req, res) => {
     const cache = context.aggregation.cacheStats();
+    const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
+      `flight_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
+      `flight_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
+      `flight_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
+      `flight_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
+      `flight_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
+      `flight_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
+      `flight_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
+      `flight_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
+      `flight_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
+    ]);
     res
       .type("text/plain")
       .send(
@@ -61,7 +74,8 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
           `flight_data_cache_stale_hits ${cache.staleHits}`,
           `flight_data_cache_refreshes ${cache.refreshes}`,
           `flight_data_cache_errors ${cache.errors}`,
-          `flight_data_cache_evictions ${cache.evictions}`
+          `flight_data_cache_evictions ${cache.evictions}`,
+          ...sourceCacheLines
         ].join("\n") + "\n"
       );
   });
@@ -115,24 +129,30 @@ function registerFlightRoutes(app: Express, context: FlightDataAppContext): void
   });
 }
 
-function registerReferenceRoutes(app: Express): void {
-  app.get("/api/v1/airports", (req, res) => {
+function registerReferenceRoutes(app: Express, context: FlightDataAppContext): void {
+  app.get("/api/v1/airports", async (req, res) => {
     const bbox = parseBbox(req.query.bbox);
     if (!bbox.ok) {
       return problem(req, res, 400, "VALIDATION_ERROR", bbox.error);
     }
     const limit = parseLimit(req.query.limit, 50, 500);
+    const referenceMetadata = await context.referenceData.metadata();
     res.json({
-      items: searchAirports(asString(req.query.query ?? req.query.q), bbox.value, limit),
+      items: await context.referenceData.searchAirports(asString(req.query.query ?? req.query.q), bbox.value, limit),
       source: {
-        label: "Airport reference subset",
-        license: "Public domain compatible seed; production sync target is OurAirports public domain data."
+        label: referenceMetadata.airportSource === "ourairports:airports.csv" ? "OurAirports airport reference data" : "Airport reference seed fallback",
+        license: "OurAirports public domain data where imported; embedded seed is public-domain compatible.",
+        loadedAt: referenceMetadata.loadedAt,
+        warnings: referenceMetadata.warnings
+      },
+      summary: {
+        totalReferenceAirports: referenceMetadata.airportCount
       }
     });
   });
 
-  app.get("/api/v1/airports/:ident", (req, res) => {
-    const airport = getAirport(req.params.ident);
+  app.get("/api/v1/airports/:ident", async (req, res) => {
+    const airport = await context.referenceData.getAirport(req.params.ident);
     if (!airport) {
       return problem(req, res, 404, "NOT_FOUND", "Airport not found.");
     }
@@ -196,7 +216,7 @@ function parseBbox(value: unknown): { ok: true; value?: BoundingBox } | { ok: fa
 }
 
 function parseSources(value: unknown, fallback: FlightDataSourceId[]): FlightDataSourceId[] {
-  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky"]);
+  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky", "local_adsb"]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -248,7 +268,17 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
         sourceId: "opensky",
         baseUrl: config.openskyBaseUrl,
         authConfigured: Boolean(config.openskyAccessToken || (config.openskyClientId && config.openskyClientSecret))
+      },
+      {
+        sourceId: "local_adsb",
+        baseUrl: config.localAdsbAircraftJsonUrls.length === 1 ? config.localAdsbAircraftJsonUrls[0] : undefined,
+        authConfigured: config.localAdsbAircraftJsonUrls.length > 0
       }
-    ]
+    ],
+    referenceData: {
+      ourAirportsEnabled: config.ourAirportsEnabled,
+      ourAirportsCountries: config.ourAirportsCountries,
+      ourAirportsCacheTtlSeconds: config.ourAirportsCacheTtlSeconds
+    }
   };
 }

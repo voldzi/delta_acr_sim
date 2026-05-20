@@ -29,7 +29,12 @@ describe("Flight Data API contract", () => {
       staleAfterSeconds: 120,
       adsbLolBaseUrl: "https://api.adsb.lol",
       openskyBaseUrl: "https://opensky-network.org/api",
-      openskyAuthUrl: "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
+      openskyAuthUrl: "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
+      localAdsbAircraftJsonUrls: [],
+      ourAirportsEnabled: false,
+      ourAirportsCsvUrl: "https://davidmegginson.github.io/ourairports-data/airports.csv",
+      ourAirportsCountries: ["CZ", "SK", "AT", "DE", "PL", "HU"],
+      ourAirportsCacheTtlSeconds: 86400
     };
     ({ app } = await createApp(config));
   });
@@ -58,6 +63,10 @@ describe("Flight Data API contract", () => {
         expect.objectContaining({
           sourceId: "opensky",
           license: expect.objectContaining({ commercialUse: "requires_license" })
+        }),
+        expect.objectContaining({
+          sourceId: "local_adsb",
+          license: expect.objectContaining({ name: "Owner-operated ADS-B receiver feed" })
         })
       ])
     );
@@ -74,9 +83,15 @@ describe("Flight Data API contract", () => {
         staleIfErrorSeconds: 60,
         cacheMaxEntries: 128,
         staleAfterSeconds: 120,
+        referenceData: expect.objectContaining({
+          ourAirportsEnabled: false,
+          ourAirportsCountries: ["CZ", "SK", "AT", "DE", "PL", "HU"],
+          ourAirportsCacheTtlSeconds: 86400
+        }),
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
-          expect.objectContaining({ sourceId: "opensky", authConfigured: false })
+          expect.objectContaining({ sourceId: "opensky", authConfigured: false }),
+          expect.objectContaining({ sourceId: "local_adsb", authConfigured: false })
         ])
       })
     );
@@ -87,6 +102,16 @@ describe("Flight Data API contract", () => {
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("flight_data_cache_entries");
     expect(response.text).toContain("flight_data_cache_coalesced_hits");
+
+    const cachedSources = await createApp({
+      ...config,
+      enabledSources: ["adsb_lol", "opensky", "local_adsb"],
+      localAdsbAircraftJsonUrls: ["data:application/json,%7B%22aircraft%22%3A%5B%5D%7D"]
+    });
+    const cachedSourceMetrics = await request(cachedSources.app).get("/metrics").expect(200);
+    expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_hits{source="adsb_lol"}');
+    expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_misses{source="opensky"}');
+    expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_stale_hits{source="local_adsb"}');
   });
 
   it("returns deduplicated aircraft positions by icao24", async () => {
@@ -114,6 +139,50 @@ describe("Flight Data API contract", () => {
     expect(response.body.source.sourceType).toBe("PUBLIC_FLIGHT_AGGREGATE");
     expect(response.body.tracks.length).toBeGreaterThan(0);
     expect(response.body.tracks.every((track: { lat?: number; lon?: number }) => typeof track.lat === "number" && typeof track.lon === "number")).toBe(true);
+  });
+
+  it("reads a local readsb/dump1090 aircraft.json feed", async () => {
+    const payload = encodeURIComponent(
+      JSON.stringify({
+        now: Date.now() / 1000,
+        aircraft: [
+          {
+            hex: "4D2216",
+            flight: "CSA42 ",
+            r: "OK-TSR",
+            t: "A320",
+            lat: 50.1174,
+            lon: 14.5121,
+            alt_baro: 9000,
+            gs: 268,
+            track: 269,
+            baro_rate: 256,
+            squawk: "2741",
+            seen: 1,
+            category: "A3"
+          }
+        ]
+      })
+    );
+    const localApp = await createApp({
+      ...config,
+      enabledSources: ["local_adsb"],
+      localAdsbAircraftJsonUrls: [`data:application/json,${payload}`]
+    });
+
+    const response = await request(localApp.app).get("/api/v1/cop/tracks?source=local_adsb&limit=10").expect(200);
+
+    expect(response.body.summary.rawObservationCount).toBe(1);
+    expect(response.body.tracks[0]).toEqual(
+      expect.objectContaining({
+        icao24: "4d2216",
+        callsign: "CSA42",
+        registration: "OK-TSR",
+        altitudeM: 2743,
+        speedMps: 137.87,
+        deduplication: expect.objectContaining({ primarySourceId: "local_adsb" })
+      })
+    );
   });
 
   it("exposes airport and aircraft type reference lookups", async () => {

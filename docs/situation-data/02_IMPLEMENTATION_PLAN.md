@@ -8,7 +8,9 @@
    - `open_meteo`: live weather feature pro střed bbox,
    - `osm_overpass`: volitelný live ground provider pro malé bbox dotazy,
    - `ctu_nettest`: live/periodický ČTÚ NetTest ZIP export pro mobilní měření,
-   - `pid_gtfs_rt`: live PID/Golemio GTFS-RT vozidla pro dopravní kontext.
+   - `pid_gtfs_rt`: live PID/Golemio GTFS-RT vozidla pro dopravní kontext,
+   - `aviation_weather`: NOAA AWC METAR/TAF letištní počasí,
+   - `ardos_partner`: neveřejný partnerský vstup ARDOS pro interní COP pohledy.
 3. Přidat endpointy:
    - `GET /api/v1/layers`
    - `GET /api/v1/sources`
@@ -20,7 +22,7 @@
    - `/situation-data/health/`
    - `/situation-data/metrics`
 5. Doplnit panel v SIM pro dohled nad stavem sběru, zdroji, licencemi, počtem features, warnings a preview.
-6. Doplnit server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem, kanonickým bbox klíčem pro COP výřezy a source-level cache pro Open-Meteo, ČTÚ NetTest, PID GTFS-RT, Safety Data a volitelný Overpass.
+6. Doplnit server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem, kanonickým bbox klíčem pro COP výřezy a source-level cache pro Open-Meteo, ČTÚ NetTest, PID GTFS-RT, Safety Data, Aviation Weather, ARDOS a volitelný Overpass.
 
 ## Fáze 2: Další síťové a dopravní vrstvy
 
@@ -29,6 +31,7 @@
 3. Přidat M-Lab agregace z BigQuery/exportů pro výkon sítě.
 4. Přidat JSDI/NDIC/DATEX II konektor pro dopravní incidenty po potvrzení licence a způsobu přístupu.
 5. Přidat PID GTFS-RT alerts jako samostatné dopravní incidenty.
+6. Po ARDOS pilotu doplnit role/permissions v COP a oddělené veřejné vs interní zobrazení partnerských dat.
 
 ## Provozní zásady
 

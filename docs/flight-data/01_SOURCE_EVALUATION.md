@@ -18,6 +18,7 @@ Výchozí implementace proto odděluje normalizovaný COP kontrakt od konkrétn�
 | Zdroj | Použití v pilotu | Pozdější komerce | Poznámka |
 | --- | --- | --- | --- |
 | OurAirports | Ano, letiště | Ano | Data jsou public domain, vhodné jako základ letištní reference. Zdroj uvádí noční CSV exporty a public domain podmínky. |
+| Vlastní ADS-B přijímač / readsb `aircraft.json` | Ano, pokud máme přijímač | Ano, při vlastním provozu nebo partnerské dohodě | Nejčistší cesta k lokálnímu pokrytí ČR a nízkých letů. Nepřeposílat cizí feedy bez oprávnění. |
 | ADSB.lol | Ano, live ADS-B testy | Ano, s ODbL povinnostmi | API je veřejné a data jsou ODbL. Pro produkční provoz je vhodné kontaktovat provozovatele, aby se nerozbilo SLA nebo API klíče. |
 | OpenSky Network | Pouze výzkum/test se souhlasem | Jen písemná licence | Podmínky omezují použití na neprofitní výzkum/vzdělávání; komerční i operační REST API použití vyžaduje písemnou licenci. |
 | ICAO API Data Service | Test přes trial | Ano, přes oficiální API/licenci | Vhodný cílový zdroj pro oficiální typy letadel a ICAO kódy. Trial poskytuje omezený počet volání. |
@@ -30,18 +31,20 @@ Pro pilotní nekomerční testování:
 
 1. Výchozí režim `mock` je bezpečný a zcela syntetický.
 2. `adsb_lol` lze zapnout pro realistický live provoz, pokud aplikace zobrazí atribuci a zachová ODbL povinnosti.
-3. `opensky` držíme jako volitelný adapter, ale v konfiguraci defaultně vypnutý.
+3. `local_adsb` je preferovaný další krok pro vlastní přijímače v ČR.
+4. `opensky` držíme jako volitelný adapter, ale v konfiguraci defaultně vypnutý.
 
 Pro komerční použití:
 
 1. Letiště: primárně OurAirports, protože public domain je nejčistší model.
-2. Live lety: buď ADSB.lol při splnění ODbL a provozních podmínek, nebo placený/licencovaný provider.
+2. Live lety: vlastní/partnerská ADS-B síť, ADSB.lol při splnění ODbL a provozních podmínek, nebo placený/licencovaný provider.
 3. Typy letadel: primárně oficiální ICAO API Data Service nebo smluvně čistý datový balík.
 4. COP kontrakt nesmí záviset na jednom providerovi; musí dostávat normalizované pole `sources` a `sourceLicenses`.
 
 ## Zdrojové odkazy
 
 - OurAirports data: https://ourairports.com/data/
+- readsb: https://github.com/wiedehopf/readsb
 - ADSB.lol API: https://www.adsb.lol/docs/open-data/api/
 - ADSB.lol license: https://www.adsb.lol/privacy-license/
 - ODbL summary: https://opendatacommons.org/licenses/odbl/summary/

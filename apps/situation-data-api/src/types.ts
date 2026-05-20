@@ -1,5 +1,13 @@
 export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic" | "warnings" | "flood" | "air_quality";
-export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass" | "ctu_nettest" | "pid_gtfs_rt" | "safety_data";
+export type SituationDataSourceId =
+  | "mock"
+  | "open_meteo"
+  | "osm_overpass"
+  | "ctu_nettest"
+  | "pid_gtfs_rt"
+  | "safety_data"
+  | "aviation_weather"
+  | "ardos_partner";
 export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
 
@@ -61,6 +69,8 @@ export interface SituationDataPublicConfig {
     openMeteo: number;
     osmOverpass: number;
     safetyData: number;
+    aviationWeather: number;
+    ardosPartner: number;
   };
   providers: Array<{
     sourceId: SituationDataSourceId;
