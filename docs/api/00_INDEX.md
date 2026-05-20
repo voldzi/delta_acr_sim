@@ -3,6 +3,7 @@
 - [openapi-simulator.yaml](openapi-simulator.yaml)
 - [openapi-flight-data.yaml](openapi-flight-data.yaml)
 - [openapi-situation-data.yaml](openapi-situation-data.yaml)
+- [openapi-safety-data.yaml](openapi-safety-data.yaml)
 - [schemas/00_INDEX.md](schemas/00_INDEX.md)
 - [schemas/scenario.schema.json](schemas/scenario.schema.json)
 - [schemas/scenario-block.schema.json](schemas/scenario-block.schema.json)

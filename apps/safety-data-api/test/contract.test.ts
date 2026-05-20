@@ -3,18 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SituationAggregationService } from "../src/aggregation.js";
+import { SafetyAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
-import type { SituationDataConfig } from "../src/config.js";
-import type { SituationDataSource } from "../src/sources.js";
+import type { SafetyDataConfig } from "../src/config.js";
+import type { SafetyDataSource } from "../src/sources.js";
 
-describe("Situation Data API contract", () => {
+describe("Safety Data API contract", () => {
   let dataDir: string;
   let app: Awaited<ReturnType<typeof createApp>>["app"];
-  let config: SituationDataConfig;
+  let config: SafetyDataConfig;
 
   beforeEach(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "delta-acr-situation-data-"));
+    dataDir = await mkdtemp(join(tmpdir(), "delta-acr-safety-data-"));
     config = {
       port: 0,
       dataDir,
@@ -25,12 +25,10 @@ describe("Situation Data API contract", () => {
       staleIfErrorSeconds: 600,
       cacheMaxEntries: 128,
       staleAfterSeconds: 900,
-      openMeteoBaseUrl: "https://api.open-meteo.com",
-      overpassBaseUrl: "https://overpass-api.de/api/interpreter",
-      overpassMaxBboxDegrees: 1.6,
-      ctuNettestUrl: "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
-      pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
-      safetyDataBaseUrl: "http://127.0.0.1:4030"
+      chmiAlertsCapBaseUrl: "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
+      chmiHydroMetadataUrl: "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
+      chmiHydroNowBaseUrl: "https://opendata.chmi.cz/hydrology/now/data",
+      chmiHydroMaxStations: 20
     };
     ({ app } = await createApp(config));
   });
@@ -47,8 +45,8 @@ describe("Situation Data API contract", () => {
     const layers = await request(app).get("/api/v1/layers").expect(200);
     expect(layers.body.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ layerId: "weather", defaultVisible: true }),
-        expect.objectContaining({ layerId: "mobile", defaultVisible: false })
+        expect.objectContaining({ layerId: "warnings", defaultVisible: true }),
+        expect.objectContaining({ layerId: "flood", defaultVisible: true })
       ])
     );
 
@@ -58,27 +56,15 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "mock",
           enabled: true,
-          layers: expect.arrayContaining(["weather", "ground", "mobile", "traffic"])
-        }),
-        expect.objectContaining({
-          sourceId: "open_meteo",
-          license: expect.objectContaining({ name: "CC BY 4.0 / Open-Meteo Terms" })
-        }),
-        expect.objectContaining({
-          sourceId: "osm_overpass",
-          license: expect.objectContaining({ name: "ODbL 1.0" })
-        }),
-        expect.objectContaining({
-          sourceId: "ctu_nettest",
-          license: expect.objectContaining({ name: "CC BY 4.0" })
-        }),
-        expect.objectContaining({
-          sourceId: "pid_gtfs_rt",
-          layers: expect.arrayContaining(["traffic"])
-        }),
-        expect.objectContaining({
-          sourceId: "safety_data",
           layers: expect.arrayContaining(["warnings", "flood"])
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_alerts",
+          license: expect.objectContaining({ name: "CHMI Open Data" })
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_hydro",
+          layers: expect.arrayContaining(["flood"])
         })
       ])
     );
@@ -95,12 +81,11 @@ describe("Situation Data API contract", () => {
         staleIfErrorSeconds: 600,
         cacheMaxEntries: 128,
         staleAfterSeconds: 900,
+        hydroMaxStations: 20,
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
-          expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
-          expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
-          expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
-          expect.objectContaining({ sourceId: "safety_data", authConfigured: true })
+          expect.objectContaining({ sourceId: "chmi_alerts", authConfigured: true }),
+          expect.objectContaining({ sourceId: "chmi_hydro", authConfigured: true })
         ])
       })
     );
@@ -109,18 +94,18 @@ describe("Situation Data API contract", () => {
 
   it("exposes cache metrics", async () => {
     const response = await request(app).get("/metrics").expect(200);
-    expect(response.text).toContain("situation_data_cache_entries");
-    expect(response.text).toContain("situation_data_cache_coalesced_hits");
+    expect(response.text).toContain("safety_data_cache_entries");
+    expect(response.text).toContain("safety_data_cache_coalesced_hits");
   });
 
   it("returns the COP GeoJSON projection", async () => {
     const response = await request(app)
-      .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=weather,ground,mobile,traffic&source=mock&limit=20")
+      .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=warnings,flood&source=mock&limit=20")
       .expect(200);
 
-    expect(response.body.contractVersion).toBe("cop-situation-source-v1");
+    expect(response.body.contractVersion).toBe("cop-safety-source-v1");
     expect(response.body.type).toBe("FeatureCollection");
-    expect(response.body.source.sourceType).toBe("PUBLIC_SITUATION_AGGREGATE");
+    expect(response.body.source.sourceType).toBe("PUBLIC_SAFETY_AGGREGATE");
     expect(response.body.summary.featureCount).toBeGreaterThan(0);
     expect(response.body.features[0]).toEqual(
       expect.objectContaining({
@@ -139,19 +124,17 @@ describe("Situation Data API contract", () => {
   });
 
   it("filters by layer", async () => {
-    const response = await request(app).get("/api/v1/features?layers=mobile&source=mock").expect(200);
+    const response = await request(app).get("/api/v1/features?layers=flood&source=mock").expect(200);
 
     expect(response.body.features.length).toBeGreaterThan(0);
-    expect(response.body.features.every((feature: { properties: { layer: string } }) => feature.properties.layer === "mobile")).toBe(true);
+    expect(response.body.features.every((feature: { properties: { layer: string } }) => feature.properties.layer === "flood")).toBe(true);
   });
 
   it("keeps layers represented when a low limit is requested", async () => {
-    const response = await request(app)
-      .get("/api/v1/features?layers=weather,ground,mobile,traffic&source=mock&limit=4")
-      .expect(200);
+    const response = await request(app).get("/api/v1/features?layers=warnings,flood&source=mock&limit=2").expect(200);
 
     const layers = new Set(response.body.features.map((feature: { properties: { layer: string } }) => feature.properties.layer));
-    expect(layers).toEqual(new Set(["weather", "ground", "mobile", "traffic"]));
+    expect(layers).toEqual(new Set(["warnings", "flood"]));
   });
 
   it("validates bbox and layers", async () => {
@@ -164,13 +147,13 @@ describe("Situation Data API contract", () => {
 
   it("coalesces concurrent cache misses into one source fetch", async () => {
     let calls = 0;
-    const descriptor: SituationDataSource["descriptor"] = {
+    const descriptor: SafetyDataSource["descriptor"] = {
       sourceId: "mock",
       label: "test",
       enabled: true,
       mode: "mock",
       priority: 10,
-      layers: ["weather"],
+      layers: ["warnings"],
       license: {
         name: "test",
         attribution: "test",
@@ -179,7 +162,7 @@ describe("Situation Data API contract", () => {
         notes: []
       }
     };
-    const source: SituationDataSource = {
+    const source: SafetyDataSource = {
       descriptor,
       async fetchFeatures() {
         calls += 1;
@@ -192,18 +175,20 @@ describe("Situation Data API contract", () => {
           features: [
             {
               type: "Feature",
-              id: "weather:test",
+              id: "warnings:test",
               geometry: { type: "Point", coordinates: [14.4, 50.1] },
               properties: {
-                featureId: "weather:test",
-                layer: "weather",
-                category: "weather_observation",
-                label: "test",
+                featureId: "warnings:test",
+                layer: "warnings",
+                category: "weather_warning",
+                headline: "test",
                 sourceId: "mock",
                 observedAt: fetchedAt,
                 confidence: 1,
                 stale: false,
                 severity: "info",
+                urgency: "unknown",
+                certainty: "unknown",
                 license: { name: "test", attribution: "test" }
               }
             }
@@ -211,10 +196,10 @@ describe("Situation Data API contract", () => {
         };
       }
     };
-    const service = new SituationAggregationService(config, [source]);
+    const service = new SafetyAggregationService(config, [source]);
     const query = {
       bbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
-      layers: ["weather" as const],
+      layers: ["warnings" as const],
       sourceIds: ["mock" as const],
       limit: 10,
       includeRaw: false

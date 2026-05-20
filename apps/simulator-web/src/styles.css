@@ -756,6 +756,10 @@ button svg {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.safety-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .publisher-stat {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1149,6 +1153,7 @@ button svg {
     .publisher-stats,
     .flight-stats,
     .situation-stats,
+    .safety-stats,
     .flight-grid,
     .settings-grid {
     grid-template-columns: 1fr;

@@ -97,14 +97,14 @@ components:
       required: false
       schema:
         type: string
-        example: weather,ground,mobile,traffic
+        example: weather,ground,mobile,traffic,warnings,flood
     Sources:
       name: source
       in: query
       required: false
       schema:
         type: string
-        example: open_meteo,ctu_nettest,pid_gtfs_rt
+        example: open_meteo,ctu_nettest,pid_gtfs_rt,safety_data
     Limit:
       name: limit
       in: query

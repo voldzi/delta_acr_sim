@@ -1,21 +1,21 @@
 import cors from "cors";
 import express, { type Express } from "express";
-import { SituationAggregationService } from "./aggregation.js";
-import type { SituationDataConfig } from "./config.js";
+import { SafetyAggregationService } from "./aggregation.js";
+import type { SafetyDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
-import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
-import type { BoundingBox, SituationDataPublicConfig, SituationDataSourceId, SituationLayerId, SituationQuery } from "./types.js";
+import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
+import type { BoundingBox, SafetyDataPublicConfig, SafetyDataSourceId, SafetyLayerId, SafetyQuery } from "./types.js";
 
-export interface SituationDataAppContext {
-  config: SituationDataConfig;
-  aggregation: SituationAggregationService;
+export interface SafetyDataAppContext {
+  config: SafetyDataConfig;
+  aggregation: SafetyAggregationService;
 }
 
-export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
-  const sources = createSituationDataSources(config);
-  const aggregation = new SituationAggregationService(config, sources);
-  const context: SituationDataAppContext = { config, aggregation };
+export async function createApp(config: SafetyDataConfig): Promise<{ app: Express; context: SafetyDataAppContext }> {
+  const sources = createSafetyDataSources(config);
+  const aggregation = new SafetyAggregationService(config, sources);
+  const context: SafetyDataAppContext = { config, aggregation };
   const app = express();
 
   app.use(cors());
@@ -32,7 +32,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   return { app, context };
 }
 
-function registerHealthRoutes(app: Express, context: SituationDataAppContext): void {
+function registerHealthRoutes(app: Express, context: SafetyDataAppContext): void {
   app.get("/health/live", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
@@ -51,22 +51,22 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       .type("text/plain")
       .send(
         [
-          `situation_data_enabled_sources ${context.config.enabledSources.length}`,
-          `situation_data_cache_entries ${cache.entries}`,
-          `situation_data_cache_inflight ${cache.inflight}`,
-          `situation_data_cache_hits ${cache.hits}`,
-          `situation_data_cache_misses ${cache.misses}`,
-          `situation_data_cache_coalesced_hits ${cache.coalescedHits}`,
-          `situation_data_cache_stale_hits ${cache.staleHits}`,
-          `situation_data_cache_refreshes ${cache.refreshes}`,
-          `situation_data_cache_errors ${cache.errors}`,
-          `situation_data_cache_evictions ${cache.evictions}`
+          `safety_data_enabled_sources ${context.config.enabledSources.length}`,
+          `safety_data_cache_entries ${cache.entries}`,
+          `safety_data_cache_inflight ${cache.inflight}`,
+          `safety_data_cache_hits ${cache.hits}`,
+          `safety_data_cache_misses ${cache.misses}`,
+          `safety_data_cache_coalesced_hits ${cache.coalescedHits}`,
+          `safety_data_cache_stale_hits ${cache.staleHits}`,
+          `safety_data_cache_refreshes ${cache.refreshes}`,
+          `safety_data_cache_errors ${cache.errors}`,
+          `safety_data_cache_evictions ${cache.evictions}`
         ].join("\n") + "\n"
       );
   });
 }
 
-function registerMetadataRoutes(app: Express, context: SituationDataAppContext): void {
+function registerMetadataRoutes(app: Express, context: SafetyDataAppContext): void {
   app.get("/api/v1/layers", (_req, res) => {
     res.json({ items: LAYERS });
   });
@@ -80,9 +80,9 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
   });
 }
 
-function registerFeatureRoutes(app: Express, context: SituationDataAppContext): void {
+function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): void {
   app.get("/api/v1/features", async (req, res) => {
-    const query = parseSituationQuery(req.query, context.config);
+    const query = parseSafetyQuery(req.query, context.config);
     if (!query.ok) {
       return problem(req, res, 400, "VALIDATION_ERROR", query.error);
     }
@@ -90,7 +90,7 @@ function registerFeatureRoutes(app: Express, context: SituationDataAppContext): 
   });
 
   app.get("/api/v1/cop/features", async (req, res) => {
-    const query = parseSituationQuery(req.query, context.config);
+    const query = parseSafetyQuery(req.query, context.config);
     if (!query.ok) {
       return problem(req, res, 400, "VALIDATION_ERROR", query.error);
     }
@@ -98,21 +98,21 @@ function registerFeatureRoutes(app: Express, context: SituationDataAppContext): 
   });
 }
 
-function parseSituationQuery(
+function parseSafetyQuery(
   raw: Record<string, unknown>,
-  config: SituationDataConfig
-): { ok: true; value: SituationQuery } | { ok: false; error: string } {
+  config: SafetyDataConfig
+): { ok: true; value: SafetyQuery } | { ok: false; error: string } {
   const bbox = parseBbox(raw.bbox, config.defaultBbox);
   if (!bbox.ok) {
     return { ok: false, error: bbox.error };
   }
   const layers = parseLayers(raw.layer ?? raw.layers);
   if (layers.length === 0) {
-    return { ok: false, error: "No valid situation layers requested." };
+    return { ok: false, error: "No valid safety layers requested." };
   }
   const sources = parseSources(raw.source ?? raw.sources, config.enabledSources);
   if (sources.length === 0) {
-    return { ok: false, error: "No valid situation data sources requested." };
+    return { ok: false, error: "No valid safety data sources requested." };
   }
   return {
     ok: true,
@@ -142,20 +142,20 @@ function parseBbox(value: unknown, fallback: BoundingBox): { ok: true; value: Bo
   return { ok: true, value: { west, south, east, north } };
 }
 
-function parseLayers(value: unknown): SituationLayerId[] {
-  const allowed = new Set<SituationLayerId>(["weather", "ground", "mobile", "traffic", "warnings", "flood", "air_quality"]);
+function parseLayers(value: unknown): SafetyLayerId[] {
+  const allowed = new Set<SafetyLayerId>(["warnings", "flood"]);
   const raw = asString(value);
   if (!raw) {
-    return ["weather", "ground", "mobile", "traffic", "warnings", "flood", "air_quality"];
+    return ["warnings", "flood"];
   }
   return raw
     .split(",")
     .map((item) => item.trim())
-    .filter((item): item is SituationLayerId => allowed.has(item as SituationLayerId));
+    .filter((item): item is SafetyLayerId => allowed.has(item as SafetyLayerId));
 }
 
-function parseSources(value: unknown, fallback: SituationDataSourceId[]): SituationDataSourceId[] {
-  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data"]);
+function parseSources(value: unknown, fallback: SafetyDataSourceId[]): SafetyDataSourceId[] {
+  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro"]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -163,7 +163,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
   return raw
     .split(",")
     .map((item) => item.trim())
-    .filter((item): item is SituationDataSourceId => allowed.has(item as SituationDataSourceId));
+    .filter((item): item is SafetyDataSourceId => allowed.has(item as SafetyDataSourceId));
 }
 
 function parseLimit(value: unknown, fallback: number, max: number): number {
@@ -187,7 +187,7 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
+function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
   return {
     enabledSources: config.enabledSources,
     defaultBbox: config.defaultBbox,
@@ -196,13 +196,11 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     cacheMaxEntries: config.cacheMaxEntries,
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
+    hydroMaxStations: config.chmiHydroMaxStations,
     providers: [
       { sourceId: "mock", authConfigured: true },
-      { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
-      { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
-      { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
-      { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
-      { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true }
+      { sourceId: "chmi_alerts", baseUrl: config.chmiAlertsCapBaseUrl, authConfigured: true },
+      { sourceId: "chmi_hydro", baseUrl: config.chmiHydroNowBaseUrl, authConfigured: true }
     ]
   };
 }

@@ -69,7 +69,7 @@ services:
       NODE_ENV: production
       SITUATION_DATA_API_PORT: 4020
       SITUATION_DATA_DIR: /data
-      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt}
+      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt,safety_data}
       SITUATION_DATA_DEFAULT_BBOX: ${SITUATION_DATA_DEFAULT_BBOX:-13.85,49.65,15.35,50.45}
       SITUATION_DATA_REQUEST_TIMEOUT_MS: ${SITUATION_DATA_REQUEST_TIMEOUT_MS:-6000}
       SITUATION_DATA_CACHE_TTL_SECONDS: ${SITUATION_DATA_CACHE_TTL_SECONDS:-30}
@@ -81,6 +81,7 @@ services:
       OVERPASS_MAX_BBOX_DEGREES: ${OVERPASS_MAX_BBOX_DEGREES:-1.6}
       CTU_NETTEST_URL: ${CTU_NETTEST_URL:-https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip}
       PID_GTFS_RT_VEHICLE_POSITIONS_URL: ${PID_GTFS_RT_VEHICLE_POSITIONS_URL:-https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb}
+      SAFETY_DATA_BASE_URL: ${SAFETY_DATA_BASE_URL:-http://safety-data-api:4030}
     volumes:
       - situation-data:/data
     expose:
@@ -88,6 +89,37 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4020/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  safety-data-api:
+    build:
+      context: .
+      dockerfile: apps/safety-data-api/Dockerfile
+    container_name: delta-acr-safety-data-api
+    environment:
+      NODE_ENV: production
+      SAFETY_DATA_API_PORT: 4030
+      SAFETY_DATA_DIR: /data
+      SAFETY_DATA_ENABLED_SOURCES: ${SAFETY_DATA_ENABLED_SOURCES:-chmi_alerts,chmi_hydro}
+      SAFETY_DATA_DEFAULT_BBOX: ${SAFETY_DATA_DEFAULT_BBOX:-11.8,48.5,19.2,51.2}
+      SAFETY_DATA_REQUEST_TIMEOUT_MS: ${SAFETY_DATA_REQUEST_TIMEOUT_MS:-8000}
+      SAFETY_DATA_CACHE_TTL_SECONDS: ${SAFETY_DATA_CACHE_TTL_SECONDS:-300}
+      SAFETY_DATA_STALE_IF_ERROR_SECONDS: ${SAFETY_DATA_STALE_IF_ERROR_SECONDS:-3600}
+      SAFETY_DATA_CACHE_MAX_ENTRIES: ${SAFETY_DATA_CACHE_MAX_ENTRIES:-512}
+      SAFETY_DATA_STALE_AFTER_SECONDS: ${SAFETY_DATA_STALE_AFTER_SECONDS:-3600}
+      CHMI_ALERTS_CAP_BASE_URL: ${CHMI_ALERTS_CAP_BASE_URL:-https://opendata.chmi.cz/meteorology/weather/alerts/cap/}
+      CHMI_HYDRO_METADATA_URL: ${CHMI_HYDRO_METADATA_URL:-https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json}
+      CHMI_HYDRO_NOW_BASE_URL: ${CHMI_HYDRO_NOW_BASE_URL:-https://opendata.chmi.cz/hydrology/now/data}
+      CHMI_HYDRO_MAX_STATIONS: ${CHMI_HYDRO_MAX_STATIONS:-80}
+    volumes:
+      - safety-data:/data
+    expose:
+      - "4030"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4030/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -106,6 +138,8 @@ services:
         condition: service_healthy
       situation-data-api:
         condition: service_healthy
+      safety-data-api:
+        condition: service_healthy
     ports:
       - "${SIM_WEB_PORT:-5020}:80"
     restart: unless-stopped
@@ -114,3 +148,4 @@ volumes:
   sim-data:
   flight-data:
   situation-data:
+  safety-data:

@@ -1,6 +1,6 @@
 # COP Air & Situation Simulator
 
-Samostatný pilotní SIM systém pro generování syntetických dat, řízení scénářů, dry-run/mock publisher workflow, AI Scenario Assistant draft workflow, Flight Data API pro agregaci veřejných nebo licencovaných letových zdrojů a Situation Data API pro mapové open-data vrstvy.
+Samostatný pilotní SIM systém pro generování syntetických dat, řízení scénářů, dry-run/mock publisher workflow, AI Scenario Assistant draft workflow, Flight Data API pro agregaci veřejných nebo licencovaných letových zdrojů, Situation Data API pro mapové open-data vrstvy a Safety Data API pro veřejné bezpečnostní výstrahy.
 
 ## Lokální spuštění
 
@@ -12,6 +12,7 @@ pnpm dev
 - API: `http://localhost:4000`
 - Flight Data API: `http://localhost:4010`
 - Situation Data API: `http://localhost:4020`
+- Safety Data API: `http://localhost:4030`
 - Web: `http://localhost:5173`
 - Health: `http://localhost:4000/health/live`
 
@@ -30,6 +31,8 @@ http://localhost:5020/flight-data/health/ready
 http://localhost:5020/flight-data/api/v1/cop/tracks
 http://localhost:5020/situation-data/health/ready
 http://localhost:5020/situation-data/api/v1/cop/features
+http://localhost:5020/safety-data/health/ready
+http://localhost:5020/safety-data/api/v1/cop/features
 ```
 
 ## Pilot na docker.home.cz
@@ -48,12 +51,19 @@ Dokumentace služby je v [docs/situation-data/00_INDEX.md](docs/situation-data/0
 
 Docker pilot ve výchozím nastavení zapíná reálné open-data zdroje `open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt`, takže COP dostane počasí, pozemní referenční objekty, mobilní měření a veřejnou dopravu pro bbox okolo Prahy. `mock` zůstává pro offline testy a stabilní integrační fixture.
 
+## Safety Data API
+
+COP kontrakt je v [docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md](docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-safety-data.yaml](docs/api/openapi-safety-data.yaml).
+
+Docker pilot zapíná reálné zdroje `chmi_alerts,chmi_hydro`, tedy ČHMÚ CAP výstrahy a hydrologické stanice. Stejná data jsou dostupná také jako kompatibilní projekce přes `situation-data` pomocí `layers=warnings,flood&source=safety_data`.
+
 ## Bezpečnostní hranice
 
 - Všechna generovaná data jsou syntetická.
 - Publisher odmítá event bez `SYNTHETIC` handling caveat a `simulation.synthetic: true`.
 - Flight Data API odděluje veřejná/licencovaná letová data od SIM syntetického publisheru.
 - Situation Data API odděluje veřejné kontextové vrstvy od COP tracků a u každé feature nese licenci a atribuci.
+- Safety Data API odděluje bezpečnostní výstrahy od obecného mapového kontextu a zachovává závažnost, platnost a atribuci původních open-data zdrojů.
 - AI vrstva vytváří pouze draft, nikdy přímo nespouští scénář.
 - Targeting, navádění, zbraňové workflow a taktické bojové doporučení jsou mimo rozsah.
 

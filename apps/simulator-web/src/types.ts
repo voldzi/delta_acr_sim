@@ -203,8 +203,8 @@ export interface FlightDataTrackResponse {
   warnings: string[];
 }
 
-export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic";
-export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass" | "ctu_nettest" | "pid_gtfs_rt";
+export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic" | "warnings" | "flood" | "air_quality";
+export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass" | "ctu_nettest" | "pid_gtfs_rt" | "safety_data";
 
 export interface SituationDataHealth {
   status: string;
@@ -318,5 +318,133 @@ export interface SituationDataFeatureResponse {
   };
   features: SituationDataFeature[];
   sources: SituationDataSource[];
+  warnings: string[];
+}
+
+export type SafetyLayerId = "warnings" | "flood";
+export type SafetyDataSourceId = "mock" | "chmi_alerts" | "chmi_hydro";
+
+export interface SafetyDataHealth {
+  status: string;
+  timestamp?: string;
+  enabledSources: SafetyDataSourceId[];
+}
+
+export interface SafetyDataLicense {
+  name: string;
+  url?: string;
+  attribution: string;
+  commercialUse: "allowed" | "allowed_with_obligations" | "requires_license" | "unknown";
+  operationalUse: "allowed" | "allowed_with_obligations" | "requires_license" | "unknown";
+  notes: string[];
+}
+
+export interface SafetyDataLayer {
+  layerId: SafetyLayerId;
+  label: string;
+  description: string;
+  defaultVisible: boolean;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  expectedCadenceSeconds?: number;
+}
+
+export interface SafetyDataSource {
+  sourceId: SafetyDataSourceId;
+  label: string;
+  enabled: boolean;
+  mode: "live" | "mock" | "reference";
+  priority: number;
+  layers: SafetyLayerId[];
+  license: SafetyDataLicense;
+  baseUrl?: string;
+  updateCadenceSeconds?: number;
+}
+
+export interface SafetyDataConfig {
+  enabledSources: SafetyDataSourceId[];
+  defaultBbox: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  };
+  cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
+  staleAfterSeconds: number;
+  requestTimeoutMs: number;
+  hydroMaxStations: number;
+  providers: Array<{
+    sourceId: SafetyDataSourceId;
+    baseUrl?: string;
+    authConfigured: boolean;
+  }>;
+}
+
+export interface SafetyDataFeature {
+  type: "Feature";
+  id: string;
+  geometry: {
+    type: "Point" | "Polygon";
+    coordinates: unknown;
+  };
+  properties: {
+    featureId: string;
+    layer: SafetyLayerId;
+    category: string;
+    headline: string;
+    description?: string;
+    recommendedAction?: string;
+    sourceId: SafetyDataSourceId;
+    observedAt: string;
+    effectiveAt?: string;
+    expiresAt?: string;
+    confidence: number;
+    stale: boolean;
+    severity: "info" | "advisory" | "warning" | "critical";
+    urgency: "immediate" | "expected" | "future" | "past" | "unknown";
+    certainty: "observed" | "likely" | "possible" | "unlikely" | "unknown";
+    license: {
+      name: string;
+      attribution: string;
+      url?: string;
+    };
+    affectedAreas?: string[];
+    geocodes?: Array<{ scheme: string; value: string }>;
+    metrics?: Record<string, number | string | boolean>;
+    tags?: Record<string, string>;
+  };
+}
+
+export interface SafetyDataFeatureResponse {
+  contractVersion: "cop-safety-source-v1";
+  type: "FeatureCollection";
+  generatedAt: string;
+  source: {
+    sourceId: string;
+    sourceType: "PUBLIC_SAFETY_AGGREGATE";
+    generatedAt: string;
+  };
+  query: {
+    bbox: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    };
+    layers: SafetyLayerId[];
+    limit: number;
+    sources: SafetyDataSourceId[];
+  };
+  summary: {
+    featureCount: number;
+    sourceCount: number;
+    staleFeatureCount: number;
+    advisoryCount: number;
+    warningCount: number;
+    criticalCount: number;
+  };
+  features: SafetyDataFeature[];
+  sources: SafetyDataSource[];
   warnings: string[];
 }

@@ -81,13 +81,27 @@ const PID_GTFS_RT_LICENSE: SituationDataLicense = {
   ]
 };
 
+const SAFETY_DATA_LICENSE: SituationDataLicense = {
+  name: "Delegated Safety Data aggregate",
+  url: "https://opendata.chmi.cz/",
+  attribution: "Safety Data API; feature-level attribution preserved from original public sources",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "This source projects /safety-data/api/v1/cop/features into the situation-data contract.",
+    "Feature-level license attribution is preserved from Safety Data properties.",
+    "Warnings and hydrological observations are public context, not a replacement for official emergency instructions."
+  ]
+};
+
 export function createSituationDataSources(config: SituationDataConfig): SituationDataSource[] {
   const allSources: Record<SituationDataSourceId, SituationDataSource> = {
     mock: new MockSituationDataSource(),
     open_meteo: new OpenMeteoSource(config),
     osm_overpass: new OsmOverpassSource(config),
     ctu_nettest: new CtuNettestSource(config),
-    pid_gtfs_rt: new PidGtfsRtSource(config)
+    pid_gtfs_rt: new PidGtfsRtSource(config),
+    safety_data: new SafetyDataProjectionSource(config)
   };
 
   return config.enabledSources.map((sourceId) => allSources[sourceId]);
@@ -100,7 +114,8 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new OpenMeteoSource(config).descriptor,
     new OsmOverpassSource(config).descriptor,
     new CtuNettestSource(config).descriptor,
-    new PidGtfsRtSource(config).descriptor
+    new PidGtfsRtSource(config).descriptor,
+    new SafetyDataProjectionSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
@@ -347,6 +362,55 @@ class PidGtfsRtSource implements SituationDataSource {
     }
 
     return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
+class SafetyDataProjectionSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.descriptor = {
+      sourceId: "safety_data",
+      label: "Safety Data API projection",
+      enabled: config.enabledSources.includes("safety_data"),
+      mode: "live",
+      priority: 95,
+      layers: ["warnings", "flood"],
+      license: SAFETY_DATA_LICENSE,
+      baseUrl: config.safetyDataBaseUrl,
+      updateCadenceSeconds: 300
+    };
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    const layers = query.layers.filter((layer): layer is "warnings" | "flood" => layer === "warnings" || layer === "flood");
+    if (layers.length === 0) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const url = new URL(`${trimTrailingSlash(this.config.safetyDataBaseUrl)}/api/v1/cop/features`);
+    url.searchParams.set("bbox", formatBbox(query.bbox));
+    url.searchParams.set("layers", layers.join(","));
+    url.searchParams.set("limit", String(query.limit));
+    if (query.includeRaw) {
+      url.searchParams.set("includeRaw", "1");
+    }
+
+    const payload = await requestJson<SafetyProjectionCollection>(url.toString(), this.config.requestTimeoutMs);
+    const features = (payload.features ?? [])
+      .map((feature) => mapSafetyProjectionFeature(feature, query.includeRaw))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .filter((feature) => query.layers.includes(feature.properties.layer))
+      .filter((feature) => isFeatureInBbox(feature, query.bbox))
+      .slice(0, query.limit);
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features,
+      warnings: (payload.warnings ?? []).map((warning) => `safety_data: ${warning}`)
+    };
   }
 }
 
@@ -625,6 +689,106 @@ interface OverpassElement {
     lon?: number;
   };
   tags?: Record<string, string>;
+}
+
+interface SafetyProjectionCollection {
+  features?: SafetyProjectionFeature[];
+  warnings?: string[];
+}
+
+interface SafetyProjectionFeature {
+  type: "Feature";
+  id: string;
+  geometry: {
+    type: "Point" | "Polygon";
+    coordinates: unknown;
+  };
+  properties: {
+    featureId: string;
+    layer: "warnings" | "flood";
+    category: string;
+    headline: string;
+    description?: string;
+    recommendedAction?: string;
+    sourceId: string;
+    observedAt: string;
+    effectiveAt?: string;
+    expiresAt?: string;
+    confidence: number;
+    stale: boolean;
+    severity: SituationSeverity;
+    urgency?: string;
+    certainty?: string;
+    license: {
+      name: string;
+      attribution: string;
+      url?: string;
+    };
+    affectedAreas?: string[];
+    geocodes?: Array<{ scheme: string; value: string }>;
+    metrics?: Record<string, number | string | boolean>;
+    tags?: Record<string, string>;
+    raw?: unknown;
+  };
+}
+
+function mapSafetyProjectionFeature(feature: SafetyProjectionFeature, includeRaw: boolean): SituationFeature | undefined {
+  const geometry = mapSafetyProjectionGeometry(feature.geometry);
+  if (!geometry) {
+    return undefined;
+  }
+  const layer = feature.properties.layer;
+  const id = `safety_data:${feature.id}`;
+  const tags = compactTags({
+    ...(feature.properties.tags ?? {}),
+    safetySourceId: optionalString(feature.properties.sourceId),
+    urgency: optionalString(feature.properties.urgency),
+    certainty: optionalString(feature.properties.certainty),
+    affectedAreas: feature.properties.affectedAreas?.slice(0, 4).join("; "),
+    geocodes: feature.properties.geocodes?.slice(0, 6).map((geocode) => `${geocode.scheme}:${geocode.value}`).join("; ")
+  });
+  return {
+    type: "Feature",
+    id,
+    geometry,
+    properties: {
+      featureId: id,
+      layer,
+      category: feature.properties.category,
+      label: feature.properties.headline,
+      sourceId: "safety_data",
+      observedAt: feature.properties.observedAt,
+      validUntil: feature.properties.expiresAt,
+      confidence: feature.properties.confidence,
+      stale: feature.properties.stale,
+      severity: feature.properties.severity,
+      license: feature.properties.license,
+      metrics: compactMixedMetrics(feature.properties.metrics ?? {}),
+      tags,
+      raw: includeRaw
+        ? {
+            ...feature,
+            properties: {
+              ...feature.properties,
+              raw: feature.properties.raw
+            }
+          }
+        : undefined
+    }
+  };
+}
+
+function mapSafetyProjectionGeometry(geometry: SafetyProjectionFeature["geometry"]): SituationFeature["geometry"] | undefined {
+  if (geometry.type === "Point" && Array.isArray(geometry.coordinates)) {
+    const [lon, lat] = geometry.coordinates;
+    if (typeof lon === "number" && typeof lat === "number") {
+      return { type: "Point", coordinates: [lon, lat] };
+    }
+  }
+  if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
+    return geometry as SituationFeature["geometry"];
+  }
+  return undefined;
 }
 
 async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
@@ -1119,12 +1283,28 @@ function stableToken(value: string): string {
   return value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 96);
 }
 
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function formatBbox(bbox: BoundingBox): string {
+  return [bbox.west, bbox.south, bbox.east, bbox.north].map((value) => round(value, 6)).join(",");
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
 function compactMetrics(values: Record<string, number | undefined>): Record<string, number> | undefined {
   const entries = Object.entries(values).filter((entry): entry is [string, number] => typeof entry[1] === "number");
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function compactMixedMetrics(values: Record<string, number | string | boolean | undefined>): Record<string, number | string | boolean> | undefined {
+  const entries = Object.entries(values).filter(
+    (entry): entry is [string, number | string | boolean] =>
+      typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+  );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 

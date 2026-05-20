@@ -32,5 +32,29 @@ export const LAYERS: LayerDescriptor[] = [
     defaultVisible: false,
     geometryTypes: ["Point", "LineString"],
     expectedCadenceSeconds: 60
+  },
+  {
+    layerId: "warnings",
+    label: "Safety warnings",
+    description: "Official public warning features projected from the Safety Data contract.",
+    defaultVisible: true,
+    geometryTypes: ["Point", "Polygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
+    layerId: "flood",
+    label: "Flood and water levels",
+    description: "Hydrological station observations projected from the Safety Data contract.",
+    defaultVisible: true,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "air_quality",
+    label: "Air quality",
+    description: "Reserved public safety layer for air quality observations.",
+    defaultVisible: false,
+    geometryTypes: ["Point", "Polygon"],
+    expectedCadenceSeconds: 900
   }
 ];

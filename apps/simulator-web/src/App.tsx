@@ -48,6 +48,13 @@ import type {
   PublisherStatus,
   QueueItem,
   RuntimeStatus,
+  SafetyDataConfig,
+  SafetyDataFeature,
+  SafetyDataFeatureResponse,
+  SafetyDataHealth,
+  SafetyDataLayer,
+  SafetyDataSource,
+  SafetyLayerId,
   Scenario,
   ScenarioBlock,
   SituationDataConfig,
@@ -83,6 +90,13 @@ interface DashboardData {
     sources: SituationDataSource[];
     config: SituationDataConfig;
     features: SituationDataFeatureResponse;
+  };
+  safetyData: {
+    health: SafetyDataHealth;
+    layers: SafetyDataLayer[];
+    sources: SafetyDataSource[];
+    config: SafetyDataConfig;
+    features: SafetyDataFeatureResponse;
   };
   warnings: string[];
 }
@@ -156,6 +170,34 @@ const emptySituationFeatures: SituationDataFeatureResponse = {
   warnings: []
 };
 
+const emptySafetyFeatures: SafetyDataFeatureResponse = {
+  contractVersion: "cop-safety-source-v1",
+  type: "FeatureCollection",
+  generatedAt: new Date(0).toISOString(),
+  source: {
+    sourceId: "safety-data-api",
+    sourceType: "PUBLIC_SAFETY_AGGREGATE",
+    generatedAt: new Date(0).toISOString()
+  },
+  query: {
+    bbox: { west: 0, south: 0, east: 0, north: 0 },
+    layers: [],
+    limit: 0,
+    sources: []
+  },
+  summary: {
+    featureCount: 0,
+    sourceCount: 0,
+    staleFeatureCount: 0,
+    advisoryCount: 0,
+    warningCount: 0,
+    criticalCount: 0
+  },
+  features: [],
+  sources: [],
+  warnings: []
+};
+
 export function App() {
   const [data, setData] = useState<DashboardData>({
     scenarios: [],
@@ -195,6 +237,23 @@ export function App() {
         providers: []
       },
       features: emptySituationFeatures
+    },
+    safetyData: {
+      health: { status: "unknown", enabledSources: [] },
+      layers: [],
+      sources: [],
+      config: {
+        enabledSources: [],
+        defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
+        cacheTtlSeconds: 0,
+        staleIfErrorSeconds: 0,
+        cacheMaxEntries: 0,
+        staleAfterSeconds: 0,
+        requestTimeoutMs: 0,
+        hydroMaxStations: 0,
+        providers: []
+      },
+      features: emptySafetyFeatures
     },
     warnings: []
   });
@@ -243,6 +302,12 @@ export function App() {
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
   const situationDataTone: Tone =
     data.situationData.health.status === "ok" ? (data.situationData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const safetyDataTone: Tone =
+    data.safetyData.health.status === "ok" ? (data.safetyData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const elevatedSafetyCount =
+    data.safetyData.features.summary.advisoryCount +
+    data.safetyData.features.summary.warningCount +
+    data.safetyData.features.summary.criticalCount;
   const activeSectionMeta = sectionMeta(activeSection);
 
   const readinessItems = [
@@ -291,6 +356,13 @@ export function App() {
       value: data.situationData.health.status.toUpperCase(),
       tone: situationDataTone,
       detail: `${data.situationData.features.summary.featureCount} features, ${data.situationData.config.enabledSources.join(", ") || "no source"}`
+    },
+    {
+      icon: <ShieldAlert />,
+      label: "Safety Data",
+      value: data.safetyData.health.status.toUpperCase(),
+      tone: safetyDataTone,
+      detail: `${data.safetyData.features.summary.featureCount} features, ${data.safetyData.config.enabledSources.join(", ") || "no source"}`
     }
   ];
 
@@ -348,7 +420,7 @@ export function App() {
           <NavButton section="situation-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Layers3 size={17} />} label="Situation data" />
           <NavButton section="publisher" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="Publisher" />
           <NavButton section="ai" activeSection={activeSection} onSelect={setActiveSection} icon={<Bot size={17} />} label="AI Assistant" />
-          <NavButton section="safety" activeSection={activeSection} onSelect={setActiveSection} icon={<ShieldCheck size={17} />} label="Safety" />
+          <NavButton section="safety" activeSection={activeSection} onSelect={setActiveSection} icon={<ShieldAlert size={17} />} label="Safety data" />
         </nav>
 
         <div className="safety-panel">
@@ -384,6 +456,7 @@ export function App() {
               <Metric icon={<Database />} label="Active tracks" value={data.runtime.activeObjects ?? totalObjects} detail={`${totalObjects} configured`} />
               <Metric icon={<Plane />} label="Flight tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount} detail={`${data.flightData.tracks.summary.rawObservationCount} raw observations`} />
               <Metric icon={<Layers3 />} label="Situation features" value={data.situationData.features.summary.featureCount} detail={`${data.situationData.layers.length} layers available`} />
+              <Metric icon={<ShieldAlert />} label="Safety features" value={data.safetyData.features.summary.featureCount} detail={`${data.safetyData.features.summary.criticalCount} critical`} />
             </section>
 
             <section id="readiness" className="operations-grid" aria-label="Operational readiness">
@@ -831,17 +904,81 @@ export function App() {
           ) : null}
 
           {activeSection === "safety" ? (
-          <section className="panel">
-            <PanelTitle icon={<ShieldCheck />} title="Safety and providers" subtitle="External AI is disabled by default in the pilot." />
-            <div className="provider-list">
-              {data.providers.map((provider) => (
-                <div key={provider.id} className="provider-row">
-                  <span>{provider.id}</span>
-                  <StatusPill label={provider.enabled ? "enabled" : "disabled"} tone={provider.enabled ? "safe" : "neutral"} />
-                  <em>{provider.external ? "external" : "local"}</em>
-                </div>
-              ))}
+          <section id="safety-data" className="panel safety-data-panel">
+            <PanelTitle icon={<ShieldAlert />} title="Safety Data source" subtitle="Official public warnings and hydrological observations prepared for COP map layers." />
+
+            <div className="publisher-status">
+              <StatusPill label={data.safetyData.health.status} tone={safetyDataTone} />
+              <StatusPill label={data.safetyData.features.contractVersion} tone="active" />
+              <StatusPill
+                label={`${elevatedSafetyCount} elevated`}
+                tone={data.safetyData.features.summary.criticalCount > 0 ? "danger" : elevatedSafetyCount > 0 ? "warn" : "neutral"}
+              />
             </div>
+
+            <div className="publisher-stats safety-stats">
+              <PublisherStat label="Features" value={data.safetyData.features.summary.featureCount.toLocaleString("cs-CZ")} tone="safe" />
+              <PublisherStat label="Advisory" value={data.safetyData.features.summary.advisoryCount.toLocaleString("cs-CZ")} tone={data.safetyData.features.summary.advisoryCount > 0 ? "warn" : "neutral"} />
+              <PublisherStat label="Warnings" value={data.safetyData.features.summary.warningCount.toLocaleString("cs-CZ")} tone={data.safetyData.features.summary.warningCount > 0 ? "warn" : "neutral"} />
+              <PublisherStat label="Critical" value={data.safetyData.features.summary.criticalCount.toLocaleString("cs-CZ")} tone={data.safetyData.features.summary.criticalCount > 0 ? "danger" : "neutral"} />
+              <PublisherStat label="Stale" value={data.safetyData.features.summary.staleFeatureCount.toLocaleString("cs-CZ")} tone={data.safetyData.features.summary.staleFeatureCount > 0 ? "warn" : "neutral"} />
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration for public safety feeds." />
+                <div className="settings-grid">
+                  <SummaryItem label="Enabled sources" value={data.safetyData.config.enabledSources.join(", ") || "-"} />
+                  <SummaryItem label="Default bbox" value={formatBbox(data.safetyData.config.defaultBbox)} />
+                  <SummaryItem label="Cache TTL" value={`${data.safetyData.config.cacheTtlSeconds}s`} />
+                  <SummaryItem label="Stale fallback" value={`${data.safetyData.config.staleIfErrorSeconds}s`} />
+                  <SummaryItem label="Cache entries" value={`${data.safetyData.config.cacheMaxEntries}`} />
+                  <SummaryItem label="Stale after" value={`${data.safetyData.config.staleAfterSeconds}s`} />
+                  <SummaryItem label="Timeout" value={`${data.safetyData.config.requestTimeoutMs} ms`} />
+                  <SummaryItem label="Hydro station cap" value={`${data.safetyData.config.hydroMaxStations}`} />
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can ingest these layers through /safety-data or projected situation-data." />
+                <div className="layer-list">
+                  {data.safetyData.layers.map((layer) => (
+                    <SafetyLayerRow key={layer.layerId} layer={layer} count={countSafetyLayer(data.safetyData.features.features, layer.layerId)} />
+                  ))}
+                  {data.safetyData.layers.length === 0 ? <div className="empty-state">Safety layer metadata is not available.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License, cadence and production suitability for safety data." />
+                <div className="source-list">
+                  {data.safetyData.sources.map((source) => (
+                    <SafetySourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.safetyData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
+                  ))}
+                  {data.safetyData.sources.length === 0 ? <div className="empty-state">Safety source metadata is not available.</div> : null}
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<ShieldCheck />} title="COP feature preview" subtitle="GeoJSON features returned by /safety-data/api/v1/cop/features." />
+                <div className="situation-feature-list">
+                  {data.safetyData.features.features.map((feature) => (
+                    <SafetyFeatureRow key={feature.id} feature={feature} />
+                  ))}
+                  {data.safetyData.features.features.length === 0 ? <div className="empty-state">No safety features are available from the configured sources.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            {data.safetyData.features.warnings.length > 0 ? (
+              <div className="notice warn">
+                <AlertTriangle size={16} />
+                <span>{data.safetyData.features.warnings.join(" ")}</span>
+              </div>
+            ) : null}
+
             <div className="notice">
               <CirclePause size={16} />
               <span>{notice}</span>
@@ -1006,6 +1143,71 @@ function SituationFeatureRow({ feature }: { feature: SituationDataFeature }) {
       </div>
       <div className="flight-track-metrics">
         <span>{formatGeometry(feature)}</span>
+        <span>{formatTime(feature.properties.observedAt)}</span>
+        <span>{formatConfidence(feature.properties.confidence)}</span>
+        <span>{formatMetrics(feature.properties.metrics)}</span>
+      </div>
+      <div className="flight-track-tags">
+        <StatusPill label={feature.properties.severity} tone={severityTone(feature.properties.severity)} />
+        <StatusPill label={feature.properties.stale ? "stale" : "current"} tone={feature.properties.stale ? "warn" : "safe"} />
+      </div>
+    </div>
+  );
+}
+
+function SafetyLayerRow({ layer, count }: { layer: SafetyDataLayer; count: number }) {
+  return (
+    <div className="layer-row">
+      <div>
+        <strong>{layer.label}</strong>
+        <span>{layer.description}</span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={layer.layerId} tone={layer.defaultVisible ? "active" : "neutral"} />
+        <StatusPill label={`${count} shown`} tone={count > 0 ? "safe" : "neutral"} />
+      </div>
+      <small>
+        {layer.geometryTypes.join(", ")}
+        {layer.expectedCadenceSeconds ? ` · ${formatCadence(layer.expectedCadenceSeconds)}` : ""}
+      </small>
+    </div>
+  );
+}
+
+function SafetySourceRow({ source, authConfigured }: { source: SafetyDataSource; authConfigured: boolean }) {
+  return (
+    <div className="source-row">
+      <div>
+        <strong>{source.label}</strong>
+        <span>
+          {source.sourceId} · priority {source.priority} · {source.layers.join(", ")}
+        </span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={source.enabled ? "enabled" : "disabled"} tone={source.enabled ? "safe" : "neutral"} />
+        <StatusPill label={source.mode} tone={source.mode === "live" ? "active" : "neutral"} />
+        <StatusPill label={authConfigured ? "auth ok" : "no auth"} tone={authConfigured ? "safe" : "warn"} />
+      </div>
+      <div className="source-license">
+        <span>{source.license.name}</span>
+        <StatusPill label={source.license.commercialUse.replaceAll("_", " ")} tone={licenseTone(source.license.commercialUse)} />
+      </div>
+      <small>{source.license.attribution}</small>
+    </div>
+  );
+}
+
+function SafetyFeatureRow({ feature }: { feature: SafetyDataFeature }) {
+  return (
+    <div className={`situation-feature-row ${feature.properties.severity} ${feature.properties.stale ? "stale" : ""}`}>
+      <div>
+        <strong>{feature.properties.headline}</strong>
+        <span>
+          {feature.properties.layer} · {feature.properties.category} · {feature.properties.sourceId}
+        </span>
+      </div>
+      <div className="flight-track-metrics">
+        <span>{formatSafetyGeometry(feature)}</span>
         <span>{formatTime(feature.properties.observedAt)}</span>
         <span>{formatConfidence(feature.properties.confidence)}</span>
         <span>{formatMetrics(feature.properties.metrics)}</span>
@@ -1298,9 +1500,9 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
       };
     case "safety":
       return {
-        kicker: "Governance",
-        title: "Safety and providers",
-        description: "Review synthetic-only controls, provider state and current operator notices."
+        kicker: "Public safety aggregate",
+        title: "Safety Data source",
+        description: "Monitor official warnings, flood observations, source licensing and cache settings."
       };
     case "overview":
     default:
@@ -1392,6 +1594,14 @@ function formatGeometry(feature: SituationDataFeature): string {
   return typeof lon === "number" && typeof lat === "number" ? `${formatCoordinate(lat)}, ${formatCoordinate(lon)}` : "position n/a";
 }
 
+function formatSafetyGeometry(feature: SafetyDataFeature): string {
+  if (feature.geometry.type !== "Point" || !Array.isArray(feature.geometry.coordinates)) {
+    return feature.geometry.type;
+  }
+  const [lon, lat] = feature.geometry.coordinates;
+  return typeof lon === "number" && typeof lat === "number" ? `${formatCoordinate(lat)}, ${formatCoordinate(lon)}` : "position n/a";
+}
+
 function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}% confidence`;
 }
@@ -1416,6 +1626,10 @@ function formatMotion(speedMps: number | undefined, headingDeg: number | undefin
 }
 
 function countSituationLayer(features: SituationDataFeature[], layerId: SituationLayerId): number {
+  return features.filter((feature) => feature.properties.layer === layerId).length;
+}
+
+function countSafetyLayer(features: SafetyDataFeature[], layerId: SafetyLayerId): number {
   return features.filter((feature) => feature.properties.layer === layerId).length;
 }
 

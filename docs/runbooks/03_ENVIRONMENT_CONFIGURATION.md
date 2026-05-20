@@ -40,6 +40,18 @@
 - `OVERPASS_MAX_BBOX_DEGREES`
 - `CTU_NETTEST_URL`
 - `PID_GTFS_RT_VEHICLE_POSITIONS_URL`
+- `SAFETY_DATA_BASE_URL`
+- `SAFETY_DATA_ENABLED_SOURCES`
+- `SAFETY_DATA_DEFAULT_BBOX`
+- `SAFETY_DATA_CACHE_TTL_SECONDS`
+- `SAFETY_DATA_STALE_IF_ERROR_SECONDS`
+- `SAFETY_DATA_CACHE_MAX_ENTRIES`
+- `SAFETY_DATA_STALE_AFTER_SECONDS`
+- `SAFETY_DATA_REQUEST_TIMEOUT_MS`
+- `CHMI_ALERTS_CAP_BASE_URL`
+- `CHMI_HYDRO_METADATA_URL`
+- `CHMI_HYDRO_NOW_BASE_URL`
+- `CHMI_HYDRO_MAX_STATIONS`
 
 ## Pravidla
 
@@ -84,7 +96,7 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=600
@@ -96,6 +108,7 @@ OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
 OVERPASS_MAX_BBOX_DEGREES=1.6
 CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
 PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
+SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 ```
 
 OpenStreetMap/Overpass zapínej pouze pro malé mapové výřezy a s konzervativní kadencí:
@@ -103,4 +116,35 @@ OpenStreetMap/Overpass zapínej pouze pro malé mapové výřezy a s konzervativ
 ```bash
 SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass
 OVERPASS_MAX_BBOX_DEGREES=1.6
+```
+
+## Safety Data API
+
+Výchozí bezpečná konfigurace:
+
+```bash
+SAFETY_DATA_ENABLED_SOURCES=mock
+```
+
+Pilot s reálnými ČHMÚ open-data zdroji:
+
+```bash
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro
+SAFETY_DATA_DEFAULT_BBOX=11.8,48.5,19.2,51.2
+SAFETY_DATA_CACHE_TTL_SECONDS=300
+SAFETY_DATA_STALE_IF_ERROR_SECONDS=3600
+SAFETY_DATA_CACHE_MAX_ENTRIES=512
+SAFETY_DATA_STALE_AFTER_SECONDS=3600
+SAFETY_DATA_REQUEST_TIMEOUT_MS=8000
+CHMI_ALERTS_CAP_BASE_URL=https://opendata.chmi.cz/meteorology/weather/alerts/cap/
+CHMI_HYDRO_METADATA_URL=https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json
+CHMI_HYDRO_NOW_BASE_URL=https://opendata.chmi.cz/hydrology/now/data
+CHMI_HYDRO_MAX_STATIONS=80
+```
+
+Projekce do `situation-data`:
+
+```bash
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt,safety_data
+SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 ```

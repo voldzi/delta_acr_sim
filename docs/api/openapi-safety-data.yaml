@@ -1,0 +1,244 @@
+openapi: 3.1.0
+info:
+  title: DELTA ACR SIM Safety Data API
+  version: 0.1.0
+  description: Aggregated public safety warnings and hydrological observations for COP map context.
+servers:
+  - url: https://sim.zeleznalady.cz/safety-data/api/v1
+  - url: http://localhost:4030/api/v1
+paths:
+  /layers:
+    get:
+      summary: List available safety layers
+      responses:
+        "200":
+          description: Layer registry
+  /sources:
+    get:
+      summary: List provider metadata and license state
+      responses:
+        "200":
+          description: Source registry
+  /config:
+    get:
+      summary: Read non-secret runtime configuration
+      responses:
+        "200":
+          description: Public runtime configuration
+  /features:
+    get:
+      summary: Return aggregated GeoJSON safety features
+      parameters:
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Safety FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyFeatureCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+  /cop/features:
+    get:
+      summary: Return the COP-facing safety source projection
+      parameters:
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: COP-ready safety FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyFeatureCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+components:
+  parameters:
+    Bbox:
+      name: bbox
+      in: query
+      required: false
+      schema:
+        type: string
+        example: "13.85,49.65,15.35,50.45"
+      description: WGS84 bbox in west,south,east,north order.
+    Layers:
+      name: layers
+      in: query
+      required: false
+      schema:
+        type: string
+        example: warnings,flood
+    Sources:
+      name: source
+      in: query
+      required: false
+      schema:
+        type: string
+        example: chmi_alerts,chmi_hydro
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 250
+        maximum: 1000
+  responses:
+    Problem:
+      description: Problem response
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+  schemas:
+    SafetyFeatureCollection:
+      type: object
+      required: [contractVersion, type, generatedAt, source, query, summary, features, sources, warnings]
+      properties:
+        contractVersion:
+          const: cop-safety-source-v1
+        type:
+          const: FeatureCollection
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          type: object
+          properties:
+            sourceId:
+              const: safety-data-api
+            sourceType:
+              const: PUBLIC_SAFETY_AGGREGATE
+            generatedAt:
+              type: string
+              format: date-time
+        query:
+          type: object
+        summary:
+          type: object
+          properties:
+            featureCount:
+              type: integer
+            sourceCount:
+              type: integer
+            staleFeatureCount:
+              type: integer
+            advisoryCount:
+              type: integer
+            warningCount:
+              type: integer
+            criticalCount:
+              type: integer
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/SafetyFeature"
+        sources:
+          type: array
+        warnings:
+          type: array
+          items:
+            type: string
+    SafetyFeature:
+      type: object
+      required: [type, id, geometry, properties]
+      properties:
+        type:
+          const: Feature
+        id:
+          type: string
+        geometry:
+          oneOf:
+            - type: object
+              properties:
+                type:
+                  const: Point
+                coordinates:
+                  type: array
+                  minItems: 2
+                  maxItems: 2
+                  items:
+                    type: number
+            - type: object
+              properties:
+                type:
+                  const: Polygon
+                coordinates:
+                  type: array
+        properties:
+          type: object
+          required: [featureId, layer, category, headline, sourceId, observedAt, confidence, stale, severity, urgency, certainty, license]
+          properties:
+            featureId:
+              type: string
+            layer:
+              enum: [warnings, flood]
+            category:
+              type: string
+            headline:
+              type: string
+            description:
+              type: string
+            recommendedAction:
+              type: string
+            sourceId:
+              enum: [mock, chmi_alerts, chmi_hydro]
+            observedAt:
+              type: string
+              format: date-time
+            effectiveAt:
+              type: string
+              format: date-time
+            expiresAt:
+              type: string
+              format: date-time
+            confidence:
+              type: number
+              minimum: 0
+              maximum: 1
+            stale:
+              type: boolean
+            severity:
+              enum: [info, advisory, warning, critical]
+            urgency:
+              enum: [immediate, expected, future, past, unknown]
+            certainty:
+              enum: [observed, likely, possible, unlikely, unknown]
+            affectedAreas:
+              type: array
+              items:
+                type: string
+            geocodes:
+              type: array
+              items:
+                type: object
+                properties:
+                  scheme:
+                    type: string
+                  value:
+                    type: string
+            metrics:
+              type: object
+              additionalProperties: true
+            tags:
+              type: object
+              additionalProperties:
+                type: string

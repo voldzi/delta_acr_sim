@@ -18,6 +18,7 @@ export interface SituationDataConfig {
   overpassMaxBboxDegrees: number;
   ctuNettestUrl: string;
   pidGtfsRtVehiclePositionsUrl: string;
+  safetyDataBaseUrl: string;
 }
 
 export async function loadConfig(): Promise<SituationDataConfig> {
@@ -45,12 +46,13 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     overpassMaxBboxDegrees: parseFloatOr(process.env.OVERPASS_MAX_BBOX_DEGREES, 1.6),
     ctuNettestUrl: process.env.CTU_NETTEST_URL ?? "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
     pidGtfsRtVehiclePositionsUrl:
-      process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb"
+      process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
+    safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030"
   };
 }
 
 function parseSourceList(value: string | undefined): SituationDataSourceId[] {
-  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt"]);
+  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data"]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())

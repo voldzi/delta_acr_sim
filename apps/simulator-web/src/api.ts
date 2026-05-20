@@ -7,6 +7,11 @@ import type {
   PublisherStatus,
   QueueItem,
   RuntimeStatus,
+  SafetyDataConfig,
+  SafetyDataFeatureResponse,
+  SafetyDataHealth,
+  SafetyDataLayer,
+  SafetyDataSource,
   Scenario,
   ScenarioBlock,
   SituationDataConfig,
@@ -147,6 +152,13 @@ export interface DashboardLoadResult {
     config: SituationDataConfig;
     features: SituationDataFeatureResponse;
   };
+  safetyData: {
+    health: SafetyDataHealth;
+    layers: SafetyDataLayer[];
+    sources: SafetyDataSource[];
+    config: SafetyDataConfig;
+    features: SafetyDataFeatureResponse;
+  };
   warnings: string[];
 }
 
@@ -166,7 +178,12 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<{ items: SituationDataLayer[] }>("/situation-data/api/v1/layers"),
     api<{ items: SituationDataSource[] }>("/situation-data/api/v1/sources"),
     api<SituationDataConfig>("/situation-data/api/v1/config"),
-    api<SituationDataFeatureResponse>("/situation-data/api/v1/cop/features?limit=12")
+    api<SituationDataFeatureResponse>("/situation-data/api/v1/cop/features?limit=12"),
+    api<SafetyDataHealth>("/safety-data/health/ready"),
+    api<{ items: SafetyDataLayer[] }>("/safety-data/api/v1/layers"),
+    api<{ items: SafetyDataSource[] }>("/safety-data/api/v1/sources"),
+    api<SafetyDataConfig>("/safety-data/api/v1/config"),
+    api<SafetyDataFeatureResponse>("/safety-data/api/v1/cop/features?limit=12")
   ]);
 
   const warnings: string[] = [];
@@ -259,6 +276,57 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "situation data features",
     warnings
   );
+  const safetyHealth = unwrapDashboardResult(results[15], { status: "unavailable", enabledSources: [] }, "safety data health", warnings);
+  const safetyLayers = unwrapDashboardResult(results[16], { items: [] }, "safety data layers", warnings);
+  const safetySources = unwrapDashboardResult(results[17], { items: [] }, "safety data sources", warnings);
+  const safetyConfig = unwrapDashboardResult(
+    results[18],
+    {
+      enabledSources: [],
+      defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
+      cacheTtlSeconds: 0,
+      staleIfErrorSeconds: 0,
+      cacheMaxEntries: 0,
+      staleAfterSeconds: 0,
+      requestTimeoutMs: 0,
+      hydroMaxStations: 0,
+      providers: []
+    },
+    "safety data config",
+    warnings
+  );
+  const safetyFeatures = unwrapDashboardResult(
+    results[19],
+    {
+      contractVersion: "cop-safety-source-v1",
+      type: "FeatureCollection",
+      generatedAt: new Date(0).toISOString(),
+      source: {
+        sourceId: "safety-data-api",
+        sourceType: "PUBLIC_SAFETY_AGGREGATE",
+        generatedAt: new Date(0).toISOString()
+      },
+      query: {
+        bbox: { west: 0, south: 0, east: 0, north: 0 },
+        layers: [],
+        limit: 0,
+        sources: []
+      },
+      summary: {
+        featureCount: 0,
+        sourceCount: 0,
+        staleFeatureCount: 0,
+        advisoryCount: 0,
+        warningCount: 0,
+        criticalCount: 0
+      },
+      features: [],
+      sources: [],
+      warnings: []
+    },
+    "safety data features",
+    warnings
+  );
 
   return {
     scenarios: scenarios.items,
@@ -280,6 +348,13 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       sources: situationSources.items,
       config: situationConfig,
       features: situationFeatures
+    },
+    safetyData: {
+      health: safetyHealth,
+      layers: safetyLayers.items,
+      sources: safetySources.items,
+      config: safetyConfig,
+      features: safetyFeatures
     },
     warnings
   };
