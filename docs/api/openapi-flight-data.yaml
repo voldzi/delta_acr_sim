@@ -1,0 +1,414 @@
+openapi: 3.1.0
+info:
+  title: DELTA ACR Flight Data API
+  version: 0.1.0
+  description: API pro agregaci veřejných nebo licencovaných letových dat pro COP.
+servers:
+  - url: http://localhost:4010
+    description: Lokální služba
+  - url: https://sim.zeleznalady.cz/flight-data
+    description: Veřejná cesta přes SIM reverse proxy
+tags:
+  - name: FlightTracks
+  - name: Reference
+  - name: Sources
+  - name: Health
+paths:
+  /api/v1/cop/tracks:
+    get:
+      tags: [FlightTracks]
+      summary: Vrátí COP projekci deduplikovaných letových tracků.
+      parameters:
+        - $ref: '#/components/parameters/Bbox'
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeStale'
+      responses:
+        '200':
+          description: COP flight source response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopTrackResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '502':
+          $ref: '#/components/responses/Problem'
+  /api/v1/aircraft/positions:
+    get:
+      tags: [FlightTracks]
+      summary: Vrátí normalizované deduplikované letové tracky.
+      parameters:
+        - $ref: '#/components/parameters/Bbox'
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/IncludeStale'
+      responses:
+        '200':
+          description: Flight track response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightTrackResponse'
+  /api/v1/sources:
+    get:
+      tags: [Sources]
+      summary: Vrátí dostupné zdroje a licenční metadata.
+      responses:
+        '200':
+          description: Source list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SourceDescriptor'
+  /api/v1/airports:
+    get:
+      tags: [Reference]
+      summary: Vyhledá letiště.
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Bbox'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Airport list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Airport'
+  /api/v1/airports/{ident}:
+    get:
+      tags: [Reference]
+      summary: Vrátí letiště podle ICAO nebo IATA kódu.
+      parameters:
+        - name: ident
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Airport
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Airport'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /api/v1/aircraft-types:
+    get:
+      tags: [Reference]
+      summary: Vyhledá typy letadel.
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Aircraft type list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AircraftType'
+  /api/v1/aircraft-types/{designator}:
+    get:
+      tags: [Reference]
+      summary: Vrátí typ letadla podle ICAO designátoru.
+      parameters:
+        - name: designator
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Aircraft type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AircraftType'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness check.
+      responses:
+        '200':
+          description: OK
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness check.
+      responses:
+        '200':
+          description: OK
+components:
+  parameters:
+    Bbox:
+      name: bbox
+      in: query
+      description: Bounding box `west,south,east,north`.
+      schema:
+        type: string
+        example: 13.5,49.5,15.5,50.6
+    Source:
+      name: source
+      in: query
+      description: Comma-separated source list.
+      schema:
+        type: string
+        example: mock
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 250
+    IncludeStale:
+      name: includeStale
+      in: query
+      schema:
+        type: boolean
+        default: false
+  responses:
+    Problem:
+      description: Problem response
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+  schemas:
+    CopTrackResponse:
+      type: object
+      required: [contractVersion, source, summary, tracks, sources, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: cop-flight-source-v1
+        source:
+          type: object
+          properties:
+            sourceId:
+              type: string
+            sourceType:
+              type: string
+              const: PUBLIC_FLIGHT_AGGREGATE
+            generatedAt:
+              type: string
+              format: date-time
+        summary:
+          $ref: '#/components/schemas/FlightTrackSummary'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlightTrack'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceDescriptor'
+        warnings:
+          type: array
+          items:
+            type: string
+    FlightTrackResponse:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: '#/components/schemas/FlightTrackSummary'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlightTrack'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceDescriptor'
+        warnings:
+          type: array
+          items:
+            type: string
+    FlightTrackSummary:
+      type: object
+      properties:
+        rawObservationCount:
+          type: integer
+        deduplicatedTrackCount:
+          type: integer
+        droppedWithoutPositionCount:
+          type: integer
+        staleTrackCount:
+          type: integer
+    FlightTrack:
+      type: object
+      required: [trackId, icao24, objectType, domain, lat, lon, lastSeenAt, sources, deduplication, quality]
+      properties:
+        trackId:
+          type: string
+        icao24:
+          type: string
+          pattern: '^[0-9a-f]{6}$'
+        callsign:
+          type: string
+        registration:
+          type: string
+        objectType:
+          type: string
+          enum: [AIRCRAFT, UAV, UNKNOWN]
+        domain:
+          type: string
+          const: AIR
+        lat:
+          type: number
+        lon:
+          type: number
+        altitudeM:
+          type: number
+        speedMps:
+          type: number
+        headingDeg:
+          type: number
+        verticalRateMps:
+          type: number
+        lastSeenAt:
+          type: string
+          format: date-time
+        originCountry:
+          type: string
+        aircraft:
+          $ref: '#/components/schemas/AircraftTypePartial'
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              sourceId:
+                type: string
+              sourceRecordId:
+                type: string
+              fetchedAt:
+                type: string
+                format: date-time
+              seenAt:
+                type: string
+                format: date-time
+        deduplication:
+          type: object
+          properties:
+            key:
+              type: string
+              const: icao24
+            mergedRecordCount:
+              type: integer
+            primarySourceId:
+              type: string
+        quality:
+          type: object
+          properties:
+            confidence:
+              type: number
+            stale:
+              type: boolean
+            positionAgeSeconds:
+              type: integer
+        metadata:
+          type: object
+    SourceDescriptor:
+      type: object
+      properties:
+        sourceId:
+          type: string
+          enum: [mock, adsb_lol, opensky]
+        label:
+          type: string
+        enabled:
+          type: boolean
+        mode:
+          type: string
+          enum: [live, mock, reference]
+        priority:
+          type: integer
+        license:
+          type: object
+    Airport:
+      type: object
+      properties:
+        ident:
+          type: string
+        iata:
+          type: string
+        name:
+          type: string
+        municipality:
+          type: string
+        countryCode:
+          type: string
+        type:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        elevationFt:
+          type: integer
+        dataSource:
+          type: string
+    AircraftType:
+      allOf:
+        - $ref: '#/components/schemas/AircraftTypePartial'
+        - type: object
+          properties:
+            dataSource:
+              type: string
+    AircraftTypePartial:
+      type: object
+      properties:
+        typeDesignator:
+          type: string
+        designator:
+          type: string
+        manufacturer:
+          type: string
+        model:
+          type: string
+        category:
+          type: string
+        engineType:
+          type: string
+        wakeTurbulenceCategory:
+          type: string

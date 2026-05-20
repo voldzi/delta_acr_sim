@@ -15,6 +15,34 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  apps/flight-data-api:
+    dependencies:
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      express:
+        specifier: ^5.1.0
+        version: 5.2.1
+    devDependencies:
+      '@types/cors':
+        specifier: ^2.8.19
+        version: 2.8.19
+      '@types/express':
+        specifier: ^5.0.5
+        version: 5.0.6
+      '@types/supertest':
+        specifier: ^6.0.3
+        version: 6.0.3
+      supertest:
+        specifier: ^7.1.4
+        version: 7.2.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.2
+      vitest:
+        specifier: ^4.0.13
+        version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
+
   apps/simulator-api:
     dependencies:
       '@delta-acr/ai-assistant':

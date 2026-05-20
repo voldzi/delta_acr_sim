@@ -25,6 +25,38 @@ services:
       timeout: 5s
       retries: 3
 
+  flight-data-api:
+    build:
+      context: .
+      dockerfile: apps/flight-data-api/Dockerfile
+    container_name: delta-acr-flight-data-api
+    environment:
+      NODE_ENV: production
+      FLIGHT_DATA_API_PORT: 4010
+      FLIGHT_DATA_DIR: /data
+      FLIGHT_DATA_ENABLED_SOURCES: ${FLIGHT_DATA_ENABLED_SOURCES:-mock}
+      FLIGHT_DATA_DEFAULT_LAT: ${FLIGHT_DATA_DEFAULT_LAT:-50.1008}
+      FLIGHT_DATA_DEFAULT_LON: ${FLIGHT_DATA_DEFAULT_LON:-14.2632}
+      FLIGHT_DATA_DEFAULT_RADIUS_NM: ${FLIGHT_DATA_DEFAULT_RADIUS_NM:-120}
+      FLIGHT_DATA_CACHE_TTL_SECONDS: ${FLIGHT_DATA_CACHE_TTL_SECONDS:-15}
+      FLIGHT_DATA_STALE_AFTER_SECONDS: ${FLIGHT_DATA_STALE_AFTER_SECONDS:-120}
+      ADSB_LOL_BASE_URL: ${ADSB_LOL_BASE_URL:-https://api.adsb.lol}
+      OPENSKY_BASE_URL: ${OPENSKY_BASE_URL:-https://opensky-network.org/api}
+      OPENSKY_AUTH_URL: ${OPENSKY_AUTH_URL:-https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token}
+      OPENSKY_ACCESS_TOKEN: ${OPENSKY_ACCESS_TOKEN:-}
+      OPENSKY_CLIENT_ID: ${OPENSKY_CLIENT_ID:-}
+      OPENSKY_CLIENT_SECRET: ${OPENSKY_CLIENT_SECRET:-}
+    volumes:
+      - flight-data:/data
+    expose:
+      - "4010"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4010/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   sim-web:
     build:
       context: .
@@ -35,9 +67,12 @@ services:
     depends_on:
       sim-api:
         condition: service_healthy
+      flight-data-api:
+        condition: service_healthy
     ports:
       - "${SIM_WEB_PORT:-5020}:80"
     restart: unless-stopped
 
 volumes:
   sim-data:
+  flight-data:

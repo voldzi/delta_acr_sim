@@ -15,7 +15,43 @@
 - `EXTERNAL_AI_ALLOWED`
 - `MAX_OBJECTS`
 - `MAX_DURATION_SECONDS`
+- `FLIGHT_DATA_ENABLED_SOURCES`
+- `FLIGHT_DATA_DEFAULT_LAT`
+- `FLIGHT_DATA_DEFAULT_LON`
+- `FLIGHT_DATA_DEFAULT_RADIUS_NM`
+- `FLIGHT_DATA_CACHE_TTL_SECONDS`
+- `FLIGHT_DATA_STALE_AFTER_SECONDS`
+- `ADSB_LOL_BASE_URL`
+- `OPENSKY_BASE_URL`
+- `OPENSKY_ACCESS_TOKEN`
+- `OPENSKY_CLIENT_ID`
+- `OPENSKY_CLIENT_SECRET`
 
 ## Pravidla
 
 Secrets se nastavují přes secret reference. `.env` soubory s tajnými hodnotami nesmí být commitované.
+
+## Flight Data API
+
+Výchozí bezpečná konfigurace:
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=mock
+```
+
+Live ADSB.lol pilot:
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=adsb_lol
+FLIGHT_DATA_DEFAULT_LAT=50.1008
+FLIGHT_DATA_DEFAULT_LON=14.2632
+FLIGHT_DATA_DEFAULT_RADIUS_NM=120
+```
+
+OpenSky používej pouze při doloženém oprávnění:
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=opensky
+OPENSKY_CLIENT_ID=...
+OPENSKY_CLIENT_SECRET=...
+```

@@ -5,8 +5,9 @@
   "description": "COP Air & Situation Simulator - standalone synthetic data simulator.",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev": "pnpm --parallel --filter @delta-acr/simulator-api --filter @delta-acr/simulator-web dev",
+    "dev": "pnpm --parallel --filter @delta-acr/simulator-api --filter @delta-acr/simulator-web --filter @delta-acr/flight-data-api dev",
     "dev:api": "pnpm --filter @delta-acr/simulator-api dev",
+    "dev:flight-data": "pnpm --filter @delta-acr/flight-data-api dev",
     "dev:web": "pnpm --filter @delta-acr/simulator-web dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r --filter './packages/**' build && pnpm -r typecheck",
