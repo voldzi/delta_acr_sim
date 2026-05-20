@@ -24,6 +24,7 @@ Stav: implementováno v první verzi.
 
 ## Fáze 3: COP integrace
 
+- Veřejný pilot `sim.zeleznalady.cz` je nakonfigurovaný na `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
 - Přidat do COP nový datový zdroj `PUBLIC_FLIGHT_AGGREGATE`.
 - Polling nebo server-side ingestion z `https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks`.
 - V COP rozlišit zdroj tracku: SIM syntetika vs veřejný letový agregát.
@@ -40,19 +41,21 @@ Stav: implementováno v první verzi.
 
 ## Konfigurace
 
-Výchozí lokální a produkční režim je bezpečný:
+Výchozí lokální režim je bezpečný:
 
 ```bash
 FLIGHT_DATA_ENABLED_SOURCES=mock
 ```
 
-Live ADSB.lol:
+Live ADSB.lol pilot pro COP:
 
 ```bash
 FLIGHT_DATA_ENABLED_SOURCES=adsb_lol
 FLIGHT_DATA_DEFAULT_LAT=50.1008
 FLIGHT_DATA_DEFAULT_LON=14.2632
 FLIGHT_DATA_DEFAULT_RADIUS_NM=120
+FLIGHT_DATA_CACHE_TTL_SECONDS=10
+FLIGHT_DATA_STALE_AFTER_SECONDS=120
 ```
 
 OpenSky jen po ověření oprávnění:

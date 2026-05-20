@@ -10,6 +10,8 @@ Veřejná cesta přes SIM web:
 https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks
 ```
 
+Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený.
+
 Lokální interní cesta v Docker síti:
 
 ```text

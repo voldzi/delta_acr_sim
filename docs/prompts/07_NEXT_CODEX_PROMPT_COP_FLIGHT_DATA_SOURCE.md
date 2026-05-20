@@ -41,7 +41,7 @@ OpenAPI:
 ## Akceptační kritéria
 
 - COP umí zapnout/vypnout vrstvu veřejných letů.
-- COP při dostupném endpointu zobrazí mock tracky z `flight-data-api`.
+- COP při dostupném endpointu zobrazí reálné ADSB.lol tracky z `flight-data-api`; lokální vývoj může používat `mock`.
 - COP deduplikuje historii podle `trackId`.
 - COP nezobrazuje stale track jako aktuální bez vizuálního příznaku.
 - UI ukazuje atribuci/licenci zdroje.

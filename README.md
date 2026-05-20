@@ -37,7 +37,7 @@ Deployment poznámky jsou v [deploy/docker-home.md](deploy/docker-home.md). Cíl
 
 Dokumentace nové služby je v [docs/flight-data/00_INDEX.md](docs/flight-data/00_INDEX.md), COP kontrakt v [docs/integration/08_FLIGHT_DATA_SOURCE_CONTRACT.md](docs/integration/08_FLIGHT_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-flight-data.yaml](docs/api/openapi-flight-data.yaml).
 
-Výchozí zdroj je bezpečný `mock`. Live ADSB.lol nebo OpenSky se zapínají přes `FLIGHT_DATA_ENABLED_SOURCES`.
+Lokální výchozí zdroj je bezpečný `mock`. Pilotní nasazení na `sim.zeleznalady.cz` je připravené pro COP jako reálný ADSB.lol feed přes `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`. OpenSky se zapíná pouze po ověření oprávnění nebo licence.
 
 ## Bezpečnostní hranice
 
