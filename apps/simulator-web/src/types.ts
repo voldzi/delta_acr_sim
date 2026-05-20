@@ -127,6 +127,8 @@ export interface FlightDataConfig {
     radiusNm: number;
   };
   cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   providers: Array<{
@@ -249,6 +251,8 @@ export interface SituationDataConfig {
     north: number;
   };
   cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   providers: Array<{

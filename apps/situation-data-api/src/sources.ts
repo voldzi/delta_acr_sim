@@ -2,6 +2,7 @@ import { unzipSync } from "fflate";
 import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
 import type { SituationDataConfig } from "./config.js";
+import { ManagedResponseCache } from "./response-cache.js";
 import type {
   BoundingBox,
   PointGeometry,
@@ -260,8 +261,14 @@ class OsmOverpassSource implements SituationDataSource {
 
 class CtuNettestSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly recordsCache: ManagedResponseCache<Array<Record<string, string>>>;
 
   constructor(private readonly config: SituationDataConfig) {
+    this.recordsCache = new ManagedResponseCache<Array<Record<string, string>>>({
+      ttlMs: 60 * 60 * 1000,
+      staleIfErrorMs: 24 * 60 * 60 * 1000,
+      maxEntries: 1
+    });
     this.descriptor = {
       sourceId: "ctu_nettest",
       label: "CTU NetTest mobile measurements",
@@ -281,19 +288,7 @@ class CtuNettestSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const archive = await requestBytes(this.config.ctuNettestUrl, this.config.requestTimeoutMs);
-    const files = unzipSync(archive);
-    const csvName = Object.keys(files).find((name) => name.toLowerCase().endsWith(".csv"));
-    if (!csvName) {
-      return { source: this.descriptor, fetchedAt, features: [], warnings: ["ctu_nettest archive did not contain a CSV file."] };
-    }
-
-    const csvFile = files[csvName];
-    if (!csvFile) {
-      return { source: this.descriptor, fetchedAt, features: [], warnings: ["ctu_nettest CSV file was empty."] };
-    }
-
-    const records = parseCsvRecords(new TextDecoder().decode(csvFile));
+    const records = await this.recordsCache.getOrLoad("ctu_nettest_records", () => fetchCtuNettestRecords(this.config));
     const features: SituationFeature[] = [];
     for (const record of records) {
       if (features.length >= query.limit) {
@@ -311,8 +306,14 @@ class CtuNettestSource implements SituationDataSource {
 
 class PidGtfsRtSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly feedCache: ManagedResponseCache<transit_realtime.FeedMessage>;
 
   constructor(private readonly config: SituationDataConfig) {
+    this.feedCache = new ManagedResponseCache<transit_realtime.FeedMessage>({
+      ttlMs: 20_000,
+      staleIfErrorMs: Math.max(60_000, config.staleIfErrorSeconds * 1000),
+      maxEntries: 1
+    });
     this.descriptor = {
       sourceId: "pid_gtfs_rt",
       label: "PID GTFS-RT vehicle positions",
@@ -332,10 +333,7 @@ class PidGtfsRtSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const payload = await requestBytes(this.config.pidGtfsRtVehiclePositionsUrl, this.config.requestTimeoutMs, {
-      accept: "application/x-protobuf,application/octet-stream"
-    });
-    const feed = gtfsRealtime.transit_realtime.FeedMessage.decode(payload);
+    const feed = await this.feedCache.getOrLoad("pid_gtfs_rt_vehicle_positions", () => fetchPidVehiclePositionFeed(this.config));
     const features: SituationFeature[] = [];
 
     for (const entity of feed.entity ?? []) {
@@ -646,6 +644,27 @@ async function requestBytes(url: string, timeoutMs: number, headers?: Record<str
     throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
   }
   return new Uint8Array(await response.arrayBuffer());
+}
+
+async function fetchCtuNettestRecords(config: SituationDataConfig): Promise<Array<Record<string, string>>> {
+  const archive = await requestBytes(config.ctuNettestUrl, config.requestTimeoutMs);
+  const files = unzipSync(archive);
+  const csvName = Object.keys(files).find((name) => name.toLowerCase().endsWith(".csv"));
+  if (!csvName) {
+    throw new Error("ctu_nettest archive did not contain a CSV file.");
+  }
+  const csvFile = files[csvName];
+  if (!csvFile) {
+    throw new Error("ctu_nettest CSV file was empty.");
+  }
+  return parseCsvRecords(new TextDecoder().decode(csvFile));
+}
+
+async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise<transit_realtime.FeedMessage> {
+  const payload = await requestBytes(config.pidGtfsRtVehiclePositionsUrl, config.requestTimeoutMs, {
+    accept: "application/x-protobuf,application/octet-stream"
+  });
+  return gtfsRealtime.transit_realtime.FeedMessage.decode(payload);
 }
 
 async function requestOverpass(baseUrl: string, query: string, timeoutMs: number): Promise<OverpassResponse> {

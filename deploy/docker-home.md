@@ -38,11 +38,15 @@ FLIGHT_DATA_DEFAULT_LAT=50.1008
 FLIGHT_DATA_DEFAULT_LON=14.2632
 FLIGHT_DATA_DEFAULT_RADIUS_NM=120
 FLIGHT_DATA_CACHE_TTL_SECONDS=10
+FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
+FLIGHT_DATA_CACHE_MAX_ENTRIES=512
 FLIGHT_DATA_STALE_AFTER_SECONDS=120
 FLIGHT_DATA_REQUEST_TIMEOUT_MS=8000
 SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
+SITUATION_DATA_STALE_IF_ERROR_SECONDS=600
+SITUATION_DATA_CACHE_MAX_ENTRIES=512
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
@@ -71,8 +75,10 @@ http://docker.home.cz:5020
 - Výchozí režim je `DRY_RUN`.
 - Pro LIVE publikování do COP nastav `SIM_PUBLISHER_MODE=LIVE`, `MAIN_COP_BASE_URL=http://172.17.0.1:4310` a `MAIN_COP_BEARER_TOKEN` na stejnou hodnotu jako `COP_LAB_TOKEN` v COP.
 - Flight Data API pro integrační pilot COP běží proti ADSB.lol: `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
+- Flight Data API používá server-side cache s in-flight deduplikací: `FLIGHT_DATA_CACHE_TTL_SECONDS=10`, `FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60`, `FLIGHT_DATA_CACHE_MAX_ENTRIES=512`.
 - Pro offline test nastav `FLIGHT_DATA_ENABLED_SOURCES=mock`.
 - Situation Data API ve výchozím pilotu používá reálné open-data zdroje `open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt`.
+- Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=600`, `SITUATION_DATA_CACHE_MAX_ENTRIES=512`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
 - `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci; veřejné Overpass instance jsou sdílený zdroj.
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.

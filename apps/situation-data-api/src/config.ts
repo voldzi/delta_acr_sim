@@ -10,6 +10,8 @@ export interface SituationDataConfig {
   defaultBbox: BoundingBox;
   requestTimeoutMs: number;
   cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
   staleAfterSeconds: number;
   openMeteoBaseUrl: string;
   overpassBaseUrl: string;
@@ -35,6 +37,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     },
     requestTimeoutMs: parseInteger(process.env.SITUATION_DATA_REQUEST_TIMEOUT_MS, 6000),
     cacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CACHE_TTL_SECONDS, 30),
+    staleIfErrorSeconds: parseInteger(process.env.SITUATION_DATA_STALE_IF_ERROR_SECONDS, 600),
+    cacheMaxEntries: parseInteger(process.env.SITUATION_DATA_CACHE_MAX_ENTRIES, 512),
     staleAfterSeconds: parseInteger(process.env.SITUATION_DATA_STALE_AFTER_SECONDS, 900),
     openMeteoBaseUrl: process.env.OPEN_METEO_BASE_URL ?? "https://api.open-meteo.com",
     overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? "https://overpass-api.de/api/interpreter",

@@ -12,6 +12,8 @@ export interface FlightDataConfig {
   defaultRadiusNm: number;
   requestTimeoutMs: number;
   cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
   staleAfterSeconds: number;
   adsbLolBaseUrl: string;
   openskyBaseUrl: string;
@@ -35,6 +37,8 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     defaultRadiusNm: parseInteger(process.env.FLIGHT_DATA_DEFAULT_RADIUS_NM, 120),
     requestTimeoutMs: parseInteger(process.env.FLIGHT_DATA_REQUEST_TIMEOUT_MS, 6000),
     cacheTtlSeconds: parseInteger(process.env.FLIGHT_DATA_CACHE_TTL_SECONDS, 15),
+    staleIfErrorSeconds: parseInteger(process.env.FLIGHT_DATA_STALE_IF_ERROR_SECONDS, 60),
+    cacheMaxEntries: parseInteger(process.env.FLIGHT_DATA_CACHE_MAX_ENTRIES, 512),
     staleAfterSeconds: parseInteger(process.env.FLIGHT_DATA_STALE_AFTER_SECONDS, 120),
     adsbLolBaseUrl: process.env.ADSB_LOL_BASE_URL ?? "https://api.adsb.lol",
     openskyBaseUrl: process.env.OPENSKY_BASE_URL ?? "https://opensky-network.org/api",

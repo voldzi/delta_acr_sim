@@ -52,6 +52,8 @@ export interface SituationDataPublicConfig {
   enabledSources: SituationDataSourceId[];
   defaultBbox: BoundingBox;
   cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   providers: Array<{

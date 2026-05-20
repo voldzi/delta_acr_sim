@@ -194,6 +194,8 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       enabledSources: [],
       defaultArea: { lat: 0, lon: 0, radiusNm: 0 },
       cacheTtlSeconds: 0,
+      staleIfErrorSeconds: 0,
+      cacheMaxEntries: 0,
       staleAfterSeconds: 0,
       requestTimeoutMs: 0,
       providers: []
@@ -223,6 +225,8 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       enabledSources: [],
       defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
       cacheTtlSeconds: 0,
+      staleIfErrorSeconds: 0,
+      cacheMaxEntries: 0,
       staleAfterSeconds: 0,
       requestTimeoutMs: 0,
       providers: []

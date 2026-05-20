@@ -215,7 +215,7 @@ components:
           type: integer
     PublicConfig:
       type: object
-      required: [enabledSources, defaultBbox, cacheTtlSeconds, staleAfterSeconds, requestTimeoutMs, providers]
+      required: [enabledSources, defaultBbox, cacheTtlSeconds, staleIfErrorSeconds, cacheMaxEntries, staleAfterSeconds, requestTimeoutMs, providers]
       properties:
         enabledSources:
           type: array
@@ -224,6 +224,10 @@ components:
         defaultBbox:
           $ref: "#/components/schemas/BoundingBox"
         cacheTtlSeconds:
+          type: integer
+        staleIfErrorSeconds:
+          type: integer
+        cacheMaxEntries:
           type: integer
         staleAfterSeconds:
           type: integer

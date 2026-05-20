@@ -41,6 +41,8 @@ export interface FlightDataPublicConfig {
     radiusNm: number;
   };
   cacheTtlSeconds: number;
+  staleIfErrorSeconds: number;
+  cacheMaxEntries: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   providers: Array<{

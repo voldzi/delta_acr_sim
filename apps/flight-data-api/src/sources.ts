@@ -1,4 +1,5 @@
 import type { FlightDataConfig } from "./config.js";
+import { ManagedResponseCache } from "./response-cache.js";
 import type {
   BoundingBox,
   FlightDataLicense,
@@ -158,8 +159,14 @@ class MockFlightDataSource implements FlightDataSource {
 
 class AdsbLolSource implements FlightDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<AdsbLolResponse>;
 
   constructor(private readonly config: FlightDataConfig) {
+    this.payloadCache = new ManagedResponseCache<AdsbLolResponse>({
+      ttlMs: config.cacheTtlSeconds * 1000,
+      staleIfErrorMs: config.staleIfErrorSeconds * 1000,
+      maxEntries: config.cacheMaxEntries
+    });
     this.descriptor = {
       sourceId: "adsb_lol",
       label: "ADSB.lol open ADS-B feed",
@@ -175,7 +182,7 @@ class AdsbLolSource implements FlightDataSource {
     const fetchedAt = new Date().toISOString();
     const area = query.bbox ? bboxToPointRadius(query.bbox) : { lat: this.config.defaultLat, lon: this.config.defaultLon, radiusNm: this.config.defaultRadiusNm };
     const url = `${this.config.adsbLolBaseUrl}/v2/lat/${area.lat.toFixed(4)}/lon/${area.lon.toFixed(4)}/dist/${Math.min(250, Math.max(1, Math.ceil(area.radiusNm)))}`;
-    const payload = await requestJson<AdsbLolResponse>(url, this.config.requestTimeoutMs);
+    const payload = await this.payloadCache.getOrLoad(url, () => requestJson<AdsbLolResponse>(url, this.config.requestTimeoutMs));
     const nowMs = typeof payload.now === "number" ? payload.now : Date.now();
 
     const observations = (payload.ac ?? [])
@@ -217,8 +224,14 @@ class AdsbLolSource implements FlightDataSource {
 class OpenSkySource implements FlightDataSource {
   readonly descriptor: SourceDescriptor;
   private cachedToken?: { value: string; expiresAtMs: number };
+  private readonly payloadCache: ManagedResponseCache<OpenSkyResponse>;
 
   constructor(private readonly config: FlightDataConfig) {
+    this.payloadCache = new ManagedResponseCache<OpenSkyResponse>({
+      ttlMs: config.cacheTtlSeconds * 1000,
+      staleIfErrorMs: config.staleIfErrorSeconds * 1000,
+      maxEntries: config.cacheMaxEntries
+    });
     this.descriptor = {
       sourceId: "opensky",
       label: "OpenSky Network REST API",
@@ -240,7 +253,9 @@ class OpenSkySource implements FlightDataSource {
       url.searchParams.set("lomax", String(query.bbox.east));
     }
     const headers = await this.authHeaders();
-    const payload = await requestJson<OpenSkyResponse>(url.toString(), this.config.requestTimeoutMs, headers);
+    const payload = await this.payloadCache.getOrLoad(`${headers.Authorization ? "auth" : "public"}:${url.toString()}`, () =>
+      requestJson<OpenSkyResponse>(url.toString(), this.config.requestTimeoutMs, headers)
+    );
     const baseTimeMs = typeof payload.time === "number" ? payload.time * 1000 : Date.now();
     const observations = (payload.states ?? [])
       .map((state): RawFlightObservation | undefined => mapOpenSkyState(state, fetchedAt, baseTimeMs, this.descriptor.priority))

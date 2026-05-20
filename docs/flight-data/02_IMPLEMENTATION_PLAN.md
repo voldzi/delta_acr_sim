@@ -12,6 +12,7 @@ Stav: implementováno v první verzi.
 - Deduplikace podle normalizovaného `icao24`.
 - Referenční lookup letišť a typů letadel.
 - COP projekce `/api/v1/cop/tracks`.
+- Server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem a cache metrikami.
 - OpenAPI dokument `docs/api/openapi-flight-data.yaml`.
 
 ## Fáze 2: datová kvalita
@@ -35,7 +36,7 @@ Stav: implementováno v první verzi.
 
 - Rozhodnout finální live provider.
 - Zajistit smlouvu nebo právní posouzení ODbL obligations.
-- Přidat rate limiting, server-side cache a audit přístupů.
+- Přidat rate limiting a audit přístupů.
 - Přidat explicitní atribuci zdrojů do COP UI a exportů.
 - Přidat administraci zapnutých providerů a jejich licence.
 
@@ -55,6 +56,8 @@ FLIGHT_DATA_DEFAULT_LAT=50.1008
 FLIGHT_DATA_DEFAULT_LON=14.2632
 FLIGHT_DATA_DEFAULT_RADIUS_NM=120
 FLIGHT_DATA_CACHE_TTL_SECONDS=10
+FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
+FLIGHT_DATA_CACHE_MAX_ENTRIES=512
 FLIGHT_DATA_STALE_AFTER_SECONDS=120
 ```
 

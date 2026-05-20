@@ -20,6 +20,7 @@
    - `/situation-data/health/`
    - `/situation-data/metrics`
 5. Doplnit panel v SIM pro dohled nad stavem sběru, zdroji, licencemi, počtem features, warnings a preview.
+6. Doplnit server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem a source-level cache pro velké feedy ČTÚ NetTest a PID GTFS-RT.
 
 ## Fáze 2: Další síťové a dopravní vrstvy
 
@@ -34,4 +35,5 @@
 - V každé feature musí být `sourceId`, licence, atribuce, `confidence`, `stale` a čas pozorování.
 - Veřejné API nesmí vracet žádné API klíče ani interní tajemství.
 - Public Overpass endpointy nepoužívat pro velké bbox ani vysokou frekvenci; pro produkční režim preferovat vlastní mirror/extract.
+- ČTÚ NetTest ZIP a PID GTFS-RT feed se nesmí stahovat pro každý COP dotaz; SIM je drží ve source-level cache a sdílí probíhající fetch.
 - SIM má při výpadku jednotlivého zdroje vracet dostupná data z ostatních zdrojů a `warnings`, ne 500 pro celý agregát.

@@ -47,7 +47,23 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
   });
 
   app.get("/metrics", (_req, res) => {
-    res.type("text/plain").send([`flight_data_enabled_sources ${context.config.enabledSources.length}`].join("\n") + "\n");
+    const cache = context.aggregation.cacheStats();
+    res
+      .type("text/plain")
+      .send(
+        [
+          `flight_data_enabled_sources ${context.config.enabledSources.length}`,
+          `flight_data_cache_entries ${cache.entries}`,
+          `flight_data_cache_inflight ${cache.inflight}`,
+          `flight_data_cache_hits ${cache.hits}`,
+          `flight_data_cache_misses ${cache.misses}`,
+          `flight_data_cache_coalesced_hits ${cache.coalescedHits}`,
+          `flight_data_cache_stale_hits ${cache.staleHits}`,
+          `flight_data_cache_refreshes ${cache.refreshes}`,
+          `flight_data_cache_errors ${cache.errors}`,
+          `flight_data_cache_evictions ${cache.evictions}`
+        ].join("\n") + "\n"
+      );
   });
 }
 
@@ -221,6 +237,8 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
       radiusNm: config.defaultRadiusNm
     },
     cacheTtlSeconds: config.cacheTtlSeconds,
+    staleIfErrorSeconds: config.staleIfErrorSeconds,
+    cacheMaxEntries: config.cacheMaxEntries,
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
     providers: [

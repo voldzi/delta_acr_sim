@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { FlightAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { FlightDataConfig } from "../src/config.js";
+import type { FlightDataSource } from "../src/sources.js";
 
 describe("Flight Data API contract", () => {
   let dataDir: string;
@@ -22,6 +24,8 @@ describe("Flight Data API contract", () => {
       defaultRadiusNm: 120,
       requestTimeoutMs: 1000,
       cacheTtlSeconds: 1,
+      staleIfErrorSeconds: 60,
+      cacheMaxEntries: 128,
       staleAfterSeconds: 120,
       adsbLolBaseUrl: "https://api.adsb.lol",
       openskyBaseUrl: "https://opensky-network.org/api",
@@ -67,6 +71,8 @@ describe("Flight Data API contract", () => {
         enabledSources: ["mock"],
         defaultArea: { lat: 50.1008, lon: 14.2632, radiusNm: 120 },
         cacheTtlSeconds: 1,
+        staleIfErrorSeconds: 60,
+        cacheMaxEntries: 128,
         staleAfterSeconds: 120,
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -75,6 +81,12 @@ describe("Flight Data API contract", () => {
       })
     );
     expect(JSON.stringify(response.body)).not.toContain("clientSecret");
+  });
+
+  it("exposes cache metrics", async () => {
+    const response = await request(app).get("/metrics").expect(200);
+    expect(response.text).toContain("flight_data_cache_entries");
+    expect(response.text).toContain("flight_data_cache_coalesced_hits");
   });
 
   it("returns deduplicated aircraft positions by icao24", async () => {
@@ -121,5 +133,55 @@ describe("Flight Data API contract", () => {
   it("validates bbox format", async () => {
     const response = await request(app).get("/api/v1/aircraft/positions?bbox=bad").expect(400);
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("coalesces concurrent cache misses into one source fetch", async () => {
+    let calls = 0;
+    const descriptor: FlightDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "test",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const source: FlightDataSource = {
+      descriptor,
+      async fetchObservations() {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const fetchedAt = new Date().toISOString();
+        return {
+          source: descriptor,
+          fetchedAt,
+          warnings: [],
+          observations: [
+            {
+              sourceId: "mock",
+              sourceRecordId: "test:4d2216",
+              sourcePriority: 10,
+              fetchedAt,
+              seenAt: fetchedAt,
+              icao24: "4d2216",
+              lat: 50.1,
+              lon: 14.4
+            }
+          ]
+        };
+      }
+    };
+    const service = new FlightAggregationService(config, [source]);
+    const query = { bbox: undefined, limit: 10, sourceIds: ["mock" as const], includeStale: false };
+
+    await Promise.all(Array.from({ length: 8 }, () => service.getTracks(query)));
+
+    expect(calls).toBe(1);
+    expect(service.cacheStats().coalescedHits).toBe(7);
   });
 });

@@ -1,0 +1,111 @@
+export interface ManagedResponseCacheOptions {
+  ttlMs: number;
+  staleIfErrorMs: number;
+  maxEntries: number;
+}
+
+export interface ManagedResponseCacheStats {
+  entries: number;
+  inflight: number;
+  hits: number;
+  misses: number;
+  coalescedHits: number;
+  staleHits: number;
+  refreshes: number;
+  errors: number;
+  evictions: number;
+}
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAtMs: number;
+  staleUntilMs: number;
+  lastAccessedAtMs: number;
+}
+
+export class ManagedResponseCache<T> {
+  private readonly entries = new Map<string, CacheEntry<T>>();
+  private readonly inflight = new Map<string, Promise<T>>();
+  private readonly counters = {
+    hits: 0,
+    misses: 0,
+    coalescedHits: 0,
+    staleHits: 0,
+    refreshes: 0,
+    errors: 0,
+    evictions: 0
+  };
+
+  constructor(private readonly options: ManagedResponseCacheOptions) {}
+
+  async getOrLoad(key: string, loader: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const entry = this.entries.get(key);
+    if (entry && entry.expiresAtMs > now) {
+      this.counters.hits += 1;
+      entry.lastAccessedAtMs = now;
+      return entry.value;
+    }
+
+    const existingInflight = this.inflight.get(key);
+    if (existingInflight) {
+      this.counters.coalescedHits += 1;
+      return existingInflight;
+    }
+
+    this.counters.misses += 1;
+    const refresh = loader()
+      .then((value) => {
+        this.counters.refreshes += 1;
+        this.store(key, value);
+        return value;
+      })
+      .catch((error) => {
+        this.counters.errors += 1;
+        const staleEntry = this.entries.get(key);
+        if (staleEntry && staleEntry.staleUntilMs > Date.now()) {
+          this.counters.staleHits += 1;
+          staleEntry.lastAccessedAtMs = Date.now();
+          return staleEntry.value;
+        }
+        throw error;
+      })
+      .finally(() => {
+        this.inflight.delete(key);
+      });
+
+    this.inflight.set(key, refresh);
+    return refresh;
+  }
+
+  stats(): ManagedResponseCacheStats {
+    return {
+      entries: this.entries.size,
+      inflight: this.inflight.size,
+      ...this.counters
+    };
+  }
+
+  private store(key: string, value: T): void {
+    const now = Date.now();
+    this.entries.set(key, {
+      value,
+      expiresAtMs: now + Math.max(0, this.options.ttlMs),
+      staleUntilMs: now + Math.max(0, this.options.ttlMs) + Math.max(0, this.options.staleIfErrorMs),
+      lastAccessedAtMs: now
+    });
+    this.evictIfNeeded();
+  }
+
+  private evictIfNeeded(): void {
+    const maxEntries = Math.max(1, this.options.maxEntries);
+    while (this.entries.size > maxEntries) {
+      const oldest = Array.from(this.entries.entries()).sort((a, b) => a[1].lastAccessedAtMs - b[1].lastAccessedAtMs)[0];
+      if (!oldest) {
+        return;
+      }
+      this.entries.delete(oldest[0]);
+      this.counters.evictions += 1;
+    }
+  }
+}

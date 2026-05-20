@@ -172,6 +172,8 @@ export function App() {
         enabledSources: [],
         defaultArea: { lat: 0, lon: 0, radiusNm: 0 },
         cacheTtlSeconds: 0,
+        staleIfErrorSeconds: 0,
+        cacheMaxEntries: 0,
         staleAfterSeconds: 0,
         requestTimeoutMs: 0,
         providers: []
@@ -186,6 +188,8 @@ export function App() {
         enabledSources: [],
         defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
         cacheTtlSeconds: 0,
+        staleIfErrorSeconds: 0,
+        cacheMaxEntries: 0,
         staleAfterSeconds: 0,
         requestTimeoutMs: 0,
         providers: []
@@ -641,6 +645,8 @@ export function App() {
                   <SummaryItem label="Default area" value={`${formatCoordinate(data.flightData.config.defaultArea.lat)}, ${formatCoordinate(data.flightData.config.defaultArea.lon)}`} />
                   <SummaryItem label="Radius" value={`${data.flightData.config.defaultArea.radiusNm} NM`} />
                   <SummaryItem label="Cache TTL" value={`${data.flightData.config.cacheTtlSeconds}s`} />
+                  <SummaryItem label="Stale fallback" value={`${data.flightData.config.staleIfErrorSeconds}s`} />
+                  <SummaryItem label="Cache entries" value={`${data.flightData.config.cacheMaxEntries}`} />
                   <SummaryItem label="Stale after" value={`${data.flightData.config.staleAfterSeconds}s`} />
                   <SummaryItem label="Timeout" value={`${data.flightData.config.requestTimeoutMs} ms`} />
                 </div>
@@ -708,6 +714,8 @@ export function App() {
                   <SummaryItem label="Enabled sources" value={data.situationData.config.enabledSources.join(", ") || "-"} />
                   <SummaryItem label="Default bbox" value={formatBbox(data.situationData.config.defaultBbox)} />
                   <SummaryItem label="Cache TTL" value={`${data.situationData.config.cacheTtlSeconds}s`} />
+                  <SummaryItem label="Stale fallback" value={`${data.situationData.config.staleIfErrorSeconds}s`} />
+                  <SummaryItem label="Cache entries" value={`${data.situationData.config.cacheMaxEntries}`} />
                   <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
                   <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
                   <SummaryItem label="Query limit" value={`${data.situationData.features.query.limit || 0}`} />

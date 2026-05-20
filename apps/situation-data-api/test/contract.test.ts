@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SituationDataConfig } from "../src/config.js";
+import type { SituationDataSource } from "../src/sources.js";
 
 describe("Situation Data API contract", () => {
   let dataDir: string;
@@ -20,6 +22,8 @@ describe("Situation Data API contract", () => {
       defaultBbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
       requestTimeoutMs: 1000,
       cacheTtlSeconds: 1,
+      staleIfErrorSeconds: 600,
+      cacheMaxEntries: 128,
       staleAfterSeconds: 900,
       openMeteoBaseUrl: "https://api.open-meteo.com",
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
@@ -83,6 +87,8 @@ describe("Situation Data API contract", () => {
         enabledSources: ["mock"],
         defaultBbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
         cacheTtlSeconds: 1,
+        staleIfErrorSeconds: 600,
+        cacheMaxEntries: 128,
         staleAfterSeconds: 900,
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -93,6 +99,12 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(JSON.stringify(response.body)).not.toContain("secret");
+  });
+
+  it("exposes cache metrics", async () => {
+    const response = await request(app).get("/metrics").expect(200);
+    expect(response.text).toContain("situation_data_cache_entries");
+    expect(response.text).toContain("situation_data_cache_coalesced_hits");
   });
 
   it("returns the COP GeoJSON projection", async () => {
@@ -142,5 +154,69 @@ describe("Situation Data API contract", () => {
 
     const layers = await request(app).get("/api/v1/features?layers=unknown").expect(400);
     expect(layers.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("coalesces concurrent cache misses into one source fetch", async () => {
+    let calls = 0;
+    const descriptor: SituationDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "test",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      layers: ["weather"],
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const source: SituationDataSource = {
+      descriptor,
+      async fetchFeatures() {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const fetchedAt = new Date().toISOString();
+        return {
+          source: descriptor,
+          fetchedAt,
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "weather:test",
+              geometry: { type: "Point", coordinates: [14.4, 50.1] },
+              properties: {
+                featureId: "weather:test",
+                layer: "weather",
+                category: "weather_observation",
+                label: "test",
+                sourceId: "mock",
+                observedAt: fetchedAt,
+                confidence: 1,
+                stale: false,
+                severity: "info",
+                license: { name: "test", attribution: "test" }
+              }
+            }
+          ]
+        };
+      }
+    };
+    const service = new SituationAggregationService(config, [source]);
+    const query = {
+      bbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
+      layers: ["weather" as const],
+      sourceIds: ["mock" as const],
+      limit: 10,
+      includeRaw: false
+    };
+
+    await Promise.all(Array.from({ length: 8 }, () => service.getFeatures(query)));
+
+    expect(calls).toBe(1);
+    expect(service.cacheStats().coalescedHits).toBe(7);
   });
 });

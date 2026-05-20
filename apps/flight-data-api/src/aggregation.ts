@@ -1,8 +1,10 @@
 import type { FlightDataConfig } from "./config.js";
 import { getAircraftType } from "./reference-data.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { FlightDataSource } from "./sources.js";
 import type {
   AggregatedFlightTrack,
+  BoundingBox,
   FlightDataSourceId,
   FlightQuery,
   FlightTrackResponse,
@@ -12,20 +14,28 @@ import type {
 } from "./types.js";
 
 export class FlightAggregationService {
-  private readonly cache = new Map<string, { expiresAtMs: number; response: FlightTrackResponse }>();
+  private readonly cache: ManagedResponseCache<FlightTrackResponse>;
 
   constructor(
     private readonly config: FlightDataConfig,
     private readonly sources: FlightDataSource[]
-  ) {}
+  ) {
+    this.cache = new ManagedResponseCache<FlightTrackResponse>({
+      ttlMs: config.cacheTtlSeconds * 1000,
+      staleIfErrorMs: config.staleIfErrorSeconds * 1000,
+      maxEntries: config.cacheMaxEntries
+    });
+  }
+
+  cacheStats(): ManagedResponseCacheStats {
+    return this.cache.stats();
+  }
 
   async getTracks(query: FlightQuery): Promise<FlightTrackResponse> {
-    const cacheKey = JSON.stringify(query);
-    const cached = this.cache.get(cacheKey);
-    if (cached && cached.expiresAtMs > Date.now()) {
-      return cached.response;
-    }
+    return this.cache.getOrLoad(cacheKeyForFlightQuery(query), () => this.fetchTracks(query));
+  }
 
+  private async fetchTracks(query: FlightQuery): Promise<FlightTrackResponse> {
     const enabledSources = this.sources.filter((source) => query.sourceIds.includes(source.descriptor.sourceId));
     const settled = await Promise.allSettled(enabledSources.map((source) => source.fetchObservations(query)));
     const results: SourceFetchResult[] = [];
@@ -62,9 +72,26 @@ export class FlightAggregationService {
       tracks: limitedTracks,
       warnings
     };
-    this.cache.set(cacheKey, { expiresAtMs: Date.now() + this.config.cacheTtlSeconds * 1000, response });
     return response;
   }
+}
+
+function cacheKeyForFlightQuery(query: FlightQuery): string {
+  return JSON.stringify({
+    bbox: query.bbox ? roundBbox(query.bbox) : null,
+    includeStale: query.includeStale,
+    limit: query.limit,
+    sources: [...query.sourceIds].sort()
+  });
+}
+
+function roundBbox(bbox: NonNullable<FlightQuery["bbox"]>): BoundingBox {
+  return {
+    west: round(bbox.west, 5),
+    south: round(bbox.south, 5),
+    east: round(bbox.east, 5),
+    north: round(bbox.north, 5)
+  };
 }
 
 function deduplicateObservations(

@@ -1,6 +1,8 @@
 import type { SituationDataConfig } from "./config.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { SituationDataSource } from "./sources.js";
 import type {
+  BoundingBox,
   SituationDataSourceId,
   SituationFeature,
   SituationFeatureCollection,
@@ -11,20 +13,28 @@ import type {
 } from "./types.js";
 
 export class SituationAggregationService {
-  private readonly cache = new Map<string, { expiresAtMs: number; response: SituationFeatureCollection }>();
+  private readonly cache: ManagedResponseCache<SituationFeatureCollection>;
 
   constructor(
     private readonly config: SituationDataConfig,
     private readonly sources: SituationDataSource[]
-  ) {}
+  ) {
+    this.cache = new ManagedResponseCache<SituationFeatureCollection>({
+      ttlMs: config.cacheTtlSeconds * 1000,
+      staleIfErrorMs: config.staleIfErrorSeconds * 1000,
+      maxEntries: config.cacheMaxEntries
+    });
+  }
+
+  cacheStats(): ManagedResponseCacheStats {
+    return this.cache.stats();
+  }
 
   async getFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
-    const cacheKey = JSON.stringify(query);
-    const cached = this.cache.get(cacheKey);
-    if (cached && cached.expiresAtMs > Date.now()) {
-      return cached.response;
-    }
+    return this.cache.getOrLoad(cacheKeyForSituationQuery(query), () => this.fetchFeatures(query));
+  }
 
+  private async fetchFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
     const enabledSources = this.sources.filter((source) => query.sourceIds.includes(source.descriptor.sourceId));
     const settled = await Promise.allSettled(enabledSources.map((source) => source.fetchFeatures(query)));
     const results: SourceFetchResult[] = [];
@@ -74,10 +84,27 @@ export class SituationAggregationService {
       sources: sourceDescriptors,
       warnings
     };
-
-    this.cache.set(cacheKey, { expiresAtMs: Date.now() + this.config.cacheTtlSeconds * 1000, response });
     return response;
   }
+}
+
+function cacheKeyForSituationQuery(query: SituationQuery): string {
+  return JSON.stringify({
+    bbox: roundBbox(query.bbox),
+    layers: [...query.layers].sort(),
+    sources: [...query.sourceIds].sort(),
+    limit: query.limit,
+    includeRaw: query.includeRaw
+  });
+}
+
+function roundBbox(bbox: BoundingBox): BoundingBox {
+  return {
+    west: round(bbox.west, 5),
+    south: round(bbox.south, 5),
+    east: round(bbox.east, 5),
+    north: round(bbox.north, 5)
+  };
 }
 
 function limitBalancedByLayer(features: SituationFeature[], layers: SituationLayerId[], limit: number): SituationFeature[] {
@@ -196,4 +223,9 @@ function layerRank(value: SituationLayerId): number {
     default:
       return 4;
   }
+}
+
+function round(value: number, precision: number): number {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
 }

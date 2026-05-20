@@ -395,6 +395,10 @@ components:
               type: number
         cacheTtlSeconds:
           type: integer
+        staleIfErrorSeconds:
+          type: integer
+        cacheMaxEntries:
+          type: integer
         staleAfterSeconds:
           type: integer
         requestTimeoutMs:

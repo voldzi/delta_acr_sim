@@ -46,7 +46,23 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
   });
 
   app.get("/metrics", (_req, res) => {
-    res.type("text/plain").send([`situation_data_enabled_sources ${context.config.enabledSources.length}`].join("\n") + "\n");
+    const cache = context.aggregation.cacheStats();
+    res
+      .type("text/plain")
+      .send(
+        [
+          `situation_data_enabled_sources ${context.config.enabledSources.length}`,
+          `situation_data_cache_entries ${cache.entries}`,
+          `situation_data_cache_inflight ${cache.inflight}`,
+          `situation_data_cache_hits ${cache.hits}`,
+          `situation_data_cache_misses ${cache.misses}`,
+          `situation_data_cache_coalesced_hits ${cache.coalescedHits}`,
+          `situation_data_cache_stale_hits ${cache.staleHits}`,
+          `situation_data_cache_refreshes ${cache.refreshes}`,
+          `situation_data_cache_errors ${cache.errors}`,
+          `situation_data_cache_evictions ${cache.evictions}`
+        ].join("\n") + "\n"
+      );
   });
 }
 
@@ -176,6 +192,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     enabledSources: config.enabledSources,
     defaultBbox: config.defaultBbox,
     cacheTtlSeconds: config.cacheTtlSeconds,
+    staleIfErrorSeconds: config.staleIfErrorSeconds,
+    cacheMaxEntries: config.cacheMaxEntries,
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
     providers: [
