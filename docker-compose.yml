@@ -132,7 +132,7 @@ services:
 
   osm-importer:
     profiles: ["osm-import"]
-    image: osm2pgsql/osm2pgsql:latest
+    image: iboates/osm2pgsql:latest
     container_name: delta-acr-osm-importer
     depends_on:
       osm-postgis:
