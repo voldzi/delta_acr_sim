@@ -41,13 +41,12 @@ export class SituationAggregationService {
 
     const sourceDescriptors = enabledSources.map((source) => source.descriptor);
     const sourcePriorityById = new Map<SituationDataSourceId, number>(sourceDescriptors.map((source) => [source.sourceId, source.priority]));
-    const features = deduplicateFeatures(
+    const deduplicatedFeatures = deduplicateFeatures(
       results.flatMap((result) => result.features),
       sourcePriorityById,
       this.config.staleAfterSeconds
-    )
-      .filter((feature) => query.layers.includes(feature.properties.layer))
-      .slice(0, query.limit);
+    ).filter((feature) => query.layers.includes(feature.properties.layer));
+    const features = limitBalancedByLayer(deduplicatedFeatures, query.layers, query.limit);
 
     const generatedAt = new Date().toISOString();
     const response: SituationFeatureCollection = {
@@ -79,6 +78,41 @@ export class SituationAggregationService {
     this.cache.set(cacheKey, { expiresAtMs: Date.now() + this.config.cacheTtlSeconds * 1000, response });
     return response;
   }
+}
+
+function limitBalancedByLayer(features: SituationFeature[], layers: SituationLayerId[], limit: number): SituationFeature[] {
+  if (features.length <= limit) {
+    return features;
+  }
+
+  const buckets = new Map<SituationLayerId, SituationFeature[]>();
+  for (const layer of layers) {
+    buckets.set(
+      layer,
+      features.filter((feature) => feature.properties.layer === layer)
+    );
+  }
+
+  const selected: SituationFeature[] = [];
+  while (selected.length < limit) {
+    let added = false;
+    for (const layer of layers) {
+      const next = buckets.get(layer)?.shift();
+      if (!next) {
+        continue;
+      }
+      selected.push(next);
+      added = true;
+      if (selected.length >= limit) {
+        break;
+      }
+    }
+    if (!added) {
+      break;
+    }
+  }
+
+  return selected;
 }
 
 function deduplicateFeatures(
@@ -122,7 +156,8 @@ function compareFeaturePriority(
 
 function markStale(feature: SituationFeature, staleAfterSeconds: number): SituationFeature {
   const ageSeconds = Math.max(0, Math.round((Date.now() - Date.parse(feature.properties.observedAt)) / 1000));
-  const stale = ageSeconds > staleAfterSeconds;
+  const validUntilMs = feature.properties.validUntil ? Date.parse(feature.properties.validUntil) : undefined;
+  const stale = typeof validUntilMs === "number" && !Number.isNaN(validUntilMs) ? Date.now() > validUntilMs : ageSeconds > staleAfterSeconds;
   return {
     ...feature,
     properties: {

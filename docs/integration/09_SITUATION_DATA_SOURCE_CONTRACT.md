@@ -44,11 +44,11 @@ GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile,traffi
     "bbox": { "west": 13.85, "south": 49.65, "east": 15.35, "north": 50.45 },
     "layers": ["weather", "ground", "mobile", "traffic"],
     "limit": 250,
-    "sources": ["mock", "open_meteo"]
+    "sources": ["open_meteo", "ctu_nettest", "pid_gtfs_rt"]
   },
   "summary": {
-    "featureCount": 8,
-    "sourceCount": 2,
+    "featureCount": 250,
+    "sourceCount": 3,
     "staleFeatureCount": 0,
     "warningCount": 0
   },
@@ -88,5 +88,5 @@ Každá feature musí mít tyto normalizované vlastnosti:
 
 - Dotazovat podle bbox aktuální mapy, ne plošně celou ČR.
 - Default `limit=250`.
-- Weather a mobile vrstvy zobrazovat jako kontext, ne jako track historii.
+- Weather, mobile a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COP tracky ani letecké cíle.
 - U každého objektu zobrazovat zdroj a licenci.

@@ -8,8 +8,10 @@ SIM má poskytovat COPu doplňkové vrstvy, které rozšiřují vzdušný obraz 
 | --- | --- | --- | --- |
 | `weather` | Open-Meteo Forecast API | vhodné jako první live zdroj bez klíče | Free API je nekomerční, data pod CC BY 4.0 podmínkami, komerční použití přes placený tarif |
 | `ground` | OpenStreetMap přes Overpass API | vhodné pro malé bbox dotazy a referenční POI | ODbL 1.0, atribuce a share-alike povinnosti pro databáze; veřejné Overpass instance mají fair-use limity |
-| `mobile` | ČTÚ otevřená data, ČTÚ-NetTest, mapa internetu, OpenCellID, M-Lab | vhodné pro referenční a periodické vrstvy, ne pro real-time výpadky operátorů | ČTÚ metadata uvádí licenci u datasetu, často CC BY 4.0; OpenCellID CC BY-SA 4.0; M-Lab CC0 |
-| `traffic` | JSDI/NDIC/DATEX II, PID GTFS/GTFS-RT | vhodné pro dopravní kontext po dopracování konektorů | podmínky je nutné ověřit pro konkrétní distribuci a způsob odběru |
+| `mobile` | ČTÚ NetTest open-data ZIP export | implementováno jako live/periodický zdroj `ctu_nettest`; vhodné pro kontext kvality mobilní sítě, ne pro real-time výpadky operátorů | CC BY 4.0 podle exportu; nutná atribuce a práce s anonymizací/accuracy |
+| `traffic` | PID/Golemio GTFS-RT vehicle positions | implementováno jako live zdroj `pid_gtfs_rt` pro pohyb veřejné dopravy v Praze a okolí | open-data podmínky PID/Golemio; nutná atribuce, bez garance operační dostupnosti |
+| `mobile` | OpenCellID, M-Lab | kandidáti pro další rozšíření | OpenCellID CC BY-SA 4.0; M-Lab CC0 |
+| `traffic` | JSDI/NDIC/DATEX II | kandidát pro dopravní incidenty po potvrzení licence a způsobu přístupu | podmínky je nutné ověřit pro konkrétní distribuci a způsob odběru |
 
 ## Důležité omezení mobilní sítě
 
@@ -30,6 +32,8 @@ Veřejný real-time zdroj stavu BTS nebo aktuálních výpadků mobilních oper�
 - ČTÚ Open Data API: https://data.ctu.gov.cz/api
 - ČTÚ mobilní sítě: https://data.ctu.gov.cz/tags/mobilni-site
 - ČTÚ NetTest dataset detail: https://data.ctu.gov.cz/dataset/nettest
+- ČTÚ NetTest Open Data: https://nettest.ctu.gov.cz/en/Opendata
+- PID/Golemio API docs: https://api.golemio.cz/pid/docs/openapi/
 - OpenCellID licence: https://wiki.opencellid.org/wiki/Licensing:
 - M-Lab FAQ/licence: https://www.measurementlab.net/frequently-asked-questions/
 - PID Open Data: https://pid.cz/o-systemu/opendata/

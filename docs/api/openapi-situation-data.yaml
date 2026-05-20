@@ -104,7 +104,7 @@ components:
       required: false
       schema:
         type: string
-        example: mock,open_meteo
+        example: open_meteo,ctu_nettest,pid_gtfs_rt
     Limit:
       name: limit
       in: query
@@ -136,7 +136,7 @@ components:
       enum: [weather, ground, mobile, traffic]
     SourceId:
       type: string
-      enum: [mock, open_meteo, osm_overpass]
+      enum: [mock, open_meteo, osm_overpass, ctu_nettest, pid_gtfs_rt]
     BoundingBox:
       type: object
       required: [west, south, east, north]

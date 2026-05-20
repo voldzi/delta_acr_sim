@@ -139,7 +139,7 @@ function parseLayers(value: unknown): SituationLayerId[] {
 }
 
 function parseSources(value: unknown, fallback: SituationDataSourceId[]): SituationDataSourceId[] {
-  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass"]);
+  const allowed = new Set<SituationDataSourceId>(["mock", "open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt"]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -181,7 +181,9 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     providers: [
       { sourceId: "mock", authConfigured: true },
       { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
-      { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true }
+      { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
+      { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
+      { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true }
     ]
   };
 }

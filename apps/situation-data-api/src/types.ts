@@ -1,5 +1,5 @@
 export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic";
-export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass";
+export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass" | "ctu_nettest" | "pid_gtfs_rt";
 export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
 

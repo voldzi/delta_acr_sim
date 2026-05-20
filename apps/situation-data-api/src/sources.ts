@@ -1,3 +1,6 @@
+import { unzipSync } from "fflate";
+import gtfsRealtime from "gtfs-realtime-bindings";
+import type { transit_realtime } from "gtfs-realtime-bindings";
 import type { SituationDataConfig } from "./config.js";
 import type {
   BoundingBox,
@@ -51,11 +54,39 @@ const OSM_LICENSE: SituationDataLicense = {
   ]
 };
 
+const CTU_NETTEST_LICENSE: SituationDataLicense = {
+  name: "CC BY 4.0",
+  url: "https://nettest.ctu.gov.cz/en/Opendata",
+  attribution: "Czech Telecommunication Office / CTU-NetTest",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Attribution is required.",
+    "Crowdsourced measurements are useful for context, not as authoritative outage detection.",
+    "Locations can be anonymized or accuracy-limited."
+  ]
+};
+
+const PID_GTFS_RT_LICENSE: SituationDataLicense = {
+  name: "PID/Golemio Open Data",
+  url: "https://api.golemio.cz/pid/docs/openapi/",
+  attribution: "Prague Integrated Transport / Golemio Prague Data Platform",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Attribution and source-specific open-data terms apply.",
+    "GTFS-RT vehicle positions are operational context, not an authoritative emergency source.",
+    "Feed availability and cadence can change without notice."
+  ]
+};
+
 export function createSituationDataSources(config: SituationDataConfig): SituationDataSource[] {
   const allSources: Record<SituationDataSourceId, SituationDataSource> = {
     mock: new MockSituationDataSource(),
     open_meteo: new OpenMeteoSource(config),
-    osm_overpass: new OsmOverpassSource(config)
+    osm_overpass: new OsmOverpassSource(config),
+    ctu_nettest: new CtuNettestSource(config),
+    pid_gtfs_rt: new PidGtfsRtSource(config)
   };
 
   return config.enabledSources.map((sourceId) => allSources[sourceId]);
@@ -66,7 +97,9 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
   return [
     new MockSituationDataSource().descriptor,
     new OpenMeteoSource(config).descriptor,
-    new OsmOverpassSource(config).descriptor
+    new OsmOverpassSource(config).descriptor,
+    new CtuNettestSource(config).descriptor,
+    new PidGtfsRtSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
@@ -225,6 +258,100 @@ class OsmOverpassSource implements SituationDataSource {
   }
 }
 
+class CtuNettestSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.descriptor = {
+      sourceId: "ctu_nettest",
+      label: "CTU NetTest mobile measurements",
+      enabled: config.enabledSources.includes("ctu_nettest"),
+      mode: "live",
+      priority: 65,
+      layers: ["mobile"],
+      license: CTU_NETTEST_LICENSE,
+      baseUrl: config.ctuNettestUrl,
+      updateCadenceSeconds: 3600
+    };
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("mobile")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const archive = await requestBytes(this.config.ctuNettestUrl, this.config.requestTimeoutMs);
+    const files = unzipSync(archive);
+    const csvName = Object.keys(files).find((name) => name.toLowerCase().endsWith(".csv"));
+    if (!csvName) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: ["ctu_nettest archive did not contain a CSV file."] };
+    }
+
+    const csvFile = files[csvName];
+    if (!csvFile) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: ["ctu_nettest CSV file was empty."] };
+    }
+
+    const records = parseCsvRecords(new TextDecoder().decode(csvFile));
+    const features: SituationFeature[] = [];
+    for (const record of records) {
+      if (features.length >= query.limit) {
+        break;
+      }
+      const feature = mapCtuNettestRecord(record, query, fetchedAt);
+      if (feature) {
+        features.push(feature);
+      }
+    }
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
+class PidGtfsRtSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.descriptor = {
+      sourceId: "pid_gtfs_rt",
+      label: "PID GTFS-RT vehicle positions",
+      enabled: config.enabledSources.includes("pid_gtfs_rt"),
+      mode: "live",
+      priority: 75,
+      layers: ["traffic"],
+      license: PID_GTFS_RT_LICENSE,
+      baseUrl: config.pidGtfsRtVehiclePositionsUrl,
+      updateCadenceSeconds: 20
+    };
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("traffic")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const payload = await requestBytes(this.config.pidGtfsRtVehiclePositionsUrl, this.config.requestTimeoutMs, {
+      accept: "application/x-protobuf,application/octet-stream"
+    });
+    const feed = gtfsRealtime.transit_realtime.FeedMessage.decode(payload);
+    const features: SituationFeature[] = [];
+
+    for (const entity of feed.entity ?? []) {
+      if (features.length >= query.limit) {
+        break;
+      }
+      const feature = mapPidVehiclePosition(entity, query, fetchedAt);
+      if (feature) {
+        features.push(feature);
+      }
+    }
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
 interface FeatureInput {
   id: string;
   lon: number;
@@ -366,6 +493,121 @@ function mockFeatures(observedAt: string): SituationFeature[] {
   ];
 }
 
+function mapCtuNettestRecord(record: Record<string, string>, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+  if (!isCtuMobileMeasurement(record)) {
+    return undefined;
+  }
+
+  const lat = optionalNumber(record.lat);
+  const lon = optionalNumber(record.long);
+  if (lat === undefined || lon === undefined || !isPointInBbox(lon, lat, query.bbox)) {
+    return undefined;
+  }
+
+  const observedAt = parseUtcTimestamp(record.time_utc) ?? fetchedAt;
+  const locationAccuracyM = optionalNumber(record.loc_accuracy);
+  const downloadMbps = kbpsToMbps(optionalNumber(record.download_kbit));
+  const uploadMbps = kbpsToMbps(optionalNumber(record.upload_kbit));
+  const latencyMs = optionalNumber(record.ping_ms);
+  const lteRsrpDbm = optionalNumber(record.lte_rsrp);
+  const lteRsrqDb = optionalNumber(record.lte_rsrq);
+  const signalStrengthDbm = optionalNumber(record.signal_strength);
+  const implausible = record.implausible === "true";
+  const accessTechnology = ctuAccessTechnology(record);
+  const measurementId = stableToken(record.open_test_uuid || record.open_uuid || `${observedAt}:${lat}:${lon}`);
+
+  return makePointFeature({
+    id: `mobile:ctu_nettest:${measurementId}`,
+    lon,
+    lat,
+    layer: "mobile",
+    category: "network_measurement",
+    label: `CTU NetTest ${accessTechnology}`,
+    sourceId: "ctu_nettest",
+    license: CTU_NETTEST_LICENSE,
+    observedAt,
+    validUntil: addSeconds(observedAt, 72 * 60 * 60),
+    confidence: ctuNettestConfidence(locationAccuracyM, implausible, downloadMbps),
+    severity: mobileNetworkSeverity(downloadMbps, uploadMbps, latencyMs, lteRsrpDbm ?? signalStrengthDbm, implausible),
+    metrics: compactMetrics({
+      downloadMbps,
+      uploadMbps,
+      latencyMs,
+      lteRsrpDbm,
+      lteRsrqDb,
+      signalStrengthDbm,
+      locationAccuracyM,
+      serverDurationSeconds: optionalNumber(record.test_duration)
+    }),
+    tags: compactTags({
+      accessTechnology,
+      catTechnology: optionalString(record.cat_technology),
+      networkType: optionalString(record.network_type),
+      networkName: optionalString(record.network_name),
+      platform: optionalString(record.platform),
+      client: optionalString(record.model || record.client_version),
+      serverName: optionalString(record.server_name),
+      locationSource: optionalString(record.loc_src),
+      implausible: implausible ? "true" : undefined
+    }),
+    raw: query.includeRaw ? record : undefined
+  });
+}
+
+function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+  const vehicle = entity.vehicle;
+  const position = vehicle?.position;
+  const lat = optionalNumber(position?.latitude);
+  const lon = optionalNumber(position?.longitude);
+  if (lat === undefined || lon === undefined || !isPointInBbox(lon, lat, query.bbox)) {
+    return undefined;
+  }
+
+  const vehicleId = optionalString(vehicle?.vehicle?.id) ?? entity.id;
+  const mode = pidVehicleMode(vehicleId, vehicle?.trip?.routeId);
+  const routeLabel = pidRouteLabel(vehicle?.trip?.routeId, vehicleId);
+  const timestampSeconds = longToNumber(vehicle?.timestamp);
+  const observedAt = timestampSeconds && timestampSeconds > 0 ? new Date(timestampSeconds * 1000).toISOString() : fetchedAt;
+
+  return makePointFeature({
+    id: `traffic:pid_gtfs_rt:${stableToken(vehicleId || entity.id)}`,
+    lon,
+    lat,
+    layer: "traffic",
+    category: mode.category,
+    label: routeLabel ? `PID ${mode.label} ${routeLabel}` : `PID ${mode.label}`,
+    sourceId: "pid_gtfs_rt",
+    license: PID_GTFS_RT_LICENSE,
+    observedAt,
+    validUntil: addSeconds(observedAt, 120),
+    confidence: pidPositionConfidence(observedAt),
+    severity: pidTrafficSeverity(vehicle?.congestionLevel),
+    metrics: compactMetrics({
+      speedMps: optionalNumber(position?.speed),
+      headingDeg: optionalNumber(position?.bearing),
+      odometerM: optionalNumber(position?.odometer),
+      currentStopSequence: optionalNumber(vehicle?.currentStopSequence),
+      occupancyPercent: optionalNumber(vehicle?.occupancyPercentage),
+      routeTypeCode: mode.routeTypeCode
+    }),
+    tags: compactTags({
+      vehicleId: optionalString(vehicleId),
+      vehicleLabel: optionalString(vehicle?.vehicle?.label),
+      tripId: optionalString(vehicle?.trip?.tripId),
+      routeId: optionalString(vehicle?.trip?.routeId),
+      route: optionalString(routeLabel),
+      startDate: optionalString(vehicle?.trip?.startDate),
+      startTime: optionalString(vehicle?.trip?.startTime),
+      stopId: optionalString(vehicle?.stopId),
+      currentStatus: pidVehicleStopStatus(vehicle?.currentStatus),
+      congestionLevel: pidCongestionLevel(vehicle?.congestionLevel),
+      occupancyStatus: pidOccupancyStatus(vehicle?.occupancyStatus),
+      transportMode: mode.tag
+    }),
+    raw: query.includeRaw ? entity : undefined
+  });
+}
+
 interface OpenMeteoResponse {
   current?: Record<string, unknown>;
   current_units?: Record<string, string>;
@@ -395,10 +637,25 @@ async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestBytes(url: string, timeoutMs: number, headers?: Record<string, string>): Promise<Uint8Array> {
+  const response = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
 async function requestOverpass(baseUrl: string, query: string, timeoutMs: number): Promise<OverpassResponse> {
   const response = await fetch(baseUrl, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      accept: "application/json",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "delta-acr-sim-situation-data/0.1"
+    },
     body: new URLSearchParams({ data: query }),
     signal: AbortSignal.timeout(timeoutMs)
   });
@@ -406,6 +663,74 @@ async function requestOverpass(baseUrl: string, query: string, timeoutMs: number
     throw new Error(`HTTP ${response.status} from ${new URL(baseUrl).hostname}`);
   }
   return (await response.json()) as OverpassResponse;
+}
+
+function parseCsvRecords(text: string): Array<Record<string, string>> {
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = detectDelimiter(firstLine);
+  const rows = parseDelimitedRows(text, delimiter).filter((row) => row.some((cell) => cell.trim().length > 0));
+  const headers = rows[0]?.map((header) => header.replace(/^\uFEFF/, "").trim());
+  if (!headers || headers.length === 0) {
+    return [];
+  }
+
+  return rows.slice(1).map((row) => {
+    const record: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      record[header] = row[index]?.trim() ?? "";
+    });
+    return record;
+  });
+}
+
+function parseDelimitedRows(text: string, delimiter: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === '"' && inQuotes && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === delimiter && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") {
+        index += 1;
+      }
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function detectDelimiter(headerLine: string): string {
+  const candidates = [",", ";", "\t"];
+  return candidates
+    .map((delimiter) => ({ delimiter, count: headerLine.split(delimiter).length }))
+    .sort((a, b) => b.count - a.count)[0]?.delimiter ?? ",";
 }
 
 function overpassQuery(bbox: BoundingBox): string {
@@ -548,9 +873,235 @@ function normalizeOpenMeteoTime(value: unknown): string | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
+function parseUtcTimestamp(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const withZone = trimmed.includes("T") ? trimmed : `${trimmed.replace(" ", "T")}Z`;
+  const date = new Date(withZone.endsWith("Z") ? withZone : `${withZone}Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function addSeconds(isoTimestamp: string, seconds: number): string {
+  const base = Date.parse(isoTimestamp);
+  const date = Number.isNaN(base) ? new Date() : new Date(base + seconds * 1000);
+  return date.toISOString();
+}
+
 function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined;
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function kbpsToMbps(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : round(value / 1000, 2);
+}
+
+function isPointInBbox(lon: number, lat: number, bbox: BoundingBox): boolean {
+  return lon >= bbox.west && lon <= bbox.east && lat >= bbox.south && lat <= bbox.north;
+}
+
+function isCtuMobileMeasurement(record: Record<string, string>): boolean {
+  const cat = (record.cat_technology ?? "").toUpperCase();
+  const networkType = (record.network_type ?? "").toUpperCase();
+  const combined = `${cat} ${networkType}`;
+  if (["LAN", "WLAN", "ETHERNET", "BLUETOOTH"].some((blocked) => cat === blocked || networkType === blocked)) {
+    return false;
+  }
+  return /\b(MOBILE|CELLULAR|2G|3G|4G|5G|LTE|NR|EDGE|GPRS|UMTS|HSPA)\b/.test(combined);
+}
+
+function ctuAccessTechnology(record: Record<string, string>): string {
+  return optionalString(record.cat_technology) ?? optionalString(record.network_type) ?? "mobile";
+}
+
+function mobileNetworkSeverity(
+  downloadMbps: number | undefined,
+  uploadMbps: number | undefined,
+  latencyMs: number | undefined,
+  signalDbm: number | undefined,
+  implausible: boolean
+): SituationSeverity {
+  if ((downloadMbps ?? Infinity) < 1 || (uploadMbps ?? Infinity) < 0.5 || (latencyMs ?? 0) > 250 || (signalDbm ?? 0) < -118) {
+    return "critical";
+  }
+  if ((downloadMbps ?? Infinity) < 5 || (uploadMbps ?? Infinity) < 1.5 || (latencyMs ?? 0) > 150 || (signalDbm ?? 0) < -110) {
+    return "warning";
+  }
+  if (implausible || (downloadMbps ?? Infinity) < 15 || (uploadMbps ?? Infinity) < 5 || (latencyMs ?? 0) > 75 || (signalDbm ?? 0) < -100) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function ctuNettestConfidence(locationAccuracyM: number | undefined, implausible: boolean, downloadMbps: number | undefined): number {
+  let confidence = 0.8;
+  if (locationAccuracyM === undefined) {
+    confidence -= 0.18;
+  } else if (locationAccuracyM > 500) {
+    confidence -= 0.25;
+  } else if (locationAccuracyM > 100) {
+    confidence -= 0.12;
+  }
+  if (implausible) {
+    confidence -= 0.35;
+  }
+  if (downloadMbps === undefined) {
+    confidence -= 0.1;
+  }
+  return clamp(confidence, 0.2, 0.88);
+}
+
+function pidVehicleMode(
+  vehicleId: string | undefined,
+  routeId: string | null | undefined
+): { category: string; label: string; tag: string; routeTypeCode?: number } {
+  const normalizedVehicleId = vehicleId?.toLowerCase() ?? "";
+  const serviceMatch = normalizedVehicleId.match(/^service-(\d+)-/);
+  const routeTypeCode = serviceMatch ? Number(serviceMatch[1]) : undefined;
+  if (routeTypeCode !== undefined) {
+    return pidModeFromRouteType(routeTypeCode);
+  }
+  if (normalizedVehicleId.startsWith("metro-") || /^L?[ABC]$/i.test(routeId ?? "")) {
+    return pidModeFromRouteType(1);
+  }
+  if (normalizedVehicleId.startsWith("train-")) {
+    return pidModeFromRouteType(2);
+  }
+  if (normalizedVehicleId.startsWith("tram-")) {
+    return pidModeFromRouteType(0);
+  }
+  return pidModeFromRouteType(3);
+}
+
+function pidModeFromRouteType(routeTypeCode: number): { category: string; label: string; tag: string; routeTypeCode: number } {
+  switch (routeTypeCode) {
+    case 0:
+      return { category: "public_transport_tram", label: "tram", tag: "tram", routeTypeCode };
+    case 1:
+      return { category: "public_transport_metro", label: "metro", tag: "metro", routeTypeCode };
+    case 2:
+      return { category: "public_transport_train", label: "train", tag: "train", routeTypeCode };
+    case 11:
+      return { category: "public_transport_trolleybus", label: "trolleybus", tag: "trolleybus", routeTypeCode };
+    case 3:
+    default:
+      return { category: "public_transport_bus", label: "bus", tag: "bus", routeTypeCode };
+  }
+}
+
+function pidRouteLabel(routeId: string | null | undefined, vehicleId: string | undefined): string | undefined {
+  const route = optionalString(routeId)?.replace(/^L(?=[A-Z0-9])/i, "");
+  if (route) {
+    return route;
+  }
+  const metroMatch = vehicleId?.match(/^metro-([A-Z])-/i);
+  return metroMatch?.[1]?.toUpperCase();
+}
+
+function pidTrafficSeverity(value: transit_realtime.VehiclePosition.CongestionLevel | null | undefined): SituationSeverity {
+  switch (value) {
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.SEVERE_CONGESTION:
+      return "critical";
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.CONGESTION:
+      return "warning";
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.STOP_AND_GO:
+      return "advisory";
+    default:
+      return "info";
+  }
+}
+
+function pidPositionConfidence(observedAt: string): number {
+  const ageSeconds = Math.max(0, (Date.now() - Date.parse(observedAt)) / 1000);
+  if (ageSeconds <= 60) {
+    return 0.88;
+  }
+  if (ageSeconds <= 180) {
+    return 0.76;
+  }
+  return 0.55;
+}
+
+function pidVehicleStopStatus(value: transit_realtime.VehiclePosition.VehicleStopStatus | null | undefined): string | undefined {
+  switch (value) {
+    case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.INCOMING_AT:
+      return "incoming_at";
+    case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.STOPPED_AT:
+      return "stopped_at";
+    case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.IN_TRANSIT_TO:
+      return "in_transit_to";
+    default:
+      return undefined;
+  }
+}
+
+function pidCongestionLevel(value: transit_realtime.VehiclePosition.CongestionLevel | null | undefined): string | undefined {
+  switch (value) {
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.RUNNING_SMOOTHLY:
+      return "running_smoothly";
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.STOP_AND_GO:
+      return "stop_and_go";
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.CONGESTION:
+      return "congestion";
+    case gtfsRealtime.transit_realtime.VehiclePosition.CongestionLevel.SEVERE_CONGESTION:
+      return "severe_congestion";
+    default:
+      return undefined;
+  }
+}
+
+function pidOccupancyStatus(value: transit_realtime.VehiclePosition.OccupancyStatus | null | undefined): string | undefined {
+  switch (value) {
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.EMPTY:
+      return "empty";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.MANY_SEATS_AVAILABLE:
+      return "many_seats_available";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.FEW_SEATS_AVAILABLE:
+      return "few_seats_available";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.STANDING_ROOM_ONLY:
+      return "standing_room_only";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.CRUSHED_STANDING_ROOM_ONLY:
+      return "crushed_standing_room_only";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.FULL:
+      return "full";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.NOT_ACCEPTING_PASSENGERS:
+      return "not_accepting_passengers";
+    case gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.NOT_BOARDABLE:
+      return "not_boardable";
+    default:
+      return undefined;
+  }
+}
+
+function longToNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "object" && value !== null && "toNumber" in value && typeof value.toNumber === "function") {
+    const parsed = value.toNumber();
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function stableToken(value: string): string {
+  return value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 96);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function compactMetrics(values: Record<string, number | undefined>): Record<string, number> | undefined {

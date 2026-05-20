@@ -6,7 +6,9 @@
 2. Implementovat vrstvy:
    - `mock`: stabilní testovací features pro ground/mobile/traffic/weather,
    - `open_meteo`: live weather feature pro střed bbox,
-   - `osm_overpass`: volitelný live ground provider pro malé bbox dotazy.
+   - `osm_overpass`: volitelný live ground provider pro malé bbox dotazy,
+   - `ctu_nettest`: live/periodický ČTÚ NetTest ZIP export pro mobilní měření,
+   - `pid_gtfs_rt`: live PID/Golemio GTFS-RT vozidla pro dopravní kontext.
 3. Přidat endpointy:
    - `GET /api/v1/layers`
    - `GET /api/v1/sources`
@@ -19,13 +21,13 @@
    - `/situation-data/metrics`
 5. Doplnit panel v SIM pro dohled nad stavem sběru, zdroji, licencemi, počtem features, warnings a preview.
 
-## Fáze 2: Reálné síťové a dopravní vrstvy
+## Fáze 2: Další síťové a dopravní vrstvy
 
-1. Přidat konektor pro ČTÚ DKAN metadata a vybrané CSV/ZIP datasety.
+1. Přidat ČTÚ DKAN metadata discovery, aby SIM uměla hlídat změnu URL/exportu a licence.
 2. Přidat importní job pro OpenCellID nebo lokálně uložený výřez databáze buněk.
 3. Přidat M-Lab agregace z BigQuery/exportů pro výkon sítě.
 4. Přidat JSDI/NDIC/DATEX II konektor pro dopravní incidenty po potvrzení licence a způsobu přístupu.
-5. Přidat PID GTFS-RT vozidla/alerts pro Prahu a Středočeský kraj.
+5. Přidat PID GTFS-RT alerts jako samostatné dopravní incidenty.
 
 ## Provozní zásady
 

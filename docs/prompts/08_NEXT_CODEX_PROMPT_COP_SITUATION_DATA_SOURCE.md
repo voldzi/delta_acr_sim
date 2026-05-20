@@ -13,6 +13,13 @@ Uprav COP tak, aby uměl načítat, zobrazovat a provozně hlídat externí situ
 
 COP musí tyto vrstvy zobrazovat jako doplňkový kontext, ne jako vlastní COP tracky letadel. Tracky z `/flight-data/api/v1/cop/tracks` zůstávají samostatný vzdušný zdroj.
 
+Aktuálně jsou v SIM zapnuté reálné zdroje:
+
+- `open_meteo`: počasí pro střed bbox,
+- `osm_overpass`: referenční pozemní objekty a komunikační věže pro malé bbox,
+- `ctu_nettest`: ČTÚ NetTest mobilní měření,
+- `pid_gtfs_rt`: PID/Golemio GTFS-RT vozidla veřejné dopravy jako živý dopravní kontext.
+
 ## Očekávaný kontrakt
 
 ```http
@@ -36,8 +43,8 @@ Odpověď:
     "limit": 250
   },
   "summary": {
-    "featureCount": 12,
-    "sourceCount": 3,
+    "featureCount": 250,
+    "sourceCount": 4,
     "staleFeatureCount": 0,
     "warningCount": 0
   },
@@ -80,10 +87,10 @@ Odpověď:
    - `weather`: bodové počasí, vítr, srážky, případně výstražná barva podle `severity`
    - `ground`: pozemní referenční objekty a infrastruktura
    - `mobile`: dostupnost/kvalita mobilní sítě a měřicí body
-   - `traffic`: dopravní incidenty, uzavírky, omezení nebo testovací dopravní kontext
+   - `traffic`: dopravní incidenty, omezení nebo živá vozidla PID z `pid_gtfs_rt`
 3. Přidej toggly vrstev. Výchozí stav: `weather` zapnuto, ostatní volitelné podle výkonu mapy.
 4. V detailu objektu zobraz `label`, `category`, `sourceId`, čas `observedAt`, `confidence`, `stale`, licenci a klíčové `metrics`.
-5. Nevykresluj tyto features jako COP track historii. Jsou to kontextové objekty, většinou statické nebo pomalu proměnné.
+5. Nevykresluj tyto features jako COP track historii. `pid_gtfs_rt` může mít pohybující se body, ale jde o civilní dopravní kontext oddělený od COP tracků.
 6. Když endpoint vrátí `warnings`, zobraz nenápadný stav zdroje. Warnings nesmí shodit mapu.
 7. Když endpoint není dostupný, COP musí běžet dál a jen označit zdroj jako degraded/offline.
 
@@ -111,5 +118,6 @@ Data ze SIM mohou kombinovat zdroje s různými licencemi:
 - Open-Meteo Free API: nekomerční režim a CC BY 4.0 podmínky, komerční režim vyžaduje placený tarif.
 - OpenStreetMap/Overpass: ODbL 1.0 a férové použití veřejných Overpass instancí.
 - ČTÚ otevřená data: licence se liší podle datasetu, často CC BY 4.0; u každého zdroje používej metadata z `sources`.
+- PID/Golemio GTFS-RT: používej metadata z `sources`, atribuci zobraz v detailu nebo v panelu zdrojů.
 
 COP má zobrazovat atribuci a nesmí v UI tvrdit, že jde o garantovaná operační data.

@@ -23,7 +23,9 @@ describe("Situation Data API contract", () => {
       staleAfterSeconds: 900,
       openMeteoBaseUrl: "https://api.open-meteo.com",
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
-      overpassMaxBboxDegrees: 1.2
+      overpassMaxBboxDegrees: 1.6,
+      ctuNettestUrl: "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
+      pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb"
     };
     ({ app } = await createApp(config));
   });
@@ -60,6 +62,14 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "osm_overpass",
           license: expect.objectContaining({ name: "ODbL 1.0" })
+        }),
+        expect.objectContaining({
+          sourceId: "ctu_nettest",
+          license: expect.objectContaining({ name: "CC BY 4.0" })
+        }),
+        expect.objectContaining({
+          sourceId: "pid_gtfs_rt",
+          layers: expect.arrayContaining(["traffic"])
         })
       ])
     );
@@ -76,7 +86,9 @@ describe("Situation Data API contract", () => {
         staleAfterSeconds: 900,
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
-          expect.objectContaining({ sourceId: "open_meteo", authConfigured: true })
+          expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
+          expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
+          expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true })
         ])
       })
     );
@@ -113,6 +125,15 @@ describe("Situation Data API contract", () => {
 
     expect(response.body.features.length).toBeGreaterThan(0);
     expect(response.body.features.every((feature: { properties: { layer: string } }) => feature.properties.layer === "mobile")).toBe(true);
+  });
+
+  it("keeps layers represented when a low limit is requested", async () => {
+    const response = await request(app)
+      .get("/api/v1/features?layers=weather,ground,mobile,traffic&source=mock&limit=4")
+      .expect(200);
+
+    const layers = new Set(response.body.features.map((feature: { properties: { layer: string } }) => feature.properties.layer));
+    expect(layers).toEqual(new Set(["weather", "ground", "mobile", "traffic"]));
   });
 
   it("validates bbox and layers", async () => {

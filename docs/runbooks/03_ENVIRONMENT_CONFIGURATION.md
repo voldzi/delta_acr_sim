@@ -34,6 +34,8 @@
 - `OPEN_METEO_BASE_URL`
 - `OVERPASS_BASE_URL`
 - `OVERPASS_MAX_BBOX_DEGREES`
+- `CTU_NETTEST_URL`
+- `PID_GTFS_RT_VEHICLE_POSITIONS_URL`
 
 ## Pravidla
 
@@ -72,18 +74,24 @@ Výchozí bezpečná konfigurace:
 SITUATION_DATA_ENABLED_SOURCES=mock
 ```
 
-Pilot s živým počasím:
+Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=mock,open_meteo
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_AFTER_SECONDS=900
+SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
+OPEN_METEO_BASE_URL=https://api.open-meteo.com
+OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
+OVERPASS_MAX_BBOX_DEGREES=1.6
+CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
+PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
 ```
 
 OpenStreetMap/Overpass zapínej pouze pro malé mapové výřezy a s konzervativní kadencí:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=mock,open_meteo,osm_overpass
-OVERPASS_MAX_BBOX_DEGREES=1.2
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass
+OVERPASS_MAX_BBOX_DEGREES=1.6
 ```
