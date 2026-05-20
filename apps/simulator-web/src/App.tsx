@@ -5,10 +5,13 @@ import {
   CheckCircle2,
   CirclePause,
   CirclePlay,
+  CloudSun,
   Database,
   ExternalLink,
   FlaskConical,
   Gauge,
+  Layers3,
+  MapPinned,
   Pause,
   Plane,
   Play,
@@ -46,12 +49,19 @@ import type {
   QueueItem,
   RuntimeStatus,
   Scenario,
-  ScenarioBlock
+  ScenarioBlock,
+  SituationDataConfig,
+  SituationDataFeature,
+  SituationDataFeatureResponse,
+  SituationDataHealth,
+  SituationDataLayer,
+  SituationDataSource,
+  SituationLayerId
 } from "./types";
 
 type Tone = "safe" | "danger" | "active" | "neutral" | "warn";
 type AffiliationCategory = "own" | "foreign" | "other";
-type AppSection = "overview" | "scenario" | "flight-data" | "publisher" | "ai" | "safety";
+type AppSection = "overview" | "scenario" | "flight-data" | "situation-data" | "publisher" | "ai" | "safety";
 
 interface DashboardData {
   scenarios: Scenario[];
@@ -66,6 +76,13 @@ interface DashboardData {
     sources: FlightDataSource[];
     config: FlightDataConfig;
     tracks: FlightDataTrackResponse;
+  };
+  situationData: {
+    health: SituationDataHealth;
+    layers: SituationDataLayer[];
+    sources: SituationDataSource[];
+    config: SituationDataConfig;
+    features: SituationDataFeatureResponse;
   };
   warnings: string[];
 }
@@ -113,6 +130,32 @@ const emptyFlightTracks: FlightDataTrackResponse = {
   warnings: []
 };
 
+const emptySituationFeatures: SituationDataFeatureResponse = {
+  contractVersion: "cop-situation-source-v1",
+  type: "FeatureCollection",
+  generatedAt: new Date(0).toISOString(),
+  source: {
+    sourceId: "situation-data-api",
+    sourceType: "PUBLIC_SITUATION_AGGREGATE",
+    generatedAt: new Date(0).toISOString()
+  },
+  query: {
+    bbox: { west: 0, south: 0, east: 0, north: 0 },
+    layers: [],
+    limit: 0,
+    sources: []
+  },
+  summary: {
+    featureCount: 0,
+    sourceCount: 0,
+    staleFeatureCount: 0,
+    warningCount: 0
+  },
+  features: [],
+  sources: [],
+  warnings: []
+};
+
 export function App() {
   const [data, setData] = useState<DashboardData>({
     scenarios: [],
@@ -134,6 +177,20 @@ export function App() {
         providers: []
       },
       tracks: emptyFlightTracks
+    },
+    situationData: {
+      health: { status: "unknown", enabledSources: [] },
+      layers: [],
+      sources: [],
+      config: {
+        enabledSources: [],
+        defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
+        cacheTtlSeconds: 0,
+        staleAfterSeconds: 0,
+        requestTimeoutMs: 0,
+        providers: []
+      },
+      features: emptySituationFeatures
     },
     warnings: []
   });
@@ -180,6 +237,8 @@ export function App() {
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const situationDataTone: Tone =
+    data.situationData.health.status === "ok" ? (data.situationData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
   const activeSectionMeta = sectionMeta(activeSection);
 
   const readinessItems = [
@@ -221,6 +280,13 @@ export function App() {
       value: data.flightData.health.status.toUpperCase(),
       tone: flightDataTone,
       detail: `${data.flightData.tracks.summary.deduplicatedTrackCount} dedup tracks, ${data.flightData.config.enabledSources.join(", ") || "no source"}`
+    },
+    {
+      icon: <Layers3 />,
+      label: "Situation Data",
+      value: data.situationData.health.status.toUpperCase(),
+      tone: situationDataTone,
+      detail: `${data.situationData.features.summary.featureCount} features, ${data.situationData.config.enabledSources.join(", ") || "no source"}`
     }
   ];
 
@@ -275,6 +341,7 @@ export function App() {
           <NavButton section="overview" activeSection={activeSection} onSelect={setActiveSection} icon={<Gauge size={17} />} label="Overview" />
           <NavButton section="scenario" activeSection={activeSection} onSelect={setActiveSection} icon={<Activity size={17} />} label="Scenario" />
           <NavButton section="flight-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Plane size={17} />} label="Flight data" />
+          <NavButton section="situation-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Layers3 size={17} />} label="Situation data" />
           <NavButton section="publisher" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="Publisher" />
           <NavButton section="ai" activeSection={activeSection} onSelect={setActiveSection} icon={<Bot size={17} />} label="AI Assistant" />
           <NavButton section="safety" activeSection={activeSection} onSelect={setActiveSection} icon={<ShieldCheck size={17} />} label="Safety" />
@@ -312,6 +379,7 @@ export function App() {
               <Metric icon={<RadioTower />} label="Delivered events" value={data.runtime.publishedEvents} detail={`${deliveryRate} delivery`} />
               <Metric icon={<Database />} label="Active tracks" value={data.runtime.activeObjects ?? totalObjects} detail={`${totalObjects} configured`} />
               <Metric icon={<Plane />} label="Flight tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount} detail={`${data.flightData.tracks.summary.rawObservationCount} raw observations`} />
+              <Metric icon={<Layers3 />} label="Situation features" value={data.situationData.features.summary.featureCount} detail={`${data.situationData.layers.length} layers available`} />
             </section>
 
             <section id="readiness" className="operations-grid" aria-label="Operational readiness">
@@ -613,6 +681,81 @@ export function App() {
           </section>
           ) : null}
 
+          {activeSection === "situation-data" ? (
+          <section id="situation-data" className="panel situation-data-panel">
+            <PanelTitle icon={<Layers3 />} title="Situation Data source" subtitle="Aggregated public context layers prepared for the COP map." />
+
+            <div className="publisher-status">
+              <StatusPill label={data.situationData.health.status} tone={situationDataTone} />
+              <StatusPill label={data.situationData.features.contractVersion} tone="active" />
+              <StatusPill
+                label={`${data.situationData.features.summary.warningCount} warnings`}
+                tone={data.situationData.features.summary.warningCount > 0 ? "warn" : "neutral"}
+              />
+            </div>
+
+            <div className="publisher-stats situation-stats">
+              <PublisherStat label="Features" value={data.situationData.features.summary.featureCount.toLocaleString("cs-CZ")} tone="safe" />
+              <PublisherStat label="Sources" value={data.situationData.features.summary.sourceCount.toLocaleString("cs-CZ")} tone="neutral" />
+              <PublisherStat label="Stale" value={data.situationData.features.summary.staleFeatureCount.toLocaleString("cs-CZ")} tone={data.situationData.features.summary.staleFeatureCount > 0 ? "warn" : "neutral"} />
+              <PublisherStat label="Layers" value={data.situationData.layers.length.toLocaleString("cs-CZ")} tone="active" />
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration for public situation layers." />
+                <div className="settings-grid">
+                  <SummaryItem label="Enabled sources" value={data.situationData.config.enabledSources.join(", ") || "-"} />
+                  <SummaryItem label="Default bbox" value={formatBbox(data.situationData.config.defaultBbox)} />
+                  <SummaryItem label="Cache TTL" value={`${data.situationData.config.cacheTtlSeconds}s`} />
+                  <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
+                  <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
+                  <SummaryItem label="Query limit" value={`${data.situationData.features.query.limit || 0}`} />
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can toggle these layers independently from flight tracks." />
+                <div className="layer-list">
+                  {data.situationData.layers.map((layer) => (
+                    <SituationLayerRow key={layer.layerId} layer={layer} count={countSituationLayer(data.situationData.features.features, layer.layerId)} />
+                  ))}
+                  {data.situationData.layers.length === 0 ? <div className="empty-state">Situation layer metadata is not available.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License, mode and source coverage for situation data." />
+                <div className="source-list">
+                  {data.situationData.sources.map((source) => (
+                    <SituationSourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.situationData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
+                  ))}
+                  {data.situationData.sources.length === 0 ? <div className="empty-state">Situation source metadata is not available.</div> : null}
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<CloudSun />} title="COP feature preview" subtitle="GeoJSON features returned by /situation-data/api/v1/cop/features." />
+                <div className="situation-feature-list">
+                  {data.situationData.features.features.map((feature) => (
+                    <SituationFeatureRow key={feature.id} feature={feature} />
+                  ))}
+                  {data.situationData.features.features.length === 0 ? <div className="empty-state">No situation features are available from the configured sources.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            {data.situationData.features.warnings.length > 0 ? (
+              <div className="notice warn">
+                <AlertTriangle size={16} />
+                <span>{data.situationData.features.warnings.join(" ")}</span>
+              </div>
+            ) : null}
+          </section>
+          ) : null}
+
           {activeSection === "publisher" ? (
           <section id="publisher" className="panel publisher-panel">
             <PanelTitle icon={<RadioTower />} title="COP publisher" subtitle="Delivery state and recent canonical events." />
@@ -797,6 +940,71 @@ function FlightTrackRow({ track }: { track: FlightDataTrack }) {
       <div className="flight-track-tags">
         <StatusPill label={`${track.deduplication.mergedRecordCount} merged`} tone={track.deduplication.mergedRecordCount > 1 ? "active" : "neutral"} />
         <StatusPill label={track.quality.stale ? "stale" : "current"} tone={track.quality.stale ? "warn" : "safe"} />
+      </div>
+    </div>
+  );
+}
+
+function SituationLayerRow({ layer, count }: { layer: SituationDataLayer; count: number }) {
+  return (
+    <div className="layer-row">
+      <div>
+        <strong>{layer.label}</strong>
+        <span>{layer.description}</span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={layer.layerId} tone={layer.defaultVisible ? "active" : "neutral"} />
+        <StatusPill label={`${count} shown`} tone={count > 0 ? "safe" : "neutral"} />
+      </div>
+      <small>
+        {layer.geometryTypes.join(", ")}
+        {layer.expectedCadenceSeconds ? ` · ${formatCadence(layer.expectedCadenceSeconds)}` : ""}
+      </small>
+    </div>
+  );
+}
+
+function SituationSourceRow({ source, authConfigured }: { source: SituationDataSource; authConfigured: boolean }) {
+  return (
+    <div className="source-row">
+      <div>
+        <strong>{source.label}</strong>
+        <span>
+          {source.sourceId} · priority {source.priority} · {source.layers.join(", ")}
+        </span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={source.enabled ? "enabled" : "disabled"} tone={source.enabled ? "safe" : "neutral"} />
+        <StatusPill label={source.mode} tone={source.mode === "live" ? "active" : "neutral"} />
+        <StatusPill label={authConfigured ? "auth ok" : "no auth"} tone={authConfigured ? "safe" : "warn"} />
+      </div>
+      <div className="source-license">
+        <span>{source.license.name}</span>
+        <StatusPill label={source.license.commercialUse.replaceAll("_", " ")} tone={licenseTone(source.license.commercialUse)} />
+      </div>
+      <small>{source.license.attribution}</small>
+    </div>
+  );
+}
+
+function SituationFeatureRow({ feature }: { feature: SituationDataFeature }) {
+  return (
+    <div className={`situation-feature-row ${feature.properties.severity} ${feature.properties.stale ? "stale" : ""}`}>
+      <div>
+        <strong>{feature.properties.label}</strong>
+        <span>
+          {feature.properties.layer} · {feature.properties.category} · {feature.properties.sourceId}
+        </span>
+      </div>
+      <div className="flight-track-metrics">
+        <span>{formatGeometry(feature)}</span>
+        <span>{formatTime(feature.properties.observedAt)}</span>
+        <span>{formatConfidence(feature.properties.confidence)}</span>
+        <span>{formatMetrics(feature.properties.metrics)}</span>
+      </div>
+      <div className="flight-track-tags">
+        <StatusPill label={feature.properties.severity} tone={severityTone(feature.properties.severity)} />
+        <StatusPill label={feature.properties.stale ? "stale" : "current"} tone={feature.properties.stale ? "warn" : "safe"} />
       </div>
     </div>
   );
@@ -1062,6 +1270,12 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
         title: "Flight Data source",
         description: "Monitor collected flight observations, deduplication, provider licenses and runtime settings."
       };
+    case "situation-data":
+      return {
+        kicker: "Public situation aggregate",
+        title: "Situation Data source",
+        description: "Monitor weather, ground, mobile and traffic context prepared for COP map layers."
+      };
     case "publisher":
       return {
         kicker: "COP integration",
@@ -1099,6 +1313,10 @@ function formatDuration(value: number): string {
 
 function formatCoordinate(value: number): string {
   return Number.isFinite(value) ? value.toFixed(4) : "-";
+}
+
+function formatBbox(bbox: SituationDataConfig["defaultBbox"]): string {
+  return `${formatCoordinate(bbox.west)}, ${formatCoordinate(bbox.south)}, ${formatCoordinate(bbox.east)}, ${formatCoordinate(bbox.north)}`;
 }
 
 function formatAltitude(value: number | undefined): string {
@@ -1141,6 +1359,16 @@ function formatRate(value: number): string {
   return `${value.toLocaleString("cs-CZ")} Hz`;
 }
 
+function formatCadence(seconds: number): string {
+  if (seconds >= 3600) {
+    return `${Math.round(seconds / 3600)} h cadence`;
+  }
+  if (seconds >= 60) {
+    return `${Math.round(seconds / 60)} min cadence`;
+  }
+  return `${seconds}s cadence`;
+}
+
 function formatGeo(geo: QueueItem["event"]["geo"]): string {
   if (!geo?.lat || !geo?.lon) {
     return "no position";
@@ -1148,8 +1376,47 @@ function formatGeo(geo: QueueItem["event"]["geo"]): string {
   return `${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}`;
 }
 
+function formatGeometry(feature: SituationDataFeature): string {
+  if (feature.geometry.type !== "Point" || !Array.isArray(feature.geometry.coordinates)) {
+    return feature.geometry.type;
+  }
+  const [lon, lat] = feature.geometry.coordinates;
+  return typeof lon === "number" && typeof lat === "number" ? `${formatCoordinate(lat)}, ${formatCoordinate(lon)}` : "position n/a";
+}
+
+function formatConfidence(value: number): string {
+  return `${Math.round(value * 100)}% confidence`;
+}
+
+function formatMetrics(metrics: SituationDataFeature["properties"]["metrics"]): string {
+  if (!metrics) {
+    return "metrics n/a";
+  }
+  const entries = Object.entries(metrics)
+    .filter(([key]) => key !== "ageSeconds")
+    .slice(0, 2);
+  if (entries.length === 0) {
+    return "metrics n/a";
+  }
+  return entries.map(([key, value]) => `${key} ${value}`).join(", ");
+}
+
 function formatMotion(speedMps: number | undefined, headingDeg: number | undefined): string {
   const speed = typeof speedMps === "number" ? `${Math.round(speedMps)} m/s (${Math.round(speedMps * 3.6)} km/h)` : "speed n/a";
   const heading = typeof headingDeg === "number" ? `${Math.round(headingDeg)} deg` : "heading n/a";
   return `${speed}, ${heading}`;
+}
+
+function countSituationLayer(features: SituationDataFeature[], layerId: SituationLayerId): number {
+  return features.filter((feature) => feature.properties.layer === layerId).length;
+}
+
+function severityTone(value: SituationDataFeature["properties"]["severity"]): Tone {
+  if (value === "critical") {
+    return "danger";
+  }
+  if (value === "warning" || value === "advisory") {
+    return "warn";
+  }
+  return "neutral";
 }

@@ -200,3 +200,119 @@ export interface FlightDataTrackResponse {
   sources: FlightDataSource[];
   warnings: string[];
 }
+
+export type SituationLayerId = "weather" | "ground" | "mobile" | "traffic";
+export type SituationDataSourceId = "mock" | "open_meteo" | "osm_overpass";
+
+export interface SituationDataHealth {
+  status: string;
+  timestamp?: string;
+  enabledSources: SituationDataSourceId[];
+}
+
+export interface SituationDataLicense {
+  name: string;
+  url?: string;
+  attribution: string;
+  commercialUse: "allowed" | "allowed_with_obligations" | "requires_license" | "unknown";
+  operationalUse: "allowed" | "allowed_with_obligations" | "requires_license" | "unknown";
+  notes: string[];
+}
+
+export interface SituationDataLayer {
+  layerId: SituationLayerId;
+  label: string;
+  description: string;
+  defaultVisible: boolean;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  expectedCadenceSeconds?: number;
+}
+
+export interface SituationDataSource {
+  sourceId: SituationDataSourceId;
+  label: string;
+  enabled: boolean;
+  mode: "live" | "mock" | "reference";
+  priority: number;
+  layers: SituationLayerId[];
+  license: SituationDataLicense;
+  baseUrl?: string;
+  updateCadenceSeconds?: number;
+}
+
+export interface SituationDataConfig {
+  enabledSources: SituationDataSourceId[];
+  defaultBbox: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  };
+  cacheTtlSeconds: number;
+  staleAfterSeconds: number;
+  requestTimeoutMs: number;
+  providers: Array<{
+    sourceId: SituationDataSourceId;
+    baseUrl?: string;
+    authConfigured: boolean;
+  }>;
+}
+
+export interface SituationDataFeature {
+  type: "Feature";
+  id: string;
+  geometry: {
+    type: "Point" | "LineString" | "Polygon";
+    coordinates: unknown;
+  };
+  properties: {
+    featureId: string;
+    layer: SituationLayerId;
+    category: string;
+    label: string;
+    sourceId: SituationDataSourceId;
+    observedAt: string;
+    validUntil?: string;
+    confidence: number;
+    stale: boolean;
+    severity: "info" | "advisory" | "warning" | "critical";
+    license: {
+      name: string;
+      attribution: string;
+      url?: string;
+    };
+    metrics?: Record<string, number | string | boolean>;
+    tags?: Record<string, string>;
+  };
+}
+
+export interface SituationDataFeatureResponse {
+  contractVersion: "cop-situation-source-v1";
+  type: "FeatureCollection";
+  generatedAt: string;
+  source: {
+    sourceId: string;
+    sourceType: "PUBLIC_SITUATION_AGGREGATE";
+    generatedAt: string;
+  };
+  query: {
+    bbox: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    };
+    layers: SituationLayerId[];
+    limit: number;
+    sources: SituationDataSourceId[];
+  };
+  summary: {
+    featureCount: number;
+    sourceCount: number;
+    staleFeatureCount: number;
+    warningCount: number;
+  };
+  features: SituationDataFeature[];
+  sources: SituationDataSource[];
+  warnings: string[];
+}

@@ -8,7 +8,12 @@ import type {
   QueueItem,
   RuntimeStatus,
   Scenario,
-  ScenarioBlock
+  ScenarioBlock,
+  SituationDataConfig,
+  SituationDataFeatureResponse,
+  SituationDataHealth,
+  SituationDataLayer,
+  SituationDataSource
 } from "./types";
 
 const API_TIMEOUT_MS = 5_000;
@@ -135,6 +140,13 @@ export interface DashboardLoadResult {
     config: FlightDataConfig;
     tracks: FlightDataTrackResponse;
   };
+  situationData: {
+    health: SituationDataHealth;
+    layers: SituationDataLayer[];
+    sources: SituationDataSource[];
+    config: SituationDataConfig;
+    features: SituationDataFeatureResponse;
+  };
   warnings: string[];
 }
 
@@ -149,7 +161,12 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<FlightDataHealth>("/flight-data/health/ready"),
     api<{ items: FlightDataSource[] }>("/flight-data/api/v1/sources"),
     api<FlightDataConfig>("/flight-data/api/v1/config"),
-    api<FlightDataTrackResponse>("/flight-data/api/v1/cop/tracks?limit=8")
+    api<FlightDataTrackResponse>("/flight-data/api/v1/cop/tracks?limit=8"),
+    api<SituationDataHealth>("/situation-data/health/ready"),
+    api<{ items: SituationDataLayer[] }>("/situation-data/api/v1/layers"),
+    api<{ items: SituationDataSource[] }>("/situation-data/api/v1/sources"),
+    api<SituationDataConfig>("/situation-data/api/v1/config"),
+    api<SituationDataFeatureResponse>("/situation-data/api/v1/cop/features?limit=12")
   ]);
 
   const warnings: string[] = [];
@@ -197,6 +214,47 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "flight data tracks",
     warnings
   );
+  const situationHealth = unwrapDashboardResult(results[10], { status: "unavailable", enabledSources: [] }, "situation data health", warnings);
+  const situationLayers = unwrapDashboardResult(results[11], { items: [] }, "situation data layers", warnings);
+  const situationSources = unwrapDashboardResult(results[12], { items: [] }, "situation data sources", warnings);
+  const situationConfig = unwrapDashboardResult(
+    results[13],
+    {
+      enabledSources: [],
+      defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
+      cacheTtlSeconds: 0,
+      staleAfterSeconds: 0,
+      requestTimeoutMs: 0,
+      providers: []
+    },
+    "situation data config",
+    warnings
+  );
+  const situationFeatures = unwrapDashboardResult(
+    results[14],
+    {
+      contractVersion: "cop-situation-source-v1",
+      type: "FeatureCollection",
+      generatedAt: new Date(0).toISOString(),
+      source: {
+        sourceId: "situation-data-api",
+        sourceType: "PUBLIC_SITUATION_AGGREGATE",
+        generatedAt: new Date(0).toISOString()
+      },
+      query: {
+        bbox: { west: 0, south: 0, east: 0, north: 0 },
+        layers: [],
+        limit: 0,
+        sources: []
+      },
+      summary: { featureCount: 0, sourceCount: 0, staleFeatureCount: 0, warningCount: 0 },
+      features: [],
+      sources: [],
+      warnings: []
+    },
+    "situation data features",
+    warnings
+  );
 
   return {
     scenarios: scenarios.items,
@@ -211,6 +269,13 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       sources: flightSources.items,
       config: flightConfig,
       tracks: flightTracks
+    },
+    situationData: {
+      health: situationHealth,
+      layers: situationLayers.items,
+      sources: situationSources.items,
+      config: situationConfig,
+      features: situationFeatures
     },
     warnings
   };

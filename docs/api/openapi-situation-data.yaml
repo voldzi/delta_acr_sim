@@ -1,0 +1,369 @@
+openapi: 3.1.0
+info:
+  title: DELTA ACR SIM Situation Data API
+  version: 0.1.0
+  description: Aggregated open-data situation layers for COP map context.
+servers:
+  - url: https://sim.zeleznalady.cz/situation-data/api/v1
+  - url: http://localhost:4020/api/v1
+paths:
+  /layers:
+    get:
+      summary: List available situation layers
+      responses:
+        "200":
+          description: Layer registry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LayerDescriptor"
+  /sources:
+    get:
+      summary: List provider metadata and license state
+      responses:
+        "200":
+          description: Source registry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SourceDescriptor"
+  /config:
+    get:
+      summary: Read non-secret runtime configuration
+      responses:
+        "200":
+          description: Public runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicConfig"
+  /features:
+    get:
+      summary: Return aggregated GeoJSON situation features
+      parameters:
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: GeoJSON FeatureCollection with SIM metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SituationFeatureCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+  /cop/features:
+    get:
+      summary: Return the COP-facing situation source projection
+      parameters:
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: COP-ready situation FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SituationFeatureCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+components:
+  parameters:
+    Bbox:
+      name: bbox
+      in: query
+      required: false
+      schema:
+        type: string
+        example: "13.85,49.65,15.35,50.45"
+      description: WGS84 bbox in west,south,east,north order. Defaults to configured Prague pilot bbox.
+    Layers:
+      name: layers
+      in: query
+      required: false
+      schema:
+        type: string
+        example: weather,ground,mobile,traffic
+    Sources:
+      name: source
+      in: query
+      required: false
+      schema:
+        type: string
+        example: mock,open_meteo
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 250
+        maximum: 1000
+  responses:
+    Problem:
+      description: Problem response
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  correlationId:
+                    type: string
+  schemas:
+    LayerId:
+      type: string
+      enum: [weather, ground, mobile, traffic]
+    SourceId:
+      type: string
+      enum: [mock, open_meteo, osm_overpass]
+    BoundingBox:
+      type: object
+      required: [west, south, east, north]
+      properties:
+        west:
+          type: number
+        south:
+          type: number
+        east:
+          type: number
+        north:
+          type: number
+    License:
+      type: object
+      required: [name, attribution, commercialUse, operationalUse, notes]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+        attribution:
+          type: string
+        commercialUse:
+          type: string
+          enum: [allowed, allowed_with_obligations, requires_license, unknown]
+        operationalUse:
+          type: string
+          enum: [allowed, allowed_with_obligations, requires_license, unknown]
+        notes:
+          type: array
+          items:
+            type: string
+    LayerDescriptor:
+      type: object
+      required: [layerId, label, description, defaultVisible, geometryTypes]
+      properties:
+        layerId:
+          $ref: "#/components/schemas/LayerId"
+        label:
+          type: string
+        description:
+          type: string
+        defaultVisible:
+          type: boolean
+        geometryTypes:
+          type: array
+          items:
+            type: string
+            enum: [Point, LineString, Polygon]
+        expectedCadenceSeconds:
+          type: integer
+    SourceDescriptor:
+      type: object
+      required: [sourceId, label, enabled, mode, priority, layers, license]
+      properties:
+        sourceId:
+          $ref: "#/components/schemas/SourceId"
+        label:
+          type: string
+        enabled:
+          type: boolean
+        mode:
+          type: string
+          enum: [live, mock, reference]
+        priority:
+          type: integer
+        layers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayerId"
+        license:
+          $ref: "#/components/schemas/License"
+        baseUrl:
+          type: string
+        updateCadenceSeconds:
+          type: integer
+    PublicConfig:
+      type: object
+      required: [enabledSources, defaultBbox, cacheTtlSeconds, staleAfterSeconds, requestTimeoutMs, providers]
+      properties:
+        enabledSources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceId"
+        defaultBbox:
+          $ref: "#/components/schemas/BoundingBox"
+        cacheTtlSeconds:
+          type: integer
+        staleAfterSeconds:
+          type: integer
+        requestTimeoutMs:
+          type: integer
+        providers:
+          type: array
+          items:
+            type: object
+            required: [sourceId, authConfigured]
+            properties:
+              sourceId:
+                $ref: "#/components/schemas/SourceId"
+              baseUrl:
+                type: string
+              authConfigured:
+                type: boolean
+    SituationFeatureCollection:
+      type: object
+      required: [contractVersion, type, generatedAt, source, query, summary, features, sources, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: cop-situation-source-v1
+        type:
+          type: string
+          const: FeatureCollection
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          type: object
+          properties:
+            sourceId:
+              type: string
+              const: situation-data-api
+            sourceType:
+              type: string
+              const: PUBLIC_SITUATION_AGGREGATE
+            generatedAt:
+              type: string
+              format: date-time
+        query:
+          type: object
+          properties:
+            bbox:
+              $ref: "#/components/schemas/BoundingBox"
+            layers:
+              type: array
+              items:
+                $ref: "#/components/schemas/LayerId"
+            limit:
+              type: integer
+            sources:
+              type: array
+              items:
+                $ref: "#/components/schemas/SourceId"
+        summary:
+          type: object
+          properties:
+            featureCount:
+              type: integer
+            sourceCount:
+              type: integer
+            staleFeatureCount:
+              type: integer
+            warningCount:
+              type: integer
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/SituationFeature"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceDescriptor"
+        warnings:
+          type: array
+          items:
+            type: string
+    SituationFeature:
+      type: object
+      required: [type, id, geometry, properties]
+      properties:
+        type:
+          type: string
+          const: Feature
+        id:
+          type: string
+        geometry:
+          type: object
+          required: [type, coordinates]
+          properties:
+            type:
+              type: string
+              enum: [Point, LineString, Polygon]
+            coordinates: {}
+        properties:
+          type: object
+          required: [featureId, layer, category, label, sourceId, observedAt, confidence, stale, severity, license]
+          properties:
+            featureId:
+              type: string
+            layer:
+              $ref: "#/components/schemas/LayerId"
+            category:
+              type: string
+            label:
+              type: string
+            sourceId:
+              $ref: "#/components/schemas/SourceId"
+            observedAt:
+              type: string
+              format: date-time
+            validUntil:
+              type: string
+              format: date-time
+            confidence:
+              type: number
+              minimum: 0
+              maximum: 1
+            stale:
+              type: boolean
+            severity:
+              type: string
+              enum: [info, advisory, warning, critical]
+            license:
+              type: object
+              required: [name, attribution]
+              properties:
+                name:
+                  type: string
+                attribution:
+                  type: string
+                url:
+                  type: string
+            metrics:
+              type: object
+              additionalProperties: true
+            tags:
+              type: object
+              additionalProperties:
+                type: string

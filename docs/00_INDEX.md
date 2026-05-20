@@ -18,6 +18,7 @@ Tento adresář je dokumentační baseline pro samostatný projekt **COP Air & S
 - [application/00_INDEX.md](application/00_INDEX.md)
 - [simulation/00_INDEX.md](simulation/00_INDEX.md)
 - [flight-data/00_INDEX.md](flight-data/00_INDEX.md)
+- [situation-data/00_INDEX.md](situation-data/00_INDEX.md)
 - [integration/00_INDEX.md](integration/00_INDEX.md)
 - [api/00_INDEX.md](api/00_INDEX.md)
 - [api/openapi-simulator.yaml](api/openapi-simulator.yaml)

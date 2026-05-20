@@ -11,6 +11,10 @@ export default defineConfig({
         target: "http://localhost:4010",
         rewrite: (path) => path.replace(/^\/flight-data/, "")
       },
+      "/situation-data": {
+        target: "http://localhost:4020",
+        rewrite: (path) => path.replace(/^\/situation-data/, "")
+      },
       "/health": "http://localhost:4000",
       "/metrics": "http://localhost:4000",
       "/mock-cop": "http://localhost:4000"

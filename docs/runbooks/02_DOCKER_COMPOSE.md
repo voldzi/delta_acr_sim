@@ -11,6 +11,7 @@ Budoucí Docker Compose má spustit web, API, store, queue a mock COP endpoint p
 - simulator-web
 - simulator-api
 - flight-data-api
+- situation-data-api
 - postgres nebo sqlite volume
 - redis nebo queue store
 - mock-cop-ingest
@@ -27,3 +28,11 @@ Výchozí compose režim má být dry-run/mock a nesmí obsahovat produkční se
 - `/flight-data/api/*` na `flight-data-api:4010/api/*`
 - `/flight-data/health/*` na `flight-data-api:4010/health/*`
 - `/flight-data/metrics` na `flight-data-api:4010/metrics`
+
+## Situation Data API routing
+
+`simulator-web` proxy předává:
+
+- `/situation-data/api/*` na `situation-data-api:4020/api/*`
+- `/situation-data/health/*` na `situation-data-api:4020/health/*`
+- `/situation-data/metrics` na `situation-data-api:4020/metrics`

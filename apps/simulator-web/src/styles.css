@@ -245,7 +245,7 @@ textarea {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -752,6 +752,10 @@ button svg {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.situation-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .publisher-stat {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -802,12 +806,15 @@ button svg {
 }
 
 .source-list,
-.flight-track-list {
+.flight-track-list,
+.layer-list,
+.situation-feature-list {
   display: grid;
   gap: 8px;
 }
 
-.source-row {
+.source-row,
+.layer-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px 12px;
@@ -820,13 +827,28 @@ button svg {
 .source-row strong,
 .source-row span,
 .source-row small,
+.layer-row strong,
+.layer-row span,
+.layer-row small,
 .source-license {
   display: block;
 }
 
 .source-row small,
+.layer-row small,
 .source-license {
   grid-column: 1 / -1;
+}
+
+.layer-row strong {
+  font-size: 14px;
+}
+
+.layer-row span,
+.layer-row small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .source-tags,
@@ -854,6 +876,47 @@ button svg {
   border-radius: 8px;
   background: #ffffff;
   padding: 12px;
+}
+
+.situation-feature-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.situation-feature-row.warning,
+.situation-feature-row.advisory {
+  border-color: rgba(163, 106, 0, 0.28);
+}
+
+.situation-feature-row.critical {
+  border-color: rgba(177, 58, 50, 0.3);
+}
+
+.situation-feature-row.stale {
+  background: rgba(101, 115, 111, 0.08);
+}
+
+.situation-feature-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.situation-feature-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.situation-feature-row .flight-track-metrics {
+  grid-column: 1 / -1;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 .flight-track-row.stale {
@@ -1083,10 +1146,11 @@ button svg {
   .scenario-summary,
   .readiness-list,
   .affiliation-grid,
-  .publisher-stats,
-  .flight-stats,
-  .flight-grid,
-  .settings-grid {
+    .publisher-stats,
+    .flight-stats,
+    .situation-stats,
+    .flight-grid,
+    .settings-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1096,7 +1160,9 @@ button svg {
   .provider-row,
   .queue-main,
   .source-row,
-  .flight-track-row {
+  .layer-row,
+  .flight-track-row,
+  .situation-feature-row {
     grid-template-columns: 1fr;
   }
 

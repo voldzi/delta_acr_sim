@@ -40,12 +40,19 @@ FLIGHT_DATA_DEFAULT_RADIUS_NM=120
 FLIGHT_DATA_CACHE_TTL_SECONDS=10
 FLIGHT_DATA_STALE_AFTER_SECONDS=120
 FLIGHT_DATA_REQUEST_TIMEOUT_MS=8000
+SITUATION_DATA_ENABLED_SOURCES=mock,open_meteo
+SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
+SITUATION_DATA_CACHE_TTL_SECONDS=30
+SITUATION_DATA_STALE_AFTER_SECONDS=900
+SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 EOF
 
 docker compose up -d --build
 docker compose ps
 curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
+curl -fsS http://localhost:5020/situation-data/health/ready
+curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile&limit=10'
 ```
 
 ## URL
@@ -60,7 +67,9 @@ http://docker.home.cz:5020
 - Pro LIVE publikování do COP nastav `SIM_PUBLISHER_MODE=LIVE`, `MAIN_COP_BASE_URL=http://172.17.0.1:4310` a `MAIN_COP_BEARER_TOKEN` na stejnou hodnotu jako `COP_LAB_TOKEN` v COP.
 - Flight Data API pro integrační pilot COP běží proti ADSB.lol: `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
 - Pro offline test nastav `FLIGHT_DATA_ENABLED_SOURCES=mock`.
+- Situation Data API ve výchozím pilotu používá `mock,open_meteo`: stabilní integrační features a živé počasí bez API klíče.
+- `SITUATION_DATA_ENABLED_SOURCES=osm_overpass` zapínej jen pro malé bbox dotazy a nízkou frekvenci; veřejné Overpass instance jsou sdílený zdroj.
 - U komerčního použití musí být vyřešená ODbL atribuce a share-alike povinnosti.
 - OpenSky nezapínej bez ověření oprávnění nebo písemné licence.
-- Perzistentní data jsou v Docker volume `sim-data` a `flight-data`.
-- Web kontejner přes nginx proxy předává `/api`, `/health`, `/metrics`, `/mock-cop` a `/flight-data/*` do příslušných API kontejnerů.
+- Perzistentní data jsou v Docker volume `sim-data`, `flight-data` a `situation-data`.
+- Web kontejner přes nginx proxy předává `/api`, `/health`, `/metrics`, `/mock-cop`, `/flight-data/*` a `/situation-data/*` do příslušných API kontejnerů.

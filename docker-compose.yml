@@ -58,6 +58,34 @@ services:
       timeout: 5s
       retries: 3
 
+  situation-data-api:
+    build:
+      context: .
+      dockerfile: apps/situation-data-api/Dockerfile
+    container_name: delta-acr-situation-data-api
+    environment:
+      NODE_ENV: production
+      SITUATION_DATA_API_PORT: 4020
+      SITUATION_DATA_DIR: /data
+      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-mock,open_meteo}
+      SITUATION_DATA_DEFAULT_BBOX: ${SITUATION_DATA_DEFAULT_BBOX:-13.85,49.65,15.35,50.45}
+      SITUATION_DATA_REQUEST_TIMEOUT_MS: ${SITUATION_DATA_REQUEST_TIMEOUT_MS:-6000}
+      SITUATION_DATA_CACHE_TTL_SECONDS: ${SITUATION_DATA_CACHE_TTL_SECONDS:-30}
+      SITUATION_DATA_STALE_AFTER_SECONDS: ${SITUATION_DATA_STALE_AFTER_SECONDS:-900}
+      OPEN_METEO_BASE_URL: ${OPEN_METEO_BASE_URL:-https://api.open-meteo.com}
+      OVERPASS_BASE_URL: ${OVERPASS_BASE_URL:-https://overpass-api.de/api/interpreter}
+      OVERPASS_MAX_BBOX_DEGREES: ${OVERPASS_MAX_BBOX_DEGREES:-1.2}
+    volumes:
+      - situation-data:/data
+    expose:
+      - "4020"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4020/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   sim-web:
     build:
       context: .
@@ -70,6 +98,8 @@ services:
         condition: service_healthy
       flight-data-api:
         condition: service_healthy
+      situation-data-api:
+        condition: service_healthy
     ports:
       - "${SIM_WEB_PORT:-5020}:80"
     restart: unless-stopped
@@ -77,3 +107,4 @@ services:
 volumes:
   sim-data:
   flight-data:
+  situation-data:
