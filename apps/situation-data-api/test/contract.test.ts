@@ -24,13 +24,18 @@ describe("Situation Data API contract", () => {
       cacheTtlSeconds: 1,
       staleIfErrorSeconds: 600,
       cacheMaxEntries: 128,
+      bboxCachePaddingDegrees: 0.18,
       staleAfterSeconds: 900,
       openMeteoBaseUrl: "https://api.open-meteo.com",
+      openMeteoCacheTtlSeconds: 600,
+      openMeteoGridDegrees: 0.05,
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
+      overpassCacheTtlSeconds: 21600,
       overpassMaxBboxDegrees: 1.6,
       ctuNettestUrl: "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
-      safetyDataBaseUrl: "http://127.0.0.1:4030"
+      safetyDataBaseUrl: "http://127.0.0.1:4030",
+      safetyDataCacheTtlSeconds: 300
     };
     ({ app } = await createApp(config));
   });
@@ -94,7 +99,13 @@ describe("Situation Data API contract", () => {
         cacheTtlSeconds: 1,
         staleIfErrorSeconds: 600,
         cacheMaxEntries: 128,
+        bboxCachePaddingDegrees: 0.18,
         staleAfterSeconds: 900,
+        sourceCacheTtlSeconds: {
+          openMeteo: 600,
+          osmOverpass: 21600,
+          safetyData: 300
+        },
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
@@ -111,6 +122,17 @@ describe("Situation Data API contract", () => {
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("situation_data_cache_entries");
     expect(response.text).toContain("situation_data_cache_coalesced_hits");
+
+    const cachedSources = await createApp({
+      ...config,
+      enabledSources: ["open_meteo", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data"]
+    });
+    const cachedSourceMetrics = await request(cachedSources.app).get("/metrics").expect(200);
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="open_meteo"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_overpass"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_stale_hits{source="ctu_nettest"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
   });
 
   it("returns the COP GeoJSON projection", async () => {
@@ -224,5 +246,73 @@ describe("Situation Data API contract", () => {
 
     expect(calls).toBe(1);
     expect(service.cacheStats().coalescedHits).toBe(7);
+  });
+
+  it("canonicalizes nearby bbox requests into the same aggregate cache key", async () => {
+    let calls = 0;
+    const descriptor: SituationDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "test",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      layers: ["weather"],
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const source: SituationDataSource = {
+      descriptor,
+      async fetchFeatures() {
+        calls += 1;
+        const fetchedAt = new Date().toISOString();
+        return {
+          source: descriptor,
+          fetchedAt,
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "weather:test",
+              geometry: { type: "Point", coordinates: [14.4, 50.1] },
+              properties: {
+                featureId: "weather:test",
+                layer: "weather",
+                category: "weather_observation",
+                label: "test",
+                sourceId: "mock",
+                observedAt: fetchedAt,
+                confidence: 1,
+                stale: false,
+                severity: "info",
+                license: { name: "test", attribution: "test" }
+              }
+            }
+          ]
+        };
+      }
+    };
+    const service = new SituationAggregationService(config, [source]);
+    const query = {
+      bbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
+      layers: ["weather" as const],
+      sourceIds: ["mock" as const],
+      limit: 10,
+      includeRaw: false
+    };
+    const shiftedQuery = {
+      ...query,
+      bbox: { west: 13.86, south: 49.66, east: 15.36, north: 50.46 }
+    };
+
+    await service.getFeatures(query);
+    await service.getFeatures(shiftedQuery);
+
+    expect(calls).toBe(1);
+    expect(service.cacheStats().hits).toBe(1);
   });
 });

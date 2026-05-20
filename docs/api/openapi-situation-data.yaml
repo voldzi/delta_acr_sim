@@ -215,7 +215,19 @@ components:
           type: integer
     PublicConfig:
       type: object
-      required: [enabledSources, defaultBbox, cacheTtlSeconds, staleIfErrorSeconds, cacheMaxEntries, staleAfterSeconds, requestTimeoutMs, providers]
+      required:
+        [
+          enabledSources,
+          defaultBbox,
+          cacheTtlSeconds,
+          staleIfErrorSeconds,
+          cacheMaxEntries,
+          bboxCachePaddingDegrees,
+          staleAfterSeconds,
+          requestTimeoutMs,
+          sourceCacheTtlSeconds,
+          providers
+        ]
       properties:
         enabledSources:
           type: array
@@ -229,10 +241,22 @@ components:
           type: integer
         cacheMaxEntries:
           type: integer
+        bboxCachePaddingDegrees:
+          type: number
         staleAfterSeconds:
           type: integer
         requestTimeoutMs:
           type: integer
+        sourceCacheTtlSeconds:
+          type: object
+          required: [openMeteo, osmOverpass, safetyData]
+          properties:
+            openMeteo:
+              type: integer
+            osmOverpass:
+              type: integer
+            safetyData:
+              type: integer
         providers:
           type: array
           items:

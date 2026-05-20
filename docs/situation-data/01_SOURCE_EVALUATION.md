@@ -7,7 +7,7 @@ SIM má poskytovat COPu doplňkové vrstvy, které rozšiřují vzdušný obraz 
 | Vrstva | Zdroj | Stav pro pilot | Licence / omezení |
 | --- | --- | --- | --- |
 | `weather` | Open-Meteo Forecast API | vhodné jako první live zdroj bez klíče | Free API je nekomerční, data pod CC BY 4.0 podmínkami, komerční použití přes placený tarif |
-| `ground` | OpenStreetMap přes Overpass API | vhodné pro malé bbox dotazy a referenční POI | ODbL 1.0, atribuce a share-alike povinnosti pro databáze; veřejné Overpass instance mají fair-use limity |
+| `ground` | OpenStreetMap přes lokální OSM extract/PostGIS; Overpass jen pro vývoj | vhodné pro referenční POI po lokálním importu; veřejný Overpass pouze pro malé testovací bbox dotazy | ODbL 1.0, atribuce a share-alike povinnosti pro databáze; veřejné Overpass instance nejsou produkční runtime backend |
 | `mobile` | ČTÚ NetTest open-data ZIP export | implementováno jako live/periodický zdroj `ctu_nettest`; vhodné pro kontext kvality mobilní sítě, ne pro real-time výpadky operátorů | CC BY 4.0 podle exportu; nutná atribuce a práce s anonymizací/accuracy |
 | `traffic` | PID/Golemio GTFS-RT vehicle positions | implementováno jako live zdroj `pid_gtfs_rt` pro pohyb veřejné dopravy v Praze a okolí | open-data podmínky PID/Golemio; nutná atribuce, bez garance operační dostupnosti |
 | `mobile` | OpenCellID, M-Lab | kandidáti pro další rozšíření | OpenCellID CC BY-SA 4.0; M-Lab CC0 |

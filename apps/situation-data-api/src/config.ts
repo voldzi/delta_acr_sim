@@ -12,13 +12,18 @@ export interface SituationDataConfig {
   cacheTtlSeconds: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
+  bboxCachePaddingDegrees: number;
   staleAfterSeconds: number;
   openMeteoBaseUrl: string;
+  openMeteoCacheTtlSeconds: number;
+  openMeteoGridDegrees: number;
   overpassBaseUrl: string;
+  overpassCacheTtlSeconds: number;
   overpassMaxBboxDegrees: number;
   ctuNettestUrl: string;
   pidGtfsRtVehiclePositionsUrl: string;
   safetyDataBaseUrl: string;
+  safetyDataCacheTtlSeconds: number;
 }
 
 export async function loadConfig(): Promise<SituationDataConfig> {
@@ -38,16 +43,21 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     },
     requestTimeoutMs: parseInteger(process.env.SITUATION_DATA_REQUEST_TIMEOUT_MS, 6000),
     cacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CACHE_TTL_SECONDS, 30),
-    staleIfErrorSeconds: parseInteger(process.env.SITUATION_DATA_STALE_IF_ERROR_SECONDS, 600),
-    cacheMaxEntries: parseInteger(process.env.SITUATION_DATA_CACHE_MAX_ENTRIES, 512),
+    staleIfErrorSeconds: parseInteger(process.env.SITUATION_DATA_STALE_IF_ERROR_SECONDS, 1800),
+    cacheMaxEntries: parseInteger(process.env.SITUATION_DATA_CACHE_MAX_ENTRIES, 10000),
+    bboxCachePaddingDegrees: parseFloatOr(process.env.SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES, 0.18),
     staleAfterSeconds: parseInteger(process.env.SITUATION_DATA_STALE_AFTER_SECONDS, 900),
     openMeteoBaseUrl: process.env.OPEN_METEO_BASE_URL ?? "https://api.open-meteo.com",
+    openMeteoCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS, 600),
+    openMeteoGridDegrees: parseFloatOr(process.env.SITUATION_DATA_OPEN_METEO_GRID_DEGREES, 0.05),
     overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? "https://overpass-api.de/api/interpreter",
+    overpassCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS, 21600),
     overpassMaxBboxDegrees: parseFloatOr(process.env.OVERPASS_MAX_BBOX_DEGREES, 1.6),
     ctuNettestUrl: process.env.CTU_NETTEST_URL ?? "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
     pidGtfsRtVehiclePositionsUrl:
       process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
-    safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030"
+    safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030",
+    safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300)
   };
 }
 

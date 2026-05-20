@@ -1,8 +1,8 @@
 import type { SituationDataConfig } from "./config.js";
+import { canonicalizeBboxForCache } from "./bbox-cache.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type { SituationDataSource } from "./sources.js";
+import type { SituationDataSource, SourceCacheStats } from "./sources.js";
 import type {
-  BoundingBox,
   SituationDataSourceId,
   SituationFeature,
   SituationFeatureCollection,
@@ -30,8 +30,12 @@ export class SituationAggregationService {
     return this.cache.stats();
   }
 
+  sourceCacheStats(): SourceCacheStats[] {
+    return this.sources.flatMap((source) => source.cacheStats?.() ?? []);
+  }
+
   async getFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
-    return this.cache.getOrLoad(cacheKeyForSituationQuery(query), () => this.fetchFeatures(query));
+    return this.cache.getOrLoad(cacheKeyForSituationQuery(query, this.config), () => this.fetchFeatures(query));
   }
 
   private async fetchFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
@@ -88,23 +92,14 @@ export class SituationAggregationService {
   }
 }
 
-function cacheKeyForSituationQuery(query: SituationQuery): string {
+function cacheKeyForSituationQuery(query: SituationQuery, config: SituationDataConfig): string {
   return JSON.stringify({
-    bbox: roundBbox(query.bbox),
+    bbox: canonicalizeBboxForCache(query.bbox, config.bboxCachePaddingDegrees),
     layers: [...query.layers].sort(),
     sources: [...query.sourceIds].sort(),
     limit: query.limit,
     includeRaw: query.includeRaw
   });
-}
-
-function roundBbox(bbox: BoundingBox): BoundingBox {
-  return {
-    west: round(bbox.west, 5),
-    south: round(bbox.south, 5),
-    east: round(bbox.east, 5),
-    north: round(bbox.north, 5)
-  };
 }
 
 function limitBalancedByLayer(features: SituationFeature[], layers: SituationLayerId[], limit: number): SituationFeature[] {
@@ -223,9 +218,4 @@ function layerRank(value: SituationLayerId): number {
     default:
       return 4;
   }
-}
-
-function round(value: number, precision: number): number {
-  const factor = 10 ** precision;
-  return Math.round(value * factor) / factor;
 }

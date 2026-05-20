@@ -1,8 +1,9 @@
 import { unzipSync } from "fflate";
 import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
+import { canonicalizeBboxForCache, formatBboxKey, roundPointToGrid } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
-import { ManagedResponseCache } from "./response-cache.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
   PointGeometry,
@@ -19,6 +20,11 @@ import type {
 export interface SituationDataSource {
   descriptor: SourceDescriptor;
   fetchFeatures(query: SituationQuery): Promise<SourceFetchResult>;
+  cacheStats?(): SourceCacheStats[];
+}
+
+export interface SourceCacheStats extends ManagedResponseCacheStats {
+  sourceId: SituationDataSourceId;
 }
 
 const MOCK_LICENSE: SituationDataLicense = {
@@ -51,7 +57,8 @@ const OSM_LICENSE: SituationDataLicense = {
   notes: [
     "Attribution is required.",
     "Public adapted databases must follow ODbL obligations.",
-    "Public Overpass instances are shared resources; keep bbox and cadence conservative."
+    "Public Overpass instances are shared resources; do not use them as a production runtime backend for high user volumes.",
+    "Production deployments should use a local OSM extract/PostGIS-backed provider before enabling this source."
   ]
 };
 
@@ -119,6 +126,13 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
+function cacheStatsFor<T>(sourceId: SituationDataSourceId, cache: ManagedResponseCache<T>): SourceCacheStats {
+  return {
+    sourceId,
+    ...cache.stats()
+  };
+}
+
 class MockSituationDataSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor = {
     sourceId: "mock",
@@ -149,8 +163,14 @@ class MockSituationDataSource implements SituationDataSource {
 
 class OpenMeteoSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<OpenMeteoResponse>;
 
   constructor(private readonly config: SituationDataConfig) {
+    this.payloadCache = new ManagedResponseCache<OpenMeteoResponse>({
+      ttlMs: Math.max(1, config.openMeteoCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(60, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, config.cacheMaxEntries)
+    });
     this.descriptor = {
       sourceId: "open_meteo",
       label: "Open-Meteo current weather",
@@ -160,8 +180,12 @@ class OpenMeteoSource implements SituationDataSource {
       layers: ["weather"],
       license: OPEN_METEO_LICENSE,
       baseUrl: config.openMeteoBaseUrl,
-      updateCadenceSeconds: 600
+      updateCadenceSeconds: config.openMeteoCacheTtlSeconds
     };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("open_meteo", this.payloadCache)];
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -171,9 +195,10 @@ class OpenMeteoSource implements SituationDataSource {
     }
 
     const center = bboxCenter(query.bbox);
+    const weatherPoint = roundPointToGrid(center.lon, center.lat, this.config.openMeteoGridDegrees);
     const url = new URL(`${this.config.openMeteoBaseUrl}/v1/forecast`);
-    url.searchParams.set("latitude", center.lat.toFixed(5));
-    url.searchParams.set("longitude", center.lon.toFixed(5));
+    url.searchParams.set("latitude", weatherPoint.lat.toFixed(5));
+    url.searchParams.set("longitude", weatherPoint.lon.toFixed(5));
     url.searchParams.set(
       "current",
       [
@@ -190,7 +215,9 @@ class OpenMeteoSource implements SituationDataSource {
     url.searchParams.set("wind_speed_unit", "ms");
     url.searchParams.set("timezone", "UTC");
 
-    const payload = await requestJson<OpenMeteoResponse>(url.toString(), this.config.requestTimeoutMs);
+    const payload = await this.payloadCache.getOrLoad(`open_meteo:${weatherPoint.lat}:${weatherPoint.lon}`, () =>
+      requestJson<OpenMeteoResponse>(url.toString(), this.config.requestTimeoutMs)
+    );
     const current = payload.current ?? {};
     const observedAt = normalizeOpenMeteoTime(current.time) ?? fetchedAt;
     const windSpeedMps = optionalNumber(current.wind_speed_10m);
@@ -199,7 +226,7 @@ class OpenMeteoSource implements SituationDataSource {
     const severity = weatherSeverity(windSpeedMps, precipitationMm, weatherCode);
 
     const feature = makePointFeature({
-      id: `weather:open_meteo:${center.lat.toFixed(4)}:${center.lon.toFixed(4)}`,
+      id: `weather:open_meteo:${weatherPoint.lat.toFixed(4)}:${weatherPoint.lon.toFixed(4)}`,
       lon: center.lon,
       lat: center.lat,
       layer: "weather",
@@ -229,8 +256,14 @@ class OpenMeteoSource implements SituationDataSource {
 
 class OsmOverpassSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<OverpassResponse>;
 
   constructor(private readonly config: SituationDataConfig) {
+    this.payloadCache = new ManagedResponseCache<OverpassResponse>({
+      ttlMs: Math.max(1, config.overpassCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.overpassCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(32, Math.min(config.cacheMaxEntries, 2048))
+    });
     this.descriptor = {
       sourceId: "osm_overpass",
       label: "OpenStreetMap Overpass ground context",
@@ -240,8 +273,12 @@ class OsmOverpassSource implements SituationDataSource {
       layers: ["ground", "mobile"],
       license: OSM_LICENSE,
       baseUrl: config.overpassBaseUrl,
-      updateCadenceSeconds: 86400
+      updateCadenceSeconds: config.overpassCacheTtlSeconds
     };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("osm_overpass", this.payloadCache)];
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -251,8 +288,9 @@ class OsmOverpassSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const width = Math.abs(query.bbox.east - query.bbox.west);
-    const height = Math.abs(query.bbox.north - query.bbox.south);
+    const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
+    const width = Math.abs(cacheBbox.east - cacheBbox.west);
+    const height = Math.abs(cacheBbox.north - cacheBbox.south);
     if (Math.max(width, height) > this.config.overpassMaxBboxDegrees) {
       return {
         source: this.descriptor,
@@ -262,7 +300,9 @@ class OsmOverpassSource implements SituationDataSource {
       };
     }
 
-    const payload = await requestOverpass(this.config.overpassBaseUrl, overpassQuery(query.bbox), this.config.requestTimeoutMs);
+    const payload = await this.payloadCache.getOrLoad(`osm_overpass:${formatBboxKey(cacheBbox)}`, () =>
+      requestOverpass(this.config.overpassBaseUrl, overpassQuery(cacheBbox), this.config.requestTimeoutMs)
+    );
     const features = (payload.elements ?? [])
       .map((element) => mapOverpassElement(element, fetchedAt, query.includeRaw))
       .filter((feature): feature is SituationFeature => Boolean(feature))
@@ -295,6 +335,10 @@ class CtuNettestSource implements SituationDataSource {
       baseUrl: config.ctuNettestUrl,
       updateCadenceSeconds: 3600
     };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("ctu_nettest", this.recordsCache)];
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -342,6 +386,10 @@ class PidGtfsRtSource implements SituationDataSource {
     };
   }
 
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("pid_gtfs_rt", this.feedCache)];
+  }
+
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     if (!query.layers.includes("traffic")) {
@@ -367,8 +415,14 @@ class PidGtfsRtSource implements SituationDataSource {
 
 class SafetyDataProjectionSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<SafetyProjectionCollection>;
 
   constructor(private readonly config: SituationDataConfig) {
+    this.payloadCache = new ManagedResponseCache<SafetyProjectionCollection>({
+      ttlMs: Math.max(1, config.safetyDataCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.safetyDataCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, config.cacheMaxEntries)
+    });
     this.descriptor = {
       sourceId: "safety_data",
       label: "Safety Data API projection",
@@ -378,8 +432,12 @@ class SafetyDataProjectionSource implements SituationDataSource {
       layers: ["warnings", "flood"],
       license: SAFETY_DATA_LICENSE,
       baseUrl: config.safetyDataBaseUrl,
-      updateCadenceSeconds: 300
+      updateCadenceSeconds: config.safetyDataCacheTtlSeconds
     };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("safety_data", this.payloadCache)];
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -389,17 +447,26 @@ class SafetyDataProjectionSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
+    const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
+    const fetchLimit = Math.min(1000, Math.max(query.limit, query.limit * 2));
     const url = new URL(`${trimTrailingSlash(this.config.safetyDataBaseUrl)}/api/v1/cop/features`);
-    url.searchParams.set("bbox", formatBbox(query.bbox));
+    url.searchParams.set("bbox", formatBbox(cacheBbox));
     url.searchParams.set("layers", layers.join(","));
-    url.searchParams.set("limit", String(query.limit));
+    url.searchParams.set("limit", String(fetchLimit));
     if (query.includeRaw) {
       url.searchParams.set("includeRaw", "1");
     }
 
-    const payload = await requestJson<SafetyProjectionCollection>(url.toString(), this.config.requestTimeoutMs);
+    const cacheKey = JSON.stringify({
+      bbox: formatBboxKey(cacheBbox),
+      layers: [...layers].sort(),
+      limit: fetchLimit,
+      includeRaw: query.includeRaw
+    });
+    const payload = await this.payloadCache.getOrLoad(cacheKey, () => requestJson<SafetyProjectionCollection>(url.toString(), this.config.requestTimeoutMs));
+    const queryCenter = bboxCenter(query.bbox);
     const features = (payload.features ?? [])
-      .map((feature) => mapSafetyProjectionFeature(feature, query.includeRaw))
+      .map((feature) => mapSafetyProjectionFeature(feature, query.includeRaw, queryCenter))
       .filter((feature): feature is SituationFeature => Boolean(feature))
       .filter((feature) => query.layers.includes(feature.properties.layer))
       .filter((feature) => isFeatureInBbox(feature, query.bbox))
@@ -732,8 +799,12 @@ interface SafetyProjectionFeature {
   };
 }
 
-function mapSafetyProjectionFeature(feature: SafetyProjectionFeature, includeRaw: boolean): SituationFeature | undefined {
-  const geometry = mapSafetyProjectionGeometry(feature.geometry);
+function mapSafetyProjectionFeature(
+  feature: SafetyProjectionFeature,
+  includeRaw: boolean,
+  warningPoint?: { lon: number; lat: number }
+): SituationFeature | undefined {
+  const geometry = mapSafetyProjectionGeometry(feature.geometry, feature.properties.layer === "warnings" ? warningPoint : undefined);
   if (!geometry) {
     return undefined;
   }
@@ -778,7 +849,13 @@ function mapSafetyProjectionFeature(feature: SafetyProjectionFeature, includeRaw
   };
 }
 
-function mapSafetyProjectionGeometry(geometry: SafetyProjectionFeature["geometry"]): SituationFeature["geometry"] | undefined {
+function mapSafetyProjectionGeometry(
+  geometry: SafetyProjectionFeature["geometry"],
+  pointOverride?: { lon: number; lat: number }
+): SituationFeature["geometry"] | undefined {
+  if (pointOverride) {
+    return { type: "Point", coordinates: [round(pointOverride.lon, 6), round(pointOverride.lat, 6)] };
+  }
   if (geometry.type === "Point" && Array.isArray(geometry.coordinates)) {
     const [lon, lat] = geometry.coordinates;
     if (typeof lon === "number" && typeof lat === "number") {

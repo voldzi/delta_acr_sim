@@ -47,6 +47,17 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
 
   app.get("/metrics", (_req, res) => {
     const cache = context.aggregation.cacheStats();
+    const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
+      `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
+      `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
+      `situation_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
+      `situation_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
+      `situation_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
+      `situation_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
+      `situation_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
+      `situation_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
+      `situation_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
+    ]);
     res
       .type("text/plain")
       .send(
@@ -60,7 +71,8 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           `situation_data_cache_stale_hits ${cache.staleHits}`,
           `situation_data_cache_refreshes ${cache.refreshes}`,
           `situation_data_cache_errors ${cache.errors}`,
-          `situation_data_cache_evictions ${cache.evictions}`
+          `situation_data_cache_evictions ${cache.evictions}`,
+          ...sourceCacheLines
         ].join("\n") + "\n"
       );
   });
@@ -194,8 +206,14 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     cacheTtlSeconds: config.cacheTtlSeconds,
     staleIfErrorSeconds: config.staleIfErrorSeconds,
     cacheMaxEntries: config.cacheMaxEntries,
+    bboxCachePaddingDegrees: config.bboxCachePaddingDegrees,
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
+    sourceCacheTtlSeconds: {
+      openMeteo: config.openMeteoCacheTtlSeconds,
+      osmOverpass: config.overpassCacheTtlSeconds,
+      safetyData: config.safetyDataCacheTtlSeconds
+    },
     providers: [
       { sourceId: "mock", authConfigured: true },
       { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },

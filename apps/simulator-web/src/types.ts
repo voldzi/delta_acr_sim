@@ -253,8 +253,14 @@ export interface SituationDataConfig {
   cacheTtlSeconds: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
+  bboxCachePaddingDegrees: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;
+  sourceCacheTtlSeconds: {
+    openMeteo: number;
+    osmOverpass: number;
+    safetyData: number;
+  };
   providers: Array<{
     sourceId: SituationDataSourceId;
     baseUrl?: string;

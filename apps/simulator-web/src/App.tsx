@@ -232,8 +232,14 @@ export function App() {
         cacheTtlSeconds: 0,
         staleIfErrorSeconds: 0,
         cacheMaxEntries: 0,
+        bboxCachePaddingDegrees: 0,
         staleAfterSeconds: 0,
         requestTimeoutMs: 0,
+        sourceCacheTtlSeconds: {
+          openMeteo: 0,
+          osmOverpass: 0,
+          safetyData: 0
+        },
         providers: []
       },
       features: emptySituationFeatures
@@ -789,8 +795,10 @@ export function App() {
                   <SummaryItem label="Cache TTL" value={`${data.situationData.config.cacheTtlSeconds}s`} />
                   <SummaryItem label="Stale fallback" value={`${data.situationData.config.staleIfErrorSeconds}s`} />
                   <SummaryItem label="Cache entries" value={`${data.situationData.config.cacheMaxEntries}`} />
+                  <SummaryItem label="BBox padding" value={`${data.situationData.config.bboxCachePaddingDegrees} deg`} />
                   <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
                   <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
+                  <SummaryItem label="Source TTLs" value={formatSituationSourceTtls(data.situationData.config.sourceCacheTtlSeconds)} />
                   <SummaryItem label="Query limit" value={`${data.situationData.features.query.limit || 0}`} />
                 </div>
               </section>
@@ -1527,6 +1535,10 @@ function formatCoordinate(value: number): string {
 
 function formatBbox(bbox: SituationDataConfig["defaultBbox"]): string {
   return `${formatCoordinate(bbox.west)}, ${formatCoordinate(bbox.south)}, ${formatCoordinate(bbox.east)}, ${formatCoordinate(bbox.north)}`;
+}
+
+function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeconds"]): string {
+  return `weather ${ttls.openMeteo}s / safety ${ttls.safetyData}s / OSM ${ttls.osmOverpass}s`;
 }
 
 function formatAltitude(value: number | undefined): string {

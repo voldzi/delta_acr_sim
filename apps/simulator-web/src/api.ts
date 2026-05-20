@@ -244,8 +244,14 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       cacheTtlSeconds: 0,
       staleIfErrorSeconds: 0,
       cacheMaxEntries: 0,
+      bboxCachePaddingDegrees: 0,
       staleAfterSeconds: 0,
       requestTimeoutMs: 0,
+      sourceCacheTtlSeconds: {
+        openMeteo: 0,
+        osmOverpass: 0,
+        safetyData: 0
+      },
       providers: []
     },
     "situation data config",

@@ -33,6 +33,11 @@
 - `SITUATION_DATA_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_STALE_IF_ERROR_SECONDS`
 - `SITUATION_DATA_CACHE_MAX_ENTRIES`
+- `SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES`
+- `SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS`
+- `SITUATION_DATA_OPEN_METEO_GRID_DEGREES`
+- `SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS`
+- `SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_STALE_AFTER_SECONDS`
 - `SITUATION_DATA_REQUEST_TIMEOUT_MS`
 - `OPEN_METEO_BASE_URL`
@@ -96,27 +101,33 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
-SITUATION_DATA_STALE_IF_ERROR_SECONDS=600
-SITUATION_DATA_CACHE_MAX_ENTRIES=512
+SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
+SITUATION_DATA_CACHE_MAX_ENTRIES=10000
+SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES=0.18
+SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS=600
+SITUATION_DATA_OPEN_METEO_GRID_DEGREES=0.05
+SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
-OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
-OVERPASS_MAX_BBOX_DEGREES=1.6
 CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
 PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 ```
 
-OpenStreetMap/Overpass zapínej pouze pro malé mapové výřezy a s konzervativní kadencí:
+OpenStreetMap/Overpass nezapínej jako produkční runtime backend pro tisíce uživatelů. Veřejný Overpass lze použít jen pro lokální vývoj nebo omezený pilot s malými bbox dotazy:
 
 ```bash
 SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass
+SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 OVERPASS_MAX_BBOX_DEGREES=1.6
 ```
+
+Produkční varianta musí použít lokální OSM import, typicky PostGIS tabulku z regionálního PBF extractu, a až poté zdroj pro pozemní POI znovu zapnout.
 
 ## Safety Data API
 
@@ -145,6 +156,7 @@ CHMI_HYDRO_MAX_STATIONS=80
 Projekce do `situation-data`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,osm_overpass,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,ctu_nettest,pid_gtfs_rt,safety_data
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
+SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 ```
