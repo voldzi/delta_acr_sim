@@ -43,6 +43,24 @@ done
 
 docker compose --profile osm exec -T osm-postgis pg_isready -U "$OSM_POSTGIS_USER" -d "$OSM_POSTGIS_DB" >/dev/null
 
+echo "Preparing PostGIS extensions and cleaning previous partial OSM imports."
+docker compose --profile osm exec -T -e PGPASSWORD="$OSM_POSTGIS_PASSWORD" osm-postgis \
+  psql -U "$OSM_POSTGIS_USER" -d "$OSM_POSTGIS_DB" -v ON_ERROR_STOP=1 <<'SQL'
+create extension if not exists postgis;
+create extension if not exists hstore;
+drop materialized view if exists public.osm_poi cascade;
+drop table if exists
+  public.osm_point,
+  public.osm_line,
+  public.osm_polygon,
+  public.osm_roads,
+  public.osm_nodes,
+  public.osm_ways,
+  public.osm_rels,
+  public.osm2pgsql_properties
+cascade;
+SQL
+
 echo "Importing OSM PBF into PostGIS with osm2pgsql."
 docker compose --profile osm --profile osm-import run --rm osm-importer \
   --create \
