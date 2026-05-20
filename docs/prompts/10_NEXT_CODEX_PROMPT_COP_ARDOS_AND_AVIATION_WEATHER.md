@@ -53,3 +53,4 @@ https://sim.zeleznalady.cz/situation-data/api/v1/sources
 - `docs/integration/08_FLIGHT_DATA_SOURCE_CONTRACT.md`
 - `docs/integration/09_SITUATION_DATA_SOURCE_CONTRACT.md`
 - `docs/integration/11_ARDOS_PARTNER_DATA_CONTRACT.md`
+- `docs/integration/12_COP_DISPLAY_GUIDE_FOR_NEW_DATA.md`
