@@ -121,14 +121,14 @@ components:
       required: false
       schema:
         type: string
-        example: weather,ground,mobile,traffic,warnings,flood
+        example: weather,ground,mobile_network,traffic,warnings,flood
     Sources:
       name: source
       in: query
       required: false
       schema:
         type: string
-        example: open_meteo,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+        example: open_meteo,mobile_network_model,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
     Technologies:
       name: technology
       in: query
@@ -136,7 +136,7 @@ components:
       schema:
         type: string
         example: 4G,5G
-      description: Optional mobile_coverage technology filter. Alias `technologies` is also accepted.
+      description: Optional mobile coverage/mobile network technology filter. Alias `technologies` is also accepted.
     Operators:
       name: operator
       in: query
@@ -144,7 +144,7 @@ components:
       schema:
         type: string
         example: unknown
-      description: Optional mobile_coverage operator filter. Phase 1 publishes only `unknown`.
+      description: Optional mobile coverage/mobile network operator filter. The unified mobile_network layer currently publishes aggregate/unknown operator assessment.
     Limit:
       name: limit
       in: query
@@ -173,10 +173,10 @@ components:
   schemas:
     LayerId:
       type: string
-      enum: [weather, ground, mobile, mobile_coverage, traffic, warnings, flood, air_quality]
+      enum: [weather, ground, mobile, mobile_coverage, mobile_network, traffic, warnings, flood, air_quality]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, osm_postgis, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -295,9 +295,11 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileCoverage, osmPostgis, osmOverpass, safetyData, aviationWeather, ardosPartner]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, safetyData, aviationWeather, ardosPartner]
           properties:
             openMeteo:
+              type: integer
+            mobileNetwork:
               type: integer
             mobileCoverage:
               type: integer
@@ -480,9 +482,25 @@ components:
             operator:
               type: string
             technology:
-              $ref: "#/components/schemas/MobileCoverageTechnology"
+              oneOf:
+                - $ref: "#/components/schemas/MobileCoverageTechnology"
+                - type: string
+                  enum: [mixed, unknown]
             quality:
               $ref: "#/components/schemas/MobileCoverageQuality"
+            status:
+              type: string
+              enum: [ok, weak_signal, degraded_possible, outage_reported, unknown]
+            basis:
+              type: array
+              items:
+                type: string
+            summary:
+              type: string
+            notices:
+              type: array
+              items:
+                type: string
             estimatedSignalDbm:
               type: integer
             modelVersion:

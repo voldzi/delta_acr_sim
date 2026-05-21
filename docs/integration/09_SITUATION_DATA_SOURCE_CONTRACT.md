@@ -22,8 +22,8 @@ https://sim.zeleznalady.cz/situation-data/api/v1
 GET /layers
 GET /sources
 GET /config
-GET /features?bbox=west,south,east,north&layers=weather,ground,mobile,traffic&limit=250
-GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile,traffic&limit=250
+GET /features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
+GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
 GET /mobile-coverage/metadata
 GET /dem/metadata
 ```
@@ -44,7 +44,7 @@ GET /dem/metadata
   },
   "query": {
     "bbox": { "west": 13.85, "south": 49.65, "east": 15.35, "north": 50.45 },
-    "layers": ["weather", "ground", "mobile", "traffic"],
+    "layers": ["weather", "ground", "mobile_network", "traffic"],
     "limit": 250,
     "sources": ["open_meteo", "ctu_nettest", "pid_gtfs_rt"]
   },
@@ -67,7 +67,7 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | Pole | Typ | Popis |
 | --- | --- | --- |
 | `featureId` | string | stabilní identifikátor v rámci zdroje |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_coverage`, `traffic`, `warnings`, `flood`, `air_quality` | mapová vrstva |
+| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `flood`, `air_quality` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
 | `sourceId` | string | poskytovatel v SIM registry |
@@ -95,6 +95,21 @@ Coverage features ve vrstvě `mobile_coverage` navíc nesou:
 | `assumptions` | object | použitý výškový/path-loss/terrain režim |
 | `disclaimer` | string | upozornění, že nejde o garantované pokrytí operátora |
 
+Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
+
+| Pole | Typ | Popis |
+| --- | --- | --- |
+| `operator` | `aggregate`, `unknown` | `aggregate` znamená souhrnný odhad bez operátorských stavových dat |
+| `technology` | `2G`, `4G`, `5G`, `mixed`, `unknown` | dominantní / filtrovaná technologie výsledku |
+| `quality` | `good`, `fair`, `weak`, `none`, `unknown` | normalizovaný závěr pro COP |
+| `status` | `ok`, `weak_signal`, `degraded_possible`, `outage_reported`, `unknown` | stavový závěr; bez partnerského feedu nejde o potvrzený výpadek BTS |
+| `basis` | string[] | vstupy, ze kterých byl závěr složen, např. `CTU_NETTEST_MEASUREMENT`, `INFERRED_COVERAGE`, `NO_OPERATOR_BTS_STATUS` |
+| `summary` | string | krátké české shrnutí pro detail v COP |
+| `notices` | string[] | bezpečnostní a kvalitativní poznámky k interpretaci |
+| `estimatedSignalDbm` | number | orientační odhad podle modelu a měření |
+| `modelVersion` | string | verze sjednocujícího modelu |
+| `disclaimer` | string | upozornění, že nejde o garantované pokrytí ani potvrzený stav konkrétní BTS |
+
 ## Podporované zdroje
 
 | Source | Vrstvy | Popis |
@@ -103,6 +118,7 @@ Coverage features ve vrstvě `mobile_coverage` navíc nesou:
 | `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COP AWC nevolá přímo. |
 | `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
 | `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
+| `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COP. Kombinuje modelované coverage, ČTÚ NetTest měření a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `safety_data` | `warnings`, `flood` | Projekce Safety Data API do situačního kontraktu. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
@@ -176,6 +192,34 @@ Příklad metadat:
 
 Health `/situation-data/health/ready` u `mobile_coverage_model` vrací `backend` a `objectCount` použitelných věží. Metrics obsahují `situation_data_mobile_coverage_towers`, `situation_data_mobile_coverage_backend_info` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_coverage_model"}`.
 
+## Mobile Network Model
+
+`mobile_network_model` je preferovaný výstup pro COP. COP má primárně zobrazovat vrstvu `mobile_network`, ne skládat sám závěr z `mobile_coverage`, `ctu_nettest` a OSM bodů. `mobile_coverage` zůstává dostupné jako technická/modelová vrstva pro detail a ladění.
+
+Dotaz:
+
+```http
+GET /cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=250
+```
+
+Volitelné parametry:
+
+- `technology` nebo `technologies`: comma-separated filtr `2G,4G,5G`,
+- `operator` nebo `operators`: podporuje `aggregate` a `unknown`; reálný operátor bude přidán až po licenčně/partnersky čistém zdroji,
+- `limit`: počet polygonů po aplikaci bbox filtru.
+
+Interpretace:
+
+- `quality` je hlavní hodnota pro barvu mapy: `good`, `fair`, `weak`, `none`, `unknown`,
+- `status` je hlavní hodnota pro výstrahy: `weak_signal` a `degraded_possible` se mohou zobrazit jako riziko, `outage_reported` až po autorizovaném operátorském/partnerském feedu,
+- `confidence` říká sílu kombinovaného závěru,
+- `basis` ukazuje, jestli závěr stojí na měření, modelu, OSM infrastruktuře nebo jen na absenci lepších dat,
+- `summary` a `notices` jsou připravené pro detail objektu v COP.
+
+Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení.
+
+Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
+
 ## DEM Catalog
 
 SIM připravuje DEM katalog pro terrain-aware coverage model:
@@ -213,7 +257,7 @@ Příklad odpovědi:
 }
 ```
 
-COP DEM data přímo nepoužívá. Endpoint slouží pro dependency dohled a informaci, z jakého DEM bude SIM později generovat terrain-aware `mobile_coverage`.
+COP DEM data přímo nepoužívá. Endpoint slouží pro dependency dohled a informaci, z jakého DEM bude SIM později generovat terrain-aware `mobile_coverage` a finální `mobile_network`.
 
 COP musí vrstvu zobrazovat jako odhad, ne jako garantované pokrytí operátora. Doporučené barvy: `good` zelená, `fair` žlutá, `weak` oranžová, `none` červená nebo šedá, `unknown` šedá.
 
@@ -250,7 +294,8 @@ SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metr
 - Dotazovat podle bbox aktuální mapy, ne plošně celou ČR.
 - Default `limit=250`.
 - Weather, mobile a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COP tracky ani letecké cíle.
-- `mobile_coverage` zobrazovat jako průhlednou polygonovou vrstvu s legendou kvality a upozorněním, že jde o odhad.
+- `mobile_network` zobrazovat jako hlavní mobilní vrstvu s legendou kvality a upozorněním, že jde o odhad, ne potvrzený stav konkrétní BTS.
+- `mobile_coverage` používat jen jako technický/detailní vstup, pokud je potřeba ladit model.
 - `aviation_weather` zobrazovat jako letištní počasí, ne jako tracky.
 - `ardos_partner` zobrazovat jen ve views, kde uživatel má oprávnění pro partnerská data.
 - U každého objektu zobrazovat zdroj a licenci.

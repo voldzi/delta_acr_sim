@@ -187,10 +187,20 @@ function parseBbox(value: unknown, fallback: BoundingBox): { ok: true; value: Bo
 }
 
 function parseLayers(value: unknown): SituationLayerId[] {
-  const allowed = new Set<SituationLayerId>(["weather", "ground", "mobile", "mobile_coverage", "traffic", "warnings", "flood", "air_quality"]);
+  const allowed = new Set<SituationLayerId>([
+    "weather",
+    "ground",
+    "mobile",
+    "mobile_coverage",
+    "mobile_network",
+    "traffic",
+    "warnings",
+    "flood",
+    "air_quality"
+  ]);
   const raw = asString(value);
   if (!raw) {
-    return ["weather", "ground", "mobile", "traffic", "warnings", "flood", "air_quality"];
+    return ["weather", "ground", "mobile", "mobile_network", "traffic", "warnings", "flood", "air_quality"];
   }
   return raw
     .split(",")
@@ -203,6 +213,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "mock",
     "open_meteo",
     "mobile_coverage_model",
+    "mobile_network_model",
     "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
@@ -279,6 +290,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     requestTimeoutMs: config.requestTimeoutMs,
     sourceCacheTtlSeconds: {
       openMeteo: config.openMeteoCacheTtlSeconds,
+      mobileNetwork: config.mobileNetworkCacheTtlSeconds,
       mobileCoverage: config.mobileCoverageCacheTtlSeconds,
       osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
@@ -291,6 +303,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
       {
         sourceId: "mobile_coverage_model",
+        baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
+        authConfigured: Boolean(config.osmPostgisConnectionString),
+        backend: config.osmPostgisBackend
+      },
+      {
+        sourceId: "mobile_network_model",
         baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
         authConfigured: Boolean(config.osmPostgisConnectionString),
         backend: config.osmPostgisBackend
@@ -319,6 +337,12 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     lines.push(`situation_data_mobile_coverage_backend_info{backend="${backend}"} 1`);
     if (typeof status.objectCount === "number") {
       lines.push(`situation_data_mobile_coverage_towers{backend="${backend}"} ${status.objectCount}`);
+    }
+  }
+  if (status.sourceId === "mobile_network_model") {
+    lines.push(`situation_data_mobile_network_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_mobile_network_towers{backend="${backend}"} ${status.objectCount}`);
     }
   }
   if (status.sourceId === "osm_postgis") {

@@ -1,8 +1,18 @@
-export type SituationLayerId = "weather" | "ground" | "mobile" | "mobile_coverage" | "traffic" | "warnings" | "flood" | "air_quality";
+export type SituationLayerId =
+  | "weather"
+  | "ground"
+  | "mobile"
+  | "mobile_coverage"
+  | "mobile_network"
+  | "traffic"
+  | "warnings"
+  | "flood"
+  | "air_quality";
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
   | "mobile_coverage_model"
+  | "mobile_network_model"
   | "osm_postgis"
   | "osm_overpass"
   | "ctu_nettest"
@@ -14,7 +24,9 @@ export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
 export type OsmPostgisBackend = "unconfigured" | "local-postgis" | "patroni-postgis" | "external-postgis";
 export type MobileCoverageTechnology = "2G" | "4G" | "5G";
+export type MobileNetworkTechnology = MobileCoverageTechnology | "mixed" | "unknown";
 export type MobileCoverageQuality = "good" | "fair" | "weak" | "none" | "unknown";
+export type MobileNetworkStatus = "ok" | "weak_signal" | "degraded_possible" | "outage_reported" | "unknown";
 
 export interface BoundingBox {
   west: number;
@@ -74,6 +86,7 @@ export interface SituationDataPublicConfig {
   requestTimeoutMs: number;
   sourceCacheTtlSeconds: {
     openMeteo: number;
+    mobileNetwork: number;
     mobileCoverage: number;
     osmPostgis: number;
     osmOverpass: number;
@@ -156,8 +169,12 @@ export interface SituationFeatureProperties {
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
   operator?: string;
-  technology?: MobileCoverageTechnology;
+  technology?: MobileNetworkTechnology;
   quality?: MobileCoverageQuality;
+  status?: MobileNetworkStatus;
+  basis?: string[];
+  summary?: string;
+  notices?: string[];
   estimatedSignalDbm?: number;
   modelVersion?: string;
   generatedAt?: string;

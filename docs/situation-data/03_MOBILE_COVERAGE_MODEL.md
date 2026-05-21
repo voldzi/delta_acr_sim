@@ -6,6 +6,8 @@ SIM publishes `mobile_coverage` as a prepared map layer for COP. COP displays an
 
 The current implementation is phase 1: a conservative estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`. It is suitable for situational context and weak/no-coverage warnings, not for guaranteed operator service availability.
 
+For production COP display, prefer the unified `mobile_network` layer from `mobile_network_model`. This document describes the lower-level coverage model that feeds that assessment and remains useful for diagnostics.
+
 ## Source And Layer
 
 - source: `mobile_coverage_model`
@@ -76,7 +78,8 @@ Feature properties include:
 ## Configuration
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MAX_CELLS=1000

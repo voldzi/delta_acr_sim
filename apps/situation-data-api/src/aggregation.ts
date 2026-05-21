@@ -105,7 +105,9 @@ function cacheKeyForSituationQuery(query: SituationQuery, config: SituationDataC
     layers: [...query.layers].sort(),
     sources: [...query.sourceIds].sort(),
     limit: query.limit,
-    includeRaw: query.includeRaw
+    includeRaw: query.includeRaw,
+    technologies: [...(query.mobileCoverageTechnologies ?? [])].sort(),
+    operators: [...(query.mobileCoverageOperators ?? [])].sort()
   });
 }
 
@@ -221,8 +223,12 @@ function layerRank(value: SituationLayerId): number {
       return 2;
     case "mobile":
       return 3;
+    case "mobile_network":
+      return 4;
+    case "mobile_coverage":
+      return 5;
     case "ground":
     default:
-      return 4;
+      return 6;
   }
 }

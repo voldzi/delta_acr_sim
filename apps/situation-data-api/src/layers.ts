@@ -34,6 +34,14 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 21600
   },
   {
+    layerId: "mobile_network",
+    label: "Mobile network assessment",
+    description: "Unified SIM assessment of mobile network quality from coverage estimates, public measurements and confidence scoring.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 3600
+  },
+  {
     layerId: "traffic",
     label: "Traffic",
     description: "Road and public transport incidents, constraints and synthetic pilot context.",

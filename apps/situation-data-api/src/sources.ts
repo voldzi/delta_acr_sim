@@ -8,6 +8,10 @@ import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
+  MobileCoverageQuality,
+  MobileCoverageTechnology,
+  MobileNetworkStatus,
+  MobileNetworkTechnology,
   PointGeometry,
   SituationDataLicense,
   SituationDataSourceId,
@@ -79,6 +83,18 @@ const CTU_NETTEST_LICENSE: SituationDataLicense = {
   ]
 };
 
+const MOBILE_NETWORK_LICENSE: SituationDataLicense = {
+  name: "Unified mobile network assessment",
+  attribution: "DELTA ACR SIM model; Czech Telecommunication Office / CTU-NetTest; OpenStreetMap contributors where tower hints are used",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Unified assessment from public measurements, modelled coverage and infrastructure hints.",
+    "Not a real-time BTS or operator NOC status feed.",
+    "Do not present inferred status as confirmed outage of a concrete BTS."
+  ]
+};
+
 const PID_GTFS_RT_LICENSE: SituationDataLicense = {
   name: "PID/Golemio Open Data",
   url: "https://api.golemio.cz/pid/docs/openapi/",
@@ -135,6 +151,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     mock: new MockSituationDataSource(),
     open_meteo: new OpenMeteoSource(config),
     mobile_coverage_model: new MobileCoverageSource(config),
+    mobile_network_model: new MobileNetworkSource(config),
     osm_postgis: new OsmPostgisSource(config),
     osm_overpass: new OsmOverpassSource(config),
     ctu_nettest: new CtuNettestSource(config),
@@ -153,6 +170,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new MockSituationDataSource().descriptor,
     new OpenMeteoSource(config).descriptor,
     new MobileCoverageSource(config).descriptor,
+    new MobileNetworkSource(config).descriptor,
     new OsmPostgisSource(config).descriptor,
     new OsmOverpassSource(config).descriptor,
     new CtuNettestSource(config).descriptor,
@@ -397,6 +415,328 @@ class CtuNettestSource implements SituationDataSource {
     }
 
     return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
+interface MobileNetworkPayload {
+  generatedAt: string;
+  features: SituationFeature[];
+  warnings: string[];
+  coverageFeatureCount: number;
+  measurementCount: number;
+}
+
+interface MeasurementStats {
+  count: number;
+  medianDownloadMbps?: number;
+  medianUploadMbps?: number;
+  medianLatencyMs?: number;
+  medianSignalDbm?: number;
+  averageConfidence: number;
+  lastMeasuredAt?: string;
+  quality?: MobileCoverageQuality;
+  severity: SituationSeverity;
+}
+
+export class MobileNetworkSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<MobileNetworkPayload>;
+  private readonly coverageSource: MobileCoverageSource;
+  private readonly ctuNettestSource: CtuNettestSource;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.payloadCache = new ManagedResponseCache<MobileNetworkPayload>({
+      ttlMs: Math.max(300, config.mobileNetworkCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.mobileNetworkCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 4096))
+    });
+    this.coverageSource = new MobileCoverageSource(config);
+    this.ctuNettestSource = new CtuNettestSource(config);
+    this.descriptor = {
+      sourceId: "mobile_network_model",
+      label: "Unified mobile network assessment",
+      enabled: config.enabledSources.includes("mobile_network_model"),
+      mode: "live",
+      priority: 68,
+      layers: ["mobile_network"],
+      license: MOBILE_NETWORK_LICENSE,
+      baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
+      updateCadenceSeconds: config.mobileNetworkCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("mobile_network_model", this.payloadCache)];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    const coverageHealth = await this.coverageSource.healthStatus?.();
+    return {
+      sourceId: "mobile_network_model",
+      status: coverageHealth?.status ?? "degraded",
+      backend: this.config.osmPostgisBackend,
+      objectCount: coverageHealth?.objectCount,
+      lastImportAt: coverageHealth?.lastImportAt,
+      lastImportAgeSeconds: coverageHealth?.lastImportAgeSeconds,
+      warnings: coverageHealth?.warnings ?? ["mobile_network_model could not inspect mobile_coverage_model health."]
+    };
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("mobile_network")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const operators = query.mobileCoverageOperators?.length ? query.mobileCoverageOperators : ["aggregate"];
+    if (!operators.some((operator) => operator === "aggregate" || operator === "unknown")) {
+      return {
+        source: this.descriptor,
+        fetchedAt,
+        features: [],
+        warnings: ["mobile_network_model currently publishes aggregate/unknown operator assessment only."]
+      };
+    }
+
+    const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
+    const cacheKey = JSON.stringify({
+      bbox: formatBboxKey(cacheBbox),
+      technologies: [...(query.mobileCoverageTechnologies ?? [])].sort(),
+      operators: ["aggregate"],
+      resolutionM: this.config.mobileCoverageResolutionM,
+      maxCells: this.config.mobileCoverageMaxCells,
+      modelVersion: this.config.mobileCoverageModelVersion
+    });
+    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildMobileNetwork(cacheBbox, query.mobileCoverageTechnologies));
+    const features = payload.features
+      .filter((feature) => featureIntersectsBboxByEnvelope(feature, query.bbox))
+      .slice(0, query.limit)
+      .map((feature) => ({
+        ...feature,
+        properties: {
+          ...feature.properties,
+          raw: query.includeRaw ? feature.properties.raw : undefined
+        }
+      }));
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features,
+      warnings: payload.warnings
+    };
+  }
+
+  private async buildMobileNetwork(bbox: BoundingBox, technologies: MobileCoverageTechnology[] | undefined): Promise<MobileNetworkPayload> {
+    const generatedAt = new Date().toISOString();
+    const warnings: string[] = [];
+    const coverageLimit = Math.min(1000, Math.max(this.config.mobileCoverageMaxCells, 1));
+    const coverageQuery: SituationQuery = {
+      bbox,
+      layers: ["mobile_coverage"],
+      sourceIds: ["mobile_coverage_model"],
+      limit: coverageLimit,
+      includeRaw: false,
+      mobileCoverageTechnologies: technologies
+    };
+    const measurementQuery: SituationQuery = {
+      bbox,
+      layers: ["mobile"],
+      sourceIds: ["ctu_nettest"],
+      limit: 1000,
+      includeRaw: false
+    };
+
+    const [coverageSettled, measurementSettled] = await Promise.allSettled([
+      this.coverageSource.fetchFeatures(coverageQuery),
+      this.ctuNettestSource.fetchFeatures(measurementQuery)
+    ]);
+
+    const coverageFeatures =
+      coverageSettled.status === "fulfilled"
+        ? coverageSettled.value.features.filter((feature) => feature.geometry.type === "Polygon")
+        : [];
+    if (coverageSettled.status === "fulfilled") {
+      warnings.push(...coverageSettled.value.warnings.map((warning) => `coverage: ${warning}`));
+    } else {
+      warnings.push(coverageSettled.reason instanceof Error ? `coverage: ${coverageSettled.reason.message}` : "coverage: unknown failure");
+    }
+
+    const measurements =
+      measurementSettled.status === "fulfilled"
+        ? measurementSettled.value.features.filter((feature) => feature.geometry.type === "Point")
+        : [];
+    if (measurementSettled.status === "fulfilled") {
+      warnings.push(...measurementSettled.value.warnings.map((warning) => `ctu_nettest: ${warning}`));
+    } else {
+      warnings.push(measurementSettled.reason instanceof Error ? `ctu_nettest: ${measurementSettled.reason.message}` : "ctu_nettest: unknown failure");
+    }
+
+    const selectedCoverage = selectCoverageFeatures(coverageFeatures, technologies);
+    const features =
+      selectedCoverage.length > 0
+        ? selectedCoverage.map((coverage) => this.mobileNetworkFeatureFromCoverage(coverage, measurementsInPolygon(measurements, coverage), generatedAt))
+        : [this.mobileNetworkFallbackFeature(bbox, measurements, generatedAt)];
+
+    if (measurements.length === 0) {
+      warnings.push("mobile_network_model has no CTU NetTest measurements in the requested area; assessment is model-only.");
+    }
+    warnings.push("mobile_network_model does not contain authorized real-time BTS/NOC status; area status is inferred.");
+
+    return {
+      generatedAt,
+      features,
+      warnings,
+      coverageFeatureCount: coverageFeatures.length,
+      measurementCount: measurements.length
+    };
+  }
+
+  private mobileNetworkFeatureFromCoverage(coverage: SituationFeature, measurements: SituationFeature[], generatedAt: string): SituationFeature {
+    const stats = summarizeMeasurements(measurements);
+    const coverageQuality = coverage.properties.quality ?? "unknown";
+    const quality = combineQuality(coverageQuality, stats.quality, stats.count);
+    const status = statusForMobileQuality(quality, stats);
+    const confidence = mobileNetworkConfidence(coverage.properties.confidence, coverageQuality, stats, quality);
+    const technology = networkTechnology(coverage.properties.technology);
+    const basis = mobileNetworkBasis(coverage, stats);
+    const featureId = coverage.id.replace(/^coverage:mobile:/, "mobile_network:aggregate:");
+    const summary = mobileNetworkSummary(quality, status, stats);
+
+    return {
+      type: "Feature",
+      id: featureId,
+      geometry: coverage.geometry,
+      properties: {
+        featureId,
+        layer: "mobile_network",
+        category: "mobile_network",
+        label: "Mobile network assessment",
+        sourceId: "mobile_network_model",
+        observedAt: generatedAt,
+        confidence,
+        stale: false,
+        severity: severityForMobileStatus(status, quality),
+        license: {
+          name: MOBILE_NETWORK_LICENSE.name,
+          attribution: MOBILE_NETWORK_LICENSE.attribution
+        },
+        operator: "aggregate",
+        technology,
+        quality,
+        status,
+        basis,
+        summary,
+        notices: ["Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora."],
+        estimatedSignalDbm: estimateSignalFromCoverageAndMeasurements(coverage, stats),
+        modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
+        generatedAt,
+        resolutionM: coverage.properties.resolutionM,
+        demSource: coverage.properties.demSource,
+        assumptions: {
+          ...(coverage.properties.assumptions ?? {}),
+          aggregationModel: "coverage+ctu-nettest-confidence-v1",
+          btsRealtimeStatus: false
+        },
+        disclaimer: "Mobile network quality is an inferred area assessment, not a confirmed BTS or operator outage state.",
+        metrics: compactMixedMetrics({
+          coverageConfidence: coverage.properties.confidence,
+          coverageQuality,
+          measurementCount: stats.count,
+          medianDownloadMbps: stats.medianDownloadMbps,
+          medianUploadMbps: stats.medianUploadMbps,
+          medianLatencyMs: stats.medianLatencyMs,
+          medianSignalDbm: stats.medianSignalDbm,
+          measurementConfidence: stats.count > 0 ? stats.averageConfidence : undefined,
+          finalConfidence: confidence,
+          distanceToNearestTowerM: coverage.properties.metrics?.distanceToNearestTowerM
+        }),
+        tags: compactTags({
+          basis: basis.join(","),
+          status,
+          lastMeasuredAt: stats.lastMeasuredAt,
+          sourceCoverageFeatureId: coverage.properties.featureId
+        }),
+        raw: {
+          coverage: coverage.properties,
+          measurementStats: stats
+        }
+      }
+    };
+  }
+
+  private mobileNetworkFallbackFeature(bbox: BoundingBox, measurements: SituationFeature[], generatedAt: string): SituationFeature {
+    const stats = summarizeMeasurements(measurements);
+    const quality = stats.quality ?? "unknown";
+    const status = statusForMobileQuality(quality, stats);
+    const confidence = mobileNetworkConfidence(undefined, "unknown", stats, quality);
+    const featureId = `mobile_network:aggregate:mixed:${formatBboxKey(bbox)}`;
+    return {
+      type: "Feature",
+      id: featureId,
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [round(bbox.west, 6), round(bbox.south, 6)],
+            [round(bbox.east, 6), round(bbox.south, 6)],
+            [round(bbox.east, 6), round(bbox.north, 6)],
+            [round(bbox.west, 6), round(bbox.north, 6)],
+            [round(bbox.west, 6), round(bbox.south, 6)]
+          ]
+        ]
+      },
+      properties: {
+        featureId,
+        layer: "mobile_network",
+        category: "mobile_network",
+        label: "Mobile network assessment",
+        sourceId: "mobile_network_model",
+        observedAt: generatedAt,
+        confidence,
+        stale: false,
+        severity: severityForMobileStatus(status, quality),
+        license: {
+          name: MOBILE_NETWORK_LICENSE.name,
+          attribution: MOBILE_NETWORK_LICENSE.attribution
+        },
+        operator: "aggregate",
+        technology: "mixed",
+        quality,
+        status,
+        basis: stats.count > 0 ? ["CTU_NETTEST_MEASUREMENT", "NO_OPERATOR_BTS_STATUS"] : ["UNKNOWN", "NO_OPERATOR_BTS_STATUS"],
+        summary: mobileNetworkSummary(quality, status, stats),
+        notices: [
+          "Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora.",
+          "V oblasti nebyl dostupný model pokrytí, výsledek je založený jen na dostupných měřeních nebo je neznámý."
+        ],
+        modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
+        generatedAt,
+        resolutionM: undefined,
+        demSource: this.config.mobileCoverageDemSource,
+        assumptions: {
+          aggregationModel: "ctu-nettest-fallback-v1",
+          btsRealtimeStatus: false
+        },
+        disclaimer: "Mobile network quality is an inferred area assessment, not a confirmed BTS or operator outage state.",
+        metrics: compactMixedMetrics({
+          measurementCount: stats.count,
+          medianDownloadMbps: stats.medianDownloadMbps,
+          medianUploadMbps: stats.medianUploadMbps,
+          medianLatencyMs: stats.medianLatencyMs,
+          medianSignalDbm: stats.medianSignalDbm,
+          measurementConfidence: stats.count > 0 ? stats.averageConfidence : undefined,
+          finalConfidence: confidence
+        }),
+        tags: compactTags({
+          status,
+          lastMeasuredAt: stats.lastMeasuredAt
+        }),
+        raw: {
+          measurementStats: stats
+        }
+      }
+    };
   }
 }
 
@@ -850,6 +1190,279 @@ function mapCtuNettestRecord(record: Record<string, string>, query: SituationQue
     }),
     raw: query.includeRaw ? record : undefined
   });
+}
+
+function selectCoverageFeatures(features: SituationFeature[], technologies: MobileCoverageTechnology[] | undefined): SituationFeature[] {
+  if (technologies?.length === 1) {
+    return features.filter((feature) => feature.properties.technology === technologies[0]);
+  }
+
+  const grouped = new Map<string, SituationFeature[]>();
+  for (const feature of features) {
+    const key = coverageCellKey(feature);
+    grouped.set(key, [...(grouped.get(key) ?? []), feature]);
+  }
+
+  return Array.from(grouped.values()).flatMap((group) => {
+    const selected = group.sort(
+      (a, b) => qualityRank(b.properties.quality) - qualityRank(a.properties.quality) || (b.properties.confidence ?? 0) - (a.properties.confidence ?? 0)
+    )[0];
+    return selected ? [selected] : [];
+  });
+}
+
+function coverageCellKey(feature: SituationFeature): string {
+  const id = String(feature.id);
+  const suffix = id.split(":").pop();
+  if (suffix) {
+    return suffix;
+  }
+  return JSON.stringify(feature.geometry);
+}
+
+function measurementsInPolygon(measurements: SituationFeature[], polygon: SituationFeature): SituationFeature[] {
+  const bbox = featureEnvelope(polygon);
+  if (!bbox) {
+    return [];
+  }
+  return measurements.filter((measurement) => {
+    if (measurement.geometry.type !== "Point") {
+      return false;
+    }
+    const [lon, lat] = measurement.geometry.coordinates;
+    return lon >= bbox.west && lon <= bbox.east && lat >= bbox.south && lat <= bbox.north;
+  });
+}
+
+function summarizeMeasurements(measurements: SituationFeature[]): MeasurementStats {
+  const download = measurements.map((feature) => numericMetric(feature, "downloadMbps")).filter(isFiniteNumber);
+  const upload = measurements.map((feature) => numericMetric(feature, "uploadMbps")).filter(isFiniteNumber);
+  const latency = measurements.map((feature) => numericMetric(feature, "latencyMs")).filter(isFiniteNumber);
+  const signal = measurements
+    .map((feature) => numericMetric(feature, "lteRsrpDbm") ?? numericMetric(feature, "signalStrengthDbm"))
+    .filter(isFiniteNumber);
+  const averageConfidence =
+    measurements.length > 0 ? round(measurements.reduce((sum, feature) => sum + feature.properties.confidence, 0) / measurements.length, 2) : 0;
+  const lastMeasuredAt = measurements
+    .map((feature) => feature.properties.observedAt)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const medianDownloadMbps = median(download);
+  const medianUploadMbps = median(upload);
+  const medianLatencyMs = median(latency);
+  const medianSignalDbm = median(signal);
+  const severity = mobileNetworkSeverity(medianDownloadMbps, medianUploadMbps, medianLatencyMs, medianSignalDbm, false);
+  return {
+    count: measurements.length,
+    medianDownloadMbps,
+    medianUploadMbps,
+    medianLatencyMs,
+    medianSignalDbm,
+    averageConfidence,
+    lastMeasuredAt,
+    quality: measurements.length > 0 ? measurementQuality(medianDownloadMbps, medianUploadMbps, medianLatencyMs, medianSignalDbm) : undefined,
+    severity
+  };
+}
+
+function measurementQuality(
+  downloadMbps: number | undefined,
+  uploadMbps: number | undefined,
+  latencyMs: number | undefined,
+  signalDbm: number | undefined
+): MobileCoverageQuality {
+  if ((downloadMbps ?? Infinity) < 1 || (uploadMbps ?? Infinity) < 0.5 || (latencyMs ?? 0) > 250 || (signalDbm ?? 0) < -118) {
+    return "none";
+  }
+  if ((downloadMbps ?? Infinity) < 5 || (uploadMbps ?? Infinity) < 1.5 || (latencyMs ?? 0) > 150 || (signalDbm ?? 0) < -110) {
+    return "weak";
+  }
+  if ((downloadMbps ?? Infinity) < 15 || (uploadMbps ?? Infinity) < 5 || (latencyMs ?? 0) > 75 || (signalDbm ?? 0) < -100) {
+    return "fair";
+  }
+  return "good";
+}
+
+function combineQuality(
+  coverageQuality: MobileCoverageQuality,
+  measurementQualityValue: MobileCoverageQuality | undefined,
+  measurementCount: number
+): MobileCoverageQuality {
+  if (!measurementQualityValue) {
+    return coverageQuality;
+  }
+  if (coverageQuality === "unknown") {
+    return measurementQualityValue;
+  }
+  if (measurementCount >= 2 && qualityRank(measurementQualityValue) < qualityRank(coverageQuality)) {
+    return measurementQualityValue;
+  }
+  if (measurementCount >= 5 && qualityRank(measurementQualityValue) > qualityRank(coverageQuality)) {
+    return measurementQualityValue;
+  }
+  return coverageQuality;
+}
+
+function mobileNetworkConfidence(
+  coverageConfidence: number | undefined,
+  coverageQuality: MobileCoverageQuality,
+  stats: MeasurementStats,
+  finalQuality: MobileCoverageQuality
+): number {
+  const baseCoverageConfidence = typeof coverageConfidence === "number" ? coverageConfidence : 0.25;
+  if (stats.count <= 0) {
+    const capped = finalQuality === "unknown" ? Math.min(baseCoverageConfidence, 0.42) : Math.min(baseCoverageConfidence * 0.9, 0.68);
+    return round(clamp(capped, 0.2, 0.7), 2);
+  }
+
+  const measurementDensity = clamp(Math.log2(stats.count + 1) / 4, 0.18, 0.8);
+  const agreement = stats.quality && coverageQuality !== "unknown" && stats.quality === coverageQuality ? 0.08 : 0;
+  const confidence = baseCoverageConfidence * 0.42 + stats.averageConfidence * 0.38 + measurementDensity * 0.12 + agreement;
+  return round(clamp(finalQuality === "unknown" ? Math.min(confidence, 0.45) : confidence, 0.25, 0.9), 2);
+}
+
+function mobileNetworkBasis(coverage: SituationFeature, stats: MeasurementStats): string[] {
+  const basis = ["INFERRED_COVERAGE", "DISTANCE_PATH_LOSS_MODEL", "NO_OPERATOR_BTS_STATUS"];
+  if (coverage.properties.metrics?.distanceToNearestTowerM !== undefined) {
+    basis.splice(1, 0, "OSM_INFRASTRUCTURE_HINT");
+  }
+  if (stats.count > 0) {
+    basis.splice(0, 0, "CTU_NETTEST_MEASUREMENT");
+  }
+  return basis;
+}
+
+function statusForMobileQuality(quality: MobileCoverageQuality, stats: MeasurementStats): MobileNetworkStatus {
+  if (quality === "good" || quality === "fair") {
+    return stats.count >= 2 && stats.severity === "warning" ? "degraded_possible" : "ok";
+  }
+  if (quality === "weak") {
+    return "weak_signal";
+  }
+  if (quality === "none") {
+    return "degraded_possible";
+  }
+  return "unknown";
+}
+
+function severityForMobileStatus(status: MobileNetworkStatus, quality: MobileCoverageQuality): SituationSeverity {
+  if (status === "outage_reported" || quality === "none") {
+    return "critical";
+  }
+  if (status === "degraded_possible" || status === "weak_signal" || quality === "weak") {
+    return "warning";
+  }
+  if (status === "unknown") {
+    return "advisory";
+  }
+  return "info";
+}
+
+function networkTechnology(value: MobileNetworkTechnology | undefined): MobileNetworkTechnology {
+  return value === "2G" || value === "4G" || value === "5G" ? value : "mixed";
+}
+
+function estimateSignalFromCoverageAndMeasurements(coverage: SituationFeature, stats: MeasurementStats): number | undefined {
+  if (stats.count >= 2 && typeof stats.medianSignalDbm === "number") {
+    return Math.round(stats.medianSignalDbm);
+  }
+  return typeof coverage.properties.estimatedSignalDbm === "number" ? coverage.properties.estimatedSignalDbm : undefined;
+}
+
+function mobileNetworkSummary(quality: MobileCoverageQuality, status: MobileNetworkStatus, stats: MeasurementStats): string {
+  const qualityText: Record<MobileCoverageQuality, string> = {
+    good: "dobrá",
+    fair: "použitelná s omezením",
+    weak: "slabá",
+    none: "pravděpodobně nedostupná",
+    unknown: "neověřená"
+  };
+  const statusText: Record<MobileNetworkStatus, string> = {
+    ok: "bez zjevného problému",
+    weak_signal: "riziko slabého signálu",
+    degraded_possible: "možná degradace služby",
+    outage_reported: "hlášený výpadek",
+    unknown: "stav nelze z veřejných dat ověřit"
+  };
+  const measurementText =
+    stats.count > 0
+      ? ` Závěr je zpřesněn ${stats.count} veřejnými měřeními ČTÚ NetTest${stats.medianDownloadMbps ? `, medián downloadu ${stats.medianDownloadMbps} Mb/s` : ""}.`
+      : " V oblasti nejsou v cache dostupná aktuální veřejná měření ČTÚ NetTest.";
+  return `Mobilní síť je v oblasti hodnocena jako ${qualityText[quality]} (${statusText[status]}).${measurementText}`;
+}
+
+function featureIntersectsBboxByEnvelope(feature: SituationFeature, bbox: BoundingBox): boolean {
+  const envelope = featureEnvelope(feature);
+  if (!envelope) {
+    return false;
+  }
+  return envelope.west <= bbox.east && envelope.east >= bbox.west && envelope.south <= bbox.north && envelope.north >= bbox.south;
+}
+
+function featureEnvelope(feature: SituationFeature): BoundingBox | undefined {
+  const coordinates =
+    feature.geometry.type === "Point"
+      ? [feature.geometry.coordinates]
+      : feature.geometry.type === "LineString"
+        ? feature.geometry.coordinates
+        : feature.geometry.coordinates.flat();
+  if (coordinates.length === 0) {
+    return undefined;
+  }
+  return coordinates.reduce(
+    (acc, [lon, lat]) => ({
+      west: Math.min(acc.west, lon),
+      south: Math.min(acc.south, lat),
+      east: Math.max(acc.east, lon),
+      north: Math.max(acc.north, lat)
+    }),
+    { west: Infinity, south: Infinity, east: -Infinity, north: -Infinity }
+  );
+}
+
+function numericMetric(feature: SituationFeature, metric: string): number | undefined {
+  const value = feature.properties.metrics?.[metric];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function median(values: number[]): number | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const value = sorted.length % 2 === 0 ? (sorted[middle - 1] ?? 0) / 2 + (sorted[middle] ?? 0) / 2 : (sorted[middle] ?? 0);
+  return round(value, 2);
+}
+
+function qualityRank(value: MobileCoverageQuality | undefined): number {
+  switch (value) {
+    case "good":
+      return 4;
+    case "fair":
+      return 3;
+    case "weak":
+      return 2;
+    case "none":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function isFiniteNumber(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function publicPostgisBaseUrl(connectionString: string | undefined): string | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  try {
+    const url = new URL(connectionString);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "postgresql://configured";
+  }
 }
 
 function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {

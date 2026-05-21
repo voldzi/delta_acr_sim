@@ -190,8 +190,10 @@ run_psql -tAc "select count(*) from public.osm_poi;"
 
 cat <<EOF
 To enable in SIM:
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
+SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 OSM_POSTGIS_BACKEND=$OSM_POSTGIS_BACKEND
 OSM_POSTGIS_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
 OSM_POSTGIS_TABLE=public.osm_poi

@@ -283,6 +283,7 @@ export function App() {
         requestTimeoutMs: 0,
         sourceCacheTtlSeconds: {
           openMeteo: 0,
+          mobileNetwork: 0,
           mobileCoverage: 0,
           osmPostgis: 0,
           osmOverpass: 0,
@@ -1784,6 +1785,7 @@ function formatBbox(bbox: { west: number; south: number; east: number; north: nu
 function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeconds"]): string {
   return [
     `weather ${ttls.openMeteo}s`,
+    `mobile net ${ttls.mobileNetwork}s`,
     `coverage ${ttls.mobileCoverage}s`,
     `aviation ${ttls.aviationWeather}s`,
     `safety ${ttls.safetyData}s`,

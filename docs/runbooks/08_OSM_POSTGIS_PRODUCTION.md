@@ -1,14 +1,15 @@
 # OSM/PostGIS Production Runbook
 
-SIM source `osm_postgis` publishes OpenStreetMap reference features for COP through `situation-data`. The optional `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons. Public Overpass must not be used as a production runtime backend.
+SIM source `osm_postgis` publishes OpenStreetMap reference features for COP through `situation-data`. The `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest measurements into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
 
 ## Preferred Backend: Patroni/PostGIS
 
 Use the HA PostgreSQL/Patroni endpoint behind HAProxy:
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MAX_CELLS=1000
@@ -60,8 +61,9 @@ Required conditions:
 Example:
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm

@@ -45,6 +45,7 @@
 - `SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS`
+- `SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS`
 - `MOBILE_COVERAGE_RESOLUTION_M`
 - `MOBILE_COVERAGE_MAX_CELLS`
@@ -151,7 +152,7 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -164,6 +165,7 @@ SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MAX_CELLS=1000
@@ -230,11 +232,12 @@ OVERPASS_MAX_BBOX_DEGREES=1.6
 Preferovaná produkční varianta pro OSM používá samostatnou databázi `sim_osm` v HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
@@ -246,7 +249,7 @@ scripts/import-osm-cz-postgis.sh
 Lokální Docker PostGIS může zůstat jen jako rebuildovatelný read-model/cache s explicitním silným heslem a URL:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
@@ -254,12 +257,15 @@ OSM_POSTGIS_PASSWORD=<strong-password>
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 ```
 
 Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COP features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
-`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COP kontraktu.
+`mobile_network_model` je hlavní COP vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, ČTÚ NetTest měření a infrastrukturní indicie do jednoho závěru `mobile_network`.
+
+`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COP kontraktu.
 
 DEM katalog pro budoucí terrain-aware model používá Copernicus DEM GLO-30, SeaweedFS a PostGIS:
 

@@ -7,7 +7,7 @@ import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SituationDataConfig } from "../src/config.js";
 import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
-import type { SituationDataSource } from "../src/sources.js";
+import { MobileNetworkSource, type SituationDataSource } from "../src/sources.js";
 
 describe("Situation Data API contract", () => {
   let dataDir: string;
@@ -31,6 +31,7 @@ describe("Situation Data API contract", () => {
       openMeteoCacheTtlSeconds: 600,
       openMeteoGridDegrees: 0.05,
       mobileCoverageCacheTtlSeconds: 21600,
+      mobileNetworkCacheTtlSeconds: 3600,
       mobileCoverageResolutionM: 1000,
       mobileCoverageMaxCells: 1000,
       mobileCoverageModelVersion: "coverage-v1",
@@ -100,6 +101,10 @@ describe("Situation Data API contract", () => {
           layers: expect.arrayContaining(["mobile_coverage"])
         }),
         expect.objectContaining({
+          sourceId: "mobile_network_model",
+          layers: expect.arrayContaining(["mobile_network"])
+        }),
+        expect.objectContaining({
           sourceId: "osm_postgis",
           license: expect.objectContaining({ name: "ODbL 1.0" })
         }),
@@ -145,6 +150,7 @@ describe("Situation Data API contract", () => {
         staleAfterSeconds: 900,
         sourceCacheTtlSeconds: {
           openMeteo: 600,
+          mobileNetwork: 3600,
           mobileCoverage: 21600,
           osmPostgis: 21600,
           osmOverpass: 21600,
@@ -156,6 +162,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
           expect.objectContaining({ sourceId: "mobile_coverage_model", authConfigured: false, backend: "unconfigured" }),
+          expect.objectContaining({ sourceId: "mobile_network_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
@@ -178,6 +185,7 @@ describe("Situation Data API contract", () => {
       enabledSources: [
         "open_meteo",
         "mobile_coverage_model",
+        "mobile_network_model",
         "osm_postgis",
         "osm_overpass",
         "ctu_nettest",
@@ -192,6 +200,9 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="mobile_coverage_model"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="mobile_coverage_model",backend="unconfigured"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_mobile_coverage_backend_info{backend="unconfigured"} 1');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="mobile_network_model"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="mobile_network_model",backend="unconfigured"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_mobile_network_backend_info{backend="unconfigured"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_postgis"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="osm_postgis",backend="unconfigured"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_osm_postgis_backend_info{backend="unconfigured"} 1');
@@ -405,6 +416,134 @@ describe("Situation Data API contract", () => {
           modelVersion: "coverage-v1",
           resolutionM: expect.any(Number),
           disclaimer: expect.stringContaining("estimate")
+        })
+      })
+    );
+    expect(result.features[0].properties.raw).toBeUndefined();
+  });
+
+  it("builds unified mobile network assessment from coverage and measurements", async () => {
+    const source = new MobileNetworkSource({
+      ...config,
+      enabledSources: ["mobile_network_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageResolutionM: 500,
+      mobileCoverageMaxCells: 16
+    });
+    (source as unknown as { coverageSource: SituationDataSource }).coverageSource = {
+      descriptor: {
+        sourceId: "mobile_coverage_model",
+        label: "coverage",
+        enabled: true,
+        mode: "live",
+        priority: 64,
+        layers: ["mobile_coverage"],
+        license: { name: "coverage", attribution: "coverage", commercialUse: "allowed", operationalUse: "allowed", notes: [] }
+      },
+      async fetchFeatures() {
+        return {
+          source: this.descriptor,
+          fetchedAt: new Date().toISOString(),
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "coverage:mobile:4g:0-0",
+              geometry: {
+                type: "Polygon",
+                coordinates: [[
+                  [14.41, 50.07],
+                  [14.43, 50.07],
+                  [14.43, 50.09],
+                  [14.41, 50.09],
+                  [14.41, 50.07]
+                ]]
+              },
+              properties: {
+                featureId: "coverage:mobile:4g:0-0",
+                layer: "mobile_coverage",
+                category: "mobile_coverage",
+                label: "4G coverage estimate",
+                sourceId: "mobile_coverage_model",
+                observedAt: new Date().toISOString(),
+                confidence: 0.66,
+                stale: false,
+                severity: "info",
+                license: { name: "coverage", attribution: "coverage" },
+                operator: "unknown",
+                technology: "4G",
+                quality: "fair",
+                estimatedSignalDbm: -98,
+                modelVersion: "coverage-v1",
+                generatedAt: new Date().toISOString(),
+                resolutionM: 500,
+                demSource: "not-used-phase-1"
+              }
+            }
+          ]
+        };
+      }
+    };
+    (source as unknown as { ctuNettestSource: SituationDataSource }).ctuNettestSource = {
+      descriptor: {
+        sourceId: "ctu_nettest",
+        label: "measurements",
+        enabled: true,
+        mode: "live",
+        priority: 65,
+        layers: ["mobile"],
+        license: { name: "CTU", attribution: "CTU", commercialUse: "allowed", operationalUse: "allowed", notes: [] }
+      },
+      async fetchFeatures() {
+        return {
+          source: this.descriptor,
+          fetchedAt: new Date().toISOString(),
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "mobile:ctu_nettest:1",
+              geometry: { type: "Point", coordinates: [14.42, 50.08] },
+              properties: {
+                featureId: "mobile:ctu_nettest:1",
+                layer: "mobile",
+                category: "network_measurement",
+                label: "CTU NetTest LTE",
+                sourceId: "ctu_nettest",
+                observedAt: new Date().toISOString(),
+                confidence: 0.8,
+                stale: false,
+                severity: "warning",
+                license: { name: "CTU", attribution: "CTU" },
+                metrics: { downloadMbps: 3, uploadMbps: 1, latencyMs: 90, lteRsrpDbm: -111 }
+              }
+            }
+          ]
+        };
+      }
+    };
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.41, south: 50.07, east: 14.43, north: 50.09 },
+      layers: ["mobile_network"],
+      sourceIds: ["mobile_network_model"],
+      limit: 5,
+      includeRaw: false,
+      mobileCoverageTechnologies: ["4G"]
+    });
+
+    expect(result.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Polygon" }),
+        properties: expect.objectContaining({
+          sourceId: "mobile_network_model",
+          layer: "mobile_network",
+          quality: "fair",
+          status: expect.stringMatching(/ok|weak_signal|degraded_possible|unknown/),
+          basis: expect.arrayContaining(["CTU_NETTEST_MEASUREMENT", "NO_OPERATOR_BTS_STATUS"]),
+          summary: expect.stringContaining("Mobilní síť"),
+          disclaimer: expect.stringContaining("not a confirmed BTS")
         })
       })
     );

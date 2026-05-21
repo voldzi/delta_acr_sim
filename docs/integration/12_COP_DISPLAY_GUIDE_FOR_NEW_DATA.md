@@ -8,7 +8,8 @@ Tento dokument popisuje, jak má COP zobrazit nová data poskytovaná SIM:
 - letiště z OurAirports reference,
 - letištní počasí METAR/TAF ze `situation-data` source `aviation_weather`,
 - pozemní referenční objekty a komunikační infrastrukturu ze `situation-data` source `osm_postgis`,
-- odhad mobilního pokrytí ze `situation-data` source `mobile_coverage_model`,
+- sjednocené hodnocení mobilní sítě ze `situation-data` source `mobile_network_model`,
+- nižší technický odhad mobilního pokrytí ze `situation-data` source `mobile_coverage_model`,
 - neveřejná partnerská data ARDOS ze `situation-data` source `ardos_partner`.
 
 COP nesmí volat NOAA AWC, ARDOS, ADS-B providery ani OurAirports přímo. Všechny dotazy jdou přes SIM, která řeší cache, licenci, fallback a normalizaci.
@@ -32,6 +33,7 @@ Příklad pro mapový výřez Prahy:
 ```http
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=weather&source=aviation_weather&limit=50
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=250
+GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=250
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=250
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile,traffic&source=ardos_partner&limit=250
 GET /flight-data/api/v1/cop/tracks?bbox=13.85,49.65,15.35,50.45&limit=500
@@ -281,7 +283,15 @@ https://sim.zeleznalady.cz/situation-data/api/v1/cop/features?bbox=13.85,49.65,1
 
 Očekávání: pokud zdroj není nakonfigurovaný, COP ukáže dependency degraded, ale mapa běží dál. Pokud nakonfigurovaný je, features se renderují jen interním uživatelům.
 
-5. COP zobrazí odhad mobilního pokrytí:
+5. COP zobrazí sjednocené hodnocení mobilní sítě:
+
+```text
+https://sim.zeleznalady.cz/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20
+```
+
+Očekávání: features jsou `Polygon` s `quality`, `status`, `confidence`, `basis`, `summary` a `disclaimer`. COP zobrazí `mobile_network` jako hlavní občanskou vrstvu; nejde o potvrzený stav konkrétní BTS.
+
+6. COP v technickém režimu ověří nižší odhad mobilního pokrytí:
 
 ```text
 https://sim.zeleznalady.cz/situation-data/api/v1/mobile-coverage/metadata

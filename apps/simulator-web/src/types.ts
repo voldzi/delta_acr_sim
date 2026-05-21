@@ -203,11 +203,21 @@ export interface FlightDataTrackResponse {
   warnings: string[];
 }
 
-export type SituationLayerId = "weather" | "ground" | "mobile" | "mobile_coverage" | "traffic" | "warnings" | "flood" | "air_quality";
+export type SituationLayerId =
+  | "weather"
+  | "ground"
+  | "mobile"
+  | "mobile_coverage"
+  | "mobile_network"
+  | "traffic"
+  | "warnings"
+  | "flood"
+  | "air_quality";
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
   | "mobile_coverage_model"
+  | "mobile_network_model"
   | "osm_postgis"
   | "osm_overpass"
   | "ctu_nettest"
@@ -279,6 +289,7 @@ export interface SituationDataConfig {
   requestTimeoutMs: number;
   sourceCacheTtlSeconds: {
     openMeteo: number;
+    mobileNetwork: number;
     mobileCoverage: number;
     osmPostgis: number;
     osmOverpass: number;
