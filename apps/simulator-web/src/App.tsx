@@ -63,12 +63,19 @@ import type {
   SituationDataHealth,
   SituationDataLayer,
   SituationDataSource,
-  SituationLayerId
+  SituationLayerId,
+  TakGatewayConfig,
+  TakGatewayFeature,
+  TakGatewayFeatureResponse,
+  TakGatewayHealth,
+  TakGatewayLayer,
+  TakGatewaySource,
+  TakLayerId
 } from "./types";
 
 type Tone = "safe" | "danger" | "active" | "neutral" | "warn";
 type AffiliationCategory = "own" | "foreign" | "other";
-type AppSection = "overview" | "scenario" | "flight-data" | "situation-data" | "publisher" | "ai" | "safety";
+type AppSection = "overview" | "scenario" | "flight-data" | "situation-data" | "tak-gateway" | "publisher" | "ai" | "safety";
 
 interface DashboardData {
   scenarios: Scenario[];
@@ -97,6 +104,13 @@ interface DashboardData {
     sources: SafetyDataSource[];
     config: SafetyDataConfig;
     features: SafetyDataFeatureResponse;
+  };
+  takGateway: {
+    health: TakGatewayHealth;
+    layers: TakGatewayLayer[];
+    sources: TakGatewaySource[];
+    config: TakGatewayConfig;
+    features: TakGatewayFeatureResponse;
   };
   warnings: string[];
 }
@@ -198,6 +212,36 @@ const emptySafetyFeatures: SafetyDataFeatureResponse = {
   warnings: []
 };
 
+const emptyTakFeatures: TakGatewayFeatureResponse = {
+  contractVersion: "cop-tak-source-v1",
+  type: "FeatureCollection",
+  generatedAt: new Date(0).toISOString(),
+  source: {
+    sourceId: "tak-gateway-api",
+    sourceType: "TAK_COT_GATEWAY",
+    generatedAt: new Date(0).toISOString()
+  },
+  query: {
+    bbox: { west: 0, south: 0, east: 0, north: 0 },
+    layers: [],
+    limit: 0
+  },
+  summary: {
+    eventCount: 0,
+    featureCount: 0,
+    staleFeatureCount: 0,
+    affiliationCounts: {
+      friend: 0,
+      hostile: 0,
+      neutral: 0,
+      unknown: 0
+    }
+  },
+  features: [],
+  sources: [],
+  warnings: []
+};
+
 export function App() {
   const [data, setData] = useState<DashboardData>({
     scenarios: [],
@@ -264,6 +308,28 @@ export function App() {
       },
       features: emptySafetyFeatures
     },
+    takGateway: {
+      health: {
+        status: "unknown",
+        ingestAuthConfigured: false,
+        currentEvents: 0,
+        staleEvents: 0
+      },
+      layers: [],
+      sources: [],
+      config: {
+        defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
+        staleAfterSeconds: 0,
+        retentionSeconds: 0,
+        maxEvents: 0,
+        exposeRaw: false,
+        ingestAuthConfigured: false,
+        readAuthConfigured: false,
+        publicRead: true,
+        sourceLabel: ""
+      },
+      features: emptyTakFeatures
+    },
     warnings: []
   });
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
@@ -313,6 +379,12 @@ export function App() {
     data.situationData.health.status === "ok" ? (data.situationData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
   const safetyDataTone: Tone =
     data.safetyData.health.status === "ok" ? (data.safetyData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const takGatewayTone: Tone =
+    data.takGateway.health.status === "ok"
+      ? data.takGateway.features.warnings.length > 0 || data.takGateway.health.staleEvents > 0
+        ? "warn"
+        : "safe"
+      : "danger";
   const elevatedSafetyCount =
     data.safetyData.features.summary.advisoryCount +
     data.safetyData.features.summary.warningCount +
@@ -372,6 +444,13 @@ export function App() {
       value: data.safetyData.health.status.toUpperCase(),
       tone: safetyDataTone,
       detail: `${data.safetyData.features.summary.featureCount} features, ${data.safetyData.config.enabledSources.join(", ") || "no source"}`
+    },
+    {
+      icon: <RadioTower />,
+      label: "TAK Gateway",
+      value: data.takGateway.health.status.toUpperCase(),
+      tone: takGatewayTone,
+      detail: `${data.takGateway.health.currentEvents} CoT events, ${data.takGateway.health.staleEvents} stale`
     }
   ];
 
@@ -427,6 +506,7 @@ export function App() {
           <NavButton section="scenario" activeSection={activeSection} onSelect={setActiveSection} icon={<Activity size={17} />} label="Scenario" />
           <NavButton section="flight-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Plane size={17} />} label="Flight data" />
           <NavButton section="situation-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Layers3 size={17} />} label="Situation data" />
+          <NavButton section="tak-gateway" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="TAK gateway" />
           <NavButton section="publisher" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="Publisher" />
           <NavButton section="ai" activeSection={activeSection} onSelect={setActiveSection} icon={<Bot size={17} />} label="AI Assistant" />
           <NavButton section="safety" activeSection={activeSection} onSelect={setActiveSection} icon={<ShieldAlert size={17} />} label="Safety data" />
@@ -466,6 +546,7 @@ export function App() {
               <Metric icon={<Plane />} label="Flight tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount} detail={`${data.flightData.tracks.summary.rawObservationCount} raw observations`} />
               <Metric icon={<Layers3 />} label="Situation features" value={data.situationData.features.summary.featureCount} detail={`${data.situationData.layers.length} layers available`} />
               <Metric icon={<ShieldAlert />} label="Safety features" value={data.safetyData.features.summary.featureCount} detail={`${data.safetyData.features.summary.criticalCount} critical`} />
+              <Metric icon={<RadioTower />} label="TAK CoT events" value={data.takGateway.health.currentEvents} detail={`${data.takGateway.features.summary.featureCount} COP features`} />
             </section>
 
             <section id="readiness" className="operations-grid" aria-label="Operational readiness">
@@ -843,6 +924,86 @@ export function App() {
               <div className="notice warn">
                 <AlertTriangle size={16} />
                 <span>{data.situationData.features.warnings.join(" ")}</span>
+              </div>
+            ) : null}
+          </section>
+          ) : null}
+
+          {activeSection === "tak-gateway" ? (
+          <section id="tak-gateway" className="panel situation-data-panel">
+            <PanelTitle icon={<RadioTower />} title="TAK Gateway" subtitle="Cursor-on-Target ingest and normalized COP feature projection for ARDOS/TAK partner data." />
+
+            <div className="publisher-status">
+              <StatusPill label={data.takGateway.health.status} tone={takGatewayTone} />
+              <StatusPill label={data.takGateway.features.contractVersion} tone="active" />
+              <StatusPill label={data.takGateway.health.ingestAuthConfigured ? "ingest protected" : "ingest open"} tone={data.takGateway.health.ingestAuthConfigured ? "safe" : "danger"} />
+              <StatusPill
+                label={`${data.takGateway.features.warnings.length} warnings`}
+                tone={data.takGateway.features.warnings.length > 0 ? "warn" : "neutral"}
+              />
+            </div>
+
+            <div className="publisher-stats situation-stats">
+              <PublisherStat label="Current events" value={data.takGateway.health.currentEvents.toLocaleString("cs-CZ")} tone="safe" />
+              <PublisherStat label="COP features" value={data.takGateway.features.summary.featureCount.toLocaleString("cs-CZ")} tone="active" />
+              <PublisherStat label="Stale" value={data.takGateway.health.staleEvents.toLocaleString("cs-CZ")} tone={data.takGateway.health.staleEvents > 0 ? "warn" : "neutral"} />
+              <PublisherStat label="Last ingest" value={formatTime(data.takGateway.health.lastIngestAt)} tone={data.takGateway.health.lastIngestAt ? "safe" : "neutral"} />
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime settings for CoT retention and COP projection." />
+                <div className="settings-grid">
+                  <SummaryItem label="Source label" value={data.takGateway.config.sourceLabel || "-"} />
+                  <SummaryItem label="Default bbox" value={formatBbox(data.takGateway.config.defaultBbox)} />
+                  <SummaryItem label="Stale after" value={`${data.takGateway.config.staleAfterSeconds}s`} />
+                  <SummaryItem label="Retention" value={`${data.takGateway.config.retentionSeconds}s`} />
+                  <SummaryItem label="Max events" value={`${data.takGateway.config.maxEvents}`} />
+                  <SummaryItem label="Raw CoT exposure" value={data.takGateway.config.exposeRaw ? "enabled" : "disabled"} />
+                  <SummaryItem label="Ingest auth" value={data.takGateway.config.ingestAuthConfigured ? "configured" : "missing"} />
+                  <SummaryItem label="Read mode" value={data.takGateway.config.publicRead ? "public" : "token"} />
+                  <SummaryItem label="Read auth" value={data.takGateway.config.readAuthConfigured ? "configured" : "missing"} />
+                  <SummaryItem label="Query limit" value={`${data.takGateway.features.query.limit || 0}`} />
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can render TAK Gateway layers independently from public open-data sources." />
+                <div className="layer-list">
+                  {data.takGateway.layers.map((layer) => (
+                    <TakLayerRow key={layer.layerId} layer={layer} count={countTakLayer(data.takGateway.features.features, layer.layerId)} />
+                  ))}
+                  {data.takGateway.layers.length === 0 ? <div className="empty-state">TAK Gateway layer metadata is not available.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            <div className="flight-grid">
+              <section className="inline-panel">
+                <PanelTitle icon={<Database />} title="Partner source" subtitle="TAK/ARDOS data is partner-provided and requires COP-side authorization." />
+                <div className="source-list">
+                  {data.takGateway.sources.map((source) => (
+                    <TakSourceRow key={source.sourceId} source={source} />
+                  ))}
+                  {data.takGateway.sources.length === 0 ? <div className="empty-state">TAK Gateway source metadata is not available.</div> : null}
+                </div>
+              </section>
+
+              <section className="inline-panel">
+                <PanelTitle icon={<RadioTower />} title="COP feature preview" subtitle="GeoJSON features returned by /tak-gateway/api/v1/cop/features." />
+                <div className="situation-feature-list">
+                  {data.takGateway.features.features.map((feature) => (
+                    <TakFeatureRow key={feature.id} feature={feature} />
+                  ))}
+                  {data.takGateway.features.features.length === 0 ? <div className="empty-state">No TAK/CoT events have been ingested yet.</div> : null}
+                </div>
+              </section>
+            </div>
+
+            {data.takGateway.features.warnings.length > 0 ? (
+              <div className="notice warn">
+                <AlertTriangle size={16} />
+                <span>{data.takGateway.features.warnings.join(" ")}</span>
               </div>
             ) : null}
           </section>
@@ -1231,6 +1392,71 @@ function SafetyFeatureRow({ feature }: { feature: SafetyDataFeature }) {
   );
 }
 
+function TakLayerRow({ layer, count }: { layer: TakGatewayLayer; count: number }) {
+  return (
+    <div className="layer-row">
+      <div>
+        <strong>{layer.label}</strong>
+        <span>{layer.description}</span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={layer.layerId} tone={layer.defaultVisible ? "active" : "neutral"} />
+        <StatusPill label={`${count} shown`} tone={count > 0 ? "safe" : "neutral"} />
+      </div>
+      <small>
+        {layer.geometryTypes.join(", ")}
+        {layer.expectedCadenceSeconds ? ` · ${formatCadence(layer.expectedCadenceSeconds)}` : ""}
+      </small>
+    </div>
+  );
+}
+
+function TakSourceRow({ source }: { source: TakGatewaySource }) {
+  return (
+    <div className="source-row">
+      <div>
+        <strong>{source.label}</strong>
+        <span>
+          {source.sourceId} · priority {source.priority} · {source.layers.join(", ")}
+        </span>
+      </div>
+      <div className="source-tags">
+        <StatusPill label={source.enabled ? "enabled" : "disabled"} tone={source.enabled ? "safe" : "neutral"} />
+        <StatusPill label={source.mode} tone={source.mode === "live" ? "active" : "neutral"} />
+        <StatusPill label="partner data" tone="warn" />
+      </div>
+      <div className="source-license">
+        <span>{source.license.name}</span>
+        <StatusPill label={source.license.commercialUse.replaceAll("_", " ")} tone={licenseTone(source.license.commercialUse)} />
+      </div>
+      <small>{source.license.attribution}</small>
+    </div>
+  );
+}
+
+function TakFeatureRow({ feature }: { feature: TakGatewayFeature }) {
+  return (
+    <div className={`situation-feature-row ${feature.properties.stale ? "stale" : ""}`}>
+      <div>
+        <strong>{feature.properties.label}</strong>
+        <span>
+          {feature.properties.layer} · {feature.properties.category} · {feature.properties.sourceId}
+        </span>
+      </div>
+      <div className="flight-track-metrics">
+        <span>{formatTakGeometry(feature)}</span>
+        <span>{formatTime(feature.properties.observedAt)}</span>
+        <span>{formatConfidence(feature.properties.confidence)}</span>
+        <span>{formatMetrics(feature.properties.metrics)}</span>
+      </div>
+      <div className="flight-track-tags">
+        <StatusPill label={feature.properties.affiliation} tone={takAffiliationTone(feature.properties.affiliation)} />
+        <StatusPill label={feature.properties.stale ? "stale" : "current"} tone={feature.properties.stale ? "warn" : "safe"} />
+      </div>
+    </div>
+  );
+}
+
 function StatusPill({ label, tone }: { label: string; tone: Tone }) {
   return <span className={`status-pill ${tone}`}>{label}</span>;
 }
@@ -1497,6 +1723,12 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
         title: "Situation Data source",
         description: "Monitor weather, ground, mobile and traffic context prepared for COP map layers."
       };
+    case "tak-gateway":
+      return {
+        kicker: "Partner CoT ingest",
+        title: "TAK Gateway",
+        description: "Monitor Cursor-on-Target ingest, retention, stale state and COP projection readiness."
+      };
     case "publisher":
       return {
         kicker: "COP integration",
@@ -1520,7 +1752,7 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
       return {
         kicker: "Pilot control station",
         title: "Simulator overview",
-        description: "Compact operational status across runtime, COP publishing and Flight Data."
+        description: "Compact operational status across runtime, COP publishing and external data gateways."
       };
   }
 }
@@ -1536,7 +1768,7 @@ function formatCoordinate(value: number): string {
   return Number.isFinite(value) ? value.toFixed(4) : "-";
 }
 
-function formatBbox(bbox: SituationDataConfig["defaultBbox"]): string {
+function formatBbox(bbox: { west: number; south: number; east: number; north: number }): string {
   return `${formatCoordinate(bbox.west)}, ${formatCoordinate(bbox.south)}, ${formatCoordinate(bbox.east)}, ${formatCoordinate(bbox.north)}`;
 }
 
@@ -1623,6 +1855,11 @@ function formatSafetyGeometry(feature: SafetyDataFeature): string {
   return typeof lon === "number" && typeof lat === "number" ? `${formatCoordinate(lat)}, ${formatCoordinate(lon)}` : "position n/a";
 }
 
+function formatTakGeometry(feature: TakGatewayFeature): string {
+  const [lon, lat] = feature.geometry.coordinates;
+  return `${formatCoordinate(lat)}, ${formatCoordinate(lon)}`;
+}
+
 function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}% confidence`;
 }
@@ -1654,12 +1891,29 @@ function countSafetyLayer(features: SafetyDataFeature[], layerId: SafetyLayerId)
   return features.filter((feature) => feature.properties.layer === layerId).length;
 }
 
+function countTakLayer(features: TakGatewayFeature[], layerId: TakLayerId): number {
+  return features.filter((feature) => feature.properties.layer === layerId).length;
+}
+
 function severityTone(value: SituationDataFeature["properties"]["severity"]): Tone {
   if (value === "critical") {
     return "danger";
   }
   if (value === "warning" || value === "advisory") {
     return "warn";
+  }
+  return "neutral";
+}
+
+function takAffiliationTone(value: TakGatewayFeature["properties"]["affiliation"]): Tone {
+  if (value === "friend") {
+    return "safe";
+  }
+  if (value === "hostile") {
+    return "danger";
+  }
+  if (value === "neutral") {
+    return "active";
   }
   return "neutral";
 }

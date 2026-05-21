@@ -61,6 +61,15 @@ SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ARDOS_PARTNER_BASE_URL=
 ARDOS_PARTNER_TOKEN=
+TAK_GATEWAY_INGEST_TOKEN=dev-tak-ingest-token
+TAK_GATEWAY_READ_TOKEN=
+TAK_GATEWAY_PUBLIC_READ=true
+TAK_GATEWAY_DEFAULT_BBOX=11.8,48.5,19.2,51.2
+TAK_GATEWAY_STALE_AFTER_SECONDS=300
+TAK_GATEWAY_RETENTION_SECONDS=3600
+TAK_GATEWAY_MAX_EVENTS=5000
+TAK_GATEWAY_EXPOSE_RAW=false
+TAK_GATEWAY_SOURCE_LABEL=TAK/CoT gateway
 ENV
 
 docker compose up -d --build
@@ -68,4 +77,5 @@ docker compose ps
 curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
+curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic,warnings,flood&limit=20' >/dev/null

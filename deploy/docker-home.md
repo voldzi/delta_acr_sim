@@ -75,6 +75,15 @@ SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ARDOS_PARTNER_BASE_URL=
 ARDOS_PARTNER_TOKEN=
+TAK_GATEWAY_INGEST_TOKEN=dev-tak-ingest-token
+TAK_GATEWAY_READ_TOKEN=
+TAK_GATEWAY_PUBLIC_READ=true
+TAK_GATEWAY_DEFAULT_BBOX=11.8,48.5,19.2,51.2
+TAK_GATEWAY_STALE_AFTER_SECONDS=300
+TAK_GATEWAY_RETENTION_SECONDS=3600
+TAK_GATEWAY_MAX_EVENTS=5000
+TAK_GATEWAY_EXPOSE_RAW=false
+TAK_GATEWAY_SOURCE_LABEL=TAK/CoT gateway
 EOF
 
 docker compose up -d --build
@@ -82,6 +91,7 @@ docker compose ps
 curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
+curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic,warnings,flood&limit=20'
 ```
 
@@ -134,7 +144,10 @@ http://docker.home.cz:5020
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.
 - `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.
+- `tak-gateway-api` přijímá TAK/CoT XML přes chráněný ingest endpoint `/tak-gateway/api/v1/cot/events` a COP čte normalizovaný GeoJSON endpoint `/tak-gateway/api/v1/cop/features`.
+- `TAK_GATEWAY_INGEST_TOKEN` je secret; pro pilot ho změň mimo repozitář a předej jen ARDOS/TAK bridge klientovi.
+- Pro reálná ARDOS data nastav `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`, aby feature endpoint nečetl veřejný browser bez oprávnění.
 - U komerčního použití musí být vyřešená ODbL atribuce a share-alike povinnosti.
 - OpenSky nezapínej bez ověření oprávnění nebo písemné licence.
-- Perzistentní data jsou v Docker volume `sim-data`, `flight-data` a `situation-data`.
-- Web kontejner přes nginx proxy předává `/api`, `/health`, `/metrics`, `/mock-cop`, `/flight-data/*` a `/situation-data/*` do příslušných API kontejnerů.
+- Perzistentní data jsou v Docker volume `sim-data`, `flight-data`, `situation-data`, `safety-data` a `tak-gateway-data`.
+- Web kontejner přes nginx proxy předává `/api`, `/health`, `/metrics`, `/mock-cop`, `/flight-data/*`, `/situation-data/*`, `/safety-data/*` a `/tak-gateway/*` do příslušných API kontejnerů.

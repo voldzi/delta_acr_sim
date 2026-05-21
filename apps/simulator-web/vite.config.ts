@@ -19,6 +19,10 @@ export default defineConfig({
         target: "http://localhost:4030",
         rewrite: (path) => path.replace(/^\/safety-data/, "")
       },
+      "/tak-gateway": {
+        target: "http://localhost:4040",
+        rewrite: (path) => path.replace(/^\/tak-gateway/, "")
+      },
       "/health": "http://localhost:4000",
       "/metrics": "http://localhost:4000",
       "/mock-cop": "http://localhost:4000"

@@ -1,0 +1,225 @@
+openapi: 3.1.0
+info:
+  title: DELTA ACR SIM TAK Gateway API
+  version: 0.1.0
+  description: Cursor-on-Target ingest and COP GeoJSON projection service.
+servers:
+  - url: https://sim.zeleznalady.cz/tak-gateway/api/v1
+  - url: http://docker.home.cz:5020/tak-gateway/api/v1
+paths:
+  /cot/events:
+    post:
+      summary: Ingest Cursor-on-Target XML event payload
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+          text/xml:
+            schema:
+              type: string
+      responses:
+        "202":
+          description: CoT payload accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, eventCount, warningCount, warnings]
+                properties:
+                  accepted:
+                    type: boolean
+                  eventCount:
+                    type: integer
+                  warningCount:
+                    type: integer
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          description: Invalid CoT XML
+        "401":
+          description: Missing or invalid bearer token
+  /cop/features:
+    get:
+      summary: COP-facing TAK GeoJSON feature projection
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: bbox
+          in: query
+          schema:
+            type: string
+          description: west,south,east,north in WGS84
+        - name: layers
+          in: query
+          schema:
+            type: string
+          description: Comma-separated mobile,ground,traffic
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+        - name: includeRaw
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: TAK feature collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TakFeatureCollection"
+        "401":
+          description: Missing or invalid bearer token when public read is disabled
+  /features:
+    get:
+      summary: Alias for COP-facing TAK GeoJSON feature projection
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        "200":
+          description: TAK feature collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TakFeatureCollection"
+        "401":
+          description: Missing or invalid bearer token when public read is disabled
+  /layers:
+    get:
+      summary: List TAK layers
+      responses:
+        "200":
+          description: Layer registry
+  /sources:
+    get:
+      summary: List TAK source descriptors
+      responses:
+        "200":
+          description: Source registry
+  /config:
+    get:
+      summary: Public runtime config without secrets
+      responses:
+        "200":
+          description: Runtime configuration
+  /events:
+    get:
+      summary: Current normalized CoT event state
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        "200":
+          description: Event list
+        "401":
+          description: Missing or invalid bearer token when public read is disabled
+  /admin/clear:
+    post:
+      summary: Clear current TAK event state
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current event state cleared
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    BoundingBox:
+      type: object
+      required: [west, south, east, north]
+      properties:
+        west:
+          type: number
+        south:
+          type: number
+        east:
+          type: number
+        north:
+          type: number
+    TakFeatureCollection:
+      type: object
+      required: [contractVersion, type, generatedAt, source, query, summary, features, sources, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: cop-tak-source-v1
+        type:
+          type: string
+          const: FeatureCollection
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          type: object
+          required: [sourceId, sourceType, generatedAt]
+          properties:
+            sourceId:
+              type: string
+              const: tak-gateway-api
+            sourceType:
+              type: string
+              const: TAK_COT_GATEWAY
+            generatedAt:
+              type: string
+              format: date-time
+        query:
+          type: object
+          required: [bbox, layers, limit]
+          properties:
+            bbox:
+              $ref: "#/components/schemas/BoundingBox"
+            layers:
+              type: array
+              items:
+                type: string
+                enum: [ground, mobile, traffic]
+            limit:
+              type: integer
+        summary:
+          type: object
+          required: [eventCount, featureCount, staleFeatureCount, affiliationCounts]
+          properties:
+            eventCount:
+              type: integer
+            featureCount:
+              type: integer
+            staleFeatureCount:
+              type: integer
+            affiliationCounts:
+              type: object
+              required: [friend, hostile, neutral, unknown]
+              properties:
+                friend:
+                  type: integer
+                hostile:
+                  type: integer
+                neutral:
+                  type: integer
+                unknown:
+                  type: integer
+        features:
+          type: array
+          items:
+            type: object
+        sources:
+          type: array
+          items:
+            type: object
+        warnings:
+          type: array
+          items:
+            type: string

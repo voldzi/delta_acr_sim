@@ -33,6 +33,8 @@ http://localhost:5020/situation-data/health/ready
 http://localhost:5020/situation-data/api/v1/cop/features
 http://localhost:5020/safety-data/health/ready
 http://localhost:5020/safety-data/api/v1/cop/features
+http://localhost:5020/tak-gateway/health/ready
+http://localhost:5020/tak-gateway/api/v1/cop/features
 ```
 
 ## Pilot na docker.home.cz
@@ -56,6 +58,12 @@ Docker pilot ve výchozím nastavení zapíná reálné open-data zdroje `open_m
 COP kontrakt je v [docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md](docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-safety-data.yaml](docs/api/openapi-safety-data.yaml).
 
 Docker pilot zapíná reálné zdroje `chmi_alerts,chmi_hydro`, tedy ČHMÚ CAP výstrahy a hydrologické stanice. Stejná data jsou dostupná také jako kompatibilní projekce přes `situation-data` pomocí `layers=warnings,flood&source=safety_data`.
+
+## TAK Gateway API
+
+TAK Gateway přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a poskytuje COP normalizovanou GeoJSON projekci přes `/tak-gateway/api/v1/cop/features`. Ingest endpoint `/tak-gateway/api/v1/cot/events` je chráněný `TAK_GATEWAY_INGEST_TOKEN`.
+
+Dokumentace je v [docs/tak-gateway/00_INDEX.md](docs/tak-gateway/00_INDEX.md), COP kontrakt v [docs/integration/13_TAK_GATEWAY_CONTRACT.md](docs/integration/13_TAK_GATEWAY_CONTRACT.md) a OpenAPI v [docs/api/openapi-tak-gateway.yaml](docs/api/openapi-tak-gateway.yaml).
 
 ## Bezpečnostní hranice
 

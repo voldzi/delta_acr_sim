@@ -14,6 +14,11 @@ import type {
   SafetyDataSource,
   Scenario,
   ScenarioBlock,
+  TakGatewayConfig,
+  TakGatewayFeatureResponse,
+  TakGatewayHealth,
+  TakGatewayLayer,
+  TakGatewaySource,
   SituationDataConfig,
   SituationDataFeatureResponse,
   SituationDataHealth,
@@ -159,6 +164,13 @@ export interface DashboardLoadResult {
     config: SafetyDataConfig;
     features: SafetyDataFeatureResponse;
   };
+  takGateway: {
+    health: TakGatewayHealth;
+    layers: TakGatewayLayer[];
+    sources: TakGatewaySource[];
+    config: TakGatewayConfig;
+    features: TakGatewayFeatureResponse;
+  };
   warnings: string[];
 }
 
@@ -183,7 +195,12 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<{ items: SafetyDataLayer[] }>("/safety-data/api/v1/layers"),
     api<{ items: SafetyDataSource[] }>("/safety-data/api/v1/sources"),
     api<SafetyDataConfig>("/safety-data/api/v1/config"),
-    api<SafetyDataFeatureResponse>("/safety-data/api/v1/cop/features?limit=12")
+    api<SafetyDataFeatureResponse>("/safety-data/api/v1/cop/features?limit=12"),
+    api<TakGatewayHealth>("/tak-gateway/health/ready"),
+    api<{ items: TakGatewayLayer[] }>("/tak-gateway/api/v1/layers"),
+    api<{ items: TakGatewaySource[] }>("/tak-gateway/api/v1/sources"),
+    api<TakGatewayConfig>("/tak-gateway/api/v1/config"),
+    api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/cop/features?limit=12")
   ]);
 
   const warnings: string[] = [];
@@ -336,6 +353,59 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "safety data features",
     warnings
   );
+  const takHealth = unwrapDashboardResult(
+    results[20],
+    { status: "unavailable", ingestAuthConfigured: false, currentEvents: 0, staleEvents: 0 },
+    "TAK gateway health",
+    warnings
+  );
+  const takLayers = unwrapDashboardResult(results[21], { items: [] }, "TAK gateway layers", warnings);
+  const takSources = unwrapDashboardResult(results[22], { items: [] }, "TAK gateway sources", warnings);
+  const takConfig = unwrapDashboardResult(
+    results[23],
+    {
+      defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
+      staleAfterSeconds: 0,
+      retentionSeconds: 0,
+      maxEvents: 0,
+      exposeRaw: false,
+      ingestAuthConfigured: false,
+      readAuthConfigured: false,
+      publicRead: true,
+      sourceLabel: ""
+    },
+    "TAK gateway config",
+    warnings
+  );
+  const takFeatures = unwrapDashboardResult(
+    results[24],
+    {
+      contractVersion: "cop-tak-source-v1",
+      type: "FeatureCollection",
+      generatedAt: new Date(0).toISOString(),
+      source: {
+        sourceId: "tak-gateway-api",
+        sourceType: "TAK_COT_GATEWAY",
+        generatedAt: new Date(0).toISOString()
+      },
+      query: {
+        bbox: { west: 0, south: 0, east: 0, north: 0 },
+        layers: [],
+        limit: 0
+      },
+      summary: {
+        eventCount: 0,
+        featureCount: 0,
+        staleFeatureCount: 0,
+        affiliationCounts: { friend: 0, hostile: 0, neutral: 0, unknown: 0 }
+      },
+      features: [],
+      sources: [],
+      warnings: []
+    },
+    "TAK gateway features",
+    warnings
+  );
 
   return {
     scenarios: scenarios.items,
@@ -364,6 +434,13 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       sources: safetySources.items,
       config: safetyConfig,
       features: safetyFeatures
+    },
+    takGateway: {
+      health: takHealth,
+      layers: takLayers.items,
+      sources: takSources.items,
+      config: takConfig,
+      features: takFeatures
     },
     warnings
   };

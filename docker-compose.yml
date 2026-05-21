@@ -172,6 +172,35 @@ services:
       timeout: 5s
       retries: 3
 
+  tak-gateway-api:
+    build:
+      context: .
+      dockerfile: apps/tak-gateway-api/Dockerfile
+    container_name: delta-acr-tak-gateway-api
+    environment:
+      NODE_ENV: production
+      TAK_GATEWAY_API_PORT: 4040
+      TAK_GATEWAY_DATA_DIR: /data
+      TAK_GATEWAY_INGEST_TOKEN: ${TAK_GATEWAY_INGEST_TOKEN:-dev-tak-ingest-token}
+      TAK_GATEWAY_READ_TOKEN: ${TAK_GATEWAY_READ_TOKEN:-}
+      TAK_GATEWAY_PUBLIC_READ: ${TAK_GATEWAY_PUBLIC_READ:-true}
+      TAK_GATEWAY_DEFAULT_BBOX: ${TAK_GATEWAY_DEFAULT_BBOX:-11.8,48.5,19.2,51.2}
+      TAK_GATEWAY_STALE_AFTER_SECONDS: ${TAK_GATEWAY_STALE_AFTER_SECONDS:-300}
+      TAK_GATEWAY_RETENTION_SECONDS: ${TAK_GATEWAY_RETENTION_SECONDS:-3600}
+      TAK_GATEWAY_MAX_EVENTS: ${TAK_GATEWAY_MAX_EVENTS:-5000}
+      TAK_GATEWAY_EXPOSE_RAW: ${TAK_GATEWAY_EXPOSE_RAW:-false}
+      TAK_GATEWAY_SOURCE_LABEL: ${TAK_GATEWAY_SOURCE_LABEL:-TAK/CoT gateway}
+    volumes:
+      - tak-gateway-data:/data
+    expose:
+      - "4040"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4040/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   sim-web:
     build:
       context: .
@@ -188,6 +217,8 @@ services:
         condition: service_healthy
       safety-data-api:
         condition: service_healthy
+      tak-gateway-api:
+        condition: service_healthy
     ports:
       - "${SIM_WEB_PORT:-5020}:80"
     restart: unless-stopped
@@ -197,4 +228,5 @@ volumes:
   flight-data:
   situation-data:
   safety-data:
+  tak-gateway-data:
   osm-postgis-data:

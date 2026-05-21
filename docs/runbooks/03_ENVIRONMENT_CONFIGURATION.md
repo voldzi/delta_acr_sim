@@ -67,6 +67,15 @@
 - `CHMI_HYDRO_METADATA_URL`
 - `CHMI_HYDRO_NOW_BASE_URL`
 - `CHMI_HYDRO_MAX_STATIONS`
+- `TAK_GATEWAY_INGEST_TOKEN`
+- `TAK_GATEWAY_READ_TOKEN`
+- `TAK_GATEWAY_PUBLIC_READ`
+- `TAK_GATEWAY_DEFAULT_BBOX`
+- `TAK_GATEWAY_STALE_AFTER_SECONDS`
+- `TAK_GATEWAY_RETENTION_SECONDS`
+- `TAK_GATEWAY_MAX_EVENTS`
+- `TAK_GATEWAY_EXPOSE_RAW`
+- `TAK_GATEWAY_SOURCE_LABEL`
 
 ## Pravidla
 
@@ -155,6 +164,22 @@ SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 ```
 
 `ARDOS_PARTNER_TOKEN` je secret; necommitovat do repozitáře.
+
+TAK Gateway pilot:
+
+```bash
+TAK_GATEWAY_INGEST_TOKEN=...
+TAK_GATEWAY_READ_TOKEN=...
+TAK_GATEWAY_PUBLIC_READ=false
+TAK_GATEWAY_DEFAULT_BBOX=11.8,48.5,19.2,51.2
+TAK_GATEWAY_STALE_AFTER_SECONDS=300
+TAK_GATEWAY_RETENTION_SECONDS=3600
+TAK_GATEWAY_MAX_EVENTS=5000
+TAK_GATEWAY_EXPOSE_RAW=false
+TAK_GATEWAY_SOURCE_LABEL=TAK/CoT gateway
+```
+
+`TAK_GATEWAY_INGEST_TOKEN` je secret pro TAK/ARDOS bridge klienta; `TAK_GATEWAY_READ_TOKEN` je secret pro server-side COP klienta. Necommitovat do repozitáře. Raw CoT drž vypnutý, pokud není schválený auditní a oprávňovací režim v COP.
 
 OpenStreetMap/Overpass nezapínej jako produkční runtime backend pro tisíce uživatelů. Veřejný Overpass lze použít jen pro lokální vývoj nebo omezený pilot s malými bbox dotazy:
 

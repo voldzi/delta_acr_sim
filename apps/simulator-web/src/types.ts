@@ -466,3 +466,117 @@ export interface SafetyDataFeatureResponse {
   sources: SafetyDataSource[];
   warnings: string[];
 }
+
+export type TakLayerId = "ground" | "mobile" | "traffic";
+export type TakAffiliation = "friend" | "hostile" | "neutral" | "unknown";
+
+export interface TakGatewayHealth {
+  status: string;
+  timestamp?: string;
+  ingestAuthConfigured: boolean;
+  currentEvents: number;
+  staleEvents: number;
+  lastIngestAt?: string;
+}
+
+export interface TakGatewayLayer {
+  layerId: TakLayerId;
+  label: string;
+  description: string;
+  defaultVisible: boolean;
+  geometryTypes: Array<"Point">;
+  expectedCadenceSeconds?: number;
+}
+
+export interface TakGatewaySource {
+  sourceId: "tak_gateway";
+  label: string;
+  enabled: boolean;
+  mode: "live" | "mock" | "reference";
+  priority: number;
+  layers: TakLayerId[];
+  license: {
+    name: string;
+    attribution: string;
+    commercialUse: "requires_license" | "unknown";
+    operationalUse: "requires_license" | "unknown";
+    notes: string[];
+  };
+  updateCadenceSeconds?: number;
+}
+
+export interface TakGatewayConfig {
+  defaultBbox: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  };
+  staleAfterSeconds: number;
+  retentionSeconds: number;
+  maxEvents: number;
+  exposeRaw: boolean;
+  ingestAuthConfigured: boolean;
+  readAuthConfigured: boolean;
+  publicRead: boolean;
+  sourceLabel: string;
+}
+
+export interface TakGatewayFeature {
+  type: "Feature";
+  id: string;
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: {
+    featureId: string;
+    layer: TakLayerId;
+    category: string;
+    label: string;
+    description?: string;
+    sourceId: "tak_gateway";
+    observedAt: string;
+    receivedAt: string;
+    validUntil?: string;
+    confidence: number;
+    stale: boolean;
+    affiliation: TakAffiliation;
+    license: {
+      name: string;
+      attribution: string;
+    };
+    metrics?: Record<string, number | string | boolean>;
+    tags?: Record<string, string>;
+  };
+}
+
+export interface TakGatewayFeatureResponse {
+  contractVersion: "cop-tak-source-v1";
+  type: "FeatureCollection";
+  generatedAt: string;
+  source: {
+    sourceId: string;
+    sourceType: "TAK_COT_GATEWAY";
+    generatedAt: string;
+  };
+  query: {
+    bbox: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    };
+    layers: TakLayerId[];
+    limit: number;
+  };
+  summary: {
+    eventCount: number;
+    featureCount: number;
+    staleFeatureCount: number;
+    affiliationCounts: Record<TakAffiliation, number>;
+  };
+  features: TakGatewayFeature[];
+  sources: TakGatewaySource[];
+  warnings: string[];
+}
