@@ -169,11 +169,11 @@ export class MobileCoverageSource implements SituationDataSource {
       bbox: formatBboxKey(cacheBbox),
       technologies,
       operators: ["unknown"],
-      limit: query.limit,
       resolutionM: this.config.mobileCoverageResolutionM,
+      maxCells: this.config.mobileCoverageMaxCells,
       modelVersion: this.config.mobileCoverageModelVersion
     });
-    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildCoverage(cacheBbox, technologies, query.limit));
+    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildCoverage(cacheBbox, technologies));
     const features = payload.features
       .filter((feature) => featureIntersectsBbox(feature, query.bbox))
       .slice(0, query.limit)
@@ -196,9 +196,10 @@ export class MobileCoverageSource implements SituationDataSource {
     };
   }
 
-  private async buildCoverage(bbox: BoundingBox, technologies: MobileCoverageTechnology[], limit: number): Promise<CoveragePayload> {
+  private async buildCoverage(bbox: BoundingBox, technologies: MobileCoverageTechnology[]): Promise<CoveragePayload> {
     const generatedAt = new Date().toISOString();
-    const maxCells = Math.max(1, Math.floor(Math.min(this.config.mobileCoverageMaxCells, Math.max(1, limit)) / Math.max(1, technologies.length)));
+    const maxCells = Math.max(1, Math.floor(this.config.mobileCoverageMaxCells / Math.max(1, technologies.length)));
+    const maxFeatures = Math.max(1, this.config.mobileCoverageMaxCells);
     const grid = buildGrid(bbox, this.config.mobileCoverageResolutionM, maxCells);
     const towers = await this.fetchTowers(expandBboxByMeters(bbox, 30_000), 10_000);
     const features: SituationFeature[] = [];
@@ -206,12 +207,12 @@ export class MobileCoverageSource implements SituationDataSource {
     for (const cell of grid.cells) {
       const nearest = nearestTower(cell.center, towers);
       for (const technology of technologies) {
-        if (features.length >= limit) {
+        if (features.length >= maxFeatures) {
           break;
         }
         features.push(this.coverageFeature(cell, nearest, technology, generatedAt, grid.resolutionM));
       }
-      if (features.length >= limit) {
+      if (features.length >= maxFeatures) {
         break;
       }
     }
