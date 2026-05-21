@@ -59,6 +59,13 @@ SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
+SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
+MOBILE_COVERAGE_RESOLUTION_M=1000
+MOBILE_COVERAGE_MAX_CELLS=1000
+MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
+MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
+MOBILE_COVERAGE_TERRAIN_AWARE=false
+MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
@@ -139,11 +146,18 @@ docker compose --profile osm up -d osm-postgis
 scripts/import-osm-cz-postgis.sh
 ```
 
-Poté uprav `.env`:
+Poté uprav `.env`. Pokud chceš zároveň publikovat odhad mobilního pokrytí nad importovanými OSM věžemi, zapni i `mobile_coverage_model`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
+MOBILE_COVERAGE_RESOLUTION_M=1000
+MOBILE_COVERAGE_MAX_CELLS=1000
+MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
+MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
+MOBILE_COVERAGE_TERRAIN_AWARE=false
+MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -154,8 +168,10 @@ A restartuj pouze situační API a web proxy:
 ```bash
 docker compose up -d --build situation-data-api sim-web
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
+curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS http://localhost:5020/situation-data/health/ready
-curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|osm_poi'
+curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|osm_poi|mobile_coverage'
 ```
 
 ## URL
@@ -177,6 +193,7 @@ http://docker.home.cz:5020
 - Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800`, `SITUATION_DATA_CACHE_MAX_ENTRIES=10000`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
 - `osm_postgis` je produkční OSM zdroj nad Patroni/PostGIS nebo lokálním rebuildovatelným PostGIS read-modelem; `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci.
+- `mobile_coverage_model` publikuje odhadovanou polygonovou vrstvu `mobile_coverage` nad OSM `communications_tower` referencemi. Zapínej ji jen s nakonfigurovaným `OSM_POSTGIS_DATABASE_URL`; výstup je modelový odhad, ne garantované pokrytí operátora.
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.

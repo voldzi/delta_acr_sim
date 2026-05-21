@@ -54,6 +54,8 @@ paths:
         - $ref: "#/components/parameters/Bbox"
         - $ref: "#/components/parameters/Layers"
         - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Technologies"
+        - $ref: "#/components/parameters/Operators"
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
@@ -71,6 +73,8 @@ paths:
         - $ref: "#/components/parameters/Bbox"
         - $ref: "#/components/parameters/Layers"
         - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Technologies"
+        - $ref: "#/components/parameters/Operators"
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
@@ -81,6 +85,16 @@ paths:
                 $ref: "#/components/schemas/SituationFeatureCollection"
         "400":
           $ref: "#/components/responses/Problem"
+  /mobile-coverage/metadata:
+    get:
+      summary: Return mobile coverage model metadata
+      responses:
+        "200":
+          description: Mobile coverage model metadata and disclaimer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileCoverageMetadata"
 components:
   parameters:
     Bbox:
@@ -105,6 +119,22 @@ components:
       schema:
         type: string
         example: open_meteo,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+    Technologies:
+      name: technology
+      in: query
+      required: false
+      schema:
+        type: string
+        example: 4G,5G
+      description: Optional mobile_coverage technology filter. Alias `technologies` is also accepted.
+    Operators:
+      name: operator
+      in: query
+      required: false
+      schema:
+        type: string
+        example: unknown
+      description: Optional mobile_coverage operator filter. Phase 1 publishes only `unknown`.
     Limit:
       name: limit
       in: query
@@ -133,10 +163,16 @@ components:
   schemas:
     LayerId:
       type: string
-      enum: [weather, ground, mobile, traffic, warnings, flood, air_quality]
+      enum: [weather, ground, mobile, mobile_coverage, traffic, warnings, flood, air_quality]
     SourceId:
       type: string
-      enum: [mock, open_meteo, osm_postgis, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, osm_postgis, osm_overpass, ctu_nettest, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
+    MobileCoverageTechnology:
+      type: string
+      enum: [2G, 4G, 5G]
+    MobileCoverageQuality:
+      type: string
+      enum: [good, fair, weak, none, unknown]
     BoundingBox:
       type: object
       required: [west, south, east, north]
@@ -249,9 +285,11 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, osmPostgis, osmOverpass, safetyData, aviationWeather, ardosPartner]
+          required: [openMeteo, mobileCoverage, osmPostgis, osmOverpass, safetyData, aviationWeather, ardosPartner]
           properties:
             openMeteo:
+              type: integer
+            mobileCoverage:
               type: integer
             osmPostgis:
               type: integer
@@ -278,7 +316,7 @@ components:
               backend:
                 type: string
                 enum: [unconfigured, local-postgis, patroni-postgis, external-postgis]
-                description: Present for osm_postgis; indicates the runtime database backend without exposing credentials.
+                description: Present for PostGIS-backed providers; indicates the runtime database backend without exposing credentials.
     SourceHealthStatus:
       type: object
       required: [sourceId, status, warnings]
@@ -293,7 +331,7 @@ components:
           enum: [unconfigured, local-postgis, patroni-postgis, external-postgis]
         objectCount:
           type: integer
-          description: Present for osm_postgis when public.osm_poi is readable.
+          description: Present for PostGIS-backed providers when public.osm_poi is readable.
         lastImportAt:
           type: string
           format: date-time
@@ -429,3 +467,62 @@ components:
               type: object
               additionalProperties:
                 type: string
+            operator:
+              type: string
+            technology:
+              $ref: "#/components/schemas/MobileCoverageTechnology"
+            quality:
+              $ref: "#/components/schemas/MobileCoverageQuality"
+            estimatedSignalDbm:
+              type: integer
+            modelVersion:
+              type: string
+            generatedAt:
+              type: string
+              format: date-time
+            resolutionM:
+              type: integer
+            demSource:
+              type: string
+            assumptions:
+              type: object
+              additionalProperties: true
+            disclaimer:
+              type: string
+    MobileCoverageMetadata:
+      type: object
+      required: [layerId, modelVersion, generatedAt, resolutionM, technologies, operators, qualityLevels, demSource, cacheTtlSeconds, disclaimer, assumptions]
+      properties:
+        layerId:
+          type: string
+          const: mobile_coverage
+        modelVersion:
+          type: string
+          example: coverage-v1
+        generatedAt:
+          type: string
+          format: date-time
+        resolutionM:
+          type: integer
+          example: 1000
+        technologies:
+          type: array
+          items:
+            $ref: "#/components/schemas/MobileCoverageTechnology"
+        operators:
+          type: array
+          items:
+            type: string
+        qualityLevels:
+          type: array
+          items:
+            $ref: "#/components/schemas/MobileCoverageQuality"
+        demSource:
+          type: string
+        cacheTtlSeconds:
+          type: integer
+        disclaimer:
+          type: string
+        assumptions:
+          type: object
+          additionalProperties: true

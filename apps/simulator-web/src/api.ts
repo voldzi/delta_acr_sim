@@ -266,6 +266,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       requestTimeoutMs: 0,
       sourceCacheTtlSeconds: {
         openMeteo: 0,
+        mobileCoverage: 0,
         osmPostgis: 0,
         osmOverpass: 0,
         safetyData: 0,

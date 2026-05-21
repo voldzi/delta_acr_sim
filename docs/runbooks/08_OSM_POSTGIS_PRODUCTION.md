@@ -1,14 +1,21 @@
 # OSM/PostGIS Production Runbook
 
-SIM source `osm_postgis` publishes OpenStreetMap reference features for COP through `situation-data`. Public Overpass must not be used as a production runtime backend.
+SIM source `osm_postgis` publishes OpenStreetMap reference features for COP through `situation-data`. The optional `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons. Public Overpass must not be used as a production runtime backend.
 
 ## Preferred Backend: Patroni/PostGIS
 
 Use the HA PostgreSQL/Patroni endpoint behind HAProxy:
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
+MOBILE_COVERAGE_RESOLUTION_M=1000
+MOBILE_COVERAGE_MAX_CELLS=1000
+MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
+MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
+MOBILE_COVERAGE_TERRAIN_AWARE=false
+MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -53,8 +60,9 @@ Required conditions:
 Example:
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
@@ -87,6 +95,8 @@ Relevant fields:
 - `sourceHealth[].objectCount`
 - `sourceHealth[].lastImportAt`
 - `sourceHealth[].lastImportAgeSeconds`
+- `sourceHealth[].sourceId=mobile_coverage_model`
+- `sourceHealth[].objectCount` for usable `communications_tower` references
 
 Metrics:
 
@@ -97,11 +107,17 @@ situation_data_osm_postgis_last_import_timestamp_seconds{backend="..."} <unix_ts
 situation_data_osm_postgis_import_age_seconds{backend="..."} <seconds>
 situation_data_source_cache_hits{source="osm_postgis"} <count>
 situation_data_source_cache_misses{source="osm_postgis"} <count>
+situation_data_mobile_coverage_backend_info{backend="..."} 1
+situation_data_mobile_coverage_towers{backend="..."} <count>
+situation_data_source_cache_hits{source="mobile_coverage_model"} <count>
+situation_data_source_cache_misses{source="mobile_coverage_model"} <count>
 ```
 
 Production readiness check:
 
 ```bash
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
-curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|OSM'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
+curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
+curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|mobile_coverage|OSM'
 ```

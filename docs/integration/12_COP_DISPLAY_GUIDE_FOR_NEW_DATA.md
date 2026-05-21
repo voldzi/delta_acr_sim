@@ -8,6 +8,7 @@ Tento dokument popisuje, jak má COP zobrazit nová data poskytovaná SIM:
 - letiště z OurAirports reference,
 - letištní počasí METAR/TAF ze `situation-data` source `aviation_weather`,
 - pozemní referenční objekty a komunikační infrastrukturu ze `situation-data` source `osm_postgis`,
+- odhad mobilního pokrytí ze `situation-data` source `mobile_coverage_model`,
 - neveřejná partnerská data ARDOS ze `situation-data` source `ardos_partner`.
 
 COP nesmí volat NOAA AWC, ARDOS, ADS-B providery ani OurAirports přímo. Všechny dotazy jdou přes SIM, která řeší cache, licenci, fallback a normalizaci.
@@ -21,6 +22,7 @@ https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks
 https://sim.zeleznalady.cz/flight-data/api/v1/airports
 https://sim.zeleznalady.cz/flight-data/api/v1/sources
 https://sim.zeleznalady.cz/situation-data/api/v1/cop/features
+https://sim.zeleznalady.cz/situation-data/api/v1/mobile-coverage/metadata
 https://sim.zeleznalady.cz/situation-data/api/v1/sources
 https://sim.zeleznalady.cz/situation-data/health/ready
 ```
@@ -30,6 +32,7 @@ Příklad pro mapový výřez Prahy:
 ```http
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=weather&source=aviation_weather&limit=50
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=250
+GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=250
 GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile,traffic&source=ardos_partner&limit=250
 GET /flight-data/api/v1/cop/tracks?bbox=13.85,49.65,15.35,50.45&limit=500
 GET /flight-data/api/v1/airports?bbox=13.85,49.65,15.35,50.45&limit=200
@@ -135,6 +138,56 @@ Doporučené kategorie:
 
 COP má u OSM objektů zobrazit atribuci `OpenStreetMap contributors` a zdrojový badge `OSM`. Tyto objekty nejsou autoritativní operační evidence; slouží jako kontext mapy.
 
+## Mobile Coverage zobrazení
+
+`mobile_coverage_model` přichází jako `cop-situation-source-v1` GeoJSON features ve vrstvě `mobile_coverage`. SIM vrací hotové polygonové features; COP nesmí coverage přepočítávat, stahovat DEM ani dotazovat OSM.
+
+Před prvním vykreslením načti metadata:
+
+```http
+GET /situation-data/api/v1/mobile-coverage/metadata
+```
+
+Coverage feature má navíc:
+
+```json
+{
+  "properties": {
+    "sourceId": "mobile_coverage_model",
+    "layer": "mobile_coverage",
+    "category": "mobile_coverage",
+    "operator": "unknown",
+    "technology": "4G",
+    "quality": "fair",
+    "estimatedSignalDbm": -98,
+    "confidence": 0.62,
+    "modelVersion": "coverage-v1",
+    "resolutionM": 1000,
+    "demSource": "not-used-phase-1",
+    "disclaimer": "Coverage is an estimate, not guaranteed service availability."
+  }
+}
+```
+
+Stylování:
+
+| Quality | COP styl |
+| --- | --- |
+| `good` | zelená, nízká průhlednost |
+| `fair` | žlutá |
+| `weak` | oranžová, upozornění "slabé pokrytí" |
+| `none` | červená nebo tmavě šedá, upozornění "bez odhadovaného pokrytí" |
+| `unknown` | šedá, degraded/nejistý stav |
+
+Doporučené UI:
+
+- zdroj v menu vrstev jako `Mobile coverage estimate`,
+- defaultně vypnuto, protože jde o plošnou překryvnou vrstvu,
+- filtr technologie `2G / 4G / 5G`,
+- filtr operátora zatím skrýt nebo ponechat `unknown`,
+- detail polygonu: kvalita, technologie, modelVersion, generatedAt, resolutionM, confidence a disclaimer,
+- nepoužívat pro garantované SLA operátora ani jako oficiální outage detekci.
+
 ## ARDOS Partner zobrazení
 
 `ardos_partner` je neveřejný zdroj. COP ho smí zobrazit pouze v interním/autorizovaném režimu.
@@ -190,6 +243,7 @@ SIM už cacheuje upstream zdroje. COP proto:
 - dotazuje podle aktuálního bbox, ne celou ČR,
 - nevytváří polling rychlejší než UI potřebuje,
 - pro `aviation_weather` stačí 60-120 s UI refresh,
+- pro `mobile_coverage` stačí 5-15 min UI refresh; SIM cache TTL je typicky 6 hodin,
 - pro `ardos_partner` interně 5-15 s podle dohody,
 - nevolá source endpoint opakovaně pro každý komponent; sdílí odpověď v aplikačním store.
 
@@ -226,3 +280,12 @@ https://sim.zeleznalady.cz/situation-data/api/v1/cop/features?bbox=13.85,49.65,1
 ```
 
 Očekávání: pokud zdroj není nakonfigurovaný, COP ukáže dependency degraded, ale mapa běží dál. Pokud nakonfigurovaný je, features se renderují jen interním uživatelům.
+
+5. COP zobrazí odhad mobilního pokrytí:
+
+```text
+https://sim.zeleznalady.cz/situation-data/api/v1/mobile-coverage/metadata
+https://sim.zeleznalady.cz/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20
+```
+
+Očekávání: metadata obsahují `qualityLevels` a `disclaimer`; features jsou `Polygon` s `quality`, `technology`, `confidence` a `modelVersion`. Pokud source vrátí warnings nebo 0 features kvůli chybějícímu PostGIS, COP ukáže degraded stav, ne chybu celé mapy.

@@ -4,8 +4,17 @@ import { SituationAggregationService } from "./aggregation.js";
 import type { SituationDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
+import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
-import type { BoundingBox, SituationDataPublicConfig, SituationDataSourceId, SituationLayerId, SituationQuery, SourceHealthStatus } from "./types.js";
+import type {
+  BoundingBox,
+  MobileCoverageTechnology,
+  SituationDataPublicConfig,
+  SituationDataSourceId,
+  SituationLayerId,
+  SituationQuery,
+  SourceHealthStatus
+} from "./types.js";
 
 export interface SituationDataAppContext {
   config: SituationDataConfig;
@@ -96,6 +105,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
   app.get("/api/v1/config", (_req, res) => {
     res.json(publicConfig(context.config));
   });
+
+  app.get("/api/v1/mobile-coverage/metadata", (_req, res) => {
+    res.json(new MobileCoverageSource(context.config).metadata());
+  });
 }
 
 function registerFeatureRoutes(app: Express, context: SituationDataAppContext): void {
@@ -139,7 +152,9 @@ function parseSituationQuery(
       layers,
       sourceIds: sources,
       limit: parseLimit(raw.limit, 250, 1000),
-      includeRaw: parseBoolean(raw.includeRaw)
+      includeRaw: parseBoolean(raw.includeRaw),
+      mobileCoverageTechnologies: parseTechnologies(raw.technology ?? raw.technologies),
+      mobileCoverageOperators: parseOperators(raw.operator ?? raw.operators)
     }
   };
 }
@@ -161,7 +176,7 @@ function parseBbox(value: unknown, fallback: BoundingBox): { ok: true; value: Bo
 }
 
 function parseLayers(value: unknown): SituationLayerId[] {
-  const allowed = new Set<SituationLayerId>(["weather", "ground", "mobile", "traffic", "warnings", "flood", "air_quality"]);
+  const allowed = new Set<SituationLayerId>(["weather", "ground", "mobile", "mobile_coverage", "traffic", "warnings", "flood", "air_quality"]);
   const raw = asString(value);
   if (!raw) {
     return ["weather", "ground", "mobile", "traffic", "warnings", "flood", "air_quality"];
@@ -176,6 +191,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
   const allowed = new Set<SituationDataSourceId>([
     "mock",
     "open_meteo",
+    "mobile_coverage_model",
     "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
@@ -192,6 +208,31 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     .split(",")
     .map((item) => item.trim())
     .filter((item): item is SituationDataSourceId => allowed.has(item as SituationDataSourceId));
+}
+
+function parseTechnologies(value: unknown): MobileCoverageTechnology[] | undefined {
+  const allowed = new Set<MobileCoverageTechnology>(["2G", "4G", "5G"]);
+  const raw = asString(value);
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = raw
+    .split(",")
+    .map((item) => item.trim().toUpperCase())
+    .filter((item): item is MobileCoverageTechnology => allowed.has(item as MobileCoverageTechnology));
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function parseOperators(value: unknown): string[] | undefined {
+  const raw = asString(value);
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = raw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+  return parsed.length > 0 ? parsed : undefined;
 }
 
 function parseLimit(value: unknown, fallback: number, max: number): number {
@@ -227,6 +268,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     requestTimeoutMs: config.requestTimeoutMs,
     sourceCacheTtlSeconds: {
       openMeteo: config.openMeteoCacheTtlSeconds,
+      mobileCoverage: config.mobileCoverageCacheTtlSeconds,
       osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,
@@ -236,6 +278,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     providers: [
       { sourceId: "mock", authConfigured: true },
       { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
+      {
+        sourceId: "mobile_coverage_model",
+        baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
+        authConfigured: Boolean(config.osmPostgisConnectionString),
+        backend: config.osmPostgisBackend
+      },
       {
         sourceId: "osm_postgis",
         baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
@@ -256,6 +304,12 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
   const backend = escapeLabel(status.backend ?? "unknown");
   const source = escapeLabel(status.sourceId);
   const lines = [`situation_data_source_health{source="${source}",backend="${backend}"} ${status.status === "ok" ? 1 : 0}`];
+  if (status.sourceId === "mobile_coverage_model") {
+    lines.push(`situation_data_mobile_coverage_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_mobile_coverage_towers{backend="${backend}"} ${status.objectCount}`);
+    }
+  }
   if (status.sourceId === "osm_postgis") {
     lines.push(`situation_data_osm_postgis_backend_info{backend="${backend}"} 1`);
     if (typeof status.objectCount === "number") {

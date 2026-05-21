@@ -17,6 +17,13 @@ export interface SituationDataConfig {
   openMeteoBaseUrl: string;
   openMeteoCacheTtlSeconds: number;
   openMeteoGridDegrees: number;
+  mobileCoverageCacheTtlSeconds: number;
+  mobileCoverageResolutionM: number;
+  mobileCoverageMaxCells: number;
+  mobileCoverageModelVersion: string;
+  mobileCoverageDemSource: string;
+  mobileCoverageTerrainAware: boolean;
+  mobileCoverageAntennaHeightM: number;
   osmPostgisConnectionString?: string;
   osmPostgisBackend: OsmPostgisBackend;
   osmPostgisTable: string;
@@ -59,6 +66,13 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     openMeteoBaseUrl: process.env.OPEN_METEO_BASE_URL ?? "https://api.open-meteo.com",
     openMeteoCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS, 600),
     openMeteoGridDegrees: parseFloatOr(process.env.SITUATION_DATA_OPEN_METEO_GRID_DEGREES, 0.05),
+    mobileCoverageCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS, 21600),
+    mobileCoverageResolutionM: parseInteger(process.env.MOBILE_COVERAGE_RESOLUTION_M, 1000),
+    mobileCoverageMaxCells: parseInteger(process.env.MOBILE_COVERAGE_MAX_CELLS, 1000),
+    mobileCoverageModelVersion: process.env.MOBILE_COVERAGE_MODEL_VERSION ?? "coverage-v1",
+    mobileCoverageDemSource: process.env.MOBILE_COVERAGE_DEM_SOURCE ?? "not-used-phase-1",
+    mobileCoverageTerrainAware: parseBoolean(process.env.MOBILE_COVERAGE_TERRAIN_AWARE, false),
+    mobileCoverageAntennaHeightM: parseInteger(process.env.MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M, 30),
     osmPostgisConnectionString: emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisBackend: parseOsmPostgisBackend(process.env.OSM_POSTGIS_BACKEND, process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisTable: process.env.OSM_POSTGIS_TABLE ?? "public.osm_poi",
@@ -83,6 +97,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
   const allowed = new Set<SituationDataSourceId>([
     "mock",
     "open_meteo",
+    "mobile_coverage_model",
     "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
@@ -127,6 +142,14 @@ function parseFloatOr(value: string | undefined, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (!value) {
+    return fallback;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
 function emptyToUndefined(value: string | undefined): string | undefined {

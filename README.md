@@ -51,7 +51,7 @@ Lokální výchozí zdroj je bezpečný `mock`. Pilotní nasazení na `sim.zelez
 
 Dokumentace služby je v [docs/situation-data/00_INDEX.md](docs/situation-data/00_INDEX.md), COP kontrakt v [docs/integration/09_SITUATION_DATA_SOURCE_CONTRACT.md](docs/integration/09_SITUATION_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-situation-data.yaml](docs/api/openapi-situation-data.yaml).
 
-Docker pilot ve výchozím nastavení zapíná reálné open-data zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`. Pozemní referenční objekty z OpenStreetMap se v produkci zapínají přes `osm_postgis` až po importu do Patroni/PostGIS nebo lokálního rebuildovatelného PostGIS read-modelu. Veřejný `osm_overpass` je pouze vývojová záloha pro malé bbox dotazy.
+Docker pilot ve výchozím nastavení zapíná reálné open-data zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`. Pozemní referenční objekty z OpenStreetMap se v produkci zapínají přes `osm_postgis` až po importu do Patroni/PostGIS nebo lokálního rebuildovatelného PostGIS read-modelu. Nad stejným importem lze zapnout `mobile_coverage_model`, který publikuje odhadovanou polygonovou vrstvu `mobile_coverage`. Veřejný `osm_overpass` je pouze vývojová záloha pro malé bbox dotazy.
 
 ## Safety Data API
 

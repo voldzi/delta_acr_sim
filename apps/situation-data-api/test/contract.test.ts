@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SituationDataConfig } from "../src/config.js";
+import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
 import type { SituationDataSource } from "../src/sources.js";
 
 describe("Situation Data API contract", () => {
@@ -29,6 +30,13 @@ describe("Situation Data API contract", () => {
       openMeteoBaseUrl: "https://api.open-meteo.com",
       openMeteoCacheTtlSeconds: 600,
       openMeteoGridDegrees: 0.05,
+      mobileCoverageCacheTtlSeconds: 21600,
+      mobileCoverageResolutionM: 1000,
+      mobileCoverageMaxCells: 1000,
+      mobileCoverageModelVersion: "coverage-v1",
+      mobileCoverageDemSource: "not-used-phase-1",
+      mobileCoverageTerrainAware: false,
+      mobileCoverageAntennaHeightM: 30,
       osmPostgisConnectionString: undefined,
       osmPostgisBackend: "unconfigured",
       osmPostgisTable: "public.osm_poi",
@@ -80,6 +88,10 @@ describe("Situation Data API contract", () => {
           license: expect.objectContaining({ name: "CC BY 4.0 / Open-Meteo Terms" })
         }),
         expect.objectContaining({
+          sourceId: "mobile_coverage_model",
+          layers: expect.arrayContaining(["mobile_coverage"])
+        }),
+        expect.objectContaining({
           sourceId: "osm_postgis",
           license: expect.objectContaining({ name: "ODbL 1.0" })
         }),
@@ -125,6 +137,7 @@ describe("Situation Data API contract", () => {
         staleAfterSeconds: 900,
         sourceCacheTtlSeconds: {
           openMeteo: 600,
+          mobileCoverage: 21600,
           osmPostgis: 21600,
           osmOverpass: 21600,
           safetyData: 300,
@@ -134,6 +147,7 @@ describe("Situation Data API contract", () => {
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
+          expect.objectContaining({ sourceId: "mobile_coverage_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
@@ -153,10 +167,23 @@ describe("Situation Data API contract", () => {
 
     const cachedSources = await createApp({
       ...config,
-      enabledSources: ["open_meteo", "osm_postgis", "osm_overpass", "ctu_nettest", "pid_gtfs_rt", "safety_data", "aviation_weather", "ardos_partner"]
+      enabledSources: [
+        "open_meteo",
+        "mobile_coverage_model",
+        "osm_postgis",
+        "osm_overpass",
+        "ctu_nettest",
+        "pid_gtfs_rt",
+        "safety_data",
+        "aviation_weather",
+        "ardos_partner"
+      ]
     });
     const cachedSourceMetrics = await request(cachedSources.app).get("/metrics").expect(200);
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="open_meteo"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="mobile_coverage_model"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="mobile_coverage_model",backend="unconfigured"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_mobile_coverage_backend_info{backend="unconfigured"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_postgis"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="osm_postgis",backend="unconfigured"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_osm_postgis_backend_info{backend="unconfigured"} 1');
@@ -298,6 +325,68 @@ describe("Situation Data API contract", () => {
         status: "degraded"
       })
     );
+  });
+
+  it("exposes mobile coverage metadata and configuration warnings", async () => {
+    const coverageApp = await createApp({ ...config, enabledSources: ["mobile_coverage_model"] });
+
+    const metadata = await request(coverageApp.app).get("/api/v1/mobile-coverage/metadata").expect(200);
+    expect(metadata.body).toEqual(
+      expect.objectContaining({
+        layerId: "mobile_coverage",
+        modelVersion: "coverage-v1",
+        technologies: ["2G", "4G", "5G"],
+        qualityLevels: ["good", "fair", "weak", "none", "unknown"],
+        cacheTtlSeconds: 21600,
+        disclaimer: expect.stringContaining("estimate")
+      })
+    );
+
+    const response = await request(coverageApp.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&limit=20")
+      .expect(200);
+    expect(response.body.features).toHaveLength(0);
+    expect(response.body.warnings[0]).toContain("OSM_POSTGIS_DATABASE_URL");
+  });
+
+  it("builds mobile coverage polygons from tower references", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageResolutionM: 500,
+      mobileCoverageMaxCells: 16
+    });
+    (source as unknown as { fetchTowers: () => Promise<Array<{ id: string; name: string; lon: number; lat: number }>> }).fetchTowers = async () => [
+      { id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08 }
+    ];
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.41, south: 50.07, east: 14.43, north: 50.09 },
+      layers: ["mobile_coverage"],
+      sourceIds: ["mobile_coverage_model"],
+      limit: 5,
+      includeRaw: false,
+      mobileCoverageTechnologies: ["4G"]
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Polygon" }),
+        properties: expect.objectContaining({
+          sourceId: "mobile_coverage_model",
+          layer: "mobile_coverage",
+          technology: "4G",
+          quality: expect.stringMatching(/good|fair|weak|none/),
+          modelVersion: "coverage-v1",
+          resolutionM: expect.any(Number),
+          disclaimer: expect.stringContaining("estimate")
+        })
+      })
+    );
+    expect(result.features[0].properties.raw).toBeUndefined();
   });
 
   it("keeps layers represented when a low limit is requested", async () => {
