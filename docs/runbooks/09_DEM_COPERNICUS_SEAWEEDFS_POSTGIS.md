@@ -58,6 +58,16 @@ DEM_SEAWEEDFS_SECRET_ACCESS_KEY=<secret>
 
 Use a dedicated SIM SeaweedFS S3 gateway, bucket and credential. Do not reuse object-store endpoints or credentials owned by another application.
 
+Current pilot on `docker.home.cz` uses:
+
+- S3 gateway: `http://docker.home.cz:8335`
+- bucket: `sim-dem`
+- prefix: `copernicus-glo30/2021`
+- gateway service: `sim-dem-s3` in `/srv/seaweedfs/docker-compose.yml`
+- gateway config: `/srv/seaweedfs/sim-dem-s3.json`
+
+The gateway may share the SeaweedFS infrastructure, but it must have its own SIM endpoint, SIM bucket and SIM credential. Application-specific endpoints such as `looloo.zeleznalady.cz` are intentionally rejected by the import script.
+
 For containers, `docker-compose.yml` mounts:
 
 ```text
