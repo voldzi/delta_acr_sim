@@ -275,6 +275,34 @@ components:
                 type: string
               authConfigured:
                 type: boolean
+              backend:
+                type: string
+                enum: [unconfigured, local-postgis, patroni-postgis, external-postgis]
+                description: Present for osm_postgis; indicates the runtime database backend without exposing credentials.
+    SourceHealthStatus:
+      type: object
+      required: [sourceId, status, warnings]
+      properties:
+        sourceId:
+          $ref: "#/components/schemas/SourceId"
+        status:
+          type: string
+          enum: [ok, degraded]
+        backend:
+          type: string
+          enum: [unconfigured, local-postgis, patroni-postgis, external-postgis]
+        objectCount:
+          type: integer
+          description: Present for osm_postgis when public.osm_poi is readable.
+        lastImportAt:
+          type: string
+          format: date-time
+        lastImportAgeSeconds:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
     SituationFeatureCollection:
       type: object
       required: [contractVersion, type, generatedAt, source, query, summary, features, sources, warnings]

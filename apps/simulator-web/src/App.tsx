@@ -269,7 +269,7 @@ export function App() {
       tracks: emptyFlightTracks
     },
     situationData: {
-      health: { status: "unknown", enabledSources: [] },
+      health: { status: "unknown", enabledSources: [], sourceHealth: [] },
       layers: [],
       sources: [],
       config: {
@@ -381,6 +381,7 @@ export function App() {
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
   const situationDataTone: Tone =
     data.situationData.health.status === "ok" ? (data.situationData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const osmPostgisHealth = data.situationData.health.sourceHealth?.find((source) => source.sourceId === "osm_postgis");
   const safetyDataTone: Tone =
     data.safetyData.health.status === "ok" ? (data.safetyData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
   const takGatewayTone: Tone =
@@ -887,6 +888,9 @@ export function App() {
                   <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
                   <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
                   <SummaryItem label="Source TTLs" value={formatSituationSourceTtls(data.situationData.config.sourceCacheTtlSeconds)} />
+                  <SummaryItem label="OSM backend" value={osmPostgisHealth?.backend ?? data.situationData.config.providers.find((provider) => provider.sourceId === "osm_postgis")?.backend ?? "-"} />
+                  <SummaryItem label="OSM objects" value={typeof osmPostgisHealth?.objectCount === "number" ? osmPostgisHealth.objectCount.toLocaleString("cs-CZ") : "-"} />
+                  <SummaryItem label="OSM import age" value={formatImportAge(osmPostgisHealth?.lastImportAgeSeconds)} />
                   <SummaryItem label="Query limit" value={`${data.situationData.features.query.limit || 0}`} />
                 </div>
               </section>
@@ -1784,6 +1788,19 @@ function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeco
     `OSM DB ${ttls.osmPostgis}s`,
     `Overpass ${ttls.osmOverpass}s`
   ].join(" / ");
+}
+
+function formatImportAge(seconds: number | undefined): string {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds)) {
+    return "-";
+  }
+  if (seconds < 3600) {
+    return `${Math.round(seconds / 60)} min`;
+  }
+  if (seconds < 86_400) {
+    return `${Math.round(seconds / 3600)} h`;
+  }
+  return `${Math.round(seconds / 86_400)} d`;
 }
 
 function formatAltitude(value: number | undefined): string {

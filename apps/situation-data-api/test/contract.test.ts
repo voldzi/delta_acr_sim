@@ -30,6 +30,7 @@ describe("Situation Data API contract", () => {
       openMeteoCacheTtlSeconds: 600,
       openMeteoGridDegrees: 0.05,
       osmPostgisConnectionString: undefined,
+      osmPostgisBackend: "unconfigured",
       osmPostgisTable: "public.osm_poi",
       osmPostgisCacheTtlSeconds: 21600,
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
@@ -133,7 +134,7 @@ describe("Situation Data API contract", () => {
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
-          expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false }),
+          expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
           expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
@@ -157,6 +158,8 @@ describe("Situation Data API contract", () => {
     const cachedSourceMetrics = await request(cachedSources.app).get("/metrics").expect(200);
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="open_meteo"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_postgis"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="osm_postgis",backend="unconfigured"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_osm_postgis_backend_info{backend="unconfigured"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_overpass"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_stale_hits{source="ctu_nettest"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
@@ -285,6 +288,16 @@ describe("Situation Data API contract", () => {
 
     expect(response.body.features).toHaveLength(0);
     expect(response.body.warnings[0]).toContain("OSM_POSTGIS_DATABASE_URL");
+
+    const health = await request(osmPostgisApp.app).get("/health/ready").expect(200);
+    expect(health.body.status).toBe("degraded");
+    expect(health.body.sourceHealth[0]).toEqual(
+      expect.objectContaining({
+        sourceId: "osm_postgis",
+        backend: "unconfigured",
+        status: "degraded"
+      })
+    );
   });
 
   it("keeps layers represented when a low limit is requested", async () => {

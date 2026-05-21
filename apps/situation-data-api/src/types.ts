@@ -11,6 +11,7 @@ export type SituationDataSourceId =
   | "ardos_partner";
 export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
+export type OsmPostgisBackend = "unconfigured" | "local-postgis" | "patroni-postgis" | "external-postgis";
 
 export interface BoundingBox {
   west: number;
@@ -78,7 +79,18 @@ export interface SituationDataPublicConfig {
     sourceId: SituationDataSourceId;
     baseUrl?: string;
     authConfigured: boolean;
+    backend?: string;
   }>;
+}
+
+export interface SourceHealthStatus {
+  sourceId: SituationDataSourceId;
+  status: "ok" | "degraded";
+  backend?: string;
+  objectCount?: number;
+  lastImportAt?: string;
+  lastImportAgeSeconds?: number;
+  warnings: string[];
 }
 
 export interface PointGeometry {

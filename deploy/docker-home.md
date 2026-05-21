@@ -64,8 +64,9 @@ SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
-OSM_POSTGIS_PASSWORD=sim_osm_dev
-OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:sim_osm_dev@osm-postgis:5432/sim_osm
+OSM_POSTGIS_PASSWORD=
+OSM_POSTGIS_BACKEND=
+OSM_POSTGIS_DATABASE_URL=
 OSM_POSTGIS_TABLE=public.osm_poi
 OVERPASS_BASE_URL=https://overpass-api.de/api/interpreter
 OVERPASS_MAX_BBOX_DEGREES=1.6
@@ -95,12 +96,45 @@ curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic,warnings,flood&limit=20'
 ```
 
-## Lokální OpenStreetMap/PostGIS import
+## OpenStreetMap/PostGIS import
 
-Veřejný Overpass nepoužívej pro produkční runtime. Pro pilot s tisíci uživatelů postav lokální PostGIS a zapni `osm_postgis` až po importu:
+Veřejný Overpass nepoužívej pro produkční runtime.
+
+Preferovaná produkční varianta je HA PostgreSQL/Patroni přes `haproxy.home.cz:5000` se samostatnou databází `sim_osm`:
 
 ```bash
 cd /srv/sim
+export OSM_POSTGIS_DATABASE_URL='postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm'
+export OSM_POSTGIS_BACKEND=patroni-postgis
+scripts/import-osm-cz-postgis.sh
+```
+
+Lokální Docker PostGIS je přípustný jen jako rebuildovatelný read-model/cache pro OSM extract. Nepoužívej default credential; nastav silné heslo a explicitní URL:
+
+```bash
+cd /srv/sim
+python3 - <<'PY'
+from pathlib import Path
+import secrets
+
+p = Path(".env")
+lines = p.read_text().splitlines()
+
+def set_key(key: str, value: str) -> None:
+    prefix = key + "="
+    for i, line in enumerate(lines):
+        if line.startswith(prefix):
+            lines[i] = prefix + value
+            return
+    lines.append(prefix + value)
+
+password = secrets.token_hex(32)
+set_key("OSM_POSTGIS_BACKEND", "local-postgis")
+set_key("OSM_POSTGIS_PASSWORD", password)
+set_key("OSM_POSTGIS_DATABASE_URL", f"postgresql://sim_osm:{password}@osm-postgis:5432/sim_osm")
+set_key("OSM_POSTGIS_TABLE", "public.osm_poi")
+p.write_text("\n".join(lines) + "\n")
+PY
 docker compose --profile osm up -d osm-postgis
 scripts/import-osm-cz-postgis.sh
 ```
@@ -110,6 +144,7 @@ Poté uprav `.env`:
 ```bash
 SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 ```
@@ -119,6 +154,8 @@ A restartuj pouze situační API a web proxy:
 ```bash
 docker compose up -d --build situation-data-api sim-web
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
+curl -fsS http://localhost:5020/situation-data/health/ready
+curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|osm_poi'
 ```
 
 ## URL
@@ -139,7 +176,7 @@ http://docker.home.cz:5020
 - Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`.
 - Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800`, `SITUATION_DATA_CACHE_MAX_ENTRIES=10000`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
-- `osm_postgis` je produkční OSM zdroj nad lokálním PostGIS importem; `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci.
+- `osm_postgis` je produkční OSM zdroj nad Patroni/PostGIS nebo lokálním rebuildovatelným PostGIS read-modelem; `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci.
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.

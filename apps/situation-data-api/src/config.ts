@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BoundingBox, SituationDataSourceId } from "./types.js";
+import type { BoundingBox, OsmPostgisBackend, SituationDataSourceId } from "./types.js";
 
 export interface SituationDataConfig {
   port: number;
@@ -18,6 +18,7 @@ export interface SituationDataConfig {
   openMeteoCacheTtlSeconds: number;
   openMeteoGridDegrees: number;
   osmPostgisConnectionString?: string;
+  osmPostgisBackend: OsmPostgisBackend;
   osmPostgisTable: string;
   osmPostgisCacheTtlSeconds: number;
   overpassBaseUrl: string;
@@ -59,6 +60,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     openMeteoCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS, 600),
     openMeteoGridDegrees: parseFloatOr(process.env.SITUATION_DATA_OPEN_METEO_GRID_DEGREES, 0.05),
     osmPostgisConnectionString: emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
+    osmPostgisBackend: parseOsmPostgisBackend(process.env.OSM_POSTGIS_BACKEND, process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisTable: process.env.OSM_POSTGIS_TABLE ?? "public.osm_poi",
     osmPostgisCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS, 21600),
     overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? "https://overpass-api.de/api/interpreter",
@@ -129,4 +131,28 @@ function parseFloatOr(value: string | undefined, fallback: number): number {
 
 function emptyToUndefined(value: string | undefined): string | undefined {
   return value && value.trim() !== "" ? value : undefined;
+}
+
+function parseOsmPostgisBackend(value: string | undefined, connectionString: string | undefined): OsmPostgisBackend {
+  const normalized = value?.trim();
+  if (normalized === "local-postgis" || normalized === "patroni-postgis" || normalized === "external-postgis") {
+    return normalized;
+  }
+  const rawUrl = connectionString?.trim();
+  if (!rawUrl) {
+    return "unconfigured";
+  }
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    if (host === "osm-postgis" || host === "localhost" || host === "127.0.0.1") {
+      return "local-postgis";
+    }
+    if (host === "haproxy.home.cz" || host.includes("patroni")) {
+      return "patroni-postgis";
+    }
+  } catch {
+    return "external-postgis";
+  }
+  return "external-postgis";
 }

@@ -215,10 +215,21 @@ export type SituationDataSourceId =
   | "aviation_weather"
   | "ardos_partner";
 
+export interface SituationDataSourceHealth {
+  sourceId: SituationDataSourceId;
+  status: "ok" | "degraded";
+  backend?: string;
+  objectCount?: number;
+  lastImportAt?: string;
+  lastImportAgeSeconds?: number;
+  warnings: string[];
+}
+
 export interface SituationDataHealth {
   status: string;
   timestamp?: string;
   enabledSources: SituationDataSourceId[];
+  sourceHealth?: SituationDataSourceHealth[];
 }
 
 export interface SituationDataLicense {
@@ -277,6 +288,7 @@ export interface SituationDataConfig {
     sourceId: SituationDataSourceId;
     baseUrl?: string;
     authConfigured: boolean;
+    backend?: string;
   }>;
 }
 

@@ -5,7 +5,7 @@ import type { SituationDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
-import type { BoundingBox, SituationDataPublicConfig, SituationDataSourceId, SituationLayerId, SituationQuery } from "./types.js";
+import type { BoundingBox, SituationDataPublicConfig, SituationDataSourceId, SituationLayerId, SituationQuery, SourceHealthStatus } from "./types.js";
 
 export interface SituationDataAppContext {
   config: SituationDataConfig;
@@ -37,16 +37,20 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.get("/health/ready", (_req, res) => {
+  app.get("/health/ready", async (_req, res) => {
+    const sourceHealth = await context.aggregation.sourceHealthStatuses();
+    const degraded = sourceHealth.some((source) => source.status === "degraded");
     res.json({
-      status: "ok",
+      status: degraded ? "degraded" : "ok",
       timestamp: new Date().toISOString(),
-      enabledSources: context.config.enabledSources
+      enabledSources: context.config.enabledSources,
+      sourceHealth
     });
   });
 
-  app.get("/metrics", (_req, res) => {
+  app.get("/metrics", async (_req, res) => {
     const cache = context.aggregation.cacheStats();
+    const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
       `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -58,6 +62,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       `situation_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
       `situation_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
     ]);
+    const sourceHealthLines = sourceHealth.flatMap(sourceHealthMetricLines);
     res
       .type("text/plain")
       .send(
@@ -72,7 +77,8 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           `situation_data_cache_refreshes ${cache.refreshes}`,
           `situation_data_cache_errors ${cache.errors}`,
           `situation_data_cache_evictions ${cache.evictions}`,
-          ...sourceCacheLines
+          ...sourceCacheLines,
+          ...sourceHealthLines
         ].join("\n") + "\n"
       );
   });
@@ -232,8 +238,9 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
       {
         sourceId: "osm_postgis",
-        baseUrl: config.osmPostgisConnectionString ? "postgresql://osm-postgis" : undefined,
-        authConfigured: Boolean(config.osmPostgisConnectionString)
+        baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
+        authConfigured: Boolean(config.osmPostgisConnectionString),
+        backend: config.osmPostgisBackend
       },
       { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
@@ -243,4 +250,39 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }
     ]
   };
+}
+
+function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
+  const backend = escapeLabel(status.backend ?? "unknown");
+  const source = escapeLabel(status.sourceId);
+  const lines = [`situation_data_source_health{source="${source}",backend="${backend}"} ${status.status === "ok" ? 1 : 0}`];
+  if (status.sourceId === "osm_postgis") {
+    lines.push(`situation_data_osm_postgis_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_osm_postgis_objects{backend="${backend}"} ${status.objectCount}`);
+    }
+    if (status.lastImportAt) {
+      lines.push(`situation_data_osm_postgis_last_import_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+    }
+    if (typeof status.lastImportAgeSeconds === "number") {
+      lines.push(`situation_data_osm_postgis_import_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+  }
+  return lines;
+}
+
+function publicPostgisBaseUrl(connectionString: string | undefined): string | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  try {
+    const url = new URL(connectionString);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "postgresql://configured";
+  }
+}
+
+function escapeLabel(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
 }

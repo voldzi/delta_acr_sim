@@ -189,26 +189,31 @@ SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 OVERPASS_MAX_BBOX_DEGREES=1.6
 ```
 
-Produkční varianta pro OSM používá lokální PostGIS import:
-
-```bash
-docker compose --profile osm up -d osm-postgis
-scripts/import-osm-cz-postgis.sh
-```
-
-Po úspěšném importu zapni `osm_postgis` místo veřejného Overpassu:
+Preferovaná produkční varianta pro OSM používá samostatnou databázi `sim_osm` v HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`:
 
 ```bash
 SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+OSM_POSTGIS_BACKEND=patroni-postgis
+OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
+OSM_POSTGIS_TABLE=public.osm_poi
+SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+scripts/import-osm-cz-postgis.sh
+```
+
+Lokální Docker PostGIS může zůstat jen jako rebuildovatelný read-model/cache s explicitním silným heslem a URL:
+
+```bash
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,ctu_nettest,pid_gtfs_rt,safety_data
+OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
-OSM_POSTGIS_PASSWORD=...
+OSM_POSTGIS_PASSWORD=<strong-password>
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 ```
 
-Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COP features.
+Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COP features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
 ## Safety Data API
 

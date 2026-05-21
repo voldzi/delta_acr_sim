@@ -90,7 +90,8 @@ services:
       SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS: ${SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS:-600}
       SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS: ${SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS:-15}
       OPEN_METEO_BASE_URL: ${OPEN_METEO_BASE_URL:-https://api.open-meteo.com}
-      OSM_POSTGIS_DATABASE_URL: ${OSM_POSTGIS_DATABASE_URL:-postgresql://sim_osm:sim_osm_dev@osm-postgis:5432/sim_osm}
+      OSM_POSTGIS_BACKEND: ${OSM_POSTGIS_BACKEND:-}
+      OSM_POSTGIS_DATABASE_URL: ${OSM_POSTGIS_DATABASE_URL:-}
       OSM_POSTGIS_TABLE: ${OSM_POSTGIS_TABLE:-public.osm_poi}
       OVERPASS_BASE_URL: ${OVERPASS_BASE_URL:-https://overpass-api.de/api/interpreter}
       OVERPASS_MAX_BBOX_DEGREES: ${OVERPASS_MAX_BBOX_DEGREES:-1.6}
@@ -118,7 +119,7 @@ services:
     environment:
       POSTGRES_DB: ${OSM_POSTGIS_DB:-sim_osm}
       POSTGRES_USER: ${OSM_POSTGIS_USER:-sim_osm}
-      POSTGRES_PASSWORD: ${OSM_POSTGIS_PASSWORD:-sim_osm_dev}
+      POSTGRES_PASSWORD: ${OSM_POSTGIS_PASSWORD:-}
     volumes:
       - osm-postgis-data:/var/lib/postgresql/data
     expose:

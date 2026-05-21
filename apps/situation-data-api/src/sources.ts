@@ -14,6 +14,7 @@ import type {
   SituationLayerId,
   SituationQuery,
   SituationSeverity,
+  SourceHealthStatus,
   SourceDescriptor,
   SourceFetchResult
 } from "./types.js";
@@ -22,6 +23,7 @@ export interface SituationDataSource {
   descriptor: SourceDescriptor;
   fetchFeatures(query: SituationQuery): Promise<SourceFetchResult>;
   cacheStats?(): SourceCacheStats[];
+  healthStatus?(): Promise<SourceHealthStatus>;
 }
 
 export interface SourceCacheStats extends ManagedResponseCacheStats {

@@ -8,6 +8,7 @@ import type {
   SituationFeatureCollection,
   SituationLayerId,
   SituationQuery,
+  SourceHealthStatus,
   SourceDescriptor,
   SourceFetchResult
 } from "./types.js";
@@ -32,6 +33,12 @@ export class SituationAggregationService {
 
   sourceCacheStats(): SourceCacheStats[] {
     return this.sources.flatMap((source) => source.cacheStats?.() ?? []);
+  }
+
+  async sourceHealthStatuses(): Promise<SourceHealthStatus[]> {
+    const checks = this.sources.filter((source) => source.healthStatus).map((source) => source.healthStatus?.());
+    const settled = await Promise.allSettled(checks);
+    return settled.flatMap((item) => (item.status === "fulfilled" && item.value ? [item.value] : []));
   }
 
   async getFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {

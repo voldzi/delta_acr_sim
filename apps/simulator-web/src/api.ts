@@ -250,7 +250,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "flight data tracks",
     warnings
   );
-  const situationHealth = unwrapDashboardResult(results[10], { status: "unavailable", enabledSources: [] }, "situation data health", warnings);
+  const situationHealth = unwrapDashboardResult(results[10], { status: "unavailable", enabledSources: [], sourceHealth: [] }, "situation data health", warnings);
   const situationLayers = unwrapDashboardResult(results[11], { items: [] }, "situation data layers", warnings);
   const situationSources = unwrapDashboardResult(results[12], { items: [] }, "situation data sources", warnings);
   const situationConfig = unwrapDashboardResult(

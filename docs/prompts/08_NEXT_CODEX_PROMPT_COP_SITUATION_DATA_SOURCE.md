@@ -13,10 +13,10 @@ Uprav COP tak, aby uměl načítat, zobrazovat a provozně hlídat externí situ
 
 COP musí tyto vrstvy zobrazovat jako doplňkový kontext, ne jako vlastní COP tracky letadel. Tracky z `/flight-data/api/v1/cop/tracks` zůstávají samostatný vzdušný zdroj.
 
-SIM podporuje tyto reálné zdroje; COP má respektovat `/sources.enabled`, protože `osm_postgis` se zapíná až po lokálním importu:
+SIM podporuje tyto reálné zdroje; COP má respektovat `/sources.enabled`, protože `osm_postgis` se zapíná až po importu do PostGIS:
 
 - `open_meteo`: počasí pro střed bbox,
-- `osm_postgis`: referenční pozemní objekty a komunikační věže z lokálního OpenStreetMap/PostGIS importu,
+- `osm_postgis`: referenční pozemní objekty a komunikační věže z OpenStreetMap/PostGIS importu; produkčně preferovaně Patroni/PostGIS, lokální Docker DB jen jako rebuildovatelný read-model/cache,
 - `osm_overpass`: pouze vývojová záloha pro malé bbox,
 - `ctu_nettest`: ČTÚ NetTest mobilní měření,
 - `pid_gtfs_rt`: PID/Golemio GTFS-RT vozidla veřejné dopravy jako živý dopravní kontext.

@@ -9,6 +9,7 @@ import type {
   SituationFeature,
   SituationLayerId,
   SituationQuery,
+  SourceHealthStatus,
   SourceDescriptor,
   SourceFetchResult
 } from "./types.js";
@@ -38,9 +39,15 @@ interface OsmPoiRow {
   imported_at: Date | string | null;
 }
 
+interface OsmPostgisMetadata {
+  objectCount: number;
+  lastImportAt?: string;
+}
+
 export class OsmPostgisSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<OsmPoiRow[]>;
+  private readonly metadataCache: ManagedResponseCache<OsmPostgisMetadata>;
   private pool?: Pool;
 
   constructor(private readonly config: SituationDataConfig) {
@@ -48,6 +55,11 @@ export class OsmPostgisSource implements SituationDataSource {
       ttlMs: Math.max(60, config.osmPostgisCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.osmPostgisCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 4096))
+    });
+    this.metadataCache = new ManagedResponseCache<OsmPostgisMetadata>({
+      ttlMs: 60_000,
+      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 4
     });
     this.descriptor = {
       sourceId: "osm_postgis",
@@ -57,7 +69,7 @@ export class OsmPostgisSource implements SituationDataSource {
       priority: 62,
       layers: ["ground", "mobile"],
       license: OSM_POSTGIS_LICENSE,
-      baseUrl: config.osmPostgisConnectionString ? "postgresql://osm-postgis" : undefined,
+      baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
       updateCadenceSeconds: config.osmPostgisCacheTtlSeconds
     };
   }
@@ -69,6 +81,45 @@ export class OsmPostgisSource implements SituationDataSource {
         ...this.payloadCache.stats()
       }
     ];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    const warnings: string[] = [];
+    if (!this.config.osmPostgisConnectionString) {
+      return {
+        sourceId: "osm_postgis",
+        status: "degraded",
+        backend: this.config.osmPostgisBackend,
+        warnings: ["osm_postgis is enabled but OSM_POSTGIS_DATABASE_URL is not configured."]
+      };
+    }
+
+    try {
+      const metadata = await this.metadataCache.getOrLoad("metadata", () => this.fetchMetadata());
+      const lastImportAgeSeconds = metadata.lastImportAt ? Math.max(0, Math.round((Date.now() - Date.parse(metadata.lastImportAt)) / 1000)) : undefined;
+      if (metadata.objectCount <= 0) {
+        warnings.push("osm_postgis public.osm_poi is empty.");
+      }
+      if (!metadata.lastImportAt) {
+        warnings.push("osm_postgis public.osm_poi has no imported_at timestamp.");
+      }
+      return {
+        sourceId: "osm_postgis",
+        status: warnings.length > 0 ? "degraded" : "ok",
+        backend: this.config.osmPostgisBackend,
+        objectCount: metadata.objectCount,
+        lastImportAt: metadata.lastImportAt,
+        lastImportAgeSeconds,
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: "osm_postgis",
+        status: "degraded",
+        backend: this.config.osmPostgisBackend,
+        warnings: [error instanceof Error ? error.message : "Unknown osm_postgis health check failure."]
+      };
+    }
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -141,6 +192,23 @@ export class OsmPostgisSource implements SituationDataSource {
     return result.rows;
   }
 
+  private async fetchMetadata(): Promise<OsmPostgisMetadata> {
+    const pool = this.getPool();
+    const table = quoteQualifiedIdentifier(this.config.osmPostgisTable);
+    const sql = `
+      select
+        count(*)::bigint as object_count,
+        max(imported_at) as last_import_at
+      from ${table}
+    `;
+    const result = await pool.query<{ object_count: string | number; last_import_at: Date | string | null }>(sql);
+    const row = result.rows[0];
+    return {
+      objectCount: numberFromPg(row?.object_count),
+      lastImportAt: normalizeTimestamp(row?.last_import_at)
+    };
+  }
+
   private getPool(): Pool {
     if (!this.pool) {
       this.pool = new Pool({
@@ -152,6 +220,29 @@ export class OsmPostgisSource implements SituationDataSource {
     }
     return this.pool;
   }
+}
+
+function publicPostgisBaseUrl(connectionString: string | undefined): string | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  try {
+    const url = new URL(connectionString);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "postgresql://configured";
+  }
+}
+
+function numberFromPg(value: string | number | null | undefined): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): SituationFeature | undefined {
@@ -283,7 +374,7 @@ function cleanString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function normalizeTimestamp(value: Date | string | null): string | undefined {
+function normalizeTimestamp(value: Date | string | null | undefined): string | undefined {
   if (!value) {
     return undefined;
   }
