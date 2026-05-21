@@ -42,9 +42,9 @@ DEM_LOCAL_CACHE_HOST_DIR="${DEM_LOCAL_CACHE_HOST_DIR:-data/dem-cache/copernicus-
 DEM_LOCAL_CACHE_DIR="${DEM_LOCAL_CACHE_DIR:-$(env_value DEM_LOCAL_CACHE_DIR)}"
 DEM_LOCAL_CACHE_DIR="${DEM_LOCAL_CACHE_DIR:-/dem-cache/copernicus-glo30}"
 DEM_SEAWEEDFS_ENABLED="${DEM_SEAWEEDFS_ENABLED:-$(env_value DEM_SEAWEEDFS_ENABLED)}"
-DEM_SEAWEEDFS_ENABLED="${DEM_SEAWEEDFS_ENABLED:-true}"
+DEM_SEAWEEDFS_ENABLED="${DEM_SEAWEEDFS_ENABLED:-false}"
 DEM_SEAWEEDFS_S3_ENDPOINT="${DEM_SEAWEEDFS_S3_ENDPOINT:-$(env_value DEM_SEAWEEDFS_S3_ENDPOINT)}"
-DEM_SEAWEEDFS_S3_ENDPOINT="${DEM_SEAWEEDFS_S3_ENDPOINT:-http://127.0.0.1:8333}"
+DEM_SEAWEEDFS_S3_ENDPOINT="${DEM_SEAWEEDFS_S3_ENDPOINT:-}"
 DEM_SEAWEEDFS_BUCKET="${DEM_SEAWEEDFS_BUCKET:-$(env_value DEM_SEAWEEDFS_BUCKET)}"
 DEM_SEAWEEDFS_BUCKET="${DEM_SEAWEEDFS_BUCKET:-sim-dem}"
 DEM_SEAWEEDFS_PREFIX="${DEM_SEAWEEDFS_PREFIX:-$(env_value DEM_SEAWEEDFS_PREFIX)}"
@@ -130,6 +130,14 @@ if [[ ! -s "$manifest" ]]; then
 fi
 
 if [[ "$DEM_SEAWEEDFS_ENABLED" == "true" || "$DEM_SEAWEEDFS_ENABLED" == "1" || "$DEM_SEAWEEDFS_ENABLED" == "yes" ]]; then
+  if [[ -z "${DEM_SEAWEEDFS_S3_ENDPOINT:-}" ]]; then
+    echo "DEM SeaweedFS upload requested but DEM_SEAWEEDFS_S3_ENDPOINT is not configured." >&2
+    exit 1
+  fi
+  if [[ "$DEM_SEAWEEDFS_S3_ENDPOINT" == *"looloo.zeleznalady.cz"* ]]; then
+    echo "Refusing to use Looloo SeaweedFS endpoint for SIM DEM. Configure a dedicated SIM SeaweedFS S3 gateway." >&2
+    exit 1
+  fi
   if [[ -z "${DEM_SEAWEEDFS_ACCESS_KEY_ID:-}" || -z "${DEM_SEAWEEDFS_SECRET_ACCESS_KEY:-}" ]]; then
     echo "DEM SeaweedFS upload requested but DEM_SEAWEEDFS_ACCESS_KEY_ID/DEM_SEAWEEDFS_SECRET_ACCESS_KEY is not configured." >&2
     exit 1
@@ -138,6 +146,8 @@ if [[ "$DEM_SEAWEEDFS_ENABLED" == "true" || "$DEM_SEAWEEDFS_ENABLED" == "1" || "
   docker run --rm \
     -e AWS_ACCESS_KEY_ID="$DEM_SEAWEEDFS_ACCESS_KEY_ID" \
     -e AWS_SECRET_ACCESS_KEY="$DEM_SEAWEEDFS_SECRET_ACCESS_KEY" \
+    -e AWS_DEFAULT_REGION=us-east-1 \
+    -e AWS_EC2_METADATA_DISABLED=true \
     amazon/aws-cli:latest \
     --endpoint-url "$DEM_SEAWEEDFS_S3_ENDPOINT" \
     s3 mb "s3://$DEM_SEAWEEDFS_BUCKET" >/dev/null 2>&1 || true
@@ -148,6 +158,8 @@ if [[ "$DEM_SEAWEEDFS_ENABLED" == "true" || "$DEM_SEAWEEDFS_ENABLED" == "1" || "
     docker run --rm \
       -e AWS_ACCESS_KEY_ID="$DEM_SEAWEEDFS_ACCESS_KEY_ID" \
       -e AWS_SECRET_ACCESS_KEY="$DEM_SEAWEEDFS_SECRET_ACCESS_KEY" \
+      -e AWS_DEFAULT_REGION=us-east-1 \
+      -e AWS_EC2_METADATA_DISABLED=true \
       -v "$DEM_LOCAL_CACHE_HOST_ABS:/dem:ro" \
       amazon/aws-cli:latest \
       --endpoint-url "$DEM_SEAWEEDFS_S3_ENDPOINT" \
@@ -155,6 +167,7 @@ if [[ "$DEM_SEAWEEDFS_ENABLED" == "true" || "$DEM_SEAWEEDFS_ENABLED" == "1" || "
   done < "$manifest"
   object_store_available=true
 else
+  echo "SeaweedFS upload disabled; registering local-only DEM tiles."
   object_store_available=false
 fi
 

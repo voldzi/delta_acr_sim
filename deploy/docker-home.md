@@ -72,8 +72,8 @@ DEM_DATASET_ID=copernicus-glo30-cz
 DEM_POSTGIS_DATABASE_URL=
 DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
 DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
-DEM_SEAWEEDFS_ENABLED=true
-DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_ENABLED=false
+DEM_SEAWEEDFS_S3_ENDPOINT=
 DEM_SEAWEEDFS_BUCKET=sim-dem
 DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
 DEM_SEAWEEDFS_ACCESS_KEY_ID=
@@ -188,7 +188,7 @@ curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|os
 
 ## DEM Copernicus GLO-30 import
 
-SIM ukládá DEM binární soubory do SeaweedFS, rychlou runtime kopii do lokálního filesystemu a prostorový katalog do PostGIS. Rastry neukládej přímo do PostgreSQL.
+SIM ukládá DEM binární soubory do dedikovaného SIM SeaweedFS S3 gateway, rychlou runtime kopii do lokálního filesystemu a prostorový katalog do PostGIS. Rastry neukládej přímo do PostgreSQL. Nepoužívej endpointy, buckety ani přístupové údaje patřící jiné aplikaci.
 
 Po nastavení `OSM_POSTGIS_DATABASE_URL` na Patroni/PostGIS doplň v `/srv/sim/.env`:
 
@@ -200,7 +200,7 @@ DEM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:
 DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
 DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
 DEM_SEAWEEDFS_ENABLED=true
-DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_S3_ENDPOINT=http://docker.home.cz:8335
 DEM_SEAWEEDFS_BUCKET=sim-dem
 DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
 DEM_SEAWEEDFS_ACCESS_KEY_ID=<secret>

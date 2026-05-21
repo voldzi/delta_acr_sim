@@ -49,12 +49,14 @@ DEM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:
 DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
 DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
 DEM_SEAWEEDFS_ENABLED=true
-DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_S3_ENDPOINT=http://docker.home.cz:8335
 DEM_SEAWEEDFS_BUCKET=sim-dem
 DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
 DEM_SEAWEEDFS_ACCESS_KEY_ID=<secret>
 DEM_SEAWEEDFS_SECRET_ACCESS_KEY=<secret>
 ```
+
+Use a dedicated SIM SeaweedFS S3 gateway, bucket and credential. Do not reuse object-store endpoints or credentials owned by another application.
 
 For containers, `docker-compose.yml` mounts:
 
@@ -74,7 +76,7 @@ The script:
 
 1. computes the 1-degree tile list for `DEM_BBOX`,
 2. downloads missing COG files from AWS Open Data into local cache,
-3. uploads the same files to SeaweedFS S3,
+3. uploads the same files to the dedicated SIM SeaweedFS S3 gateway when `DEM_SEAWEEDFS_ENABLED=true`,
 4. creates PostGIS schema,
 5. registers tile metadata, checksum, bbox, local path and object key.
 
