@@ -95,6 +95,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MobileCoverageMetadata"
+  /dem/metadata:
+    get:
+      summary: Return DEM catalog metadata
+      responses:
+        "200":
+          description: DEM catalog metadata, storage state and import warnings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemCatalogStatus"
 components:
   parameters:
     Bbox:
@@ -526,3 +536,50 @@ components:
         assumptions:
           type: object
           additionalProperties: true
+    DemCatalogStatus:
+      type: object
+      required: [enabled, status, datasetId, warnings]
+      properties:
+        enabled:
+          type: boolean
+        status:
+          type: string
+          enum: [ok, degraded, disabled]
+        datasetId:
+          type: string
+          example: copernicus-glo30-cz
+        source:
+          type: string
+          example: copernicus-dem-glo30
+        version:
+          type: string
+          example: "2021"
+        resolutionM:
+          type: integer
+          example: 30
+        tileCount:
+          type: integer
+        localTileCount:
+          type: integer
+        objectStoreTileCount:
+          type: integer
+        importedAt:
+          type: string
+          format: date-time
+        bbox:
+          $ref: "#/components/schemas/BoundingBox"
+        localCacheDir:
+          type: string
+        objectStore:
+          type: object
+          properties:
+            endpoint:
+              type: string
+            bucket:
+              type: string
+            prefix:
+              type: string
+        warnings:
+          type: array
+          items:
+            type: string

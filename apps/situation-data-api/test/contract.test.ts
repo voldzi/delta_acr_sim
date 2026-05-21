@@ -52,7 +52,14 @@ describe("Situation Data API contract", () => {
       aviationWeatherCacheTtlSeconds: 600,
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
-      ardosPartnerCacheTtlSeconds: 15
+      ardosPartnerCacheTtlSeconds: 15,
+      demEnabled: false,
+      demDatasetId: "copernicus-glo30-cz",
+      demPostgisConnectionString: undefined,
+      demLocalCacheDir: "/dem-cache/copernicus-glo30",
+      demSeaweedfsEndpoint: undefined,
+      demSeaweedfsBucket: "sim-dem",
+      demSeaweedfsPrefix: "copernicus-glo30/2021"
     };
     ({ app } = await createApp(config));
   });
@@ -66,6 +73,7 @@ describe("Situation Data API contract", () => {
     const health = await request(app).get("/health/ready").expect(200);
     expect(health.body.status).toBe("ok");
     expect(health.body.enabledSources).toEqual(["mock"]);
+    expect(health.body.dem).toEqual(expect.objectContaining({ status: "disabled", datasetId: "copernicus-glo30-cz" }));
 
     const layers = await request(app).get("/api/v1/layers").expect(200);
     expect(layers.body.items).toEqual(
@@ -347,6 +355,20 @@ describe("Situation Data API contract", () => {
       .expect(200);
     expect(response.body.features).toHaveLength(0);
     expect(response.body.warnings[0]).toContain("OSM_POSTGIS_DATABASE_URL");
+  });
+
+  it("exposes DEM metadata when the catalog is disabled", async () => {
+    const response = await request(app).get("/api/v1/dem/metadata").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        status: "disabled",
+        datasetId: "copernicus-glo30-cz",
+        localCacheDir: "/dem-cache/copernicus-glo30",
+        objectStore: expect.objectContaining({ bucket: "sim-dem", prefix: "copernicus-glo30/2021" })
+      })
+    );
   });
 
   it("builds mobile coverage polygons from tower references", async () => {

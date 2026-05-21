@@ -38,6 +38,12 @@ Metadata:
 GET /situation-data/api/v1/mobile-coverage/metadata
 ```
 
+DEM catalog metadata:
+
+```http
+GET /situation-data/api/v1/dem/metadata
+```
+
 Feature properties include:
 
 ```json
@@ -103,6 +109,9 @@ Phase 1 implemented:
 Phase 2:
 
 - local DEM,
+- Copernicus DEM GLO-30 imported through `scripts/import-dem-copernicus-glo30-cz.sh`,
+- DEM COG files in SeaweedFS and local cache,
+- DEM tile metadata in PostGIS,
 - line-of-sight/viewshed,
 - terrain obstruction confidence.
 

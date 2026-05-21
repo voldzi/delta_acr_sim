@@ -40,6 +40,13 @@ export interface SituationDataConfig {
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
+  demEnabled: boolean;
+  demDatasetId: string;
+  demPostgisConnectionString?: string;
+  demLocalCacheDir: string;
+  demSeaweedfsEndpoint?: string;
+  demSeaweedfsBucket: string;
+  demSeaweedfsPrefix: string;
 }
 
 export async function loadConfig(): Promise<SituationDataConfig> {
@@ -89,7 +96,14 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     aviationWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS, 600),
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
-    ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15)
+    ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
+    demEnabled: parseBoolean(process.env.DEM_ENABLED, false),
+    demDatasetId: process.env.DEM_DATASET_ID ?? "copernicus-glo30-cz",
+    demPostgisConnectionString: emptyToUndefined(process.env.DEM_POSTGIS_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
+    demLocalCacheDir: process.env.DEM_LOCAL_CACHE_DIR ?? "/dem-cache",
+    demSeaweedfsEndpoint: emptyToUndefined(process.env.DEM_SEAWEEDFS_S3_ENDPOINT),
+    demSeaweedfsBucket: process.env.DEM_SEAWEEDFS_BUCKET ?? "sim-dem",
+    demSeaweedfsPrefix: trimSlashes(process.env.DEM_SEAWEEDFS_PREFIX ?? "copernicus-glo30/2021")
   };
 }
 
@@ -154,6 +168,10 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
 
 function emptyToUndefined(value: string | undefined): string | undefined {
   return value && value.trim() !== "" ? value : undefined;
+}
+
+function trimSlashes(value: string): string {
+  return value.replace(/^\/+|\/+$/g, "");
 }
 
 function parseOsmPostgisBackend(value: string | undefined, connectionString: string | undefined): OsmPostgisBackend {

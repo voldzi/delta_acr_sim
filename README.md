@@ -53,6 +53,8 @@ Dokumentace služby je v [docs/situation-data/00_INDEX.md](docs/situation-data/0
 
 Docker pilot ve výchozím nastavení zapíná reálné open-data zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`. Pozemní referenční objekty z OpenStreetMap se v produkci zapínají přes `osm_postgis` až po importu do Patroni/PostGIS nebo lokálního rebuildovatelného PostGIS read-modelu. Nad stejným importem lze zapnout `mobile_coverage_model`, který publikuje odhadovanou polygonovou vrstvu `mobile_coverage`. Veřejný `osm_overpass` je pouze vývojová záloha pro malé bbox dotazy.
 
+DEM katalog pro budoucí terrain-aware coverage model používá Copernicus DEM GLO-30: GeoTIFF/COG soubory v SeaweedFS, lokální cache pro runtime a metadata v PostGIS. Postup je v [docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md](docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md).
+
 ## Safety Data API
 
 COP kontrakt je v [docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md](docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-safety-data.yaml](docs/api/openapi-safety-data.yaml).

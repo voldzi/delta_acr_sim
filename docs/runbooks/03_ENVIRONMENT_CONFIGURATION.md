@@ -52,6 +52,18 @@
 - `MOBILE_COVERAGE_DEM_SOURCE`
 - `MOBILE_COVERAGE_TERRAIN_AWARE`
 - `MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M`
+- `DEM_ENABLED`
+- `DEM_BBOX`
+- `DEM_DATASET_ID`
+- `DEM_POSTGIS_DATABASE_URL`
+- `DEM_LOCAL_CACHE_HOST_DIR`
+- `DEM_LOCAL_CACHE_DIR`
+- `DEM_SEAWEEDFS_ENABLED`
+- `DEM_SEAWEEDFS_S3_ENDPOINT`
+- `DEM_SEAWEEDFS_BUCKET`
+- `DEM_SEAWEEDFS_PREFIX`
+- `DEM_SEAWEEDFS_ACCESS_KEY_ID`
+- `DEM_SEAWEEDFS_SECRET_ACCESS_KEY`
 - `SITUATION_DATA_STALE_AFTER_SECONDS`
 - `SITUATION_DATA_REQUEST_TIMEOUT_MS`
 - `OPEN_METEO_BASE_URL`
@@ -159,6 +171,18 @@ MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
 MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
 MOBILE_COVERAGE_TERRAIN_AWARE=false
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
+DEM_ENABLED=false
+DEM_BBOX=11.8,48.5,19.2,51.2
+DEM_DATASET_ID=copernicus-glo30-cz
+DEM_POSTGIS_DATABASE_URL=
+DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
+DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
+DEM_SEAWEEDFS_ENABLED=true
+DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_BUCKET=sim-dem
+DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
+DEM_SEAWEEDFS_ACCESS_KEY_ID=
+DEM_SEAWEEDFS_SECRET_ACCESS_KEY=
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
@@ -236,6 +260,25 @@ SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COP features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
 `mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COP kontraktu.
+
+DEM katalog pro budoucí terrain-aware model používá Copernicus DEM GLO-30, SeaweedFS a PostGIS:
+
+```bash
+DEM_ENABLED=true
+DEM_BBOX=11.8,48.5,19.2,51.2
+DEM_DATASET_ID=copernicus-glo30-cz
+DEM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
+DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
+DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
+DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_BUCKET=sim-dem
+DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
+DEM_SEAWEEDFS_ACCESS_KEY_ID=<secret>
+DEM_SEAWEEDFS_SECRET_ACCESS_KEY=<secret>
+scripts/import-dem-copernicus-glo30-cz.sh
+```
+
+Podrobný postup je v `docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md`.
 
 ## Safety Data API
 

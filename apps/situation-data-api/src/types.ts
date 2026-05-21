@@ -99,6 +99,27 @@ export interface SourceHealthStatus {
   warnings: string[];
 }
 
+export interface DemCatalogStatus {
+  enabled: boolean;
+  status: "ok" | "degraded" | "disabled";
+  datasetId: string;
+  source?: string;
+  version?: string;
+  resolutionM?: number;
+  tileCount?: number;
+  localTileCount?: number;
+  objectStoreTileCount?: number;
+  importedAt?: string;
+  bbox?: BoundingBox;
+  localCacheDir?: string;
+  objectStore?: {
+    endpoint?: string;
+    bucket: string;
+    prefix: string;
+  };
+  warnings: string[];
+}
+
 export interface PointGeometry {
   type: "Point";
   coordinates: [number, number];

@@ -25,6 +25,7 @@ GET /config
 GET /features?bbox=west,south,east,north&layers=weather,ground,mobile,traffic&limit=250
 GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile,traffic&limit=250
 GET /mobile-coverage/metadata
+GET /dem/metadata
 ```
 
 ## COP projection
@@ -174,6 +175,45 @@ Příklad metadat:
 ```
 
 Health `/situation-data/health/ready` u `mobile_coverage_model` vrací `backend` a `objectCount` použitelných věží. Metrics obsahují `situation_data_mobile_coverage_towers`, `situation_data_mobile_coverage_backend_info` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_coverage_model"}`.
+
+## DEM Catalog
+
+SIM připravuje DEM katalog pro terrain-aware coverage model:
+
+- source dataset: Copernicus DEM GLO-30 Public, 2021 release,
+- object store: SeaweedFS S3,
+- runtime cache: lokální filesystem mount,
+- metadata: PostGIS tabulky `dem_datasets` a `dem_tiles`.
+
+Metadata endpoint:
+
+```http
+GET /dem/metadata
+```
+
+Příklad odpovědi:
+
+```json
+{
+  "enabled": true,
+  "status": "ok",
+  "datasetId": "copernicus-glo30-cz",
+  "source": "copernicus-dem-glo30",
+  "version": "2021",
+  "resolutionM": 30,
+  "tileCount": 36,
+  "localTileCount": 36,
+  "objectStoreTileCount": 36,
+  "localCacheDir": "/dem-cache/copernicus-glo30",
+  "objectStore": {
+    "bucket": "sim-dem",
+    "prefix": "copernicus-glo30/2021"
+  },
+  "warnings": []
+}
+```
+
+COP DEM data přímo nepoužívá. Endpoint slouží pro dependency dohled a informaci, z jakého DEM bude SIM později generovat terrain-aware `mobile_coverage`.
 
 COP musí vrstvu zobrazovat jako odhad, ne jako garantované pokrytí operátora. Doporučené barvy: `good` zelená, `fair` žlutá, `weak` oranžová, `none` červená nebo šedá, `unknown` šedá.
 

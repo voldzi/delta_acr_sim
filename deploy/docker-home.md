@@ -66,6 +66,18 @@ MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
 MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
 MOBILE_COVERAGE_TERRAIN_AWARE=false
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
+DEM_ENABLED=false
+DEM_BBOX=11.8,48.5,19.2,51.2
+DEM_DATASET_ID=copernicus-glo30-cz
+DEM_POSTGIS_DATABASE_URL=
+DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
+DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
+DEM_SEAWEEDFS_ENABLED=true
+DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_BUCKET=sim-dem
+DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
+DEM_SEAWEEDFS_ACCESS_KEY_ID=
+DEM_SEAWEEDFS_SECRET_ACCESS_KEY=
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
@@ -173,6 +185,38 @@ curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|osm_poi|mobile_coverage'
 ```
+
+## DEM Copernicus GLO-30 import
+
+SIM ukládá DEM binární soubory do SeaweedFS, rychlou runtime kopii do lokálního filesystemu a prostorový katalog do PostGIS. Rastry neukládej přímo do PostgreSQL.
+
+Po nastavení `OSM_POSTGIS_DATABASE_URL` na Patroni/PostGIS doplň v `/srv/sim/.env`:
+
+```bash
+DEM_ENABLED=true
+DEM_BBOX=11.8,48.5,19.2,51.2
+DEM_DATASET_ID=copernicus-glo30-cz
+DEM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
+DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
+DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
+DEM_SEAWEEDFS_ENABLED=true
+DEM_SEAWEEDFS_S3_ENDPOINT=http://127.0.0.1:8333
+DEM_SEAWEEDFS_BUCKET=sim-dem
+DEM_SEAWEEDFS_PREFIX=copernicus-glo30/2021
+DEM_SEAWEEDFS_ACCESS_KEY_ID=<secret>
+DEM_SEAWEEDFS_SECRET_ACCESS_KEY=<secret>
+```
+
+Import:
+
+```bash
+scripts/import-dem-copernicus-glo30-cz.sh
+docker compose up -d --build situation-data-api sim-web
+curl -fsS http://localhost:5020/situation-data/api/v1/dem/metadata
+curl -fsS http://localhost:5020/situation-data/metrics | grep dem_
+```
+
+`MOBILE_COVERAGE_TERRAIN_AWARE` zatím nech `false`, dokud nebude ověřené čtení výšek a line-of-sight model.
 
 ## URL
 

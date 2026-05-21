@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import { SituationAggregationService } from "./aggregation.js";
 import type { SituationDataConfig } from "./config.js";
+import { DemCatalog } from "./dem-catalog.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
@@ -19,12 +20,14 @@ import type {
 export interface SituationDataAppContext {
   config: SituationDataConfig;
   aggregation: SituationAggregationService;
+  demCatalog: DemCatalog;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
   const sources = createSituationDataSources(config);
   const aggregation = new SituationAggregationService(config, sources);
-  const context: SituationDataAppContext = { config, aggregation };
+  const demCatalog = new DemCatalog(config);
+  const context: SituationDataAppContext = { config, aggregation, demCatalog };
   const app = express();
 
   app.use(cors());
@@ -48,18 +51,21 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
 
   app.get("/health/ready", async (_req, res) => {
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
+    const dem = await context.demCatalog.status();
     const degraded = sourceHealth.some((source) => source.status === "degraded");
     res.json({
-      status: degraded ? "degraded" : "ok",
+      status: degraded || dem.status === "degraded" ? "degraded" : "ok",
       timestamp: new Date().toISOString(),
       enabledSources: context.config.enabledSources,
-      sourceHealth
+      sourceHealth,
+      dem
     });
   });
 
   app.get("/metrics", async (_req, res) => {
     const cache = context.aggregation.cacheStats();
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
+    const dem = await context.demCatalog.status();
     const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
       `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -87,7 +93,8 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           `situation_data_cache_errors ${cache.errors}`,
           `situation_data_cache_evictions ${cache.evictions}`,
           ...sourceCacheLines,
-          ...sourceHealthLines
+          ...sourceHealthLines,
+          ...demMetricLines(dem)
         ].join("\n") + "\n"
       );
   });
@@ -108,6 +115,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
 
   app.get("/api/v1/mobile-coverage/metadata", (_req, res) => {
     res.json(new MobileCoverageSource(context.config).metadata());
+  });
+
+  app.get("/api/v1/dem/metadata", async (_req, res) => {
+    res.json(await context.demCatalog.metadata());
   });
 }
 
@@ -321,6 +332,26 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_osm_postgis_import_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
     }
+  }
+  return lines;
+}
+
+function demMetricLines(status: Awaited<ReturnType<DemCatalog["status"]>>): string[] {
+  const dataset = escapeLabel(status.datasetId);
+  const source = escapeLabel(status.source ?? "unknown");
+  const state = status.status === "ok" ? 1 : 0;
+  const lines = [`situation_data_dem_health{dataset="${dataset}",source="${source}"} ${state}`];
+  if (typeof status.tileCount === "number") {
+    lines.push(`situation_data_dem_tiles{dataset="${dataset}",source="${source}"} ${status.tileCount}`);
+  }
+  if (typeof status.localTileCount === "number") {
+    lines.push(`situation_data_dem_local_tiles{dataset="${dataset}",source="${source}"} ${status.localTileCount}`);
+  }
+  if (typeof status.objectStoreTileCount === "number") {
+    lines.push(`situation_data_dem_object_store_tiles{dataset="${dataset}",source="${source}"} ${status.objectStoreTileCount}`);
+  }
+  if (status.importedAt) {
+    lines.push(`situation_data_dem_last_import_timestamp_seconds{dataset="${dataset}",source="${source}"} ${Math.round(Date.parse(status.importedAt) / 1000)}`);
   }
   return lines;
 }
