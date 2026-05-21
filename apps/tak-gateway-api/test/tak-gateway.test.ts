@@ -56,7 +56,7 @@ describe("tak-gateway-api", () => {
     expect(ingest.status).toBe(202);
     expect(ingest.body.eventCount).toBe(1);
 
-    const events = await request(app).get("/api/v1/events");
+    const events = await request(app).get("/api/v1/events").set("authorization", "Bearer secret");
     expect(events.status).toBe(200);
     expect(events.body.totalCount).toBe(1);
     expect(events.body.items[0].raw).toBeUndefined();
@@ -65,6 +65,8 @@ describe("tak-gateway-api", () => {
     expect(features.status).toBe(200);
     expect(features.body.contractVersion).toBe("cop-tak-source-v1");
     expect(features.body.summary.featureCount).toBe(1);
+    expect(features.body.summary.sourceCount).toBe(1);
+    expect(features.body.summary.warningCount).toBe(1);
     expect(features.body.features[0].geometry.coordinates).toEqual([14.421, 50.087]);
     expect(features.body.features[0].properties.label).toBe("ARDOS Alpha");
     expect(features.body.features[0].properties.affiliation).toBe("friend");
@@ -84,7 +86,7 @@ describe("tak-gateway-api", () => {
     expect(response.body.error.code).toBe("INVALID_COT_XML");
   });
 
-  it("does not expose raw CoT unless explicitly enabled", async () => {
+  it("does not expose raw CoT unless explicitly enabled and requested", async () => {
     const { app } = await createApp(config({ exposeRaw: true }));
 
     await request(app)
@@ -94,8 +96,30 @@ describe("tak-gateway-api", () => {
       .send(cotEvent("TAK-RAW-001"))
       .expect(202);
 
-    const hidden = await request(app).get("/api/v1/cop/features?includeRaw=true");
-    expect(hidden.body.features[0].properties.raw).toBeDefined();
+    const eventsWithoutRaw = await request(app).get("/api/v1/events").set("authorization", "Bearer secret");
+    expect(eventsWithoutRaw.status).toBe(200);
+    expect(eventsWithoutRaw.body.items[0].raw).toBeUndefined();
+
+    const eventsWithRaw = await request(app).get("/api/v1/events?includeRaw=true").set("authorization", "Bearer secret");
+    expect(eventsWithRaw.status).toBe(200);
+    expect(eventsWithRaw.body.items[0].raw).toBeDefined();
+
+    const featuresWithRaw = await request(app).get("/api/v1/cop/features?includeRaw=true");
+    expect(featuresWithRaw.body.features[0].properties.raw).toBeDefined();
+  });
+
+  it("always protects debug event reads", async () => {
+    const { app } = await createApp(config({ publicRead: true }));
+
+    await request(app)
+      .post("/api/v1/cot/events")
+      .set("authorization", "Bearer secret")
+      .set("content-type", "application/xml")
+      .send(cotEvent("TAK-DEBUG-001"))
+      .expect(202);
+
+    await request(app).get("/api/v1/events").expect(401);
+    await request(app).get("/api/v1/events").set("authorization", "Bearer secret").expect(200);
   });
 
   it("accepts a payload with multiple adjacent CoT events", async () => {

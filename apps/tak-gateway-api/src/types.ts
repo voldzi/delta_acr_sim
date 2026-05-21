@@ -132,7 +132,9 @@ export interface TakFeatureCollection {
   summary: {
     eventCount: number;
     featureCount: number;
+    sourceCount: number;
     staleFeatureCount: number;
+    warningCount: number;
     affiliationCounts: Record<TakAffiliation, number>;
   };
   features: TakFeature[];

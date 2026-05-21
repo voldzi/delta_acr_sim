@@ -61,7 +61,7 @@ Docker pilot zapíná reálné zdroje `chmi_alerts,chmi_hydro`, tedy ČHMÚ CAP 
 
 ## TAK Gateway API
 
-TAK Gateway přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a poskytuje COP normalizovanou GeoJSON projekci přes `/tak-gateway/api/v1/cop/features`. Ingest endpoint `/tak-gateway/api/v1/cot/events` je chráněný `TAK_GATEWAY_INGEST_TOKEN`.
+TAK Gateway přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a poskytuje COP normalizovanou GeoJSON projekci přes `/tak-gateway/api/v1/cop/features`. Ingest endpoint `/tak-gateway/api/v1/cot/events` je chráněný `TAK_GATEWAY_INGEST_TOKEN`; pro reálná partnerská data je read endpoint chráněný `TAK_GATEWAY_READ_TOKEN` a `TAK_GATEWAY_PUBLIC_READ=false`.
 
 Dokumentace je v [docs/tak-gateway/00_INDEX.md](docs/tak-gateway/00_INDEX.md), COP kontrakt v [docs/integration/13_TAK_GATEWAY_CONTRACT.md](docs/integration/13_TAK_GATEWAY_CONTRACT.md) a OpenAPI v [docs/api/openapi-tak-gateway.yaml](docs/api/openapi-tak-gateway.yaml).
 

@@ -229,7 +229,9 @@ const emptyTakFeatures: TakGatewayFeatureResponse = {
   summary: {
     eventCount: 0,
     featureCount: 0,
+    sourceCount: 0,
     staleFeatureCount: 0,
+    warningCount: 0,
     affiliationCounts: {
       friend: 0,
       hostile: 0,
@@ -312,6 +314,8 @@ export function App() {
       health: {
         status: "unknown",
         ingestAuthConfigured: false,
+        readAuthConfigured: false,
+        publicRead: false,
         currentEvents: 0,
         staleEvents: 0
       },
@@ -325,7 +329,7 @@ export function App() {
         exposeRaw: false,
         ingestAuthConfigured: false,
         readAuthConfigured: false,
-        publicRead: true,
+        publicRead: false,
         sourceLabel: ""
       },
       features: emptyTakFeatures

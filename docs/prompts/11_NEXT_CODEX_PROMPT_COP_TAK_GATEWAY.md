@@ -39,11 +39,13 @@ Content-Type: application/xml
 1. Přidej nový volitelný zdroj `tak_gateway`.
 2. Source klient má číst jen `GET /tak-gateway/api/v1/cop/features`.
 3. Zobraz vrstvy `mobile`, `ground`, `traffic`; defaultně zapni jen `mobile` v interním režimu.
-4. Použij `properties.label` jako hlavní label, `properties.affiliation` jen jako situační metadata.
-5. `properties.stale=true` zobraz viditelně degradovaně a nepoužívej jako aktuální polohu.
-6. Raw CoT neočekávej; SIM ho defaultně nevystavuje.
-7. TAK/ARDOS vrstva musí být dostupná jen oprávněným uživatelům, protože nejde o veřejná open data.
-8. Token pro čtení nevkládej do browser bundle; použij backend/proxy COP.
+4. `traffic` zobraz jako `TAK Gateway > Traffic tracks`, nemíchat s veřejnou dopravní vrstvou.
+5. Použij `properties.label` jako hlavní label, `properties.affiliation` jen jako situační metadata.
+6. `properties.stale=true` zobraz viditelně degradovaně a nepoužívej jako aktuální polohu.
+7. Raw CoT neočekávej; SIM ho defaultně nevystavuje.
+8. TAK/ARDOS vrstva musí být dostupná jen oprávněným uživatelům, protože nejde o veřejná open data.
+9. Token pro čtení nevkládej do browser bundle; použij backend/proxy COP.
+10. `/events` nepoužívej pro běžnou mapu; je to interní/debug endpoint chráněný tokenem.
 
 ## Dokumentace SIM
 

@@ -12,7 +12,7 @@ GET /tak-gateway/api/v1/cop/features
 
 1. Samostatná služba `@delta-acr/tak-gateway-api` na portu `4040`.
 2. Chráněný ingest endpoint `POST /api/v1/cot/events` s bearer tokenem `TAK_GATEWAY_INGEST_TOKEN`.
-3. Volitelně chráněný read endpoint přes `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`.
+3. Chráněný read endpoint přes `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`; veřejné čtení je jen explicitní syntetický pilotní režim.
 4. In-memory stav posledních CoT eventů podle `uid`, bounded retention a `maxEvents`.
 5. Normalizace CoT point eventů do GeoJSON kontraktu `cop-tak-source-v1`.
 6. Health, metrics, source registry, layer registry a public config endpointy.

@@ -355,7 +355,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
   );
   const takHealth = unwrapDashboardResult(
     results[20],
-    { status: "unavailable", ingestAuthConfigured: false, currentEvents: 0, staleEvents: 0 },
+    { status: "unavailable", ingestAuthConfigured: false, readAuthConfigured: false, publicRead: false, currentEvents: 0, staleEvents: 0 },
     "TAK gateway health",
     warnings
   );
@@ -371,7 +371,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       exposeRaw: false,
       ingestAuthConfigured: false,
       readAuthConfigured: false,
-      publicRead: true,
+      publicRead: false,
       sourceLabel: ""
     },
     "TAK gateway config",
@@ -396,7 +396,9 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       summary: {
         eventCount: 0,
         featureCount: 0,
+        sourceCount: 0,
         staleFeatureCount: 0,
+        warningCount: 0,
         affiliationCounts: { friend: 0, hostile: 0, neutral: 0, unknown: 0 }
       },
       features: [],

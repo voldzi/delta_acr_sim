@@ -474,6 +474,8 @@ export interface TakGatewayHealth {
   status: string;
   timestamp?: string;
   ingestAuthConfigured: boolean;
+  readAuthConfigured: boolean;
+  publicRead: boolean;
   currentEvents: number;
   staleEvents: number;
   lastIngestAt?: string;
@@ -573,7 +575,9 @@ export interface TakGatewayFeatureResponse {
   summary: {
     eventCount: number;
     featureCount: number;
+    sourceCount: number;
     staleFeatureCount: number;
+    warningCount: number;
     affiliationCounts: Record<TakAffiliation, number>;
   };
   features: TakGatewayFeature[];

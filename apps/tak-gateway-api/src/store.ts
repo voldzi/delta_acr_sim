@@ -45,7 +45,7 @@ export class TakEventStore {
     const now = new Date();
     this.prune(now);
     this.refreshCurrentStats(now);
-    return [...this.events.values()].map((event) => (includeRaw || this.config.exposeRaw ? event : withoutRaw(event)));
+    return [...this.events.values()].map((event) => (includeRaw ? event : withoutRaw(event)));
   }
 
   getFeatureCollection(query: TakQuery): TakFeatureCollection {
@@ -70,6 +70,7 @@ export class TakEventStore {
     }
 
     const generatedAt = now.toISOString();
+    const warnings = warningsForConfig(this.config);
     return {
       contractVersion: "cop-tak-source-v1",
       type: "FeatureCollection",
@@ -87,12 +88,14 @@ export class TakEventStore {
       summary: {
         eventCount: this.events.size,
         featureCount: features.length,
+        sourceCount: 1,
         staleFeatureCount: features.filter((feature) => feature.properties.stale).length,
+        warningCount: warnings.length,
         affiliationCounts
       },
       features,
       sources: [takSourceDescriptor(this.config)],
-      warnings: warningsForConfig(this.config)
+      warnings
     };
   }
 

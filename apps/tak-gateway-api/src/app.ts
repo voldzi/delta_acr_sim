@@ -40,10 +40,13 @@ function registerHealthRoutes(app: Express, context: TakGatewayAppContext): void
 
   app.get("/health/ready", (_req, res) => {
     const stats = context.store.getStats();
+    const ready = isOperationallyReady(context.config);
     res.json({
-      status: "ok",
+      status: ready ? "ok" : "degraded",
       timestamp: new Date().toISOString(),
       ingestAuthConfigured: Boolean(context.config.ingestToken),
+      readAuthConfigured: Boolean(context.config.readToken),
+      publicRead: context.config.publicRead,
       currentEvents: stats.currentEvents,
       staleEvents: stats.staleEvents,
       lastIngestAt: stats.lastIngestAt
@@ -63,7 +66,9 @@ function registerHealthRoutes(app: Express, context: TakGatewayAppContext): void
           `tak_gateway_dropped_events_total ${stats.droppedEvents}`,
           `tak_gateway_auth_failures_total ${stats.authFailures}`,
           `tak_gateway_parse_errors_total ${stats.parseErrors}`,
-          `tak_gateway_ingest_auth_configured ${context.config.ingestToken ? 1 : 0}`
+          `tak_gateway_ingest_auth_configured ${context.config.ingestToken ? 1 : 0}`,
+          `tak_gateway_read_auth_configured ${context.config.readToken ? 1 : 0}`,
+          `tak_gateway_public_read_enabled ${context.config.publicRead ? 1 : 0}`
         ].join("\n") + "\n"
       );
   });
@@ -83,7 +88,7 @@ function registerMetadataRoutes(app: Express, context: TakGatewayAppContext): vo
   });
 
   app.get("/api/v1/events", (req, res) => {
-    if (!isReadAuthorized(req, context)) {
+    if (!isDebugAuthorized(req, context)) {
       context.store.recordAuthFailure();
       return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid bearer token.");
     }
@@ -155,6 +160,10 @@ function registerFeatureRoutes(app: Express, context: TakGatewayAppContext): voi
   });
 }
 
+function isOperationallyReady(config: TakGatewayConfig): boolean {
+  return Boolean(config.ingestToken) && (config.publicRead || Boolean(config.readToken));
+}
+
 function isReadAuthorized(req: Request, context: TakGatewayAppContext): boolean {
   if (context.config.publicRead) {
     return true;
@@ -163,6 +172,14 @@ function isReadAuthorized(req: Request, context: TakGatewayAppContext): boolean 
     return false;
   }
   return req.headers.authorization === `Bearer ${context.config.readToken}`;
+}
+
+function isDebugAuthorized(req: Request, context: TakGatewayAppContext): boolean {
+  const header = req.headers.authorization;
+  return Boolean(
+    (context.config.readToken && header === `Bearer ${context.config.readToken}`) ||
+      (context.config.ingestToken && header === `Bearer ${context.config.ingestToken}`)
+  );
 }
 
 function isAuthorized(req: Request, context: TakGatewayAppContext): boolean {

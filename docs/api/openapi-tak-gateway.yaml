@@ -42,8 +42,16 @@ paths:
                       type: string
         "400":
           description: Invalid CoT XML
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "401":
           description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /cop/features:
     get:
       summary: COP-facing TAK GeoJSON feature projection
@@ -78,8 +86,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TakFeatureCollection"
+        "400":
+          description: Invalid bbox, layers or limit query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "401":
           description: Missing or invalid bearer token when public read is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /features:
     get:
       summary: Alias for COP-facing TAK GeoJSON feature projection
@@ -93,8 +111,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TakFeatureCollection"
+        "400":
+          description: Invalid bbox, layers or limit query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "401":
           description: Missing or invalid bearer token when public read is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /layers:
     get:
       summary: List TAK layers
@@ -118,12 +146,15 @@ paths:
       summary: Current normalized CoT event state
       security:
         - bearerAuth: []
-        - {}
       responses:
         "200":
           description: Event list
         "401":
-          description: Missing or invalid bearer token when public read is disabled
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /admin/clear:
     post:
       summary: Clear current TAK event state
@@ -132,6 +163,12 @@ paths:
       responses:
         "200":
           description: Current event state cleared
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   securitySchemes:
     bearerAuth:
@@ -191,13 +228,17 @@ components:
               type: integer
         summary:
           type: object
-          required: [eventCount, featureCount, staleFeatureCount, affiliationCounts]
+          required: [eventCount, featureCount, sourceCount, staleFeatureCount, warningCount, affiliationCounts]
           properties:
             eventCount:
               type: integer
             featureCount:
               type: integer
+            sourceCount:
+              type: integer
             staleFeatureCount:
+              type: integer
+            warningCount:
               type: integer
             affiliationCounts:
               type: object
@@ -223,3 +264,17 @@ components:
           type: array
           items:
             type: string
+    Problem:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlationId]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            correlationId:
+              type: string

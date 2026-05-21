@@ -77,7 +77,7 @@ ARDOS_PARTNER_BASE_URL=
 ARDOS_PARTNER_TOKEN=
 TAK_GATEWAY_INGEST_TOKEN=dev-tak-ingest-token
 TAK_GATEWAY_READ_TOKEN=
-TAK_GATEWAY_PUBLIC_READ=true
+TAK_GATEWAY_PUBLIC_READ=false
 TAK_GATEWAY_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 TAK_GATEWAY_STALE_AFTER_SECONDS=300
 TAK_GATEWAY_RETENTION_SECONDS=3600
@@ -146,7 +146,7 @@ http://docker.home.cz:5020
 - `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.
 - `tak-gateway-api` přijímá TAK/CoT XML přes chráněný ingest endpoint `/tak-gateway/api/v1/cot/events` a COP čte normalizovaný GeoJSON endpoint `/tak-gateway/api/v1/cop/features`.
 - `TAK_GATEWAY_INGEST_TOKEN` je secret; pro pilot ho změň mimo repozitář a předej jen ARDOS/TAK bridge klientovi.
-- Pro reálná ARDOS data nastav `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`, aby feature endpoint nečetl veřejný browser bez oprávnění.
+- `TAK_GATEWAY_PUBLIC_READ=false` je bezpečný výchozí režim; nastav `TAK_GATEWAY_READ_TOKEN` a předávej jej jen server-side klientovi COP.
 - U komerčního použití musí být vyřešená ODbL atribuce a share-alike povinnosti.
 - OpenSky nezapínej bez ověření oprávnění nebo písemné licence.
 - Perzistentní data jsou v Docker volume `sim-data`, `flight-data`, `situation-data`, `safety-data` a `tak-gateway-data`.

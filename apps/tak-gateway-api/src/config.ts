@@ -27,7 +27,7 @@ export async function loadConfig(): Promise<TakGatewayConfig> {
     dataDir,
     ingestToken: normalizeSecret(process.env.TAK_GATEWAY_INGEST_TOKEN),
     readToken: normalizeSecret(process.env.TAK_GATEWAY_READ_TOKEN),
-    publicRead: parseBoolean(process.env.TAK_GATEWAY_PUBLIC_READ, true),
+    publicRead: parseBoolean(process.env.TAK_GATEWAY_PUBLIC_READ, false),
     defaultBbox: parseBbox(process.env.TAK_GATEWAY_DEFAULT_BBOX) ?? {
       west: 11.8,
       south: 48.5,

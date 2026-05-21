@@ -2,7 +2,7 @@
 
 TAK Gateway je neveřejný partnerský zdroj pro COP. Přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a publikuje poslední známý stav jako GeoJSON. COP nevolá TAK přímo.
 
-## Public COP endpoint
+## COP read endpoint
 
 ```http
 GET /tak-gateway/api/v1/cop/features?bbox=west,south,east,north&layers=mobile,ground,traffic&limit=250
@@ -20,7 +20,7 @@ Pro reálná partnerská data nastav v SIM `TAK_GATEWAY_PUBLIC_READ=false` a `TA
 Authorization: Bearer <TAK_GATEWAY_READ_TOKEN>
 ```
 
-Query parametry:
+Query parametry a validace:
 
 | Parametr | Popis |
 | --- | --- |
@@ -28,6 +28,10 @@ Query parametry:
 | `layers` | `mobile`, `ground`, `traffic`; výchozí jsou všechny. |
 | `limit` | 1-1000, výchozí 250. |
 | `includeRaw` | Raw CoT se vrátí jen pokud je zároveň `TAK_GATEWAY_EXPOSE_RAW=true`. |
+
+Chybný `bbox`, prázdný výběr vrstev nebo neznámé vrstvy vrací `400 VALIDATION_ERROR`. Pokud je `TAK_GATEWAY_PUBLIC_READ=false`, chybějící nebo chybný bearer token vrací `401 UNAUTHORIZED`.
+
+Vrstva `traffic` v tomto kontraktu znamená `TAK Gateway > Traffic tracks`, tedy transportní/air/vehicle tracky z CoT. Není to veřejná dopravní vrstva z `situation-data`.
 
 ## Response
 
@@ -49,7 +53,9 @@ Query parametry:
   "summary": {
     "eventCount": 1,
     "featureCount": 1,
+    "sourceCount": 1,
     "staleFeatureCount": 0,
+    "warningCount": 0,
     "affiliationCounts": { "friend": 1, "hostile": 0, "neutral": 0, "unknown": 0 }
   },
   "features": [
@@ -90,7 +96,28 @@ Query parametry:
       }
     }
   ],
-  "sources": [],
+  "sources": [
+    {
+      "sourceId": "tak_gateway",
+      "label": "TAK/CoT gateway",
+      "enabled": true,
+      "mode": "live",
+      "priority": 20,
+      "layers": ["mobile", "ground", "traffic"],
+      "license": {
+        "name": "TAK/CoT partner data",
+        "attribution": "TAK/ARDOS partner feed",
+        "commercialUse": "requires_license",
+        "operationalUse": "requires_license",
+        "notes": [
+          "Data is partner-provided, not public open data.",
+          "COP must apply user authorization and should not expose raw CoT details to public users.",
+          "SIM stores only the latest event state with bounded retention."
+        ]
+      },
+      "updateCadenceSeconds": 15
+    }
+  ],
   "warnings": []
 }
 ```
@@ -117,7 +144,7 @@ Ukázka vstupu:
 </event>
 ```
 
-Úspěšná odpověď:
+Úspěšná odpověď má status `202 Accepted`:
 
 ```json
 {
@@ -125,6 +152,25 @@ Ukázka vstupu:
   "eventCount": 1,
   "warningCount": 0,
   "warnings": []
+}
+```
+
+Chyby:
+
+| Status | Code | Kdy |
+| --- | --- | --- |
+| `400` | `INVALID_COT_XML` | XML payload není CoT, neobsahuje `<event>`, nemá `uid`, `type` nebo platný `point lat/lon`. |
+| `401` | `UNAUTHORIZED` | Chybí nebo nesedí `TAK_GATEWAY_INGEST_TOKEN`. |
+
+Error kontrakt:
+
+```json
+{
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Missing or invalid bearer token.",
+    "correlationId": "..."
+  }
 }
 ```
 
@@ -137,8 +183,9 @@ GET /tak-gateway/metrics
 GET /tak-gateway/api/v1/layers
 GET /tak-gateway/api/v1/sources
 GET /tak-gateway/api/v1/config
-GET /tak-gateway/api/v1/events
 ```
+
+`GET /tak-gateway/api/v1/events` je pouze interní/debug endpoint. Je vždy chráněný bearer tokenem, i když je `TAK_GATEWAY_PUBLIC_READ=true`. Lze použít `TAK_GATEWAY_READ_TOKEN` nebo `TAK_GATEWAY_INGEST_TOKEN`. Raw CoT vrací jen při `includeRaw=true` a současně `TAK_GATEWAY_EXPOSE_RAW=true`.
 
 ## Doporučení pro COP
 
