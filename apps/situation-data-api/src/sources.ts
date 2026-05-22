@@ -35,6 +35,8 @@ export interface SourceCacheStats extends ManagedResponseCacheStats {
   sourceId: SituationDataSourceId;
 }
 
+const DEFAULT_MOBILE_NETWORK_TECHNOLOGIES: MobileCoverageTechnology[] = ["4G"];
+
 const MOCK_LICENSE: SituationDataLicense = {
   name: "Synthetic internal test data",
   attribution: "CSM SIM",
@@ -548,16 +550,17 @@ export class MobileNetworkSource implements SituationDataSource {
       };
     }
 
+    const technologies = query.mobileCoverageTechnologies?.length ? query.mobileCoverageTechnologies : DEFAULT_MOBILE_NETWORK_TECHNOLOGIES;
     const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
     const cacheKey = JSON.stringify({
       bbox: formatBboxKey(cacheBbox),
-      technologies: [...(query.mobileCoverageTechnologies ?? [])].sort(),
+      technologies: [...technologies].sort(),
       operators: ["aggregate"],
       resolutionM: this.config.mobileCoverageResolutionM,
       maxCells: this.config.mobileCoverageMaxCells,
       modelVersion: this.config.mobileCoverageModelVersion
     });
-    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildMobileNetwork(cacheBbox, query.mobileCoverageTechnologies));
+    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildMobileNetwork(cacheBbox, technologies));
     const features = payload.features
       .filter((feature) => featureIntersectsBboxByEnvelope(feature, query.bbox))
       .slice(0, query.limit)

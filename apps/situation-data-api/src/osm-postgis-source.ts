@@ -257,6 +257,7 @@ function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): S
   }
   const id = `${layer}:osm_postgis:${osmType}:${osmId}:${category}`;
   const tags = normalizeTags(row.tags);
+  const isCommunicationsTower = category === "communications_tower";
   return {
     type: "Feature",
     id,
@@ -274,6 +275,13 @@ function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): S
       confidence: confidenceForCategory(category),
       stale: false,
       severity: "info",
+      status: isCommunicationsTower ? "unknown" : undefined,
+      dataQuality: isCommunicationsTower ? "unknown" : undefined,
+      btsStatus: isCommunicationsTower ? "unknown" : undefined,
+      btsStatusSource: isCommunicationsTower ? "none" : undefined,
+      operatorStatusAvailable: isCommunicationsTower ? false : undefined,
+      notices: isCommunicationsTower ? ["Referenční OSM komunikační stožár; nejde o ověřený stav BTS ani dostupnost služby."] : undefined,
+      disclaimer: isCommunicationsTower ? "Reference infrastructure only; BTS operational status is unknown." : undefined,
       license: {
         name: OSM_POSTGIS_LICENSE.name,
         attribution: OSM_POSTGIS_LICENSE.attribution,
@@ -289,7 +297,9 @@ function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): S
         amenity: tags.amenity,
         emergency: tags.emergency,
         manMade: tags.man_made,
-        towerType: tags["tower:type"]
+        towerType: tags["tower:type"],
+        referenceOnly: isCommunicationsTower ? "true" : undefined,
+        btsStatus: isCommunicationsTower ? "unknown" : undefined
       }),
       raw: includeRaw ? row : undefined
     }

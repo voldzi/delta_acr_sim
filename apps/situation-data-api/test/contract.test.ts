@@ -581,6 +581,7 @@ describe("Situation Data API contract", () => {
       mobileCoverageResolutionM: 500,
       mobileCoverageMaxCells: 16
     });
+    let coverageTechnologies: string[] | undefined;
     (source as unknown as { coverageSource: SituationDataSource }).coverageSource = {
       descriptor: {
         sourceId: "mobile_coverage_model",
@@ -591,7 +592,8 @@ describe("Situation Data API contract", () => {
         layers: ["mobile_coverage"],
         license: { name: "coverage", attribution: "coverage", commercialUse: "allowed", operationalUse: "allowed", notes: [] }
       },
-      async fetchFeatures() {
+      async fetchFeatures(query) {
+        coverageTechnologies = query.mobileCoverageTechnologies;
         return {
           source: this.descriptor,
           fetchedAt: new Date().toISOString(),
@@ -679,10 +681,10 @@ describe("Situation Data API contract", () => {
       layers: ["mobile_network"],
       sourceIds: ["mobile_network_model"],
       limit: 5,
-      includeRaw: false,
-      mobileCoverageTechnologies: ["4G"]
+      includeRaw: false
     });
 
+    expect(coverageTechnologies).toEqual(["4G"]);
     expect(result.features[0]).toEqual(
       expect.objectContaining({
         geometry: expect.objectContaining({ type: "Polygon" }),

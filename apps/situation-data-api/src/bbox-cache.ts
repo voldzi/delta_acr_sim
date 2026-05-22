@@ -8,6 +8,9 @@ export interface CanonicalBbox extends BoundingBox {
 const CACHE_GRID_DEGREES = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5] as const;
 
 export function canonicalizeBboxForCache(bbox: BoundingBox, paddingDegrees = 0.18): CanonicalBbox {
+  if (isCanonicalBbox(bbox)) {
+    return bbox;
+  }
   const normalized = normalizeBbox(bbox);
   const viewportSpan = Math.max(normalized.east - normalized.west, normalized.north - normalized.south);
   const gridDegrees = gridForViewportSpan(viewportSpan);
@@ -27,6 +30,11 @@ export function canonicalizeBboxForCache(bbox: BoundingBox, paddingDegrees = 0.1
     gridDegrees,
     paddingDegrees: round(padding, 6)
   };
+}
+
+function isCanonicalBbox(bbox: BoundingBox): bbox is CanonicalBbox {
+  const candidate = bbox as Partial<CanonicalBbox>;
+  return typeof candidate.gridDegrees === "number" && typeof candidate.paddingDegrees === "number";
 }
 
 export function roundPointToGrid(lon: number, lat: number, gridDegrees: number): { lon: number; lat: number; gridDegrees: number } {

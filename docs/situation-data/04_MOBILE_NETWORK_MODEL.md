@@ -50,6 +50,8 @@ GET /situation-data/api/v1/catalog
 
 COM should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest` and OSM communication towers are marked as diagnostic/reference inputs.
 
+The `reference.infrastructure.communications` layer contains OSM communication towers only as reference infrastructure. Features from that layer carry `btsStatus: "unknown"` and `operatorStatusAvailable: false`; COM must not color them as confirmed healthy BTS sites.
+
 Features:
 
 ```http
@@ -61,6 +63,8 @@ Optional filters:
 - `technology` or `technologies`: `2G`, `4G`, `5G`, comma-separated,
 - `operator` or `operators`: currently `aggregate` and `unknown`,
 - `limit`: default COM should use 250 for normal map views.
+
+If no technology filter is supplied, SIM defaults the final `mobile_network` layer to `4G`. This prevents the public layer from silently selecting the best-looking `2G` estimate when `2G`, `4G` and `5G` are all available as technical inputs.
 
 Feature properties include:
 
@@ -122,6 +126,8 @@ OSM_POSTGIS_TABLE=public.osm_poi
 
 - Aggregated responses use the standard `situation-data` cache and bbox canonicalization.
 - The source-level cache is keyed by canonical bbox, technology filter, aggregate operator filter, resolution, max cells and model version.
+- The canonical bbox is applied only once inside the chained `mobile_network_model -> mobile_coverage_model` path.
+- The underlying coverage grid uses a deterministic resolution ladder so nearby zoom levels do not shift cell origins unnecessarily.
 - Default source TTL is 3600 seconds.
 - External inputs are not queried per COM user when a cached area assessment exists.
 - Health reports `mobile_network_model` as degraded when dependent model/input sources cannot produce an assessment.

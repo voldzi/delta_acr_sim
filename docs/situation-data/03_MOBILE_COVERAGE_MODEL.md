@@ -102,6 +102,8 @@ OSM_POSTGIS_TABLE=public.osm_poi
 
 - Aggregated responses use the standard `situation-data` cache and bbox canonicalization.
 - The coverage source keeps a source-level cache keyed by canonical bbox, technology filter, operator filter, limit, resolution and model version.
+- When no technology filter is supplied, the provider defaults to `4G`, matching the public catalog default. Clients must explicitly request `2G` or `5G` when they want those diagnostics.
+- Coverage cells are aligned to a deterministic resolution ladder (`250`, `500`, `1000`, `2000`, `5000`, `10000`, `25000`, `50000` m) instead of being generated from the current viewport origin.
 - Default coverage TTL is 21600 seconds.
 - Health reports `mobile_coverage_model` as degraded when PostGIS is not configured or no tower references exist.
 - If DEM is imported but coverage-v1 does not apply line-of-sight yet, health returns a warning so COM can present the model as non-terrain-aware.

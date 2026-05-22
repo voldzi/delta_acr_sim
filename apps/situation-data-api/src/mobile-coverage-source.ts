@@ -28,8 +28,10 @@ const MOBILE_COVERAGE_LICENSE: SituationDataLicense = {
 };
 
 const TECHNOLOGIES: MobileCoverageTechnology[] = ["2G", "4G", "5G"];
+const DEFAULT_TECHNOLOGIES: MobileCoverageTechnology[] = ["4G"];
 const QUALITY_LEVELS: MobileCoverageQuality[] = ["good", "fair", "weak", "none", "unknown"];
 const DISCLAIMER = "Coverage is an estimate, not guaranteed service availability.";
+const RESOLUTION_STEPS_M = [250, 500, 1000, 2000, 5000, 10_000, 25_000, 50_000] as const;
 
 interface TowerRow {
   osm_id: string;
@@ -165,7 +167,7 @@ export class MobileCoverageSource implements SituationDataSource {
       };
     }
 
-    const technologies = query.mobileCoverageTechnologies?.length ? query.mobileCoverageTechnologies : TECHNOLOGIES;
+    const technologies = query.mobileCoverageTechnologies?.length ? query.mobileCoverageTechnologies : DEFAULT_TECHNOLOGIES;
     const operators = query.mobileCoverageOperators?.length ? query.mobileCoverageOperators : ["unknown"];
     if (!operators.includes("unknown")) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
@@ -404,21 +406,24 @@ function buildGrid(bbox: BoundingBox, requestedResolutionM: number, maxCells: nu
   const heightM = Math.max(1, (bbox.north - bbox.south) * 111_320);
   const requested = Math.max(100, requestedResolutionM);
   const requestedCells = Math.ceil(widthM / requested) * Math.ceil(heightM / requested);
-  const resolutionM = requestedCells > maxCells ? Math.ceil(requested * Math.sqrt(requestedCells / Math.max(1, maxCells))) : requested;
-  const columns = Math.max(1, Math.ceil(widthM / resolutionM));
-  const rows = Math.max(1, Math.ceil(heightM / resolutionM));
-  const lonStep = (bbox.east - bbox.west) / columns;
-  const latStep = (bbox.north - bbox.south) / rows;
+  const minimumResolutionM = requestedCells > maxCells ? requested * Math.sqrt(requestedCells / Math.max(1, maxCells)) : requested;
+  const resolutionM = nearestResolutionStep(minimumResolutionM);
+  const lonStep = resolutionM / metersPerLon;
+  const latStep = resolutionM / 111_320;
+  const minColumn = Math.floor(bbox.west / lonStep);
+  const maxColumn = Math.ceil(bbox.east / lonStep) - 1;
+  const minRow = Math.floor(bbox.south / latStep);
+  const maxRow = Math.ceil(bbox.north / latStep) - 1;
   const cells: CoverageCell[] = [];
 
-  for (let row = 0; row < rows; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const west = bbox.west + column * lonStep;
-      const east = column === columns - 1 ? bbox.east : west + lonStep;
-      const south = bbox.south + row * latStep;
-      const north = row === rows - 1 ? bbox.north : south + latStep;
+  for (let row = minRow; row <= maxRow && cells.length < maxCells; row += 1) {
+    for (let column = minColumn; column <= maxColumn && cells.length < maxCells; column += 1) {
+      const west = Math.max(-180, column * lonStep);
+      const east = Math.min(180, (column + 1) * lonStep);
+      const south = Math.max(-90, row * latStep);
+      const north = Math.min(90, (row + 1) * latStep);
       cells.push({
-        id: `${row}-${column}`,
+        id: `m${Math.round(resolutionM)}-r${row}-c${column}`,
         center: {
           lon: (west + east) / 2,
           lat: (south + north) / 2
@@ -434,6 +439,11 @@ function buildGrid(bbox: BoundingBox, requestedResolutionM: number, maxCells: nu
     }
   }
   return { resolutionM, cells };
+}
+
+function nearestResolutionStep(minimumResolutionM: number): number {
+  const requested = Math.max(100, Math.ceil(minimumResolutionM));
+  return RESOLUTION_STEPS_M.find((step) => step >= requested) ?? requested;
 }
 
 function nearestTower(point: { lon: number; lat: number }, towers: Tower[]): NearestTower | undefined {
