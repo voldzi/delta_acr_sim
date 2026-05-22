@@ -503,7 +503,7 @@ export function App() {
         <div className="brand">
           <div className="brand-mark">SIM</div>
           <div>
-            <strong>DELTA ACR SIM</strong>
+            <strong>CSM SIM</strong>
             <span>Data provider pilot</span>
           </div>
         </div>

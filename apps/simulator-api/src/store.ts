@@ -1,4 +1,4 @@
-import type { AiScenarioDraft, RuntimeStatus, Scenario } from "@delta-acr/contracts";
+import type { AiScenarioDraft, RuntimeStatus, Scenario } from "@csm-sim/contracts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 

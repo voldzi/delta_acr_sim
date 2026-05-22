@@ -1,6 +1,6 @@
 # Dokumentace SIM systému
 
-Tento adresář je dokumentace samostatného projektu **DELTA ACR SIM**. SIM je datový a simulační provider pro centrální zobrazovací aplikaci COM. COP je aktuální implementace COM, ale veřejná dokumentace má být source-neutral, aby mohli vznikat další poskytovatelé informací.
+Tento adresář je dokumentace samostatného projektu **CSM SIM**. SIM je datový a simulační provider pro centrální zobrazovací aplikaci COM. COP je aktuální implementace COM, ale veřejná dokumentace má být source-neutral, aby mohli vznikat další poskytovatelé informací.
 
 ## Základní dokumenty
 

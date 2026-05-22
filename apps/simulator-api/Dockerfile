@@ -7,7 +7,7 @@ COPY docs ./docs
 COPY packages ./packages
 COPY apps/simulator-api ./apps/simulator-api
 RUN pnpm install --frozen-lockfile=false
-RUN pnpm --filter @delta-acr/simulator-api... build
+RUN pnpm --filter @csm-sim/simulator-api... build
 
 FROM node:24-alpine AS runtime
 WORKDIR /app

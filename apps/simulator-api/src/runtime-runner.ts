@@ -1,6 +1,6 @@
-import type { RuntimeStatus, Scenario } from "@delta-acr/contracts";
-import type { PublisherClient } from "@delta-acr/publisher-client";
-import { countActiveScenarioObjects, generateScenarioEvents } from "@delta-acr/simulation-core";
+import type { RuntimeStatus, Scenario } from "@csm-sim/contracts";
+import type { PublisherClient } from "@csm-sim/publisher-client";
+import { countActiveScenarioObjects, generateScenarioEvents } from "@csm-sim/simulation-core";
 import { randomUUID } from "node:crypto";
 import type { ApiConfig } from "./config.js";
 import type { JsonStore } from "./store.js";

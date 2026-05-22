@@ -76,16 +76,16 @@ importers:
 
   apps/simulator-api:
     dependencies:
-      '@delta-acr/ai-assistant':
+      '@csm-sim/ai-assistant':
         specifier: workspace:*
         version: link:../../packages/ai-assistant
-      '@delta-acr/contracts':
+      '@csm-sim/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@delta-acr/publisher-client':
+      '@csm-sim/publisher-client':
         specifier: workspace:*
         version: link:../../packages/publisher-client
-      '@delta-acr/simulation-core':
+      '@csm-sim/simulation-core':
         specifier: workspace:*
         version: link:../../packages/simulation-core
       ajv:
@@ -218,7 +218,7 @@ importers:
 
   packages/ai-assistant:
     dependencies:
-      '@delta-acr/contracts':
+      '@csm-sim/contracts':
         specifier: workspace:*
         version: link:../contracts
 
@@ -226,13 +226,13 @@ importers:
 
   packages/publisher-client:
     dependencies:
-      '@delta-acr/contracts':
+      '@csm-sim/contracts':
         specifier: workspace:*
         version: link:../contracts
 
   packages/simulation-core:
     dependencies:
-      '@delta-acr/contracts':
+      '@csm-sim/contracts':
         specifier: workspace:*
         version: link:../contracts
 

@@ -1,4 +1,4 @@
-import type { CanonicalEventEnvelope, PublisherMode } from "@delta-acr/contracts";
+import type { CanonicalEventEnvelope, PublisherMode } from "@csm-sim/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";

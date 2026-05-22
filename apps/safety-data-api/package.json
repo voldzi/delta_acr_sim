@@ -1,5 +1,5 @@
 {
-  "name": "@delta-acr/safety-data-api",
+  "name": "@csm-sim/safety-data-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",

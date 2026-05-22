@@ -17,8 +17,9 @@ Po zpřístupnění `/srv/sim`:
 
 ```bash
 cd /srv/sim
+export SIM_GIT_REPOSITORY_URL='<SIM repository clone URL>'
 if [ ! -d .git ]; then
-  git clone https://github.com/voldzi/delta_acr_sim.git .
+  git clone "$SIM_GIT_REPOSITORY_URL" .
 else
   git pull --ff-only
 fi

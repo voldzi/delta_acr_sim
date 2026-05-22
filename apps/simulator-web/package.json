@@ -1,5 +1,5 @@
 {
-  "name": "@delta-acr/simulator-web",
+  "name": "@csm-sim/simulator-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",

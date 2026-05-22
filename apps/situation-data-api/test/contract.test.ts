@@ -15,7 +15,7 @@ describe("Situation Data API contract", () => {
   let config: SituationDataConfig;
 
   beforeEach(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "delta-acr-situation-data-"));
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-situation-data-"));
     config = {
       port: 0,
       dataDir,

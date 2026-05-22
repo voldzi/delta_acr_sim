@@ -1,5 +1,5 @@
 {
-  "name": "@delta-acr/tak-gateway-api",
+  "name": "@csm-sim/tak-gateway-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",

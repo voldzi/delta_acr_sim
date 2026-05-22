@@ -1,4 +1,4 @@
-import type { AiScenarioDraft, Scenario, SimulationBlockId } from "@delta-acr/contracts";
+import type { AiScenarioDraft, Scenario, SimulationBlockId } from "@csm-sim/contracts";
 import { randomUUID } from "node:crypto";
 
 export interface AiDraftRequest {

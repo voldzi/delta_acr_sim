@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: DELTA ACR SIM Safety Data API
+  title: CSM SIM Safety Data API
   version: 0.1.0
   description: Aggregated public safety warnings and hydrological observations for COM/server-side map context.
 servers:

@@ -5,7 +5,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/tak-gateway-api ./apps/tak-gateway-api
 RUN pnpm install --frozen-lockfile=false
-RUN pnpm --filter @delta-acr/tak-gateway-api build
+RUN pnpm --filter @csm-sim/tak-gateway-api build
 
 FROM node:24-alpine AS runtime
 WORKDIR /app

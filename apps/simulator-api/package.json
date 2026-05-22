@@ -1,5 +1,5 @@
 {
-  "name": "@delta-acr/simulator-api",
+  "name": "@csm-sim/simulator-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,10 +12,10 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@delta-acr/ai-assistant": "workspace:*",
-    "@delta-acr/contracts": "workspace:*",
-    "@delta-acr/publisher-client": "workspace:*",
-    "@delta-acr/simulation-core": "workspace:*",
+    "@csm-sim/ai-assistant": "workspace:*",
+    "@csm-sim/contracts": "workspace:*",
+    "@csm-sim/publisher-client": "workspace:*",
+    "@csm-sim/simulation-core": "workspace:*",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "cors": "^2.8.5",

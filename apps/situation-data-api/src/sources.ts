@@ -138,7 +138,7 @@ const AVIATION_WEATHER_LICENSE: SituationDataLicense = {
 
 const ARDOS_PARTNER_LICENSE: SituationDataLicense = {
   name: "ARDOS partner data under MoU",
-  attribution: "ARDOS / Radioklub ACR partner feed",
+  attribution: "ARDOS / ARDOS partner feed",
   commercialUse: "requires_license",
   operationalUse: "requires_license",
   notes: [

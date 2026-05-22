@@ -1,7 +1,7 @@
-import { aiProviders, createMockScenarioDraft, type AiDraftRequest } from "@delta-acr/ai-assistant";
-import { CONTRACT_VERSION, type CanonicalEventEnvelope, type FaultInjection, type Scenario } from "@delta-acr/contracts";
-import { PublisherClient } from "@delta-acr/publisher-client";
-import { availableBlocks } from "@delta-acr/simulation-core";
+import { aiProviders, createMockScenarioDraft, type AiDraftRequest } from "@csm-sim/ai-assistant";
+import { CONTRACT_VERSION, type CanonicalEventEnvelope, type FaultInjection, type Scenario } from "@csm-sim/contracts";
+import { PublisherClient } from "@csm-sim/publisher-client";
+import { availableBlocks } from "@csm-sim/simulation-core";
 import cors from "cors";
 import express, { type Express } from "express";
 import { randomUUID } from "node:crypto";

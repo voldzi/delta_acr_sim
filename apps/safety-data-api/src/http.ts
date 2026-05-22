@@ -38,7 +38,7 @@ async function request(url: string, timeoutMs: number): Promise<globalThis.Respo
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        "user-agent": "DELTA-ACR-SIM/0.1 safety-data-api"
+        "user-agent": "CSM-SIM/0.1 safety-data-api"
       }
     });
     if (!response.ok) {

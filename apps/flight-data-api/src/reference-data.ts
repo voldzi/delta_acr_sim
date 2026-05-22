@@ -254,7 +254,7 @@ export class ReferenceDataService {
         const response = await fetch(this.config.ourAirportsCsvUrl, {
           headers: {
             accept: "text/csv,*/*",
-            "user-agent": "delta-acr-sim-flight-data/0.1"
+            "user-agent": "csm-sim-flight-data/0.1"
           },
           signal: AbortSignal.timeout(this.config.requestTimeoutMs)
         });

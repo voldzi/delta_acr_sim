@@ -23,7 +23,7 @@ export interface SafetyDataSource {
 
 const MOCK_LICENSE: SafetyDataLicense = {
   name: "Synthetic internal test data",
-  attribution: "DELTA ACR SIM",
+  attribution: "CSM SIM",
   commercialUse: "allowed",
   operationalUse: "allowed",
   notes: ["Synthetic safety features for COP integration testing."]

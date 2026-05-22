@@ -10,7 +10,7 @@ GET /tak-gateway/api/v1/features
 
 ## Implementovaný rozsah
 
-1. Samostatná služba `@delta-acr/tak-gateway-api` na portu `4040`.
+1. Samostatná služba `@csm-sim/tak-gateway-api` na portu `4040`.
 2. Chráněný ingest endpoint `POST /api/v1/cot/events` s bearer tokenem `TAK_GATEWAY_INGEST_TOKEN`.
 3. Chráněný read endpoint přes `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`; veřejné čtení je jen explicitní syntetický pilotní režim.
 4. In-memory stav posledních CoT eventů podle `uid`, bounded retention a `maxEvents`.

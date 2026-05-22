@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: apps/simulator-api/Dockerfile
-    container_name: delta-acr-sim-api
+    container_name: csm-sim-api
     environment:
       NODE_ENV: production
       API_PORT: 4000
@@ -29,7 +29,7 @@ services:
     build:
       context: .
       dockerfile: apps/flight-data-api/Dockerfile
-    container_name: delta-acr-flight-data-api
+    container_name: csm-sim-flight-data-api
     environment:
       NODE_ENV: production
       FLIGHT_DATA_API_PORT: 4010
@@ -79,7 +79,7 @@ services:
     build:
       context: .
       dockerfile: apps/situation-data-api/Dockerfile
-    container_name: delta-acr-situation-data-api
+    container_name: csm-sim-situation-data-api
     environment:
       NODE_ENV: production
       SITUATION_DATA_API_PORT: 4020
@@ -141,7 +141,7 @@ services:
   osm-postgis:
     profiles: ["osm"]
     image: postgis/postgis:16-3.5
-    container_name: delta-acr-osm-postgis
+    container_name: csm-sim-osm-postgis
     environment:
       POSTGRES_DB: ${OSM_POSTGIS_DB:-sim_osm}
       POSTGRES_USER: ${OSM_POSTGIS_USER:-sim_osm}
@@ -160,7 +160,7 @@ services:
   osm-importer:
     profiles: ["osm-import"]
     image: iboates/osm2pgsql:latest
-    container_name: delta-acr-osm-importer
+    container_name: csm-sim-osm-importer
     depends_on:
       osm-postgis:
         condition: service_healthy
@@ -172,7 +172,7 @@ services:
     build:
       context: .
       dockerfile: apps/safety-data-api/Dockerfile
-    container_name: delta-acr-safety-data-api
+    container_name: csm-sim-safety-data-api
     environment:
       NODE_ENV: production
       SAFETY_DATA_API_PORT: 4030
@@ -203,7 +203,7 @@ services:
     build:
       context: .
       dockerfile: apps/tak-gateway-api/Dockerfile
-    container_name: delta-acr-tak-gateway-api
+    container_name: csm-sim-tak-gateway-api
     environment:
       NODE_ENV: production
       TAK_GATEWAY_API_PORT: 4040
@@ -234,7 +234,7 @@ services:
       dockerfile: apps/simulator-web/Dockerfile
       args:
         VITE_COP_DISPLAY_URL: ${VITE_COP_DISPLAY_URL:-https://cop.zeleznalady.cz}
-    container_name: delta-acr-sim-web
+    container_name: csm-sim-web
     depends_on:
       sim-api:
         condition: service_healthy

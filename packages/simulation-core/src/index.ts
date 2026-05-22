@@ -4,7 +4,7 @@ import {
   type CanonicalEventEnvelope,
   type Scenario,
   type ScenarioBlock
-} from "@delta-acr/contracts";
+} from "@csm-sim/contracts";
 import { randomUUID } from "node:crypto";
 
 export interface GenerateOptions {

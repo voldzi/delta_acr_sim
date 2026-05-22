@@ -3,7 +3,7 @@ import { allSourceDescriptors } from "./sources.js";
 import type { SafetyDataSourceId, SafetyLayerId, SourceDescriptor } from "./types.js";
 
 const PROVIDER_ID = "sim.safety-data" as const;
-const MAP_CATALOG_DOCUMENT = "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
+const MAP_CATALOG_DOCUMENT = "docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
 
 export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = new Date().toISOString()) {
   const descriptors = allSourceDescriptors(config);

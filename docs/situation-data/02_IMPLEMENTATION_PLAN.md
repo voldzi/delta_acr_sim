@@ -2,7 +2,7 @@
 
 ## Fáze 1: Stabilní kontrakt a pilotní zdroje
 
-1. Přidat službu `@delta-acr/situation-data-api` s health endpointy, registry zdrojů a COM GeoJSON provider kontraktem.
+1. Přidat službu `@csm-sim/situation-data-api` s health endpointy, registry zdrojů a COM GeoJSON provider kontraktem.
 2. Implementovat vrstvy:
    - `mock`: stabilní testovací features pro ground/mobile/traffic/weather,
    - `open_meteo`: live weather feature pro střed bbox,

@@ -5,7 +5,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/safety-data-api ./apps/safety-data-api
 RUN pnpm install --frozen-lockfile=false
-RUN pnpm --filter @delta-acr/safety-data-api build
+RUN pnpm --filter @csm-sim/safety-data-api build
 
 FROM node:24-alpine AS runtime
 WORKDIR /app

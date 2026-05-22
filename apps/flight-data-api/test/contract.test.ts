@@ -14,7 +14,7 @@ describe("Flight Data API contract", () => {
   let config: FlightDataConfig;
 
   beforeEach(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "delta-acr-flight-data-"));
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-flight-data-"));
     config = {
       port: 0,
       dataDir,

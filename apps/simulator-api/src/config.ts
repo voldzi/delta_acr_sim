@@ -1,5 +1,5 @@
-import type { PublisherMode } from "@delta-acr/contracts";
-import { DEFAULT_SOURCE_SYSTEM_ID } from "@delta-acr/contracts";
+import type { PublisherMode } from "@csm-sim/contracts";
+import { DEFAULT_SOURCE_SYSTEM_ID } from "@csm-sim/contracts";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

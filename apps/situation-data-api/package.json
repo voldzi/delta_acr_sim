@@ -1,5 +1,5 @@
 {
-  "name": "@delta-acr/situation-data-api",
+  "name": "@csm-sim/situation-data-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",

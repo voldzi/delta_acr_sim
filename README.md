@@ -1,4 +1,4 @@
-# DELTA ACR SIM
+# CSM SIM
 
 SIM je samostatný datový a simulační provider pro centrální zobrazovací aplikaci COM. Generuje syntetické scénáře, provozuje dry-run/mock publisher workflow a poskytuje cacheované provider API pro mapové vrstvy: lety, počasí, bezpečnostní výstrahy, mobilní síť, OSM/PostGIS kontext a partnerské TAK/CoT streamy.
 

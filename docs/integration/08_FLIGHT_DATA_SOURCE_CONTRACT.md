@@ -135,7 +135,7 @@ COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a li
       "priority": 10,
       "license": {
         "name": "Synthetic internal test data",
-        "attribution": "DELTA ACR SIM",
+        "attribution": "CSM SIM",
         "commercialUse": "allowed",
         "operationalUse": "allowed",
         "notes": ["Synthetic data only. No external aviation data is used by this source."]

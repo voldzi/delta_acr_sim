@@ -1,4 +1,4 @@
-import { countActiveScenarioObjects, generateScenarioEvents } from "@delta-acr/simulation-core";
+import { countActiveScenarioObjects, generateScenarioEvents } from "@csm-sim/simulation-core";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -108,7 +108,7 @@ describe("SIM API contract baseline", () => {
   let config: ApiConfig;
 
   beforeEach(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "delta-acr-sim-"));
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-"));
     config = {
       port: 0,
       dataDir,

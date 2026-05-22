@@ -16,7 +16,7 @@ describe("Safety Data API contract", () => {
   let config: SafetyDataConfig;
 
   beforeEach(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "delta-acr-safety-data-"));
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-safety-data-"));
     config = {
       port: 0,
       dataDir,
@@ -223,7 +223,7 @@ describe("Safety Data API contract", () => {
           sourceId: "mock",
           confidence: expect.any(Number),
           stale: false,
-          license: expect.objectContaining({ attribution: "DELTA ACR SIM" })
+          license: expect.objectContaining({ attribution: "CSM SIM" })
         })
       })
     );

@@ -5,7 +5,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/situation-data-api ./apps/situation-data-api
 RUN pnpm install --frozen-lockfile=false
-RUN pnpm --filter @delta-acr/situation-data-api build
+RUN pnpm --filter @csm-sim/situation-data-api build
 
 FROM node:24-alpine AS runtime
 WORKDIR /app

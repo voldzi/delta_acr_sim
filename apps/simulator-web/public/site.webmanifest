@@ -1,7 +1,7 @@
 {
-  "name": "DELTA ACR SIM",
+  "name": "CSM SIM",
   "short_name": "SIM",
-  "description": "DELTA ACR SIM data provider and scenario simulator.",
+  "description": "CSM SIM data provider and scenario simulator.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

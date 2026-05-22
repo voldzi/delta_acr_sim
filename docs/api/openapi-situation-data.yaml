@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: DELTA ACR SIM Situation Data API
+  title: CSM SIM Situation Data API
   version: 0.1.0
   description: Aggregated open-data situation layers for COM/server-side map context.
 servers:

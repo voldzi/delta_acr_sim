@@ -3,7 +3,7 @@ import { takSourceDescriptor } from "./sources.js";
 import type { TakLayerId } from "./types.js";
 
 const PROVIDER_ID = "sim.tak-gateway" as const;
-const MAP_CATALOG_DOCUMENT = "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
+const MAP_CATALOG_DOCUMENT = "docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
 
 export function buildTakMapCatalog(config: TakGatewayConfig, generatedAt = new Date().toISOString()) {
   const source = takSourceDescriptor(config);

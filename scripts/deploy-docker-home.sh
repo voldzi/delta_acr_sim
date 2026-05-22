@@ -4,7 +4,8 @@ set -euo pipefail
 cd /srv/sim
 
 if [ ! -d .git ]; then
-  git clone https://github.com/voldzi/delta_acr_sim.git .
+  : "${SIM_GIT_REPOSITORY_URL:?Set SIM_GIT_REPOSITORY_URL to the SIM repository clone URL.}"
+  git clone "$SIM_GIT_REPOSITORY_URL" .
 else
   git pull --ff-only
 fi

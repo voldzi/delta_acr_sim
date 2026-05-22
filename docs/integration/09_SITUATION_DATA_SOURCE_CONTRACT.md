@@ -45,7 +45,7 @@ GET /dem/metadata
   "authority": {
     "contractVersion": "map-catalog-v1",
     "catalogVersion": "map-catalog-v1",
-    "document": "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md"
+    "document": "docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md"
   },
   "layers": [],
   "sources": []

@@ -2,7 +2,7 @@
 
 ## Účel
 
-Tento dokument je podklad pro jednání s ARDOS/Radioklub ACR. ARDOS není veřejný open-data zdroj; integrace má být partnerská, zabezpečená a datově minimalizovaná. SIM bude působit jako adapter/cache mezi ARDOS a COM.
+Tento dokument je podklad pro jednání s ARDOS partner network. ARDOS není veřejný open-data zdroj; integrace má být partnerská, zabezpečená a datově minimalizovaná. SIM bude působit jako adapter/cache mezi ARDOS a COM.
 
 Pro nové provedení používej terminologii COM a source-neutral provider model; historické názvy `cop` v ukázkách znamenají pouze kompatibilní backend stream.
 

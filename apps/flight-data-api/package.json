@@ -1,5 +1,5 @@
 {
-  "name": "@delta-acr/flight-data-api",
+  "name": "@csm-sim/flight-data-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",

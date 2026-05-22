@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 
 const PROVIDER_ID = "sim.situation-data" as const;
-const MAP_CATALOG_DOCUMENT = "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
+const MAP_CATALOG_DOCUMENT = "docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
 const DEFAULT_MAX_FEATURES = 250;
 
 export function buildSituationMapCatalog(config: SituationDataConfig, generatedAt = new Date().toISOString()): ProviderMapCatalog {

@@ -37,7 +37,7 @@ Veřejný real-time zdroj stavu BTS nebo aktuálních výpadků mobilních oper�
 - ČTÚ NetTest Open Data: https://nettest.ctu.gov.cz/en/Opendata
 - PID/Golemio API docs: https://api.golemio.cz/pid/docs/openapi/
 - NOAA AWC Data API: https://aviationweather.gov/data/api/
-- ARDOS / RK AČR: https://radioklub.mo.gov.cz/ardos
+- ARDOS / ARDOS partner network: https://radioklub.mo.gov.cz/ardos
 - OpenCellID licence: https://wiki.opencellid.org/wiki/Licensing:
 - M-Lab FAQ/licence: https://www.measurementlab.net/frequently-asked-questions/
 - PID Open Data: https://pid.cz/o-systemu/opendata/
