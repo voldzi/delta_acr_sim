@@ -169,6 +169,9 @@ export class TakEventStore {
       },
       properties: {
         featureId: `tak:cot:${event.uid}`,
+        layerId: catalogLayerIdForTakLayer(layer),
+        providerId: "sim.tak-gateway",
+        providerLayerId: providerLayerIdForTakLayer(layer),
         layer,
         category: inferCategory(event, layer),
         label,
@@ -191,9 +194,41 @@ export class TakEventStore {
           groupName: event.group?.name,
           groupRole: event.group?.role
         }),
+        providerProperties: compactRecord({
+          affiliation,
+          metrics,
+          cotType: event.type,
+          how: event.how,
+          groupName: event.group?.name,
+          groupRole: event.group?.role
+        }),
         raw: includeRaw && this.config.exposeRaw ? event.raw : undefined
       }
     };
+  }
+}
+
+function providerLayerIdForTakLayer(layer: string): string {
+  switch (layer) {
+    case "mobile":
+      return "tak.mobile";
+    case "traffic":
+      return "tak.traffic";
+    case "ground":
+    default:
+      return "tak.ground";
+  }
+}
+
+function catalogLayerIdForTakLayer(layer: string): string {
+  switch (layer) {
+    case "mobile":
+      return "partner.tak.mobile";
+    case "traffic":
+      return "partner.tak.traffic";
+    case "ground":
+    default:
+      return "partner.tak.ground";
   }
 }
 
@@ -243,6 +278,10 @@ function addMetric(metrics: Record<string, number | string | boolean>, key: stri
 function compactTags(values: Record<string, string | undefined>): Record<string, string> | undefined {
   const tags = Object.fromEntries(Object.entries(values).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
   return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
+function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function warningsForConfig(config: TakGatewayConfig): string[] {

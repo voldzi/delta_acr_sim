@@ -80,6 +80,9 @@ export type SafetyGeometry = PointGeometry | PolygonGeometry;
 
 export interface SafetyFeatureProperties {
   featureId: string;
+  layerId?: string;
+  providerId?: "sim.safety-data";
+  providerLayerId?: string;
   layer: SafetyLayerId;
   category: string;
   headline: string;
@@ -103,6 +106,7 @@ export interface SafetyFeatureProperties {
   geocodes?: Array<{ scheme: string; value: string }>;
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
+  providerProperties?: Record<string, unknown>;
   raw?: unknown;
 }
 

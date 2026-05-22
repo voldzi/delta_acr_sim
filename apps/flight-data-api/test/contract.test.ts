@@ -98,6 +98,55 @@ describe("Flight Data API contract", () => {
     expect(JSON.stringify(response.body)).not.toContain("clientSecret");
   });
 
+  it("exposes provider map catalog metadata for COM", async () => {
+    const response = await request(app).get("/api/v1/catalog").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "provider-map-catalog-v1",
+        catalogVersion: "provider-map-catalog-v1",
+        providerId: "sim.flight-data",
+        status: "online",
+        authority: expect.objectContaining({
+          contractVersion: "map-catalog-v1",
+          document: expect.stringContaining("02_MAP_CATALOG_PROVIDER_CONTRACT.md")
+        })
+      })
+    );
+    expect(response.body.layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerLayerId: "flight.tracks",
+          recommendedCatalogLayerId: "flight.public.tracks",
+          kind: "track_stream",
+          categories: expect.arrayContaining(["aircraft_track"])
+        }),
+        expect.objectContaining({
+          providerLayerId: "flight.airports",
+          recommendedCatalogLayerId: "flight.reference.airports",
+          kind: "static_reference",
+          categories: expect.arrayContaining(["airport"])
+        })
+      ])
+    );
+    expect(response.body.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "local_adsb",
+          sourceRole: "final",
+          feedsLayerIds: ["flight.tracks"],
+          feedsCatalogLayerIds: ["flight.public.tracks"]
+        }),
+        expect.objectContaining({
+          sourceId: "ourairports",
+          sourceRole: "reference",
+          feedsLayerIds: ["flight.airports"],
+          feedsCatalogLayerIds: ["flight.reference.airports"]
+        })
+      ])
+    );
+  });
+
   it("exposes cache metrics", async () => {
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("flight_data_cache_entries");

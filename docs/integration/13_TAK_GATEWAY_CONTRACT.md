@@ -7,6 +7,7 @@ TAK Gateway je neveřejný partnerský zdroj pro COM. Přijímá Cursor-on-Targe
 ## COM read endpoint
 
 ```http
+GET /tak-gateway/api/v1/catalog
 GET /tak-gateway/api/v1/features?bbox=west,south,east,north&layers=mobile,ground,traffic&limit=250
 ```
 
@@ -36,6 +37,8 @@ Query parametry a validace:
 Chybný `bbox`, prázdný výběr vrstev nebo neznámé vrstvy vrací `400 VALIDATION_ERROR`. Pokud je `TAK_GATEWAY_PUBLIC_READ=false`, chybějící nebo chybný bearer token vrací `401 UNAUTHORIZED`.
 
 Vrstva `traffic` v tomto kontraktu znamená `TAK Gateway > Traffic tracks`, tedy transportní/air/vehicle tracky z CoT. Není to veřejná dopravní vrstva z `situation-data`.
+
+`GET /tak-gateway/api/v1/catalog` vrací partner vrstvy `partner.tak.mobile`, `partner.tak.ground` a `partner.tak.traffic`. COM je má zobrazovat jako neveřejný/partnerský zdroj, defaultně vypnutý a dotazovaný server-side s read tokenem.
 
 ## Response
 
@@ -69,6 +72,9 @@ Vrstva `traffic` v tomto kontraktu znamená `TAK Gateway > Traffic tracks`, tedy
       "geometry": { "type": "Point", "coordinates": [14.421, 50.087] },
       "properties": {
         "featureId": "tak:cot:TAK-ARDOS-001",
+        "layerId": "partner.tak.mobile",
+        "providerId": "sim.tak-gateway",
+        "providerLayerId": "tak.mobile",
         "layer": "mobile",
         "category": "tak_unit",
         "label": "ARDOS Alpha",

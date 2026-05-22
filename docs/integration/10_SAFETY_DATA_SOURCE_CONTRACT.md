@@ -7,6 +7,7 @@ Safety Data API je samostatný COM zdroj pro veřejná bezpečnostní data. Kont
 ## Autoritativní endpoint pro COM backend
 
 ```text
+GET /safety-data/api/v1/catalog
 GET /safety-data/api/v1/features
 ```
 
@@ -52,6 +53,9 @@ Odpověď je GeoJSON `FeatureCollection` s verzí:
 
 Každá feature nese:
 
+- `properties.layerId`: `public.safety.warnings` nebo `public.safety.flood`.
+- `properties.providerId`: `sim.safety-data`.
+- `properties.providerLayerId`: `safety.warnings` nebo `safety.flood`.
 - `properties.layer`: `warnings` nebo `flood`.
 - `properties.severity`: `info`, `advisory`, `warning`, `critical`.
 - `properties.urgency` a `properties.certainty`.
@@ -59,6 +63,7 @@ Každá feature nese:
 - `properties.license` s atribucí původního zdroje.
 - `properties.metrics` pro číselné hodnoty, např. hladina, průtok, SPA.
 - `properties.tags` pro strojově čitelné doplňky.
+- `properties.providerProperties` pro provider-native hodnoty a auditní detail.
 
 ## Zdroje v pilotu
 

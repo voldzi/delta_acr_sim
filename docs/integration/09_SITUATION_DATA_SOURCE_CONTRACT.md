@@ -37,10 +37,13 @@ GET /dem/metadata
 
 ```json
 {
+  "contractVersion": "provider-map-catalog-v1",
   "catalogVersion": "provider-map-catalog-v1",
   "providerId": "sim.situation-data",
   "generatedAt": "2026-05-22T08:00:00.000Z",
+  "status": "online",
   "authority": {
+    "contractVersion": "map-catalog-v1",
     "catalogVersion": "map-catalog-v1",
     "document": "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md"
   },
@@ -98,6 +101,9 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | Pole | Typ | Popis |
 | --- | --- | --- |
 | `featureId` | string | stabilní identifikátor v rámci zdroje |
+| `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
+| `providerId` | string | identifikátor providera, např. `sim.situation-data` |
+| `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
 | `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `flood`, `air_quality` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
@@ -109,6 +115,7 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `severity` | `info`, `advisory`, `warning`, `critical` | priorita pro vizualizaci |
 | `license` | object | licence a atribuce zdroje |
 | `metrics` | object | číselné metriky vrstvy |
+| `providerProperties` | object | provider-native hodnoty pro detail a audit |
 | `raw` | object, optional | omezený původní payload pro ladění |
 
 Coverage features ve vrstvě `mobile_coverage` navíc nesou:

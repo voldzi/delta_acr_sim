@@ -68,6 +68,40 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/SourceDescriptor'
+  /api/v1/catalog:
+    get:
+      tags: [Sources]
+      summary: Vrátí Flight Data provider katalog pro COM Map Catalog v1.
+      description: Katalog odděluje uživatelské vrstvy flight.public.tracks a flight.reference.airports od technických upstream zdrojů.
+      responses:
+        '200':
+          description: Provider map catalog metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contractVersion, providerId, generatedAt, status, layers, sources]
+                properties:
+                  contractVersion:
+                    type: string
+                    const: provider-map-catalog-v1
+                  providerId:
+                    type: string
+                    const: sim.flight-data
+                  generatedAt:
+                    type: string
+                    format: date-time
+                  status:
+                    type: string
+                    enum: [online]
+                  layers:
+                    type: array
+                    items:
+                      type: object
+                  sources:
+                    type: array
+                    items:
+                      type: object
   /api/v1/config:
     get:
       tags: [Sources]

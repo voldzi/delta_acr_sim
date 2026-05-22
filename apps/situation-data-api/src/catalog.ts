@@ -18,10 +18,13 @@ const DEFAULT_MAX_FEATURES = 250;
 export function buildSituationMapCatalog(config: SituationDataConfig, generatedAt = new Date().toISOString()): ProviderMapCatalog {
   const descriptors = allSourceDescriptors(config);
   return {
+    contractVersion: "provider-map-catalog-v1",
     catalogVersion: "provider-map-catalog-v1",
     providerId: PROVIDER_ID,
     generatedAt,
+    status: "online",
     authority: {
+      contractVersion: "map-catalog-v1",
       catalogVersion: "map-catalog-v1",
       document: MAP_CATALOG_DOCUMENT
     },
@@ -38,6 +41,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Počasí",
       description: "Aktuální počasí pro mapový výřez z cacheovaného Open-Meteo zdroje.",
       categoryPath: ["weather", "current"],
+      categories: ["weather"],
       role: "primary",
       audience: "public",
       kind: "vector_features",
@@ -63,6 +67,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Letištní počasí",
       description: "METAR/TAF letecké počasí pro letiště v mapovém výřezu.",
       categoryPath: ["weather", "aviation"],
+      categories: ["weather", "aviation_weather"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -88,6 +93,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Mobilní síť",
       description: "Sjednocené občanské hodnocení dostupnosti mobilní sítě.",
       categoryPath: ["communications", "mobile"],
+      categories: ["mobile_network"],
       role: "overlay",
       audience: "public",
       kind: "vector_features",
@@ -130,6 +136,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Technický odhad pokrytí",
       description: "Diagnostická modelová vrstva pokrytí používaná jako vstup pro finální hodnocení mobilní sítě.",
       categoryPath: ["diagnostic", "communications", "mobile"],
+      categories: ["mobile_coverage"],
       role: "diagnostic",
       audience: "diagnostic",
       kind: "vector_features",
@@ -172,6 +179,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "ČTÚ měření",
       description: "Diagnostické body veřejných měření ČTÚ NetTest používané jako vstup modelu.",
       categoryPath: ["diagnostic", "communications", "mobile"],
+      categories: ["network_measurement", "mobile"],
       role: "diagnostic",
       audience: "diagnostic",
       kind: "vector_features",
@@ -198,6 +206,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Komunikační infrastruktura",
       description: "Referenční komunikační věže z lokálního OSM/PostGIS importu.",
       categoryPath: ["reference", "infrastructure", "communications"],
+      categories: ["communications_tower"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -223,6 +232,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Zdravotnictví",
       description: "Nemocnice, kliniky, lékaři a lékárny z lokálního OSM/PostGIS importu.",
       categoryPath: ["reference", "infrastructure", "healthcare"],
+      categories: ["hospital", "clinic", "doctors", "pharmacy"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -248,6 +258,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Záchranná infrastruktura",
       description: "Hasiči, policie, záchranné a nouzové body z lokálního OSM/PostGIS importu.",
       categoryPath: ["reference", "infrastructure", "emergency"],
+      categories: ["fire_station", "police", "ambulance_station", "shelter"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -273,6 +284,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Veřejná správa",
       description: "Obecní úřady a další veřejné referenční body z lokálního OSM/PostGIS importu.",
       categoryPath: ["reference", "infrastructure", "civic"],
+      categories: ["townhall"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -298,6 +310,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Doprava",
       description: "Živý dopravní kontext veřejné dopravy z PID/Golemio GTFS-RT.",
       categoryPath: ["traffic", "transit"],
+      categories: ["traffic", "transit_vehicle"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -323,6 +336,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Veřejné výstrahy (kompatibilní projekce)",
       description: "Kompatibilní projekce výstrah ze Safety Data API. COP má preferovat provider sim.safety-data.",
       categoryPath: ["safety", "warnings"],
+      categories: ["warning", "safety_warning"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -350,6 +364,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       label: "Povodně a voda (kompatibilní projekce)",
       description: "Kompatibilní projekce hydrologických dat ze Safety Data API. COP má preferovat provider sim.safety-data.",
       categoryPath: ["safety", "flood"],
+      categories: ["flood", "hydrology"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -386,8 +401,11 @@ function buildProviderSource(descriptor: SourceDescriptor, config: SituationData
     audience: classification.audience,
     selectableInMap: classification.selectableInMap,
     visibleInDiagnostics: classification.visibleInDiagnostics,
+    feedsLayerIds: classification.feedsLayerIds,
     feedsCatalogLayerIds: classification.feedsCatalogLayerIds,
+    usedByLayerIds: classification.usedByLayerIds,
     usedByCatalogLayerIds: classification.usedByCatalogLayerIds,
+    technicalInputs: classification.technicalInputs,
     replacedBy: classification.replacedBy,
     preferredProviderId: classification.preferredProviderId,
     updateCadenceSeconds: descriptor.updateCadenceSeconds,
@@ -416,8 +434,11 @@ function sourceClassification(sourceId: SituationDataSourceId): {
   audience: ProviderCatalogAudience;
   selectableInMap: boolean;
   visibleInDiagnostics: boolean;
+  feedsLayerIds: string[];
   feedsCatalogLayerIds: string[];
+  usedByLayerIds?: string[];
   usedByCatalogLayerIds?: string[];
+  technicalInputs?: SituationDataSourceId[];
   replacedBy?: SituationDataSourceId;
   preferredProviderId?: string;
   notes?: string[];
@@ -429,6 +450,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "diagnostic",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: [],
         feedsCatalogLayerIds: [],
         notes: ["Synthetic data source for tests only."]
       };
@@ -438,6 +460,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["weather.open_meteo"],
         feedsCatalogLayerIds: ["public.weather.current"]
       };
     case "aviation_weather":
@@ -446,15 +469,18 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["weather.aviation_weather"],
         feedsCatalogLayerIds: ["public.weather.aviation"]
       };
     case "mobile_network_model":
       return {
-        sourceRole: "aggregate",
+        sourceRole: "final",
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["mobile_network"],
         feedsCatalogLayerIds: ["public.mobile.network"],
+        technicalInputs: ["mobile_coverage_model", "ctu_nettest", "osm_postgis"],
         usedByCatalogLayerIds: ["public.mobile.network"],
         notes: ["Final public mobile-network assessment. Prefer this over raw mobile inputs."]
       };
@@ -464,7 +490,9 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "diagnostic",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["mobile_coverage"],
         feedsCatalogLayerIds: ["diagnostic.mobile.coverage"],
+        usedByLayerIds: ["mobile_network"],
         usedByCatalogLayerIds: ["public.mobile.network"],
         replacedBy: "mobile_network_model",
         notes: ["Technical model input; do not show as a normal public mobile layer."]
@@ -475,7 +503,9 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "diagnostic",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["mobile.ctu_nettest"],
         feedsCatalogLayerIds: ["diagnostic.mobile.ctu_measurements"],
+        usedByLayerIds: ["mobile_network"],
         usedByCatalogLayerIds: ["public.mobile.network"],
         replacedBy: "mobile_network_model",
         notes: ["Raw public measurements; do not show as a normal public mobile layer."]
@@ -486,12 +516,19 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: [
+          "ground.osm_postgis.healthcare",
+          "ground.osm_postgis.emergency",
+          "ground.osm_postgis.civic",
+          "mobile.osm_postgis.communications"
+        ],
         feedsCatalogLayerIds: [
           "reference.infrastructure.healthcare",
           "reference.infrastructure.emergency",
           "reference.infrastructure.civic",
           "reference.infrastructure.communications"
         ],
+        usedByLayerIds: ["mobile_network"],
         usedByCatalogLayerIds: ["public.mobile.network"],
         notes: ["Select concrete catalog layers, not the whole OSM source."]
       };
@@ -501,6 +538,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "diagnostic",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: [],
         feedsCatalogLayerIds: [],
         notes: ["Development fallback only; public Overpass is not a production runtime backend."]
       };
@@ -510,6 +548,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["traffic.pid_gtfs_rt"],
         feedsCatalogLayerIds: ["public.traffic.transit"]
       };
     case "safety_data":
@@ -518,6 +557,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: ["warnings.safety_data_projection", "flood.safety_data_projection"],
         feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.flood"],
         preferredProviderId: "sim.safety-data",
         notes: ["Compatibility projection only; prefer the dedicated safety-data provider."]
@@ -528,6 +568,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "partner",
         selectableInMap: false,
         visibleInDiagnostics: true,
+        feedsLayerIds: [],
         feedsCatalogLayerIds: [],
         notes: ["Partner-only source; access and display must be controlled outside public catalog defaults."]
       };

@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express, type Request } from "express";
+import { buildTakMapCatalog } from "./catalog.js";
 import type { TakGatewayConfig } from "./config.js";
 import { parseCotXml } from "./cot.js";
 import { problem } from "./http.js";
@@ -81,6 +82,10 @@ function registerMetadataRoutes(app: Express, context: TakGatewayAppContext): vo
 
   app.get("/api/v1/sources", (_req, res) => {
     res.json({ items: [takSourceDescriptor(context.config)] });
+  });
+
+  app.get("/api/v1/catalog", (_req, res) => {
+    res.json(buildTakMapCatalog(context.config));
   });
 
   app.get("/api/v1/config", (_req, res) => {

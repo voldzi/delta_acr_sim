@@ -6,7 +6,7 @@ Nová integrace má používat source-neutral COM model:
 
 - COM klient: `GET /api/v1/map/catalog`
 - COM klient: `POST /api/v1/map/query`
-- SIM provider discovery: `GET /situation-data/api/v1/catalog`
+- SIM provider discovery: `GET /situation-data/api/v1/catalog`, `GET /safety-data/api/v1/catalog`, `GET /flight-data/api/v1/catalog`, `GET /tak-gateway/api/v1/catalog`
 - SIM provider data streamy: neutrální `/api/v1/features`, `/api/v1/aircraft/positions` a chráněné partner streamy
 
 ## Co zůstává jen kvůli kompatibilitě

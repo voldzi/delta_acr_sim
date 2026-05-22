@@ -286,8 +286,11 @@ components:
           type: integer
     ProviderMapCatalog:
       type: object
-      required: [catalogVersion, providerId, generatedAt, authority, layers, sources]
+      required: [contractVersion, providerId, generatedAt, status, authority, layers, sources]
       properties:
+        contractVersion:
+          type: string
+          const: provider-map-catalog-v1
         catalogVersion:
           type: string
           const: provider-map-catalog-v1
@@ -297,10 +300,16 @@ components:
         generatedAt:
           type: string
           format: date-time
+        status:
+          type: string
+          enum: [online]
         authority:
           type: object
-          required: [catalogVersion, document]
+          required: [contractVersion, document]
           properties:
+            contractVersion:
+              type: string
+              const: map-catalog-v1
             catalogVersion:
               type: string
               const: map-catalog-v1
@@ -324,6 +333,7 @@ components:
           label,
           description,
           categoryPath,
+          categories,
           role,
           audience,
           kind,
@@ -350,6 +360,10 @@ components:
         description:
           type: string
         categoryPath:
+          type: array
+          items:
+            type: string
+        categories:
           type: array
           items:
             type: string
@@ -480,6 +494,7 @@ components:
           audience,
           selectableInMap,
           visibleInDiagnostics,
+          feedsLayerIds,
           feedsCatalogLayerIds,
           cacheTtlSeconds,
           license
@@ -507,7 +522,15 @@ components:
           description: Whether COM may expose the whole source as a normal map selection. Prefer layer metadata for user-facing selection.
         visibleInDiagnostics:
           type: boolean
+        feedsLayerIds:
+          type: array
+          items:
+            type: string
         feedsCatalogLayerIds:
+          type: array
+          items:
+            type: string
+        usedByLayerIds:
           type: array
           items:
             type: string
@@ -515,6 +538,10 @@ components:
           type: array
           items:
             type: string
+        technicalInputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceId"
         replacedBy:
           $ref: "#/components/schemas/SourceId"
         preferredProviderId:
@@ -713,6 +740,14 @@ components:
           properties:
             featureId:
               type: string
+            layerId:
+              type: string
+              description: Recommended COM catalog layer id, e.g. public.mobile.network.
+            providerId:
+              type: string
+              const: sim.situation-data
+            providerLayerId:
+              type: string
             layer:
               $ref: "#/components/schemas/LayerId"
             category:
@@ -791,6 +826,9 @@ components:
               additionalProperties: true
             disclaimer:
               type: string
+            providerProperties:
+              type: object
+              additionalProperties: true
     MobileCoverageMetadata:
       type: object
       required: [layerId, modelVersion, generatedAt, resolutionM, technologies, operators, qualityLevels, demSource, cacheTtlSeconds, disclaimer, assumptions]

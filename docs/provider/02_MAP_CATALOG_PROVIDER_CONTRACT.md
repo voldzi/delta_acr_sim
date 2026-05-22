@@ -8,16 +8,22 @@ SIM publikuje aktuální provider katalog zde:
 
 ```http
 GET /situation-data/api/v1/catalog
+GET /safety-data/api/v1/catalog
+GET /flight-data/api/v1/catalog
+GET /tak-gateway/api/v1/catalog
 ```
 
 ## Minimální struktura
 
 ```json
 {
+  "contractVersion": "provider-map-catalog-v1",
   "catalogVersion": "provider-map-catalog-v1",
   "providerId": "sim.situation-data",
   "generatedAt": "2026-05-22T08:00:00.000Z",
+  "status": "online",
   "authority": {
+    "contractVersion": "map-catalog-v1",
     "catalogVersion": "map-catalog-v1",
     "document": "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md"
   },
@@ -36,6 +42,7 @@ Povinné nebo prakticky povinné položky:
 - `recommendedCatalogLayerId`: doporučené source-neutral COM ID, například `public.mobile.network`.
 - `label`, `description`.
 - `categoryPath`.
+- `categories`.
 - `role`: `primary`, `reference`, `overlay`, `user`, `partner`, `diagnostic`.
 - `audience`: `public`, `authenticated`, `partner`, `diagnostic`.
 - `kind`: `vector_features`, `mvt_tiles`, `raster_tiles`, `track_stream`, `static_reference`.
@@ -60,8 +67,11 @@ Provider má u každého source uvádět:
 - `audience`
 - `selectableInMap`
 - `visibleInDiagnostics`
+- `feedsLayerIds`
 - `feedsCatalogLayerIds`
+- `usedByLayerIds`
 - `usedByCatalogLayerIds`
+- `technicalInputs`, pokud source vzniká agregací nebo modelem
 - `cacheTtlSeconds`
 - `license`
 - `notes`
@@ -83,6 +93,30 @@ Provider má u každého source uvádět:
 
 Aktuální SIM používá kompatibilní `streamId=cop.features`, protože stávající COM backend ho mapuje na server-side provider stream. Noví provideři mají používat stabilní `providerId`, `providerLayerIds` a `providerSourceIds`; konkrétní `streamId` se domlouvá s COM adapterem a nesmí být volán z klientského prohlížeče.
 
+## Feature properties
+
+Každá feature vrácená provider streamem má nést normalizované identifikátory, aby COM nemusel odvozovat význam z interního `sourceId`:
+
+```json
+{
+  "properties": {
+    "layerId": "public.mobile.network",
+    "providerId": "sim.situation-data",
+    "providerLayerId": "mobile_network",
+    "sourceId": "mobile_network_model",
+    "category": "mobile_network",
+    "label": "4G",
+    "observedAt": "2026-05-22T08:00:00.000Z",
+    "stale": false,
+    "confidence": 0.72,
+    "severity": "info",
+    "providerProperties": {}
+  }
+}
+```
+
+`layerId` je doporučené COM katalogové ID. `providerLayerId` je lokální provider vrstva. `providerProperties` obsahují provider-native hodnoty jako `quality`, `technology`, `basis`, `metrics`, `tags`, modelové verze a disclaimery.
+
 ## Hlavní mobilní vrstva
 
 Pro občanské zobrazení mobilní sítě je jediná doporučená vrstva:
@@ -95,6 +129,8 @@ Pro občanské zobrazení mobilní sítě je jediná doporučená vrstva:
 - style: `mobile-network-quality-v1`
 
 Diagnostické vstupy `mobile_coverage_model`, `ctu_nettest` a OSM komunikační infrastruktura nejsou samostatné běžné uživatelské vrstvy.
+
+V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`, zatímco `mobile_coverage_model` a `ctu_nettest` jsou `sourceRole=input` a `audience=diagnostic`.
 
 ## Kompatibilní feature streamy v SIM
 

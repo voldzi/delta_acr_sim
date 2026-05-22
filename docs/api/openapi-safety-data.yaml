@@ -19,6 +19,39 @@ paths:
       responses:
         "200":
           description: Source registry
+  /catalog:
+    get:
+      summary: Return SIM safety provider metadata for COM Map Catalog v1
+      description: Separates user-facing safety layers from technical upstream sources.
+      responses:
+        "200":
+          description: Provider map catalog metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contractVersion, providerId, generatedAt, status, layers, sources]
+                properties:
+                  contractVersion:
+                    type: string
+                    const: provider-map-catalog-v1
+                  providerId:
+                    type: string
+                    const: sim.safety-data
+                  generatedAt:
+                    type: string
+                    format: date-time
+                  status:
+                    type: string
+                    enum: [online]
+                  layers:
+                    type: array
+                    items:
+                      type: object
+                  sources:
+                    type: array
+                    items:
+                      type: object
   /config:
     get:
       summary: Read non-secret runtime configuration
@@ -191,6 +224,15 @@ components:
           properties:
             featureId:
               type: string
+            layerId:
+              type: string
+              enum: [public.safety.warnings, public.safety.flood]
+            providerId:
+              type: string
+              const: sim.safety-data
+            providerLayerId:
+              type: string
+              enum: [safety.warnings, safety.flood]
             layer:
               enum: [warnings, flood]
             category:
@@ -244,3 +286,6 @@ components:
               type: object
               additionalProperties:
                 type: string
+            providerProperties:
+              type: object
+              additionalProperties: true

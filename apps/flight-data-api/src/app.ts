@@ -2,6 +2,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import type { FlightDataConfig } from "./config.js";
 import { FlightAggregationService } from "./aggregation.js";
+import { buildFlightMapCatalog } from "./catalog.js";
 import { problem } from "./http.js";
 import { getAircraftType, ReferenceDataService, searchAircraftTypes } from "./reference-data.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
@@ -84,6 +85,10 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
 function registerSourceRoutes(app: Express, context: FlightDataAppContext): void {
   app.get("/api/v1/sources", (_req, res) => {
     res.json({ items: allSourceDescriptors(context.config) });
+  });
+
+  app.get("/api/v1/catalog", (_req, res) => {
+    res.json(buildFlightMapCatalog(context.config));
   });
 
   app.get("/api/v1/config", (_req, res) => {

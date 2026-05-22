@@ -139,10 +139,13 @@ describe("Situation Data API contract", () => {
   it("exposes provider map catalog metadata for COM", async () => {
     const response = await request(app).get("/api/v1/catalog").expect(200);
 
+    expect(response.body.contractVersion).toBe("provider-map-catalog-v1");
     expect(response.body.catalogVersion).toBe("provider-map-catalog-v1");
     expect(response.body.providerId).toBe("sim.situation-data");
+    expect(response.body.status).toBe("online");
     expect(response.body.authority).toEqual(
       expect.objectContaining({
+        contractVersion: "map-catalog-v1",
         catalogVersion: "map-catalog-v1",
         document: expect.stringContaining("02_MAP_CATALOG_PROVIDER_CONTRACT.md")
       })
@@ -156,6 +159,7 @@ describe("Situation Data API contract", () => {
           role: "overlay",
           audience: "public",
           kind: "vector_features",
+          categories: ["mobile_network"],
           selectable: true,
           styleProfile: "mobile-network-quality-v1",
           sourceIds: ["mobile_network_model"],
@@ -203,6 +207,7 @@ describe("Situation Data API contract", () => {
       expect(layer).toEqual(
         expect.objectContaining({
           recommendedCatalogLayerId: expect.any(String),
+          categories: expect.any(Array),
           role: expect.any(String),
           audience: expect.any(String),
           kind: expect.any(String),
@@ -218,10 +223,12 @@ describe("Situation Data API contract", () => {
       expect.arrayContaining([
         expect.objectContaining({
           sourceId: "mobile_network_model",
-          sourceRole: "aggregate",
+          sourceRole: "final",
           audience: "public",
           selectableInMap: true,
           visibleInDiagnostics: true,
+          feedsLayerIds: ["mobile_network"],
+          technicalInputs: expect.arrayContaining(["mobile_coverage_model", "ctu_nettest", "osm_postgis"]),
           feedsCatalogLayerIds: ["public.mobile.network"]
         }),
         expect.objectContaining({
@@ -230,6 +237,8 @@ describe("Situation Data API contract", () => {
           audience: "diagnostic",
           selectableInMap: false,
           visibleInDiagnostics: true,
+          feedsLayerIds: ["mobile_coverage"],
+          usedByLayerIds: ["mobile_network"],
           usedByCatalogLayerIds: ["public.mobile.network"],
           replacedBy: "mobile_network_model"
         }),
@@ -239,6 +248,8 @@ describe("Situation Data API contract", () => {
           audience: "diagnostic",
           selectableInMap: false,
           visibleInDiagnostics: true,
+          feedsLayerIds: ["mobile.ctu_nettest"],
+          usedByLayerIds: ["mobile_network"],
           usedByCatalogLayerIds: ["public.mobile.network"],
           replacedBy: "mobile_network_model"
         }),
@@ -258,7 +269,9 @@ describe("Situation Data API contract", () => {
           sourceRole: expect.any(String),
           audience: expect.any(String),
           selectableInMap: expect.any(Boolean),
-          visibleInDiagnostics: expect.any(Boolean)
+          visibleInDiagnostics: expect.any(Boolean),
+          feedsLayerIds: expect.any(Array),
+          feedsCatalogLayerIds: expect.any(Array)
         })
       );
     }
@@ -358,6 +371,9 @@ describe("Situation Data API contract", () => {
         geometry: expect.objectContaining({ type: "Point" }),
         properties: expect.objectContaining({
           featureId: expect.any(String),
+          layerId: expect.stringMatching(/^diagnostic\.mock\./),
+          providerId: "sim.situation-data",
+          providerLayerId: expect.any(String),
           sourceId: "mock",
           confidence: expect.any(Number),
           stale: false,

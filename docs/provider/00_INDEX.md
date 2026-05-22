@@ -12,7 +12,10 @@ COP je aktuální implementace COM. Historické názvy endpointů obsahující `
 
 ## Stabilní vstupy SIM providera
 
-- discovery: `GET /situation-data/api/v1/catalog`
+- situation discovery: `GET /situation-data/api/v1/catalog`
+- safety discovery: `GET /safety-data/api/v1/catalog`
+- flight discovery: `GET /flight-data/api/v1/catalog`
+- TAK/partner discovery: `GET /tak-gateway/api/v1/catalog`
 - situation features: `GET /situation-data/api/v1/features`
 - safety features: `GET /safety-data/api/v1/features`
 - TAK/partner features: `GET /tak-gateway/api/v1/features`

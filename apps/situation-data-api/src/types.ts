@@ -93,6 +93,7 @@ export interface ProviderCatalogLayer {
   label: string;
   description: string;
   categoryPath: string[];
+  categories: string[];
   role: ProviderCatalogLayerRole;
   audience: ProviderCatalogAudience;
   kind: ProviderCatalogKind;
@@ -145,8 +146,11 @@ export interface ProviderCatalogSource {
   audience: ProviderCatalogAudience;
   selectableInMap: boolean;
   visibleInDiagnostics: boolean;
+  feedsLayerIds: string[];
   feedsCatalogLayerIds: string[];
+  usedByLayerIds?: string[];
   usedByCatalogLayerIds?: string[];
+  technicalInputs?: SituationDataSourceId[];
   replacedBy?: SituationDataSourceId;
   preferredProviderId?: string;
   updateCadenceSeconds?: number;
@@ -158,10 +162,13 @@ export interface ProviderCatalogSource {
 }
 
 export interface ProviderMapCatalog {
+  contractVersion: "provider-map-catalog-v1";
   catalogVersion: "provider-map-catalog-v1";
   providerId: "sim.situation-data";
   generatedAt: string;
+  status: "online";
   authority: {
+    contractVersion: "map-catalog-v1";
     catalogVersion: "map-catalog-v1";
     document: string;
   };
@@ -246,6 +253,9 @@ export type SituationGeometry = PointGeometry | LineStringGeometry | PolygonGeom
 
 export interface SituationFeatureProperties {
   featureId: string;
+  layerId?: string;
+  providerId?: "sim.situation-data";
+  providerLayerId?: string;
   layer: SituationLayerId;
   category: string;
   label: string;
@@ -276,6 +286,7 @@ export interface SituationFeatureProperties {
   demSource?: string;
   assumptions?: Record<string, string | number | boolean>;
   disclaimer?: string;
+  providerProperties?: Record<string, unknown>;
   raw?: unknown;
 }
 

@@ -55,7 +55,9 @@ export class SafetyAggregationService {
       results.flatMap((result) => result.features),
       sourcePriorityById,
       this.config.staleAfterSeconds
-    ).filter((feature) => query.layers.includes(feature.properties.layer));
+    )
+      .filter((feature) => query.layers.includes(feature.properties.layer))
+      .map(normalizeProviderFeature);
     const features = limitBalancedByLayer(deduplicatedFeatures, query.layers, query.limit);
 
     const generatedAt = new Date().toISOString();
@@ -87,6 +89,42 @@ export class SafetyAggregationService {
       warnings
     };
   }
+}
+
+function normalizeProviderFeature(feature: SafetyFeature): SafetyFeature {
+  const providerLayerId = providerLayerIdForFeature(feature.properties.layer);
+  return {
+    ...feature,
+    properties: {
+      ...feature.properties,
+      layerId: catalogLayerIdForFeature(feature.properties.layer),
+      providerId: "sim.safety-data",
+      providerLayerId,
+      providerProperties: compactRecord({
+        headline: feature.properties.headline,
+        description: feature.properties.description,
+        recommendedAction: feature.properties.recommendedAction,
+        urgency: feature.properties.urgency,
+        certainty: feature.properties.certainty,
+        affectedAreas: feature.properties.affectedAreas,
+        geocodes: feature.properties.geocodes,
+        metrics: feature.properties.metrics,
+        tags: feature.properties.tags
+      })
+    }
+  };
+}
+
+function providerLayerIdForFeature(layer: SafetyLayerId): string {
+  return layer === "flood" ? "safety.flood" : "safety.warnings";
+}
+
+function catalogLayerIdForFeature(layer: SafetyLayerId): string {
+  return layer === "flood" ? "public.safety.flood" : "public.safety.warnings";
+}
+
+function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function cacheKeyForSafetyQuery(query: SafetyQuery): string {

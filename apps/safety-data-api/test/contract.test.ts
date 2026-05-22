@@ -94,6 +94,57 @@ describe("Safety Data API contract", () => {
     expect(JSON.stringify(response.body)).not.toContain("secret");
   });
 
+  it("exposes provider map catalog metadata for COM", async () => {
+    const response = await request(app).get("/api/v1/catalog").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "provider-map-catalog-v1",
+        catalogVersion: "provider-map-catalog-v1",
+        providerId: "sim.safety-data",
+        status: "online",
+        authority: expect.objectContaining({
+          contractVersion: "map-catalog-v1",
+          document: expect.stringContaining("02_MAP_CATALOG_PROVIDER_CONTRACT.md")
+        })
+      })
+    );
+    expect(response.body.layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerLayerId: "safety.warnings",
+          recommendedCatalogLayerId: "public.safety.warnings",
+          categories: expect.arrayContaining(["warning"]),
+          role: "overlay",
+          sourceIds: ["chmi_alerts"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "safety.flood",
+          recommendedCatalogLayerId: "public.safety.flood",
+          categories: expect.arrayContaining(["hydrology"]),
+          role: "overlay",
+          sourceIds: ["chmi_hydro"]
+        })
+      ])
+    );
+    expect(response.body.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "chmi_alerts",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.warnings"],
+          feedsCatalogLayerIds: ["public.safety.warnings"]
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_hydro",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.flood"],
+          feedsCatalogLayerIds: ["public.safety.flood"]
+        })
+      ])
+    );
+  });
+
   it("exposes cache metrics", async () => {
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("safety_data_cache_entries");
@@ -166,6 +217,9 @@ describe("Safety Data API contract", () => {
         geometry: expect.objectContaining({ type: "Point" }),
         properties: expect.objectContaining({
           featureId: expect.any(String),
+          layerId: expect.stringMatching(/^public\.safety\./),
+          providerId: "sim.safety-data",
+          providerLayerId: expect.stringMatching(/^safety\./),
           sourceId: "mock",
           confidence: expect.any(Number),
           stale: false,

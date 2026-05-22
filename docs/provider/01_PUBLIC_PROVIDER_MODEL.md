@@ -10,6 +10,8 @@ Provider nesmí předpokládat, že webový klient bude volat jeho endpointy př
 
 - Vrstva je uživatelský produkt, například `public.mobile.network`.
 - Source je technický zdroj nebo upstream, například `mobile_network_model`, `ctu_nettest` nebo `osm_postgis`.
+- `enabled=true` u source znamená pouze to, že provider zdroj provozuje. Neznamená to, že jej COM má ukázat jako běžnou mapovou vrstvu.
+- COM ukládá a dotazuje katalogové `layerId`, ne interní provider `sourceId`.
 - Jeden source může být jen diagnostický vstup a nemá se ukazovat jako běžná vrstva.
 - Katalog je autoritativní zdroj pro strom vrstev, default viditelnost, cache, refresh a bezpečnostní metadata.
 - Feature odpovědi musí nést atribuci, licenci, stale stav, varování a modelové disclaimery.
@@ -45,3 +47,17 @@ Každý provider má publikovat minimálně:
 - `stale` nebo `staleAt`
 - health stav zdrojů
 - per-source cache metriky, pokud pracuje s externími upstreamy
+
+## Role source
+
+Provider používá `sourceRole`, aby COM nemusel hardcodovat význam názvů:
+
+- `final`: finální uživatelský datový produkt.
+- `aggregate`: sloučený výstup z více vstupů, pokud ještě není finálním produktem.
+- `reference`: referenční kontext.
+- `input`: technický vstup do modelu.
+- `projection`: kompatibilní projekce jiné služby.
+- `mock`: syntetická/testovací data.
+- `diagnostic`: pouze diagnostika.
+
+Příklad: běžná mobilní vrstva je `public.mobile.network` z provider layer `mobile_network` a source `mobile_network_model`. `mobile_coverage_model`, `ctu_nettest` a OSM komunikační věže jsou vstupy/provenance, ne tři další běžné vrstvy „Mobilní síť“.

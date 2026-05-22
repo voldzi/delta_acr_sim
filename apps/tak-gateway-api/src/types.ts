@@ -94,6 +94,9 @@ export interface TakFeature {
   };
   properties: {
     featureId: string;
+    layerId?: string;
+    providerId?: "sim.tak-gateway";
+    providerLayerId?: string;
     layer: TakLayerId;
     category: string;
     label: string;
@@ -111,6 +114,7 @@ export interface TakFeature {
     };
     metrics?: Record<string, number | string | boolean>;
     tags?: Record<string, string>;
+    providerProperties?: Record<string, unknown>;
     raw?: unknown;
   };
 }

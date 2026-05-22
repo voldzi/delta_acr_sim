@@ -7,6 +7,39 @@ servers:
   - url: https://sim.zeleznalady.cz/tak-gateway/api/v1
   - url: http://docker.home.cz:5020/tak-gateway/api/v1
 paths:
+  /catalog:
+    get:
+      summary: Return TAK Gateway provider metadata for COM Map Catalog v1
+      description: Partner catalog for TAK mobile, ground and traffic layers. Metadata is public-safe; feature reads can still require a read token.
+      responses:
+        "200":
+          description: Provider map catalog metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contractVersion, providerId, generatedAt, status, layers, sources]
+                properties:
+                  contractVersion:
+                    type: string
+                    const: provider-map-catalog-v1
+                  providerId:
+                    type: string
+                    const: sim.tak-gateway
+                  generatedAt:
+                    type: string
+                    format: date-time
+                  status:
+                    type: string
+                    enum: [online, degraded]
+                  layers:
+                    type: array
+                    items:
+                      type: object
+                  sources:
+                    type: array
+                    items:
+                      type: object
   /cot/events:
     post:
       summary: Ingest Cursor-on-Target XML event payload

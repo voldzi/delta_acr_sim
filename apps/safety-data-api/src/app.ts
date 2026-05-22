@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { type Express } from "express";
 import { SafetyAggregationService } from "./aggregation.js";
+import { buildSafetyMapCatalog } from "./catalog.js";
 import type { SafetyDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
@@ -73,6 +74,10 @@ function registerMetadataRoutes(app: Express, context: SafetyDataAppContext): vo
 
   app.get("/api/v1/sources", (_req, res) => {
     res.json({ items: allSourceDescriptors(context.config) });
+  });
+
+  app.get("/api/v1/catalog", (_req, res) => {
+    res.json(buildSafetyMapCatalog(context.config));
   });
 
   app.get("/api/v1/config", (_req, res) => {

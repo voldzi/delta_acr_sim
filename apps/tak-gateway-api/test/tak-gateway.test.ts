@@ -35,6 +35,50 @@ function cotEvent(uid = "TAK-ARDOS-001"): string {
 }
 
 describe("tak-gateway-api", () => {
+  it("exposes provider map catalog metadata for COM", async () => {
+    const { app } = await createApp(config());
+
+    const response = await request(app).get("/api/v1/catalog").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "provider-map-catalog-v1",
+        catalogVersion: "provider-map-catalog-v1",
+        providerId: "sim.tak-gateway",
+        status: "online",
+        authority: expect.objectContaining({
+          contractVersion: "map-catalog-v1",
+          document: expect.stringContaining("02_MAP_CATALOG_PROVIDER_CONTRACT.md")
+        })
+      })
+    );
+    expect(response.body.layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerLayerId: "tak.mobile",
+          recommendedCatalogLayerId: "partner.tak.mobile",
+          role: "partner",
+          audience: "partner"
+        }),
+        expect.objectContaining({
+          providerLayerId: "tak.traffic",
+          recommendedCatalogLayerId: "partner.tak.traffic"
+        })
+      ])
+    );
+    expect(response.body.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "tak_gateway",
+          sourceRole: "final",
+          audience: "partner",
+          selectableInMap: false,
+          feedsCatalogLayerIds: expect.arrayContaining(["partner.tak.mobile"])
+        })
+      ])
+    );
+  });
+
   it("requires bearer token for CoT ingest", async () => {
     const { app } = await createApp(config());
 
@@ -69,6 +113,9 @@ describe("tak-gateway-api", () => {
     expect(features.body.summary.warningCount).toBe(1);
     expect(features.body.features[0].geometry.coordinates).toEqual([14.421, 50.087]);
     expect(features.body.features[0].properties.label).toBe("ARDOS Alpha");
+    expect(features.body.features[0].properties.layerId).toBe("partner.tak.mobile");
+    expect(features.body.features[0].properties.providerId).toBe("sim.tak-gateway");
+    expect(features.body.features[0].properties.providerLayerId).toBe("tak.mobile");
     expect(features.body.features[0].properties.affiliation).toBe("friend");
     expect(features.body.features[0].properties.raw).toBeUndefined();
   });

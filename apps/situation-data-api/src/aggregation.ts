@@ -66,7 +66,9 @@ export class SituationAggregationService {
       results.flatMap((result) => result.features),
       sourcePriorityById,
       this.config.staleAfterSeconds
-    ).filter((feature) => query.layers.includes(feature.properties.layer));
+    )
+      .filter((feature) => query.layers.includes(feature.properties.layer))
+      .map(normalizeProviderFeature);
     const features = limitBalancedByLayer(deduplicatedFeatures, query.layers, query.limit);
 
     const generatedAt = new Date().toISOString();
@@ -97,6 +99,139 @@ export class SituationAggregationService {
     };
     return response;
   }
+}
+
+function normalizeProviderFeature(feature: SituationFeature): SituationFeature {
+  const providerLayerId = providerLayerIdForFeature(feature);
+  const layerId = catalogLayerIdForFeature(feature, providerLayerId);
+  return {
+    ...feature,
+    properties: {
+      ...feature.properties,
+      layerId,
+      providerId: "sim.situation-data",
+      providerLayerId,
+      providerProperties: providerPropertiesForFeature(feature)
+    }
+  };
+}
+
+function providerLayerIdForFeature(feature: SituationFeature): string {
+  const { layer, sourceId, category } = feature.properties;
+  if (sourceId === "open_meteo") {
+    return "weather.open_meteo";
+  }
+  if (sourceId === "aviation_weather") {
+    return "weather.aviation_weather";
+  }
+  if (sourceId === "mobile_network_model") {
+    return "mobile_network";
+  }
+  if (sourceId === "mobile_coverage_model") {
+    return "mobile_coverage";
+  }
+  if (sourceId === "ctu_nettest") {
+    return "mobile.ctu_nettest";
+  }
+  if (sourceId === "pid_gtfs_rt") {
+    return "traffic.pid_gtfs_rt";
+  }
+  if (sourceId === "safety_data" && layer === "warnings") {
+    return "warnings.safety_data_projection";
+  }
+  if (sourceId === "safety_data" && layer === "flood") {
+    return "flood.safety_data_projection";
+  }
+  if (sourceId === "osm_postgis") {
+    if (category === "communications_tower") {
+      return "mobile.osm_postgis.communications";
+    }
+    if (["hospital", "clinic", "doctors", "pharmacy"].includes(category)) {
+      return "ground.osm_postgis.healthcare";
+    }
+    if (["fire_station", "police", "ambulance_station", "shelter"].includes(category)) {
+      return "ground.osm_postgis.emergency";
+    }
+    if (category === "townhall") {
+      return "ground.osm_postgis.civic";
+    }
+  }
+  return `${sourceId}.${layer}`;
+}
+
+function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: string): string {
+  const { layer, sourceId } = feature.properties;
+  switch (providerLayerId) {
+    case "weather.open_meteo":
+      return "public.weather.current";
+    case "weather.aviation_weather":
+      return "public.weather.aviation";
+    case "mobile_network":
+      return "public.mobile.network";
+    case "mobile_coverage":
+      return "diagnostic.mobile.coverage";
+    case "mobile.ctu_nettest":
+      return "diagnostic.mobile.ctu_measurements";
+    case "mobile.osm_postgis.communications":
+      return "reference.infrastructure.communications";
+    case "ground.osm_postgis.healthcare":
+      return "reference.infrastructure.healthcare";
+    case "ground.osm_postgis.emergency":
+      return "reference.infrastructure.emergency";
+    case "ground.osm_postgis.civic":
+      return "reference.infrastructure.civic";
+    case "traffic.pid_gtfs_rt":
+      return "public.traffic.transit";
+    case "warnings.safety_data_projection":
+      return "public.safety.warnings";
+    case "flood.safety_data_projection":
+      return "public.safety.flood";
+    default:
+      return sourceId === "mock" ? `diagnostic.mock.${layer}` : `provider.${sourceId}.${layer}`;
+  }
+}
+
+function providerPropertiesForFeature(feature: SituationFeature): Record<string, unknown> {
+  const {
+    metrics,
+    tags,
+    operator,
+    technology,
+    quality,
+    status,
+    basis,
+    summary,
+    notices,
+    estimatedSignalDbm,
+    modelVersion,
+    generatedAt,
+    resolutionM,
+    demSource,
+    assumptions,
+    disclaimer
+  } = feature.properties;
+  return compactRecord({
+    metrics,
+    tags,
+    operator,
+    technology,
+    quality,
+    status,
+    basis,
+    summary,
+    notices,
+    estimatedSignalDbm,
+    modelVersion,
+    generatedAt,
+    resolutionM,
+    demSource,
+    assumptions,
+    disclaimer
+  });
+}
+
+function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function cacheKeyForSituationQuery(query: SituationQuery, config: SituationDataConfig): string {

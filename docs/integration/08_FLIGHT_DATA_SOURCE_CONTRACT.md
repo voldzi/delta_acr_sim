@@ -23,6 +23,7 @@ http://flight-data-api:4010/api/v1/aircraft/positions
 ## Základní endpointy
 
 ```http
+GET /api/v1/catalog
 GET /api/v1/aircraft/positions
 GET /api/v1/cop/tracks
 GET /api/v1/airports
@@ -33,6 +34,13 @@ GET /api/v1/sources
 GET /api/v1/config
 GET /health/ready
 ```
+
+`GET /api/v1/catalog` vrací provider map catalog s hlavními vrstvami:
+
+- `flight.public.tracks` z provider layer `flight.tracks`,
+- `flight.reference.airports` z provider layer `flight.airports`.
+
+COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a licenční/provenance metadata.
 
 ## Query parametry pro tracky
 
