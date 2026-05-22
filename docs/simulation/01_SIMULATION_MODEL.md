@@ -25,7 +25,7 @@ Runtime chrání pilotní prostředí horním limitem 500 objektů na jeden blok
 
 ## Rychlostní profily
 
-Rychlosti v `payload.speedMps` jsou syntetické, ale drží se realistických obálek pro COP zobrazení:
+Rychlosti v `payload.speedMps` jsou syntetické, ale drží se realistických obálek pro COM zobrazení:
 
 - `air-sim-aircraft`: 130-260 m/s, přibližně 468-936 km/h.
 - `air-sim-uav`: 22-75 m/s, přibližně 79-270 km/h.
@@ -35,7 +35,7 @@ Rychlosti v `payload.speedMps` jsou syntetické, ale drží se realistických ob
 
 ## Kinematika a historie poloh
 
-Generátor poloh je určený pro COP zobrazení, které vykresluje i minulé body stopy. Následné body jednoho `payload.objectId` proto musí tvořit plynulou trajektorii:
+Generátor poloh je určený pro COM zobrazení, které vykresluje i minulé body stopy. Následné body jednoho `payload.objectId` proto musí tvořit plynulou trajektorii:
 
 - `DIRECT` používá souvislý pohyb podle rychlosti a kurzu. Běžné nemissilové stopy se na hraně scénáře odrážejí, aby nevznikal skok z jedné strany BBOX na druhou.
 - `PATROL` používá obousměrný segment uvnitř BBOX. Obrat mění heading, ale poloha zůstává souvislá.
@@ -43,7 +43,7 @@ Generátor poloh je určený pro COP zobrazení, které vykresluje i minulé bod
 - `SURVEY` používá souvislou lawnmower trasu přes menší pracovní oblast. Přechod mezi řádky je modelovaný jako spojovací úsek, ne jako skok.
 - `SHORT_LIVED_TRACK` je přímý krátkodobý syntetický transit bez wrapování přes BBOX; po TTL přechází do `track.lost`.
 
-Každý track event nese v `payload.attributes.motionModel` použitý pohybový model a `sampleIntervalSeconds`, aby bylo možné při ladění COP historie rozlišit modelované polohy od problémů ve vizualizaci.
+Každý track event nese v `payload.attributes.motionModel` použitý pohybový model a `sampleIntervalSeconds`, aby bylo možné při ladění COM historie rozlišit modelované polohy od problémů ve vizualizaci.
 
 ## Typy dat
 

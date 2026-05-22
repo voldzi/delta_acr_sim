@@ -1,0 +1,110 @@
+# Map Catalog Provider Contract
+
+## Účel
+
+Provider catalog říká COM, jaké mapové produkty provider nabízí a jak je má COM server-side dotazovat. Katalog neslouží k přímému volání z prohlížeče.
+
+SIM publikuje aktuální provider katalog zde:
+
+```http
+GET /situation-data/api/v1/catalog
+```
+
+## Minimální struktura
+
+```json
+{
+  "catalogVersion": "provider-map-catalog-v1",
+  "providerId": "sim.situation-data",
+  "generatedAt": "2026-05-22T08:00:00.000Z",
+  "authority": {
+    "catalogVersion": "map-catalog-v1",
+    "document": "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md"
+  },
+  "layers": [],
+  "sources": []
+}
+```
+
+## Vrstva
+
+Vrstva je produkt pro uživatele. COM ji může zobrazit v katalogu, uložit do profilu uživatele a použít pro mapový dotaz.
+
+Povinné nebo prakticky povinné položky:
+
+- `providerLayerId`: lokální ID vrstvy u providera.
+- `recommendedCatalogLayerId`: doporučené source-neutral COM ID, například `public.mobile.network`.
+- `label`, `description`.
+- `categoryPath`.
+- `role`: `primary`, `reference`, `overlay`, `user`, `partner`, `diagnostic`.
+- `audience`: `public`, `authenticated`, `partner`, `diagnostic`.
+- `kind`: `vector_features`, `mvt_tiles`, `raster_tiles`, `track_stream`, `static_reference`.
+- `defaultVisible`, `selectable`.
+- `geometryTypes`.
+- `refreshSeconds`, `cacheTtlSeconds`.
+- `styleProfile`.
+- `sourceIds`.
+- `query`.
+- `legal`.
+
+## Source
+
+Source je technický zdroj, upstream nebo model. Source s `enabled=true` se automaticky nemá zobrazit jako uživatelská vrstva.
+
+Provider má u každého source uvádět:
+
+- `sourceId`
+- `label`
+- `enabled`
+- `sourceRole`
+- `audience`
+- `selectableInMap`
+- `visibleInDiagnostics`
+- `feedsCatalogLayerIds`
+- `usedByCatalogLayerIds`
+- `cacheTtlSeconds`
+- `license`
+- `notes`
+
+## Query objekt
+
+`query` je instrukce pro COM backend. `streamId` je neprůhledný identifikátor streamu, nikoli veřejná URL.
+
+```json
+{
+  "mode": "bbox",
+  "providerId": "sim.situation-data",
+  "streamId": "cop.features",
+  "providerLayerIds": ["mobile_network"],
+  "providerSourceIds": ["mobile_network_model"],
+  "maxFeatures": 250
+}
+```
+
+Aktuální SIM používá kompatibilní `streamId=cop.features`, protože stávající COM backend ho mapuje na server-side provider stream. Noví provideři mají používat stabilní `providerId`, `providerLayerIds` a `providerSourceIds`; konkrétní `streamId` se domlouvá s COM adapterem a nesmí být volán z klientského prohlížeče.
+
+## Hlavní mobilní vrstva
+
+Pro občanské zobrazení mobilní sítě je jediná doporučená vrstva:
+
+- COM layer: `public.mobile.network`
+- provider layer: `mobile_network`
+- source: `mobile_network_model`
+- role: `overlay`
+- audience: `public`
+- style: `mobile-network-quality-v1`
+
+Diagnostické vstupy `mobile_coverage_model`, `ctu_nettest` a OSM komunikační infrastruktura nejsou samostatné běžné uživatelské vrstvy.
+
+## Kompatibilní feature streamy v SIM
+
+Tyto cesty existují pro backend COM a pro přímé integrační testy:
+
+```http
+GET /situation-data/api/v1/features
+GET /safety-data/api/v1/features
+GET /tak-gateway/api/v1/features
+GET /flight-data/api/v1/aircraft/positions
+```
+
+Historické aliasy `/api/v1/cop/features` a `/api/v1/cop/tracks` jsou zachované kvůli současným adaptérům, ale nejsou doporučený veřejný kontrakt pro nové klienty.

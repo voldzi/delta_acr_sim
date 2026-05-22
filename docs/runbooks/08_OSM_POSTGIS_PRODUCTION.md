@@ -1,6 +1,6 @@
 # OSM/PostGIS Production Runbook
 
-SIM source `osm_postgis` publishes OpenStreetMap reference features for COP through `situation-data`. The `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest measurements into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
+SIM source `osm_postgis` publishes OpenStreetMap reference features for COM through `situation-data`. The `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest measurements into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
 
 ## Preferred Backend: Patroni/PostGIS
 
@@ -22,7 +22,7 @@ OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:
 OSM_POSTGIS_TABLE=public.osm_poi
 ```
 
-Create a separate database and role. Do not store SIM OSM data in the COP database.
+Create a separate database and role. Do not store SIM OSM data in the COM/COP application database.
 
 ```sql
 CREATE ROLE sim_osm LOGIN PASSWORD '<strong-password>';
@@ -118,8 +118,8 @@ situation_data_source_cache_misses{source="mobile_coverage_model"} <count>
 Production readiness check:
 
 ```bash
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|mobile_coverage|OSM'
 ```

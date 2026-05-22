@@ -4,7 +4,7 @@ export const LAYERS: LayerDescriptor[] = [
   {
     layerId: "warnings",
     label: "Official warnings",
-    description: "Public safety warnings and alerts normalized for a COP map layer.",
+    description: "Public safety warnings and alerts normalized for a COM map layer.",
     defaultVisible: true,
     geometryTypes: ["Point", "Polygon"],
     expectedCadenceSeconds: 300

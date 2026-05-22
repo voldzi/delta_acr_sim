@@ -61,8 +61,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const demoScenario: Scenario = {
-  name: "Moving COP Tracks Demo",
-  description: "Synthetic moving aircraft, UAV and missile-track events for COP display validation.",
+  name: "Moving COM Tracks Demo",
+  description: "Synthetic moving aircraft, UAV and missile-track events for COM display validation.",
   area: {
     type: "BBOX",
     bbox: [14.0, 49.8, 15.0, 50.3]
@@ -99,8 +99,8 @@ export const demoScenario: Scenario = {
 };
 
 export const denseDemoScenario: Scenario = {
-  name: "High Density COP Tracks Demo",
-  description: "Synthetic high-density moving air picture with hundreds of COP-compatible tracks.",
+  name: "High Density COM Tracks Demo",
+  description: "Synthetic high-density moving air picture with hundreds of COM-compatible tracks.",
   area: {
     type: "BBOX",
     bbox: [13.85, 49.65, 15.35, 50.45]
@@ -185,22 +185,22 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<FlightDataHealth>("/flight-data/health/ready"),
     api<{ items: FlightDataSource[] }>("/flight-data/api/v1/sources"),
     api<FlightDataConfig>("/flight-data/api/v1/config"),
-    api<FlightDataTrackResponse>("/flight-data/api/v1/cop/tracks?limit=8"),
+    api<FlightDataTrackPayload>("/flight-data/api/v1/aircraft/positions?limit=8"),
     api<SituationDataHealth>("/situation-data/health/ready"),
     api<{ items: SituationDataLayer[] }>("/situation-data/api/v1/layers"),
     api<{ items: SituationDataSource[] }>("/situation-data/api/v1/sources"),
     api<SituationDataConfig>("/situation-data/api/v1/config"),
-    api<SituationDataFeatureResponse>("/situation-data/api/v1/cop/features?limit=12"),
+    api<SituationDataFeatureResponse>("/situation-data/api/v1/features?limit=12"),
     api<SafetyDataHealth>("/safety-data/health/ready"),
     api<{ items: SafetyDataLayer[] }>("/safety-data/api/v1/layers"),
     api<{ items: SafetyDataSource[] }>("/safety-data/api/v1/sources"),
     api<SafetyDataConfig>("/safety-data/api/v1/config"),
-    api<SafetyDataFeatureResponse>("/safety-data/api/v1/cop/features?limit=12"),
+    api<SafetyDataFeatureResponse>("/safety-data/api/v1/features?limit=12"),
     api<TakGatewayHealth>("/tak-gateway/health/ready"),
     api<{ items: TakGatewayLayer[] }>("/tak-gateway/api/v1/layers"),
     api<{ items: TakGatewaySource[] }>("/tak-gateway/api/v1/sources"),
     api<TakGatewayConfig>("/tak-gateway/api/v1/config"),
-    api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/cop/features?limit=12")
+    api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12")
   ]);
 
   const warnings: string[] = [];
@@ -237,11 +237,10 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "flight data config",
     warnings
   );
-  const flightTracks = unwrapDashboardResult(
+  const flightTrackPayload = unwrapDashboardResult(
     results[9],
     {
-      contractVersion: "cop-flight-source-v1",
-      source: { sourceId: "flight-data-api", sourceType: "PUBLIC_FLIGHT_AGGREGATE", generatedAt: new Date(0).toISOString() },
+      generatedAt: new Date(0).toISOString(),
       summary: { rawObservationCount: 0, deduplicatedTrackCount: 0, droppedWithoutPositionCount: 0, staleTrackCount: 0 },
       tracks: [],
       sources: [],
@@ -250,6 +249,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "flight data tracks",
     warnings
   );
+  const flightTracks = normalizeFlightTrackPayload(flightTrackPayload);
   const situationHealth = unwrapDashboardResult(results[10], { status: "unavailable", enabledSources: [], sourceHealth: [] }, "situation data health", warnings);
   const situationLayers = unwrapDashboardResult(results[11], { items: [] }, "situation data layers", warnings);
   const situationSources = unwrapDashboardResult(results[12], { items: [] }, "situation data sources", warnings);
@@ -447,6 +447,27 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       features: takFeatures
     },
     warnings
+  };
+}
+
+type FlightDataTrackPayload = Omit<FlightDataTrackResponse, "contractVersion" | "source"> &
+  Partial<Pick<FlightDataTrackResponse, "contractVersion" | "source">> & {
+    generatedAt?: string;
+  };
+
+function normalizeFlightTrackPayload(payload: FlightDataTrackPayload): FlightDataTrackResponse {
+  const generatedAt = payload.source?.generatedAt ?? payload.generatedAt ?? new Date(0).toISOString();
+  return {
+    contractVersion: payload.contractVersion ?? "flight-track-response-v1",
+    source: payload.source ?? {
+      sourceId: "flight-data-api",
+      sourceType: "PUBLIC_FLIGHT_AGGREGATE",
+      generatedAt
+    },
+    summary: payload.summary,
+    tracks: payload.tracks,
+    sources: payload.sources,
+    warnings: payload.warnings
   };
 }
 

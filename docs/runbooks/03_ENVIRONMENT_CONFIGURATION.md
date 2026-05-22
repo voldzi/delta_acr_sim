@@ -219,7 +219,7 @@ TAK_GATEWAY_EXPOSE_RAW=false
 TAK_GATEWAY_SOURCE_LABEL=TAK/CoT gateway
 ```
 
-`TAK_GATEWAY_INGEST_TOKEN` je secret pro TAK/ARDOS bridge klienta; `TAK_GATEWAY_READ_TOKEN` je secret pro server-side COP klienta. Necommitovat do repozitáře. Raw CoT drž vypnutý, pokud není schválený auditní a oprávňovací režim v COP.
+`TAK_GATEWAY_INGEST_TOKEN` je secret pro TAK/ARDOS bridge klienta; `TAK_GATEWAY_READ_TOKEN` je secret pro server-side COM klienta. Necommitovat do repozitáře. Raw CoT drž vypnutý, pokud není schválený auditní a oprávňovací režim v COM.
 
 OpenStreetMap/Overpass nezapínej jako produkční runtime backend pro tisíce uživatelů. Veřejný Overpass lze použít jen pro lokální vývoj nebo omezený pilot s malými bbox dotazy:
 
@@ -261,11 +261,11 @@ SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 ```
 
-Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COP features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
+Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COM provider features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
-`mobile_network_model` je hlavní COP vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, ČTÚ NetTest měření a infrastrukturní indicie do jednoho závěru `mobile_network`.
+`mobile_network_model` je hlavní COM vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, ČTÚ NetTest měření a infrastrukturní indicie do jednoho závěru `mobile_network`.
 
-`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COP kontraktu.
+`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COM kontraktu.
 
 DEM katalog pro budoucí terrain-aware model používá Copernicus DEM GLO-30, SeaweedFS a PostGIS:
 

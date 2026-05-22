@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: DELTA ACR SIM TAK Gateway API
   version: 0.1.0
-  description: Cursor-on-Target ingest and COP GeoJSON projection service.
+  description: Cursor-on-Target ingest and COM server-side GeoJSON projection service.
 servers:
   - url: https://sim.zeleznalady.cz/tak-gateway/api/v1
   - url: http://docker.home.cz:5020/tak-gateway/api/v1
@@ -54,7 +54,9 @@ paths:
                 $ref: "#/components/schemas/Problem"
   /cop/features:
     get:
-      summary: COP-facing TAK GeoJSON feature projection
+      summary: Compatibility alias for TAK GeoJSON feature projection
+      deprecated: true
+      description: Kept for existing COM/COP backend adapters. New provider integrations should prefer /features through a server-side COM adapter.
       security:
         - bearerAuth: []
         - {}
@@ -100,10 +102,31 @@ paths:
                 $ref: "#/components/schemas/Problem"
   /features:
     get:
-      summary: Alias for COP-facing TAK GeoJSON feature projection
+      summary: TAK GeoJSON feature projection for server-side COM adapters
       security:
         - bearerAuth: []
         - {}
+      parameters:
+        - name: bbox
+          in: query
+          schema:
+            type: string
+          description: west,south,east,north in WGS84
+        - name: layers
+          in: query
+          schema:
+            type: string
+          description: Comma-separated mobile,ground,traffic
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+        - name: includeRaw
+          in: query
+          schema:
+            type: boolean
       responses:
         "200":
           description: TAK feature collection

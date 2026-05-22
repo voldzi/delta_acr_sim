@@ -186,7 +186,7 @@ export interface FlightDataTrack {
 }
 
 export interface FlightDataTrackResponse {
-  contractVersion: "cop-flight-source-v1";
+  contractVersion: "flight-track-response-v1" | "cop-flight-source-v1";
   source: {
     sourceId: string;
     sourceType: "PUBLIC_FLIGHT_AGGREGATE";

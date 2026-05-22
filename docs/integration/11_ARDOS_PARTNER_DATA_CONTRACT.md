@@ -2,14 +2,16 @@
 
 ## Účel
 
-Tento dokument je podklad pro jednání s ARDOS/Radioklub ACR. ARDOS není veřejný open-data zdroj; integrace má být partnerská, zabezpečená a datově minimalizovaná. SIM bude působit jako adapter/cache mezi ARDOS a COP.
+Tento dokument je podklad pro jednání s ARDOS/Radioklub ACR. ARDOS není veřejný open-data zdroj; integrace má být partnerská, zabezpečená a datově minimalizovaná. SIM bude působit jako adapter/cache mezi ARDOS a COM.
+
+Pro nové provedení používej terminologii COM a source-neutral provider model; historické názvy `cop` v ukázkách znamenají pouze kompatibilní backend stream.
 
 ## Co od ARDOS potřebujeme
 
-Minimální požadavek je endpoint, který vrací už filtrovanou COP projekci pro aktuální mapový výřez:
+Minimální požadavek je endpoint, který vrací už filtrovanou GeoJSON projekci pro aktuální mapový výřez:
 
 ```http
-GET /api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,traffic,mobile&limit=250
+GET /api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,traffic,mobile&limit=250
 Authorization: Bearer <partner-token>
 Accept: application/json
 ```
@@ -59,7 +61,7 @@ Odpověď:
 
 ## Datová minimalizace
 
-Ve veřejném nebo občanském COP se nesmí posílat:
+Ve veřejném nebo občanském COM se nesmí posílat:
 
 - jména, telefonní čísla, volací znaky jednotlivců, registrační značky soukromých vozidel,
 - přesný živý pohyb dobrovolníků, pokud není pro daný účel schválen,
@@ -98,5 +100,5 @@ SIM už obsahuje zdroj `ardos_partner`:
 
 1. ARDOS vystaví neveřejný staging endpoint s 5-20 syntetickými/pseudonymními features pro oblast Prahy.
 2. SIM nastaví `ARDOS_PARTNER_BASE_URL` a token jen na pilotním `docker.home.cz`.
-3. COP přidá vrstvu "ARDOS partner" dostupnou jen v interním režimu.
+3. COM přidá vrstvu "ARDOS partner" dostupnou jen v interním režimu.
 4. Ověříme latenci, cache, stale chování, varování a to, že veřejné zobrazení neukazuje citlivá data.

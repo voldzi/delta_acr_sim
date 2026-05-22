@@ -1,5 +1,7 @@
 # API dokumentace
 
+Provider model a pravidla pro COM integraci jsou v [../provider/00_INDEX.md](../provider/00_INDEX.md). OpenAPI soubory níže popisují jednotlivé SIM služby a jejich server-side provider endpointy.
+
 - [openapi-simulator.yaml](openapi-simulator.yaml)
 - [openapi-flight-data.yaml](openapi-flight-data.yaml)
 - [openapi-situation-data.yaml](openapi-situation-data.yaml)

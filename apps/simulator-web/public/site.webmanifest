@@ -1,7 +1,7 @@
 {
-  "name": "COP Air & Situation Simulator",
+  "name": "DELTA ACR SIM",
   "short_name": "SIM",
-  "description": "Synthetic moving COP track simulator for pilot operations.",
+  "description": "DELTA ACR SIM data provider and scenario simulator.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

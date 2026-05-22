@@ -2,7 +2,7 @@
 
 ## Purpose
 
-SIM publishes `mobile_network` as the single preferred mobile-network layer for COP. COP should use this layer for citizen-facing map display and alerts instead of independently combining `mobile_coverage`, ČTÚ NetTest points and OSM infrastructure.
+SIM publishes `mobile_network` as the single preferred mobile-network layer for COM. COM should use this layer for citizen-facing map display and alerts instead of independently combining `mobile_coverage`, ČTÚ NetTest points and OSM infrastructure.
 
 The layer is an inferred area assessment. It is not a confirmed real-time BTS outage feed and it must not be presented as guaranteed operator service availability.
 
@@ -26,12 +26,12 @@ The current implementation combines:
 - OSM infrastructure hints through the coverage model,
 - model metadata and disclaimers.
 
-Future inputs can be added without changing the COP layer name:
+Future inputs can be added without changing the COM layer name:
 
 - official ČTÚ coverage polygons, if ingested as a licensed/public dataset,
 - OpenCellID after token/license validation,
 - partner/operator status feed,
-- anonymized aggregate measurements from COP/iOS clients,
+- anonymized aggregate measurements from COM/iOS clients,
 - terrain-aware DEM and line-of-sight scoring.
 
 ## API
@@ -48,19 +48,19 @@ Provider map catalog:
 GET /situation-data/api/v1/catalog
 ```
 
-COP should use `/catalog` to build the normal layer tree. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest` and OSM communication towers are marked as diagnostic/reference inputs.
+COM should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest` and OSM communication towers are marked as diagnostic/reference inputs.
 
 Features:
 
 ```http
-GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=250
+GET /situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=250
 ```
 
 Optional filters:
 
 - `technology` or `technologies`: `2G`, `4G`, `5G`, comma-separated,
 - `operator` or `operators`: currently `aggregate` and `unknown`,
-- `limit`: default COP should use 250 for normal map views.
+- `limit`: default COM should use 250 for normal map views.
 
 Feature properties include:
 
@@ -119,13 +119,13 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - Aggregated responses use the standard `situation-data` cache and bbox canonicalization.
 - The source-level cache is keyed by canonical bbox, technology filter, aggregate operator filter, resolution, max cells and model version.
 - Default source TTL is 3600 seconds.
-- External inputs are not queried per COP user when a cached area assessment exists.
+- External inputs are not queried per COM user when a cached area assessment exists.
 - Health reports `mobile_network_model` as degraded when dependent model/input sources cannot produce an assessment.
 - Metrics include `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info` and per-source cache counters for `mobile_network_model`.
 
-## COP Interpretation
+## COM Interpretation
 
-COP should use:
+COM should use:
 
 - `quality` for the map color,
 - `status` for warnings and user-facing risk states,
@@ -133,12 +133,12 @@ COP should use:
 - `basis` and `notices` to explain why the assessment is limited,
 - `summary` as the short detail text.
 
-COP should not infer BTS outages from `weak` or `none`. `outage_reported` should only be treated as confirmed after SIM receives an authorized operator/partner status feed.
+COM should not infer BTS outages from `weak` or `none`. `outage_reported` should only be treated as confirmed after SIM receives an authorized operator/partner status feed.
 
 ## Acceptance Checks
 
 ```bash
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20'
 curl -fsS http://localhost:5020/situation-data/api/v1/catalog
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'mobile_network|mobile_network_model'

@@ -1,6 +1,8 @@
 # Situation Data Source Contract
 
-Tento kontrakt popisuje situační open-data vrstvy, které SIM poskytuje COPu jako doplňkový kontext mapy. Kontrakt je oddělený od syntetických COP tracků i od veřejných letových tracků.
+**Status:** kompatibilní backend kontrakt. Pro nové providery a veřejnou dokumentaci je autoritativní source-neutral model v [../provider/00_INDEX.md](../provider/00_INDEX.md).
+
+Tento kontrakt popisuje situační open-data vrstvy, které SIM poskytuje COM jako doplňkový kontext mapy. Kontrakt je oddělený od syntetických tracků i od veřejných letových tracků.
 
 ## Base URL
 
@@ -31,7 +33,7 @@ GET /dem/metadata
 
 ## Map Catalog v1 metadata
 
-`GET /catalog` je preferovaný metadata endpoint pro COP layer tree. Vrací provider metadata pro autoritativní source-neutral kontrakt COP Map Catalog v1:
+`GET /catalog` je preferovaný metadata endpoint pro COM layer tree. Vrací provider metadata pro autoritativní source-neutral kontrakt Map Catalog v1:
 
 ```json
 {
@@ -40,14 +42,14 @@ GET /dem/metadata
   "generatedAt": "2026-05-22T08:00:00.000Z",
   "authority": {
     "catalogVersion": "map-catalog-v1",
-    "document": "/Users/voldzi/Documents/Development/18 2026/DELTA_ACR/01 COP/docs/integration/08_MAP_CATALOG_V1.md"
+    "document": "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md"
   },
   "layers": [],
   "sources": []
 }
 ```
 
-COP má používat `/catalog` pro rozhodnutí, co je běžná mapová vrstva a co je pouze technický vstup. `enabled=true` ve starším `/sources` znamená jen to, že SIM zdroj běží; neznamená to, že ho má COP automaticky zobrazit jako checkbox v běžné mapě.
+COM má používat provider katalog pro rozhodnutí, co je běžná mapová vrstva a co je pouze technický vstup. `enabled=true` ve starším `/sources` znamená jen to, že SIM zdroj běží; neznamená to, že ho má COM automaticky zobrazit jako checkbox v běžné mapě.
 
 Klíčová pravidla katalogu:
 
@@ -55,11 +57,11 @@ Klíčová pravidla katalogu:
 - `diagnostic.mobile.coverage` je diagnostická vrstva `mobile_coverage` ze zdroje `mobile_coverage_model`, `selectable=false`,
 - `diagnostic.mobile.ctu_measurements` jsou diagnostická ČTÚ měření, `selectable=false`,
 - `reference.infrastructure.communications` jsou referenční OSM věže, `defaultVisible=false` a `selectable=false`,
-- `safety_data` v situation-data je označený jako `sourceRole=projection`; COP má pro primární safety vrstvy preferovat provider `sim.safety-data`.
+- `safety_data` v situation-data je označený jako `sourceRole=projection`; COM má pro primární safety vrstvy preferovat provider `sim.safety-data`.
 
-## COP projection
+## Feature projection
 
-`GET /cop/features` vrací GeoJSON `FeatureCollection`:
+`GET /features` vrací GeoJSON `FeatureCollection`. `GET /cop/features` je kompatibilní alias pro současné backend adaptéry:
 
 ```json
 {
@@ -130,10 +132,10 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | --- | --- | --- |
 | `operator` | `aggregate`, `unknown` | `aggregate` znamená souhrnný odhad bez operátorských stavových dat |
 | `technology` | `2G`, `4G`, `5G`, `mixed`, `unknown` | dominantní / filtrovaná technologie výsledku |
-| `quality` | `good`, `fair`, `weak`, `none`, `unknown` | normalizovaný závěr pro COP |
+| `quality` | `good`, `fair`, `weak`, `none`, `unknown` | normalizovaný závěr pro COM |
 | `status` | `ok`, `weak_signal`, `degraded_possible`, `outage_reported`, `unknown` | stavový závěr; bez partnerského feedu nejde o potvrzený výpadek BTS |
 | `basis` | string[] | vstupy, ze kterých byl závěr složen, např. `CTU_NETTEST_MEASUREMENT`, `INFERRED_COVERAGE`, `NO_OPERATOR_BTS_STATUS` |
-| `summary` | string | krátké české shrnutí pro detail v COP |
+| `summary` | string | krátké české shrnutí pro detail v COM |
 | `notices` | string[] | bezpečnostní a kvalitativní poznámky k interpretaci |
 | `estimatedSignalDbm` | number | orientační odhad podle modelu a měření |
 | `modelVersion` | string | verze sjednocujícího modelu |
@@ -144,10 +146,10 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | Source | Vrstvy | Popis |
 | --- | --- | --- |
 | `open_meteo` | `weather` | Obecné počasí u středu bbox, silně cacheované podle weather gridu. |
-| `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COP AWC nevolá přímo. |
+| `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo. |
 | `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
 | `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
-| `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COP. Kombinuje modelované coverage, ČTÚ NetTest měření a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
+| `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `safety_data` | `warnings`, `flood` | Projekce Safety Data API do situačního kontraktu. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
@@ -162,13 +164,13 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 - `layer=mobile`: komunikační věže a mobilní infrastruktura odvozená z OSM tagů,
 - `sourceId=osm_postgis`, licence `ODbL 1.0`, atribuce `OpenStreetMap contributors`.
 
-COP má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
+COM má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
 
 Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt` a `lastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_osm_postgis_import_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
 
 ## Mobile Coverage Model
 
-`mobile_coverage_model` vrací modelované coverage polygony jako samostatnou vrstvu `mobile_coverage`. Je to technický/modelový vstup pro `mobile_network`, ne běžná občanská vrstva. COP ho má zobrazovat pouze v diagnostice nebo při ladění modelu.
+`mobile_coverage_model` vrací modelované coverage polygony jako samostatnou vrstvu `mobile_coverage`. Je to technický/modelový vstup pro `mobile_network`, ne běžná občanská vrstva. COM ho má zobrazovat pouze v diagnostice nebo při ladění modelu.
 
 Vrstva je ve fázi 1 orientační:
 
@@ -223,7 +225,7 @@ Health `/situation-data/health/ready` u `mobile_coverage_model` vrací `backend`
 
 ## Mobile Network Model
 
-`mobile_network_model` je preferovaný výstup pro COP. COP má primárně zobrazovat vrstvu `mobile_network`, ne skládat sám závěr z `mobile_coverage`, `ctu_nettest` a OSM bodů. `mobile_coverage` zůstává dostupné jako technická/modelová vrstva pro detail a ladění.
+`mobile_network_model` je preferovaný výstup pro COM. COM má primárně zobrazovat vrstvu `mobile_network`, ne skládat sám závěr z `mobile_coverage`, `ctu_nettest` a OSM bodů. `mobile_coverage` zůstává dostupné jako technická/modelová vrstva pro detail a ladění.
 
 Dotaz:
 
@@ -243,7 +245,7 @@ Interpretace:
 - `status` je hlavní hodnota pro výstrahy: `weak_signal` a `degraded_possible` se mohou zobrazit jako riziko, `outage_reported` až po autorizovaném operátorském/partnerském feedu,
 - `confidence` říká sílu kombinovaného závěru,
 - `basis` ukazuje, jestli závěr stojí na měření, modelu, OSM infrastruktuře nebo jen na absenci lepších dat,
-- `summary` a `notices` jsou připravené pro detail objektu v COP.
+- `summary` a `notices` jsou připravené pro detail objektu v COM.
 
 Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení.
 
@@ -286,9 +288,9 @@ Příklad odpovědi:
 }
 ```
 
-COP DEM data přímo nepoužívá. Endpoint slouží pro dependency dohled a informaci, z jakého DEM bude SIM později generovat terrain-aware `mobile_coverage` a finální `mobile_network`.
+COM DEM data přímo nepoužívá. Endpoint slouží pro dependency dohled a informaci, z jakého DEM bude SIM později generovat terrain-aware `mobile_coverage` a finální `mobile_network`.
 
-COP musí vrstvu zobrazovat jako odhad, ne jako garantované pokrytí operátora. Doporučené barvy: `good` zelená, `fair` žlutá, `weak` oranžová, `none` červená nebo šedá, `unknown` šedá.
+COM musí vrstvu zobrazovat jako odhad, ne jako garantované pokrytí operátora. Doporučené barvy: `good` zelená, `fair` žlutá, `weak` oranžová, `none` červená nebo šedá, `unknown` šedá.
 
 ## Aviation Weather
 
@@ -303,14 +305,14 @@ NOAA AWC uvádí limit 100 requestů/min a doporučuje omezit rozsah/frekvenci d
 
 ## ARDOS partner source
 
-`ardos_partner` není open-data. Aktivuje se jen po partnerské dohodě a tokenu. SIM očekává, že ARDOS vystaví již filtrovaný COP projection endpoint:
+`ardos_partner` není open-data. Aktivuje se jen po partnerské dohodě a tokenu. SIM očekává, že ARDOS vystaví již filtrovaný COM projection endpoint:
 
 ```http
-GET /api/v1/cop/features?bbox=west,south,east,north&layers=ground,traffic,mobile&limit=250
+GET /api/v1/features?bbox=west,south,east,north&layers=ground,traffic,mobile&limit=250
 Authorization: Bearer <token>
 ```
 
-SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metriky, ale `sourceId` normalizuje na `ardos_partner`. Ve veřejném COP zobrazení se nesmí publikovat osobní identifikátory dobrovolníků, přesné citlivé mise ani interní komunikační údaje.
+SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metriky, ale `sourceId` normalizuje na `ardos_partner`. Ve veřejném COM zobrazení se nesmí publikovat osobní identifikátory dobrovolníků, přesné citlivé mise ani interní komunikační údaje.
 
 ## Chování při chybách
 
@@ -318,12 +320,12 @@ SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metr
 - Výpadek jednoho zdroje se promítne do `warnings`; agregát má vrátit dostupné features z ostatních zdrojů.
 - Pokud selžou všechny zdroje, endpoint stále může vrátit prázdnou kolekci s warnings.
 
-## COP doporučení
+## COM doporučení
 
 - Dotazovat podle bbox aktuální mapy, ne plošně celou ČR.
 - Default `limit=250`.
 - Layer tree a defaultní viditelnost řídit z `GET /catalog`, ne ze staršího `/sources`.
-- Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COP tracky ani letecké cíle.
+- Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COM tracky ani letecké cíle.
 - `mobile_network` zobrazovat jako hlavní mobilní vrstvu s legendou kvality a upozorněním, že jde o odhad, ne potvrzený stav konkrétní BTS.
 - `mobile_coverage` používat jen jako technický/detailní vstup, pokud je potřeba ladit model.
 - `aviation_weather` zobrazovat jako letištní počasí, ne jako tracky.

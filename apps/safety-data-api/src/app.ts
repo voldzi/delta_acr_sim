@@ -90,12 +90,21 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
   });
 
   app.get("/api/v1/cop/features", async (req, res) => {
+    res.set(compatibilityAliasHeaders("/api/v1/features"));
     const query = parseSafetyQuery(req.query, context.config);
     if (!query.ok) {
       return problem(req, res, 400, "VALIDATION_ERROR", query.error);
     }
     res.json(await context.aggregation.getFeatures(query.value));
   });
+}
+
+function compatibilityAliasHeaders(successorPath: string): Record<string, string> {
+  return {
+    Deprecation: "true",
+    Link: `<${successorPath}>; rel="successor-version"`,
+    Warning: '299 - "Compatibility alias; use the source-neutral provider endpoint for new integrations."'
+  };
 }
 
 function parseSafetyQuery(

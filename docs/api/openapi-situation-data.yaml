@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: DELTA ACR SIM Situation Data API
   version: 0.1.0
-  description: Aggregated open-data situation layers for COP map context.
+  description: Aggregated open-data situation layers for COM/server-side map context.
 servers:
   - url: https://sim.zeleznalady.cz/situation-data/api/v1
   - url: http://localhost:4020/api/v1
@@ -39,7 +39,7 @@ paths:
                       $ref: "#/components/schemas/SourceDescriptor"
   /catalog:
     get:
-      summary: Return SIM provider metadata for COP Map Catalog v1
+      summary: Return SIM provider metadata for COM Map Catalog v1
       description: Separates user-facing map products from technical upstream sources. Existing /layers and /sources remain compatibility endpoints.
       responses:
         "200":
@@ -79,7 +79,9 @@ paths:
           $ref: "#/components/responses/Problem"
   /cop/features:
     get:
-      summary: Return the COP-facing situation source projection
+      summary: Compatibility alias for the server-side situation feature stream
+      deprecated: true
+      description: Kept for existing COM/COP backend adapters. New provider integrations should prefer /features or the COM /api/v1/map/query facade.
       parameters:
         - $ref: "#/components/parameters/Bbox"
         - $ref: "#/components/parameters/Layers"
@@ -89,7 +91,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: COP-ready situation FeatureCollection
+          description: Situation FeatureCollection
           content:
             application/json:
               schema:
@@ -304,7 +306,7 @@ components:
               const: map-catalog-v1
             document:
               type: string
-              description: Path to the authoritative source-neutral COP Map Catalog v1 document.
+              description: URL or path to the authoritative source-neutral COM Map Catalog provider document.
         layers:
           type: array
           items:
@@ -414,7 +416,7 @@ components:
               const: sim.situation-data
             streamId:
               type: string
-              const: cop.features
+              description: Opaque provider stream id consumed by the COM backend; it is not a public browser URL.
             providerLayerIds:
               type: array
               items:
@@ -502,7 +504,7 @@ components:
           $ref: "#/components/schemas/ProviderCatalogAudience"
         selectableInMap:
           type: boolean
-          description: Whether COP may expose the whole source as a normal map selection. Prefer layer metadata for user-facing selection.
+          description: Whether COM may expose the whole source as a normal map selection. Prefer layer metadata for user-facing selection.
         visibleInDiagnostics:
           type: boolean
         feedsCatalogLayerIds:

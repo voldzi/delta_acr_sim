@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: DELTA ACR Flight Data API
   version: 0.1.0
-  description: API pro agregaci veřejných nebo licencovaných letových dat pro COP.
+  description: API pro agregaci veřejných nebo licencovaných letových dat pro COM/server-side mapový kontext.
 servers:
   - url: http://localhost:4010
     description: Lokální služba
@@ -17,7 +17,9 @@ paths:
   /api/v1/cop/tracks:
     get:
       tags: [FlightTracks]
-      summary: Vrátí COP projekci deduplikovaných letových tracků.
+      summary: Kompatibilní projekce deduplikovaných letových tracků pro existující backend adapter.
+      deprecated: true
+      description: Nové integrace mají preferovat source-neutral COM mapový kontrakt a normalizovaná data z /api/v1/aircraft/positions.
       parameters:
         - $ref: '#/components/parameters/Bbox'
         - $ref: '#/components/parameters/Source'
@@ -25,7 +27,7 @@ paths:
         - $ref: '#/components/parameters/IncludeStale'
       responses:
         '200':
-          description: COP flight source response
+          description: Compatibility flight source response
           content:
             application/json:
               schema:

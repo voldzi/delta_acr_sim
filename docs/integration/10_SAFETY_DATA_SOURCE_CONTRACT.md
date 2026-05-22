@@ -1,20 +1,22 @@
 # Safety Data source contract
 
-**Status:** Implementováno pro pilot
+**Status:** Implementováno pro pilot; kompatibilní backend kontrakt pro aktuální COM/COP adapter.
 
-Safety Data API je samostatný COP zdroj pro veřejná bezpečnostní data. Kontrakt je oddělený od `situation-data`, protože bezpečnostní výstrahy mají jinou závažnost, platnost a auditní požadavky než obecný mapový kontext.
+Safety Data API je samostatný COM zdroj pro veřejná bezpečnostní data. Kontrakt je oddělený od `situation-data`, protože bezpečnostní výstrahy mají jinou závažnost, platnost a auditní požadavky než obecný mapový kontext.
 
-## Autoritativní endpoint pro COP
+## Autoritativní endpoint pro COM backend
 
 ```text
-GET /safety-data/api/v1/cop/features
+GET /safety-data/api/v1/features
 ```
 
 Produkční URL za SIM gateway:
 
 ```text
-https://sim.zeleznalady.cz/safety-data/api/v1/cop/features
+https://sim.zeleznalady.cz/safety-data/api/v1/features
 ```
+
+`/safety-data/api/v1/cop/features` zůstává jen jako kompatibilní alias pro existující backend adaptéry.
 
 Podporované query parametry:
 
@@ -64,17 +66,17 @@ Každá feature nese:
 - `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
-ČHMÚ CAP feed může poskytovat administrativní geokódy bez přesných polygonů. SIM proto ukládá `affectedAreas` a `geocodes`, ale pro mapový bod používá reprezentativní bod aktuálního bboxu. COP má tyto body vizualizovat jako výstražné anotace, nikoli jako přesnou hranici území.
+ČHMÚ CAP feed může poskytovat administrativní geokódy bez přesných polygonů. SIM proto ukládá `affectedAreas` a `geocodes`, ale pro mapový bod používá reprezentativní bod aktuálního bboxu. COM má tyto body vizualizovat jako výstražné anotace, nikoli jako přesnou hranici území.
 
 ## Projekce do Situation Data
 
 Kvůli kompatibilitě je stejný obsah dostupný i přes:
 
 ```text
-GET /situation-data/api/v1/cop/features?layers=warnings,flood&source=safety_data
+GET /situation-data/api/v1/features?layers=warnings,flood&source=safety_data
 ```
 
-Tato projekce je určena pro COP mapu, která už umí načítat `situation-data`. Nová implementace COP by měla preferovat čistý `safety-data` kontrakt, protože obsahuje plnou bezpečnostní sémantiku.
+Tato projekce je určena pro COM mapu, která už umí načítat `situation-data`. Nová implementace COM by měla preferovat čistý `safety-data` kontrakt, protože obsahuje plnou bezpečnostní sémantiku.
 
 ## Cache a zátěž
 
@@ -85,12 +87,12 @@ API používá řízenou cache:
 - stale-if-error fallback,
 - dlouhá cache hydrologických metadat,
 - per-station cache aktuálních hydrologických dat,
-- negativní cache pro hydrologické stanice, u kterých ČHMÚ vrací `404` pro aktuální data; pokud alespoň část stanic v bbox vrací platná data, jednotlivé `404` se neposílají jako COP warning,
+- negativní cache pro hydrologické stanice, u kterých ČHMÚ vrací `404` pro aktuální data; pokud alespoň část stanic v bbox vrací platná data, jednotlivé `404` se neposílají jako COM warning,
 - limit `CHMI_HYDRO_MAX_STATIONS`.
 
-Veřejné zdroje se nesmí dotazovat při každém dotazu tisíců COP klientů. COP má dotazovat SIM, SIM drží cache a dotazuje původní zdroje s konzervativní kadencí.
+Veřejné zdroje se nesmí dotazovat při každém dotazu tisíců COM klientů. COM má dotazovat SIM, SIM drží cache a dotazuje původní zdroje s konzervativní kadencí.
 
-CAP soubory ČHMÚ mohou obsahovat informační záznamy typu „žádná výstraha“ i jazykové varianty bez reálné výstrahy. SIM tyto záznamy nepublikuje jako mapové warnings, aby COP nedegradoval kvůli neaktivním nebo administrativním CAP položkám.
+CAP soubory ČHMÚ mohou obsahovat informační záznamy typu „žádná výstraha“ i jazykové varianty bez reálné výstrahy. SIM tyto záznamy nepublikuje jako mapové warnings, aby COM nedegradoval kvůli neaktivním nebo administrativním CAP položkám.
 
 ## Health a metadata
 

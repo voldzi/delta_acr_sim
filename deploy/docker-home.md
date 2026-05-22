@@ -113,7 +113,8 @@ curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/tak-gateway/health/ready
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20'
+curl -fsS http://localhost:5020/situation-data/api/v1/catalog
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20'
 ```
 
 ## OpenStreetMap/PostGIS import
@@ -181,9 +182,9 @@ A restartuj pouze situační API a web proxy:
 
 ```bash
 docker compose up -d --build situation-data-api sim-web
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20'
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|osm_poi|mobile_coverage|mobile_network'
@@ -230,8 +231,8 @@ http://docker.home.cz:5020
 ## Poznámky
 
 - Výchozí režim je `DRY_RUN`.
-- Pro LIVE publikování do COP nastav `SIM_PUBLISHER_MODE=LIVE`, `MAIN_COP_BASE_URL=http://172.17.0.1:4310` a `MAIN_COP_BEARER_TOKEN` na stejnou hodnotu jako `COP_LAB_TOKEN` v COP.
-- Flight Data API pro integrační pilot COP běží proti ADSB.lol: `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
+- Pro LIVE publikování syntetických eventů do aktuálního COP nastav `SIM_PUBLISHER_MODE=LIVE`, `MAIN_COP_BASE_URL=http://172.17.0.1:4310` a `MAIN_COP_BEARER_TOKEN` na stejnou hodnotu jako `COP_LAB_TOKEN` v COP.
+- Flight Data API pro integrační pilot COM/COP běží proti ADSB.lol: `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
 - Vlastní readsb/dump1090 přijímače přidej přes `FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol` a `LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://.../aircraft.json`.
 - OurAirports import je zapnutý pro letiště v ČR a okolí: `OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU`.
 - Flight Data API používá server-side cache s in-flight deduplikací: `FLIGHT_DATA_CACHE_TTL_SECONDS=10`, `FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60`, `FLIGHT_DATA_CACHE_MAX_ENTRIES=512`.
@@ -246,9 +247,9 @@ http://docker.home.cz:5020
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.
 - `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.
-- `tak-gateway-api` přijímá TAK/CoT XML přes chráněný ingest endpoint `/tak-gateway/api/v1/cot/events` a COP čte normalizovaný GeoJSON endpoint `/tak-gateway/api/v1/cop/features`.
+- `tak-gateway-api` přijímá TAK/CoT XML přes chráněný ingest endpoint `/tak-gateway/api/v1/cot/events`; COM backend čte normalizovaný GeoJSON endpoint `/tak-gateway/api/v1/features`. Starý `/cop/features` zůstává jen jako kompatibilní alias.
 - `TAK_GATEWAY_INGEST_TOKEN` je secret; pro pilot ho změň mimo repozitář a předej jen ARDOS/TAK bridge klientovi.
-- `TAK_GATEWAY_PUBLIC_READ=false` je bezpečný výchozí režim; nastav `TAK_GATEWAY_READ_TOKEN` a předávej jej jen server-side klientovi COP.
+- `TAK_GATEWAY_PUBLIC_READ=false` je bezpečný výchozí režim; nastav `TAK_GATEWAY_READ_TOKEN` a předávej jej jen server-side klientovi COM.
 - U komerčního použití musí být vyřešená ODbL atribuce a share-alike povinnosti.
 - OpenSky nezapínej bez ověření oprávnění nebo písemné licence.
 - Perzistentní data jsou v Docker volume `sim-data`, `flight-data`, `situation-data`, `safety-data` a `tak-gateway-data`.

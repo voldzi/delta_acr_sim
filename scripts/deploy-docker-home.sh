@@ -99,4 +99,5 @@ curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/tak-gateway/health/ready
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?layers=weather,mobile,traffic,warnings,flood&limit=20' >/dev/null
+curl -fsS http://localhost:5020/situation-data/api/v1/catalog >/dev/null
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20' >/dev/null

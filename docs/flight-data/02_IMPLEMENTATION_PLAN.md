@@ -13,7 +13,7 @@ Stav: implementováno v první verzi.
 - Deduplikace podle normalizovaného `icao24`.
 - Referenční lookup letišť a typů letadel.
 - Cacheovaný OurAirports `airports.csv` import pro ČR a okolí s fallbackem na seed.
-- COP projekce `/api/v1/cop/tracks`.
+- Normalizované tracky `/api/v1/aircraft/positions`; kompatibilní projekce `/api/v1/cop/tracks`.
 - Server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem a cache metrikami.
 - OpenAPI dokument `docs/api/openapi-flight-data.yaml`.
 
@@ -25,12 +25,12 @@ Stav: implementováno v první verzi.
 - Doplnit airline/route enrichment pouze ze zdrojů s jasnou licencí.
 - Přidat validaci rychlostí a geografických skoků pro live feedy.
 
-## Fáze 3: COP integrace
+## Fáze 3: COM integrace
 
 - Veřejný pilot `sim.zeleznalady.cz` je nakonfigurovaný na `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`.
-- Přidat do COP nový datový zdroj `PUBLIC_FLIGHT_AGGREGATE`.
-- Polling nebo server-side ingestion z `https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks`.
-- V COP rozlišit zdroj tracku: SIM syntetika vs veřejný letový agregát.
+- Přidat do COM nový datový zdroj `PUBLIC_FLIGHT_AGGREGATE`.
+- Polling nebo server-side ingestion z `https://sim.zeleznalady.cz/flight-data/api/v1/aircraft/positions`.
+- V COM rozlišit zdroj tracku: SIM syntetika vs veřejný letový agregát.
 - V mapě zobrazit `icao24`, callsign, typ letadla, rychlost, výšku a zdroj licence.
 - Přidat stav zdroje: API OK, source warning, stale tracks, source unavailable.
 
@@ -39,7 +39,7 @@ Stav: implementováno v první verzi.
 - Rozhodnout finální live provider.
 - Zajistit smlouvu nebo právní posouzení ODbL obligations.
 - Přidat rate limiting a audit přístupů.
-- Přidat explicitní atribuci zdrojů do COP UI a exportů.
+- Přidat explicitní atribuci zdrojů do COM UI a exportů.
 - Přidat administraci zapnutých providerů a jejich licence.
 
 ## Konfigurace
@@ -50,7 +50,7 @@ Výchozí lokální režim je bezpečný:
 FLIGHT_DATA_ENABLED_SOURCES=mock
 ```
 
-Live ADSB.lol pilot pro COP:
+Live ADSB.lol pilot pro COM:
 
 ```bash
 FLIGHT_DATA_ENABLED_SOURCES=adsb_lol

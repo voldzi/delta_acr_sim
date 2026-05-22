@@ -148,6 +148,7 @@ function registerFeatureRoutes(app: Express, context: TakGatewayAppContext): voi
   });
 
   app.get("/api/v1/cop/features", (req, res) => {
+    res.set(compatibilityAliasHeaders("/api/v1/features"));
     if (!isReadAuthorized(req, context)) {
       context.store.recordAuthFailure();
       return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid bearer token.");
@@ -158,6 +159,14 @@ function registerFeatureRoutes(app: Express, context: TakGatewayAppContext): voi
     }
     res.json(context.store.getFeatureCollection(query.value));
   });
+}
+
+function compatibilityAliasHeaders(successorPath: string): Record<string, string> {
+  return {
+    Deprecation: "true",
+    Link: `<${successorPath}>; rel="successor-version"`,
+    Warning: '299 - "Compatibility alias; use the source-neutral provider endpoint for new integrations."'
+  };
 }
 
 function isOperationallyReady(config: TakGatewayConfig): boolean {

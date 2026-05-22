@@ -136,7 +136,7 @@ describe("Situation Data API contract", () => {
     );
   });
 
-  it("exposes provider map catalog metadata for COP", async () => {
+  it("exposes provider map catalog metadata for COM", async () => {
     const response = await request(app).get("/api/v1/catalog").expect(200);
 
     expect(response.body.catalogVersion).toBe("provider-map-catalog-v1");
@@ -144,7 +144,7 @@ describe("Situation Data API contract", () => {
     expect(response.body.authority).toEqual(
       expect.objectContaining({
         catalogVersion: "map-catalog-v1",
-        document: expect.stringContaining("08_MAP_CATALOG_V1.md")
+        document: expect.stringContaining("02_MAP_CATALOG_PROVIDER_CONTRACT.md")
       })
     );
 

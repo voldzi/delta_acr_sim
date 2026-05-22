@@ -2,11 +2,11 @@
 
 ## Purpose
 
-SIM publishes `mobile_coverage` as a prepared map layer for COP. COP displays and filters the layer; it does not compute coverage, download DEM/terrain data, or query OSM directly.
+SIM publishes `mobile_coverage` as a prepared diagnostic map layer for COM. COM displays and filters the layer only in technical/diagnostic contexts; it does not compute coverage, download DEM/terrain data, or query OSM directly.
 
 The current implementation is phase 1: a conservative estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`. It is suitable for situational context and weak/no-coverage warnings, not for guaranteed operator service availability.
 
-For production COP display, prefer the unified `mobile_network` layer from `mobile_network_model`. This document describes the lower-level coverage model that feeds that assessment and remains useful for diagnostics.
+For production COM display, prefer the unified `mobile_network` layer from `mobile_network_model`. This document describes the lower-level coverage model that feeds that assessment and remains useful for diagnostics.
 
 ## Source And Layer
 
@@ -31,7 +31,7 @@ GET /situation-data/api/v1/layers
 Features:
 
 ```http
-GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=250
+GET /situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=250
 ```
 
 Metadata:
@@ -128,14 +128,14 @@ Phase 3:
 
 Phase 4:
 
-- anonymized aggregate measurements from COP/iOS clients,
+- anonymized aggregate measurements from COM/iOS clients,
 - calibration by area, technology and operator.
 
 ## Acceptance Checks
 
 ```bash
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
-curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'mobile_coverage|mobile_coverage_model'
 ```

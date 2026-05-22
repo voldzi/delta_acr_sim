@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: COP Air & Situation Simulator API
+  title: DELTA ACR SIM API
   version: 0.1.0
   description: API skeleton pro samostatný SIM systém generující výhradně syntetická data.
 servers:

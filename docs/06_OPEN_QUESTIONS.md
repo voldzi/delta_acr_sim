@@ -1,22 +1,21 @@
 # Otevřené otázky
 
-Autoritativní zadání `docs/zadani_codex_simulacni_system_ai_v1.md` bylo nalezeno a použito jako hlavní zdroj baseline.
+Tento seznam drží jen otázky relevantní pro další provoz SIM jako veřejně dokumentovaného providera.
 
-## Integrace s COP
+## Integrace s COM
 
-- Jaký bude finální base URL formát pro COP ingest prostředí v dev, test a lab režimu?
-- Bude COP ingest preferovat bearer token, mTLS, OIDC client credentials, nebo kombinaci podle prostředí?
-- Jaké budou finální rate limity, batch size limity a maximální payload size pro `cop-ingest-v1`?
-- Má COP vracet `409` pro duplicitní idempotency key vždy, nebo pouze při odlišném payload hash?
+- Jaký bude finální název a governance model centrální aplikace COM mimo aktuální implementaci COP?
+- Kdy COM backend přejde ze starších `/cop/*` provider aliasů na neutrální `/features` a katalogové streamy?
+- Bude COM pro partnery preferovat bearer token, mTLS, OIDC client credentials, nebo kombinaci podle prostředí?
+- Jaké budou finální rate limity, batch size limity a maximální payload size pro syntetický publisher ingest?
 - Jaký je přesný slovník klasifikačních úrovní, releasability a handling caveats mimo povinné `SYNTHETIC`?
 
-## Implementace SIM
+## Provider API
 
-- Bude MVP používat SQLite, PostgreSQL, nebo jiný store pro scénáře a persistent publisher queue?
-- Jak dlouho se mají uchovávat event payload previews, AI audity a publisher odpovědi?
-- Jaké SLO/SLA hodnoty jsou očekávané pro generování 1 000+ zpráv/s v laboratorním režimu?
-- Jaký lokální LLM runtime je preferovaný pro local-only režim?
-- Budou demo scénáře verzované jako JSON soubory v repozitáři, nebo spravované přes aplikaci?
+- Jaký bude stabilní registry proces pro nové `providerId`, `recommendedCatalogLayerId` a `styleProfile`?
+- Které husté vrstvy přejdou jako první z bbox GeoJSON na MVT nebo raster tiles?
+- Jak se bude verzovat Map Catalog Provider Contract po přidání tile streamů?
+- Jak dlouho se mají uchovávat provider preview payloady, AI audity a publisher odpovědi?
 
 ## UI a provoz
 

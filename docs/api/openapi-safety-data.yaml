@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: DELTA ACR SIM Safety Data API
   version: 0.1.0
-  description: Aggregated public safety warnings and hydrological observations for COP map context.
+  description: Aggregated public safety warnings and hydrological observations for COM/server-side map context.
 servers:
   - url: https://sim.zeleznalady.cz/safety-data/api/v1
   - url: http://localhost:4030/api/v1
@@ -44,7 +44,9 @@ paths:
           $ref: "#/components/responses/Problem"
   /cop/features:
     get:
-      summary: Return the COP-facing safety source projection
+      summary: Compatibility alias for the server-side safety feature stream
+      deprecated: true
+      description: Kept for existing COM/COP backend adapters. New provider integrations should prefer /features or the COM /api/v1/map/query facade.
       parameters:
         - $ref: "#/components/parameters/Bbox"
         - $ref: "#/components/parameters/Layers"
@@ -52,7 +54,7 @@ paths:
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
-          description: COP-ready safety FeatureCollection
+          description: Safety FeatureCollection
           content:
             application/json:
               schema:

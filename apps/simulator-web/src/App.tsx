@@ -141,7 +141,7 @@ const emptyPublisher: PublisherStatus = {
 };
 
 const emptyFlightTracks: FlightDataTrackResponse = {
-  contractVersion: "cop-flight-source-v1",
+  contractVersion: "flight-track-response-v1",
   source: {
     sourceId: "flight-data-api",
     sourceType: "PUBLIC_FLIGHT_AGGREGATE",
@@ -503,8 +503,8 @@ export function App() {
         <div className="brand">
           <div className="brand-mark">SIM</div>
           <div>
-            <strong>COP Air & Situation Simulator</strong>
-            <span>Synthetic data pilot</span>
+            <strong>DELTA ACR SIM</strong>
+            <span>Data provider pilot</span>
           </div>
         </div>
 
@@ -523,7 +523,7 @@ export function App() {
           <ShieldCheck size={18} />
           <div>
             <strong>Synthetic-only gate</strong>
-            <span>Non-synthetic payloads are rejected before COP ingest.</span>
+            <span>Non-synthetic payloads are rejected before COM ingest.</span>
           </div>
         </div>
       </aside>
@@ -537,7 +537,7 @@ export function App() {
           </div>
           <div className="topbar-actions">
             <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
-              COP display <ExternalLink size={15} />
+              COM display <ExternalLink size={15} />
             </a>
             <StatusPill label={data.publisher.mode} tone={publisherTone} />
             <StatusPill label={data.runtime.state} tone={runtimeTone} />
@@ -553,7 +553,7 @@ export function App() {
               <Metric icon={<Plane />} label="Flight tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount} detail={`${data.flightData.tracks.summary.rawObservationCount} raw observations`} />
               <Metric icon={<Layers3 />} label="Situation features" value={data.situationData.features.summary.featureCount} detail={`${data.situationData.layers.length} layers available`} />
               <Metric icon={<ShieldAlert />} label="Safety features" value={data.safetyData.features.summary.featureCount} detail={`${data.safetyData.features.summary.criticalCount} critical`} />
-              <Metric icon={<RadioTower />} label="TAK CoT events" value={data.takGateway.health.currentEvents} detail={`${data.takGateway.features.summary.featureCount} COP features`} />
+              <Metric icon={<RadioTower />} label="TAK CoT events" value={data.takGateway.health.currentEvents} detail={`${data.takGateway.features.summary.featureCount} provider features`} />
             </section>
 
             <section id="readiness" className="operations-grid" aria-label="Operational readiness">
@@ -574,7 +574,7 @@ export function App() {
               </section>
 
               <section className="ops-panel affiliation-panel">
-                <PanelTitle icon={<ShieldAlert />} title="Track ownership mix" subtitle="COP affiliation source" />
+                <PanelTitle icon={<ShieldAlert />} title="Track ownership mix" subtitle="COM affiliation source" />
                 <div className="affiliation-grid">
                   {affiliationSummary.map((item) => (
                     <div key={item.category} className={`affiliation-card ${item.category}`}>
@@ -592,7 +592,7 @@ export function App() {
         <section className="section-layout">
           {activeSection === "scenario" ? (
           <section id="scenario" className="panel scenario-panel">
-            <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COP display validation." />
+            <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COM display validation." />
 
             <div className="scenario-toolbar">
               <div>
@@ -789,7 +789,7 @@ export function App() {
 
           {activeSection === "flight-data" ? (
           <section id="flight-data" className="panel flight-data-panel">
-            <PanelTitle icon={<Plane />} title="Flight Data source" subtitle="Aggregated public or licensed flight tracks prepared for the COP layer." />
+            <PanelTitle icon={<Plane />} title="Flight Data source" subtitle="Aggregated public or licensed flight tracks prepared for COM." />
 
             <div className="publisher-status">
               <StatusPill label={data.flightData.health.status} tone={flightDataTone} />
@@ -823,7 +823,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License and production suitability are visible before COP consumption." />
+                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License and production suitability are visible before COM consumption." />
                 <div className="source-list">
                   {data.flightData.sources.map((source) => (
                     <FlightSourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.flightData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
@@ -835,7 +835,7 @@ export function App() {
 
             <div className="section-head compact-head">
               <div>
-                <strong>COP track preview</strong>
+                <strong>Flight track preview</strong>
                 <span>{data.flightData.tracks.tracks.length} shown from latest aggregate response</span>
               </div>
               <StatusPill label={formatTime(data.flightData.tracks.source.generatedAt)} tone="neutral" />
@@ -859,7 +859,7 @@ export function App() {
 
           {activeSection === "situation-data" ? (
           <section id="situation-data" className="panel situation-data-panel">
-            <PanelTitle icon={<Layers3 />} title="Situation Data source" subtitle="Aggregated public context layers prepared for the COP map." />
+            <PanelTitle icon={<Layers3 />} title="Situation Data source" subtitle="Aggregated public context layers prepared for the COM map." />
 
             <div className="publisher-status">
               <StatusPill label={data.situationData.health.status} tone={situationDataTone} />
@@ -898,7 +898,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can toggle these layers independently from flight tracks." />
+                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COM can toggle these layers independently from flight tracks." />
                 <div className="layer-list">
                   {data.situationData.layers.map((layer) => (
                     <SituationLayerRow key={layer.layerId} layer={layer} count={countSituationLayer(data.situationData.features.features, layer.layerId)} />
@@ -920,7 +920,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<CloudSun />} title="COP feature preview" subtitle="GeoJSON features returned by /situation-data/api/v1/cop/features." />
+                <PanelTitle icon={<CloudSun />} title="Provider feature preview" subtitle="GeoJSON features returned by /situation-data/api/v1/features." />
                 <div className="situation-feature-list">
                   {data.situationData.features.features.map((feature) => (
                     <SituationFeatureRow key={feature.id} feature={feature} />
@@ -941,7 +941,7 @@ export function App() {
 
           {activeSection === "tak-gateway" ? (
           <section id="tak-gateway" className="panel situation-data-panel">
-            <PanelTitle icon={<RadioTower />} title="TAK Gateway" subtitle="Cursor-on-Target ingest and normalized COP feature projection for ARDOS/TAK partner data." />
+            <PanelTitle icon={<RadioTower />} title="TAK Gateway" subtitle="Cursor-on-Target ingest and normalized COM feature projection for ARDOS/TAK partner data." />
 
             <div className="publisher-status">
               <StatusPill label={data.takGateway.health.status} tone={takGatewayTone} />
@@ -955,14 +955,14 @@ export function App() {
 
             <div className="publisher-stats situation-stats">
               <PublisherStat label="Current events" value={data.takGateway.health.currentEvents.toLocaleString("cs-CZ")} tone="safe" />
-              <PublisherStat label="COP features" value={data.takGateway.features.summary.featureCount.toLocaleString("cs-CZ")} tone="active" />
+              <PublisherStat label="Provider features" value={data.takGateway.features.summary.featureCount.toLocaleString("cs-CZ")} tone="active" />
               <PublisherStat label="Stale" value={data.takGateway.health.staleEvents.toLocaleString("cs-CZ")} tone={data.takGateway.health.staleEvents > 0 ? "warn" : "neutral"} />
               <PublisherStat label="Last ingest" value={formatTime(data.takGateway.health.lastIngestAt)} tone={data.takGateway.health.lastIngestAt ? "safe" : "neutral"} />
             </div>
 
             <div className="flight-grid">
               <section className="inline-panel">
-                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime settings for CoT retention and COP projection." />
+                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime settings for CoT retention and COM projection." />
                 <div className="settings-grid">
                   <SummaryItem label="Source label" value={data.takGateway.config.sourceLabel || "-"} />
                   <SummaryItem label="Default bbox" value={formatBbox(data.takGateway.config.defaultBbox)} />
@@ -978,7 +978,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can render TAK Gateway layers independently from public open-data sources." />
+                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COM can render TAK Gateway layers independently from public open-data sources." />
                 <div className="layer-list">
                   {data.takGateway.layers.map((layer) => (
                     <TakLayerRow key={layer.layerId} layer={layer} count={countTakLayer(data.takGateway.features.features, layer.layerId)} />
@@ -990,7 +990,7 @@ export function App() {
 
             <div className="flight-grid">
               <section className="inline-panel">
-                <PanelTitle icon={<Database />} title="Partner source" subtitle="TAK/ARDOS data is partner-provided and requires COP-side authorization." />
+                <PanelTitle icon={<Database />} title="Partner source" subtitle="TAK/ARDOS data is partner-provided and requires COM-side authorization." />
                 <div className="source-list">
                   {data.takGateway.sources.map((source) => (
                     <TakSourceRow key={source.sourceId} source={source} />
@@ -1000,7 +1000,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<RadioTower />} title="COP feature preview" subtitle="GeoJSON features returned by /tak-gateway/api/v1/cop/features." />
+                <PanelTitle icon={<RadioTower />} title="Provider feature preview" subtitle="GeoJSON features returned by /tak-gateway/api/v1/features." />
                 <div className="situation-feature-list">
                   {data.takGateway.features.features.map((feature) => (
                     <TakFeatureRow key={feature.id} feature={feature} />
@@ -1021,7 +1021,7 @@ export function App() {
 
           {activeSection === "publisher" ? (
           <section id="publisher" className="panel publisher-panel">
-            <PanelTitle icon={<RadioTower />} title="COP publisher" subtitle="Delivery state and recent canonical events." />
+            <PanelTitle icon={<RadioTower />} title="COM publisher" subtitle="Delivery state and recent canonical events." />
             <div className="publisher-status">
               <StatusPill label={data.publisher.publishingEnabled ? "publishing enabled" : "publishing stopped"} tone={data.publisher.publishingEnabled ? "safe" : "danger"} />
               <StatusPill label={`${data.publisher.deadLetterSize} dead-letter`} tone={data.publisher.deadLetterSize > 0 ? "danger" : "neutral"} />
@@ -1087,7 +1087,7 @@ export function App() {
 
           {activeSection === "safety" ? (
           <section id="safety-data" className="panel safety-data-panel">
-            <PanelTitle icon={<ShieldAlert />} title="Safety Data source" subtitle="Official public warnings and hydrological observations prepared for COP map layers." />
+            <PanelTitle icon={<ShieldAlert />} title="Safety Data source" subtitle="Official public warnings and hydrological observations prepared for COM map layers." />
 
             <div className="publisher-status">
               <StatusPill label={data.safetyData.health.status} tone={safetyDataTone} />
@@ -1122,7 +1122,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can ingest these layers through /safety-data or projected situation-data." />
+                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COM can ingest these layers through /safety-data or projected situation-data." />
                 <div className="layer-list">
                   {data.safetyData.layers.map((layer) => (
                     <SafetyLayerRow key={layer.layerId} layer={layer} count={countSafetyLayer(data.safetyData.features.features, layer.layerId)} />
@@ -1144,7 +1144,7 @@ export function App() {
               </section>
 
               <section className="inline-panel">
-                <PanelTitle icon={<ShieldCheck />} title="COP feature preview" subtitle="GeoJSON features returned by /safety-data/api/v1/cop/features." />
+                <PanelTitle icon={<ShieldCheck />} title="Provider feature preview" subtitle="GeoJSON features returned by /safety-data/api/v1/features." />
                 <div className="situation-feature-list">
                   {data.safetyData.features.features.map((feature) => (
                     <SafetyFeatureRow key={feature.id} feature={feature} />
@@ -1490,7 +1490,7 @@ function ScenarioCard({
     <button type="button" className={`scenario-card ${selected ? "selected" : ""} ${active ? "active-runtime" : ""}`} onClick={onSelect}>
       <span className="scenario-card-main">
         <strong>{scenario.name}</strong>
-        <span>{scenario.description ?? "Synthetic COP scenario"}</span>
+        <span>{scenario.description ?? "Synthetic COM scenario"}</span>
       </span>
       <span className="scenario-card-tags">
         {active ? <StatusPill label="active" tone="active" /> : null}
@@ -1719,7 +1719,7 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
       return {
         kicker: "Scenario control",
         title: "Scenario execution",
-        description: "Start, pause and inspect deterministic synthetic movement for COP validation."
+        description: "Start, pause and inspect deterministic synthetic movement for COM validation."
       };
     case "flight-data":
       return {
@@ -1731,18 +1731,18 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
       return {
         kicker: "Public situation aggregate",
         title: "Situation Data source",
-        description: "Monitor weather, ground, mobile and traffic context prepared for COP map layers."
+        description: "Monitor weather, ground, mobile and traffic context prepared for COM map layers."
       };
     case "tak-gateway":
       return {
         kicker: "Partner CoT ingest",
         title: "TAK Gateway",
-        description: "Monitor Cursor-on-Target ingest, retention, stale state and COP projection readiness."
+        description: "Monitor Cursor-on-Target ingest, retention, stale state and COM projection readiness."
       };
     case "publisher":
       return {
-        kicker: "COP integration",
-        title: "COP publisher",
+        kicker: "COM integration",
+        title: "COM publisher",
         description: "Watch delivery state, retained events, retry queue and ingest failures."
       };
     case "ai":
@@ -1762,7 +1762,7 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
       return {
         kicker: "Pilot control station",
         title: "Simulator overview",
-        description: "Compact operational status across runtime, COP publishing and external data gateways."
+        description: "Compact operational status across runtime, COM publishing and external data gateways."
       };
   }
 }

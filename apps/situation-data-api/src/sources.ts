@@ -40,7 +40,7 @@ const MOCK_LICENSE: SituationDataLicense = {
   attribution: "DELTA ACR SIM",
   commercialUse: "allowed",
   operationalUse: "allowed",
-  notes: ["Synthetic situation features for COP integration testing."]
+  notes: ["Synthetic situation features for COM integration testing."]
 };
 
 const OPEN_METEO_LICENSE: SituationDataLicense = {
@@ -115,7 +115,7 @@ const SAFETY_DATA_LICENSE: SituationDataLicense = {
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "This source projects /safety-data/api/v1/cop/features into the situation-data contract.",
+    "This source projects /safety-data/api/v1/features into the situation-data contract.",
     "Feature-level license attribution is preserved from Safety Data properties.",
     "Warnings and hydrological observations are public context, not a replacement for official emergency instructions."
   ]
@@ -128,7 +128,7 @@ const AVIATION_WEATHER_LICENSE: SituationDataLicense = {
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "AWC Data API is rate limited; SIM caches requests and COP must not call AWC directly.",
+    "AWC Data API is rate limited; SIM caches requests and COM must not call AWC directly.",
     "Use a custom user agent and keep requests limited in scope and frequency.",
     "Aviation weather is context only and does not replace official aviation briefing products."
   ]
@@ -141,8 +141,8 @@ const ARDOS_PARTNER_LICENSE: SituationDataLicense = {
   operationalUse: "requires_license",
   notes: [
     "Not open data; consume only through an explicit partner agreement.",
-    "Do not expose personal identifiers, exact volunteer identities, or sensitive mission details in public COP views.",
-    "SIM expects ARDOS to provide a filtered COP projection API with token authentication."
+    "Do not expose personal identifiers, exact volunteer identities, or sensitive mission details in public COM views.",
+    "SIM expects ARDOS to provide a filtered COM projection API with token authentication."
   ]
 };
 
@@ -826,7 +826,7 @@ class SafetyDataProjectionSource implements SituationDataSource {
 
     const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
     const fetchLimit = Math.min(1000, Math.max(query.limit, query.limit * 2));
-    const url = new URL(`${trimTrailingSlash(this.config.safetyDataBaseUrl)}/api/v1/cop/features`);
+    const url = new URL(`${trimTrailingSlash(this.config.safetyDataBaseUrl)}/api/v1/features`);
     url.searchParams.set("bbox", formatBbox(cacheBbox));
     url.searchParams.set("layers", layers.join(","));
     url.searchParams.set("limit", String(fetchLimit));
@@ -953,7 +953,7 @@ class ArdosPartnerSource implements SituationDataSource {
     }
 
     const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
-    const url = new URL(`${trimTrailingSlash(this.config.ardosPartnerBaseUrl)}/api/v1/cop/features`);
+    const url = new URL(`${trimTrailingSlash(this.config.ardosPartnerBaseUrl)}/api/v1/features`);
     url.searchParams.set("bbox", formatBbox(cacheBbox));
     url.searchParams.set("layers", layers.join(","));
     url.searchParams.set("limit", String(query.limit));

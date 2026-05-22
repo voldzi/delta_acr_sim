@@ -2,7 +2,7 @@
 
 ## Cíl
 
-Služba má pro COP poskytnout jednotný zdroj reálných nebo testovacích leteckých tracků:
+Služba má pro COM poskytnout jednotný zdroj reálných nebo testovacích leteckých tracků:
 
 - aktuální polohy letadel,
 - deduplikaci podle `icao24`,
@@ -11,7 +11,7 @@ Služba má pro COP poskytnout jednotný zdroj reálných nebo testovacích lete
 - referenční databázi typů letadel,
 - transparentní informaci o původu dat a licenci.
 
-Výchozí implementace proto odděluje normalizovaný COP kontrakt od konkrétního poskytovatele. COP se integruje na `flight-data-api`; zdroje se mění konfigurací služby.
+Výchozí implementace proto odděluje normalizovaný provider kontrakt od konkrétního poskytovatele. COM se integruje na `flight-data-api`; zdroje se mění konfigurací služby.
 
 ## Doporučené zdroje
 
@@ -39,7 +39,7 @@ Pro komerční použití:
 1. Letiště: primárně OurAirports, protože public domain je nejčistší model.
 2. Live lety: vlastní/partnerská ADS-B síť, ADSB.lol při splnění ODbL a provozních podmínek, nebo placený/licencovaný provider.
 3. Typy letadel: primárně oficiální ICAO API Data Service nebo smluvně čistý datový balík.
-4. COP kontrakt nesmí záviset na jednom providerovi; musí dostávat normalizované pole `sources` a `sourceLicenses`.
+4. COM kontrakt nesmí záviset na jednom providerovi; musí dostávat normalizované pole `sources` a `sourceLicenses`.
 
 ## Zdrojové odkazy
 

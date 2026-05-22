@@ -1,6 +1,8 @@
-# COP Air & Situation Simulator
+# DELTA ACR SIM
 
-Samostatný pilotní SIM systém pro generování syntetických dat, řízení scénářů, dry-run/mock publisher workflow, AI Scenario Assistant draft workflow, Flight Data API pro agregaci veřejných nebo licencovaných letových zdrojů, Situation Data API pro mapové open-data vrstvy a Safety Data API pro veřejné bezpečnostní výstrahy.
+SIM je samostatný datový a simulační provider pro centrální zobrazovací aplikaci COM. Generuje syntetické scénáře, provozuje dry-run/mock publisher workflow a poskytuje cacheované provider API pro mapové vrstvy: lety, počasí, bezpečnostní výstrahy, mobilní síť, OSM/PostGIS kontext a partnerské TAK/CoT streamy.
+
+COP je aktuální implementace COM. Veřejný klient COP/COM má používat pouze COM endpointy `GET /api/v1/map/catalog` a `POST /api/v1/map/query`; SIM endpointy jsou server-side provider API.
 
 ## Lokální spuštění
 
@@ -27,53 +29,51 @@ Výchozí port web/API gateway je `5020`:
 
 ```text
 http://localhost:5020
+http://localhost:5020/health/live
 http://localhost:5020/flight-data/health/ready
-http://localhost:5020/flight-data/api/v1/cop/tracks
+http://localhost:5020/flight-data/api/v1/aircraft/positions
 http://localhost:5020/situation-data/health/ready
-http://localhost:5020/situation-data/api/v1/cop/features
+http://localhost:5020/situation-data/api/v1/catalog
+http://localhost:5020/situation-data/api/v1/features
 http://localhost:5020/safety-data/health/ready
-http://localhost:5020/safety-data/api/v1/cop/features
+http://localhost:5020/safety-data/api/v1/features
 http://localhost:5020/tak-gateway/health/ready
-http://localhost:5020/tak-gateway/api/v1/cop/features
+http://localhost:5020/tak-gateway/api/v1/features
 ```
 
-## Pilot na docker.home.cz
+Historické `/api/v1/cop/*` endpointy zůstávají pouze jako kompatibilní backend aliasy pro současné server-side adaptéry.
 
-Deployment poznámky jsou v [deploy/docker-home.md](deploy/docker-home.md). Cílový port je `5020` a výchozí publisher režim je `DRY_RUN`.
+## Provider kontrakt
 
-## Flight Data API
+Veřejná dokumentace pro další poskytovatele dat začíná v [docs/provider/00_INDEX.md](docs/provider/00_INDEX.md). Kanonický discovery endpoint SIM providera je:
 
-Dokumentace nové služby je v [docs/flight-data/00_INDEX.md](docs/flight-data/00_INDEX.md), COP kontrakt v [docs/integration/08_FLIGHT_DATA_SOURCE_CONTRACT.md](docs/integration/08_FLIGHT_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-flight-data.yaml](docs/api/openapi-flight-data.yaml).
+```http
+GET /situation-data/api/v1/catalog
+```
 
-Lokální výchozí zdroj je bezpečný `mock`. Pilotní nasazení na `sim.zeleznalady.cz` je připravené pro COP jako reálný ADSB.lol feed přes `FLIGHT_DATA_ENABLED_SOURCES=adsb_lol`. OpenSky se zapíná pouze po ověření oprávnění nebo licence.
+Katalog odděluje uživatelské vrstvy od technických zdrojů. Například běžná občanská vrstva mobilní sítě je `public.mobile.network` / `mobile_network`; diagnostické vstupy `mobile_coverage_model`, `ctu_nettest` a OSM komunikační infrastruktura se nemají zobrazovat jako samostatné běžné vrstvy.
 
-## Situation Data API
+## Služby
 
-Dokumentace služby je v [docs/situation-data/00_INDEX.md](docs/situation-data/00_INDEX.md), COP kontrakt v [docs/integration/09_SITUATION_DATA_SOURCE_CONTRACT.md](docs/integration/09_SITUATION_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-situation-data.yaml](docs/api/openapi-situation-data.yaml).
+- Flight Data API: agregované veřejné nebo licencované letové tracky, letiště a referenční data. Dokumentace je v [docs/flight-data/00_INDEX.md](docs/flight-data/00_INDEX.md).
+- Situation Data API: cacheované mapové vrstvy pro počasí, OSM/PostGIS, mobilní síť, dopravu a kompatibilní safety projekce. Dokumentace je v [docs/situation-data/00_INDEX.md](docs/situation-data/00_INDEX.md).
+- Safety Data API: veřejné bezpečnostní výstrahy a hydrologická data. OpenAPI je v [docs/api/openapi-safety-data.yaml](docs/api/openapi-safety-data.yaml).
+- TAK Gateway API: chráněný partner ingest Cursor-on-Target XML a normalizovaná GeoJSON projekce pro COM backend. Dokumentace je v [docs/tak-gateway/00_INDEX.md](docs/tak-gateway/00_INDEX.md).
 
-Docker pilot ve výchozím nastavení zapíná reálné open-data zdroje `open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data`. Pozemní referenční objekty z OpenStreetMap se v produkci zapínají přes `osm_postgis` až po importu do Patroni/PostGIS nebo lokálního rebuildovatelného PostGIS read-modelu. Nad stejným importem lze zapnout `mobile_coverage_model`, který publikuje odhadovanou polygonovou vrstvu `mobile_coverage`. Veřejný `osm_overpass` je pouze vývojová záloha pro malé bbox dotazy.
+## Produkční poznámky
 
-DEM katalog pro budoucí terrain-aware coverage model používá Copernicus DEM GLO-30: GeoTIFF/COG soubory v SeaweedFS, lokální cache pro runtime a metadata v PostGIS. Postup je v [docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md](docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md).
+Deployment na `docker.home.cz` je v [deploy/docker-home.md](deploy/docker-home.md). Cílový port je `5020` a výchozí publisher režim je `DRY_RUN`.
 
-## Safety Data API
+Pozemní referenční objekty z OpenStreetMap se v produkci čtou přes `osm_postgis` nad Patroni/PostGIS nebo lokálním rebuildovatelným PostGIS read-modelem. Veřejný Overpass je pouze vývojová záloha pro malé bbox dotazy.
 
-COP kontrakt je v [docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md](docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md) a OpenAPI v [docs/api/openapi-safety-data.yaml](docs/api/openapi-safety-data.yaml).
-
-Docker pilot zapíná reálné zdroje `chmi_alerts,chmi_hydro`, tedy ČHMÚ CAP výstrahy a hydrologické stanice. Stejná data jsou dostupná také jako kompatibilní projekce přes `situation-data` pomocí `layers=warnings,flood&source=safety_data`.
-
-## TAK Gateway API
-
-TAK Gateway přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a poskytuje COP normalizovanou GeoJSON projekci přes `/tak-gateway/api/v1/cop/features`. Ingest endpoint `/tak-gateway/api/v1/cot/events` je chráněný `TAK_GATEWAY_INGEST_TOKEN`; pro reálná partnerská data je read endpoint chráněný `TAK_GATEWAY_READ_TOKEN` a `TAK_GATEWAY_PUBLIC_READ=false`.
-
-Dokumentace je v [docs/tak-gateway/00_INDEX.md](docs/tak-gateway/00_INDEX.md), COP kontrakt v [docs/integration/13_TAK_GATEWAY_CONTRACT.md](docs/integration/13_TAK_GATEWAY_CONTRACT.md) a OpenAPI v [docs/api/openapi-tak-gateway.yaml](docs/api/openapi-tak-gateway.yaml).
+DEM katalog pro budoucí terrain-aware coverage model používá Copernicus DEM GLO-30: GeoTIFF/COG soubory v dedikovaném SIM SeaweedFS, lokální runtime cache a metadata v PostGIS. Postup je v [docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md](docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md).
 
 ## Bezpečnostní hranice
 
-- Všechna generovaná data jsou syntetická.
-- Publisher odmítá event bez `SYNTHETIC` handling caveat a `simulation.synthetic: true`.
-- Flight Data API odděluje veřejná/licencovaná letová data od SIM syntetického publisheru.
-- Situation Data API odděluje veřejné kontextové vrstvy od COP tracků a u každé feature nese licenci a atribuci.
-- Safety Data API odděluje bezpečnostní výstrahy od obecného mapového kontextu a zachovává závažnost, platnost a atribuci původních open-data zdrojů.
+- Publisher odmítá syntetický event bez `SYNTHETIC` handling caveat a `simulation.synthetic: true`.
+- Provider endpointy nejsou veřejný klientský kontrakt; tokeny a partner data drží server-side COM.
+- TAK/CoT read endpoint má mít pro reálná data `TAK_GATEWAY_PUBLIC_READ=false` a nastavený `TAK_GATEWAY_READ_TOKEN`.
+- Flight, Situation a Safety API oddělují licenci, atribuci, stale stav a varování zdrojů.
 - AI vrstva vytváří pouze draft, nikdy přímo nespouští scénář.
 - Targeting, navádění, zbraňové workflow a taktické bojové doporučení jsou mimo rozsah.
 

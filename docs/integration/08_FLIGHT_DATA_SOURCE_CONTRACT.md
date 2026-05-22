@@ -1,13 +1,15 @@
-# COP kontrakt: Flight Data Source
+# Flight Data Source Compatibility Contract
+
+**Status:** kompatibilní backend kontrakt pro aktuální COM/COP adapter. Nové veřejné integrace mají používat source-neutral provider model v [../provider/00_INDEX.md](../provider/00_INDEX.md).
 
 ## Účel
 
-`flight-data-api` je samostatná služba poskytující COP aplikaci normalizované tracky veřejných nebo licencovaných letových zdrojů. COP nemá volat jednotlivé veřejné providery přímo. Volá pouze tento kontrakt a používá metadata `sources` pro atribuci, diagnostiku a audit.
+`flight-data-api` je samostatná služba poskytující COM aplikaci normalizované tracky veřejných nebo licencovaných letových zdrojů. COM nemá volat jednotlivé veřejné providery přímo. Volá pouze SIM provider API a používá metadata `sources` pro atribuci, diagnostiku a audit.
 
 Veřejná cesta přes SIM web:
 
 ```text
-https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks
+https://sim.zeleznalady.cz/flight-data/api/v1/aircraft/positions
 ```
 
 Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený. Vlastní přijímače lze připojit přes `local_adsb`, který čte readsb/dump1090 `aircraft.json`.
@@ -15,14 +17,14 @@ Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint 
 Lokální interní cesta v Docker síti:
 
 ```text
-http://flight-data-api:4010/api/v1/cop/tracks
+http://flight-data-api:4010/api/v1/aircraft/positions
 ```
 
 ## Základní endpointy
 
 ```http
-GET /api/v1/cop/tracks
 GET /api/v1/aircraft/positions
+GET /api/v1/cop/tracks
 GET /api/v1/airports
 GET /api/v1/airports/{ident}
 GET /api/v1/aircraft-types
@@ -41,7 +43,7 @@ GET /health/ready
 | `limit` | `500` | Maximum vrácených deduplikovaných tracků. Max 1000. |
 | `includeStale` | `true` | Vrátí i stale tracky. Default `false`. |
 
-## Odpověď pro COP
+## Odpověď pro COM
 
 ```json
 {
@@ -132,7 +134,7 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - primární záznam vybírá podle priority zdroje a času `seenAt`,
 - `mergedRecordCount` říká, kolik zdrojových observací bylo sloučeno,
 - `sources` zachovává auditní stopu všech sloučených zdrojů,
-- COP používá `trackId` jako stabilní identifikátor.
+- COM používá `trackId` jako stabilní identifikátor.
 
 ## Podporované zdroje
 
@@ -145,7 +147,7 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 
 ## Referenční data
 
-`GET /api/v1/airports` používá cacheovaný import OurAirports `airports.csv` pro státy v `OURAIRPORTS_COUNTRIES`. Výchozí sada je `CZ,SK,AT,DE,PL,HU`, aby COP dostal letiště v ČR a okolí bez ručního udržování seed seznamu. Při výpadku importu služba vrací seed fallback a `source.warnings`.
+`GET /api/v1/airports` používá cacheovaný import OurAirports `airports.csv` pro státy v `OURAIRPORTS_COUNTRIES`. Výchozí sada je `CZ,SK,AT,DE,PL,HU`, aby COM dostal letiště v ČR a okolí bez ručního udržování seed seznamu. Při výpadku importu služba vrací seed fallback a `source.warnings`.
 
 Typy letadel zůstávají zatím seedované v SIM. Úplnější aircraft type store musí přijít z licencovaného nebo právně ověřeného zdroje.
 
@@ -158,16 +160,16 @@ FLIGHT_DATA_CACHE_TTL_SECONDS=5
 FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
 ```
 
-Používej jen přijímače provozované projektem nebo partnery, kteří výslovně povolí redistribuci do COP. Nepřeposílej komerční ani komunitní feedy, jejichž podmínky to neumožňují.
+Používej jen přijímače provozované projektem nebo partnery, kteří výslovně povolí redistribuci do COM. Nepřeposílej komerční ani komunitní feedy, jejichž podmínky to neumožňují.
 
-## Doporučení pro COP
+## Doporučení pro COM
 
 - Tracky z této služby ukládat jako samostatný typ zdroje, ne jako SIM syntetiku.
 - V mapě zobrazit badge zdroje a licenci.
 - Pracovat s `quality.stale`; stale tracky nezobrazovat jako aktuální bez varování.
 - Pokud `warnings` není prázdné, zobrazit stav zdroje jako degradovaný.
 - Pro historii poloh používat `trackId` a `lastSeenAt`.
-- Pro krátkou historii/predikci polohy dál používat COP buffer. SIM poskytuje aktuální agregovaný stav a zdrojová metadata.
+- Pro krátkou historii/predikci polohy dál používat COM buffer. SIM poskytuje aktuální agregovaný stav a zdrojová metadata.
 
 ## Dohled v SIM
 
@@ -176,4 +178,4 @@ SIM web čte pro dohled a nastavení tyto endpointy:
 - `/flight-data/health/ready` pro stav služby a enabled source list,
 - `/flight-data/api/v1/sources` pro zdroje, licence a produkční omezení,
 - `/flight-data/api/v1/config` pro aktuální non-secret env konfiguraci,
-- `/flight-data/api/v1/cop/tracks?limit=8` pro rychlý náhled dat, deduplikace a stale tracků.
+- `/flight-data/api/v1/aircraft/positions?limit=8` pro rychlý náhled dat, deduplikace a stale tracků.

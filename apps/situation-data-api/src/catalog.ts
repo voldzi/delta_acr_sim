@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 
 const PROVIDER_ID = "sim.situation-data" as const;
-const COP_MAP_CATALOG_DOCUMENT = "/Users/voldzi/Documents/Development/18 2026/DELTA_ACR/01 COP/docs/integration/08_MAP_CATALOG_V1.md";
+const MAP_CATALOG_DOCUMENT = "https://github.com/voldzi/delta_acr_sim/blob/main/docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
 const DEFAULT_MAX_FEATURES = 250;
 
 export function buildSituationMapCatalog(config: SituationDataConfig, generatedAt = new Date().toISOString()): ProviderMapCatalog {
@@ -23,7 +23,7 @@ export function buildSituationMapCatalog(config: SituationDataConfig, generatedA
     generatedAt,
     authority: {
       catalogVersion: "map-catalog-v1",
-      document: COP_MAP_CATALOG_DOCUMENT
+      document: MAP_CATALOG_DOCUMENT
     },
     layers: buildProviderLayers(config),
     sources: descriptors.map((descriptor) => buildProviderSource(descriptor, config))

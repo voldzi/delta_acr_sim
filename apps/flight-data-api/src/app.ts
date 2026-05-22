@@ -105,6 +105,7 @@ function registerFlightRoutes(app: Express, context: FlightDataAppContext): void
   });
 
   app.get("/api/v1/cop/tracks", async (req, res) => {
+    res.set(compatibilityAliasHeaders("/api/v1/aircraft/positions"));
     const query = parseFlightQuery(req.query, context.config.enabledSources);
     if (!query.ok) {
       return problem(req, res, 400, "VALIDATION_ERROR", query.error);
@@ -127,6 +128,14 @@ function registerFlightRoutes(app: Express, context: FlightDataAppContext): void
       problem(req, res, 502, "SOURCE_UNAVAILABLE", error instanceof Error ? error.message : "Unable to fetch flight data.");
     }
   });
+}
+
+function compatibilityAliasHeaders(successorPath: string): Record<string, string> {
+  return {
+    Deprecation: "true",
+    Link: `<${successorPath}>; rel="successor-version"`,
+    Warning: '299 - "Compatibility alias; use the source-neutral provider endpoint for new integrations."'
+  };
 }
 
 function registerReferenceRoutes(app: Express, context: FlightDataAppContext): void {

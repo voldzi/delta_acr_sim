@@ -1,17 +1,17 @@
 # Vyhodnocení open-data zdrojů pro situační obraz
 
-SIM má poskytovat COPu doplňkové vrstvy, které rozšiřují vzdušný obraz o pozemní, síťový, dopravní a meteorologický kontext. Tyto vrstvy nejsou náhradou operačních systémů složek IZS ani garantovaným vojenským zdrojem. V pilotu slouží pro testování integrace, vizualizace a práce s kvalitou dat.
+SIM má poskytovat COM doplňkové vrstvy, které rozšiřují vzdušný obraz o pozemní, síťový, dopravní a meteorologický kontext. Tyto vrstvy nejsou náhradou operačních systémů složek IZS ani garantovaným vojenským zdrojem. V pilotu slouží pro testování integrace, vizualizace a práce s kvalitou dat.
 
 ## Doporučené zdroje pro pilot
 
 | Vrstva | Zdroj | Stav pro pilot | Licence / omezení |
 | --- | --- | --- | --- |
 | `weather` | Open-Meteo Forecast API | vhodné jako první live zdroj bez klíče | Free API je nekomerční, data pod CC BY 4.0 podmínkami, komerční použití přes placený tarif |
-| `weather` | NOAA Aviation Weather Center METAR/TAF | implementováno jako `aviation_weather` pro letištní počasí | Veřejné API bez klíče, ale s rate limity; SIM musí cacheovat a COP nesmí volat AWC přímo |
+| `weather` | NOAA Aviation Weather Center METAR/TAF | implementováno jako `aviation_weather` pro letištní počasí | Veřejné API bez klíče, ale s rate limity; SIM musí cacheovat a COM nesmí volat AWC přímo |
 | `ground` | OpenStreetMap přes OSM extract/PostGIS (`osm_postgis`); Overpass jen pro vývoj | implementováno jako PostGIS provider pro referenční POI po importu Geofabrik PBF extractu; produkčně preferovat Patroni/PostGIS, lokální Docker DB jen jako rebuildovatelný read-model/cache; veřejný Overpass pouze pro malé testovací bbox dotazy | ODbL 1.0, atribuce a share-alike povinnosti pro databáze; veřejné Overpass instance nejsou produkční runtime backend |
 | `mobile` | ČTÚ NetTest open-data ZIP export | implementováno jako live/periodický zdroj `ctu_nettest`; vhodné pro kontext kvality mobilní sítě, ne pro real-time výpadky operátorů | CC BY 4.0 podle exportu; nutná atribuce a práce s anonymizací/accuracy |
 | `traffic` | PID/Golemio GTFS-RT vehicle positions | implementováno jako live zdroj `pid_gtfs_rt` pro pohyb veřejné dopravy v Praze a okolí | open-data podmínky PID/Golemio; nutná atribuce, bez garance operační dostupnosti |
-| `ground/mobile/traffic` | ARDOS partner feed | implementováno jako vypnutý `ardos_partner` konektor | Není open-data; vyžaduje partnerskou dohodu, token, datovou minimalizaci a oprávnění uživatele v COP |
+| `ground/mobile/traffic` | ARDOS partner feed | implementováno jako vypnutý `ardos_partner` konektor | Není open-data; vyžaduje partnerskou dohodu, token, datovou minimalizaci a oprávnění uživatele v COM |
 | `mobile` | OpenCellID, M-Lab | kandidáti pro další rozšíření | OpenCellID CC BY-SA 4.0; M-Lab CC0 |
 | `traffic` | JSDI/NDIC/DATEX II | kandidát pro dopravní incidenty po potvrzení licence a způsobu přístupu | podmínky je nutné ověřit pro konkrétní distribuci a způsob odběru |
 

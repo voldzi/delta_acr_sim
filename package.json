@@ -2,7 +2,7 @@
   "name": "delta-acr-sim",
   "version": "0.1.0",
   "private": true,
-  "description": "COP Air & Situation Simulator - standalone synthetic data simulator.",
+  "description": "DELTA ACR SIM - standalone data provider and synthetic scenario simulator.",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "pnpm --parallel --filter @delta-acr/simulator-api --filter @delta-acr/simulator-web --filter @delta-acr/flight-data-api --filter @delta-acr/situation-data-api --filter @delta-acr/safety-data-api --filter @delta-acr/tak-gateway-api dev",

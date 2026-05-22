@@ -1,20 +1,24 @@
 # TAK Gateway Contract
 
-TAK Gateway je neveřejný partnerský zdroj pro COP. Přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a publikuje poslední známý stav jako GeoJSON. COP nevolá TAK přímo.
+**Status:** neveřejný partner provider kontrakt. Pro nové mapové integrace platí source-neutral provider model v [../provider/00_INDEX.md](../provider/00_INDEX.md).
 
-## COP read endpoint
+TAK Gateway je neveřejný partnerský zdroj pro COM. Přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a publikuje poslední známý stav jako GeoJSON. COM nevolá TAK přímo.
+
+## COM read endpoint
 
 ```http
-GET /tak-gateway/api/v1/cop/features?bbox=west,south,east,north&layers=mobile,ground,traffic&limit=250
+GET /tak-gateway/api/v1/features?bbox=west,south,east,north&layers=mobile,ground,traffic&limit=250
 ```
 
 Veřejná URL pilotu:
 
 ```text
-https://sim.zeleznalady.cz/tak-gateway/api/v1/cop/features
+https://sim.zeleznalady.cz/tak-gateway/api/v1/features
 ```
 
-Pro reálná partnerská data nastav v SIM `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`. COP potom volá endpoint server-side s hlavičkou:
+`/tak-gateway/api/v1/cop/features` zůstává jen jako kompatibilní alias pro existující backend adaptéry.
+
+Pro reálná partnerská data nastav v SIM `TAK_GATEWAY_PUBLIC_READ=false` a `TAK_GATEWAY_READ_TOKEN`. COM potom volá endpoint server-side s hlavičkou:
 
 ```http
 Authorization: Bearer <TAK_GATEWAY_READ_TOKEN>
@@ -111,7 +115,7 @@ Vrstva `traffic` v tomto kontraktu znamená `TAK Gateway > Traffic tracks`, tedy
         "operationalUse": "requires_license",
         "notes": [
           "Data is partner-provided, not public open data.",
-          "COP must apply user authorization and should not expose raw CoT details to public users.",
+          "COM must apply user authorization and should not expose raw CoT details to public users.",
           "SIM stores only the latest event state with bounded retention."
         ]
       },
@@ -187,11 +191,11 @@ GET /tak-gateway/api/v1/config
 
 `GET /tak-gateway/api/v1/events` je pouze interní/debug endpoint. Je vždy chráněný bearer tokenem, i když je `TAK_GATEWAY_PUBLIC_READ=true`. Lze použít `TAK_GATEWAY_READ_TOKEN` nebo `TAK_GATEWAY_INGEST_TOKEN`. Raw CoT vrací jen při `includeRaw=true` a současně `TAK_GATEWAY_EXPOSE_RAW=true`.
 
-## Doporučení pro COP
+## Doporučení pro COM
 
 1. Přidej volitelný zdroj `tak_gateway`.
-2. Čti `GET /tak-gateway/api/v1/cop/features` stejně jako jiné GeoJSON mapové zdroje.
+2. Čti `GET /tak-gateway/api/v1/features` server-side stejně jako jiné GeoJSON mapové zdroje.
 3. Vrstvu defaultně zapínej jen v interním nebo partnerském režimu.
 4. Zobraz `stale=true` jako degradovaný stav, ne jako aktuální polohu.
 5. Nepoužívej `affiliation` k žádnému targeting nebo naváděcímu workflow. Je to pouze situační metadata.
-6. Pro reálný pilot čti SIM ze serveru COP s `TAK_GATEWAY_READ_TOKEN`; token nevkládej do frontendového bundle.
+6. Pro reálný pilot čti SIM ze serveru COM s `TAK_GATEWAY_READ_TOKEN`; token nevkládej do frontendového bundle.
