@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express } from "express";
+import { AirspaceActivationService } from "./airspace-activation.js";
 import { AirspaceReferenceService } from "./airspace-reference.js";
 import type { FlightDataConfig } from "./config.js";
 import { FlightAggregationService } from "./aggregation.js";
@@ -8,12 +9,15 @@ import { problem } from "./http.js";
 import { getAircraftType, ReferenceDataService, searchAircraftTypes } from "./reference-data.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
 import type { BoundingBox, FlightDataPublicConfig, FlightDataSourceId, FlightQuery } from "./types.js";
+import { UasGeozoneService } from "./uas-geozones.js";
 
 export interface FlightDataAppContext {
   config: FlightDataConfig;
   aggregation: FlightAggregationService;
   referenceData: ReferenceDataService;
   airspaces: AirspaceReferenceService;
+  uasGeozones: UasGeozoneService;
+  airspaceActivations: AirspaceActivationService;
 }
 
 export async function createApp(config: FlightDataConfig): Promise<{ app: Express; context: FlightDataAppContext }> {
@@ -21,7 +25,9 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
   const aggregation = new FlightAggregationService(config, sources);
   const referenceData = new ReferenceDataService(config);
   const airspaces = new AirspaceReferenceService(config);
-  const context: FlightDataAppContext = { config, aggregation, referenceData, airspaces };
+  const uasGeozones = new UasGeozoneService(config);
+  const airspaceActivations = new AirspaceActivationService(config, uasGeozones);
+  const context: FlightDataAppContext = { config, aggregation, referenceData, airspaces, uasGeozones, airspaceActivations };
   const app = express();
 
   app.use(cors());
@@ -55,6 +61,8 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
   app.get("/metrics", (_req, res) => {
     const cache = context.aggregation.cacheStats();
     const airspaceCache = context.airspaces.cacheStats();
+    const uasGeozoneCache = context.uasGeozones.cacheStats();
+    const airspaceActivationCache = context.airspaceActivations.cacheStats();
     const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
       `flight_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `flight_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -86,6 +94,16 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
           `flight_data_reference_cache_misses{source="czech_aip_airspaces"} ${airspaceCache.misses}`,
           `flight_data_reference_cache_stale_hits{source="czech_aip_airspaces"} ${airspaceCache.staleHits}`,
           `flight_data_reference_cache_errors{source="czech_aip_airspaces"} ${airspaceCache.errors}`,
+          `flight_data_reference_cache_entries{source="czech_uas_geozones"} ${uasGeozoneCache.entries}`,
+          `flight_data_reference_cache_hits{source="czech_uas_geozones"} ${uasGeozoneCache.hits}`,
+          `flight_data_reference_cache_misses{source="czech_uas_geozones"} ${uasGeozoneCache.misses}`,
+          `flight_data_reference_cache_stale_hits{source="czech_uas_geozones"} ${uasGeozoneCache.staleHits}`,
+          `flight_data_reference_cache_errors{source="czech_uas_geozones"} ${uasGeozoneCache.errors}`,
+          `flight_data_reference_cache_entries{source="czech_aup_uup"} ${airspaceActivationCache.entries}`,
+          `flight_data_reference_cache_hits{source="czech_aup_uup"} ${airspaceActivationCache.hits}`,
+          `flight_data_reference_cache_misses{source="czech_aup_uup"} ${airspaceActivationCache.misses}`,
+          `flight_data_reference_cache_stale_hits{source="czech_aup_uup"} ${airspaceActivationCache.staleHits}`,
+          `flight_data_reference_cache_errors{source="czech_aup_uup"} ${airspaceActivationCache.errors}`,
           ...sourceCacheLines
         ].join("\n") + "\n"
       );
@@ -220,6 +238,37 @@ function registerReferenceRoutes(app: Express, context: FlightDataAppContext): v
       })
     );
   });
+
+  app.get("/api/v1/uas-geozones", async (req, res) => {
+    const bbox = parseBbox(req.query.bbox);
+    if (!bbox.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", bbox.error);
+    }
+    const layerIds = parseLayerIds(req.query.layer ?? req.query.layers ?? req.query.publication ?? req.query.publications);
+    const limit = parseLimit(req.query.limit, 250, 1000);
+    res.json(
+      await context.uasGeozones.getFeatureCollection({
+        bbox: bbox.value,
+        layerIds,
+        limit
+      })
+    );
+  });
+
+  app.get("/api/v1/airspace-activations", async (req, res) => {
+    const bbox = parseBbox(req.query.bbox);
+    if (!bbox.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", bbox.error);
+    }
+    const limit = parseLimit(req.query.limit, 250, 1000);
+    res.json(
+      await context.airspaceActivations.getFeatureCollection({
+        bbox: bbox.value,
+        limit,
+        includeCancelled: parseBoolean(req.query.includeCancelled)
+      })
+    );
+  });
 }
 
 function parseFlightQuery(raw: Record<string, unknown>, defaultSources: FlightDataSourceId[]): { ok: true; value: FlightQuery } | { ok: false; error: string } {
@@ -290,6 +339,18 @@ function parseAirspaceTypes(value: unknown): { ok: true; value?: Array<"prohibit
   };
 }
 
+function parseLayerIds(value: unknown): string[] | undefined {
+  const raw = asString(value);
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = raw
+    .split(",")
+    .map((item) => item.trim().toUpperCase())
+    .filter((item) => item.length > 0);
+  return parsed.length > 0 ? parsed : undefined;
+}
+
 function parseLimit(value: unknown, fallback: number, max: number): number {
   const raw = asString(value);
   if (!raw) {
@@ -344,7 +405,14 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
       ourAirportsCacheTtlSeconds: config.ourAirportsCacheTtlSeconds,
       aipAirspacesEnabled: config.aipAirspacesEnabled,
       aipAirspacesCacheTtlSeconds: config.aipAirspacesCacheTtlSeconds,
-      aipAirspacesSourceUrl: config.aipAirspacesSourceUrl
+      aipAirspacesSourceUrl: config.aipAirspacesSourceUrl,
+      uasGeozonesEnabled: config.uasGeozonesEnabled,
+      uasGeozonesLayerIds: config.uasGeozonesLayerIds,
+      uasGeozonesCacheTtlSeconds: config.uasGeozonesCacheTtlSeconds,
+      uasGeozonesCatalogUrl: config.uasGeozonesCatalogUrl,
+      airspaceActivationEnabled: config.airspaceActivationEnabled,
+      airspaceActivationCacheTtlSeconds: config.airspaceActivationCacheTtlSeconds,
+      airspaceActivationBaseUrl: config.airspaceActivationBaseUrl
     }
   };
 }

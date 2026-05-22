@@ -37,7 +37,14 @@ describe("Flight Data API contract", () => {
       ourAirportsCacheTtlSeconds: 86400,
       aipAirspacesEnabled: false,
       aipAirspacesSourceUrl: "https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html",
-      aipAirspacesCacheTtlSeconds: 86400
+      aipAirspacesCacheTtlSeconds: 86400,
+      uasGeozonesEnabled: false,
+      uasGeozonesCatalogUrl: "https://aim.rlp.cz/?lang=cz&p=uas-gz",
+      uasGeozonesLayerIds: ["LKR320A"],
+      uasGeozonesCacheTtlSeconds: 86400,
+      airspaceActivationEnabled: false,
+      airspaceActivationBaseUrl: "https://aup.rlp.cz/",
+      airspaceActivationCacheTtlSeconds: 300
     };
     ({ app } = await createApp(config));
   });
@@ -91,7 +98,11 @@ describe("Flight Data API contract", () => {
           ourAirportsCountries: ["CZ", "SK", "AT", "DE", "PL", "HU"],
           ourAirportsCacheTtlSeconds: 86400,
           aipAirspacesEnabled: false,
-          aipAirspacesCacheTtlSeconds: 86400
+          aipAirspacesCacheTtlSeconds: 86400,
+          uasGeozonesEnabled: false,
+          uasGeozonesLayerIds: ["LKR320A"],
+          airspaceActivationEnabled: false,
+          airspaceActivationCacheTtlSeconds: 300
         }),
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -137,6 +148,18 @@ describe("Flight Data API contract", () => {
           recommendedCatalogLayerId: "flight.reference.airspaces",
           kind: "static_reference",
           categories: expect.arrayContaining(["airspace"])
+        }),
+        expect.objectContaining({
+          providerLayerId: "flight.uas_geozones",
+          recommendedCatalogLayerId: "flight.reference.uas_geozones",
+          kind: "static_reference",
+          categories: expect.arrayContaining(["uas_geozone"])
+        }),
+        expect.objectContaining({
+          providerLayerId: "flight.airspace_activation",
+          recommendedCatalogLayerId: "flight.airspace.activation",
+          kind: "vector_features",
+          categories: expect.arrayContaining(["airspace_activation"])
         })
       ])
     );
@@ -159,6 +182,18 @@ describe("Flight Data API contract", () => {
           sourceRole: "reference",
           feedsLayerIds: ["flight.airspaces"],
           feedsCatalogLayerIds: ["flight.reference.airspaces"]
+        }),
+        expect.objectContaining({
+          sourceId: "czech_uas_geozones",
+          sourceRole: "reference",
+          feedsLayerIds: ["flight.uas_geozones"],
+          feedsCatalogLayerIds: ["flight.reference.uas_geozones"]
+        }),
+        expect.objectContaining({
+          sourceId: "czech_aup_uup",
+          sourceRole: "reference",
+          feedsLayerIds: ["flight.airspace_activation"],
+          feedsCatalogLayerIds: ["flight.airspace.activation"]
         })
       ])
     );
@@ -179,6 +214,8 @@ describe("Flight Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_misses{source="opensky"}');
     expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_stale_hits{source="local_adsb"}');
     expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_aip_airspaces"}');
+    expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_uas_geozones"}');
+    expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_aup_uup"}');
   });
 
   it("returns deduplicated aircraft positions by icao24", async () => {
@@ -286,6 +323,16 @@ describe("Flight Data API contract", () => {
         })
       ])
     );
+  });
+
+  it("exposes UAS geozone reference and activation endpoints", async () => {
+    const uas = await request(app).get("/api/v1/uas-geozones?bbox=12,48,19,52&limit=10").expect(200);
+    expect(uas.body.contractVersion).toBe("flight-uas-geozone-reference-v1");
+    expect(uas.body.summary.notForNavigation).toBe(true);
+
+    const activations = await request(app).get("/api/v1/airspace-activations?bbox=12,48,19,52&limit=10&includeCancelled=true").expect(200);
+    expect(activations.body.contractVersion).toBe("flight-airspace-activation-v1");
+    expect(activations.body.summary.notForNavigation).toBe(true);
   });
 
   it("validates bbox format", async () => {

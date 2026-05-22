@@ -143,6 +143,13 @@ export interface FlightDataConfig {
     aipAirspacesEnabled: boolean;
     aipAirspacesCacheTtlSeconds: number;
     aipAirspacesSourceUrl: string;
+    uasGeozonesEnabled: boolean;
+    uasGeozonesLayerIds: string[];
+    uasGeozonesCacheTtlSeconds: number;
+    uasGeozonesCatalogUrl: string;
+    airspaceActivationEnabled: boolean;
+    airspaceActivationCacheTtlSeconds: number;
+    airspaceActivationBaseUrl: string;
   };
 }
 

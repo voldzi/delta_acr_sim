@@ -26,7 +26,9 @@ Výchozí implementace proto odděluje normalizovaný provider kontrakt od konkr
 | OpenSky Aircraft Database | Jen doplňkově | Rizikové | Samotná aircraft DB je deklarovaná jako nelicencovaná/as-is crowdsourced databáze. Pro komerční produkt je lepší licencovaný zdroj. |
 | AIP/eAIP ČR ENR 5.1 | Ano, referenční situační vrstva | Ověřit u AIS/ŘLP nebo použít licencovaný AIXM/AIP feed | Veřejná eAIP stránka obsahuje zakázané, omezené a nebezpečné prostory včetně strukturovaných souřadnic. SIM používá cacheovaný import a výstup označuje `notForNavigation=true`. |
 | OpenAIP | Nekomercní/pilot po posouzení | Pozor na CC BY-NC / podmínky | Užitečný komunitní zdroj leteckých prostorů, ale licence není čistě komerční open-data. Nepoužívat jako produkční default bez právního posouzení. |
-| DroneMap ČR | Ne jako republikační zdroj | Jen s písemným souhlasem | Oficiální UAS geografické zóny, ale podmínky omezují veřejné zobrazování/distribuci odvozených dat bez souhlasu. Vhodné řešit partnerstvím s ŘLP/ÚCL. |
+| AIM/ŘLP UAS zeměpisné zóny | Ano | Ano, při splnění podmínek datových sad a atribuce | Oficiální JSON/GeoJSON datové sady pro UAS geoawareness. SIM používá vybrané vrstvy jako `czech_uas_geozones`; velmi velké vrstvy patří do offline PostGIS/tile pipeline. |
+| AUP/UUP ŘLP | Ano | Ano, při zachování atribuce a zdrojového charakteru | Oficiální plán využití vzdušného prostoru. SIM jej používá jako dynamickou vrstvu `czech_aup_uup`, párovanou na dostupnou geometrii UAS/AIM zón. |
+| DroneMap ČR UI | Ne jako scraping/republikační zdroj | Jen s písemným souhlasem | DroneMap je oficiální vizualizace. Pro SIM je čistší číst přímo publikované AIM datové sady, ne vytěžovat uživatelské UI. |
 
 ## Licenční závěr
 
@@ -57,6 +59,8 @@ Pro komerční použití:
 - ICAO API Data Service: https://dataservices.icao.int/
 - OpenFlights data/license: https://openflights.org/data.php
 - AIP ČR ENR 5.1: https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html
+- AIM UAS zeměpisné zóny: https://aim.rlp.cz/?lang=cz&p=uas-gz
+- AUP/UUP ŘLP: https://aup.rlp.cz/
 - OpenAIP: https://www.openaip.net/
 - DroneMap: https://dronemap.gov.cz/
 - DroneMap terms: https://dronemap.gov.cz/doc/podminky_uziti_dm_en.pdf

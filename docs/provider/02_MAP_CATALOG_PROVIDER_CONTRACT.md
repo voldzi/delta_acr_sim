@@ -148,6 +148,8 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `flight.public.tracks`
 - `flight.reference.airports`
 - `flight.reference.airspaces`
+- `flight.reference.uas_geozones`
+- `flight.airspace.activation`
 - `partner.tak.mobile`
 - `partner.tak.ground`
 - `partner.tak.traffic`

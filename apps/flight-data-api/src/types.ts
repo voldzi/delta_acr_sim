@@ -57,6 +57,13 @@ export interface FlightDataPublicConfig {
     aipAirspacesEnabled: boolean;
     aipAirspacesCacheTtlSeconds: number;
     aipAirspacesSourceUrl: string;
+    uasGeozonesEnabled: boolean;
+    uasGeozonesLayerIds: string[];
+    uasGeozonesCacheTtlSeconds: number;
+    uasGeozonesCatalogUrl: string;
+    airspaceActivationEnabled: boolean;
+    airspaceActivationCacheTtlSeconds: number;
+    airspaceActivationBaseUrl: string;
   };
 }
 
@@ -188,6 +195,23 @@ export interface GeoJsonPolygon {
   type: "Polygon";
   coordinates: Array<Array<[number, number]>>;
 }
+
+export interface GeoJsonMultiPolygon {
+  type: "MultiPolygon";
+  coordinates: Array<Array<Array<[number, number]>>>;
+}
+
+export interface GeoJsonPoint {
+  type: "Point";
+  coordinates: [number, number];
+}
+
+export interface GeoJsonLineString {
+  type: "LineString";
+  coordinates: Array<[number, number]>;
+}
+
+export type GeoJsonGeometry = GeoJsonPoint | GeoJsonLineString | GeoJsonPolygon | GeoJsonMultiPolygon;
 
 export type AviationAirspaceType = "prohibited" | "restricted" | "danger" | "temporary_reserved" | "temporary_segregated" | "other";
 

@@ -127,6 +127,82 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
             "DroneMap UAS geographical zones are not republished because its terms restrict public redistribution without written consent."
           ]
         }
+      },
+      {
+        providerLayerId: "flight.uas_geozones",
+        recommendedCatalogLayerId: "flight.reference.uas_geozones",
+        label: "UAS zeměpisné zóny",
+        description: "Referenční zeměpisné zóny pro bezpilotní systémy z oficiálních AIM/ŘLP JSON datových sad.",
+        categoryPath: ["flight", "reference", "uas-geozones"],
+        categories: ["uas_geozone", "geoawareness", "restricted_area"],
+        role: "reference",
+        audience: "public",
+        kind: "static_reference",
+        defaultVisible: false,
+        selectable: true,
+        geometryTypes: ["Polygon", "MultiPolygon"],
+        minZoom: 7,
+        maxZoom: 18,
+        refreshSeconds: config.uasGeozonesCacheTtlSeconds,
+        cacheTtlSeconds: config.uasGeozonesCacheTtlSeconds,
+        styleProfile: "uas-geozone-reference-v1",
+        sourceIds: ["czech_uas_geozones"],
+        filters: [
+          {
+            filterId: "publication",
+            label: "Datová sada",
+            type: "multi_select",
+            values: config.uasGeozonesLayerIds,
+            defaultValue: config.uasGeozonesLayerIds
+          }
+        ],
+        query: {
+          mode: "bbox",
+          providerId: PROVIDER_ID,
+          streamId: "uas.geozones",
+          providerLayerIds: ["flight.uas_geozones"],
+          providerSourceIds: ["czech_uas_geozones"],
+          maxFeatures: 1000
+        },
+        legal: {
+          attribution: "Řízení letového provozu České republiky, s.p. / AIM.",
+          notes: [
+            "Reference layer for UAS geoawareness, not a replacement for pre-flight planning.",
+            "The default import intentionally avoids very large AIM packages; broaden UAS_GEOZONES_LAYER_IDS only with cache/tile capacity sized for it."
+          ]
+        }
+      },
+      {
+        providerLayerId: "flight.airspace_activation",
+        recommendedCatalogLayerId: "flight.airspace.activation",
+        label: "Aktivace vzdušných prostorů",
+        description: "Aktuální plánovaná a aktualizovaná aktivace TRA/TSA prostorů z AUP/UUP ŘLP, promítnutá na dostupnou geometrii UAS/AIM zón.",
+        categoryPath: ["flight", "airspace", "activation"],
+        categories: ["airspace_activation", "aup", "uup"],
+        role: "overlay",
+        audience: "public",
+        kind: "vector_features",
+        defaultVisible: false,
+        selectable: true,
+        geometryTypes: ["Polygon", "MultiPolygon"],
+        minZoom: 6,
+        maxZoom: 18,
+        refreshSeconds: config.airspaceActivationCacheTtlSeconds,
+        cacheTtlSeconds: config.airspaceActivationCacheTtlSeconds,
+        styleProfile: "airspace-activation-v1",
+        sourceIds: ["czech_aup_uup"],
+        query: {
+          mode: "bbox",
+          providerId: PROVIDER_ID,
+          streamId: "airspace.activations",
+          providerLayerIds: ["flight.airspace_activation"],
+          providerSourceIds: ["czech_aup_uup"],
+          maxFeatures: 1000
+        },
+        legal: {
+          attribution: "Řízení letového provozu České republiky, s.p. / AUP/UUP.",
+          notes: ["Situational activation overview only; NOTAM/AUP/UUP source documents remain authoritative."]
+        }
       }
     ],
     sources: [
@@ -178,6 +254,53 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
           ]
         },
         notes: ["Cache-backed reference source for restricted/prohibited/danger airspaces."]
+      },
+      {
+        sourceId: "czech_uas_geozones",
+        label: "AIM/ANS CR UAS geographical zones",
+        enabled: config.uasGeozonesEnabled,
+        mode: "reference",
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["flight.uas_geozones"],
+        feedsCatalogLayerIds: ["flight.reference.uas_geozones"],
+        updateCadenceSeconds: config.uasGeozonesCacheTtlSeconds,
+        cacheTtlSeconds: config.uasGeozonesCacheTtlSeconds,
+        baseUrl: config.uasGeozonesCatalogUrl,
+        license: {
+          name: "AIM/ANS CR UAS geographical zone dataset terms",
+          attribution: "Řízení letového provozu České republiky, s.p. / AIM",
+          commercialUse: "allowed_with_obligations",
+          operationalUse: "allowed_with_obligations",
+          notes: ["Preserve attribution and dataset validity metadata.", "Use reference GeoJSON files for precise UAS geographical zone boundaries."]
+        },
+        notes: ["Configured imported layers: " + config.uasGeozonesLayerIds.join(", ")]
+      },
+      {
+        sourceId: "czech_aup_uup",
+        label: "ANS CR AUP/UUP airspace activation",
+        enabled: config.airspaceActivationEnabled,
+        mode: "live",
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["flight.airspace_activation"],
+        feedsCatalogLayerIds: ["flight.airspace.activation"],
+        technicalInputs: ["czech_uas_geozones"],
+        updateCadenceSeconds: config.airspaceActivationCacheTtlSeconds,
+        cacheTtlSeconds: config.airspaceActivationCacheTtlSeconds,
+        baseUrl: config.airspaceActivationBaseUrl,
+        license: {
+          name: "ANS CR AUP/UUP publication terms",
+          attribution: "Řízení letového provozu České republiky, s.p. / AUP/UUP",
+          commercialUse: "allowed_with_obligations",
+          operationalUse: "allowed_with_obligations",
+          notes: ["AUP/UUP source documents remain authoritative.", "Geometry matching depends on the imported AIM UAS geozone datasets."]
+        },
+        notes: ["Dynamic activation overlay matched to available geozone geometry."]
       }
     ]
   };

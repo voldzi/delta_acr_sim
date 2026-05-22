@@ -178,6 +178,51 @@ paths:
                 $ref: '#/components/schemas/AirspaceFeatureCollection'
         '400':
           $ref: '#/components/responses/Problem'
+  /api/v1/uas-geozones:
+    get:
+      tags: [Reference]
+      summary: Vrátí referenční UAS zeměpisné zóny jako GeoJSON FeatureCollection.
+      description: Cacheovaná vrstva oficiálních AIM/ŘLP JSON datových sad pro UAS geoawareness. Výchozí konfigurace importuje jen vybrané vrstvy vhodné pro runtime API; velké balíčky mají být řešené importem do PostGIS/tile cache.
+      parameters:
+        - $ref: '#/components/parameters/Bbox'
+        - name: layer
+          in: query
+          description: Comma-separated AIM publication/layer ids.
+          schema:
+            type: string
+            example: LKR314A,LKR320A
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: UAS geozone GeoJSON FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UasGeozoneFeatureCollection'
+        '400':
+          $ref: '#/components/responses/Problem'
+  /api/v1/airspace-activations:
+    get:
+      tags: [Reference]
+      summary: Vrátí aktuální aktivace vzdušných prostorů z AUP/UUP jako GeoJSON FeatureCollection.
+      description: Dynamická vrstva AUP/UUP, kde SIM páruje TRA/TSA aktivace na dostupnou geometrii z importovaných AIM UAS zón.
+      parameters:
+        - $ref: '#/components/parameters/Bbox'
+        - name: includeCancelled
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Airspace activation GeoJSON FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AirspaceActivationFeatureCollection'
+        '400':
+          $ref: '#/components/responses/Problem'
   /api/v1/aircraft-types:
     get:
       tags: [Reference]
@@ -491,6 +536,22 @@ components:
               type: integer
             aipAirspacesSourceUrl:
               type: string
+            uasGeozonesEnabled:
+              type: boolean
+            uasGeozonesLayerIds:
+              type: array
+              items:
+                type: string
+            uasGeozonesCacheTtlSeconds:
+              type: integer
+            uasGeozonesCatalogUrl:
+              type: string
+            airspaceActivationEnabled:
+              type: boolean
+            airspaceActivationCacheTtlSeconds:
+              type: integer
+            airspaceActivationBaseUrl:
+              type: string
     Airport:
       type: object
       properties:
@@ -641,6 +702,96 @@ components:
               type: boolean
             providerProperties:
               type: object
+    UasGeozoneFeatureCollection:
+      type: object
+      required: [type, contractVersion, generatedAt, features, source, summary, warnings]
+      properties:
+        type:
+          type: string
+          const: FeatureCollection
+        contractVersion:
+          type: string
+          const: flight-uas-geozone-reference-v1
+        generatedAt:
+          type: string
+          format: date-time
+        features:
+          type: array
+          items:
+            type: object
+        source:
+          type: object
+          properties:
+            sourceId:
+              type: string
+              const: czech_uas_geozones
+            catalogUrl:
+              type: string
+            importedLayerIds:
+              type: array
+              items:
+                type: string
+        summary:
+          type: object
+          properties:
+            totalReferenceGeozones:
+              type: integer
+            returnedGeozones:
+              type: integer
+            notForNavigation:
+              type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+    AirspaceActivationFeatureCollection:
+      type: object
+      required: [type, contractVersion, generatedAt, features, source, summary, warnings]
+      properties:
+        type:
+          type: string
+          const: FeatureCollection
+        contractVersion:
+          type: string
+          const: flight-airspace-activation-v1
+        generatedAt:
+          type: string
+          format: date-time
+        features:
+          type: array
+          items:
+            type: object
+        source:
+          type: object
+          properties:
+            sourceId:
+              type: string
+              const: czech_aup_uup
+            baseUrl:
+              type: string
+            validFrom:
+              type: string
+              format: date-time
+            validTo:
+              type: string
+              format: date-time
+        summary:
+          type: object
+          properties:
+            activationCount:
+              type: integer
+            returnedActivations:
+              type: integer
+            cancelledCount:
+              type: integer
+            withGeometryCount:
+              type: integer
+            notForNavigation:
+              type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
     AircraftType:
       allOf:
         - $ref: '#/components/schemas/AircraftTypePartial'

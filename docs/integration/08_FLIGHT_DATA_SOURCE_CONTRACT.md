@@ -29,6 +29,8 @@ GET /api/v1/cop/tracks
 GET /api/v1/airports
 GET /api/v1/airports/{ident}
 GET /api/v1/airspaces
+GET /api/v1/uas-geozones
+GET /api/v1/airspace-activations
 GET /api/v1/aircraft-types
 GET /api/v1/aircraft-types/{designator}
 GET /api/v1/sources
@@ -40,7 +42,9 @@ GET /health/ready
 
 - `flight.public.tracks` z provider layer `flight.tracks`,
 - `flight.reference.airports` z provider layer `flight.airports`,
-- `flight.reference.airspaces` z provider layer `flight.airspaces`.
+- `flight.reference.airspaces` z provider layer `flight.airspaces`,
+- `flight.reference.uas_geozones` z provider layer `flight.uas_geozones`,
+- `flight.airspace.activation` z provider layer `flight.airspace_activation`.
 
 COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a licenční/provenance metadata.
 
@@ -177,6 +181,16 @@ Endpoint podporuje:
 
 Vrstva je určena pro situační přehled v COM, ne pro navigaci ani právně závazné letecké rozhodování. Pro produkční nebo komerční redistribuci je potřeba potvrdit oprávnění u AIS/ŘLP ČR nebo použít licencovaný AIXM/AIP feed. SIM výslovně nerepublikuje DroneMap UAS zóny, protože podmínky DroneMap omezují veřejné zobrazování a distribuci bez písemného souhlasu.
 
+`GET /api/v1/uas-geozones` vrací GeoJSON `FeatureCollection` z oficiálních AIM/ŘLP datových sad UAS zeměpisných zón. Výchozí import je záměrně omezený na produkčně rozumné vrstvy:
+
+```bash
+UAS_GEOZONES_LAYER_IDS=LKR314A,LKR314B,LKR314C,LKR314D,LKR314E,LKR314F,LKR315A,LKR315B,LKR319,LKR320A
+```
+
+Velké vrstvy jako `LKR316`, silniční/železniční zóny nebo kompletní `geozones_geojson.zip` nemají být v produkci tahány jako live runtime odpověď pro tisíce uživatelů. Pro ně je správná cesta offline import do PostGIS a publikace přes tile/cache vrstvu.
+
+`GET /api/v1/airspace-activations` vrací aktuální aktivace z AUP/UUP. SIM načte platný AUP a případný UUP z `https://aup.rlp.cz/`, vyparsuje sekci `C/ Prostory spravované AMC` a páruje TRA/TSA identifikátory na dostupnou geometrii z `LKR320A`. Endpoint podporuje `includeCancelled=true`, aby COM mohl zobrazit i zrušené položky z UUP diagnosticky.
+
 Typy letadel zůstávají zatím seedované v SIM. Úplnější aircraft type store musí přijít z licencovaného nebo právně ověřeného zdroje.
 
 ## Konfigurace lokální ADS-B sítě
@@ -189,6 +203,13 @@ FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
 AIP_AIRSPACES_ENABLED=true
 AIP_AIRSPACES_SOURCE_URL=https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html
 AIP_AIRSPACES_CACHE_TTL_SECONDS=86400
+UAS_GEOZONES_ENABLED=true
+UAS_GEOZONES_CATALOG_URL=https://aim.rlp.cz/?lang=cz&p=uas-gz
+UAS_GEOZONES_LAYER_IDS=LKR314A,LKR314B,LKR314C,LKR314D,LKR314E,LKR314F,LKR315A,LKR315B,LKR319,LKR320A
+UAS_GEOZONES_CACHE_TTL_SECONDS=86400
+AIRSPACE_ACTIVATION_ENABLED=true
+AIRSPACE_ACTIVATION_BASE_URL=https://aup.rlp.cz/
+AIRSPACE_ACTIVATION_CACHE_TTL_SECONDS=300
 ```
 
 Používej jen přijímače provozované projektem nebo partnery, kteří výslovně povolí redistribuci do COM. Nepřeposílej komerční ani komunitní feedy, jejichž podmínky to neumožňují.
@@ -211,3 +232,5 @@ SIM web čte pro dohled a nastavení tyto endpointy:
 - `/flight-data/api/v1/config` pro aktuální non-secret env konfiguraci,
 - `/flight-data/api/v1/aircraft/positions?limit=8` pro rychlý náhled dat, deduplikace a stale tracků.
 - `/flight-data/api/v1/airspaces?bbox=12,48,19,52&type=prohibited,restricted,danger` pro kontrolu referenční vrstvy leteckých prostorů.
+- `/flight-data/api/v1/uas-geozones?bbox=12,48,19,52&limit=1000` pro kontrolu UAS zeměpisných zón.
+- `/flight-data/api/v1/airspace-activations?bbox=12,48,19,52&includeCancelled=true` pro kontrolu AUP/UUP aktivací.

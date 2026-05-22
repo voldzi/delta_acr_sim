@@ -29,6 +29,13 @@ export interface FlightDataConfig {
   aipAirspacesEnabled: boolean;
   aipAirspacesSourceUrl: string;
   aipAirspacesCacheTtlSeconds: number;
+  uasGeozonesEnabled: boolean;
+  uasGeozonesCatalogUrl: string;
+  uasGeozonesLayerIds: string[];
+  uasGeozonesCacheTtlSeconds: number;
+  airspaceActivationEnabled: boolean;
+  airspaceActivationBaseUrl: string;
+  airspaceActivationCacheTtlSeconds: number;
 }
 
 export async function loadConfig(): Promise<FlightDataConfig> {
@@ -62,7 +69,25 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     ourAirportsCacheTtlSeconds: parseInteger(process.env.OURAIRPORTS_CACHE_TTL_SECONDS, 24 * 60 * 60),
     aipAirspacesEnabled: parseBoolean(process.env.AIP_AIRSPACES_ENABLED, true),
     aipAirspacesSourceUrl: process.env.AIP_AIRSPACES_SOURCE_URL ?? "https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html",
-    aipAirspacesCacheTtlSeconds: parseInteger(process.env.AIP_AIRSPACES_CACHE_TTL_SECONDS, 24 * 60 * 60)
+    aipAirspacesCacheTtlSeconds: parseInteger(process.env.AIP_AIRSPACES_CACHE_TTL_SECONDS, 24 * 60 * 60),
+    uasGeozonesEnabled: parseBoolean(process.env.UAS_GEOZONES_ENABLED, true),
+    uasGeozonesCatalogUrl: process.env.UAS_GEOZONES_CATALOG_URL ?? "https://aim.rlp.cz/?lang=cz&p=uas-gz",
+    uasGeozonesLayerIds: parseStringList(process.env.UAS_GEOZONES_LAYER_IDS, [
+      "LKR314A",
+      "LKR314B",
+      "LKR314C",
+      "LKR314D",
+      "LKR314E",
+      "LKR314F",
+      "LKR315A",
+      "LKR315B",
+      "LKR319",
+      "LKR320A"
+    ]).map((item) => item.toUpperCase()),
+    uasGeozonesCacheTtlSeconds: parseInteger(process.env.UAS_GEOZONES_CACHE_TTL_SECONDS, 24 * 60 * 60),
+    airspaceActivationEnabled: parseBoolean(process.env.AIRSPACE_ACTIVATION_ENABLED, true),
+    airspaceActivationBaseUrl: process.env.AIRSPACE_ACTIVATION_BASE_URL ?? "https://aup.rlp.cz/",
+    airspaceActivationCacheTtlSeconds: parseInteger(process.env.AIRSPACE_ACTIVATION_CACHE_TTL_SECONDS, 5 * 60)
   };
 }
 
