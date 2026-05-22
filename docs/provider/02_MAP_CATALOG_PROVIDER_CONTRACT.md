@@ -132,6 +132,28 @@ Diagnostické vstupy `mobile_coverage_model`, `ctu_nettest` a OSM komunikační 
 
 V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`, zatímco `mobile_coverage_model` a `ctu_nettest` jsou `sourceRole=input` a `audience=diagnostic`.
 
+## Doporučená katalogová ID
+
+SIM používá nebo doporučuje tato stabilní COM layer ID:
+
+- `public.safety.warnings`
+- `public.safety.flood`
+- `public.weather.current`
+- `public.weather.aviation`
+- `public.mobile.network`
+- `public.traffic.transit`
+- `reference.infrastructure.healthcare`
+- `reference.infrastructure.emergency`
+- `reference.infrastructure.communications`
+- `flight.public.tracks`
+- `flight.reference.airports`
+- `flight.reference.airspaces`
+- `partner.tak.mobile`
+- `partner.tak.ground`
+- `partner.tak.traffic`
+- `diagnostic.mobile.coverage`
+- `diagnostic.mobile.ctu_measurements`
+
 ## Kompatibilní feature streamy v SIM
 
 Tyto cesty existují pro backend COM a pro přímé integrační testy:

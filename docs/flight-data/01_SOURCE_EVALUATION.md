@@ -24,6 +24,9 @@ Výchozí implementace proto odděluje normalizovaný provider kontrakt od konkr
 | ICAO API Data Service | Test přes trial | Ano, přes oficiální API/licenci | Vhodný cílový zdroj pro oficiální typy letadel a ICAO kódy. Trial poskytuje omezený počet volání. |
 | OpenFlights | Jen doplňkově | Rizikové bez posouzení | ODbL plus historická/neudržovaná route data. Lze použít pro demo lookup, ne jako autoritativní provozní základ. |
 | OpenSky Aircraft Database | Jen doplňkově | Rizikové | Samotná aircraft DB je deklarovaná jako nelicencovaná/as-is crowdsourced databáze. Pro komerční produkt je lepší licencovaný zdroj. |
+| AIP/eAIP ČR ENR 5.1 | Ano, referenční situační vrstva | Ověřit u AIS/ŘLP nebo použít licencovaný AIXM/AIP feed | Veřejná eAIP stránka obsahuje zakázané, omezené a nebezpečné prostory včetně strukturovaných souřadnic. SIM používá cacheovaný import a výstup označuje `notForNavigation=true`. |
+| OpenAIP | Nekomercní/pilot po posouzení | Pozor na CC BY-NC / podmínky | Užitečný komunitní zdroj leteckých prostorů, ale licence není čistě komerční open-data. Nepoužívat jako produkční default bez právního posouzení. |
+| DroneMap ČR | Ne jako republikační zdroj | Jen s písemným souhlasem | Oficiální UAS geografické zóny, ale podmínky omezují veřejné zobrazování/distribuci odvozených dat bez souhlasu. Vhodné řešit partnerstvím s ŘLP/ÚCL. |
 
 ## Licenční závěr
 
@@ -53,3 +56,7 @@ Pro komerční použití:
 - OpenSky aircraft database: https://opensky-network.org/data/aircraft
 - ICAO API Data Service: https://dataservices.icao.int/
 - OpenFlights data/license: https://openflights.org/data.php
+- AIP ČR ENR 5.1: https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html
+- OpenAIP: https://www.openaip.net/
+- DroneMap: https://dronemap.gov.cz/
+- DroneMap terms: https://dronemap.gov.cz/doc/podminky_uziti_dm_en.pdf

@@ -26,6 +26,9 @@ export interface FlightDataConfig {
   ourAirportsCsvUrl: string;
   ourAirportsCountries: string[];
   ourAirportsCacheTtlSeconds: number;
+  aipAirspacesEnabled: boolean;
+  aipAirspacesSourceUrl: string;
+  aipAirspacesCacheTtlSeconds: number;
 }
 
 export async function loadConfig(): Promise<FlightDataConfig> {
@@ -56,7 +59,10 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     ourAirportsEnabled: parseBoolean(process.env.OURAIRPORTS_ENABLED, true),
     ourAirportsCsvUrl: process.env.OURAIRPORTS_AIRPORTS_CSV_URL ?? "https://davidmegginson.github.io/ourairports-data/airports.csv",
     ourAirportsCountries: parseStringList(process.env.OURAIRPORTS_COUNTRIES, ["CZ", "SK", "AT", "DE", "PL", "HU"]),
-    ourAirportsCacheTtlSeconds: parseInteger(process.env.OURAIRPORTS_CACHE_TTL_SECONDS, 24 * 60 * 60)
+    ourAirportsCacheTtlSeconds: parseInteger(process.env.OURAIRPORTS_CACHE_TTL_SECONDS, 24 * 60 * 60),
+    aipAirspacesEnabled: parseBoolean(process.env.AIP_AIRSPACES_ENABLED, true),
+    aipAirspacesSourceUrl: process.env.AIP_AIRSPACES_SOURCE_URL ?? "https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html",
+    aipAirspacesCacheTtlSeconds: parseInteger(process.env.AIP_AIRSPACES_CACHE_TTL_SECONDS, 24 * 60 * 60)
   };
 }
 

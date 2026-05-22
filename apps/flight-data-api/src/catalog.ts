@@ -82,6 +82,51 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
           attribution: "OurAirports public domain data where imported; embedded seed is public-domain compatible.",
           notes: ["Reference data only; not an operational aeronautical information publication."]
         }
+      },
+      {
+        providerLayerId: "flight.airspaces",
+        recommendedCatalogLayerId: "flight.reference.airspaces",
+        label: "Letecké prostory",
+        description: "Referenční zakázané, omezené a nebezpečné prostory z AIP/eAIP ENR 5.1. Vrstva je určena pro situační přehled, ne pro navigaci.",
+        categoryPath: ["flight", "reference", "airspaces"],
+        categories: ["airspace", "prohibited_area", "restricted_area", "danger_area"],
+        role: "reference",
+        audience: "public",
+        kind: "static_reference",
+        defaultVisible: false,
+        selectable: true,
+        geometryTypes: ["Polygon"],
+        minZoom: 6,
+        maxZoom: 18,
+        refreshSeconds: config.aipAirspacesCacheTtlSeconds,
+        cacheTtlSeconds: config.aipAirspacesCacheTtlSeconds,
+        styleProfile: "airspace-reference-v1",
+        sourceIds: ["czech_aip_airspaces"],
+        filters: [
+          {
+            filterId: "type",
+            label: "Typ prostoru",
+            type: "multi_select",
+            values: ["prohibited", "restricted", "danger", "temporary_reserved", "temporary_segregated", "other"],
+            defaultValue: ["prohibited", "restricted", "danger"]
+          }
+        ],
+        query: {
+          mode: "bbox",
+          providerId: PROVIDER_ID,
+          streamId: "airspaces",
+          providerLayerIds: ["flight.airspaces"],
+          providerSourceIds: ["czech_aip_airspaces"],
+          maxFeatures: 1000
+        },
+        legal: {
+          attribution: "Air Navigation Services of the Czech Republic / AIP CR.",
+          notes: [
+            "Reference layer only; not for navigation.",
+            "Commercial or operational redistribution should be validated with AIS/ANS CR or replaced by a licensed AIXM/AIP feed.",
+            "DroneMap UAS geographical zones are not republished because its terms restrict public redistribution without written consent."
+          ]
+        }
       }
     ],
     sources: [
@@ -107,6 +152,32 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
           notes: ["Verify operational aviation use against official AIP/AIS sources."]
         },
         notes: ["Reference source, not a live track feed."]
+      },
+      {
+        sourceId: "czech_aip_airspaces",
+        label: "Czech AIP/eAIP ENR 5.1 airspace reference",
+        enabled: config.aipAirspacesEnabled,
+        mode: "reference",
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["flight.airspaces"],
+        feedsCatalogLayerIds: ["flight.reference.airspaces"],
+        updateCadenceSeconds: config.aipAirspacesCacheTtlSeconds,
+        cacheTtlSeconds: config.aipAirspacesCacheTtlSeconds,
+        baseUrl: config.aipAirspacesSourceUrl,
+        license: {
+          name: "Public AIP/eAIP publication; redistribution rights must be validated",
+          attribution: "Air Navigation Services of the Czech Republic / AIP CR",
+          commercialUse: "requires_license",
+          operationalUse: "requires_license",
+          notes: [
+            "Use as public situational reference only, not as operational aeronautical information.",
+            "Production/commercial redistribution should be confirmed with AIS/ANS CR."
+          ]
+        },
+        notes: ["Cache-backed reference source for restricted/prohibited/danger airspaces."]
       }
     ]
   };

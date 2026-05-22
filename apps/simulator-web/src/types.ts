@@ -110,7 +110,7 @@ export interface FlightDataLicense {
 }
 
 export interface FlightDataSource {
-  sourceId: "mock" | "adsb_lol" | "opensky";
+  sourceId: "mock" | "adsb_lol" | "opensky" | "local_adsb";
   label: string;
   enabled: boolean;
   mode: "live" | "mock" | "reference";
@@ -120,7 +120,7 @@ export interface FlightDataSource {
 }
 
 export interface FlightDataConfig {
-  enabledSources: Array<"mock" | "adsb_lol" | "opensky">;
+  enabledSources: Array<"mock" | "adsb_lol" | "opensky" | "local_adsb">;
   defaultArea: {
     lat: number;
     lon: number;
@@ -132,10 +132,18 @@ export interface FlightDataConfig {
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   providers: Array<{
-    sourceId: "mock" | "adsb_lol" | "opensky";
+    sourceId: "mock" | "adsb_lol" | "opensky" | "local_adsb";
     baseUrl?: string;
     authConfigured: boolean;
   }>;
+  referenceData?: {
+    ourAirportsEnabled: boolean;
+    ourAirportsCountries: string[];
+    ourAirportsCacheTtlSeconds: number;
+    aipAirspacesEnabled: boolean;
+    aipAirspacesCacheTtlSeconds: number;
+    aipAirspacesSourceUrl: string;
+  };
 }
 
 export interface FlightDataTrack {

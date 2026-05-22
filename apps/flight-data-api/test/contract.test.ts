@@ -34,7 +34,10 @@ describe("Flight Data API contract", () => {
       ourAirportsEnabled: false,
       ourAirportsCsvUrl: "https://davidmegginson.github.io/ourairports-data/airports.csv",
       ourAirportsCountries: ["CZ", "SK", "AT", "DE", "PL", "HU"],
-      ourAirportsCacheTtlSeconds: 86400
+      ourAirportsCacheTtlSeconds: 86400,
+      aipAirspacesEnabled: false,
+      aipAirspacesSourceUrl: "https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html",
+      aipAirspacesCacheTtlSeconds: 86400
     };
     ({ app } = await createApp(config));
   });
@@ -86,7 +89,9 @@ describe("Flight Data API contract", () => {
         referenceData: expect.objectContaining({
           ourAirportsEnabled: false,
           ourAirportsCountries: ["CZ", "SK", "AT", "DE", "PL", "HU"],
-          ourAirportsCacheTtlSeconds: 86400
+          ourAirportsCacheTtlSeconds: 86400,
+          aipAirspacesEnabled: false,
+          aipAirspacesCacheTtlSeconds: 86400
         }),
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -126,6 +131,12 @@ describe("Flight Data API contract", () => {
           recommendedCatalogLayerId: "flight.reference.airports",
           kind: "static_reference",
           categories: expect.arrayContaining(["airport"])
+        }),
+        expect.objectContaining({
+          providerLayerId: "flight.airspaces",
+          recommendedCatalogLayerId: "flight.reference.airspaces",
+          kind: "static_reference",
+          categories: expect.arrayContaining(["airspace"])
         })
       ])
     );
@@ -142,6 +153,12 @@ describe("Flight Data API contract", () => {
           sourceRole: "reference",
           feedsLayerIds: ["flight.airports"],
           feedsCatalogLayerIds: ["flight.reference.airports"]
+        }),
+        expect.objectContaining({
+          sourceId: "czech_aip_airspaces",
+          sourceRole: "reference",
+          feedsLayerIds: ["flight.airspaces"],
+          feedsCatalogLayerIds: ["flight.reference.airspaces"]
         })
       ])
     );
@@ -161,6 +178,7 @@ describe("Flight Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_hits{source="adsb_lol"}');
     expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_misses{source="opensky"}');
     expect(cachedSourceMetrics.text).toContain('flight_data_source_cache_stale_hits{source="local_adsb"}');
+    expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_aip_airspaces"}');
   });
 
   it("returns deduplicated aircraft positions by icao24", async () => {
@@ -246,6 +264,28 @@ describe("Flight Data API contract", () => {
 
     const aircraftType = await request(app).get("/api/v1/aircraft-types/B738").expect(200);
     expect(aircraftType.body.model).toBe("737-800");
+  });
+
+  it("exposes airspace reference as GeoJSON features", async () => {
+    const response = await request(app).get("/api/v1/airspaces?bbox=14.2,49.9,14.6,50.2&type=prohibited&limit=10").expect(200);
+
+    expect(response.body.contractVersion).toBe("flight-airspace-reference-v1");
+    expect(response.body.type).toBe("FeatureCollection");
+    expect(response.body.summary.notForNavigation).toBe(true);
+    expect(response.body.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "Feature",
+          properties: expect.objectContaining({
+            layerId: "flight.reference.airspaces",
+            providerLayerId: "flight.airspaces",
+            sourceId: "czech_aip_airspaces",
+            notForNavigation: true,
+            airspaceType: "prohibited"
+          })
+        })
+      ])
+    );
   });
 
   it("validates bbox format", async () => {

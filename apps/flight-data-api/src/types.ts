@@ -54,6 +54,9 @@ export interface FlightDataPublicConfig {
     ourAirportsEnabled: boolean;
     ourAirportsCountries: string[];
     ourAirportsCacheTtlSeconds: number;
+    aipAirspacesEnabled: boolean;
+    aipAirspacesCacheTtlSeconds: number;
+    aipAirspacesSourceUrl: string;
   };
 }
 
@@ -179,4 +182,31 @@ export interface AircraftTypeReference {
   engineType?: string;
   wakeTurbulenceCategory?: string;
   dataSource: string;
+}
+
+export interface GeoJsonPolygon {
+  type: "Polygon";
+  coordinates: Array<Array<[number, number]>>;
+}
+
+export type AviationAirspaceType = "prohibited" | "restricted" | "danger" | "temporary_reserved" | "temporary_segregated" | "other";
+
+export interface AirspaceReference {
+  airspaceId: string;
+  designator: string;
+  name: string;
+  type: AviationAirspaceType;
+  geometry: GeoJsonPolygon;
+  geometryQuality: "official_vertices" | "official_circle_approximation" | "official_vertices_with_boundary_simplification" | "seed_fallback";
+  lowerLimit: string;
+  upperLimit: string;
+  verticalLimitText: string;
+  activity?: string;
+  time?: string;
+  remarks?: string;
+  sourceUrl: string;
+  sourceSection: string;
+  dataSource: string;
+  loadedAt: string;
+  notForNavigation: true;
 }

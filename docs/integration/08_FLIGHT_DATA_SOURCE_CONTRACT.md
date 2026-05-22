@@ -28,6 +28,7 @@ GET /api/v1/aircraft/positions
 GET /api/v1/cop/tracks
 GET /api/v1/airports
 GET /api/v1/airports/{ident}
+GET /api/v1/airspaces
 GET /api/v1/aircraft-types
 GET /api/v1/aircraft-types/{designator}
 GET /api/v1/sources
@@ -38,7 +39,8 @@ GET /health/ready
 `GET /api/v1/catalog` vrací provider map catalog s hlavními vrstvami:
 
 - `flight.public.tracks` z provider layer `flight.tracks`,
-- `flight.reference.airports` z provider layer `flight.airports`.
+- `flight.reference.airports` z provider layer `flight.airports`,
+- `flight.reference.airspaces` z provider layer `flight.airspaces`.
 
 COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a licenční/provenance metadata.
 
@@ -157,6 +159,24 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 
 `GET /api/v1/airports` používá cacheovaný import OurAirports `airports.csv` pro státy v `OURAIRPORTS_COUNTRIES`. Výchozí sada je `CZ,SK,AT,DE,PL,HU`, aby COM dostal letiště v ČR a okolí bez ručního udržování seed seznamu. Při výpadku importu služba vrací seed fallback a `source.warnings`.
 
+`GET /api/v1/airspaces` vrací GeoJSON `FeatureCollection` s referenčními leteckými prostory z AIP/eAIP ENR 5.1:
+
+- provider layer `flight.airspaces`,
+- katalogová vrstva `flight.reference.airspaces`,
+- source `czech_aip_airspaces`,
+- typy `prohibited`, `restricted`, `danger`, připraveno i pro `temporary_reserved`, `temporary_segregated`, `other`,
+- každá feature má `properties.notForNavigation=true`.
+
+Endpoint podporuje:
+
+| Parametr | Příklad | Popis |
+| --- | --- | --- |
+| `bbox` | `14.2,49.9,14.6,50.2` | `west,south,east,north` ve WGS84. |
+| `type` | `prohibited,restricted,danger` | Volitelný filtr typů prostorů. |
+| `limit` | `500` | Maximum vrácených polygonů. Max 1000. |
+
+Vrstva je určena pro situační přehled v COM, ne pro navigaci ani právně závazné letecké rozhodování. Pro produkční nebo komerční redistribuci je potřeba potvrdit oprávnění u AIS/ŘLP ČR nebo použít licencovaný AIXM/AIP feed. SIM výslovně nerepublikuje DroneMap UAS zóny, protože podmínky DroneMap omezují veřejné zobrazování a distribuci bez písemného souhlasu.
+
 Typy letadel zůstávají zatím seedované v SIM. Úplnější aircraft type store musí přijít z licencovaného nebo právně ověřeného zdroje.
 
 ## Konfigurace lokální ADS-B sítě
@@ -166,6 +186,9 @@ FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol
 LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://receiver-1.home.cz/tar1090/data/aircraft.json,http://receiver-2.home.cz/readsb/data/aircraft.json
 FLIGHT_DATA_CACHE_TTL_SECONDS=5
 FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
+AIP_AIRSPACES_ENABLED=true
+AIP_AIRSPACES_SOURCE_URL=https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html
+AIP_AIRSPACES_CACHE_TTL_SECONDS=86400
 ```
 
 Používej jen přijímače provozované projektem nebo partnery, kteří výslovně povolí redistribuci do COM. Nepřeposílej komerční ani komunitní feedy, jejichž podmínky to neumožňují.
@@ -187,3 +210,4 @@ SIM web čte pro dohled a nastavení tyto endpointy:
 - `/flight-data/api/v1/sources` pro zdroje, licence a produkční omezení,
 - `/flight-data/api/v1/config` pro aktuální non-secret env konfiguraci,
 - `/flight-data/api/v1/aircraft/positions?limit=8` pro rychlý náhled dat, deduplikace a stale tracků.
+- `/flight-data/api/v1/airspaces?bbox=12,48,19,52&type=prohibited,restricted,danger` pro kontrolu referenční vrstvy leteckých prostorů.

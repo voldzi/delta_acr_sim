@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express } from "express";
+import { AirspaceReferenceService } from "./airspace-reference.js";
 import type { FlightDataConfig } from "./config.js";
 import { FlightAggregationService } from "./aggregation.js";
 import { buildFlightMapCatalog } from "./catalog.js";
@@ -12,13 +13,15 @@ export interface FlightDataAppContext {
   config: FlightDataConfig;
   aggregation: FlightAggregationService;
   referenceData: ReferenceDataService;
+  airspaces: AirspaceReferenceService;
 }
 
 export async function createApp(config: FlightDataConfig): Promise<{ app: Express; context: FlightDataAppContext }> {
   const sources = createFlightDataSources(config);
   const aggregation = new FlightAggregationService(config, sources);
   const referenceData = new ReferenceDataService(config);
-  const context: FlightDataAppContext = { config, aggregation, referenceData };
+  const airspaces = new AirspaceReferenceService(config);
+  const context: FlightDataAppContext = { config, aggregation, referenceData, airspaces };
   const app = express();
 
   app.use(cors());
@@ -51,6 +54,7 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
 
   app.get("/metrics", (_req, res) => {
     const cache = context.aggregation.cacheStats();
+    const airspaceCache = context.airspaces.cacheStats();
     const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
       `flight_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `flight_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -76,6 +80,12 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
           `flight_data_cache_refreshes ${cache.refreshes}`,
           `flight_data_cache_errors ${cache.errors}`,
           `flight_data_cache_evictions ${cache.evictions}`,
+          `flight_data_reference_cache_entries{source="czech_aip_airspaces"} ${airspaceCache.entries}`,
+          `flight_data_reference_cache_inflight{source="czech_aip_airspaces"} ${airspaceCache.inflight}`,
+          `flight_data_reference_cache_hits{source="czech_aip_airspaces"} ${airspaceCache.hits}`,
+          `flight_data_reference_cache_misses{source="czech_aip_airspaces"} ${airspaceCache.misses}`,
+          `flight_data_reference_cache_stale_hits{source="czech_aip_airspaces"} ${airspaceCache.staleHits}`,
+          `flight_data_reference_cache_errors{source="czech_aip_airspaces"} ${airspaceCache.errors}`,
           ...sourceCacheLines
         ].join("\n") + "\n"
       );
@@ -191,6 +201,25 @@ function registerReferenceRoutes(app: Express, context: FlightDataAppContext): v
     }
     res.json(aircraftType);
   });
+
+  app.get("/api/v1/airspaces", async (req, res) => {
+    const bbox = parseBbox(req.query.bbox);
+    if (!bbox.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", bbox.error);
+    }
+    const types = parseAirspaceTypes(req.query.type ?? req.query.types);
+    if (!types.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", types.error);
+    }
+    const limit = parseLimit(req.query.limit, 250, 1000);
+    res.json(
+      await context.airspaces.getFeatureCollection({
+        bbox: bbox.value,
+        types: types.value,
+        limit
+      })
+    );
+  });
 }
 
 function parseFlightQuery(raw: Record<string, unknown>, defaultSources: FlightDataSourceId[]): { ok: true; value: FlightQuery } | { ok: false; error: string } {
@@ -239,6 +268,26 @@ function parseSources(value: unknown, fallback: FlightDataSourceId[]): FlightDat
     .split(",")
     .map((item) => item.trim())
     .filter((item): item is FlightDataSourceId => allowed.has(item as FlightDataSourceId));
+}
+
+function parseAirspaceTypes(value: unknown): { ok: true; value?: Array<"prohibited" | "restricted" | "danger" | "temporary_reserved" | "temporary_segregated" | "other"> } | { ok: false; error: string } {
+  const raw = asString(value);
+  if (!raw) {
+    return { ok: true, value: undefined };
+  }
+  const allowed = new Set(["prohibited", "restricted", "danger", "temporary_reserved", "temporary_segregated", "other"]);
+  const parsed = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  const invalid = parsed.filter((item) => !allowed.has(item));
+  if (invalid.length > 0) {
+    return { ok: false, error: `Unsupported airspace type: ${invalid.join(", ")}.` };
+  }
+  return {
+    ok: true,
+    value: parsed as Array<"prohibited" | "restricted" | "danger" | "temporary_reserved" | "temporary_segregated" | "other">
+  };
 }
 
 function parseLimit(value: unknown, fallback: number, max: number): number {
@@ -292,7 +341,10 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
     referenceData: {
       ourAirportsEnabled: config.ourAirportsEnabled,
       ourAirportsCountries: config.ourAirportsCountries,
-      ourAirportsCacheTtlSeconds: config.ourAirportsCacheTtlSeconds
+      ourAirportsCacheTtlSeconds: config.ourAirportsCacheTtlSeconds,
+      aipAirspacesEnabled: config.aipAirspacesEnabled,
+      aipAirspacesCacheTtlSeconds: config.aipAirspacesCacheTtlSeconds,
+      aipAirspacesSourceUrl: config.aipAirspacesSourceUrl
     }
   };
 }

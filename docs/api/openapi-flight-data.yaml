@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: DELTA ACR Flight Data API
+  title: CSM SIM Flight Data API
   version: 0.1.0
   description: API pro agregaci veřejných nebo licencovaných letových dat pro COM/server-side mapový kontext.
 servers:
@@ -154,6 +154,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Airport'
         '404':
+          $ref: '#/components/responses/Problem'
+  /api/v1/airspaces:
+    get:
+      tags: [Reference]
+      summary: Vrátí referenční letecké prostory jako GeoJSON FeatureCollection.
+      description: Cacheovaná referenční vrstva AIP/eAIP ENR 5.1 pro zakázané, omezené a nebezpečné prostory. Výstup je situační reference, ne navigační ani právně závazná letecká informace.
+      parameters:
+        - $ref: '#/components/parameters/Bbox'
+        - name: type
+          in: query
+          description: Comma-separated airspace types.
+          schema:
+            type: string
+            example: prohibited,restricted,danger
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Airspace GeoJSON FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AirspaceFeatureCollection'
+        '400':
           $ref: '#/components/responses/Problem'
   /api/v1/aircraft-types:
     get:
@@ -462,6 +485,12 @@ components:
                 type: string
             ourAirportsCacheTtlSeconds:
               type: integer
+            aipAirspacesEnabled:
+              type: boolean
+            aipAirspacesCacheTtlSeconds:
+              type: integer
+            aipAirspacesSourceUrl:
+              type: string
     Airport:
       type: object
       properties:
@@ -485,6 +514,133 @@ components:
           type: integer
         dataSource:
           type: string
+    AirspaceFeatureCollection:
+      type: object
+      required: [type, contractVersion, generatedAt, features, source, summary, warnings]
+      properties:
+        type:
+          type: string
+          const: FeatureCollection
+        contractVersion:
+          type: string
+          const: flight-airspace-reference-v1
+        generatedAt:
+          type: string
+          format: date-time
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/AirspaceFeature'
+        source:
+          type: object
+          properties:
+            sourceId:
+              type: string
+              const: czech_aip_airspaces
+            label:
+              type: string
+            sourceUrl:
+              type: string
+            sourceSection:
+              type: string
+            loadedAt:
+              type: string
+              format: date-time
+            warnings:
+              type: array
+              items:
+                type: string
+        summary:
+          type: object
+          properties:
+            totalReferenceAirspaces:
+              type: integer
+            returnedAirspaces:
+              type: integer
+            notForNavigation:
+              type: boolean
+            geometryQuality:
+              type: object
+              additionalProperties:
+                type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+    AirspaceFeature:
+      type: object
+      required: [type, id, geometry, properties]
+      properties:
+        type:
+          type: string
+          const: Feature
+        id:
+          type: string
+        geometry:
+          type: object
+          required: [type, coordinates]
+          properties:
+            type:
+              type: string
+              const: Polygon
+            coordinates:
+              type: array
+              items:
+                type: array
+                items:
+                  type: array
+                  minItems: 2
+                  maxItems: 2
+                  items:
+                    type: number
+        properties:
+          type: object
+          properties:
+            layerId:
+              type: string
+              const: flight.reference.airspaces
+            providerId:
+              type: string
+              const: sim.flight-data
+            providerLayerId:
+              type: string
+              const: flight.airspaces
+            sourceId:
+              type: string
+              const: czech_aip_airspaces
+            category:
+              type: string
+            label:
+              type: string
+            observedAt:
+              type: string
+              format: date-time
+            stale:
+              type: boolean
+            confidence:
+              type: number
+            severity:
+              type: string
+              enum: [info, warning]
+            airspaceId:
+              type: string
+            designator:
+              type: string
+            name:
+              type: string
+            airspaceType:
+              type: string
+              enum: [prohibited, restricted, danger, temporary_reserved, temporary_segregated, other]
+            lowerLimit:
+              type: string
+            upperLimit:
+              type: string
+            verticalLimitText:
+              type: string
+            notForNavigation:
+              type: boolean
+            providerProperties:
+              type: object
     AircraftType:
       allOf:
         - $ref: '#/components/schemas/AircraftTypePartial'
