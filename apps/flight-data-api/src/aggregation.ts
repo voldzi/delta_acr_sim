@@ -6,6 +6,7 @@ import type {
   AggregatedFlightTrack,
   BoundingBox,
   FlightDataSourceId,
+  FlightTrackIconHint,
   FlightQuery,
   FlightTrackResponse,
   RawFlightObservation,
@@ -138,6 +139,8 @@ function deduplicateObservations(
     }
     const typeDesignator = firstDefined(sorted.map((item) => item.typeDesignator?.toUpperCase()));
     const aircraftType = getAircraftType(typeDesignator);
+    const sourceCategory = firstDefined(sorted.map((item) => item.category));
+    const iconHint = iconHintFor(typeDesignator, aircraftType?.category, aircraftType?.engineType, sourceCategory);
     const sourceLicenses = Array.from(new Set(sorted.map((item) => sourceLicenseById.get(item.sourceId)).filter((item): item is string => Boolean(item))));
 
     tracks.push({
@@ -145,10 +148,14 @@ function deduplicateObservations(
       icao24,
       callsign: firstDefined(sorted.map((item) => item.callsign)),
       registration: firstDefined(sorted.map((item) => item.registration)),
-      objectType: typeDesignator === "H60" ? "AIRCRAFT" : "AIRCRAFT",
+      objectType: iconHint === "uav" ? "UAV" : "AIRCRAFT",
       domain: "AIR",
       lat: round(primary.lat, 6),
       lon: round(primary.lon, 6),
+      position: {
+        lat: round(primary.lat, 6),
+        lon: round(primary.lon, 6)
+      },
       altitudeM: primary.altitudeM,
       speedMps: primary.speedMps,
       headingDeg: primary.headingDeg,
@@ -161,7 +168,8 @@ function deduplicateObservations(
         model: aircraftType?.model,
         category: aircraftType?.category,
         engineType: aircraftType?.engineType,
-        wakeTurbulenceCategory: aircraftType?.wakeTurbulenceCategory
+        wakeTurbulenceCategory: aircraftType?.wakeTurbulenceCategory,
+        iconHint
       },
       sources: sorted.map((item) => ({
         sourceId: item.sourceId,
@@ -192,6 +200,37 @@ function deduplicateObservations(
     tracks: tracks.sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt)),
     droppedWithoutPositionCount
   };
+}
+
+function iconHintFor(
+  typeDesignator: string | undefined,
+  aircraftCategory: string | undefined,
+  engineType: string | undefined,
+  sourceCategory: string | undefined
+): FlightTrackIconHint {
+  const designator = typeDesignator?.toUpperCase() ?? "";
+  const category = `${aircraftCategory ?? ""} ${sourceCategory ?? ""}`.toLowerCase();
+  const engine = engineType?.toLowerCase() ?? "";
+
+  if (category.includes("uav") || category.includes("drone") || category.includes("b6") || designator.startsWith("UAV")) {
+    return "uav";
+  }
+  if (category.includes("glider") || category.includes("b1")) {
+    return "glider";
+  }
+  if (category.includes("helicopter") || category.includes("rotor") || category.includes("a7") || designator.startsWith("H")) {
+    return "helicopter";
+  }
+  if (engine.includes("turboprop") || engine.includes("turboshaft")) {
+    return "turboprop";
+  }
+  if (engine.includes("jet")) {
+    return "jet";
+  }
+  if (engine.includes("piston") || category.includes("light") || ["C", "D", "P"].some((prefix) => designator.startsWith(prefix))) {
+    return "small_aircraft";
+  }
+  return "unknown";
 }
 
 function compareObservationPriority(a: RawFlightObservation, b: RawFlightObservation): number {

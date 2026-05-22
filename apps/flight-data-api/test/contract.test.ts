@@ -134,6 +134,7 @@ describe("Flight Data API contract", () => {
         expect.objectContaining({
           providerLayerId: "flight.tracks",
           recommendedCatalogLayerId: "flight.public.tracks",
+          label: "Veřejné lety",
           kind: "track_stream",
           categories: expect.arrayContaining(["aircraft_track"])
         }),
@@ -228,12 +229,17 @@ describe("Flight Data API contract", () => {
       expect.objectContaining({
         trackId: expect.stringMatching(/^flight:icao24:/),
         domain: "AIR",
+        position: expect.objectContaining({
+          lat: expect.any(Number),
+          lon: expect.any(Number)
+        }),
         deduplication: expect.objectContaining({ key: "icao24" })
       })
     );
     const duplicated = response.body.tracks.find((track: { icao24: string }) => track.icao24 === "4d2216");
     expect(duplicated.deduplication.mergedRecordCount).toBe(2);
     expect(duplicated.aircraft.typeDesignator).toBe("A320");
+    expect(duplicated.aircraft.iconHint).toBe("jet");
   });
 
   it("provides the COP source projection", async () => {
@@ -284,6 +290,8 @@ describe("Flight Data API contract", () => {
         registration: "OK-TSR",
         altitudeM: 2743,
         speedMps: 137.87,
+        position: { lat: 50.1174, lon: 14.5121 },
+        aircraft: expect.objectContaining({ iconHint: "jet" }),
         deduplication: expect.objectContaining({ primarySourceId: "local_adsb" })
       })
     );

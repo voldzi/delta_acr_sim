@@ -105,6 +105,8 @@ export interface FlightTrackSourceRef {
   seenAt: string;
 }
 
+export type FlightTrackIconHint = "jet" | "turboprop" | "small_aircraft" | "helicopter" | "glider" | "uav" | "unknown";
+
 export interface FlightTrackAircraft {
   typeDesignator?: string;
   manufacturer?: string;
@@ -112,6 +114,12 @@ export interface FlightTrackAircraft {
   category?: string;
   engineType?: string;
   wakeTurbulenceCategory?: string;
+  iconHint: FlightTrackIconHint;
+}
+
+export interface FlightTrackPosition {
+  lat: number;
+  lon: number;
 }
 
 export interface AggregatedFlightTrack {
@@ -123,6 +131,7 @@ export interface AggregatedFlightTrack {
   domain: "AIR";
   lat: number;
   lon: number;
+  position: FlightTrackPosition;
   altitudeM?: number;
   speedMps?: number;
   headingDeg?: number;

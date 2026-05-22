@@ -22,8 +22,8 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
       {
         providerLayerId: "flight.tracks",
         recommendedCatalogLayerId: "flight.public.tracks",
-        label: "Letecké tracky",
-        description: "Deduplicované polohy letadel podle icao24 z povolených veřejných nebo partnerských ADS-B zdrojů.",
+        label: "Veřejné lety",
+        description: "Deduplicované civilní polohy letadel podle icao24 z povolených veřejných nebo partnerských ADS-B zdrojů.",
         categoryPath: ["flight", "tracks"],
         categories: ["aircraft_track", "flight"],
         role: "overlay",

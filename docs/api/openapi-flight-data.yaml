@@ -391,7 +391,7 @@ components:
           type: integer
     FlightTrack:
       type: object
-      required: [trackId, icao24, objectType, domain, lat, lon, lastSeenAt, sources, deduplication, quality]
+      required: [trackId, icao24, objectType, domain, lat, lon, position, lastSeenAt, sources, deduplication, quality]
       properties:
         trackId:
           type: string
@@ -412,6 +412,14 @@ components:
           type: number
         lon:
           type: number
+        position:
+          type: object
+          required: [lat, lon]
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
         altitudeM:
           type: number
         speedMps:
@@ -816,3 +824,6 @@ components:
           type: string
         wakeTurbulenceCategory:
           type: string
+        iconHint:
+          type: string
+          enum: [jet, turboprop, small_aircraft, helicopter, glider, uav, unknown]

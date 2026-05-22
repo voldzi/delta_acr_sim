@@ -83,6 +83,10 @@ COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a li
       "domain": "AIR",
       "lat": 50.1174,
       "lon": 14.5121,
+      "position": {
+        "lat": 50.1174,
+        "lon": 14.5121
+      },
       "altitudeM": 2743,
       "speedMps": 138,
       "headingDeg": 268,
@@ -95,7 +99,8 @@ COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a li
         "model": "A320",
         "category": "LandPlane",
         "engineType": "Jet",
-        "wakeTurbulenceCategory": "Medium"
+        "wakeTurbulenceCategory": "Medium",
+        "iconHint": "jet"
       },
       "sources": [
         {
@@ -149,6 +154,9 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - `mergedRecordCount` říká, kolik zdrojových observací bylo sloučeno,
 - `sources` zachovává auditní stopu všech sloučených zdrojů,
 - COM používá `trackId` jako stabilní identifikátor.
+- COM má pro zobrazený název preferovat `callsign`, potom `registration`, potom `icao24`. SIM nesmí při chybějícím callsignu posílat technický fallback typu `flight:icao24:*` do pole `callsign`.
+- `position.lat/lon` je normalizovaná poloha pro nové integrace; kořenová pole `lat/lon` zůstávají kvůli zpětné kompatibilitě.
+- `aircraft.iconHint` je volitelný prezentační hint pro civilní symboliku. Povolené hodnoty jsou `jet`, `turboprop`, `small_aircraft`, `helicopter`, `glider`, `uav`, `unknown`.
 
 ## Podporované zdroje
 
