@@ -1,0 +1,569 @@
+import type { SituationDataConfig } from "./config.js";
+import { allSourceDescriptors } from "./sources.js";
+import type {
+  ProviderCatalogAudience,
+  ProviderCatalogLayer,
+  ProviderCatalogSource,
+  ProviderCatalogSourceRole,
+  ProviderMapCatalog,
+  SituationDataSourceId,
+  SituationLayerId,
+  SourceDescriptor
+} from "./types.js";
+
+const PROVIDER_ID = "sim.situation-data" as const;
+const COP_MAP_CATALOG_DOCUMENT = "/Users/voldzi/Documents/Development/18 2026/DELTA_ACR/01 COP/docs/integration/08_MAP_CATALOG_V1.md";
+const DEFAULT_MAX_FEATURES = 250;
+
+export function buildSituationMapCatalog(config: SituationDataConfig, generatedAt = new Date().toISOString()): ProviderMapCatalog {
+  const descriptors = allSourceDescriptors(config);
+  return {
+    catalogVersion: "provider-map-catalog-v1",
+    providerId: PROVIDER_ID,
+    generatedAt,
+    authority: {
+      catalogVersion: "map-catalog-v1",
+      document: COP_MAP_CATALOG_DOCUMENT
+    },
+    layers: buildProviderLayers(config),
+    sources: descriptors.map((descriptor) => buildProviderSource(descriptor, config))
+  };
+}
+
+function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+  return [
+    {
+      providerLayerId: "weather.open_meteo",
+      recommendedCatalogLayerId: "public.weather.current",
+      label: "Počasí",
+      description: "Aktuální počasí pro mapový výřez z cacheovaného Open-Meteo zdroje.",
+      categoryPath: ["weather", "current"],
+      role: "primary",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: true,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 4,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: config.openMeteoCacheTtlSeconds,
+      styleProfile: "current-weather-v1",
+      sourceIds: ["open_meteo"],
+      query: query(["weather"], ["open_meteo"]),
+      legend: { profile: "current-weather-v1" },
+      legal: {
+        attribution: "Weather data by Open-Meteo.com",
+        notes: ["Free API conditions and commercial use restrictions are described in source metadata."]
+      }
+    },
+    {
+      providerLayerId: "weather.aviation_weather",
+      recommendedCatalogLayerId: "public.weather.aviation",
+      label: "Letištní počasí",
+      description: "METAR/TAF letecké počasí pro letiště v mapovém výřezu.",
+      categoryPath: ["weather", "aviation"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.aviationWeatherCacheTtlSeconds,
+      styleProfile: "aviation-weather-v1",
+      sourceIds: ["aviation_weather"],
+      query: query(["weather"], ["aviation_weather"]),
+      legend: { profile: "aviation-weather-v1" },
+      legal: {
+        attribution: "NOAA Aviation Weather Center",
+        notes: ["Use as situational weather reference, not as a flight planning service."]
+      }
+    },
+    {
+      providerLayerId: "mobile_network",
+      recommendedCatalogLayerId: "public.mobile.network",
+      label: "Mobilní síť",
+      description: "Sjednocené občanské hodnocení dostupnosti mobilní sítě.",
+      categoryPath: ["communications", "mobile"],
+      role: "overlay",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: config.mobileNetworkCacheTtlSeconds,
+      styleProfile: "mobile-network-quality-v1",
+      sourceIds: ["mobile_network_model"],
+      technicalInputs: ["mobile_coverage_model", "ctu_nettest", "osm_postgis"],
+      filters: [
+        {
+          filterId: "technology",
+          label: "Technologie",
+          type: "multi_select",
+          values: ["2G", "4G", "5G"],
+          defaultValue: ["4G"]
+        }
+      ],
+      query: query(["mobile_network"], ["mobile_network_model"]),
+      legend: { profile: "mobile-network-quality-v1" },
+      model: {
+        modelVersion: `${config.mobileCoverageModelVersion}+mobile-network-v1`,
+        terrainAware: config.mobileCoverageTerrainAware,
+        demSource: config.mobileCoverageTerrainAware ? config.demDatasetId : config.mobileCoverageDemSource,
+        confidenceExplanation: "Combines public measurements, inferred coverage and OSM infrastructure hints."
+      },
+      legal: {
+        attribution: "Czech Telecommunication Office / CTU-NetTest; OpenStreetMap contributors where tower hints are used",
+        notes: ["Modelový odhad, ne garantované pokrytí ani potvrzený výpadek operátora."]
+      },
+      supersedes: ["mobile", "mobile_coverage"]
+    },
+    {
+      providerLayerId: "mobile_coverage",
+      recommendedCatalogLayerId: "diagnostic.mobile.coverage",
+      label: "Technický odhad pokrytí",
+      description: "Diagnostická modelová vrstva pokrytí používaná jako vstup pro finální hodnocení mobilní sítě.",
+      categoryPath: ["diagnostic", "communications", "mobile"],
+      role: "diagnostic",
+      audience: "diagnostic",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Polygon"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.mobileCoverageCacheTtlSeconds,
+      styleProfile: "mobile-coverage-diagnostic-v1",
+      sourceIds: ["mobile_coverage_model"],
+      technicalInputs: ["osm_postgis"],
+      filters: [
+        {
+          filterId: "technology",
+          label: "Technologie",
+          type: "multi_select",
+          values: ["2G", "4G", "5G"],
+          defaultValue: ["4G"]
+        }
+      ],
+      query: query(["mobile_coverage"], ["mobile_coverage_model"]),
+      legend: { profile: "mobile-coverage-diagnostic-v1" },
+      model: {
+        modelVersion: config.mobileCoverageModelVersion,
+        terrainAware: config.mobileCoverageTerrainAware,
+        demSource: config.mobileCoverageTerrainAware ? config.demDatasetId : config.mobileCoverageDemSource,
+        confidenceExplanation: "Distance/path-loss estimate from imported OSM communication tower references."
+      },
+      legal: {
+        attribution: "OpenStreetMap contributors where tower hints are used",
+        notes: ["Technický vstup pro model, ne běžná uživatelská vrstva."]
+      },
+      replacedBy: "public.mobile.network"
+    },
+    {
+      providerLayerId: "mobile.ctu_nettest",
+      recommendedCatalogLayerId: "diagnostic.mobile.ctu_measurements",
+      label: "ČTÚ měření",
+      description: "Diagnostické body veřejných měření ČTÚ NetTest používané jako vstup modelu.",
+      categoryPath: ["diagnostic", "communications", "mobile"],
+      role: "diagnostic",
+      audience: "diagnostic",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point"],
+      minZoom: 8,
+      maxZoom: 18,
+      refreshSeconds: 3600,
+      cacheTtlSeconds: 3600,
+      styleProfile: "ctu-nettest-measurements-v1",
+      sourceIds: ["ctu_nettest"],
+      query: query(["mobile"], ["ctu_nettest"]),
+      legend: { profile: "ctu-nettest-measurements-v1" },
+      legal: {
+        attribution: "Czech Telecommunication Office / CTU-NetTest",
+        notes: ["Surová veřejná měření jsou technický vstup; běžné zobrazení má používat vrstvu Mobilní síť."]
+      },
+      replacedBy: "public.mobile.network"
+    },
+    {
+      providerLayerId: "mobile.osm_postgis.communications",
+      recommendedCatalogLayerId: "reference.infrastructure.communications",
+      label: "Komunikační infrastruktura",
+      description: "Referenční komunikační věže z lokálního OSM/PostGIS importu.",
+      categoryPath: ["reference", "infrastructure", "communications"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point"],
+      minZoom: 10,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "communications-infrastructure-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["mobile"], ["osm_postgis"], ["communications_tower"]),
+      legend: { profile: "communications-infrastructure-v1" },
+      legal: {
+        attribution: "OpenStreetMap contributors",
+        notes: ["Referenční infrastruktura, ne stav dostupnosti služby."]
+      }
+    },
+    {
+      providerLayerId: "ground.osm_postgis.healthcare",
+      recommendedCatalogLayerId: "reference.infrastructure.healthcare",
+      label: "Zdravotnictví",
+      description: "Nemocnice, kliniky, lékaři a lékárny z lokálního OSM/PostGIS importu.",
+      categoryPath: ["reference", "infrastructure", "healthcare"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "LineString", "Polygon"],
+      minZoom: 8,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "infrastructure-healthcare-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["ground"], ["osm_postgis"], ["hospital", "clinic", "doctors", "pharmacy"]),
+      legend: { profile: "infrastructure-healthcare-v1" },
+      legal: {
+        attribution: "OpenStreetMap contributors",
+        notes: ["Referenční veřejný kontext, ne autoritativní registr IZS."]
+      }
+    },
+    {
+      providerLayerId: "ground.osm_postgis.emergency",
+      recommendedCatalogLayerId: "reference.infrastructure.emergency",
+      label: "Záchranná infrastruktura",
+      description: "Hasiči, policie, záchranné a nouzové body z lokálního OSM/PostGIS importu.",
+      categoryPath: ["reference", "infrastructure", "emergency"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "LineString", "Polygon"],
+      minZoom: 8,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "infrastructure-emergency-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["ground"], ["osm_postgis"], ["fire_station", "police", "ambulance_station", "shelter"]),
+      legend: { profile: "infrastructure-emergency-v1" },
+      legal: {
+        attribution: "OpenStreetMap contributors",
+        notes: ["Referenční veřejný kontext, ne autoritativní registr IZS."]
+      }
+    },
+    {
+      providerLayerId: "ground.osm_postgis.civic",
+      recommendedCatalogLayerId: "reference.infrastructure.civic",
+      label: "Veřejná správa",
+      description: "Obecní úřady a další veřejné referenční body z lokálního OSM/PostGIS importu.",
+      categoryPath: ["reference", "infrastructure", "civic"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "LineString", "Polygon"],
+      minZoom: 8,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "infrastructure-civic-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["ground"], ["osm_postgis"], ["townhall"]),
+      legend: { profile: "infrastructure-civic-v1" },
+      legal: {
+        attribution: "OpenStreetMap contributors",
+        notes: ["Referenční veřejný kontext."]
+      }
+    },
+    {
+      providerLayerId: "traffic.pid_gtfs_rt",
+      recommendedCatalogLayerId: "public.traffic.transit",
+      label: "Doprava",
+      description: "Živý dopravní kontext veřejné dopravy z PID/Golemio GTFS-RT.",
+      categoryPath: ["traffic", "transit"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "LineString"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: 20,
+      cacheTtlSeconds: 20,
+      styleProfile: "transit-vehicle-position-v1",
+      sourceIds: ["pid_gtfs_rt"],
+      query: query(["traffic"], ["pid_gtfs_rt"]),
+      legend: { profile: "transit-vehicle-position-v1" },
+      legal: {
+        attribution: "PID / Golemio Open Data",
+        notes: ["Dopravní kontext, ne bezpečnostní track."]
+      }
+    },
+    {
+      providerLayerId: "warnings.safety_data_projection",
+      recommendedCatalogLayerId: "public.safety.warnings",
+      label: "Veřejné výstrahy (kompatibilní projekce)",
+      description: "Kompatibilní projekce výstrah ze Safety Data API. COP má preferovat provider sim.safety-data.",
+      categoryPath: ["safety", "warnings"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point", "Polygon"],
+      minZoom: 4,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: config.safetyDataCacheTtlSeconds,
+      styleProfile: "safety-warning-v1",
+      sourceIds: ["safety_data"],
+      query: query(["warnings"], ["safety_data"]),
+      legend: { profile: "safety-warning-v1" },
+      legal: {
+        attribution: "Safety Data API; feature-level attribution preserved from original public sources",
+        notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for safety layers."]
+      },
+      compatibilityOnly: true,
+      preferredProviderId: "sim.safety-data"
+    },
+    {
+      providerLayerId: "flood.safety_data_projection",
+      recommendedCatalogLayerId: "public.safety.flood",
+      label: "Povodně a voda (kompatibilní projekce)",
+      description: "Kompatibilní projekce hydrologických dat ze Safety Data API. COP má preferovat provider sim.safety-data.",
+      categoryPath: ["safety", "flood"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point"],
+      minZoom: 4,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: config.safetyDataCacheTtlSeconds,
+      styleProfile: "safety-flood-v1",
+      sourceIds: ["safety_data"],
+      query: query(["flood"], ["safety_data"]),
+      legend: { profile: "safety-flood-v1" },
+      legal: {
+        attribution: "Safety Data API; feature-level attribution preserved from original public sources",
+        notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for safety layers."]
+      },
+      compatibilityOnly: true,
+      preferredProviderId: "sim.safety-data"
+    }
+  ];
+}
+
+function buildProviderSource(descriptor: SourceDescriptor, config: SituationDataConfig): ProviderCatalogSource {
+  const classification = sourceClassification(descriptor.sourceId);
+  return {
+    sourceId: descriptor.sourceId,
+    label: descriptor.label,
+    enabled: descriptor.enabled,
+    mode: descriptor.mode,
+    layers: descriptor.layers,
+    sourceRole: classification.sourceRole,
+    audience: classification.audience,
+    selectableInMap: classification.selectableInMap,
+    visibleInDiagnostics: classification.visibleInDiagnostics,
+    feedsCatalogLayerIds: classification.feedsCatalogLayerIds,
+    usedByCatalogLayerIds: classification.usedByCatalogLayerIds,
+    replacedBy: classification.replacedBy,
+    preferredProviderId: classification.preferredProviderId,
+    updateCadenceSeconds: descriptor.updateCadenceSeconds,
+    cacheTtlSeconds: cacheTtlSecondsForSource(descriptor.sourceId, config),
+    baseUrl: descriptor.baseUrl,
+    backend: backendForSource(descriptor.sourceId, config),
+    license: descriptor.license,
+    notes: classification.notes
+  };
+}
+
+function query(providerLayerIds: SituationLayerId[], providerSourceIds: SituationDataSourceId[], categoryFilter?: string[]): ProviderCatalogLayer["query"] {
+  return {
+    mode: "bbox",
+    providerId: PROVIDER_ID,
+    streamId: "cop.features",
+    providerLayerIds,
+    providerSourceIds,
+    maxFeatures: DEFAULT_MAX_FEATURES,
+    categoryFilter
+  };
+}
+
+function sourceClassification(sourceId: SituationDataSourceId): {
+  sourceRole: ProviderCatalogSourceRole;
+  audience: ProviderCatalogAudience;
+  selectableInMap: boolean;
+  visibleInDiagnostics: boolean;
+  feedsCatalogLayerIds: string[];
+  usedByCatalogLayerIds?: string[];
+  replacedBy?: SituationDataSourceId;
+  preferredProviderId?: string;
+  notes?: string[];
+} {
+  switch (sourceId) {
+    case "mock":
+      return {
+        sourceRole: "mock",
+        audience: "diagnostic",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: [],
+        notes: ["Synthetic data source for tests only."]
+      };
+    case "open_meteo":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["public.weather.current"]
+      };
+    case "aviation_weather":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["public.weather.aviation"]
+      };
+    case "mobile_network_model":
+      return {
+        sourceRole: "aggregate",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["public.mobile.network"],
+        usedByCatalogLayerIds: ["public.mobile.network"],
+        notes: ["Final public mobile-network assessment. Prefer this over raw mobile inputs."]
+      };
+    case "mobile_coverage_model":
+      return {
+        sourceRole: "input",
+        audience: "diagnostic",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["diagnostic.mobile.coverage"],
+        usedByCatalogLayerIds: ["public.mobile.network"],
+        replacedBy: "mobile_network_model",
+        notes: ["Technical model input; do not show as a normal public mobile layer."]
+      };
+    case "ctu_nettest":
+      return {
+        sourceRole: "input",
+        audience: "diagnostic",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["diagnostic.mobile.ctu_measurements"],
+        usedByCatalogLayerIds: ["public.mobile.network"],
+        replacedBy: "mobile_network_model",
+        notes: ["Raw public measurements; do not show as a normal public mobile layer."]
+      };
+    case "osm_postgis":
+      return {
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: [
+          "reference.infrastructure.healthcare",
+          "reference.infrastructure.emergency",
+          "reference.infrastructure.civic",
+          "reference.infrastructure.communications"
+        ],
+        usedByCatalogLayerIds: ["public.mobile.network"],
+        notes: ["Select concrete catalog layers, not the whole OSM source."]
+      };
+    case "osm_overpass":
+      return {
+        sourceRole: "diagnostic",
+        audience: "diagnostic",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: [],
+        notes: ["Development fallback only; public Overpass is not a production runtime backend."]
+      };
+    case "pid_gtfs_rt":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["public.traffic.transit"]
+      };
+    case "safety_data":
+      return {
+        sourceRole: "projection",
+        audience: "public",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.flood"],
+        preferredProviderId: "sim.safety-data",
+        notes: ["Compatibility projection only; prefer the dedicated safety-data provider."]
+      };
+    case "ardos_partner":
+      return {
+        sourceRole: "final",
+        audience: "partner",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsCatalogLayerIds: [],
+        notes: ["Partner-only source; access and display must be controlled outside public catalog defaults."]
+      };
+  }
+}
+
+function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: SituationDataConfig): number {
+  switch (sourceId) {
+    case "open_meteo":
+      return config.openMeteoCacheTtlSeconds;
+    case "aviation_weather":
+      return config.aviationWeatherCacheTtlSeconds;
+    case "mobile_network_model":
+      return config.mobileNetworkCacheTtlSeconds;
+    case "mobile_coverage_model":
+      return config.mobileCoverageCacheTtlSeconds;
+    case "osm_postgis":
+      return config.osmPostgisCacheTtlSeconds;
+    case "osm_overpass":
+      return config.overpassCacheTtlSeconds;
+    case "ctu_nettest":
+      return 3600;
+    case "pid_gtfs_rt":
+      return 20;
+    case "safety_data":
+      return config.safetyDataCacheTtlSeconds;
+    case "ardos_partner":
+      return config.ardosPartnerCacheTtlSeconds;
+    case "mock":
+      return 10;
+  }
+}
+
+function backendForSource(sourceId: SituationDataSourceId, config: SituationDataConfig): string | undefined {
+  if (sourceId === "mobile_network_model" || sourceId === "mobile_coverage_model" || sourceId === "osm_postgis") {
+    return config.osmPostgisBackend;
+  }
+  return undefined;
+}

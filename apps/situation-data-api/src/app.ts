@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { type Express } from "express";
 import { SituationAggregationService } from "./aggregation.js";
+import { buildSituationMapCatalog } from "./catalog.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { problem } from "./http.js";
@@ -107,6 +108,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
 
   app.get("/api/v1/sources", (_req, res) => {
     res.json({ items: allSourceDescriptors(context.config) });
+  });
+
+  app.get("/api/v1/catalog", (_req, res) => {
+    res.json(buildSituationMapCatalog(context.config));
   });
 
   app.get("/api/v1/config", (_req, res) => {

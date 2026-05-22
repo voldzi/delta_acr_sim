@@ -27,6 +27,10 @@ export type MobileCoverageTechnology = "2G" | "4G" | "5G";
 export type MobileNetworkTechnology = MobileCoverageTechnology | "mixed" | "unknown";
 export type MobileCoverageQuality = "good" | "fair" | "weak" | "none" | "unknown";
 export type MobileNetworkStatus = "ok" | "weak_signal" | "degraded_possible" | "outage_reported" | "unknown";
+export type ProviderCatalogLayerRole = "primary" | "reference" | "overlay" | "user" | "partner" | "diagnostic";
+export type ProviderCatalogSourceRole = "final" | "aggregate" | "reference" | "input" | "projection" | "mock" | "diagnostic";
+export type ProviderCatalogAudience = "public" | "authenticated" | "partner" | "admin" | "diagnostic";
+export type ProviderCatalogKind = "vector_features" | "mvt_tiles" | "raster_tiles" | "track_stream" | "user_objects" | "static_reference" | "aggregate";
 
 export interface BoundingBox {
   west: number;
@@ -73,6 +77,96 @@ export interface LayerDescriptor {
   defaultVisible: boolean;
   geometryTypes: Array<"Point" | "LineString" | "Polygon">;
   expectedCadenceSeconds?: number;
+}
+
+export interface ProviderCatalogFilter {
+  filterId: string;
+  label?: string;
+  type: "single_select" | "multi_select" | "boolean" | "range";
+  values?: string[];
+  defaultValue?: string | string[] | boolean | number;
+}
+
+export interface ProviderCatalogLayer {
+  providerLayerId: string;
+  recommendedCatalogLayerId: string;
+  label: string;
+  description: string;
+  categoryPath: string[];
+  role: ProviderCatalogLayerRole;
+  audience: ProviderCatalogAudience;
+  kind: ProviderCatalogKind;
+  defaultVisible: boolean;
+  selectable: boolean;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  minZoom: number;
+  maxZoom: number;
+  refreshSeconds: number;
+  cacheTtlSeconds: number;
+  styleProfile: string;
+  sourceIds: SituationDataSourceId[];
+  technicalInputs?: SituationDataSourceId[];
+  filters?: ProviderCatalogFilter[];
+  query: {
+    mode: "bbox";
+    providerId: "sim.situation-data";
+    streamId: "cop.features";
+    providerLayerIds: SituationLayerId[];
+    providerSourceIds: SituationDataSourceId[];
+    maxFeatures: number;
+    categoryFilter?: string[];
+  };
+  legend?: {
+    profile: string;
+  };
+  model?: {
+    modelVersion: string;
+    terrainAware: boolean;
+    demSource: string;
+    confidenceExplanation: string;
+  };
+  legal: {
+    attribution: string;
+    notes: string[];
+  };
+  supersedes?: string[];
+  replacedBy?: string;
+  compatibilityOnly?: boolean;
+  preferredProviderId?: string;
+}
+
+export interface ProviderCatalogSource {
+  sourceId: SituationDataSourceId;
+  label: string;
+  enabled: boolean;
+  mode: SourceMode;
+  layers: SituationLayerId[];
+  sourceRole: ProviderCatalogSourceRole;
+  audience: ProviderCatalogAudience;
+  selectableInMap: boolean;
+  visibleInDiagnostics: boolean;
+  feedsCatalogLayerIds: string[];
+  usedByCatalogLayerIds?: string[];
+  replacedBy?: SituationDataSourceId;
+  preferredProviderId?: string;
+  updateCadenceSeconds?: number;
+  cacheTtlSeconds: number;
+  baseUrl?: string;
+  backend?: string;
+  license: SituationDataLicense;
+  notes?: string[];
+}
+
+export interface ProviderMapCatalog {
+  catalogVersion: "provider-map-catalog-v1";
+  providerId: "sim.situation-data";
+  generatedAt: string;
+  authority: {
+    catalogVersion: "map-catalog-v1";
+    document: string;
+  };
+  layers: ProviderCatalogLayer[];
+  sources: ProviderCatalogSource[];
 }
 
 export interface SituationDataPublicConfig {

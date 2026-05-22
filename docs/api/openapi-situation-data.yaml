@@ -37,6 +37,17 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/SourceDescriptor"
+  /catalog:
+    get:
+      summary: Return SIM provider metadata for COP Map Catalog v1
+      description: Separates user-facing map products from technical upstream sources. Existing /layers and /sources remain compatibility endpoints.
+      responses:
+        "200":
+          description: Provider map catalog metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderMapCatalog"
   /config:
     get:
       summary: Read non-secret runtime configuration
@@ -183,6 +194,18 @@ components:
     MobileCoverageQuality:
       type: string
       enum: [good, fair, weak, none, unknown]
+    ProviderCatalogLayerRole:
+      type: string
+      enum: [primary, reference, overlay, user, partner, diagnostic]
+    ProviderCatalogSourceRole:
+      type: string
+      enum: [final, aggregate, reference, input, projection, mock, diagnostic]
+    ProviderCatalogAudience:
+      type: string
+      enum: [public, authenticated, partner, admin, diagnostic]
+    ProviderCatalogKind:
+      type: string
+      enum: [vector_features, mvt_tiles, raster_tiles, track_stream, user_objects, static_reference, aggregate]
     BoundingBox:
       type: object
       required: [west, south, east, north]
@@ -259,6 +282,255 @@ components:
           type: string
         updateCadenceSeconds:
           type: integer
+    ProviderMapCatalog:
+      type: object
+      required: [catalogVersion, providerId, generatedAt, authority, layers, sources]
+      properties:
+        catalogVersion:
+          type: string
+          const: provider-map-catalog-v1
+        providerId:
+          type: string
+          const: sim.situation-data
+        generatedAt:
+          type: string
+          format: date-time
+        authority:
+          type: object
+          required: [catalogVersion, document]
+          properties:
+            catalogVersion:
+              type: string
+              const: map-catalog-v1
+            document:
+              type: string
+              description: Path to the authoritative source-neutral COP Map Catalog v1 document.
+        layers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderCatalogLayer"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderCatalogSource"
+    ProviderCatalogLayer:
+      type: object
+      required:
+        [
+          providerLayerId,
+          recommendedCatalogLayerId,
+          label,
+          description,
+          categoryPath,
+          role,
+          audience,
+          kind,
+          defaultVisible,
+          selectable,
+          geometryTypes,
+          minZoom,
+          maxZoom,
+          refreshSeconds,
+          cacheTtlSeconds,
+          styleProfile,
+          sourceIds,
+          query,
+          legal
+        ]
+      properties:
+        providerLayerId:
+          type: string
+        recommendedCatalogLayerId:
+          type: string
+          example: public.mobile.network
+        label:
+          type: string
+        description:
+          type: string
+        categoryPath:
+          type: array
+          items:
+            type: string
+        role:
+          $ref: "#/components/schemas/ProviderCatalogLayerRole"
+        audience:
+          $ref: "#/components/schemas/ProviderCatalogAudience"
+        kind:
+          $ref: "#/components/schemas/ProviderCatalogKind"
+        defaultVisible:
+          type: boolean
+        selectable:
+          type: boolean
+        geometryTypes:
+          type: array
+          items:
+            type: string
+            enum: [Point, LineString, Polygon]
+        minZoom:
+          type: integer
+        maxZoom:
+          type: integer
+        refreshSeconds:
+          type: integer
+        cacheTtlSeconds:
+          type: integer
+        styleProfile:
+          type: string
+        sourceIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceId"
+        technicalInputs:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceId"
+        filters:
+          type: array
+          items:
+            type: object
+            required: [filterId, type]
+            properties:
+              filterId:
+                type: string
+              label:
+                type: string
+              type:
+                type: string
+                enum: [single_select, multi_select, boolean, range]
+              values:
+                type: array
+                items:
+                  type: string
+              defaultValue: {}
+        query:
+          type: object
+          required: [mode, providerId, streamId, providerLayerIds, providerSourceIds, maxFeatures]
+          properties:
+            mode:
+              type: string
+              const: bbox
+            providerId:
+              type: string
+              const: sim.situation-data
+            streamId:
+              type: string
+              const: cop.features
+            providerLayerIds:
+              type: array
+              items:
+                $ref: "#/components/schemas/LayerId"
+            providerSourceIds:
+              type: array
+              items:
+                $ref: "#/components/schemas/SourceId"
+            maxFeatures:
+              type: integer
+            categoryFilter:
+              type: array
+              items:
+                type: string
+        legend:
+          type: object
+          properties:
+            profile:
+              type: string
+        model:
+          type: object
+          properties:
+            modelVersion:
+              type: string
+            terrainAware:
+              type: boolean
+            demSource:
+              type: string
+            confidenceExplanation:
+              type: string
+        legal:
+          type: object
+          required: [attribution, notes]
+          properties:
+            attribution:
+              type: string
+            notes:
+              type: array
+              items:
+                type: string
+        supersedes:
+          type: array
+          items:
+            type: string
+        replacedBy:
+          type: string
+        compatibilityOnly:
+          type: boolean
+        preferredProviderId:
+          type: string
+    ProviderCatalogSource:
+      type: object
+      required:
+        [
+          sourceId,
+          label,
+          enabled,
+          mode,
+          layers,
+          sourceRole,
+          audience,
+          selectableInMap,
+          visibleInDiagnostics,
+          feedsCatalogLayerIds,
+          cacheTtlSeconds,
+          license
+        ]
+      properties:
+        sourceId:
+          $ref: "#/components/schemas/SourceId"
+        label:
+          type: string
+        enabled:
+          type: boolean
+        mode:
+          type: string
+          enum: [live, mock, reference]
+        layers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LayerId"
+        sourceRole:
+          $ref: "#/components/schemas/ProviderCatalogSourceRole"
+        audience:
+          $ref: "#/components/schemas/ProviderCatalogAudience"
+        selectableInMap:
+          type: boolean
+          description: Whether COP may expose the whole source as a normal map selection. Prefer layer metadata for user-facing selection.
+        visibleInDiagnostics:
+          type: boolean
+        feedsCatalogLayerIds:
+          type: array
+          items:
+            type: string
+        usedByCatalogLayerIds:
+          type: array
+          items:
+            type: string
+        replacedBy:
+          $ref: "#/components/schemas/SourceId"
+        preferredProviderId:
+          type: string
+        updateCadenceSeconds:
+          type: integer
+        cacheTtlSeconds:
+          type: integer
+        baseUrl:
+          type: string
+        backend:
+          type: string
+        license:
+          $ref: "#/components/schemas/License"
+        notes:
+          type: array
+          items:
+            type: string
     PublicConfig:
       type: object
       required:

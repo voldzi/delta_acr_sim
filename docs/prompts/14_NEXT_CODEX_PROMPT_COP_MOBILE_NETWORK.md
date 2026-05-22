@@ -16,7 +16,10 @@ Registry:
 GET /layers
 GET /sources
 GET /config
+GET /catalog
 ```
+
+COP má pro layer tree a defaultní mapové checkboxy preferovat `GET /catalog`. `/sources.enabled=true` znamená pouze provozní stav zdroje v SIM, ne doporučení k běžnému vykreslení.
 
 Features:
 
@@ -104,6 +107,7 @@ SIM cacheuje `mobile_network` server-side. COP má:
 ```text
 https://sim.zeleznalady.cz/situation-data/api/v1/layers
 https://sim.zeleznalady.cz/situation-data/api/v1/sources
+https://sim.zeleznalady.cz/situation-data/api/v1/catalog
 https://sim.zeleznalady.cz/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20
 ```
 
@@ -111,6 +115,7 @@ Očekávání:
 
 - `/layers` obsahuje `mobile_network`,
 - `/sources` obsahuje `mobile_network_model`,
+- `/catalog` obsahuje `public.mobile.network` jako veřejnou selectable vrstvu a označí `mobile_coverage_model`, `ctu_nettest` a OSM věže jako technické/diagnostické vstupy,
 - features jsou polygonové,
 - každá feature má `quality`, `status`, `confidence`, `basis`, `summary`, `disclaimer`,
 - při warning/degraded stavu nespadne celá mapa.

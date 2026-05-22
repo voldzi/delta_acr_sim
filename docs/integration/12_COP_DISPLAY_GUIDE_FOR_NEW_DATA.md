@@ -23,6 +23,7 @@ https://sim.zeleznalady.cz/flight-data/api/v1/cop/tracks
 https://sim.zeleznalady.cz/flight-data/api/v1/airports
 https://sim.zeleznalady.cz/flight-data/api/v1/sources
 https://sim.zeleznalady.cz/situation-data/api/v1/cop/features
+https://sim.zeleznalady.cz/situation-data/api/v1/catalog
 https://sim.zeleznalady.cz/situation-data/api/v1/mobile-coverage/metadata
 https://sim.zeleznalady.cz/situation-data/api/v1/sources
 https://sim.zeleznalady.cz/situation-data/health/ready
@@ -39,6 +40,14 @@ GET /situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=grou
 GET /flight-data/api/v1/cop/tracks?bbox=13.85,49.65,15.35,50.45&limit=500
 GET /flight-data/api/v1/airports?bbox=13.85,49.65,15.35,50.45&limit=200
 ```
+
+COP má layer tree a defaultní mapové checkboxy řídit z `GET /situation-data/api/v1/catalog`. Starší `/sources.enabled=true` znamená pouze to, že SIM zdroj běží. Neznamená to, že COP má zdroj automaticky zobrazit jako běžnou mapovou vrstvu.
+
+Pro mobilní síť z katalogu platí:
+
+- `public.mobile.network` je běžná veřejná vrstva, provider layer `mobile_network`, source `mobile_network_model`,
+- `diagnostic.mobile.coverage` a `diagnostic.mobile.ctu_measurements` jsou diagnostické vstupy, `selectable=false`,
+- OSM komunikační infrastruktura je reference, ne stav dostupnosti mobilní služby.
 
 ## Flight Data zobrazení
 

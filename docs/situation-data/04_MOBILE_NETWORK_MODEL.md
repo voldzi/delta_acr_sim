@@ -42,6 +42,14 @@ Layer registry:
 GET /situation-data/api/v1/layers
 ```
 
+Provider map catalog:
+
+```http
+GET /situation-data/api/v1/catalog
+```
+
+COP should use `/catalog` to build the normal layer tree. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest` and OSM communication towers are marked as diagnostic/reference inputs.
+
 Features:
 
 ```http
@@ -131,6 +139,7 @@ COP should not infer BTS outages from `weak` or `none`. `outage_reported` should
 
 ```bash
 curl -fsS 'http://localhost:5020/situation-data/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_network&source=mobile_network_model&limit=20'
+curl -fsS http://localhost:5020/situation-data/api/v1/catalog
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'mobile_network|mobile_network_model'
 ```

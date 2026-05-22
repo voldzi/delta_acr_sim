@@ -21,12 +21,41 @@ https://sim.zeleznalady.cz/situation-data/api/v1
 ```http
 GET /layers
 GET /sources
+GET /catalog
 GET /config
 GET /features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
 GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
 GET /mobile-coverage/metadata
 GET /dem/metadata
 ```
+
+## Map Catalog v1 metadata
+
+`GET /catalog` je preferovaný metadata endpoint pro COP layer tree. Vrací provider metadata pro autoritativní source-neutral kontrakt COP Map Catalog v1:
+
+```json
+{
+  "catalogVersion": "provider-map-catalog-v1",
+  "providerId": "sim.situation-data",
+  "generatedAt": "2026-05-22T08:00:00.000Z",
+  "authority": {
+    "catalogVersion": "map-catalog-v1",
+    "document": "/Users/voldzi/Documents/Development/18 2026/DELTA_ACR/01 COP/docs/integration/08_MAP_CATALOG_V1.md"
+  },
+  "layers": [],
+  "sources": []
+}
+```
+
+COP má používat `/catalog` pro rozhodnutí, co je běžná mapová vrstva a co je pouze technický vstup. `enabled=true` ve starším `/sources` znamená jen to, že SIM zdroj běží; neznamená to, že ho má COP automaticky zobrazit jako checkbox v běžné mapě.
+
+Klíčová pravidla katalogu:
+
+- `public.mobile.network` je finální veřejná vrstva `mobile_network` ze zdroje `mobile_network_model`,
+- `diagnostic.mobile.coverage` je diagnostická vrstva `mobile_coverage` ze zdroje `mobile_coverage_model`, `selectable=false`,
+- `diagnostic.mobile.ctu_measurements` jsou diagnostická ČTÚ měření, `selectable=false`,
+- `reference.infrastructure.communications` jsou referenční OSM věže, `defaultVisible=false` a `selectable=false`,
+- `safety_data` v situation-data je označený jako `sourceRole=projection`; COP má pro primární safety vrstvy preferovat provider `sim.safety-data`.
 
 ## COP projection
 
@@ -139,7 +168,7 @@ Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `b
 
 ## Mobile Coverage Model
 
-`mobile_coverage_model` vrací modelované coverage polygony jako samostatnou vrstvu `mobile_coverage`. COP nemá počítat coverage, stahovat DEM ani dotazovat OSM; používá pouze hotový výstup SIM.
+`mobile_coverage_model` vrací modelované coverage polygony jako samostatnou vrstvu `mobile_coverage`. Je to technický/modelový vstup pro `mobile_network`, ne běžná občanská vrstva. COP ho má zobrazovat pouze v diagnostice nebo při ladění modelu.
 
 Vrstva je ve fázi 1 orientační:
 
@@ -293,7 +322,8 @@ SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metr
 
 - Dotazovat podle bbox aktuální mapy, ne plošně celou ČR.
 - Default `limit=250`.
-- Weather, mobile a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COP tracky ani letecké cíle.
+- Layer tree a defaultní viditelnost řídit z `GET /catalog`, ne ze staršího `/sources`.
+- Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COP tracky ani letecké cíle.
 - `mobile_network` zobrazovat jako hlavní mobilní vrstvu s legendou kvality a upozorněním, že jde o odhad, ne potvrzený stav konkrétní BTS.
 - `mobile_coverage` používat jen jako technický/detailní vstup, pokud je potřeba ladit model.
 - `aviation_weather` zobrazovat jako letištní počasí, ne jako tracky.

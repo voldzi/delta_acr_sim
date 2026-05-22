@@ -136,6 +136,134 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("exposes provider map catalog metadata for COP", async () => {
+    const response = await request(app).get("/api/v1/catalog").expect(200);
+
+    expect(response.body.catalogVersion).toBe("provider-map-catalog-v1");
+    expect(response.body.providerId).toBe("sim.situation-data");
+    expect(response.body.authority).toEqual(
+      expect.objectContaining({
+        catalogVersion: "map-catalog-v1",
+        document: expect.stringContaining("08_MAP_CATALOG_V1.md")
+      })
+    );
+
+    expect(response.body.layers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          providerLayerId: "mobile_network",
+          recommendedCatalogLayerId: "public.mobile.network",
+          role: "overlay",
+          audience: "public",
+          kind: "vector_features",
+          selectable: true,
+          styleProfile: "mobile-network-quality-v1",
+          sourceIds: ["mobile_network_model"],
+          technicalInputs: expect.arrayContaining(["mobile_coverage_model", "ctu_nettest", "osm_postgis"]),
+          model: expect.objectContaining({
+            modelVersion: "coverage-v1+mobile-network-v1",
+            terrainAware: false,
+            demSource: "not-used-phase-1"
+          })
+        }),
+        expect.objectContaining({
+          providerLayerId: "mobile_coverage",
+          recommendedCatalogLayerId: "diagnostic.mobile.coverage",
+          role: "diagnostic",
+          audience: "diagnostic",
+          selectable: false,
+          replacedBy: "public.mobile.network"
+        }),
+        expect.objectContaining({
+          providerLayerId: "mobile.ctu_nettest",
+          recommendedCatalogLayerId: "diagnostic.mobile.ctu_measurements",
+          role: "diagnostic",
+          audience: "diagnostic",
+          selectable: false,
+          replacedBy: "public.mobile.network"
+        }),
+        expect.objectContaining({
+          providerLayerId: "mobile.osm_postgis.communications",
+          recommendedCatalogLayerId: "reference.infrastructure.communications",
+          role: "reference",
+          audience: "public",
+          selectable: false
+        }),
+        expect.objectContaining({
+          providerLayerId: "warnings.safety_data_projection",
+          recommendedCatalogLayerId: "public.safety.warnings",
+          compatibilityOnly: true,
+          preferredProviderId: "sim.safety-data",
+          selectable: false
+        })
+      ])
+    );
+
+    for (const layer of response.body.layers) {
+      expect(layer).toEqual(
+        expect.objectContaining({
+          recommendedCatalogLayerId: expect.any(String),
+          role: expect.any(String),
+          audience: expect.any(String),
+          kind: expect.any(String),
+          styleProfile: expect.any(String),
+          sourceIds: expect.any(Array),
+          refreshSeconds: expect.any(Number),
+          cacheTtlSeconds: expect.any(Number)
+        })
+      );
+    }
+
+    expect(response.body.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: "mobile_network_model",
+          sourceRole: "aggregate",
+          audience: "public",
+          selectableInMap: true,
+          visibleInDiagnostics: true,
+          feedsCatalogLayerIds: ["public.mobile.network"]
+        }),
+        expect.objectContaining({
+          sourceId: "mobile_coverage_model",
+          sourceRole: "input",
+          audience: "diagnostic",
+          selectableInMap: false,
+          visibleInDiagnostics: true,
+          usedByCatalogLayerIds: ["public.mobile.network"],
+          replacedBy: "mobile_network_model"
+        }),
+        expect.objectContaining({
+          sourceId: "ctu_nettest",
+          sourceRole: "input",
+          audience: "diagnostic",
+          selectableInMap: false,
+          visibleInDiagnostics: true,
+          usedByCatalogLayerIds: ["public.mobile.network"],
+          replacedBy: "mobile_network_model"
+        }),
+        expect.objectContaining({
+          sourceId: "safety_data",
+          sourceRole: "projection",
+          audience: "public",
+          selectableInMap: false,
+          preferredProviderId: "sim.safety-data"
+        })
+      ])
+    );
+
+    for (const source of response.body.sources) {
+      expect(source).toEqual(
+        expect.objectContaining({
+          sourceRole: expect.any(String),
+          audience: expect.any(String),
+          selectableInMap: expect.any(Boolean),
+          visibleInDiagnostics: expect.any(Boolean)
+        })
+      );
+    }
+  });
+
   it("exposes non-secret runtime configuration", async () => {
     const response = await request(app).get("/api/v1/config").expect(200);
 
