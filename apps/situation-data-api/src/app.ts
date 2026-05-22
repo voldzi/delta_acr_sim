@@ -371,6 +371,18 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
       lines.push(`situation_data_osm_postgis_import_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
     }
   }
+  if (status.sourceId === "ctu_nettest") {
+    lines.push(`situation_data_ctu_nettest_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_ctu_nettest_measurements{backend="${backend}"} ${status.objectCount}`);
+    }
+    if (status.lastImportAt) {
+      lines.push(`situation_data_ctu_nettest_latest_measurement_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+    }
+    if (typeof status.lastImportAgeSeconds === "number") {
+      lines.push(`situation_data_ctu_nettest_latest_measurement_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+  }
   return lines;
 }
 

@@ -121,7 +121,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       model: {
         modelVersion: `${config.mobileCoverageModelVersion}+mobile-network-v1`,
         terrainAware: config.mobileCoverageTerrainAware,
-        demSource: config.mobileCoverageTerrainAware ? config.demDatasetId : config.mobileCoverageDemSource,
+        demSource: mobileModelDemSource(config),
         confidenceExplanation: "Combines public measurements, inferred coverage and OSM infrastructure hints."
       },
       legal: {
@@ -164,7 +164,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       model: {
         modelVersion: config.mobileCoverageModelVersion,
         terrainAware: config.mobileCoverageTerrainAware,
-        demSource: config.mobileCoverageTerrainAware ? config.demDatasetId : config.mobileCoverageDemSource,
+        demSource: mobileModelDemSource(config),
         confidenceExplanation: "Distance/path-loss estimate from imported OSM communication tower references."
       },
       legal: {
@@ -606,5 +606,18 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   if (sourceId === "mobile_network_model" || sourceId === "mobile_coverage_model" || sourceId === "osm_postgis") {
     return config.osmPostgisBackend;
   }
+  if (sourceId === "ctu_nettest") {
+    return "ctu-nettest";
+  }
   return undefined;
+}
+
+function mobileModelDemSource(config: SituationDataConfig): string {
+  if (config.mobileCoverageTerrainAware) {
+    return config.demDatasetId;
+  }
+  if (config.demEnabled) {
+    return `${config.demDatasetId} available; not applied by coverage-v1`;
+  }
+  return config.mobileCoverageDemSource;
 }

@@ -75,6 +75,10 @@ Feature properties include:
   "technology": "4G",
   "quality": "fair",
   "status": "ok",
+  "dataQuality": "mixed",
+  "btsStatus": "operator_feed_unavailable",
+  "btsStatusSource": "none",
+  "operatorStatusAvailable": false,
   "basis": [
     "CTU_NETTEST_MEASUREMENT",
     "INFERRED_COVERAGE",
@@ -90,7 +94,7 @@ Feature properties include:
   "modelVersion": "mobile-network-v1",
   "generatedAt": "2026-05-21T00:00:00.000Z",
   "resolutionM": 1000,
-  "demSource": "not-used-phase-1",
+  "demSource": "copernicus-glo30-cz available; not applied by coverage-v1",
   "stale": false,
   "disclaimer": "Mobile network assessment is inferred from public/modelled data; it is not a confirmed BTS outage or guaranteed service availability."
 }
@@ -121,7 +125,10 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - Default source TTL is 3600 seconds.
 - External inputs are not queried per COM user when a cached area assessment exists.
 - Health reports `mobile_network_model` as degraded when dependent model/input sources cannot produce an assessment.
-- Metrics include `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info` and per-source cache counters for `mobile_network_model`.
+- Health also reports `ctu_nettest` freshness and measurement count when that source is enabled.
+- Metrics include `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`,
+  `situation_data_ctu_nettest_measurements`, `situation_data_ctu_nettest_latest_measurement_age_seconds`
+  and per-source cache counters for `mobile_network_model`.
 
 ## COM Interpretation
 
@@ -132,6 +139,8 @@ COM should use:
 - `confidence` for opacity/detail priority,
 - `basis` and `notices` to explain why the assessment is limited,
 - `summary` as the short detail text.
+- `dataQuality` to distinguish `modelled`, `observed`, `mixed` and `unknown` conclusions.
+- `btsStatus` and `operatorStatusAvailable` to avoid presenting inferred signal quality as confirmed BTS state.
 
 COM should not infer BTS outages from `weak` or `none`. `outage_reported` should only be treated as confirmed after SIM receives an authorized operator/partner status feed.
 

@@ -17,7 +17,7 @@ import type {
 
 const MOBILE_COVERAGE_LICENSE: SituationDataLicense = {
   name: "Estimated mobile coverage model",
-  attribution: "DELTA ACR SIM model; OpenStreetMap contributors for tower references",
+  attribution: "CSM SIM model; OpenStreetMap contributors for tower references",
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
@@ -111,12 +111,19 @@ export class MobileCoverageSource implements SituationDataSource {
     }
     try {
       const objectCount = await this.towerCountCache.getOrLoad("tower-count", () => this.fetchTowerCount());
+      const warnings: string[] = [];
+      if (objectCount <= 0) {
+        warnings.push("mobile_coverage_model has no communications_tower references.");
+      }
+      if (this.config.demEnabled && !this.config.mobileCoverageTerrainAware) {
+        warnings.push("DEM catalog is available but coverage-v1 does not apply terrain line-of-sight yet.");
+      }
       return {
         sourceId: "mobile_coverage_model",
         status: objectCount > 0 ? "ok" : "degraded",
         backend: this.config.osmPostgisBackend,
         objectCount,
-        warnings: objectCount > 0 ? [] : ["mobile_coverage_model has no communications_tower references."]
+        warnings
       };
     } catch (error) {
       return {
@@ -137,7 +144,7 @@ export class MobileCoverageSource implements SituationDataSource {
       technologies: TECHNOLOGIES,
       operators: ["unknown"],
       qualityLevels: QUALITY_LEVELS,
-      demSource: this.config.mobileCoverageDemSource,
+      demSource: this.effectiveDemSource(),
       cacheTtlSeconds: this.config.mobileCoverageCacheTtlSeconds,
       disclaimer: DISCLAIMER,
       assumptions: this.assumptions()
@@ -264,7 +271,9 @@ export class MobileCoverageSource implements SituationDataSource {
         }),
         tags: compactTags({
           nearestTowerId: nearest?.tower.id,
-          nearestTowerName: nearest?.tower.name
+          nearestTowerName: nearest?.tower.name,
+          nearestTowerOperator: nearest?.tower.operator,
+          nearestTowerTechnologyHint: nearest?.tower.technologyHint
         }),
         operator: "unknown",
         technology,
@@ -273,8 +282,12 @@ export class MobileCoverageSource implements SituationDataSource {
         modelVersion: this.config.mobileCoverageModelVersion,
         generatedAt,
         resolutionM,
-        demSource: this.config.mobileCoverageDemSource,
+        demSource: this.effectiveDemSource(),
         assumptions: this.assumptions(),
+        dataQuality: "modelled",
+        btsStatus: "operator_feed_unavailable",
+        btsStatusSource: "none",
+        operatorStatusAvailable: false,
         disclaimer: DISCLAIMER,
         raw: {
           nearestTower: nearest,
@@ -289,8 +302,22 @@ export class MobileCoverageSource implements SituationDataSource {
       antennaHeightM: this.config.mobileCoverageAntennaHeightM,
       propagationModel: "distance-path-loss-lite",
       terrainAware: this.config.mobileCoverageTerrainAware,
-      landCoverAware: false
+      terrainDataAvailable: this.config.demEnabled,
+      terrainApplied: false,
+      demDatasetId: this.config.demDatasetId,
+      landCoverAware: false,
+      btsRealtimeStatus: false
     };
+  }
+
+  private effectiveDemSource(): string {
+    if (this.config.mobileCoverageTerrainAware) {
+      return this.config.mobileCoverageDemSource;
+    }
+    if (this.config.demEnabled) {
+      return `${this.config.demDatasetId} available; not applied by coverage-v1`;
+    }
+    return this.config.mobileCoverageDemSource;
   }
 
   private async fetchTowerCount(): Promise<number> {
@@ -329,7 +356,9 @@ export class MobileCoverageSource implements SituationDataSource {
           id: `${row.osm_type}:${row.osm_id}`,
           name: cleanString(row.name),
           lon,
-          lat
+          lat,
+          operator: towerOperator(row.tags),
+          technologyHint: towerTechnologyHint(row.tags)
         }
       ];
     });
@@ -353,6 +382,8 @@ interface Tower {
   name?: string;
   lon: number;
   lat: number;
+  operator?: string;
+  technologyHint?: string;
 }
 
 interface NearestTower {
@@ -527,6 +558,23 @@ function optionalNumber(value: unknown): number | undefined {
 
 function cleanString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function towerOperator(tags: Record<string, unknown> | null): string | undefined {
+  return cleanString(tags?.operator) ?? cleanString(tags?.brand) ?? cleanString(tags?.network);
+}
+
+function towerTechnologyHint(tags: Record<string, unknown> | null): string | undefined {
+  if (!tags) {
+    return undefined;
+  }
+  const hints = [
+    cleanString(tags["communication:mobile_phone"]),
+    cleanString(tags["telecom:medium"]),
+    cleanString(tags["tower:type"]),
+    cleanString(tags.man_made)
+  ].filter((value): value is string => Boolean(value));
+  return hints.length > 0 ? hints.join(",") : undefined;
 }
 
 function compactTags(values: Record<string, string | undefined>): Record<string, string> | undefined {

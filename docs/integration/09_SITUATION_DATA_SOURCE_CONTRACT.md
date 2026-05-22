@@ -185,7 +185,7 @@ Vrstva je ve fázi 1 orientační:
 - výpočet: grid nad bbox, nejbližší věž, jednoduchý distance/path-loss odhad,
 - technologie: `2G`, `4G`, `5G`,
 - operator: `unknown`,
-- DEM: zatím `not-used-phase-1`, `terrainAware=false`.
+- DEM: Copernicus GLO-30 katalog může být dostupný, ale `coverage-v1` zatím neaplikuje line-of-sight; ve výstupu je proto `terrainApplied=false`.
 
 Dotaz:
 
@@ -216,13 +216,16 @@ Příklad metadat:
   "technologies": ["2G", "4G", "5G"],
   "operators": ["unknown"],
   "qualityLevels": ["good", "fair", "weak", "none", "unknown"],
-  "demSource": "not-used-phase-1",
+  "demSource": "copernicus-glo30-cz available; not applied by coverage-v1",
   "cacheTtlSeconds": 21600,
   "disclaimer": "Coverage is an estimate, not guaranteed service availability.",
   "assumptions": {
     "antennaHeightM": 30,
     "propagationModel": "distance-path-loss-lite",
     "terrainAware": false,
+    "terrainDataAvailable": true,
+    "terrainApplied": false,
+    "demDatasetId": "copernicus-glo30-cz",
     "landCoverAware": false
   }
 }
@@ -252,11 +255,13 @@ Interpretace:
 - `status` je hlavní hodnota pro výstrahy: `weak_signal` a `degraded_possible` se mohou zobrazit jako riziko, `outage_reported` až po autorizovaném operátorském/partnerském feedu,
 - `confidence` říká sílu kombinovaného závěru,
 - `basis` ukazuje, jestli závěr stojí na měření, modelu, OSM infrastruktuře nebo jen na absenci lepších dat,
+- `dataQuality` rozlišuje `modelled`, `observed`, `mixed`, `unknown`,
+- `btsStatus=operator_feed_unavailable` a `operatorStatusAvailable=false` znamená, že nejde o potvrzený stav konkrétní BTS,
 - `summary` a `notices` jsou připravené pro detail objektu v COM.
 
 Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení.
 
-Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
+Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. `ctu_nettest` má vlastní health položku s počtem mobilních měření a časem posledního měření. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`, `situation_data_ctu_nettest_measurements`, `situation_data_ctu_nettest_latest_measurement_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
 
 ## DEM Catalog
 

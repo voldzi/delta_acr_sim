@@ -63,13 +63,19 @@ Feature properties include:
   "modelVersion": "coverage-v1",
   "generatedAt": "2026-05-21T00:00:00.000Z",
   "resolutionM": 1000,
-  "demSource": "not-used-phase-1",
+  "demSource": "copernicus-glo30-cz available; not applied by coverage-v1",
   "assumptions": {
     "antennaHeightM": 30,
     "propagationModel": "distance-path-loss-lite",
     "terrainAware": false,
+    "terrainDataAvailable": true,
+    "terrainApplied": false,
+    "demDatasetId": "copernicus-glo30-cz",
     "landCoverAware": false
   },
+  "dataQuality": "modelled",
+  "btsStatus": "operator_feed_unavailable",
+  "operatorStatusAvailable": false,
   "stale": false,
   "disclaimer": "Coverage is an estimate, not guaranteed service availability."
 }
@@ -98,6 +104,7 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - The coverage source keeps a source-level cache keyed by canonical bbox, technology filter, operator filter, limit, resolution and model version.
 - Default coverage TTL is 21600 seconds.
 - Health reports `mobile_coverage_model` as degraded when PostGIS is not configured or no tower references exist.
+- If DEM is imported but coverage-v1 does not apply line-of-sight yet, health returns a warning so COM can present the model as non-terrain-aware.
 - Metrics include `situation_data_mobile_coverage_towers` and per-source cache counters for `mobile_coverage_model`.
 
 ## Model Phases

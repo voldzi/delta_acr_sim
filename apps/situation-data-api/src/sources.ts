@@ -37,7 +37,7 @@ export interface SourceCacheStats extends ManagedResponseCacheStats {
 
 const MOCK_LICENSE: SituationDataLicense = {
   name: "Synthetic internal test data",
-  attribution: "DELTA ACR SIM",
+  attribution: "CSM SIM",
   commercialUse: "allowed",
   operationalUse: "allowed",
   notes: ["Synthetic situation features for COM integration testing."]
@@ -85,7 +85,7 @@ const CTU_NETTEST_LICENSE: SituationDataLicense = {
 
 const MOBILE_NETWORK_LICENSE: SituationDataLicense = {
   name: "Unified mobile network assessment",
-  attribution: "DELTA ACR SIM model; Czech Telecommunication Office / CTU-NetTest; OpenStreetMap contributors where tower hints are used",
+  attribution: "CSM SIM model; Czech Telecommunication Office / CTU-NetTest; OpenStreetMap contributors where tower hints are used",
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
@@ -186,6 +186,23 @@ function cacheStatsFor<T>(sourceId: SituationDataSourceId, cache: ManagedRespons
     sourceId,
     ...cache.stats()
   };
+}
+
+const ctuNettestRecordsCaches = new Map<string, ManagedResponseCache<Array<Record<string, string>>>>();
+
+function ctuNettestRecordsCache(config: SituationDataConfig): ManagedResponseCache<Array<Record<string, string>>> {
+  const key = `${config.ctuNettestUrl}:${config.requestTimeoutMs}`;
+  const existing = ctuNettestRecordsCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<Array<Record<string, string>>>({
+    ttlMs: 60 * 60 * 1000,
+    staleIfErrorMs: 24 * 60 * 60 * 1000,
+    maxEntries: 1
+  });
+  ctuNettestRecordsCaches.set(key, cache);
+  return cache;
 }
 
 class MockSituationDataSource implements SituationDataSource {
@@ -374,11 +391,7 @@ class CtuNettestSource implements SituationDataSource {
   private readonly recordsCache: ManagedResponseCache<Array<Record<string, string>>>;
 
   constructor(private readonly config: SituationDataConfig) {
-    this.recordsCache = new ManagedResponseCache<Array<Record<string, string>>>({
-      ttlMs: 60 * 60 * 1000,
-      staleIfErrorMs: 24 * 60 * 60 * 1000,
-      maxEntries: 1
-    });
+    this.recordsCache = ctuNettestRecordsCache(config);
     this.descriptor = {
       sourceId: "ctu_nettest",
       label: "CTU NetTest mobile measurements",
@@ -394,6 +407,38 @@ class CtuNettestSource implements SituationDataSource {
 
   cacheStats(): SourceCacheStats[] {
     return [cacheStatsFor("ctu_nettest", this.recordsCache)];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    try {
+      const records = await this.recordsCache.getOrLoad("ctu_nettest_records", () => fetchCtuNettestRecords(this.config));
+      const mobileRecords = records.filter(isCtuMobileMeasurement);
+      const lastImportAt = latestCtuMeasurementAt(mobileRecords);
+      const lastImportAgeSeconds = lastImportAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastImportAt)) / 1000)) : undefined;
+      const warnings: string[] = [];
+      if (mobileRecords.length === 0) {
+        warnings.push("ctu_nettest did not return mobile measurements.");
+      }
+      if (lastImportAgeSeconds !== undefined && lastImportAgeSeconds > 72 * 60 * 60) {
+        warnings.push("ctu_nettest newest mobile measurement is older than 72 hours.");
+      }
+      return {
+        sourceId: "ctu_nettest",
+        status: warnings.length === 0 ? "ok" : "degraded",
+        backend: "ctu-nettest",
+        objectCount: mobileRecords.length,
+        lastImportAt,
+        lastImportAgeSeconds,
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: "ctu_nettest",
+        status: "degraded",
+        backend: "ctu-nettest",
+        warnings: [error instanceof Error ? error.message : "Unknown ctu_nettest health check failure."]
+      };
+    }
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -470,15 +515,20 @@ export class MobileNetworkSource implements SituationDataSource {
   }
 
   async healthStatus(): Promise<SourceHealthStatus> {
-    const coverageHealth = await this.coverageSource.healthStatus?.();
+    const [coverageHealth, ctuHealth] = await Promise.all([this.coverageSource.healthStatus?.(), this.ctuNettestSource.healthStatus?.()]);
+    const warnings = [
+      ...(coverageHealth?.warnings ?? ["mobile_network_model could not inspect mobile_coverage_model health."]),
+      ...(ctuHealth?.warnings ?? ["mobile_network_model could not inspect ctu_nettest health."]),
+      "mobile_network_model has no authorized real-time BTS/NOC status feed."
+    ];
     return {
       sourceId: "mobile_network_model",
-      status: coverageHealth?.status ?? "degraded",
+      status: coverageHealth?.status === "ok" ? "ok" : "degraded",
       backend: this.config.osmPostgisBackend,
       objectCount: coverageHealth?.objectCount,
-      lastImportAt: coverageHealth?.lastImportAt,
-      lastImportAgeSeconds: coverageHealth?.lastImportAgeSeconds,
-      warnings: coverageHealth?.warnings ?? ["mobile_network_model could not inspect mobile_coverage_model health."]
+      lastImportAt: ctuHealth?.lastImportAt ?? coverageHealth?.lastImportAt,
+      lastImportAgeSeconds: ctuHealth?.lastImportAgeSeconds ?? coverageHealth?.lastImportAgeSeconds,
+      warnings
     };
   }
 
@@ -602,6 +652,7 @@ export class MobileNetworkSource implements SituationDataSource {
     const basis = mobileNetworkBasis(coverage, stats);
     const featureId = coverage.id.replace(/^coverage:mobile:/, "mobile_network:aggregate:");
     const summary = mobileNetworkSummary(quality, status, stats);
+    const dataQuality = mobileNetworkDataQuality(stats.count, coverageQuality);
 
     return {
       type: "Feature",
@@ -616,7 +667,7 @@ export class MobileNetworkSource implements SituationDataSource {
         observedAt: generatedAt,
         confidence,
         stale: false,
-        severity: severityForMobileStatus(status, quality),
+        severity: severityForMobileStatus(status, quality, stats),
         license: {
           name: MOBILE_NETWORK_LICENSE.name,
           attribution: MOBILE_NETWORK_LICENSE.attribution
@@ -627,6 +678,10 @@ export class MobileNetworkSource implements SituationDataSource {
         status,
         basis,
         summary,
+        dataQuality,
+        btsStatus: "operator_feed_unavailable",
+        btsStatusSource: "none",
+        operatorStatusAvailable: false,
         notices: ["Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora."],
         estimatedSignalDbm: estimateSignalFromCoverageAndMeasurements(coverage, stats),
         modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
@@ -636,7 +691,8 @@ export class MobileNetworkSource implements SituationDataSource {
         assumptions: {
           ...(coverage.properties.assumptions ?? {}),
           aggregationModel: "coverage+ctu-nettest-confidence-v1",
-          btsRealtimeStatus: false
+          btsRealtimeStatus: false,
+          operatorStatusAvailable: false
         },
         disclaimer: "Mobile network quality is an inferred area assessment, not a confirmed BTS or operator outage state.",
         metrics: compactMixedMetrics({
@@ -654,6 +710,8 @@ export class MobileNetworkSource implements SituationDataSource {
         tags: compactTags({
           basis: basis.join(","),
           status,
+          dataQuality,
+          btsStatus: "operator_feed_unavailable",
           lastMeasuredAt: stats.lastMeasuredAt,
           sourceCoverageFeatureId: coverage.properties.featureId
         }),
@@ -671,6 +729,7 @@ export class MobileNetworkSource implements SituationDataSource {
     const status = statusForMobileQuality(quality, stats);
     const confidence = mobileNetworkConfidence(undefined, "unknown", stats, quality);
     const featureId = `mobile_network:aggregate:mixed:${formatBboxKey(bbox)}`;
+    const dataQuality = mobileNetworkDataQuality(stats.count, "unknown");
     return {
       type: "Feature",
       id: featureId,
@@ -695,7 +754,7 @@ export class MobileNetworkSource implements SituationDataSource {
         observedAt: generatedAt,
         confidence,
         stale: false,
-        severity: severityForMobileStatus(status, quality),
+        severity: severityForMobileStatus(status, quality, stats),
         license: {
           name: MOBILE_NETWORK_LICENSE.name,
           attribution: MOBILE_NETWORK_LICENSE.attribution
@@ -706,6 +765,10 @@ export class MobileNetworkSource implements SituationDataSource {
         status,
         basis: stats.count > 0 ? ["CTU_NETTEST_MEASUREMENT", "NO_OPERATOR_BTS_STATUS"] : ["UNKNOWN", "NO_OPERATOR_BTS_STATUS"],
         summary: mobileNetworkSummary(quality, status, stats),
+        dataQuality,
+        btsStatus: "operator_feed_unavailable",
+        btsStatusSource: "none",
+        operatorStatusAvailable: false,
         notices: [
           "Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora.",
           "V oblasti nebyl dostupný model pokrytí, výsledek je založený jen na dostupných měřeních nebo je neznámý."
@@ -716,7 +779,8 @@ export class MobileNetworkSource implements SituationDataSource {
         demSource: this.config.mobileCoverageDemSource,
         assumptions: {
           aggregationModel: "ctu-nettest-fallback-v1",
-          btsRealtimeStatus: false
+          btsRealtimeStatus: false,
+          operatorStatusAvailable: false
         },
         disclaimer: "Mobile network quality is an inferred area assessment, not a confirmed BTS or operator outage state.",
         metrics: compactMixedMetrics({
@@ -730,6 +794,8 @@ export class MobileNetworkSource implements SituationDataSource {
         }),
         tags: compactTags({
           status,
+          dataQuality,
+          btsStatus: "operator_feed_unavailable",
           lastMeasuredAt: stats.lastMeasuredAt
         }),
         raw: {
@@ -971,7 +1037,7 @@ class ArdosPartnerSource implements SituationDataSource {
       requestJsonWithHeaders<ArdosPartnerCollection>(url.toString(), this.config.requestTimeoutMs, {
         accept: "application/json",
         authorization: `Bearer ${this.config.ardosPartnerToken}`,
-        "user-agent": "delta-acr-sim-ardos-partner/0.1"
+        "user-agent": "csm-sim-ardos-partner/0.1"
       })
     );
     const features = (payload.features ?? [])
@@ -1331,6 +1397,19 @@ function mobileNetworkBasis(coverage: SituationFeature, stats: MeasurementStats)
   return basis;
 }
 
+function mobileNetworkDataQuality(measurementCount: number, coverageQuality: MobileCoverageQuality): "observed" | "modelled" | "mixed" | "unknown" {
+  if (measurementCount > 0 && coverageQuality !== "unknown") {
+    return "mixed";
+  }
+  if (measurementCount > 0) {
+    return "observed";
+  }
+  if (coverageQuality !== "unknown") {
+    return "modelled";
+  }
+  return "unknown";
+}
+
 function statusForMobileQuality(quality: MobileCoverageQuality, stats: MeasurementStats): MobileNetworkStatus {
   if (quality === "good" || quality === "fair") {
     return stats.count >= 2 && stats.severity === "warning" ? "degraded_possible" : "ok";
@@ -1344,8 +1423,8 @@ function statusForMobileQuality(quality: MobileCoverageQuality, stats: Measureme
   return "unknown";
 }
 
-function severityForMobileStatus(status: MobileNetworkStatus, quality: MobileCoverageQuality): SituationSeverity {
-  if (status === "outage_reported" || quality === "none") {
+function severityForMobileStatus(status: MobileNetworkStatus, quality: MobileCoverageQuality, stats: MeasurementStats): SituationSeverity {
+  if (status === "outage_reported" || (quality === "none" && stats.count >= 2)) {
     return "critical";
   }
   if (status === "degraded_possible" || status === "weak_signal" || quality === "weak") {
@@ -1748,7 +1827,7 @@ async function fetchAviationWeatherBundle(config: SituationDataConfig, bbox: Bou
   const warnings: string[] = [];
   const metars = await requestJsonArray<AviationMetar>(metarUrl.toString(), config.requestTimeoutMs, {
     accept: "application/json",
-    "user-agent": "delta-acr-sim-aviation-weather/0.1"
+    "user-agent": "csm-sim-aviation-weather/0.1"
   });
   const ids = Array.from(new Set(metars.map((metar) => normalizeIcaoId(metar.icaoId)).filter((id) => id.length > 0))).slice(0, 100);
   let tafs: AviationTaf[] = [];
@@ -1759,7 +1838,7 @@ async function fetchAviationWeatherBundle(config: SituationDataConfig, bbox: Bou
     try {
       tafs = await requestJsonArray<AviationTaf>(tafUrl.toString(), config.requestTimeoutMs, {
         accept: "application/json",
-        "user-agent": "delta-acr-sim-aviation-weather/0.1"
+        "user-agent": "csm-sim-aviation-weather/0.1"
       });
     } catch (error) {
       warnings.push(error instanceof Error ? `aviation_weather TAF fetch failed: ${error.message}` : "aviation_weather TAF fetch failed.");
@@ -1959,7 +2038,7 @@ async function requestOverpass(baseUrl: string, query: string, timeoutMs: number
     headers: {
       accept: "application/json",
       "content-type": "application/x-www-form-urlencoded",
-      "user-agent": "delta-acr-sim-situation-data/0.1"
+      "user-agent": "csm-sim-situation-data/0.1"
     },
     body: new URLSearchParams({ data: query }),
     signal: AbortSignal.timeout(timeoutMs)
@@ -2225,6 +2304,13 @@ function isCtuMobileMeasurement(record: Record<string, string>): boolean {
     return false;
   }
   return /\b(MOBILE|CELLULAR|2G|3G|4G|5G|LTE|NR|EDGE|GPRS|UMTS|HSPA)\b/.test(combined);
+}
+
+function latestCtuMeasurementAt(records: Array<Record<string, string>>): string | undefined {
+  return records
+    .map((record) => parseUtcTimestamp(record.time_utc))
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
 }
 
 function ctuAccessTechnology(record: Record<string, string>): string {

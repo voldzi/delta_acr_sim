@@ -321,6 +321,7 @@ describe("Situation Data API contract", () => {
     expect(response.text).toContain("situation_data_cache_entries");
     expect(response.text).toContain("situation_data_cache_coalesced_hits");
 
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
     const cachedSources = await createApp({
       ...config,
       enabledSources: [
@@ -349,6 +350,8 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_osm_postgis_backend_info{backend="unconfigured"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="osm_overpass"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_stale_hits{source="ctu_nettest"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="ctu_nettest",backend="ctu-nettest"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_ctu_nettest_backend_info{backend="ctu-nettest"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');
@@ -377,7 +380,7 @@ describe("Situation Data API contract", () => {
           sourceId: "mock",
           confidence: expect.any(Number),
           stale: false,
-          license: expect.objectContaining({ attribution: "DELTA ACR SIM" })
+          license: expect.objectContaining({ attribution: "CSM SIM" })
         })
       })
     );
@@ -557,6 +560,9 @@ describe("Situation Data API contract", () => {
           layer: "mobile_coverage",
           technology: "4G",
           quality: expect.stringMatching(/good|fair|weak|none/),
+          dataQuality: "modelled",
+          btsStatus: "operator_feed_unavailable",
+          operatorStatusAvailable: false,
           modelVersion: "coverage-v1",
           resolutionM: expect.any(Number),
           disclaimer: expect.stringContaining("estimate")
@@ -685,6 +691,9 @@ describe("Situation Data API contract", () => {
           layer: "mobile_network",
           quality: "fair",
           status: expect.stringMatching(/ok|weak_signal|degraded_possible|unknown/),
+          dataQuality: "mixed",
+          btsStatus: "operator_feed_unavailable",
+          operatorStatusAvailable: false,
           basis: expect.arrayContaining(["CTU_NETTEST_MEASUREMENT", "NO_OPERATOR_BTS_STATUS"]),
           summary: expect.stringContaining("Mobilní síť"),
           disclaimer: expect.stringContaining("not a confirmed BTS")

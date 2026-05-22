@@ -810,6 +810,18 @@ components:
               type: array
               items:
                 type: string
+            dataQuality:
+              type: string
+              enum: [observed, modelled, mixed, unknown]
+              description: Indicates whether the mobile assessment is based on measurements, modelled coverage, both, or insufficient inputs.
+            btsStatus:
+              type: string
+              enum: [operator_feed_unavailable, unverified, reported_outage, unknown]
+              description: Status of the concrete BTS/operator feed. `operator_feed_unavailable` means SIM has no authorized BTS/NOC status.
+            btsStatusSource:
+              type: string
+            operatorStatusAvailable:
+              type: boolean
             estimatedSignalDbm:
               type: integer
             modelVersion:
