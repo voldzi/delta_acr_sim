@@ -24,6 +24,8 @@ else
   git pull --ff-only
 fi
 
+export SIM_API_ADMIN_TOKEN="${SIM_API_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+
 cat > .env <<'EOF'
 SIM_WEB_PORT=5020
 API_PORT=4000
@@ -34,6 +36,15 @@ SIM_DATA_DIR=/data
 MAIN_COP_BASE_URL=http://sim-api:4000/mock-cop
 MAIN_COP_BEARER_TOKEN=dev-lab-token
 EXTERNAL_AI_ALLOWED=false
+SIM_API_AUTH_REQUIRED=true
+SIM_API_ADMIN_TOKEN=<paste-generated-token>
+SIM_API_TOKENS=
+SIM_API_CORS_ORIGINS=
+SIM_API_RATE_LIMIT_WINDOW_MS=60000
+SIM_API_RATE_LIMIT_MAX_REQUESTS=300
+SIM_SCENARIO_MAX_BLOCKS=24
+SIM_SCENARIO_MAX_ACTIVE_OBJECTS=1000
+SIM_SCENARIO_MAX_EVENTS_PER_SECOND=1000
 FLIGHT_DATA_ENABLED_SOURCES=adsb_lol
 FLIGHT_DATA_DEFAULT_LAT=50.1008
 FLIGHT_DATA_DEFAULT_LON=14.2632
@@ -42,6 +53,7 @@ FLIGHT_DATA_CACHE_TTL_SECONDS=10
 FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
 FLIGHT_DATA_CACHE_MAX_ENTRIES=512
 FLIGHT_DATA_STALE_AFTER_SECONDS=120
+FLIGHT_DATA_CORS_ORIGINS=
 FLIGHT_DATA_REQUEST_TIMEOUT_MS=8000
 LOCAL_ADSB_AIRCRAFT_JSON_URLS=
 OURAIRPORTS_ENABLED=true
@@ -97,6 +109,7 @@ SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ARDOS_PARTNER_BASE_URL=
 ARDOS_PARTNER_TOKEN=
+SITUATION_DATA_CORS_ORIGINS=
 TAK_GATEWAY_INGEST_TOKEN=dev-tak-ingest-token
 TAK_GATEWAY_READ_TOKEN=
 TAK_GATEWAY_PUBLIC_READ=false
@@ -106,16 +119,22 @@ TAK_GATEWAY_RETENTION_SECONDS=3600
 TAK_GATEWAY_MAX_EVENTS=5000
 TAK_GATEWAY_EXPOSE_RAW=false
 TAK_GATEWAY_SOURCE_LABEL=TAK/CoT gateway
+TAK_GATEWAY_CORS_ORIGINS=
+SAFETY_DATA_CORS_ORIGINS=
 EOF
+
+sed -i "s|^SIM_API_ADMIN_TOKEN=.*|SIM_API_ADMIN_TOKEN=${SIM_API_ADMIN_TOKEN}|" .env
 
 docker compose up -d --build
 docker compose ps
 curl -fsS http://localhost:5020/health/live
+curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN}" http://localhost:5020/api/v1/scenarios
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS http://localhost:5020/situation-data/api/v1/catalog
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20'
+test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:5020/metrics)" = "404"
 ```
 
 ## OpenStreetMap/PostGIS import

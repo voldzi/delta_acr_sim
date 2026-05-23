@@ -89,7 +89,8 @@
       "items": {
         "$ref": "./scenario-block.schema.json"
       },
-      "minItems": 1
+      "minItems": 1,
+      "maxItems": 24
     },
     "faults": {
       "type": "array",

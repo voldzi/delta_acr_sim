@@ -27,19 +27,26 @@ import type {
 } from "./types";
 
 const API_TIMEOUT_MS = 5_000;
+const SIM_API_TOKEN_STORAGE_KEY = "csm-sim-api-token";
+const AUTH_CHANGE_EVENT = "csm-sim-auth-change";
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const token = getSimApiToken();
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined)
+  };
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
   let response: Response;
   try {
     response = await fetch(path, {
       ...init,
       signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        ...(init?.headers ?? {})
-      }
+      headers
     }).catch((error: unknown) => {
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error(`API request timed out after ${API_TIMEOUT_MS / 1000}s: ${path}`);
@@ -58,6 +65,33 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+export function getSimApiToken(): string {
+  return window.sessionStorage.getItem(SIM_API_TOKEN_STORAGE_KEY) ?? "";
+}
+
+export function hasSimApiToken(): boolean {
+  return getSimApiToken().length > 0;
+}
+
+export function setSimApiToken(token: string): void {
+  const trimmed = token.trim();
+  if (trimmed) {
+    window.sessionStorage.setItem(SIM_API_TOKEN_STORAGE_KEY, trimmed);
+  } else {
+    window.sessionStorage.removeItem(SIM_API_TOKEN_STORAGE_KEY);
+  }
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
+
+export function clearSimApiToken(): void {
+  setSimApiToken("");
+}
+
+export function onSimApiAuthChange(handler: () => void): () => void {
+  window.addEventListener(AUTH_CHANGE_EVENT, handler);
+  return () => window.removeEventListener(AUTH_CHANGE_EVENT, handler);
 }
 
 export const demoScenario: Scenario = {

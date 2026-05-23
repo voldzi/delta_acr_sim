@@ -36,6 +36,7 @@ export interface FlightDataConfig {
   airspaceActivationEnabled: boolean;
   airspaceActivationBaseUrl: string;
   airspaceActivationCacheTtlSeconds: number;
+  corsOrigins?: string[];
 }
 
 export async function loadConfig(): Promise<FlightDataConfig> {
@@ -87,7 +88,8 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     uasGeozonesCacheTtlSeconds: parseInteger(process.env.UAS_GEOZONES_CACHE_TTL_SECONDS, 24 * 60 * 60),
     airspaceActivationEnabled: parseBoolean(process.env.AIRSPACE_ACTIVATION_ENABLED, true),
     airspaceActivationBaseUrl: process.env.AIRSPACE_ACTIVATION_BASE_URL ?? "https://aup.rlp.cz/",
-    airspaceActivationCacheTtlSeconds: parseInteger(process.env.AIRSPACE_ACTIVATION_CACHE_TTL_SECONDS, 5 * 60)
+    airspaceActivationCacheTtlSeconds: parseInteger(process.env.AIRSPACE_ACTIVATION_CACHE_TTL_SECONDS, 5 * 60),
+    corsOrigins: parseStringList(process.env.FLIGHT_DATA_CORS_ORIGINS)
   };
 }
 

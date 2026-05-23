@@ -4,6 +4,15 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export const SIM_ROLES = ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"] as const;
+export type SimRole = (typeof SIM_ROLES)[number];
+
+export interface ApiPrincipalConfig {
+  actor: string;
+  token: string;
+  roles: SimRole[];
+}
+
 export interface ApiConfig {
   port: number;
   dataDir: string;
@@ -14,12 +23,25 @@ export interface ApiConfig {
   mainCopBaseUrl?: string;
   mainCopBearerToken?: string;
   externalAiAllowed: boolean;
+  apiAuthRequired?: boolean;
+  apiPrincipals?: ApiPrincipalConfig[];
+  apiCorsOrigins?: string[];
+  apiRateLimitWindowMs?: number;
+  apiRateLimitMaxRequests?: number;
+  scenarioMaxBlocks?: number;
+  scenarioMaxActiveObjects?: number;
+  scenarioMaxEventsPerSecond?: number;
 }
 
 export async function loadConfig(): Promise<ApiConfig> {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
   const dataDir = resolve(process.env.SIM_DATA_DIR ?? `${projectRoot}/data`);
   await mkdir(dataDir, { recursive: true });
+  const apiAuthRequired = parseBoolean(process.env.SIM_API_AUTH_REQUIRED, process.env.NODE_ENV === "production");
+  const apiPrincipals = parseApiPrincipals(process.env.SIM_API_TOKENS, process.env.SIM_API_ADMIN_TOKEN, process.env.SIM_API_INTERNAL_TOKEN);
+  if (apiAuthRequired && apiPrincipals.length === 0) {
+    throw new Error("SIM_API_AUTH_REQUIRED is enabled but no SIM_API_ADMIN_TOKEN, SIM_API_TOKENS, or SIM_API_INTERNAL_TOKEN is configured.");
+  }
 
   return {
     port: Number(process.env.API_PORT ?? 4000),
@@ -30,7 +52,15 @@ export async function loadConfig(): Promise<ApiConfig> {
     adapterVersion: process.env.SIM_ADAPTER_VERSION ?? "0.1.0",
     mainCopBaseUrl: process.env.MAIN_COP_BASE_URL,
     mainCopBearerToken: process.env.MAIN_COP_BEARER_TOKEN ?? "dev-lab-token",
-    externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true"
+    externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true",
+    apiAuthRequired,
+    apiPrincipals,
+    apiCorsOrigins: parseList(process.env.SIM_API_CORS_ORIGINS),
+    apiRateLimitWindowMs: parseInteger(process.env.SIM_API_RATE_LIMIT_WINDOW_MS, 60_000),
+    apiRateLimitMaxRequests: parseInteger(process.env.SIM_API_RATE_LIMIT_MAX_REQUESTS, 300),
+    scenarioMaxBlocks: parseInteger(process.env.SIM_SCENARIO_MAX_BLOCKS, 24),
+    scenarioMaxActiveObjects: parseInteger(process.env.SIM_SCENARIO_MAX_ACTIVE_OBJECTS, 1000),
+    scenarioMaxEventsPerSecond: parseInteger(process.env.SIM_SCENARIO_MAX_EVENTS_PER_SECOND, 1000)
   };
 }
 
@@ -39,4 +69,63 @@ function parsePublisherMode(value: string | undefined): PublisherMode {
     return value;
   }
   return "DRY_RUN";
+}
+
+function parseApiPrincipals(value: string | undefined, adminToken: string | undefined, internalToken: string | undefined): ApiPrincipalConfig[] {
+  const principals: ApiPrincipalConfig[] = [];
+  const trimmedAdminToken = adminToken?.trim();
+  if (trimmedAdminToken) {
+    principals.push({
+      actor: "admin",
+      token: trimmedAdminToken,
+      roles: ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"]
+    });
+  }
+  const trimmedInternalToken = internalToken?.trim();
+  if (trimmedInternalToken) {
+    principals.push({
+      actor: "web-proxy",
+      token: trimmedInternalToken,
+      roles: ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"]
+    });
+  }
+
+  for (const item of parseList(value)) {
+    const [actor, token, rawRoles] = item.split(":");
+    const roles = parseRoles(rawRoles);
+    if (actor && token && roles.length > 0) {
+      principals.push({ actor, token, roles });
+    }
+  }
+  return principals;
+}
+
+function parseRoles(value: string | undefined): SimRole[] {
+  const allowed = new Set<string>(SIM_ROLES);
+  return (value ?? "")
+    .split("|")
+    .map((role) => role.trim())
+    .filter((role): role is SimRole => allowed.has(role));
+}
+
+function parseList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseBoolean(value: string | undefined, fallback = false): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function parseInteger(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : fallback;
 }

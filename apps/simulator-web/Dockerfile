@@ -5,7 +5,7 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/simulator-web ./apps/simulator-web
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/simulator-web build
 
 FROM nginx:1.29-alpine AS runtime

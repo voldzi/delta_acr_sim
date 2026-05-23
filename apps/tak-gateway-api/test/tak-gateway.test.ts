@@ -88,6 +88,15 @@ describe("tak-gateway-api", () => {
     expect(response.body.error.code).toBe("UNAUTHORIZED");
   });
 
+  it("keeps CoT ingest closed when no ingest token is configured", async () => {
+    const { app } = await createApp(config({ ingestToken: undefined }));
+
+    const response = await request(app).post("/api/v1/cot/events").set("content-type", "application/xml").send(cotEvent());
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHORIZED");
+  });
+
   it("ingests CoT XML and exposes a COP GeoJSON projection", async () => {
     const { app } = await createApp(config());
 

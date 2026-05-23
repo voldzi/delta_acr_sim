@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express, { type Express, type Request } from "express";
 import { buildTakMapCatalog } from "./catalog.js";
 import type { TakGatewayConfig } from "./config.js";
@@ -19,7 +19,7 @@ export async function createApp(config: TakGatewayConfig): Promise<{ app: Expres
   const context: TakGatewayAppContext = { config, store };
   const app = express();
 
-  app.use(cors());
+  app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 
   registerHealthRoutes(app, context);
@@ -32,6 +32,17 @@ export async function createApp(config: TakGatewayConfig): Promise<{ app: Expres
   });
 
   return { app, context };
+}
+
+function createCorsOptions(origins: string[] = []): CorsOptions {
+  if (origins.length > 0) {
+    return {
+      origin(origin, callback) {
+        callback(null, !origin || origins.includes(origin));
+      }
+    };
+  }
+  return process.env.NODE_ENV === "production" ? { origin: false } : {};
 }
 
 function registerHealthRoutes(app: Express, context: TakGatewayAppContext): void {
@@ -198,7 +209,7 @@ function isDebugAuthorized(req: Request, context: TakGatewayAppContext): boolean
 
 function isAuthorized(req: Request, context: TakGatewayAppContext): boolean {
   if (!context.config.ingestToken) {
-    return true;
+    return false;
   }
   const header = req.headers.authorization;
   return header === `Bearer ${context.config.ingestToken}`;

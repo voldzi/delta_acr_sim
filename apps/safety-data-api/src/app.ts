@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { SafetyAggregationService } from "./aggregation.js";
 import { buildSafetyMapCatalog } from "./catalog.js";
@@ -19,7 +19,7 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   const context: SafetyDataAppContext = { config, aggregation };
   const app = express();
 
-  app.use(cors());
+  app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 
   registerHealthRoutes(app, context);
@@ -31,6 +31,17 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   });
 
   return { app, context };
+}
+
+function createCorsOptions(origins: string[] = []): CorsOptions {
+  if (origins.length > 0) {
+    return {
+      origin(origin, callback) {
+        callback(null, !origin || origins.includes(origin));
+      }
+    };
+  }
+  return process.env.NODE_ENV === "production" ? { origin: false } : {};
 }
 
 function registerHealthRoutes(app: Express, context: SafetyDataAppContext): void {

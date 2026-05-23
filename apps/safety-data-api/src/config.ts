@@ -17,6 +17,7 @@ export interface SafetyDataConfig {
   chmiHydroMetadataUrl: string;
   chmiHydroNowBaseUrl: string;
   chmiHydroMaxStations: number;
+  corsOrigins?: string[];
 }
 
 export async function loadConfig(): Promise<SafetyDataConfig> {
@@ -42,7 +43,8 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     chmiAlertsCapBaseUrl: process.env.CHMI_ALERTS_CAP_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
     chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
-    chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 80)
+    chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 80),
+    corsOrigins: parseStringList(process.env.SAFETY_DATA_CORS_ORIGINS)
   };
 }
 
@@ -68,6 +70,14 @@ function parseBbox(value: string | undefined): BoundingBox | undefined {
     return undefined;
   }
   return { west, south, east, north };
+}
+
+function parseStringList(value: string | undefined, fallback: string[] = []): string[] {
+  const parsed = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return parsed && parsed.length > 0 ? parsed : fallback;
 }
 
 function parseInteger(value: string | undefined, fallback: number): number {

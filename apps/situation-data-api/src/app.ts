@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { SituationAggregationService } from "./aggregation.js";
 import { buildSituationMapCatalog } from "./catalog.js";
@@ -31,7 +31,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const context: SituationDataAppContext = { config, aggregation, demCatalog };
   const app = express();
 
-  app.use(cors());
+  app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 
   registerHealthRoutes(app, context);
@@ -43,6 +43,17 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   });
 
   return { app, context };
+}
+
+function createCorsOptions(origins: string[] = []): CorsOptions {
+  if (origins.length > 0) {
+    return {
+      origin(origin, callback) {
+        callback(null, !origin || origins.includes(origin));
+      }
+    };
+  }
+  return process.env.NODE_ENV === "production" ? { origin: false } : {};
 }
 
 function registerHealthRoutes(app: Express, context: SituationDataAppContext): void {

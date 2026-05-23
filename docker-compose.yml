@@ -14,6 +14,15 @@ services:
       MAIN_COP_BASE_URL: ${MAIN_COP_BASE_URL:-http://sim-api:4000/mock-cop}
       MAIN_COP_BEARER_TOKEN: ${MAIN_COP_BEARER_TOKEN:-dev-lab-token}
       EXTERNAL_AI_ALLOWED: ${EXTERNAL_AI_ALLOWED:-false}
+      SIM_API_AUTH_REQUIRED: ${SIM_API_AUTH_REQUIRED:-true}
+      SIM_API_ADMIN_TOKEN: ${SIM_API_ADMIN_TOKEN:?Set SIM_API_ADMIN_TOKEN to a high-entropy SIM API bearer token}
+      SIM_API_TOKENS: ${SIM_API_TOKENS:-}
+      SIM_API_CORS_ORIGINS: ${SIM_API_CORS_ORIGINS:-}
+      SIM_API_RATE_LIMIT_WINDOW_MS: ${SIM_API_RATE_LIMIT_WINDOW_MS:-60000}
+      SIM_API_RATE_LIMIT_MAX_REQUESTS: ${SIM_API_RATE_LIMIT_MAX_REQUESTS:-300}
+      SIM_SCENARIO_MAX_BLOCKS: ${SIM_SCENARIO_MAX_BLOCKS:-24}
+      SIM_SCENARIO_MAX_ACTIVE_OBJECTS: ${SIM_SCENARIO_MAX_ACTIVE_OBJECTS:-1000}
+      SIM_SCENARIO_MAX_EVENTS_PER_SECOND: ${SIM_SCENARIO_MAX_EVENTS_PER_SECOND:-1000}
     volumes:
       - sim-data:/data
     expose:
@@ -43,6 +52,7 @@ services:
       FLIGHT_DATA_STALE_IF_ERROR_SECONDS: ${FLIGHT_DATA_STALE_IF_ERROR_SECONDS:-60}
       FLIGHT_DATA_CACHE_MAX_ENTRIES: ${FLIGHT_DATA_CACHE_MAX_ENTRIES:-512}
       FLIGHT_DATA_STALE_AFTER_SECONDS: ${FLIGHT_DATA_STALE_AFTER_SECONDS:-120}
+      FLIGHT_DATA_CORS_ORIGINS: ${FLIGHT_DATA_CORS_ORIGINS:-}
       ADSB_LOL_BASE_URL: ${ADSB_LOL_BASE_URL:-https://api.adsb.lol}
       OPENSKY_BASE_URL: ${OPENSKY_BASE_URL:-https://opensky-network.org/api}
       OPENSKY_AUTH_URL: ${OPENSKY_AUTH_URL:-https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token}
@@ -126,6 +136,7 @@ services:
       AVIATION_WEATHER_BASE_URL: ${AVIATION_WEATHER_BASE_URL:-https://aviationweather.gov}
       ARDOS_PARTNER_BASE_URL: ${ARDOS_PARTNER_BASE_URL:-}
       ARDOS_PARTNER_TOKEN: ${ARDOS_PARTNER_TOKEN:-}
+      SITUATION_DATA_CORS_ORIGINS: ${SITUATION_DATA_CORS_ORIGINS:-}
     volumes:
       - situation-data:/data
       - ${DEM_LOCAL_CACHE_HOST_DIR:-./data/dem-cache/copernicus-glo30}:${DEM_LOCAL_CACHE_DIR:-/dem-cache/copernicus-glo30}:ro
@@ -188,6 +199,7 @@ services:
       CHMI_HYDRO_METADATA_URL: ${CHMI_HYDRO_METADATA_URL:-https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json}
       CHMI_HYDRO_NOW_BASE_URL: ${CHMI_HYDRO_NOW_BASE_URL:-https://opendata.chmi.cz/hydrology/now/data}
       CHMI_HYDRO_MAX_STATIONS: ${CHMI_HYDRO_MAX_STATIONS:-80}
+      SAFETY_DATA_CORS_ORIGINS: ${SAFETY_DATA_CORS_ORIGINS:-}
     volumes:
       - safety-data:/data
     expose:
@@ -217,6 +229,7 @@ services:
       TAK_GATEWAY_MAX_EVENTS: ${TAK_GATEWAY_MAX_EVENTS:-5000}
       TAK_GATEWAY_EXPOSE_RAW: ${TAK_GATEWAY_EXPOSE_RAW:-false}
       TAK_GATEWAY_SOURCE_LABEL: ${TAK_GATEWAY_SOURCE_LABEL:-TAK/CoT gateway}
+      TAK_GATEWAY_CORS_ORIGINS: ${TAK_GATEWAY_CORS_ORIGINS:-}
     volumes:
       - tak-gateway-data:/data
     expose:

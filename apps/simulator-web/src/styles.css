@@ -31,6 +31,7 @@ body {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
@@ -64,6 +65,7 @@ button:disabled {
 }
 
 select,
+input,
 textarea {
   width: 100%;
   border: 1px solid #c8d7d4;
@@ -73,6 +75,11 @@ textarea {
 }
 
 select {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+input {
   min-height: 38px;
   padding: 0 12px;
 }
@@ -241,6 +248,25 @@ textarea {
 .external-link:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.api-auth-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(360px, 100%);
+}
+
+.api-auth-form input {
+  width: 180px;
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.api-auth-form button,
+.token-button {
+  min-height: 34px;
+  font-size: 13px;
 }
 
 .metrics-grid {

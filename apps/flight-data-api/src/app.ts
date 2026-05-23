@@ -1,4 +1,4 @@
-import cors from "cors";
+import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { AirspaceActivationService } from "./airspace-activation.js";
 import { AirspaceReferenceService } from "./airspace-reference.js";
@@ -30,7 +30,7 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
   const context: FlightDataAppContext = { config, aggregation, referenceData, airspaces, uasGeozones, airspaceActivations };
   const app = express();
 
-  app.use(cors());
+  app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 
   registerHealthRoutes(app, context);
@@ -43,6 +43,17 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
   });
 
   return { app, context };
+}
+
+function createCorsOptions(origins: string[] = []): CorsOptions {
+  if (origins.length > 0) {
+    return {
+      origin(origin, callback) {
+        callback(null, !origin || origins.includes(origin));
+      }
+    };
+  }
+  return process.env.NODE_ENV === "production" ? { origin: false } : {};
 }
 
 function registerHealthRoutes(app: Express, context: FlightDataAppContext): void {

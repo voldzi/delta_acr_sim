@@ -1,5 +1,5 @@
 import { countActiveScenarioObjects, generateScenarioEvents } from "@csm-sim/simulation-core";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import request from "supertest";
@@ -101,6 +101,20 @@ const trajectoryScenarioPayload = {
   faults: []
 };
 
+function testConfig(dataDir: string, overrides: Partial<ApiConfig> = {}): ApiConfig {
+  return {
+    port: 0,
+    dataDir,
+    schemaDir: resolve("../../docs/api/schemas"),
+    publisherMode: "DRY_RUN",
+    sourceSystemId: "sim-air-situation-001",
+    adapterVersion: "0.1.0",
+    mainCopBaseUrl: "http://localhost/mock-cop",
+    externalAiAllowed: false,
+    ...overrides
+  };
+}
+
 describe("SIM API contract baseline", () => {
   let dataDir: string;
   let app: Awaited<ReturnType<typeof createApp>>["app"];
@@ -109,16 +123,7 @@ describe("SIM API contract baseline", () => {
 
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), "csm-sim-"));
-    config = {
-      port: 0,
-      dataDir,
-      schemaDir: resolve("../../docs/api/schemas"),
-      publisherMode: "DRY_RUN",
-      sourceSystemId: "sim-air-situation-001",
-      adapterVersion: "0.1.0",
-      mainCopBaseUrl: "http://localhost/mock-cop",
-      externalAiAllowed: false
-    };
+    config = testConfig(dataDir);
     ({ app, context } = await createApp(config));
   });
 
@@ -357,6 +362,96 @@ describe("SIM API contract baseline", () => {
     expect(draft.body.policyCheck.allowed).toBe(true);
     const accepted = await request(app).post(`/api/v1/ai/scenario-drafts/${draft.body.draftId}/accept`).send({}).expect(200);
     expect(accepted.body.scenarioId).toBeTruthy();
+  });
+});
+
+describe("SIM API security controls", () => {
+  let dataDir = "";
+  let app: Awaited<ReturnType<typeof createApp>>["app"];
+  let context: Awaited<ReturnType<typeof createApp>>["context"] | undefined;
+
+  afterEach(async () => {
+    context?.runtimeRunner.dispose();
+    if (dataDir) {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("requires bearer auth and the right role for protected SIM routes", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthRequired: true,
+        apiPrincipals: [
+          { actor: "viewer", token: "viewer-token", roles: ["SIM_VIEWER"] },
+          { actor: "operator", token: "operator-token", roles: ["SIM_OPERATOR", "SIM_VIEWER"] }
+        ]
+      })
+    ));
+
+    await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(401);
+    await request(app).post("/api/v1/scenarios").set("authorization", "Bearer viewer-token").send(scenarioPayload).expect(403);
+
+    const created = await request(app).post("/api/v1/scenarios").set("authorization", "Bearer operator-token").send(scenarioPayload).expect(201);
+    expect(created.body.scenarioId).toBeTruthy();
+
+    const listed = await request(app).get("/api/v1/scenarios").set("authorization", "Bearer viewer-token").expect(200);
+    expect(listed.body.items).toHaveLength(1);
+
+    const auditLog = await readFile(join(dataDir, "sim-audit.jsonl"), "utf8");
+    expect(auditLog).toContain("auth.failure");
+    expect(auditLog).toContain("auth.forbidden");
+  });
+
+  it("rate limits authenticated protected routes per actor and client", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthRequired: true,
+        apiPrincipals: [{ actor: "viewer", token: "viewer-token", roles: ["SIM_VIEWER"] }],
+        apiRateLimitWindowMs: 60_000,
+        apiRateLimitMaxRequests: 1
+      })
+    ));
+
+    await request(app).get("/api/v1/scenarios").set("authorization", "Bearer viewer-token").expect(200);
+    const response = await request(app).get("/api/v1/scenarios").set("authorization", "Bearer viewer-token").expect(429);
+    expect(response.body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("rejects oversized scenario payloads before they can be started", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    ({ app, context } = await createApp(testConfig(dataDir, { scenarioMaxActiveObjects: 10 })));
+
+    const oversized = {
+      ...scenarioPayload,
+      blocks: [{ ...scenarioPayload.blocks[0], objectCount: 11 }]
+    };
+
+    const createResponse = await request(app).post("/api/v1/scenarios").send(oversized).expect(400);
+    expect(createResponse.body.error.code).toBe("SCENARIO_BUDGET_EXCEEDED");
+
+    const legacyScenario = {
+      ...oversized,
+      scenarioId: "00000000-0000-4000-8000-000000000099",
+      status: "DRAFT" as const
+    };
+    context!.store.data.scenarios.push(legacyScenario);
+    await context!.store.save();
+
+    const startResponse = await request(app).post(`/api/v1/scenarios/${legacyScenario.scenarioId}/start`).send({}).expect(400);
+    expect(startResponse.body.error.code).toBe("SCENARIO_BUDGET_EXCEEDED");
+  });
+
+  it("rejects block counts above the schema cap", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    ({ app, context } = await createApp(testConfig(dataDir)));
+
+    const response = await request(app)
+      .post("/api/v1/scenarios")
+      .send({ ...scenarioPayload, blocks: [{ ...scenarioPayload.blocks[0], objectCount: 501 }] })
+      .expect(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
 });
 

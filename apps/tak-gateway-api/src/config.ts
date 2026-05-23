@@ -15,6 +15,7 @@ export interface TakGatewayConfig {
   maxEvents: number;
   exposeRaw: boolean;
   sourceLabel: string;
+  corsOrigins?: string[];
 }
 
 export async function loadConfig(): Promise<TakGatewayConfig> {
@@ -38,7 +39,8 @@ export async function loadConfig(): Promise<TakGatewayConfig> {
     retentionSeconds: parseInteger(process.env.TAK_GATEWAY_RETENTION_SECONDS, 3600),
     maxEvents: parseInteger(process.env.TAK_GATEWAY_MAX_EVENTS, 5000),
     exposeRaw: parseBoolean(process.env.TAK_GATEWAY_EXPOSE_RAW),
-    sourceLabel: process.env.TAK_GATEWAY_SOURCE_LABEL ?? "TAK/CoT gateway"
+    sourceLabel: process.env.TAK_GATEWAY_SOURCE_LABEL ?? "TAK/CoT gateway",
+    corsOrigins: parseStringList(process.env.TAK_GATEWAY_CORS_ORIGINS)
   };
 }
 
@@ -60,6 +62,14 @@ function parseBbox(value: string | undefined): BoundingBox | undefined {
     return undefined;
   }
   return { west, south, east, north };
+}
+
+function parseStringList(value: string | undefined, fallback: string[] = []): string[] {
+  const parsed = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return parsed && parsed.length > 0 ? parsed : fallback;
 }
 
 function parseBoolean(value: string | undefined, fallback = false): boolean {

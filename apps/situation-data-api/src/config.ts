@@ -48,6 +48,7 @@ export interface SituationDataConfig {
   demSeaweedfsEndpoint?: string;
   demSeaweedfsBucket: string;
   demSeaweedfsPrefix: string;
+  corsOrigins?: string[];
 }
 
 export async function loadConfig(): Promise<SituationDataConfig> {
@@ -105,7 +106,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     demLocalCacheDir: process.env.DEM_LOCAL_CACHE_DIR ?? "/dem-cache",
     demSeaweedfsEndpoint: emptyToUndefined(process.env.DEM_SEAWEEDFS_S3_ENDPOINT),
     demSeaweedfsBucket: process.env.DEM_SEAWEEDFS_BUCKET ?? "sim-dem",
-    demSeaweedfsPrefix: trimSlashes(process.env.DEM_SEAWEEDFS_PREFIX ?? "copernicus-glo30/2021")
+    demSeaweedfsPrefix: trimSlashes(process.env.DEM_SEAWEEDFS_PREFIX ?? "copernicus-glo30/2021"),
+    corsOrigins: parseStringList(process.env.SITUATION_DATA_CORS_ORIGINS)
   };
 }
 
@@ -143,6 +145,14 @@ function parseBbox(value: string | undefined): BoundingBox | undefined {
     return undefined;
   }
   return { west, south, east, north };
+}
+
+function parseStringList(value: string | undefined, fallback: string[] = []): string[] {
+  const parsed = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return parsed && parsed.length > 0 ? parsed : fallback;
 }
 
 function parseInteger(value: string | undefined, fallback: number): number {

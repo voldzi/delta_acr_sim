@@ -4,7 +4,7 @@ RUN corepack enable
 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/safety-data-api ./apps/safety-data-api
-RUN pnpm install --frozen-lockfile=false
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/safety-data-api build
 
 FROM node:24-alpine AS runtime
@@ -13,6 +13,6 @@ ENV NODE_ENV=production
 RUN corepack enable
 COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/safety-data-api ./apps/safety-data-api
-RUN pnpm install --prod --frozen-lockfile=false
+RUN pnpm install --prod --frozen-lockfile
 EXPOSE 4030
 CMD ["node", "apps/safety-data-api/dist/index.js"]

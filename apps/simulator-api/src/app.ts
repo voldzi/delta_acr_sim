@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { ApiConfig } from "./config.js";
 import { problem } from "./http.js";
 import { RuntimeRunner } from "./runtime-runner.js";
+import { AuditLogger, createCorsOptions, createSecurityMiddleware } from "./security.js";
 import { JsonStore } from "./store.js";
 import { createValidators, type Validators } from "./validation.js";
 
@@ -18,6 +19,7 @@ export interface AppContext {
   publisher: PublisherClient;
   runtimeRunner: RuntimeRunner;
   validators: Validators;
+  audit: AuditLogger;
 }
 
 export async function createApp(config: ApiConfig): Promise<{ app: Express; context: AppContext }> {
@@ -40,11 +42,13 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
   const validators = createValidators(config.schemaDir);
   const runtimeRunner = new RuntimeRunner(config, store, publisher);
   await runtimeRunner.recover();
-  const context: AppContext = { config, store, publisher, runtimeRunner, validators };
+  const audit = new AuditLogger(config.dataDir);
+  const context: AppContext = { config, store, publisher, runtimeRunner, validators, audit };
   const app = express();
   app.locals.runtimeRunner = runtimeRunner;
 
-  app.use(cors());
+  app.use(cors(createCorsOptions(config)));
+  app.use(createSecurityMiddleware(config, audit));
   app.use(express.json({ limit: "2mb" }));
 
   registerScenarioRoutes(app, context);
@@ -70,6 +74,10 @@ function registerScenarioRoutes(app: Express, context: AppContext): void {
   app.post("/api/v1/scenarios", async (req, res) => {
     if (!context.validators.scenario(req.body)) {
       return problem(req, res, 400, "VALIDATION_ERROR", "Scenario does not match schema.", context.validators.issues(context.validators.scenario));
+    }
+    const budgetIssues = validateScenarioBudget(req.body as Scenario, context.config);
+    if (budgetIssues.length > 0) {
+      return problem(req, res, 400, "SCENARIO_BUDGET_EXCEEDED", "Scenario exceeds configured simulation budget.", budgetIssues);
     }
 
     const scenario: Scenario = {
@@ -106,6 +114,10 @@ function registerScenarioRoutes(app: Express, context: AppContext): void {
     if (!context.validators.scenario(next)) {
       return problem(req, res, 400, "VALIDATION_ERROR", "Scenario update does not match schema.", context.validators.issues(context.validators.scenario));
     }
+    const budgetIssues = validateScenarioBudget(next, context.config);
+    if (budgetIssues.length > 0) {
+      return problem(req, res, 400, "SCENARIO_BUDGET_EXCEEDED", "Scenario update exceeds configured simulation budget.", budgetIssues);
+    }
 
     context.store.data.scenarios[index] = next;
     await context.store.save();
@@ -131,6 +143,10 @@ function registerRuntimeRoutes(app: Express, context: AppContext): void {
     const scenario = findScenario(context, req.params.scenarioId);
     if (!scenario) {
       return problem(req, res, 404, "NOT_FOUND", "Scenario not found.");
+    }
+    const budgetIssues = validateScenarioBudget(scenario, context.config);
+    if (budgetIssues.length > 0) {
+      return problem(req, res, 400, "SCENARIO_BUDGET_EXCEEDED", "Scenario exceeds configured simulation budget.", budgetIssues);
     }
     const runtime = await context.runtimeRunner.start(scenario, req.body);
     res.json(runtime);
@@ -293,7 +309,9 @@ function registerAiRoutes(app: Express, context: AppContext): void {
       return problem(req, res, 404, "NOT_FOUND", "AI draft not found.");
     }
     const schemaValid = draft.policyCheck.allowed && context.validators.scenario(draft.scenarioPatch);
-    res.json({ schemaValid, issues: schemaValid ? [] : context.validators.issues(context.validators.scenario) });
+    const budgetIssues = schemaValid ? validateScenarioBudget(draft.scenarioPatch as Scenario, context.config) : [];
+    const valid = schemaValid && budgetIssues.length === 0;
+    res.json({ schemaValid: valid, issues: valid ? [] : [...context.validators.issues(context.validators.scenario), ...budgetIssues] });
   });
 
   app.post("/api/v1/ai/scenario-drafts/:draftId/accept", async (req, res) => {
@@ -301,8 +319,13 @@ function registerAiRoutes(app: Express, context: AppContext): void {
     if (!draft) {
       return problem(req, res, 404, "NOT_FOUND", "AI draft not found.");
     }
-    if (!draft.policyCheck.allowed || !context.validators.scenario(draft.scenarioPatch)) {
-      return problem(req, res, 400, "VALIDATION_ERROR", "AI draft cannot be accepted.");
+    const schemaValid = context.validators.scenario(draft.scenarioPatch);
+    const budgetIssues = schemaValid ? validateScenarioBudget(draft.scenarioPatch as Scenario, context.config) : [];
+    if (!draft.policyCheck.allowed || !schemaValid || budgetIssues.length > 0) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "AI draft cannot be accepted.", [
+        ...context.validators.issues(context.validators.scenario),
+        ...budgetIssues
+      ]);
     }
     const scenario: Scenario = {
       ...(draft.scenarioPatch as Scenario),
@@ -425,6 +448,28 @@ function registerMockCopRoutes(app: Express, context: AppContext): void {
 
 function findScenario(context: AppContext, scenarioId: string | undefined): Scenario | undefined {
   return context.store.data.scenarios.find((scenario) => scenario.scenarioId === scenarioId);
+}
+
+function validateScenarioBudget(scenario: Scenario, config: ApiConfig): unknown[] {
+  const maxBlocks = config.scenarioMaxBlocks ?? 24;
+  const maxActiveObjects = config.scenarioMaxActiveObjects ?? 1000;
+  const maxEventsPerSecond = config.scenarioMaxEventsPerSecond ?? 1000;
+  const enabledBlocks = scenario.blocks.filter((block) => block.enabled);
+  const activeObjects = enabledBlocks.reduce((sum, block) => sum + block.objectCount, 0);
+  const eventsPerSecond = enabledBlocks.reduce((sum, block) => sum + block.objectCount * block.updateRateHz, 0);
+  const issues: unknown[] = [];
+
+  if (scenario.blocks.length > maxBlocks) {
+    issues.push({ path: "/blocks", message: "Too many scenario blocks.", limit: maxBlocks, actual: scenario.blocks.length });
+  }
+  if (activeObjects > maxActiveObjects) {
+    issues.push({ path: "/blocks", message: "Too many active synthetic objects.", limit: maxActiveObjects, actual: activeObjects });
+  }
+  if (eventsPerSecond > maxEventsPerSecond) {
+    issues.push({ path: "/blocks", message: "Scenario event rate is too high.", limit: maxEventsPerSecond, actual: eventsPerSecond });
+  }
+
+  return issues;
 }
 
 function parseQueryInteger(value: unknown, fallback: number, max: number): number {

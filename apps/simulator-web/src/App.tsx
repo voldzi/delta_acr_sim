@@ -10,7 +10,9 @@ import {
   ExternalLink,
   FlaskConical,
   Gauge,
+  KeyRound,
   Layers3,
+  LogOut,
   MapPinned,
   Pause,
   Plane,
@@ -25,17 +27,21 @@ import {
   Trash2,
   Zap
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   acceptAiDraft,
   addConnectivityFault,
   clearQueue,
+  clearSimApiToken,
   createAiDraft,
   createScenario,
   demoScenario,
   denseDemoScenario,
+  hasSimApiToken,
   loadDashboard,
+  onSimApiAuthChange,
   runtimeAction,
+  setSimApiToken,
   testPublisher
 } from "./api";
 import type {
@@ -346,6 +352,8 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [lastRefreshAt, setLastRefreshAt] = useState<string>();
+  const [apiTokenConfigured, setApiTokenConfigured] = useState(hasSimApiToken);
+  const [apiTokenInput, setApiTokenInput] = useState("");
 
   const selectedScenario = useMemo(
     () => data.scenarios.find((scenario) => scenario.scenarioId === selectedScenarioId) ?? data.scenarios[0],
@@ -484,6 +492,24 @@ export function App() {
     return () => window.clearInterval(interval);
   }, [refresh]);
 
+  useEffect(() => onSimApiAuthChange(() => setApiTokenConfigured(hasSimApiToken())), []);
+
+  async function saveApiToken(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSimApiToken(apiTokenInput);
+    setApiTokenInput("");
+    setApiTokenConfigured(hasSimApiToken());
+    setNotice("SIM API token saved.");
+    await refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
+  }
+
+  async function forgetApiToken() {
+    clearSimApiToken();
+    setApiTokenConfigured(false);
+    setNotice("SIM API token cleared.");
+    await refresh().catch(() => undefined);
+  }
+
   async function runAction<T>(message: string, action: () => Promise<T>) {
     setLoading(true);
     try {
@@ -536,6 +562,25 @@ export function App() {
             <p>{activeSectionMeta.description}</p>
           </div>
           <div className="topbar-actions">
+            {apiTokenConfigured ? (
+              <button type="button" className="token-button" onClick={() => void forgetApiToken()}>
+                <LogOut size={15} /> Token set
+              </button>
+            ) : (
+              <form className="api-auth-form" onSubmit={(event) => void saveApiToken(event)}>
+                <input
+                  type="password"
+                  value={apiTokenInput}
+                  placeholder="SIM API token"
+                  aria-label="SIM API token"
+                  autoComplete="off"
+                  onChange={(event) => setApiTokenInput(event.target.value)}
+                />
+                <button type="submit" disabled={!apiTokenInput.trim()}>
+                  <KeyRound size={15} /> Auth
+                </button>
+              </form>
+            )}
             <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
               COM display <ExternalLink size={15} />
             </a>
