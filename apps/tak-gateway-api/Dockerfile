@@ -11,7 +11,7 @@ FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
-COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/apps/tak-gateway-api ./apps/tak-gateway-api
 RUN pnpm install --prod --frozen-lockfile
 EXPOSE 4040

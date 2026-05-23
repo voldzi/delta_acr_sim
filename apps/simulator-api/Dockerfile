@@ -13,7 +13,7 @@ FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable
-COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/docs ./docs
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/simulator-api ./apps/simulator-api
