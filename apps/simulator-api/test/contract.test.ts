@@ -1,11 +1,13 @@
 import { countActiveScenarioObjects, generateScenarioEvents } from "@csm-sim/simulation-core";
+import { createSign, generateKeyPairSync, type KeyObject } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { ApiConfig } from "../src/config.js";
+import { clearJwksCacheForTests } from "../src/security.js";
 
 const scenarioPayload = {
   name: "Air situation basic",
@@ -497,6 +499,9 @@ describe("SIM API security controls", () => {
 
   afterEach(async () => {
     context?.runtimeRunner.dispose();
+    clearJwksCacheForTests();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     if (dataDir) {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -545,6 +550,86 @@ describe("SIM API security controls", () => {
     await request(app).get("/api/v1/publisher/queue").expect(401);
     await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(401);
     await request(app).post("/api/v1/scenarios").set("authorization", "Bearer operator-token").send(scenarioPayload).expect(201);
+  });
+
+  it("accepts Keycloak OIDC operator tokens in hybrid mode", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    const issuer = "https://login.zeleznalady.cz/realms/cop";
+    const keyId = "sim-test-key";
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const publicJwk = {
+      ...publicKey.export({ format: "jwk" }),
+      alg: "RS256",
+      kid: keyId,
+      use: "sig"
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ keys: [publicJwk] })));
+    const now = Math.floor(Date.now() / 1000);
+    const token = signJwt(privateKey, keyId, {
+      azp: "csm-sim-web",
+      exp: now + 300,
+      iat: now,
+      iss: issuer,
+      preferred_username: "sim.operator",
+      realm_access: {
+        roles: ["csm-sim-operator"]
+      },
+      sub: "sim-operator-1"
+    });
+
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthMode: "hybrid",
+        apiAuthRequired: true,
+        apiOidcAllowedClients: ["csm-sim-web"],
+        apiOidcClientId: "csm-sim-web",
+        apiOidcIssuer: issuer,
+        apiPrincipals: [{ actor: "fallback", token: "operator-token", roles: ["SIM_OPERATOR", "SIM_VIEWER"] }]
+      })
+    ));
+
+    const created = await request(app).post("/api/v1/scenarios").set("authorization", `Bearer ${token}`).send(scenarioPayload).expect(201);
+    expect(created.body.scenarioId).toBeTruthy();
+    const listed = await request(app).get("/api/v1/scenarios").set("authorization", `Bearer ${token}`).expect(200);
+    expect(listed.body.items).toHaveLength(1);
+  });
+
+  it("rejects OIDC tokens without SIM roles", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    const issuer = "https://login.zeleznalady.cz/realms/cop";
+    const keyId = "sim-test-key";
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const publicJwk = {
+      ...publicKey.export({ format: "jwk" }),
+      alg: "RS256",
+      kid: keyId,
+      use: "sig"
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ keys: [publicJwk] })));
+    const now = Math.floor(Date.now() / 1000);
+    const token = signJwt(privateKey, keyId, {
+      azp: "csm-sim-web",
+      exp: now + 300,
+      iat: now,
+      iss: issuer,
+      realm_access: {
+        roles: ["cop_operator"]
+      },
+      sub: "cop-only-user"
+    });
+
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthMode: "oidc",
+        apiAuthRequired: true,
+        apiOidcAllowedClients: ["csm-sim-web"],
+        apiOidcClientId: "csm-sim-web",
+        apiOidcIssuer: issuer,
+        apiPrincipals: []
+      })
+    ));
+
+    await request(app).post("/api/v1/scenarios").set("authorization", `Bearer ${token}`).send(scenarioPayload).expect(401);
   });
 
   it("rate limits authenticated protected routes per actor and client", async () => {
@@ -605,6 +690,31 @@ function expectPositionInsideBbox(geo: { lat?: number; lon?: number }, bbox: num
   expect(geo.lat).toBeLessThanOrEqual(maxLat);
   expect(geo.lon).toBeGreaterThanOrEqual(minLon);
   expect(geo.lon).toBeLessThanOrEqual(maxLon);
+}
+
+function signJwt(privateKey: KeyObject, keyId: string, payload: Record<string, unknown>): string {
+  const header = {
+    alg: "RS256",
+    kid: keyId,
+    typ: "JWT"
+  };
+  const signedContent = `${base64Url(JSON.stringify(header))}.${base64Url(JSON.stringify(payload))}`;
+  const signer = createSign("RSA-SHA256");
+  signer.update(signedContent);
+  signer.end();
+  return `${signedContent}.${signer.sign(privateKey).toString("base64url")}`;
+}
+
+function base64Url(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+function jsonResponse(body: unknown): Response {
+  return {
+    json: async () => body,
+    ok: true,
+    status: 200
+  } as Response;
 }
 
 function distanceMeters(start: { lat?: number; lon?: number }, end: { lat?: number; lon?: number }): number {

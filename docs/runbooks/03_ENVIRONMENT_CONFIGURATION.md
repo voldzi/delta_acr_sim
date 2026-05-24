@@ -127,12 +127,19 @@ Secrets se nastavují přes secret reference. `.env` soubory s tajnými hodnotam
 
 ## SIM API security
 
-Produkční běh musí mít zapnutý bearer-token auth. `SIM_API_ADMIN_TOKEN` je jednoduchý administrátorský token pro pilotní UI. `SIM_API_TOKENS` může přidat jemnější role ve formátu:
+Produkční běh musí mít zapnuté auth. Doporučený režim je `SIM_API_AUTH_MODE=hybrid`: Keycloak je primární přihlášení a `SIM_API_ADMIN_TOKEN` zůstává jen nouzový fallback. `SIM_API_AUTH_MODE=oidc` povolí pouze Keycloak JWT. `SIM_API_TOKENS` může v token/hybrid režimu přidat jemnější statické role ve formátu:
 
 ```bash
 SIM_API_AUTH_REQUIRED=true
+SIM_API_AUTH_MODE=hybrid
 SIM_API_ADMIN_TOKEN=<high-entropy-token>
 SIM_API_TOKENS='viewer:<token>:SIM_VIEWER,operator:<token>:SIM_OPERATOR|SIM_VIEWER,ai:<token>:SIM_AI_USER|SIM_VIEWER'
+SIM_OIDC_ISSUER=https://login.zeleznalady.cz/realms/cop
+SIM_OIDC_CLIENT_ID=csm-sim-web
+SIM_OIDC_ALLOWED_CLIENTS=csm-sim-web
+VITE_SIM_AUTH_MODE=hybrid
+VITE_SIM_OIDC_ISSUER=https://login.zeleznalady.cz/realms/cop
+VITE_SIM_OIDC_CLIENT_ID=csm-sim-web
 SIM_API_CORS_ORIGINS=
 SIM_API_RATE_LIMIT_WINDOW_MS=60000
 SIM_API_RATE_LIMIT_MAX_REQUESTS=300

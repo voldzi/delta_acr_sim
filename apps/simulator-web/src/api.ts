@@ -29,11 +29,12 @@ import type {
 const API_TIMEOUT_MS = 5_000;
 const SIM_API_TOKEN_STORAGE_KEY = "csm-sim-api-token";
 const AUTH_CHANGE_EVENT = "csm-sim-auth-change";
+let authorizationTokenProvider: (() => string | undefined) | undefined;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-  const token = getSimApiToken();
+  const token = getSimAuthorizationToken();
   const headers: Record<string, string> = {
     "content-type": "application/json",
     ...(init?.headers as Record<string, string> | undefined)
@@ -73,6 +74,19 @@ export function getSimApiToken(): string {
 
 export function hasSimApiToken(): boolean {
   return getSimApiToken().length > 0;
+}
+
+export function getSimAuthorizationToken(): string {
+  return authorizationTokenProvider?.() ?? getSimApiToken();
+}
+
+export function hasSimAuthorizationToken(): boolean {
+  return getSimAuthorizationToken().length > 0;
+}
+
+export function setSimAuthorizationTokenProvider(provider: (() => string | undefined) | undefined): void {
+  authorizationTokenProvider = provider;
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 
 export function setSimApiToken(token: string): void {
@@ -322,7 +336,7 @@ const emptyTakFeatureResponse: TakGatewayFeatureResponse = {
 };
 
 export async function loadDashboard(): Promise<DashboardLoadResult> {
-  const operatorTokenConfigured = hasSimApiToken();
+  const operatorTokenConfigured = hasSimAuthorizationToken();
   const results = await Promise.allSettled([
     api<{ items: Scenario[] }>("/api/v1/scenarios"),
     api<RuntimeStatus>("/api/v1/runtime/status"),

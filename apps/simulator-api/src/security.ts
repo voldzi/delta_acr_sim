@@ -1,15 +1,53 @@
 import type { CorsOptions } from "cors";
 import type { NextFunction, Request, Response } from "express";
 import { appendFile } from "node:fs/promises";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createPublicKey, createVerify, randomUUID, timingSafeEqual, type JsonWebKey as NodeJsonWebKey } from "node:crypto";
 import { join } from "node:path";
 import type { ApiConfig, ApiPrincipalConfig, SimRole } from "./config.js";
 import { problem } from "./http.js";
 
 interface AuthenticatedPrincipal {
   actor: string;
+  authMode?: "public" | "token" | "oidc" | "dev";
+  email?: string;
   roles: SimRole[];
 }
+
+interface JwtHeader {
+  alg?: string;
+  kid?: string;
+  typ?: string;
+}
+
+interface JwtPayload {
+  aud?: string | string[];
+  azp?: string;
+  email?: string;
+  exp?: number;
+  iat?: number;
+  iss?: string;
+  name?: string;
+  nbf?: number;
+  preferred_username?: string;
+  realm_access?: {
+    roles?: string[];
+  };
+  resource_access?: Record<string, { roles?: string[] }>;
+  sub?: string;
+}
+
+interface JsonWebKeySet {
+  keys?: Jwk[];
+}
+
+interface CachedJwks {
+  expiresAt: number;
+  keys: Jwk[];
+}
+
+type Jwk = NodeJsonWebKey & {
+  kid?: string;
+};
 
 interface RoutePolicy {
   methods?: string[];
@@ -29,6 +67,9 @@ interface RateLimitBucket {
 }
 
 const principalKey = Symbol("simPrincipal");
+const jwksCache = new Map<string, CachedJwks>();
+const authClockSkewSeconds = 30;
+const jwksCacheMs = 5 * 60 * 1000;
 
 type AuthenticatedRequest = Request & {
   [principalKey]?: AuthenticatedPrincipal;
@@ -140,11 +181,13 @@ const routePolicies: RoutePolicy[] = [
 
 const devPrincipal: AuthenticatedPrincipal = {
   actor: "anonymous-dev",
+  authMode: "dev",
   roles: ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"]
 };
 
 const publicReadPrincipal: AuthenticatedPrincipal = {
   actor: "public-read",
+  authMode: "public",
   roles: ["SIM_VIEWER"]
 };
 
@@ -178,13 +221,13 @@ export function createSecurityMiddleware(config: ApiConfig, audit: AuditLogger) 
       return;
     }
 
-    if (config.apiAuthRequired && config.apiPublicRead && req.method === "GET" && policy.publicRead) {
+    if (config.apiAuthRequired && config.apiPublicRead && req.method === "GET" && policy.publicRead && !req.header("authorization")) {
       setPrincipal(req, publicReadPrincipal);
       next();
       return;
     }
 
-    const principal = config.apiAuthRequired ? authenticate(req, config.apiPrincipals ?? []) : devPrincipal;
+    const principal = config.apiAuthRequired ? await authenticate(req, config) : devPrincipal;
     if (!principal) {
       await audit.record(req, { action: "auth.failure", resourceType: "api", result: "DENIED", statusCode: 401 });
       problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid bearer token.");
@@ -230,13 +273,27 @@ function findPolicy(req: Request): RoutePolicy | undefined {
   return routePolicies.find((policy) => (!policy.methods || policy.methods.includes(req.method)) && policy.pattern.test(req.path));
 }
 
-function authenticate(req: Request, principals: ApiPrincipalConfig[]): AuthenticatedPrincipal | undefined {
+async function authenticate(req: Request, config: ApiConfig): Promise<AuthenticatedPrincipal | undefined> {
   const token = bearerToken(req.header("authorization"));
   if (!token) {
     return undefined;
   }
+  const mode = config.apiAuthMode ?? "token";
+  if (mode !== "oidc") {
+    const principal = authenticateStaticToken(token, config.apiPrincipals ?? []);
+    if (principal) {
+      return principal;
+    }
+  }
+  if (mode !== "token") {
+    return authenticateOidcToken(token, config);
+  }
+  return undefined;
+}
+
+function authenticateStaticToken(token: string, principals: ApiPrincipalConfig[]): AuthenticatedPrincipal | undefined {
   const principal = principals.find((candidate) => secureCompare(candidate.token, token));
-  return principal ? { actor: principal.actor, roles: principal.roles } : undefined;
+  return principal ? { actor: principal.actor, authMode: "token", roles: principal.roles } : undefined;
 }
 
 function bearerToken(header: string | undefined): string | undefined {
@@ -248,6 +305,158 @@ function secureCompare(expected: string, actual: string): boolean {
   const expectedBuffer = Buffer.from(expected);
   const actualBuffer = Buffer.from(actual);
   return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+async function authenticateOidcToken(token: string, config: ApiConfig): Promise<AuthenticatedPrincipal | undefined> {
+  const issuer = config.apiOidcIssuer?.trim();
+  if (!issuer) {
+    return undefined;
+  }
+  const decoded = decodeJwt(token);
+  if (!decoded || decoded.header.alg !== "RS256" || !decoded.header.kid) {
+    return undefined;
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (decoded.payload.iss !== issuer) {
+    return undefined;
+  }
+  if (!decoded.payload.exp || decoded.payload.exp <= nowSeconds - authClockSkewSeconds) {
+    return undefined;
+  }
+  if (decoded.payload.nbf && decoded.payload.nbf > nowSeconds + authClockSkewSeconds) {
+    return undefined;
+  }
+  if (!matchesAllowedClient(decoded.payload, config)) {
+    return undefined;
+  }
+  const key = await findJwkForToken(issuer, decoded.header.kid, config);
+  if (!key || !verifyJwtSignature(token, key)) {
+    return undefined;
+  }
+  const roles = mapOidcRoles(tokenRoles(decoded.payload, config));
+  const subjectId = decoded.payload.sub?.trim();
+  if (!subjectId || roles.length === 0) {
+    return undefined;
+  }
+  const actor = decoded.payload.preferred_username?.trim()
+    || decoded.payload.email?.trim()
+    || decoded.payload.name?.trim()
+    || subjectId;
+  return {
+    actor,
+    authMode: "oidc",
+    ...(decoded.payload.email?.trim() ? { email: decoded.payload.email.trim() } : {}),
+    roles
+  };
+}
+
+function decodeJwt(token: string): { header: JwtHeader; payload: JwtPayload; signedContent: string; signature: Buffer } | null {
+  const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature) {
+    return null;
+  }
+  try {
+    return {
+      header: JSON.parse(base64UrlToBuffer(encodedHeader).toString("utf8")) as JwtHeader,
+      payload: JSON.parse(base64UrlToBuffer(encodedPayload).toString("utf8")) as JwtPayload,
+      signature: base64UrlToBuffer(encodedSignature),
+      signedContent: `${encodedHeader}.${encodedPayload}`
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function findJwkForToken(issuer: string, kid: string, config: ApiConfig): Promise<Jwk | null> {
+  const jwksUri = config.apiOidcJwksUri ?? `${issuer}/protocol/openid-connect/certs`;
+  const jwks = await fetchJwks(jwksUri);
+  return jwks.find((key) => key.kid === kid) ?? null;
+}
+
+async function fetchJwks(jwksUri: string): Promise<Jwk[]> {
+  const cached = jwksCache.get(jwksUri);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.keys;
+  }
+  try {
+    const response = await fetch(jwksUri);
+    if (!response.ok) {
+      return [];
+    }
+    const jwks = (await response.json()) as JsonWebKeySet;
+    const keys = Array.isArray(jwks.keys) ? jwks.keys : [];
+    jwksCache.set(jwksUri, { expiresAt: Date.now() + jwksCacheMs, keys });
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
+function verifyJwtSignature(token: string, key: Jwk): boolean {
+  const decoded = decodeJwt(token);
+  if (!decoded) {
+    return false;
+  }
+  try {
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(decoded.signedContent);
+    verifier.end();
+    return verifier.verify(createPublicKey({ format: "jwk", key }), decoded.signature);
+  } catch {
+    return false;
+  }
+}
+
+function matchesAllowedClient(payload: JwtPayload, config: ApiConfig): boolean {
+  const allowedClients = config.apiOidcAllowedClients ?? [];
+  if (allowedClients.length === 0) {
+    return true;
+  }
+  const audiences = Array.isArray(payload.aud) ? payload.aud : payload.aud ? [payload.aud] : [];
+  return allowedClients.some((client) => payload.azp === client || audiences.includes(client));
+}
+
+function tokenRoles(payload: JwtPayload, config: ApiConfig): string[] {
+  const clientId = config.apiOidcClientId?.trim();
+  return Array.from(new Set([
+    ...(payload.realm_access?.roles ?? []),
+    ...(clientId ? payload.resource_access?.[clientId]?.roles ?? [] : [])
+  ]));
+}
+
+function mapOidcRoles(roles: string[]): SimRole[] {
+  const mapped = new Set<SimRole>();
+  const normalized = new Set(roles.map((role) => role.trim()).filter(Boolean));
+  if (hasAnyRole(normalized, ["SIM_ADMIN", "sim_admin", "csm-sim-admin"])) {
+    mapped.add("SIM_ADMIN");
+  }
+  if (hasAnyRole(normalized, ["SIM_OPERATOR", "sim_operator", "csm-sim-operator"])) {
+    mapped.add("SIM_OPERATOR");
+    mapped.add("SIM_VIEWER");
+  }
+  if (hasAnyRole(normalized, ["SIM_VIEWER", "sim_viewer", "csm-sim-viewer"])) {
+    mapped.add("SIM_VIEWER");
+  }
+  if (hasAnyRole(normalized, ["SIM_AI_ADMIN", "sim_ai_admin", "csm-sim-ai-admin"])) {
+    mapped.add("SIM_AI_ADMIN");
+    mapped.add("SIM_AI_USER");
+  }
+  if (hasAnyRole(normalized, ["SIM_AI_USER", "sim_ai_user", "csm-sim-ai-user"])) {
+    mapped.add("SIM_AI_USER");
+  }
+  return Array.from(mapped);
+}
+
+function hasAnyRole(actualRoles: Set<string>, acceptedRoles: string[]): boolean {
+  return acceptedRoles.some((role) => actualRoles.has(role));
+}
+
+function base64UrlToBuffer(value: string): Buffer {
+  return Buffer.from(value.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+
+export function clearJwksCacheForTests(): void {
+  jwksCache.clear();
 }
 
 function hasRequiredRole(principal: AuthenticatedPrincipal, requiredRoles: SimRole[]): boolean {

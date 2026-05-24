@@ -37,14 +37,25 @@ import {
   createScenario,
   demoScenario,
   denseDemoScenario,
+  hasSimAuthorizationToken,
   hasSimApiToken,
   loadDashboard,
   onSimApiAuthChange,
   runtimeAction,
+  setSimAuthorizationTokenProvider,
   setSimApiToken,
   testPublisher,
   ukraineAirDefenseDemoScenario
 } from "./api";
+import {
+  beginLogin,
+  createInitialAuthSession,
+  endSession,
+  initializeAuth,
+  isOidcEnabled,
+  readAuthConfig,
+  type AuthSession
+} from "./auth";
 import type {
   AiDraft,
   FlightDataConfig,
@@ -133,7 +144,7 @@ const copDisplayUrl = import.meta.env.VITE_COP_DISPLAY_URL ?? "https://cop.zelez
 const ownAffiliations = new Set(["FRIEND", "ASSUMED_FRIEND"]);
 const foreignAffiliations = new Set(["HOSTILE", "SUSPECT"]);
 const operatorTokenRequiredNotice = "Operator token required. Enter the SIM API token in the top bar to start, stop or create scenarios.";
-const invalidOperatorTokenNotice = "Operator token is missing or invalid. Check SIM_API_ADMIN_TOKEN or another SIM operator token.";
+const invalidOperatorTokenNotice = "Operator token is missing or invalid. Check Keycloak role or SIM fallback token.";
 
 const emptyRuntime: RuntimeStatus = {
   state: "STOPPED",
@@ -254,6 +265,9 @@ const emptyTakFeatures: TakGatewayFeatureResponse = {
 };
 
 export function App() {
+  const authConfig = useMemo(() => readAuthConfig(), []);
+  const oidcEnabled = isOidcEnabled(authConfig);
+  const [authSession, setAuthSession] = useState<AuthSession>(() => createInitialAuthSession(authConfig));
   const [data, setData] = useState<DashboardData>({
     scenarios: [],
     runtime: emptyRuntime,
@@ -355,7 +369,8 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [lastRefreshAt, setLastRefreshAt] = useState<string>();
-  const [apiTokenConfigured, setApiTokenConfigured] = useState(hasSimApiToken);
+  const [apiTokenConfigured, setApiTokenConfigured] = useState(() => Boolean(authSession.accessToken) || hasSimAuthorizationToken());
+  const [manualTokenConfigured, setManualTokenConfigured] = useState(hasSimApiToken);
   const [apiTokenInput, setApiTokenInput] = useState("");
 
   const selectedScenario = useMemo(
@@ -391,6 +406,9 @@ export function App() {
   const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
   const operatorActionDisabled = loading || !apiTokenConfigured;
+  const operatorAuthRequiredNotice = oidcEnabled
+    ? "Login with Keycloak using an account with csm-sim-operator or csm-sim-admin role."
+    : operatorTokenRequiredNotice;
   const noticeIsWarning = /required|invalid|failed|degraded|missing|error/i.test(notice);
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
@@ -497,21 +515,67 @@ export function App() {
     return () => window.clearInterval(interval);
   }, [refresh]);
 
-  useEffect(() => onSimApiAuthChange(() => setApiTokenConfigured(hasSimApiToken())), []);
+  useEffect(() => {
+    let cancelled = false;
+    void initializeAuth(authConfig)
+      .then((session) => {
+        if (cancelled) {
+          return;
+        }
+        setAuthSession(session);
+        if (session.status === "authenticated") {
+          setNotice(`Signed in as ${session.profile?.username ?? "Keycloak user"}.`);
+        } else if (session.status === "error") {
+          setNotice(session.error ?? "Keycloak sign-in failed.");
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setNotice(error instanceof Error ? error.message : "Keycloak initialization failed.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authConfig]);
+
+  useEffect(() => {
+    setSimAuthorizationTokenProvider(() => authSession.accessToken);
+    setApiTokenConfigured(hasSimAuthorizationToken());
+    setManualTokenConfigured(hasSimApiToken());
+    return () => setSimAuthorizationTokenProvider(undefined);
+  }, [authSession.accessToken]);
+
+  useEffect(() => {
+    if (authSession.status === "authenticated") {
+      void refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
+    }
+  }, [authSession.status, authSession.accessToken, refresh]);
+
+  useEffect(
+    () =>
+      onSimApiAuthChange(() => {
+        setApiTokenConfigured(hasSimAuthorizationToken());
+        setManualTokenConfigured(hasSimApiToken());
+      }),
+    []
+  );
 
   async function saveApiToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSimApiToken(apiTokenInput);
     setApiTokenInput("");
-    setApiTokenConfigured(hasSimApiToken());
-    setNotice("SIM API token saved.");
+    setApiTokenConfigured(hasSimAuthorizationToken());
+    setManualTokenConfigured(hasSimApiToken());
+    setNotice("SIM fallback token saved.");
     await refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
   }
 
   async function forgetApiToken() {
     clearSimApiToken();
-    setApiTokenConfigured(false);
-    setNotice("SIM API token cleared. Read-only monitoring remains available.");
+    setApiTokenConfigured(hasSimAuthorizationToken());
+    setManualTokenConfigured(false);
+    setNotice("SIM fallback token cleared. Read-only monitoring remains available.");
     await refresh().catch(() => undefined);
   }
 
@@ -519,8 +583,19 @@ export function App() {
     if (apiTokenConfigured) {
       return true;
     }
-    setNotice(operatorTokenRequiredNotice);
+    setNotice(operatorAuthRequiredNotice);
     return false;
+  }
+
+  async function loginWithKeycloak() {
+    setAuthSession((session) => ({ ...session, status: "authenticating" }));
+    await beginLogin(authConfig);
+  }
+
+  function logoutFromKeycloak() {
+    setAuthSession({ status: "anonymous" });
+    setSimAuthorizationTokenProvider(undefined);
+    endSession(authConfig, authSession);
   }
 
   async function runAction<T>(message: string, action: () => Promise<T>) {
@@ -576,17 +651,29 @@ export function App() {
             <p>{activeSectionMeta.description}</p>
           </div>
           <div className="topbar-actions">
-            {apiTokenConfigured ? (
+            {oidcEnabled ? (
+              authSession.status === "authenticated" ? (
+                <button type="button" className="token-button" onClick={logoutFromKeycloak}>
+                  <LogOut size={15} /> {authSession.profile?.username ?? "Keycloak"}
+                </button>
+              ) : (
+                <button type="button" className="token-button" disabled={authSession.status === "authenticating"} onClick={() => void loginWithKeycloak()}>
+                  <KeyRound size={15} /> {authSession.status === "authenticating" ? "Signing in" : "Keycloak login"}
+                </button>
+              )
+            ) : null}
+            {(!oidcEnabled || (authConfig.mode === "hybrid" && authSession.status !== "authenticated")) && manualTokenConfigured ? (
               <button type="button" className="token-button" onClick={() => void forgetApiToken()}>
-                <LogOut size={15} /> Token set
+                <LogOut size={15} /> Fallback token
               </button>
-            ) : (
+            ) : null}
+            {(!oidcEnabled || authConfig.mode === "hybrid") && !manualTokenConfigured && authSession.status !== "authenticated" ? (
               <form className="api-auth-form" onSubmit={(event) => void saveApiToken(event)}>
                 <input
                   type="password"
                   value={apiTokenInput}
-                  placeholder="SIM API token"
-                  aria-label="SIM API token"
+                  placeholder={oidcEnabled ? "Fallback SIM token" : "SIM API token"}
+                  aria-label={oidcEnabled ? "Fallback SIM token" : "SIM API token"}
                   autoComplete="off"
                   onChange={(event) => setApiTokenInput(event.target.value)}
                 />
@@ -594,7 +681,7 @@ export function App() {
                   <KeyRound size={15} /> Auth
                 </button>
               </form>
-            )}
+            ) : null}
             <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
               COM display <ExternalLink size={15} />
             </a>
@@ -674,7 +761,7 @@ export function App() {
                   })
                 }
                 disabled={operatorActionDisabled}
-                title={apiTokenConfigured ? "Create demo scenario" : operatorTokenRequiredNotice}
+                title={apiTokenConfigured ? "Create demo scenario" : operatorAuthRequiredNotice}
               >
                 <Plus size={16} /> Demo
               </button>
@@ -689,7 +776,7 @@ export function App() {
                   })
                 }
                 disabled={operatorActionDisabled}
-                title={apiTokenConfigured ? "Create high-density demo scenario" : operatorTokenRequiredNotice}
+                title={apiTokenConfigured ? "Create high-density demo scenario" : operatorAuthRequiredNotice}
               >
                 <Database size={16} /> 300 tracks
               </button>
@@ -704,7 +791,7 @@ export function App() {
                   })
                 }
                 disabled={operatorActionDisabled}
-                title={apiTokenConfigured ? "Create Ukraine demo scenario" : operatorTokenRequiredNotice}
+                title={apiTokenConfigured ? "Create Ukraine demo scenario" : operatorAuthRequiredNotice}
               >
                 <ShieldAlert size={16} /> Ukraine demo
               </button>
@@ -769,7 +856,7 @@ export function App() {
                       icon={<Play />}
                       label="Start"
                       disabled={operatorActionDisabled}
-                      title={apiTokenConfigured ? "Start selected scenario" : operatorTokenRequiredNotice}
+                      title={apiTokenConfigured ? "Start selected scenario" : operatorAuthRequiredNotice}
                       onClick={() =>
                         selectedScenario.scenarioId &&
                         requireOperatorToken() &&
@@ -785,7 +872,7 @@ export function App() {
                         icon={<Pause />}
                         label="Pause"
                         disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? "Pause active scenario" : operatorTokenRequiredNotice}
+                        title={apiTokenConfigured ? "Pause active scenario" : operatorAuthRequiredNotice}
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
@@ -796,7 +883,7 @@ export function App() {
                         icon={<Square />}
                         label="Stop"
                         disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? "Stop active scenario" : operatorTokenRequiredNotice}
+                        title={apiTokenConfigured ? "Stop active scenario" : operatorAuthRequiredNotice}
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
@@ -807,7 +894,7 @@ export function App() {
                         icon={<Zap />}
                         label="Fault"
                         disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? "Add connectivity fault" : operatorTokenRequiredNotice}
+                        title={apiTokenConfigured ? "Add connectivity fault" : operatorAuthRequiredNotice}
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
@@ -822,7 +909,7 @@ export function App() {
                         icon={<Play />}
                         label="Resume"
                         disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? "Resume active scenario" : operatorTokenRequiredNotice}
+                        title={apiTokenConfigured ? "Resume active scenario" : operatorAuthRequiredNotice}
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
@@ -833,7 +920,7 @@ export function App() {
                         icon={<Square />}
                         label="Stop"
                         disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? "Stop active scenario" : operatorTokenRequiredNotice}
+                        title={apiTokenConfigured ? "Stop active scenario" : operatorAuthRequiredNotice}
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
@@ -854,7 +941,7 @@ export function App() {
                     icon={<RotateCcw />}
                     label="Step"
                     disabled={operatorActionDisabled || isRunning}
-                    title={apiTokenConfigured ? "Generate one deterministic step" : operatorTokenRequiredNotice}
+                    title={apiTokenConfigured ? "Generate one deterministic step" : operatorAuthRequiredNotice}
                     onClick={() =>
                       selectedScenario.scenarioId &&
                       requireOperatorToken() &&
@@ -865,7 +952,7 @@ export function App() {
                     icon={<Zap />}
                     label="Fault"
                     disabled={operatorActionDisabled || otherScenarioIsActive}
-                    title={apiTokenConfigured ? "Add connectivity fault" : operatorTokenRequiredNotice}
+                    title={apiTokenConfigured ? "Add connectivity fault" : operatorAuthRequiredNotice}
                     onClick={() =>
                       selectedScenario.scenarioId &&
                       requireOperatorToken() &&

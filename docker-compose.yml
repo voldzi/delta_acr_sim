@@ -16,9 +16,14 @@ services:
       EXTERNAL_AI_ALLOWED: ${EXTERNAL_AI_ALLOWED:-false}
       SIM_API_PUBLIC_READ: ${SIM_API_PUBLIC_READ:-false}
       SIM_API_AUTH_REQUIRED: ${SIM_API_AUTH_REQUIRED:-true}
+      SIM_API_AUTH_MODE: ${SIM_API_AUTH_MODE:-token}
       SIM_API_ADMIN_TOKEN: ${SIM_API_ADMIN_TOKEN:?Set SIM_API_ADMIN_TOKEN to a high-entropy SIM API bearer token}
       SIM_API_INTERNAL_TOKEN: ${SIM_API_INTERNAL_TOKEN:-}
       SIM_API_TOKENS: ${SIM_API_TOKENS:-}
+      SIM_OIDC_ISSUER: ${SIM_OIDC_ISSUER:-}
+      SIM_OIDC_JWKS_URI: ${SIM_OIDC_JWKS_URI:-}
+      SIM_OIDC_CLIENT_ID: ${SIM_OIDC_CLIENT_ID:-csm-sim-web}
+      SIM_OIDC_ALLOWED_CLIENTS: ${SIM_OIDC_ALLOWED_CLIENTS:-csm-sim-web}
       SIM_API_CORS_ORIGINS: ${SIM_API_CORS_ORIGINS:-}
       SIM_API_RATE_LIMIT_WINDOW_MS: ${SIM_API_RATE_LIMIT_WINDOW_MS:-60000}
       SIM_API_RATE_LIMIT_MAX_REQUESTS: ${SIM_API_RATE_LIMIT_MAX_REQUESTS:-300}
@@ -249,6 +254,10 @@ services:
       dockerfile: apps/simulator-web/Dockerfile
       args:
         VITE_COP_DISPLAY_URL: ${VITE_COP_DISPLAY_URL:-https://cop.zeleznalady.cz}
+        VITE_SIM_AUTH_MODE: ${VITE_SIM_AUTH_MODE:-token}
+        VITE_SIM_OIDC_ISSUER: ${VITE_SIM_OIDC_ISSUER:-}
+        VITE_SIM_OIDC_CLIENT_ID: ${VITE_SIM_OIDC_CLIENT_ID:-csm-sim-web}
+        VITE_SIM_OIDC_SCOPE: ${VITE_SIM_OIDC_SCOPE:-openid profile email}
     container_name: csm-sim-web
     depends_on:
       sim-api:
