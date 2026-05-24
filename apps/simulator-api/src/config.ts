@@ -24,6 +24,7 @@ export interface ApiConfig {
   mainCopBearerToken?: string;
   externalAiAllowed: boolean;
   apiAuthRequired?: boolean;
+  apiPublicRead?: boolean;
   apiPrincipals?: ApiPrincipalConfig[];
   apiCorsOrigins?: string[];
   apiRateLimitWindowMs?: number;
@@ -54,6 +55,7 @@ export async function loadConfig(): Promise<ApiConfig> {
     mainCopBearerToken: process.env.MAIN_COP_BEARER_TOKEN ?? "dev-lab-token",
     externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true",
     apiAuthRequired,
+    apiPublicRead: parseBoolean(process.env.SIM_API_PUBLIC_READ, false),
     apiPrincipals,
     apiCorsOrigins: parseList(process.env.SIM_API_CORS_ORIGINS),
     apiRateLimitWindowMs: parseInteger(process.env.SIM_API_RATE_LIMIT_WINDOW_MS, 60_000),

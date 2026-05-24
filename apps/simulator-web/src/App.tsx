@@ -42,7 +42,8 @@ import {
   onSimApiAuthChange,
   runtimeAction,
   setSimApiToken,
-  testPublisher
+  testPublisher,
+  ukraineAirDefenseDemoScenario
 } from "./api";
 import type {
   AiDraft,
@@ -669,6 +670,19 @@ export function App() {
                 disabled={loading}
               >
                 <Database size={16} /> 300 tracks
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  runAction("Ukraine air-defense demo scenario created.", async () => {
+                    const created = await createScenario(ukraineAirDefenseDemoScenario);
+                    setSelectedScenarioId(created.scenarioId);
+                    return created.scenarioId;
+                  })
+                }
+                disabled={loading}
+              >
+                <ShieldAlert size={16} /> Ukraine demo
               </button>
             </div>
 

@@ -101,6 +101,88 @@ const trajectoryScenarioPayload = {
   faults: []
 };
 
+const ukraineAirDefenseScenarioPayload = {
+  name: "Ukraine Air Defense Demo 2026-05-13",
+  description: "Synthetic non-operational paired intercept demonstration over Ukraine.",
+  area: {
+    type: "BBOX",
+    bbox: [22.0, 44.2, 40.4, 52.5]
+  },
+  durationSeconds: 5700,
+  seed: 20260513,
+  blocks: [
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 10,
+      updateRateHz: 1,
+      patterns: ["DIRECT"],
+      parameters: {
+        objectIdPrefix: "HOSTILE_UAV",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "HOSTILE_INBOUND",
+        engagementFamily: "uav",
+        pairedObjectIdPrefix: "BLUE_INTERCEPTOR_UAV",
+        affiliations: ["HOSTILE"]
+      }
+    },
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 9,
+      updateRateHz: 1,
+      patterns: ["DIRECT"],
+      parameters: {
+        objectIdPrefix: "BLUE_INTERCEPTOR_UAV",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "FRIEND_INTERCEPTOR",
+        engagementFamily: "uav",
+        pairedObjectIdPrefix: "HOSTILE_UAV",
+        affiliations: ["FRIEND"]
+      }
+    }
+  ],
+  faults: []
+};
+
+const ukraineFullDemoScenarioPayload = {
+  ...ukraineAirDefenseScenarioPayload,
+  blocks: [
+    { ...ukraineAirDefenseScenarioPayload.blocks[0], objectCount: 72 },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 18,
+      updateRateHz: 1,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: {
+        objectIdPrefix: "HOSTILE_MSL",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "HOSTILE_INBOUND",
+        engagementFamily: "missile",
+        pairedObjectIdPrefix: "BLUE_INTERCEPTOR_MSL",
+        affiliations: ["HOSTILE"]
+      }
+    },
+    { ...ukraineAirDefenseScenarioPayload.blocks[1], objectCount: 65 },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 16,
+      updateRateHz: 1,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: {
+        objectIdPrefix: "BLUE_INTERCEPTOR_MSL",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "FRIEND_INTERCEPTOR",
+        engagementFamily: "missile",
+        pairedObjectIdPrefix: "HOSTILE_MSL",
+        affiliations: ["FRIEND"]
+      }
+    }
+  ]
+};
+
 function testConfig(dataDir: string, overrides: Partial<ApiConfig> = {}): ApiConfig {
   return {
     port: 0,
@@ -255,6 +337,40 @@ describe("SIM API contract baseline", () => {
     }
   });
 
+  it("generates paired synthetic intercepts over Ukraine", () => {
+    const scenario = { ...ukraineAirDefenseScenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000004" };
+    const initialEvents = generateScenarioEvents(scenario, {
+      sourceSystemId: "sim-air-situation-001",
+      adapterVersion: "0.1.0",
+      tick: 0,
+      elapsedSeconds: 0,
+      tickIntervalSeconds: 1
+    });
+
+    expect(initialEvents).toHaveLength(19);
+    expect(new Set(initialEvents.map((event) => event.payload.objectId)).size).toBe(19);
+    expect(initialEvents.filter((event) => event.payload.affiliation === "HOSTILE")).toHaveLength(10);
+    expect(initialEvents.filter((event) => event.payload.affiliation === "FRIEND")).toHaveLength(9);
+    expect(initialEvents.find((event) => event.payload.objectId === "HOSTILE_UAV-0010")?.payload.attributes?.terminalMode).toBe("TRANSIT");
+
+    const terminalEvents = generateScenarioEvents(scenario, {
+      sourceSystemId: "sim-air-situation-001",
+      adapterVersion: "0.1.0",
+      tick: 1220,
+      elapsedSeconds: 1220,
+      tickIntervalSeconds: 1
+    });
+    const hostile = terminalEvents.find((event) => event.payload.objectId === "HOSTILE_UAV-0001");
+    const interceptor = terminalEvents.find((event) => event.payload.objectId === "BLUE_INTERCEPTOR_UAV-0001");
+
+    expect(hostile?.eventType).toBe("track.lost");
+    expect(interceptor?.eventType).toBe("track.lost");
+    expect(hostile?.payload.attributes?.pairedObjectId).toBe("BLUE_INTERCEPTOR_UAV-0001");
+    expect(interceptor?.payload.attributes?.pairedObjectId).toBe("HOSTILE_UAV-0001");
+    expect(hostile?.geo?.lat).toBe(interceptor?.geo?.lat);
+    expect(hostile?.geo?.lon).toBe(interceptor?.geo?.lon);
+  });
+
   it("keeps generated historical positions kinematically continuous", () => {
     const scenario = { ...trajectoryScenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000003" };
     const previousByObjectId = new Map<string, NonNullable<ReturnType<typeof generateScenarioEvents>[number]["geo"]>>();
@@ -297,6 +413,15 @@ describe("SIM API contract baseline", () => {
     const queue = await request(app).get("/api/v1/publisher/queue?limit=5").expect(200);
     expect(queue.body.totalCount).toBe(300);
     expect(queue.body.items).toHaveLength(5);
+  });
+
+  it("starts the Ukraine air-defense demo within runtime budgets", async () => {
+    const created = await request(app).post("/api/v1/scenarios").send(ukraineFullDemoScenarioPayload).expect(201);
+    const runtime = await request(app).post(`/api/v1/scenarios/${created.body.scenarioId}/start`).send({ dryRun: true }).expect(200);
+
+    expect(runtime.body.generatedEvents).toBe(171);
+    expect(runtime.body.activeObjects).toBe(171);
+    expect(countActiveScenarioObjects({ ...ukraineFullDemoScenarioPayload, scenarioId: created.body.scenarioId })).toBe(171);
   });
 
   it("rejects a canonical event without synthetic marking", async () => {
@@ -401,6 +526,25 @@ describe("SIM API security controls", () => {
     const auditLog = await readFile(join(dataDir, "sim-audit.jsonl"), "utf8");
     expect(auditLog).toContain("auth.failure");
     expect(auditLog).toContain("auth.forbidden");
+  });
+
+  it("allows configured public read-only dashboard routes without exposing mutations", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthRequired: true,
+        apiPublicRead: true,
+        apiPrincipals: [{ actor: "operator", token: "operator-token", roles: ["SIM_OPERATOR", "SIM_VIEWER"] }]
+      })
+    ));
+
+    await request(app).get("/api/v1/scenarios").expect(200);
+    await request(app).get("/api/v1/runtime/status").expect(200);
+    await request(app).get("/api/v1/runtime/blocks").expect(200);
+    await request(app).get("/api/v1/runtime/publisher").expect(200);
+    await request(app).get("/api/v1/publisher/queue").expect(401);
+    await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(401);
+    await request(app).post("/api/v1/scenarios").set("authorization", "Bearer operator-token").send(scenarioPayload).expect(201);
   });
 
   it("rate limits authenticated protected routes per actor and client", async () => {

@@ -139,7 +139,7 @@ function buildEventForBlock(
 ): CanonicalEventEnvelope | null {
   const objectType = objectTypesByBlock[block.blockId] ?? "UNKNOWN";
   const domain = domainsByBlock[block.blockId] ?? "OTHER";
-  const objectId = `${block.blockId.toUpperCase().replaceAll("-", "_")}-${String(index + 1).padStart(4, "0")}`;
+  const objectId = `${objectIdPrefixForBlock(block)}-${String(index + 1).padStart(4, "0")}`;
   const profile = createTrackProfile(scenario, block, index, objectType, domain);
   const movement = computeTrackPosition(scenario, profile, elapsedSeconds * speedMultiplier, tickIntervalSeconds * speedMultiplier);
 
@@ -185,12 +185,26 @@ function buildEventForBlock(
       verticalRateMps: movement.verticalRateMps,
       attributes: {
         syntheticPattern: profile.pattern,
-        motionModel: profile.pattern === "SHORT_LIVED_TRACK" ? "STRAIGHT_TRANSIT" : "CONTINUOUS_KINEMATIC",
+        motionModel: profile.customRoute ? "SCRIPTED_SYNTHETIC_INTERCEPT" : profile.pattern === "SHORT_LIVED_TRACK" ? "STRAIGHT_TRANSIT" : "CONTINUOUS_KINEMATIC",
         sampleIntervalSeconds: tickIntervalSeconds,
         trackAgeSeconds: Math.round(elapsedSeconds * speedMultiplier),
         tick,
         simplifiedTrack: objectType === "MISSILE_TRACK",
-        note: "Synthetic COP test data only"
+        note: "Synthetic COP test data only",
+        ...(profile.customRoute
+          ? {
+              engagementId: profile.customRoute.engagementId,
+              engagementRole: profile.customRoute.role,
+              engagementFamily: profile.customRoute.family,
+              pairedObjectId: profile.customRoute.pairedObjectId,
+              routeLabel: profile.customRoute.routeLabel,
+              sourceReferenceDate: profile.customRoute.sourceReferenceDate,
+              terminalAtSeconds: profile.customRoute.terminalAtSeconds,
+              terminalMode: profile.customRoute.terminalMode,
+              destroyedInScenario: profile.customRoute.destroyed,
+              modeledInterceptedRatio: profile.customRoute.interceptedRatio
+            }
+          : {})
       }
     },
     quality: {
@@ -233,6 +247,7 @@ interface TrackProfile {
   surveyHeightM: number;
   surveyRows: number;
   ttlSeconds: number;
+  customRoute?: CustomRouteProfile;
 }
 
 interface TrackPosition {
@@ -259,6 +274,24 @@ interface AreaProjection {
 interface LocalPoint {
   xM: number;
   yM: number;
+}
+
+interface CustomRouteProfile {
+  role: "HOSTILE_INBOUND" | "FRIEND_INTERCEPTOR";
+  family: "uav" | "missile";
+  startLat: number;
+  startLon: number;
+  terminalLat: number;
+  terminalLon: number;
+  headingDeg: number;
+  terminalAtSeconds: number;
+  terminalMode: "INTERCEPT" | "TRANSIT";
+  engagementId: string;
+  pairedObjectId?: string;
+  routeLabel: string;
+  sourceReferenceDate: string;
+  destroyed: boolean;
+  interceptedRatio: number;
 }
 
 function shouldEmitBlock(block: ScenarioBlock, tick: number, tickIntervalSeconds: number): boolean {
@@ -339,6 +372,11 @@ function createTrackProfile(
 
   const originGeo = fromLocalPoint(area, origin);
   const loiterDirection = rng.next() >= 0.5 ? 1 : -1;
+  const customRoute = buildCustomRoute(block, index, objectType, scenario.durationSeconds);
+  const effectiveOrigin = customRoute ? { lat: customRoute.startLat, lon: customRoute.startLon } : originGeo;
+  const effectiveHeading = customRoute?.headingDeg ?? headingDeg;
+  const effectiveSpeedMps = customRoute ? distanceBetweenGeo(customRoute.startLat, customRoute.startLon, customRoute.terminalLat, customRoute.terminalLon) / customRoute.terminalAtSeconds : speedMps;
+  const effectiveTtlSeconds = customRoute?.terminalAtSeconds ?? (objectType === "MISSILE_TRACK" ? Math.round(rng.range(45, 120)) : scenario.durationSeconds);
 
   return {
     blockId: block.blockId,
@@ -346,10 +384,10 @@ function createTrackProfile(
     domain,
     objectType,
     affiliation: affiliationForBlock(block, index, objectType),
-    originLat: originGeo.lat,
-    originLon: originGeo.lon,
-    headingDeg,
-    speedMps,
+    originLat: effectiveOrigin.lat,
+    originLon: effectiveOrigin.lon,
+    headingDeg: effectiveHeading,
+    speedMps: effectiveSpeedMps,
     altitudeM: domain === "AIR" ? Math.round(rng.range(900, objectType === "MISSILE_TRACK" ? 4500 : 9500)) : 0,
     verticalRateMps: domain === "AIR" ? Number(rng.range(-3, 3).toFixed(1)) : 0,
     accuracyM: Math.round(rng.range(15, 140)),
@@ -360,7 +398,8 @@ function createTrackProfile(
     surveyWidthM,
     surveyHeightM,
     surveyRows,
-    ttlSeconds: objectType === "MISSILE_TRACK" ? Math.round(rng.range(45, 120)) : scenario.durationSeconds
+    ttlSeconds: effectiveTtlSeconds,
+    customRoute
   };
 }
 
@@ -408,6 +447,10 @@ function computeTrackPosition(
   elapsedSeconds: number,
   tickIntervalSeconds: number
 ): TrackPosition {
+  if (profile.customRoute) {
+    return computeCustomRoutePosition(profile, elapsedSeconds, tickIntervalSeconds);
+  }
+
   if (profile.objectType === "MISSILE_TRACK" && profile.pattern === "SHORT_LIVED_TRACK") {
     const lostWindowSeconds = Math.max(1, tickIntervalSeconds * 1.5);
     if (elapsedSeconds > profile.ttlSeconds + lostWindowSeconds) {
@@ -441,6 +484,41 @@ function computeTrackPosition(
     verticalRateMps: status === "LOST" ? 0 : profile.verticalRateMps,
     accuracyM: status === "LOST" ? Math.round(profile.accuracyM * 3) : profile.accuracyM,
     status,
+    expired: false
+  };
+}
+
+function computeCustomRoutePosition(profile: TrackProfile, elapsedSeconds: number, tickIntervalSeconds: number): TrackPosition {
+  const route = profile.customRoute!;
+  const lostWindowSeconds = Math.max(2, tickIntervalSeconds * 1.5);
+  const terminalReached = route.terminalMode === "INTERCEPT" && elapsedSeconds >= route.terminalAtSeconds;
+
+  if (route.terminalMode === "INTERCEPT" && elapsedSeconds > route.terminalAtSeconds + lostWindowSeconds) {
+    return {
+      lat: route.terminalLat,
+      lon: route.terminalLon,
+      headingDeg: route.headingDeg,
+      altitudeM: profile.altitudeM,
+      verticalRateMps: 0,
+      accuracyM: profile.accuracyM,
+      status: "LOST",
+      expired: true
+    };
+  }
+
+  const progress = Math.min(1, Math.max(0, elapsedSeconds / route.terminalAtSeconds));
+  const point =
+    route.terminalMode === "TRANSIT" && progress >= 1
+      ? moveMeters(route.startLat, route.startLon, route.headingDeg, profile.speedMps * elapsedSeconds)
+      : interpolateGeo(route.startLat, route.startLon, route.terminalLat, route.terminalLon, progress);
+
+  return {
+    ...point,
+    headingDeg: route.headingDeg,
+    altitudeM: Math.max(0, Math.round(profile.altitudeM + profile.verticalRateMps * Math.sin(elapsedSeconds / 40) * 25)),
+    verticalRateMps: terminalReached ? 0 : profile.verticalRateMps,
+    accuracyM: terminalReached ? Math.round(profile.accuracyM * 3) : profile.accuracyM,
+    status: terminalReached ? "LOST" : "ACTIVE",
     expired: false
   };
 }
@@ -789,6 +867,122 @@ function toRadians(value: number): number {
   return (value * Math.PI) / 180;
 }
 
+function objectIdPrefixForBlock(block: ScenarioBlock): string {
+  const configured = stringParameter(block, "objectIdPrefix");
+  const fallback = block.blockId.toUpperCase().replaceAll("-", "_");
+  return sanitizeObjectIdPrefix(configured ?? fallback);
+}
+
+function sanitizeObjectIdPrefix(value: string): string {
+  const sanitized = value
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return sanitized || "SIM_OBJECT";
+}
+
+function buildCustomRoute(
+  block: ScenarioBlock,
+  index: number,
+  objectType: CanonicalEventEnvelope["payload"]["objectType"],
+  scenarioDurationSeconds: number
+): CustomRouteProfile | undefined {
+  if (stringParameter(block, "routeModel") !== "UKRAINE_AIR_DEFENSE_DEMO") {
+    return undefined;
+  }
+
+  const role = stringParameter(block, "engagementRole");
+  if (role !== "HOSTILE_INBOUND" && role !== "FRIEND_INTERCEPTOR") {
+    return undefined;
+  }
+
+  const family = stringParameter(block, "engagementFamily") === "missile" || objectType === "MISSILE_TRACK" ? "missile" : "uav";
+  const pairIndex = role === "FRIEND_INTERCEPTOR" ? friendlyIndexToHostileIndex(index) : index;
+  const route = UKRAINE_AIR_DEFENSE_ROUTES[pairIndex % UKRAINE_AIR_DEFENSE_ROUTES.length]!;
+  const destroyed = role === "FRIEND_INTERCEPTOR" || isDestroyedHostileIndex(pairIndex);
+  const terminalAtSeconds = terminalAtSecondsForUkraineDemo(family, pairIndex, scenarioDurationSeconds);
+  const start =
+    role === "HOSTILE_INBOUND"
+      ? route.hostileStart
+      : family === "missile"
+        ? route.friendlyMissileStart
+        : route.friendlyUavStart;
+  const terminal = destroyed ? route.intercept : route.transitEnd;
+  const friendlyIndex = hostileIndexToFriendlyIndex(pairIndex);
+  const pairedObjectId =
+    role === "HOSTILE_INBOUND"
+      ? destroyed && friendlyIndex !== undefined
+        ? `${sanitizeObjectIdPrefix(stringParameter(block, "pairedObjectIdPrefix") ?? (family === "missile" ? "BLUE_INTERCEPTOR_MSL" : "BLUE_INTERCEPTOR_UAV"))}-${String(friendlyIndex + 1).padStart(4, "0")}`
+        : undefined
+      : `${sanitizeObjectIdPrefix(stringParameter(block, "pairedObjectIdPrefix") ?? (family === "missile" ? "HOSTILE_MSL" : "HOSTILE_UAV"))}-${String(pairIndex + 1).padStart(4, "0")}`;
+
+  return {
+    role,
+    family,
+    startLat: start.lat,
+    startLon: start.lon,
+    terminalLat: terminal.lat,
+    terminalLon: terminal.lon,
+    headingDeg: headingBetweenGeo(start.lat, start.lon, terminal.lat, terminal.lon),
+    terminalAtSeconds,
+    terminalMode: destroyed ? "INTERCEPT" : "TRANSIT",
+    engagementId: `UKR-DEMO-${family.toUpperCase()}-${String(pairIndex + 1).padStart(4, "0")}`,
+    pairedObjectId,
+    routeLabel: route.label,
+    sourceReferenceDate: UKRAINE_AIR_DEFENSE_SOURCE_DATE,
+    destroyed,
+    interceptedRatio: UKRAINE_AIR_DEFENSE_INTERCEPTED_RATIO
+  };
+}
+
+function stringParameter(block: ScenarioBlock, key: string): string | undefined {
+  const value = block.parameters?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isDestroyedHostileIndex(index: number): boolean {
+  return index % 10 !== 9;
+}
+
+function friendlyIndexToHostileIndex(index: number): number {
+  return Math.floor(index / 9) * 10 + (index % 9);
+}
+
+function hostileIndexToFriendlyIndex(index: number): number | undefined {
+  if (!isDestroyedHostileIndex(index)) {
+    return undefined;
+  }
+  return Math.floor(index / 10) * 9 + (index % 10);
+}
+
+function terminalAtSecondsForUkraineDemo(family: "uav" | "missile", pairIndex: number, scenarioDurationSeconds: number): number {
+  const routeIndex = pairIndex % UKRAINE_AIR_DEFENSE_ROUTES.length;
+  const waveIndex = Math.floor(pairIndex / UKRAINE_AIR_DEFENSE_ROUTES.length);
+  const terminalAt =
+    family === "missile"
+      ? 100 + routeIndex * 12 + waveIndex * 50
+      : 1220 + routeIndex * 65 + waveIndex * 220;
+  return Math.min(Math.max(30, scenarioDurationSeconds - 30), terminalAt);
+}
+
+function interpolateGeo(startLat: number, startLon: number, endLat: number, endLon: number, ratio: number): { lat: number; lon: number } {
+  return {
+    lat: Number(interpolate(startLat, endLat, ratio).toFixed(6)),
+    lon: Number(interpolate(startLon, endLon, ratio).toFixed(6))
+  };
+}
+
+function distanceBetweenGeo(startLat: number, startLon: number, endLat: number, endLon: number): number {
+  const refLat = (startLat + endLat) / 2;
+  return Math.hypot(latToMeters(endLat - startLat), lonToMeters(endLon - startLon, refLat));
+}
+
+function headingBetweenGeo(startLat: number, startLon: number, endLat: number, endLon: number): number {
+  const refLat = (startLat + endLat) / 2;
+  return normalizeHeading(toDegrees(Math.atan2(lonToMeters(endLon - startLon, refLat), latToMeters(endLat - startLat))));
+}
+
 function hashString(value: string): number {
   let hash = 0;
   for (const char of value) {
@@ -796,6 +990,99 @@ function hashString(value: string): number {
   }
   return hash;
 }
+
+const UKRAINE_AIR_DEFENSE_SOURCE_DATE = "2026-05-13";
+const UKRAINE_AIR_DEFENSE_INTERCEPTED_RATIO = 0.9;
+
+const UKRAINE_AIR_DEFENSE_ROUTES: Array<{
+  label: string;
+  hostileStart: { lat: number; lon: number };
+  friendlyUavStart: { lat: number; lon: number };
+  friendlyMissileStart: { lat: number; lon: number };
+  intercept: { lat: number; lon: number };
+  transitEnd: { lat: number; lon: number };
+}> = [
+  {
+    label: "Kyiv north approach",
+    hostileStart: { lat: 51.25, lon: 30.15 },
+    friendlyUavStart: { lat: 50.42, lon: 30.85 },
+    friendlyMissileStart: { lat: 50.12, lon: 31.25 },
+    intercept: { lat: 50.68, lon: 30.56 },
+    transitEnd: { lat: 50.42, lon: 30.52 }
+  },
+  {
+    label: "Kyiv south-west crossing",
+    hostileStart: { lat: 49.15, lon: 31.6 },
+    friendlyUavStart: { lat: 49.72, lon: 30.96 },
+    friendlyMissileStart: { lat: 49.95, lon: 29.75 },
+    intercept: { lat: 49.43, lon: 30.65 },
+    transitEnd: { lat: 50.05, lon: 30.37 }
+  },
+  {
+    label: "Dnipro east approach",
+    hostileStart: { lat: 48.8, lon: 36.45 },
+    friendlyUavStart: { lat: 48.42, lon: 35.52 },
+    friendlyMissileStart: { lat: 47.75, lon: 34.4 },
+    intercept: { lat: 48.47, lon: 35.17 },
+    transitEnd: { lat: 48.46, lon: 35.04 }
+  },
+  {
+    label: "Odesa coastal approach",
+    hostileStart: { lat: 45.86, lon: 30.9 },
+    friendlyUavStart: { lat: 46.28, lon: 30.48 },
+    friendlyMissileStart: { lat: 46.95, lon: 29.75 },
+    intercept: { lat: 46.45, lon: 30.73 },
+    transitEnd: { lat: 46.49, lon: 30.72 }
+  },
+  {
+    label: "Lviv west corridor",
+    hostileStart: { lat: 49.42, lon: 25.18 },
+    friendlyUavStart: { lat: 49.62, lon: 24.42 },
+    friendlyMissileStart: { lat: 50.25, lon: 23.2 },
+    intercept: { lat: 49.82, lon: 24.21 },
+    transitEnd: { lat: 49.84, lon: 24.03 }
+  },
+  {
+    label: "Kharkiv east approach",
+    hostileStart: { lat: 50.15, lon: 37.1 },
+    friendlyUavStart: { lat: 49.82, lon: 36.52 },
+    friendlyMissileStart: { lat: 49.35, lon: 35.55 },
+    intercept: { lat: 49.98, lon: 36.25 },
+    transitEnd: { lat: 49.99, lon: 36.23 }
+  },
+  {
+    label: "Zaporizhzhia south-east approach",
+    hostileStart: { lat: 46.95, lon: 36.0 },
+    friendlyUavStart: { lat: 47.52, lon: 35.42 },
+    friendlyMissileStart: { lat: 47.15, lon: 34.1 },
+    intercept: { lat: 47.8, lon: 35.2 },
+    transitEnd: { lat: 47.84, lon: 35.14 }
+  },
+  {
+    label: "Vinnytsia central crossing",
+    hostileStart: { lat: 48.5, lon: 29.7 },
+    friendlyUavStart: { lat: 48.92, lon: 28.86 },
+    friendlyMissileStart: { lat: 49.75, lon: 27.65 },
+    intercept: { lat: 49.2, lon: 28.46 },
+    transitEnd: { lat: 49.23, lon: 28.47 }
+  },
+  {
+    label: "Poltava north-east approach",
+    hostileStart: { lat: 50.15, lon: 35.4 },
+    friendlyUavStart: { lat: 49.72, lon: 34.86 },
+    friendlyMissileStart: { lat: 49.05, lon: 33.6 },
+    intercept: { lat: 49.62, lon: 34.55 },
+    transitEnd: { lat: 49.59, lon: 34.55 }
+  },
+  {
+    label: "Mykolaiv southern approach",
+    hostileStart: { lat: 46.55, lon: 33.0 },
+    friendlyUavStart: { lat: 46.85, lon: 32.1 },
+    friendlyMissileStart: { lat: 46.25, lon: 31.25 },
+    intercept: { lat: 46.98, lon: 31.99 },
+    transitEnd: { lat: 46.97, lon: 32.0 }
+  }
+];
 
 export const availableBlocks: ScenarioBlock[] = [
   { blockId: "air-sim-aircraft", enabled: true, objectCount: 20, updateRateHz: 1, patterns: ["DIRECT", "PATROL"] },

@@ -170,6 +170,92 @@ export const denseDemoScenario: Scenario = {
   faults: []
 };
 
+export const ukraineAirDefenseDemoScenario: Scenario = {
+  name: "Ukraine Air Defense Demo 2026-05-13",
+  description:
+    "Synthetic non-operational demonstration inspired by a public aggregate flight-path image from 2026-05-13. Red inbound tracks and blue defensive interceptors meet over Ukraine; about 90% of hostile tracks are terminated together with the paired interceptor.",
+  area: {
+    type: "BBOX",
+    bbox: [22.0, 44.2, 40.4, 52.5]
+  },
+  durationSeconds: 5700,
+  seed: 20260513,
+  blocks: [
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 72,
+      updateRateHz: 1,
+      patterns: ["DIRECT"],
+      parameters: {
+        objectIdPrefix: "HOSTILE_UAV",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "HOSTILE_INBOUND",
+        engagementFamily: "uav",
+        pairedObjectIdPrefix: "BLUE_INTERCEPTOR_UAV",
+        affiliations: ["HOSTILE"],
+        sourceReferenceDate: "2026-05-13"
+      }
+    },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 18,
+      updateRateHz: 1,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: {
+        objectIdPrefix: "HOSTILE_MSL",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "HOSTILE_INBOUND",
+        engagementFamily: "missile",
+        pairedObjectIdPrefix: "BLUE_INTERCEPTOR_MSL",
+        affiliations: ["HOSTILE"],
+        sourceReferenceDate: "2026-05-13"
+      }
+    },
+    {
+      blockId: "air-sim-uav",
+      enabled: true,
+      objectCount: 65,
+      updateRateHz: 1,
+      patterns: ["DIRECT"],
+      parameters: {
+        objectIdPrefix: "BLUE_INTERCEPTOR_UAV",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "FRIEND_INTERCEPTOR",
+        engagementFamily: "uav",
+        pairedObjectIdPrefix: "HOSTILE_UAV",
+        affiliations: ["FRIEND"],
+        sourceReferenceDate: "2026-05-13"
+      }
+    },
+    {
+      blockId: "air-sim-missile",
+      enabled: true,
+      objectCount: 16,
+      updateRateHz: 1,
+      patterns: ["SHORT_LIVED_TRACK"],
+      parameters: {
+        objectIdPrefix: "BLUE_INTERCEPTOR_MSL",
+        routeModel: "UKRAINE_AIR_DEFENSE_DEMO",
+        engagementRole: "FRIEND_INTERCEPTOR",
+        engagementFamily: "missile",
+        pairedObjectIdPrefix: "HOSTILE_MSL",
+        affiliations: ["FRIEND"],
+        sourceReferenceDate: "2026-05-13"
+      }
+    }
+  ],
+  faults: [],
+  metadata: {
+    syntheticOnly: true,
+    demonstration: "ukraine-air-defense-summary",
+    sourceReferenceDate: "2026-05-13",
+    modeledInterceptedRatio: 0.9,
+    nonOperational: true
+  }
+};
+
 export interface DashboardLoadResult {
   scenarios: Scenario[];
   runtime: RuntimeStatus;

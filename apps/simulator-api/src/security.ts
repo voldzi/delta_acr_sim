@@ -15,6 +15,7 @@ interface RoutePolicy {
   methods?: string[];
   pattern: RegExp;
   roles: SimRole[];
+  publicRead?: boolean;
   audit?: {
     action: string;
     resourceType: string;
@@ -87,9 +88,9 @@ const routePolicies: RoutePolicy[] = [
   { methods: ["GET"], pattern: /^\/health\/ready$/, roles: ["SIM_VIEWER"] },
   { methods: ["GET"], pattern: /^\/health\/dependencies$/, roles: ["SIM_VIEWER"] },
   { methods: ["GET"], pattern: /^\/metrics$/, roles: ["SIM_VIEWER"] },
-  { methods: ["GET"], pattern: /^\/api\/v1\/scenarios$/, roles: ["SIM_VIEWER"] },
+  { methods: ["GET"], pattern: /^\/api\/v1\/scenarios$/, roles: ["SIM_VIEWER"], publicRead: true },
   { methods: ["POST"], pattern: /^\/api\/v1\/scenarios$/, roles: ["SIM_OPERATOR"], audit: { action: "scenario.create", resourceType: "scenario" } },
-  { methods: ["GET"], pattern: /^\/api\/v1\/scenarios\/[^/]+$/, roles: ["SIM_VIEWER"] },
+  { methods: ["GET"], pattern: /^\/api\/v1\/scenarios\/[^/]+$/, roles: ["SIM_VIEWER"], publicRead: true },
   {
     methods: ["PATCH"],
     pattern: /^\/api\/v1\/scenarios\/[^/]+$/,
@@ -108,7 +109,8 @@ const routePolicies: RoutePolicy[] = [
     roles: ["SIM_OPERATOR"],
     audit: { action: "runtime.command", resourceType: "scenario", resourceId: scenarioIdFromPath }
   },
-  { methods: ["GET"], pattern: /^\/api\/v1\/runtime\/(?:status|metrics|blocks|publisher)$/, roles: ["SIM_VIEWER"] },
+  { methods: ["GET"], pattern: /^\/api\/v1\/runtime\/(?:status|blocks|publisher)$/, roles: ["SIM_VIEWER"], publicRead: true },
+  { methods: ["GET"], pattern: /^\/api\/v1\/runtime\/metrics$/, roles: ["SIM_VIEWER"] },
   {
     methods: ["POST", "DELETE"],
     pattern: /^\/api\/v1\/scenarios\/[^/]+\/faults(?:\/[^/]+)?$/,
@@ -132,13 +134,18 @@ const routePolicies: RoutePolicy[] = [
     roles: ["SIM_AI_USER"],
     audit: { action: "ai.draft.review", resourceType: "aiDraft", resourceId: draftIdFromPath }
   },
-  { methods: ["GET"], pattern: /^\/api\/v1\/ai\/providers$/, roles: ["SIM_VIEWER"] },
+  { methods: ["GET"], pattern: /^\/api\/v1\/ai\/providers$/, roles: ["SIM_VIEWER"], publicRead: true },
   { methods: ["PATCH"], pattern: /^\/api\/v1\/ai\/config$/, roles: ["SIM_AI_ADMIN"], audit: { action: "ai.config.update", resourceType: "aiConfig" } }
 ];
 
 const devPrincipal: AuthenticatedPrincipal = {
   actor: "anonymous-dev",
   roles: ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"]
+};
+
+const publicReadPrincipal: AuthenticatedPrincipal = {
+  actor: "public-read",
+  roles: ["SIM_VIEWER"]
 };
 
 export function createCorsOptions(config: ApiConfig): CorsOptions {
@@ -167,6 +174,12 @@ export function createSecurityMiddleware(config: ApiConfig, audit: AuditLogger) 
 
     const policy = findPolicy(req);
     if (!policy) {
+      next();
+      return;
+    }
+
+    if (config.apiAuthRequired && config.apiPublicRead && req.method === "GET" && policy.publicRead) {
+      setPrincipal(req, publicReadPrincipal);
       next();
       return;
     }
