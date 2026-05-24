@@ -232,7 +232,7 @@ export const ukraineAirDefenseDemoScenario: Scenario = {
     {
       blockId: "air-sim-missile",
       enabled: true,
-      objectCount: 16,
+      objectCount: 17,
       updateRateHz: 1,
       patterns: ["SHORT_LIVED_TRACK"],
       parameters: {
