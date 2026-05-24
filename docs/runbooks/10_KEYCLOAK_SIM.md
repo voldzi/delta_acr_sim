@@ -18,6 +18,12 @@ SIM muze pouzit stejny Keycloak realm a stejne uzivatelske ucty jako COP. Opravn
 
 SIM API mapuje tyto Keycloak role na interní role `SIM_VIEWER`, `SIM_OPERATOR`, `SIM_ADMIN`, `SIM_AI_USER` a `SIM_AI_ADMIN`. Role mohou být realm role nebo client role klienta `csm-sim-web`.
 
+Kvuli sdilenemu realmu COP jsou podporovane i existujici COP role:
+
+- `cop_operator` -> `SIM_OPERATOR` + `SIM_VIEWER`
+- `cop_admin` -> `SIM_ADMIN`
+- `cop_user` -> `SIM_VIEWER`
+
 ## kcadm příklad
 
 ```bash
@@ -68,4 +74,3 @@ VITE_SIM_OIDC_SCOPE=openid profile email
 SIM web pouziva Authorization Code + PKCE. Po prihlaseni posila access token jako `Authorization: Bearer <token>` na SIM API. Token neni vkladany do HTML ani do JavaScript bundle jako secret.
 
 Read-only dashboard endpointy mohou zustat verejne pres `SIM_API_PUBLIC_READ=true`. Operacni akce jako start/stop scenare, fault injection, publisher queue a AI zmeny vyzaduji Keycloak roli nebo fallback token.
-

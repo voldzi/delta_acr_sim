@@ -594,7 +594,49 @@ describe("SIM API security controls", () => {
     expect(listed.body.items).toHaveLength(1);
   });
 
-  it("rejects OIDC tokens without SIM roles", async () => {
+  it("accepts existing COP operator realm roles as SIM operators", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    const issuer = "https://login.zeleznalady.cz/realms/cop";
+    const keyId = "sim-test-key";
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const publicJwk = {
+      ...publicKey.export({ format: "jwk" }),
+      alg: "RS256",
+      kid: keyId,
+      use: "sig"
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ keys: [publicJwk] })));
+    const now = Math.floor(Date.now() / 1000);
+    const token = signJwt(privateKey, keyId, {
+      azp: "csm-sim-web",
+      exp: now + 300,
+      iat: now,
+      iss: issuer,
+      preferred_username: "cop.operator",
+      realm_access: {
+        roles: ["cop_operator"]
+      },
+      sub: "cop-operator-user"
+    });
+
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthMode: "hybrid",
+        apiAuthRequired: true,
+        apiOidcAllowedClients: ["csm-sim-web"],
+        apiOidcClientId: "csm-sim-web",
+        apiOidcIssuer: issuer,
+        apiPrincipals: []
+      })
+    ));
+
+    const created = await request(app).post("/api/v1/scenarios").set("authorization", `Bearer ${token}`).send(scenarioPayload).expect(201);
+    expect(created.body.scenarioId).toBeTruthy();
+    const listed = await request(app).get("/api/v1/scenarios").set("authorization", `Bearer ${token}`).expect(200);
+    expect(listed.body.items).toHaveLength(1);
+  });
+
+  it("rejects OIDC tokens without SIM or COP roles", async () => {
     dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
     const issuer = "https://login.zeleznalady.cz/realms/cop";
     const keyId = "sim-test-key";
@@ -613,9 +655,9 @@ describe("SIM API security controls", () => {
       iat: now,
       iss: issuer,
       realm_access: {
-        roles: ["cop_operator"]
+        roles: ["unrelated_role"]
       },
-      sub: "cop-only-user"
+      sub: "non-sim-user"
     });
 
     ({ app, context } = await createApp(

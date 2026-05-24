@@ -427,14 +427,14 @@ function tokenRoles(payload: JwtPayload, config: ApiConfig): string[] {
 function mapOidcRoles(roles: string[]): SimRole[] {
   const mapped = new Set<SimRole>();
   const normalized = new Set(roles.map((role) => role.trim()).filter(Boolean));
-  if (hasAnyRole(normalized, ["SIM_ADMIN", "sim_admin", "csm-sim-admin"])) {
+  if (hasAnyRole(normalized, ["SIM_ADMIN", "sim_admin", "csm-sim-admin", "cop_admin"])) {
     mapped.add("SIM_ADMIN");
   }
-  if (hasAnyRole(normalized, ["SIM_OPERATOR", "sim_operator", "csm-sim-operator"])) {
+  if (hasAnyRole(normalized, ["SIM_OPERATOR", "sim_operator", "csm-sim-operator", "cop_operator"])) {
     mapped.add("SIM_OPERATOR");
     mapped.add("SIM_VIEWER");
   }
-  if (hasAnyRole(normalized, ["SIM_VIEWER", "sim_viewer", "csm-sim-viewer"])) {
+  if (hasAnyRole(normalized, ["SIM_VIEWER", "sim_viewer", "csm-sim-viewer", "cop_user"])) {
     mapped.add("SIM_VIEWER");
   }
   if (hasAnyRole(normalized, ["SIM_AI_ADMIN", "sim_ai_admin", "csm-sim-ai-admin"])) {
