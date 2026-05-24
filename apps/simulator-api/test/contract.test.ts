@@ -685,9 +685,27 @@ describe("SIM API security controls", () => {
       })
     ));
 
-    await request(app).get("/api/v1/scenarios").set("authorization", "Bearer viewer-token").expect(200);
-    const response = await request(app).get("/api/v1/scenarios").set("authorization", "Bearer viewer-token").expect(429);
+    await request(app).get("/api/v1/publisher/queue").set("authorization", "Bearer viewer-token").expect(200);
+    const response = await request(app).get("/api/v1/publisher/queue").set("authorization", "Bearer viewer-token").expect(429);
     expect(response.body.error.code).toBe("RATE_LIMITED");
+  });
+
+  it("does not spend operator rate limit on public dashboard reads", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
+    ({ app, context } = await createApp(
+      testConfig(dataDir, {
+        apiAuthRequired: true,
+        apiPublicRead: true,
+        apiPrincipals: [{ actor: "operator", token: "operator-token", roles: ["SIM_OPERATOR", "SIM_VIEWER"] }],
+        apiRateLimitWindowMs: 60_000,
+        apiRateLimitMaxRequests: 1
+      })
+    ));
+
+    await request(app).get("/api/v1/scenarios").set("authorization", "Bearer operator-token").expect(200);
+    await request(app).get("/api/v1/runtime/status").set("authorization", "Bearer operator-token").expect(200);
+    await request(app).get("/api/v1/runtime/blocks").set("authorization", "Bearer operator-token").expect(200);
+    await request(app).post("/api/v1/scenarios").set("authorization", "Bearer operator-token").send(scenarioPayload).expect(201);
   });
 
   it("rejects oversized scenario payloads before they can be started", async () => {

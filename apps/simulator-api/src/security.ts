@@ -241,12 +241,14 @@ export function createSecurityMiddleware(config: ApiConfig, audit: AuditLogger) 
       return;
     }
 
-    const rateLimit = rateLimiter.check(`${principal.actor}:${clientAddress(req)}`);
-    if (!rateLimit.allowed) {
-      res.setHeader("Retry-After", String(rateLimit.retryAfterSeconds));
-      await audit.record(req, { action: "rate_limit.exceeded", resourceType: "api", result: "DENIED", statusCode: 429 });
-      problem(req, res, 429, "RATE_LIMITED", "Too many SIM API requests.");
-      return;
+    if (!isPublicReadRequest(req, policy)) {
+      const rateLimit = rateLimiter.check(`${principal.actor}:${clientAddress(req)}`);
+      if (!rateLimit.allowed) {
+        res.setHeader("Retry-After", String(rateLimit.retryAfterSeconds));
+        await audit.record(req, { action: "rate_limit.exceeded", resourceType: "api", result: "DENIED", statusCode: 429 });
+        problem(req, res, 429, "RATE_LIMITED", "Too many SIM API requests.");
+        return;
+      }
     }
 
     if (policy.audit) {
@@ -263,6 +265,10 @@ export function createSecurityMiddleware(config: ApiConfig, audit: AuditLogger) 
 
     next();
   };
+}
+
+function isPublicReadRequest(req: Request, policy: RoutePolicy): boolean {
+  return req.method === "GET" && Boolean(policy.publicRead);
 }
 
 function isPublicPath(path: string): boolean {
