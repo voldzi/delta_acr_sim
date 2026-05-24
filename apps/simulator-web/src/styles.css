@@ -1110,6 +1110,10 @@ button svg {
   font-size: 14px;
 }
 
+.notice-global {
+  margin: -8px 0 18px;
+}
+
 .notice.warn {
   border-color: rgba(163, 106, 0, 0.3);
   color: var(--warn);

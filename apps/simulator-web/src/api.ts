@@ -294,12 +294,40 @@ export interface DashboardLoadResult {
   warnings: string[];
 }
 
+const emptyTakFeatureResponse: TakGatewayFeatureResponse = {
+  contractVersion: "cop-tak-source-v1",
+  type: "FeatureCollection",
+  generatedAt: new Date(0).toISOString(),
+  source: {
+    sourceId: "tak-gateway-api",
+    sourceType: "TAK_COT_GATEWAY",
+    generatedAt: new Date(0).toISOString()
+  },
+  query: {
+    bbox: { west: 0, south: 0, east: 0, north: 0 },
+    layers: [],
+    limit: 0
+  },
+  summary: {
+    eventCount: 0,
+    featureCount: 0,
+    sourceCount: 0,
+    staleFeatureCount: 0,
+    warningCount: 0,
+    affiliationCounts: { friend: 0, hostile: 0, neutral: 0, unknown: 0 }
+  },
+  features: [],
+  sources: [],
+  warnings: []
+};
+
 export async function loadDashboard(): Promise<DashboardLoadResult> {
+  const operatorTokenConfigured = hasSimApiToken();
   const results = await Promise.allSettled([
     api<{ items: Scenario[] }>("/api/v1/scenarios"),
     api<RuntimeStatus>("/api/v1/runtime/status"),
     api<PublisherStatus>("/api/v1/runtime/publisher"),
-    api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20"),
+    operatorTokenConfigured ? api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20") : Promise.resolve({ items: [], totalCount: 0 }),
     api<{ blocks: ScenarioBlock[] }>("/api/v1/runtime/blocks"),
     api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers"),
     api<FlightDataHealth>("/flight-data/health/ready"),
@@ -320,7 +348,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<{ items: TakGatewayLayer[] }>("/tak-gateway/api/v1/layers"),
     api<{ items: TakGatewaySource[] }>("/tak-gateway/api/v1/sources"),
     api<TakGatewayConfig>("/tak-gateway/api/v1/config"),
-    api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12")
+    operatorTokenConfigured ? api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12") : Promise.resolve(emptyTakFeatureResponse)
   ]);
 
   const warnings: string[] = [];
@@ -501,32 +529,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
   );
   const takFeatures = unwrapDashboardResult(
     results[24],
-    {
-      contractVersion: "cop-tak-source-v1",
-      type: "FeatureCollection",
-      generatedAt: new Date(0).toISOString(),
-      source: {
-        sourceId: "tak-gateway-api",
-        sourceType: "TAK_COT_GATEWAY",
-        generatedAt: new Date(0).toISOString()
-      },
-      query: {
-        bbox: { west: 0, south: 0, east: 0, north: 0 },
-        layers: [],
-        limit: 0
-      },
-      summary: {
-        eventCount: 0,
-        featureCount: 0,
-        sourceCount: 0,
-        staleFeatureCount: 0,
-        warningCount: 0,
-        affiliationCounts: { friend: 0, hostile: 0, neutral: 0, unknown: 0 }
-      },
-      features: [],
-      sources: [],
-      warnings: []
-    },
+    emptyTakFeatureResponse,
     "TAK gateway features",
     warnings
   );

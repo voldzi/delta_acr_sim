@@ -132,6 +132,8 @@ interface AffiliationSummaryItem {
 const copDisplayUrl = import.meta.env.VITE_COP_DISPLAY_URL ?? "https://cop.zeleznalady.cz";
 const ownAffiliations = new Set(["FRIEND", "ASSUMED_FRIEND"]);
 const foreignAffiliations = new Set(["HOSTILE", "SUSPECT"]);
+const operatorTokenRequiredNotice = "Operator token required. Enter the SIM API token in the top bar to start, stop or create scenarios.";
+const invalidOperatorTokenNotice = "Operator token is missing or invalid. Check SIM_API_ADMIN_TOKEN or another SIM operator token.";
 
 const emptyRuntime: RuntimeStatus = {
   state: "STOPPED",
@@ -388,6 +390,8 @@ export function App() {
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
   const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
+  const operatorActionDisabled = loading || !apiTokenConfigured;
+  const noticeIsWarning = /required|invalid|failed|degraded|missing|error/i.test(notice);
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
   const situationDataTone: Tone =
@@ -507,8 +511,16 @@ export function App() {
   async function forgetApiToken() {
     clearSimApiToken();
     setApiTokenConfigured(false);
-    setNotice("SIM API token cleared.");
+    setNotice("SIM API token cleared. Read-only monitoring remains available.");
     await refresh().catch(() => undefined);
+  }
+
+  function requireOperatorToken(): boolean {
+    if (apiTokenConfigured) {
+      return true;
+    }
+    setNotice(operatorTokenRequiredNotice);
+    return false;
   }
 
   async function runAction<T>(message: string, action: () => Promise<T>) {
@@ -518,7 +530,8 @@ export function App() {
       setNotice(message);
       await refresh(typeof result === "string" ? result : undefined);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Operation failed.");
+      const message = error instanceof Error ? error.message : "Operation failed.";
+      setNotice(message.includes("Missing or invalid bearer token") ? invalidOperatorTokenNotice : message);
     } finally {
       setLoading(false);
     }
@@ -549,8 +562,8 @@ export function App() {
         <div className="safety-panel">
           <ShieldCheck size={18} />
           <div>
-            <strong>Synthetic-only gate</strong>
-            <span>Non-synthetic payloads are rejected before COM ingest.</span>
+            <strong>Safety gate active</strong>
+            <span>Only synthetic payloads are accepted by the CSM publisher.</span>
           </div>
         </div>
       </aside>
@@ -589,6 +602,11 @@ export function App() {
             <StatusPill label={data.runtime.state} tone={runtimeTone} />
           </div>
         </header>
+
+        <div className={`notice notice-global ${noticeIsWarning ? "warn" : ""}`} role="status">
+          {noticeIsWarning ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{notice}</span>
+        </div>
 
         {activeSection === "overview" ? (
           <>
@@ -648,39 +666,45 @@ export function App() {
               <button
                 type="button"
                 onClick={() =>
+                  requireOperatorToken() &&
                   runAction("Demo scenario created.", async () => {
                     const created = await createScenario(demoScenario);
                     setSelectedScenarioId(created.scenarioId);
                     return created.scenarioId;
                   })
                 }
-                disabled={loading}
+                disabled={operatorActionDisabled}
+                title={apiTokenConfigured ? "Create demo scenario" : operatorTokenRequiredNotice}
               >
                 <Plus size={16} /> Demo
               </button>
               <button
                 type="button"
                 onClick={() =>
+                  requireOperatorToken() &&
                   runAction("High-density demo scenario created.", async () => {
                     const created = await createScenario(denseDemoScenario);
                     setSelectedScenarioId(created.scenarioId);
                     return created.scenarioId;
                   })
                 }
-                disabled={loading}
+                disabled={operatorActionDisabled}
+                title={apiTokenConfigured ? "Create high-density demo scenario" : operatorTokenRequiredNotice}
               >
                 <Database size={16} /> 300 tracks
               </button>
               <button
                 type="button"
                 onClick={() =>
+                  requireOperatorToken() &&
                   runAction("Ukraine air-defense demo scenario created.", async () => {
                     const created = await createScenario(ukraineAirDefenseDemoScenario);
                     setSelectedScenarioId(created.scenarioId);
                     return created.scenarioId;
                   })
                 }
-                disabled={loading}
+                disabled={operatorActionDisabled}
+                title={apiTokenConfigured ? "Create Ukraine demo scenario" : operatorTokenRequiredNotice}
               >
                 <ShieldAlert size={16} /> Ukraine demo
               </button>
@@ -738,14 +762,17 @@ export function App() {
                   <span>{runtimeCommandDetail(selectedScenario, data.runtime)}</span>
                 </div>
                 <div className="button-strip runtime-actions">
+                  {!apiTokenConfigured ? <span className="command-note">Operator token required for runtime control.</span> : null}
                   {otherScenarioIsActive ? <span className="command-note">Select the active scenario to control the running runtime.</span> : null}
                   {!isRunning && !isPaused ? (
                     <ActionButton
                       icon={<Play />}
                       label="Start"
-                      disabled={loading}
+                      disabled={operatorActionDisabled}
+                      title={apiTokenConfigured ? "Start selected scenario" : operatorTokenRequiredNotice}
                       onClick={() =>
                         selectedScenario.scenarioId &&
+                        requireOperatorToken() &&
                         runAction("Scenario started. Moving tracks are published every second.", () =>
                           runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
                         )
@@ -757,20 +784,35 @@ export function App() {
                       <ActionButton
                         icon={<Pause />}
                         label="Pause"
-                        disabled={loading}
-                        onClick={() => selectedScenario.scenarioId && runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))}
+                        disabled={operatorActionDisabled}
+                        title={apiTokenConfigured ? "Pause active scenario" : operatorTokenRequiredNotice}
+                        onClick={() =>
+                          selectedScenario.scenarioId &&
+                          requireOperatorToken() &&
+                          runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))
+                        }
                       />
                       <ActionButton
                         icon={<Square />}
                         label="Stop"
-                        disabled={loading}
-                        onClick={() => selectedScenario.scenarioId && runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))}
+                        disabled={operatorActionDisabled}
+                        title={apiTokenConfigured ? "Stop active scenario" : operatorTokenRequiredNotice}
+                        onClick={() =>
+                          selectedScenario.scenarioId &&
+                          requireOperatorToken() &&
+                          runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
+                        }
                       />
                       <ActionButton
                         icon={<Zap />}
                         label="Fault"
-                        disabled={loading}
-                        onClick={() => selectedScenario.scenarioId && runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))}
+                        disabled={operatorActionDisabled}
+                        title={apiTokenConfigured ? "Add connectivity fault" : operatorTokenRequiredNotice}
+                        onClick={() =>
+                          selectedScenario.scenarioId &&
+                          requireOperatorToken() &&
+                          runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
+                        }
                       />
                     </>
                   ) : null}
@@ -779,14 +821,24 @@ export function App() {
                       <ActionButton
                         icon={<Play />}
                         label="Resume"
-                        disabled={loading}
-                        onClick={() => selectedScenario.scenarioId && runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))}
+                        disabled={operatorActionDisabled}
+                        title={apiTokenConfigured ? "Resume active scenario" : operatorTokenRequiredNotice}
+                        onClick={() =>
+                          selectedScenario.scenarioId &&
+                          requireOperatorToken() &&
+                          runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))
+                        }
                       />
                       <ActionButton
                         icon={<Square />}
                         label="Stop"
-                        disabled={loading}
-                        onClick={() => selectedScenario.scenarioId && runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))}
+                        disabled={operatorActionDisabled}
+                        title={apiTokenConfigured ? "Stop active scenario" : operatorTokenRequiredNotice}
+                        onClick={() =>
+                          selectedScenario.scenarioId &&
+                          requireOperatorToken() &&
+                          runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
+                        }
                       />
                     </>
                   ) : null}
@@ -801,17 +853,24 @@ export function App() {
                   <ActionButton
                     icon={<RotateCcw />}
                     label="Step"
-                    disabled={loading || isRunning}
+                    disabled={operatorActionDisabled || isRunning}
+                    title={apiTokenConfigured ? "Generate one deterministic step" : operatorTokenRequiredNotice}
                     onClick={() =>
                       selectedScenario.scenarioId &&
+                      requireOperatorToken() &&
                       runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))
                     }
                   />
                   <ActionButton
                     icon={<Zap />}
                     label="Fault"
-                    disabled={loading || otherScenarioIsActive}
-                    onClick={() => selectedScenario.scenarioId && runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))}
+                    disabled={operatorActionDisabled || otherScenarioIsActive}
+                    title={apiTokenConfigured ? "Add connectivity fault" : operatorTokenRequiredNotice}
+                    onClick={() =>
+                      selectedScenario.scenarioId &&
+                      requireOperatorToken() &&
+                      runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
+                    }
                   />
                 </div>
               </details>
@@ -1565,9 +1624,21 @@ function ScenarioCard({
   );
 }
 
-function ActionButton({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled: boolean; onClick: () => void }) {
+function ActionButton({
+  icon,
+  label,
+  disabled,
+  title,
+  onClick
+}: {
+  icon: ReactNode;
+  label: string;
+  disabled: boolean;
+  title?: string;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick}>
+    <button type="button" disabled={disabled} title={title} onClick={onClick}>
       {icon} {label}
     </button>
   );
