@@ -57,7 +57,7 @@ SIM_API_AUTH_MODE=hybrid
 SIM_API_ADMIN_TOKEN=<high-entropy-break-glass-token>
 
 SIM_OIDC_ISSUER=https://login.zeleznalady.cz/realms/cop
-SIM_OIDC_JWKS_URI=
+SIM_OIDC_JWKS_URI=http://docker.home.cz:8081/realms/cop/protocol/openid-connect/certs
 SIM_OIDC_CLIENT_ID=csm-sim-web
 SIM_OIDC_ALLOWED_CLIENTS=csm-sim-web
 
