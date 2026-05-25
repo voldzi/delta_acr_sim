@@ -6,6 +6,7 @@ import { ManagedResponseCache } from "./response-cache.js";
 import type { SituationDataSource, SourceCacheStats } from "./sources.js";
 import type {
   BoundingBox,
+  MobileBtsStatus,
   MobileCoverageQuality,
   MobileCoverageTechnology,
   SituationDataLicense,
@@ -44,13 +45,42 @@ interface TowerRow {
   tags: Record<string, unknown> | null;
 }
 
-interface CoveragePayload {
+interface CoverageCellRow {
+  feature_id: string;
+  model_version: string;
+  technology: string;
+  operator: string;
+  quality: string;
+  estimated_signal_dbm: number | string | null;
+  confidence: number | string;
+  resolution_m: number | string;
+  dem_dataset_id: string | null;
+  generated_at: Date | string;
+  expires_at: Date | string;
+  assumptions: Record<string, unknown> | null;
+  metrics: Record<string, unknown> | null;
+  tags: Record<string, unknown> | null;
+  data_quality: string | null;
+  bts_status: string | null;
+  bts_status_source: string | null;
+  operator_status_available: boolean | null;
+  source_revision: string | null;
+  geometry: unknown;
+}
+
+export interface CoveragePayload {
   generatedAt: string;
   effectiveResolutionM: number;
   towerCount: number;
   terrainApplied: boolean;
   warnings: string[];
   features: SituationFeature[];
+}
+
+interface ReadModelLookup {
+  features: SituationFeature[];
+  warnings: string[];
+  hit: boolean;
 }
 
 export interface MobileCoverageMetadata {
@@ -124,6 +154,14 @@ export class MobileCoverageSource implements SituationDataSource {
       if (this.config.demEnabled && !this.config.mobileCoverageTerrainAware) {
         warnings.push("DEM catalog is available but coverage-v1 does not apply terrain line-of-sight yet.");
       }
+      if (this.config.mobileCoverageReadModelEnabled) {
+        const readModelCount = await this.fetchReadModelCount().catch(() => undefined);
+        if (readModelCount === 0) {
+          warnings.push("mobile_coverage_model read-model table is empty; runtime queries fall back to on-demand coverage calculation.");
+        } else if (readModelCount === undefined) {
+          warnings.push("mobile_coverage_model read-model table is not available yet; runtime queries fall back to on-demand coverage calculation.");
+        }
+      }
       return {
         sourceId: "mobile_coverage_model",
         status: objectCount > 0 ? "ok" : "degraded",
@@ -157,6 +195,156 @@ export class MobileCoverageSource implements SituationDataSource {
     };
   }
 
+  async buildCoverageForBbox(bbox: BoundingBox, technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES): Promise<CoveragePayload> {
+    return this.buildCoverage(bbox, technologies);
+  }
+
+  async ensureReadModelSchema(): Promise<void> {
+    const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
+    await this.getPool().query(`
+      create extension if not exists postgis;
+
+      create table if not exists ${table} (
+        dataset_id text,
+        model_version text not null,
+        technology text not null,
+        operator text not null default 'unknown',
+        quality text not null,
+        estimated_signal_dbm integer,
+        confidence double precision not null,
+        resolution_m integer not null,
+        dem_dataset_id text,
+        generated_at timestamptz not null,
+        expires_at timestamptz not null,
+        assumptions jsonb not null default '{}'::jsonb,
+        metrics jsonb not null default '{}'::jsonb,
+        tags jsonb not null default '{}'::jsonb,
+        data_quality text not null default 'modelled',
+        bts_status text not null default 'operator_feed_unavailable',
+        bts_status_source text not null default 'none',
+        operator_status_available boolean not null default false,
+        source_revision text,
+        geom geometry(Polygon, 4326) not null,
+        feature_id text primary key
+      );
+
+      alter table ${table} add column if not exists metrics jsonb not null default '{}'::jsonb;
+      alter table ${table} add column if not exists tags jsonb not null default '{}'::jsonb;
+      alter table ${table} add column if not exists data_quality text not null default 'modelled';
+      alter table ${table} add column if not exists bts_status text not null default 'operator_feed_unavailable';
+      alter table ${table} add column if not exists bts_status_source text not null default 'none';
+      alter table ${table} add column if not exists operator_status_available boolean not null default false;
+      alter table ${table} add column if not exists source_revision text;
+
+      create index if not exists mobile_coverage_cells_geom_gix on ${table} using gist (geom);
+      create index if not exists mobile_coverage_cells_model_idx on ${table}(model_version, technology, operator);
+      create index if not exists mobile_coverage_cells_expires_idx on ${table}(expires_at);
+      create index if not exists mobile_coverage_cells_generated_idx on ${table}(generated_at);
+    `);
+  }
+
+  async replaceReadModelFeatures(
+    bbox: BoundingBox,
+    technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES,
+    expiresAt = addSeconds(new Date().toISOString(), this.config.mobileCoverageCacheTtlSeconds)
+  ): Promise<number> {
+    await this.ensureReadModelSchema();
+    const payload = await this.buildCoverage(bbox, technologies);
+    const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
+    await this.getPool().query(
+      `
+        delete from ${table}
+        where model_version = $1
+          and technology = any($2::text[])
+          and operator = 'unknown'
+          and geom && st_makeenvelope($3, $4, $5, $6, 4326)
+          and st_intersects(geom, st_makeenvelope($3, $4, $5, $6, 4326))
+      `,
+      [this.config.mobileCoverageModelVersion, technologies, bbox.west, bbox.south, bbox.east, bbox.north]
+    );
+
+    for (const feature of payload.features) {
+      await this.getPool().query(
+        `
+          insert into ${table} (
+            dataset_id,
+            model_version,
+            technology,
+            operator,
+            quality,
+            estimated_signal_dbm,
+            confidence,
+            resolution_m,
+            dem_dataset_id,
+            generated_at,
+            expires_at,
+            assumptions,
+            metrics,
+            tags,
+            data_quality,
+            bts_status,
+            bts_status_source,
+            operator_status_available,
+            source_revision,
+            geom,
+            feature_id
+          ) values (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11::timestamptz,
+            $12::jsonb, $13::jsonb, $14::jsonb, $15, $16, $17, $18, $19,
+            st_setsrid(st_geomfromgeojson($20), 4326),
+            $21
+          )
+          on conflict (feature_id) do update set
+            dataset_id = excluded.dataset_id,
+            model_version = excluded.model_version,
+            technology = excluded.technology,
+            operator = excluded.operator,
+            quality = excluded.quality,
+            estimated_signal_dbm = excluded.estimated_signal_dbm,
+            confidence = excluded.confidence,
+            resolution_m = excluded.resolution_m,
+            dem_dataset_id = excluded.dem_dataset_id,
+            generated_at = excluded.generated_at,
+            expires_at = excluded.expires_at,
+            assumptions = excluded.assumptions,
+            metrics = excluded.metrics,
+            tags = excluded.tags,
+            data_quality = excluded.data_quality,
+            bts_status = excluded.bts_status,
+            bts_status_source = excluded.bts_status_source,
+            operator_status_available = excluded.operator_status_available,
+            source_revision = excluded.source_revision,
+            geom = excluded.geom
+        `,
+        [
+          "osm_postgis",
+          feature.properties.modelVersion ?? this.config.mobileCoverageModelVersion,
+          feature.properties.technology ?? "unknown",
+          feature.properties.operator ?? "unknown",
+          feature.properties.quality ?? "unknown",
+          feature.properties.estimatedSignalDbm ?? null,
+          feature.properties.confidence,
+          feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
+          feature.properties.demSource ?? this.config.demDatasetId,
+          feature.properties.generatedAt ?? feature.properties.observedAt,
+          expiresAt,
+          JSON.stringify(feature.properties.assumptions ?? {}),
+          JSON.stringify(feature.properties.metrics ?? {}),
+          JSON.stringify(feature.properties.tags ?? {}),
+          feature.properties.dataQuality ?? "modelled",
+          feature.properties.btsStatus ?? "operator_feed_unavailable",
+          feature.properties.btsStatusSource ?? "none",
+          feature.properties.operatorStatusAvailable ?? false,
+          feature.properties.sourceRevision ?? this.sourceRevision(Boolean(feature.properties.assumptions?.terrainApplied)),
+          JSON.stringify(feature.geometry),
+          feature.properties.featureId
+        ]
+      );
+    }
+
+    return payload.features.length;
+  }
+
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     if (!query.layers.includes("mobile_coverage")) {
@@ -173,6 +361,24 @@ export class MobileCoverageSource implements SituationDataSource {
 
     const technologies = query.mobileCoverageTechnologies?.length ? query.mobileCoverageTechnologies : DEFAULT_TECHNOLOGIES;
     const operators = query.mobileCoverageOperators?.length ? query.mobileCoverageOperators : ["unknown"];
+    const readModel = await this.fetchReadModelFeatures(query, technologies, operators);
+    if (readModel.hit) {
+      const features = readModel.features.map((feature) => ({
+        ...feature,
+        properties: {
+          ...feature.properties,
+          raw: query.includeRaw ? feature.properties.raw : undefined
+        }
+      }));
+
+      return {
+        source: this.descriptor,
+        fetchedAt,
+        features,
+        warnings: readModel.warnings
+      };
+    }
+
     if (!operators.includes("unknown")) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
@@ -184,7 +390,8 @@ export class MobileCoverageSource implements SituationDataSource {
       operators: ["unknown"],
       resolutionM: this.config.mobileCoverageResolutionM,
       maxCells: this.config.mobileCoverageMaxCells,
-      modelVersion: this.config.mobileCoverageModelVersion
+      modelVersion: this.config.mobileCoverageModelVersion,
+      readModelFallback: true
     });
     const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildCoverage(cacheBbox, technologies));
     const features = payload.features
@@ -208,6 +415,136 @@ export class MobileCoverageSource implements SituationDataSource {
           ? []
           : ["mobile_coverage_model has no communications_tower references in the requested area; features are marked unknown."])
       ]
+    };
+  }
+
+  private async fetchReadModelFeatures(
+    query: SituationQuery,
+    technologies: MobileCoverageTechnology[],
+    operators: string[]
+  ): Promise<ReadModelLookup> {
+    if (!this.config.mobileCoverageReadModelEnabled || !this.config.osmPostgisConnectionString) {
+      return { features: [], warnings: [], hit: false };
+    }
+    const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
+    const normalizedOperators = operators.includes("aggregate") ? ["unknown"] : operators;
+    try {
+      const result = await this.getPool().query<CoverageCellRow>(
+        `
+          select
+            feature_id,
+            model_version,
+            technology,
+            operator,
+            quality,
+            estimated_signal_dbm,
+            confidence,
+            resolution_m,
+            dem_dataset_id,
+            generated_at,
+            expires_at,
+            assumptions,
+            metrics,
+            tags,
+            data_quality,
+            bts_status,
+            bts_status_source,
+            operator_status_available,
+            source_revision,
+            st_asgeojson(geom)::json as geometry
+          from ${table}
+          where model_version = $1
+            and technology = any($2::text[])
+            and operator = any($3::text[])
+            and expires_at > now()
+            and ($4::int <= 0 or generated_at >= now() - make_interval(secs => $4::int))
+            and geom && st_makeenvelope($5, $6, $7, $8, 4326)
+            and st_intersects(geom, st_makeenvelope($5, $6, $7, $8, 4326))
+          order by generated_at desc, feature_id asc
+          limit $9
+        `,
+        [
+          this.config.mobileCoverageModelVersion,
+          technologies,
+          normalizedOperators,
+          this.config.mobileCoverageReadModelMaxAgeSeconds,
+          query.bbox.west,
+          query.bbox.south,
+          query.bbox.east,
+          query.bbox.north,
+          Math.max(1, query.limit)
+        ]
+      );
+      if (result.rows.length === 0) {
+        return { features: [], warnings: [], hit: false };
+      }
+      const features = result.rows.flatMap((row) => {
+        const feature = this.readModelFeature(row);
+        return feature ? [feature] : [];
+      });
+      return {
+        features,
+        warnings: [],
+        hit: features.length > 0
+      };
+    } catch (error) {
+      if (isMissingRelationError(error)) {
+        return { features: [], warnings: [], hit: false };
+      }
+      return {
+        features: [],
+        warnings: [`mobile_coverage_model read-model lookup failed; using on-demand model: ${errorMessage(error)}`],
+        hit: false
+      };
+    }
+  }
+
+  private readModelFeature(row: CoverageCellRow): SituationFeature | undefined {
+    const technology = mobileCoverageTechnology(row.technology);
+    const quality = mobileCoverageQuality(row.quality);
+    if (!technology || !quality || !isPolygonGeometry(row.geometry)) {
+      return undefined;
+    }
+    const generatedAt = toIsoTimestamp(row.generated_at);
+    const validUntil = toIsoTimestamp(row.expires_at);
+    return {
+      type: "Feature",
+      id: row.feature_id,
+      geometry: row.geometry,
+      properties: {
+        featureId: row.feature_id,
+        layer: "mobile_coverage",
+        category: "mobile_coverage",
+        label: `${technology} coverage estimate`,
+        sourceId: "mobile_coverage_model",
+        observedAt: generatedAt,
+        validUntil,
+        confidence: Number(row.confidence),
+        stale: false,
+        severity: severityForQuality(quality),
+        license: {
+          name: MOBILE_COVERAGE_LICENSE.name,
+          attribution: MOBILE_COVERAGE_LICENSE.attribution
+        },
+        metrics: compactMixedMetrics(row.metrics),
+        tags: compactStringTags(row.tags),
+        operator: row.operator,
+        technology,
+        quality,
+        estimatedSignalDbm: optionalNumber(row.estimated_signal_dbm),
+        modelVersion: row.model_version,
+        sourceRevision: cleanString(row.source_revision),
+        readModel: true,
+        generatedAt,
+        resolutionM: optionalNumber(row.resolution_m),
+        demSource: cleanString(row.dem_dataset_id) ?? this.effectiveDemSource(true),
+        assumptions: compactAssumptions(row.assumptions),
+        dataQuality: row.data_quality === "observed" || row.data_quality === "mixed" || row.data_quality === "unknown" ? row.data_quality : "modelled",
+        btsStatus: mobileBtsStatus(row.bts_status),
+        btsStatusSource: cleanString(row.bts_status_source) ?? "none",
+        operatorStatusAvailable: row.operator_status_available === true,
+        disclaimer: DISCLAIMER
+      }
     };
   }
 
@@ -306,6 +643,8 @@ export class MobileCoverageSource implements SituationDataSource {
         quality,
         estimatedSignalDbm: estimate?.signalDbm,
         modelVersion: this.config.mobileCoverageModelVersion,
+        sourceRevision: this.sourceRevision(Boolean(terrain)),
+        readModel: false,
         generatedAt,
         resolutionM,
         demSource: this.effectiveDemSource(Boolean(terrain)),
@@ -338,6 +677,17 @@ export class MobileCoverageSource implements SituationDataSource {
     };
   }
 
+  private sourceRevision(terrainApplied: boolean): string {
+    return [
+      `model=${this.config.mobileCoverageModelVersion}`,
+      `osmTable=${this.config.osmPostgisTable}`,
+      `dem=${terrainApplied ? this.config.demDatasetId : "not-applied"}`,
+      `terrain=${terrainApplied ? "line-of-sight-v1" : "none"}`,
+      `resolutionM=${this.config.mobileCoverageResolutionM}`,
+      `antennaM=${this.config.mobileCoverageAntennaHeightM}`
+    ].join("|");
+  }
+
   private effectiveDemSource(terrainApplied = false): string {
     if (terrainApplied) {
       return this.config.mobileCoverageDemSource === "not-used-phase-1" ? this.config.demDatasetId : this.config.mobileCoverageDemSource;
@@ -362,6 +712,21 @@ export class MobileCoverageSource implements SituationDataSource {
     const table = quoteQualifiedIdentifier(this.config.osmPostgisTable);
     const result = await this.getPool().query<{ count: string }>(
       `select count(*)::bigint as count from ${table} where layer = 'mobile' and category = 'communications_tower'`
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  private async fetchReadModelCount(): Promise<number> {
+    const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
+    const result = await this.getPool().query<{ count: string }>(
+      `
+        select count(*)::bigint as count
+        from ${table}
+        where model_version = $1
+          and expires_at > now()
+          and ($2::int <= 0 or generated_at >= now() - make_interval(secs => $2::int))
+      `,
+      [this.config.mobileCoverageModelVersion, this.config.mobileCoverageReadModelMaxAgeSeconds]
     );
     return Number(result.rows[0]?.count ?? 0);
   }
@@ -720,6 +1085,81 @@ function compactTags(values: Record<string, string | undefined>): Record<string,
 function compactMetrics(values: Record<string, number | string | boolean | undefined>): Record<string, number | string | boolean> | undefined {
   const entries = Object.entries(values).filter((entry): entry is [string, number | string | boolean] => entry[1] !== undefined);
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function compactMixedMetrics(values: Record<string, unknown> | null): Record<string, number | string | boolean> | undefined {
+  if (!values) {
+    return undefined;
+  }
+  const entries = Object.entries(values).filter((entry): entry is [string, number | string | boolean] =>
+    typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function compactStringTags(values: Record<string, unknown> | null): Record<string, string> | undefined {
+  if (!values) {
+    return undefined;
+  }
+  const entries = Object.entries(values).flatMap(([key, value]): Array<[string, string]> => {
+    if (typeof value === "string" && value.length > 0) {
+      return [[key, value]];
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return [[key, String(value)]];
+    }
+    return [];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function compactAssumptions(values: Record<string, unknown> | null): Record<string, string | number | boolean> | undefined {
+  if (!values) {
+    return undefined;
+  }
+  const entries = Object.entries(values).filter((entry): entry is [string, string | number | boolean] =>
+    typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function mobileCoverageTechnology(value: string): MobileCoverageTechnology | undefined {
+  return value === "2G" || value === "4G" || value === "5G" ? value : undefined;
+}
+
+function mobileCoverageQuality(value: string): MobileCoverageQuality | undefined {
+  return value === "good" || value === "fair" || value === "weak" || value === "none" || value === "unknown" ? value : undefined;
+}
+
+function mobileBtsStatus(value: string | null): MobileBtsStatus {
+  if (value === "operator_feed_unavailable" || value === "unverified" || value === "reported_outage" || value === "unknown") {
+    return value;
+  }
+  return "operator_feed_unavailable";
+}
+
+function isPolygonGeometry(value: unknown): value is SituationFeature["geometry"] {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const geometry = value as { type?: unknown; coordinates?: unknown };
+  return geometry.type === "Polygon" && Array.isArray(geometry.coordinates);
+}
+
+function toIsoTimestamp(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function addSeconds(value: string, seconds: number): string {
+  return new Date(Date.parse(value) + Math.max(1, seconds) * 1000).toISOString();
+}
+
+function isMissingRelationError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "42P01";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown failure";
 }
 
 function round(value: number, precision: number): number {

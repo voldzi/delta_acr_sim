@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "rebuild:mobile-coverage": "node dist/rebuild-mobile-coverage.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

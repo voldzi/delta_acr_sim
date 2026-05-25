@@ -22,6 +22,7 @@ The layer is an inferred area assessment. It is not a confirmed real-time BTS ou
 The current implementation combines:
 
 - `mobile_coverage_model`: modelled polygon coverage from imported OSM `communications_tower` references,
+- prepared PostGIS read-model cells from `public.mobile_coverage_cells` when available,
 - `ctu_nettest`: public ČTÚ NetTest measurements inside the polygon,
 - `ctu_stationary_mobile`: official ČTÚ stationary 2G/4G mobile signal measurements by operator, used as historical reference evidence,
 - OSM infrastructure hints through the coverage model,
@@ -34,6 +35,7 @@ Future inputs can be added without changing the COM layer name:
 - partner/operator status feed,
 - anonymized aggregate measurements from COM/iOS clients,
 - terrain-aware DEM and line-of-sight scoring.
+- authorized BTS/NOC status feed. When available, SIM should update or regenerate affected read-model cells and set `btsStatus`, `btsStatusSource`, `operatorStatusAvailable` and adjusted `quality/status`.
 
 ## API
 
@@ -118,6 +120,9 @@ MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain
 MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz
 MOBILE_COVERAGE_TERRAIN_AWARE=true
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
+MOBILE_COVERAGE_READ_MODEL_ENABLED=true
+MOBILE_COVERAGE_READ_MODEL_TABLE=public.mobile_coverage_cells
+MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -129,6 +134,7 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - The source-level cache is keyed by canonical bbox, technology filter, aggregate operator filter, resolution, max cells and model version.
 - The canonical bbox is applied only once inside the chained `mobile_network_model -> mobile_coverage_model` path.
 - The underlying coverage grid uses a deterministic resolution ladder so nearby zoom levels do not shift cell origins unnecessarily.
+- If prepared `mobile_coverage_cells` exist for the requested area, `mobile_network_model` builds on those polygons instead of triggering on-demand DEM/path-loss calculation.
 - Default source TTL is 3600 seconds.
 - External inputs are not queried per COM user when a cached area assessment exists.
 - Health reports `mobile_network_model` as degraded when dependent model/input sources cannot produce an assessment.

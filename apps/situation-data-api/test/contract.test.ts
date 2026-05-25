@@ -38,6 +38,9 @@ describe("Situation Data API contract", () => {
       mobileCoverageDemSource: "not-used-phase-1",
       mobileCoverageTerrainAware: false,
       mobileCoverageAntennaHeightM: 30,
+      mobileCoverageReadModelEnabled: true,
+      mobileCoverageReadModelTable: "public.mobile_coverage_cells",
+      mobileCoverageReadModelMaxAgeSeconds: 604800,
       osmPostgisConnectionString: undefined,
       osmPostgisBackend: "unconfigured",
       osmPostgisTable: "public.osm_poi",
@@ -599,6 +602,73 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(result.features[0].properties.raw).toBeUndefined();
+  });
+
+  it("prefers prepared mobile coverage read-model polygons over runtime calculation", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageReadModelEnabled: true
+    });
+    let runtimeFallbackCalled = false;
+    (source as unknown as { fetchTowers: () => Promise<Array<never>> }).fetchTowers = async () => {
+      runtimeFallbackCalled = true;
+      return [];
+    };
+    (source as unknown as { fetchReadModelFeatures: () => Promise<{ hit: boolean; warnings: string[]; features: Array<unknown> }> }).fetchReadModelFeatures =
+      async () => ({
+        hit: true,
+        warnings: [],
+        features: [
+          {
+            type: "Feature",
+            id: "coverage:mobile:4g:prepared",
+            geometry: {
+              type: "Polygon",
+              coordinates: [[
+                [14.41, 50.07],
+                [14.43, 50.07],
+                [14.43, 50.09],
+                [14.41, 50.09],
+                [14.41, 50.07]
+              ]]
+            },
+            properties: {
+              featureId: "coverage:mobile:4g:prepared",
+              layer: "mobile_coverage",
+              category: "mobile_coverage",
+              label: "4G coverage estimate",
+              sourceId: "mobile_coverage_model",
+              observedAt: new Date().toISOString(),
+              confidence: 0.74,
+              stale: false,
+              severity: "info",
+              license: { name: "coverage", attribution: "coverage" },
+              operator: "unknown",
+              technology: "4G",
+              quality: "good",
+              modelVersion: "coverage-v1",
+              readModel: true,
+              dataQuality: "modelled"
+            }
+          }
+        ]
+      });
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.41, south: 50.07, east: 14.43, north: 50.09 },
+      layers: ["mobile_coverage"],
+      sourceIds: ["mobile_coverage_model"],
+      limit: 5,
+      includeRaw: false,
+      mobileCoverageTechnologies: ["4G"]
+    });
+
+    expect(runtimeFallbackCalled).toBe(false);
+    expect(result.features[0].properties.readModel).toBe(true);
+    expect(result.features[0].properties.quality).toBe("good");
   });
 
   it("builds unified mobile network assessment from coverage and measurements", async () => {

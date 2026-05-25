@@ -74,6 +74,9 @@
 - `MOBILE_COVERAGE_DEM_SOURCE`
 - `MOBILE_COVERAGE_TERRAIN_AWARE`
 - `MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M`
+- `MOBILE_COVERAGE_READ_MODEL_ENABLED`
+- `MOBILE_COVERAGE_READ_MODEL_TABLE`
+- `MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS`
 - `DEM_ENABLED`
 - `DEM_BBOX`
 - `DEM_DATASET_ID`
@@ -234,6 +237,9 @@ MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
 MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
 MOBILE_COVERAGE_TERRAIN_AWARE=false
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
+MOBILE_COVERAGE_READ_MODEL_ENABLED=true
+MOBILE_COVERAGE_READ_MODEL_TABLE=public.mobile_coverage_cells
+MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 DEM_ENABLED=false
 DEM_BBOX=11.8,48.5,19.2,51.2
 DEM_DATASET_ID=copernicus-glo30-cz
@@ -304,6 +310,9 @@ MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain
 MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz
 MOBILE_COVERAGE_TERRAIN_AWARE=true
+MOBILE_COVERAGE_READ_MODEL_ENABLED=true
+MOBILE_COVERAGE_READ_MODEL_TABLE=public.mobile_coverage_cells
+MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 scripts/import-osm-cz-postgis.sh
 ```
 
@@ -326,7 +335,7 @@ Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-la
 
 `mobile_network_model` je hlavní COM vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, aktuální ČTÚ NetTest měření, oficiální historická stacionární měření ČTÚ `ctu_stationary_mobile` a infrastrukturní indicie do jednoho závěru `mobile_network`.
 
-`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 2 při `MOBILE_COVERAGE_TERRAIN_AWARE=true` používá lokální Copernicus DEM GLO-30 cache a line-of-sight penalizaci terénem bez změny COM kontraktu.
+`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 2 při `MOBILE_COVERAGE_TERRAIN_AWARE=true` používá lokální Copernicus DEM GLO-30 cache a line-of-sight penalizaci terénem bez změny COM kontraktu. V produkci má runtime API primárně číst připravený read-model `public.mobile_coverage_cells` a on-demand výpočet používat jen jako fallback.
 
 DEM katalog pro terrain-aware model používá Copernicus DEM GLO-30, SeaweedFS a PostGIS:
 

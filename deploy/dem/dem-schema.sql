@@ -59,6 +59,13 @@ create table if not exists public.mobile_coverage_cells (
   generated_at timestamptz not null,
   expires_at timestamptz not null,
   assumptions jsonb not null default '{}'::jsonb,
+  metrics jsonb not null default '{}'::jsonb,
+  tags jsonb not null default '{}'::jsonb,
+  data_quality text not null default 'modelled',
+  bts_status text not null default 'operator_feed_unavailable',
+  bts_status_source text not null default 'none',
+  operator_status_available boolean not null default false,
+  source_revision text,
   geom geometry(Polygon, 4326) not null,
   feature_id text primary key
 );
@@ -66,3 +73,4 @@ create table if not exists public.mobile_coverage_cells (
 create index if not exists mobile_coverage_cells_geom_gix on public.mobile_coverage_cells using gist (geom);
 create index if not exists mobile_coverage_cells_model_idx on public.mobile_coverage_cells(model_version, technology, operator);
 create index if not exists mobile_coverage_cells_expires_idx on public.mobile_coverage_cells(expires_at);
+create index if not exists mobile_coverage_cells_generated_idx on public.mobile_coverage_cells(generated_at);

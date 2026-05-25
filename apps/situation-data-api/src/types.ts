@@ -289,6 +289,8 @@ export interface SituationFeatureProperties {
   operatorStatusAvailable?: boolean;
   estimatedSignalDbm?: number;
   modelVersion?: string;
+  sourceRevision?: string;
+  readModel?: boolean;
   generatedAt?: string;
   resolutionM?: number;
   demSource?: string;

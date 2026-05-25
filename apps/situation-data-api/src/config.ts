@@ -25,6 +25,9 @@ export interface SituationDataConfig {
   mobileCoverageDemSource: string;
   mobileCoverageTerrainAware: boolean;
   mobileCoverageAntennaHeightM: number;
+  mobileCoverageReadModelEnabled: boolean;
+  mobileCoverageReadModelTable: string;
+  mobileCoverageReadModelMaxAgeSeconds: number;
   osmPostgisConnectionString?: string;
   osmPostgisBackend: OsmPostgisBackend;
   osmPostgisTable: string;
@@ -85,6 +88,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     mobileCoverageDemSource: process.env.MOBILE_COVERAGE_DEM_SOURCE ?? "not-used-phase-1",
     mobileCoverageTerrainAware: parseBoolean(process.env.MOBILE_COVERAGE_TERRAIN_AWARE, false),
     mobileCoverageAntennaHeightM: parseInteger(process.env.MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M, 30),
+    mobileCoverageReadModelEnabled: parseBoolean(process.env.MOBILE_COVERAGE_READ_MODEL_ENABLED, true),
+    mobileCoverageReadModelTable: process.env.MOBILE_COVERAGE_READ_MODEL_TABLE ?? "public.mobile_coverage_cells",
+    mobileCoverageReadModelMaxAgeSeconds: parseInteger(process.env.MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS, 7 * 24 * 60 * 60),
     osmPostgisConnectionString: emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisBackend: parseOsmPostgisBackend(process.env.OSM_POSTGIS_BACKEND, process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisTable: process.env.OSM_POSTGIS_TABLE ?? "public.osm_poi",

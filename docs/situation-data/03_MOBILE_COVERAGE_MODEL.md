@@ -4,7 +4,7 @@
 
 SIM publishes `mobile_coverage` as a prepared diagnostic map layer for COM. COM displays and filters the layer only in technical/diagnostic contexts; it does not compute coverage, download DEM/terrain data, or query OSM directly.
 
-The current implementation is phase 2: a terrain-aware estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`, local Copernicus DEM GLO-30 tiles and a line-of-sight obstruction penalty. It is suitable for situational context and weak/no-coverage warnings, not for guaranteed operator service availability.
+The current implementation is phase 2+3 foundation: a terrain-aware estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`, local Copernicus DEM GLO-30 tiles and a line-of-sight obstruction penalty. Runtime API can also read prepared coverage cells from the PostGIS read-model table `public.mobile_coverage_cells`; if the table is not available or not populated for the requested area, SIM falls back to on-demand calculation.
 
 For production COM display, prefer the unified `mobile_network` layer from `mobile_network_model`. This document describes the lower-level coverage model that feeds that assessment and remains useful for diagnostics.
 
@@ -61,6 +61,8 @@ Feature properties include:
   "estimatedSignalDbm": -106,
   "confidence": 0.58,
   "modelVersion": "coverage-v2-terrain",
+  "sourceRevision": "model=coverage-v2-terrain|osmTable=public.osm_poi|dem=copernicus-glo30-cz|terrain=line-of-sight-v1|resolutionM=1000|antennaM=30",
+  "readModel": true,
   "generatedAt": "2026-05-21T00:00:00.000Z",
   "resolutionM": 1000,
   "demSource": "copernicus-glo30-cz",
@@ -94,6 +96,9 @@ MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain
 MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz
 MOBILE_COVERAGE_TERRAIN_AWARE=true
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
+MOBILE_COVERAGE_READ_MODEL_ENABLED=true
+MOBILE_COVERAGE_READ_MODEL_TABLE=public.mobile_coverage_cells
+MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -102,11 +107,13 @@ OSM_POSTGIS_TABLE=public.osm_poi
 ## Cache And Operations
 
 - Aggregated responses use the standard `situation-data` cache and bbox canonicalization.
-- The coverage source keeps a source-level cache keyed by canonical bbox, technology filter, operator filter, limit, resolution and model version.
+- The preferred production path is a prepared PostGIS read-model in `public.mobile_coverage_cells`. Runtime API first tries this table by bbox, technology, operator, model version and freshness.
+- If the read-model misses, the coverage source falls back to source-level cached on-demand calculation keyed by canonical bbox, technology filter, operator filter, resolution and model version.
 - When no technology filter is supplied, the provider defaults to `4G`, matching the public catalog default. Clients must explicitly request `2G` or `5G` when they want those diagnostics.
 - Coverage cells are aligned to a deterministic resolution ladder (`250`, `500`, `1000`, `2000`, `5000`, `10000`, `25000`, `50000` m) instead of being generated from the current viewport origin.
 - Default coverage TTL is 21600 seconds.
 - Health reports `mobile_coverage_model` as degraded when PostGIS is not configured or no tower references exist.
+- Health warns when the read-model table is unavailable or empty, but keeps the source usable through the on-demand fallback.
 - If `MOBILE_COVERAGE_TERRAIN_AWARE=true`, the source samples Copernicus DEM GLO-30 from the local cache and applies a line-of-sight terrain obstruction penalty. If DEM tiles are unavailable for a requested area, the response warns and falls back to the distance model for that area.
 - Metrics include `situation_data_mobile_coverage_towers` and per-source cache counters for `mobile_coverage_model`.
 
@@ -128,7 +135,14 @@ Phase 2 implemented:
 - line-of-sight/viewshed,
 - terrain obstruction confidence.
 
-Phase 3:
+Phase 3 foundation implemented:
+
+- `public.mobile_coverage_cells` PostGIS read-model schema,
+- API read path from prepared polygons,
+- rebuild command `pnpm --filter @csm-sim/situation-data-api rebuild:mobile-coverage`,
+- metadata columns for future BTS/operator status adjustment.
+
+Phase 3 RF model:
 
 - frequency band,
 - sector azimuth,
@@ -148,4 +162,6 @@ curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'mobile_coverage|mobile_coverage_model'
+
+docker compose run --rm situation-data-api pnpm --filter @csm-sim/situation-data-api rebuild:mobile-coverage
 ```
