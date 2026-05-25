@@ -99,6 +99,8 @@ Feature properties include:
   "estimatedSignalDbm": -98,
   "confidence": 0.62,
   "modelVersion": "mobile-network-v1",
+  "sourceRevision": "model=coverage-v2-terrain|osmTable=public.osm_poi|dem=copernicus-glo30-cz|terrain=line-of-sight-v1|resolutionM=1000|antennaM=30",
+  "readModel": true,
   "generatedAt": "2026-05-21T00:00:00.000Z",
   "resolutionM": 1000,
   "demSource": "copernicus-glo30-cz available; not applied by coverage-v1",

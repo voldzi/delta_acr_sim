@@ -847,6 +847,8 @@ export class MobileNetworkSource implements SituationDataSource {
         notices: ["Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora."],
         estimatedSignalDbm: estimateSignalFromCoverageAndMeasurements(coverage, stats),
         modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
+        sourceRevision: coverage.properties.sourceRevision,
+        readModel: coverage.properties.readModel === true,
         generatedAt,
         resolutionM: coverage.properties.resolutionM,
         demSource: coverage.properties.demSource,
@@ -869,13 +871,15 @@ export class MobileNetworkSource implements SituationDataSource {
           medianSignalDbm: stats.medianSignalDbm,
           measurementConfidence: stats.count > 0 ? stats.averageConfidence : undefined,
           finalConfidence: confidence,
-          distanceToNearestTowerM: coverage.properties.metrics?.distanceToNearestTowerM
+          distanceToNearestTowerM: coverage.properties.metrics?.distanceToNearestTowerM,
+          coverageReadModel: coverage.properties.readModel === true
         }),
         tags: compactTags({
           basis: basis.join(","),
           status,
           dataQuality,
           btsStatus: "operator_feed_unavailable",
+          coverageReadModel: coverage.properties.readModel === true ? "true" : undefined,
           lastMeasuredAt: stats.lastMeasuredAt,
           sourceCoverageFeatureId: coverage.properties.featureId
         }),
@@ -938,6 +942,7 @@ export class MobileNetworkSource implements SituationDataSource {
           "V oblasti nebyl dostupný model pokrytí, výsledek je založený jen na dostupných měřeních nebo je neznámý."
         ],
         modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
+        readModel: false,
         generatedAt,
         resolutionM: undefined,
         demSource: this.config.mobileCoverageDemSource,
@@ -1613,6 +1618,9 @@ function mobileNetworkConfidence(
 
 function mobileNetworkBasis(coverage: SituationFeature, stats: MeasurementStats): string[] {
   const basis = ["INFERRED_COVERAGE", "DISTANCE_PATH_LOSS_MODEL", "NO_OPERATOR_BTS_STATUS"];
+  if (coverage.properties.readModel === true) {
+    basis.unshift("PRECOMPUTED_COVERAGE_READ_MODEL");
+  }
   if (coverage.properties.metrics?.distanceToNearestTowerM !== undefined) {
     basis.splice(1, 0, "OSM_INFRASTRUCTURE_HINT");
   }
