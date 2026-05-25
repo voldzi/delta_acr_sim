@@ -1587,7 +1587,7 @@ function combineQuality(
   if (measurementCount >= 2 && qualityRank(measurementQualityValue) < qualityRank(coverageQuality)) {
     return measurementQualityValue;
   }
-  if (measurementCount >= 5 && qualityRank(measurementQualityValue) > qualityRank(coverageQuality)) {
+  if (measurementCount >= 3 && qualityRank(measurementQualityValue) > qualityRank(coverageQuality)) {
     return measurementQualityValue;
   }
   return coverageQuality;
