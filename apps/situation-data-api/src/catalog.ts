@@ -106,7 +106,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       cacheTtlSeconds: config.mobileNetworkCacheTtlSeconds,
       styleProfile: "mobile-network-quality-v1",
       sourceIds: ["mobile_network_model"],
-      technicalInputs: ["mobile_coverage_model", "ctu_nettest", "osm_postgis"],
+      technicalInputs: ["mobile_coverage_model", "ctu_nettest", "ctu_stationary_mobile", "osm_postgis"],
       filters: [
         {
           filterId: "technology",
@@ -125,7 +125,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
         confidenceExplanation: "Combines public measurements, inferred coverage and OSM infrastructure hints."
       },
       legal: {
-        attribution: "Czech Telecommunication Office / CTU-NetTest; OpenStreetMap contributors where tower hints are used",
+        attribution: "Czech Telecommunication Office / CTU-NetTest / ČTÚ open data; OpenStreetMap contributors where tower hints are used",
         notes: ["Modelový odhad, ne garantované pokrytí ani potvrzený výpadek operátora."]
       },
       supersedes: ["mobile", "mobile_coverage"]
@@ -197,6 +197,33 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       legal: {
         attribution: "Czech Telecommunication Office / CTU-NetTest",
         notes: ["Surová veřejná měření jsou technický vstup; běžné zobrazení má používat vrstvu Mobilní síť."]
+      },
+      replacedBy: "public.mobile.network"
+    },
+    {
+      providerLayerId: "mobile.ctu_stationary",
+      recommendedCatalogLayerId: "diagnostic.mobile.ctu_stationary_measurements",
+      label: "ČTÚ stacionární měření",
+      description: "Diagnostické body oficiálních stacionárních měření mobilního signálu ČTÚ 2G/4G po operátorech.",
+      categoryPath: ["diagnostic", "communications", "mobile"],
+      categories: ["network_stationary_measurement", "mobile"],
+      role: "diagnostic",
+      audience: "diagnostic",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point"],
+      minZoom: 8,
+      maxZoom: 18,
+      refreshSeconds: 86400,
+      cacheTtlSeconds: config.ctuStationaryMobileCacheTtlSeconds,
+      styleProfile: "ctu-stationary-mobile-measurements-v1",
+      sourceIds: ["ctu_stationary_mobile"],
+      query: query(["mobile"], ["ctu_stationary_mobile"]),
+      legend: { profile: "ctu-stationary-mobile-measurements-v1" },
+      legal: {
+        attribution: "Český telekomunikační úřad",
+        notes: ["Oficiální historická měření v terénu; běžné zobrazení má používat finální vrstvu Mobilní síť."]
       },
       replacedBy: "public.mobile.network"
     },
@@ -480,7 +507,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         visibleInDiagnostics: true,
         feedsLayerIds: ["mobile_network"],
         feedsCatalogLayerIds: ["public.mobile.network"],
-        technicalInputs: ["mobile_coverage_model", "ctu_nettest", "osm_postgis"],
+        technicalInputs: ["mobile_coverage_model", "ctu_nettest", "ctu_stationary_mobile", "osm_postgis"],
         usedByCatalogLayerIds: ["public.mobile.network"],
         notes: ["Final public mobile-network assessment. Prefer this over raw mobile inputs."]
       };
@@ -509,6 +536,19 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         usedByCatalogLayerIds: ["public.mobile.network"],
         replacedBy: "mobile_network_model",
         notes: ["Raw public measurements; do not show as a normal public mobile layer."]
+      };
+    case "ctu_stationary_mobile":
+      return {
+        sourceRole: "input",
+        audience: "diagnostic",
+        selectableInMap: false,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["mobile.ctu_stationary"],
+        feedsCatalogLayerIds: ["diagnostic.mobile.ctu_stationary_measurements"],
+        usedByLayerIds: ["mobile_network"],
+        usedByCatalogLayerIds: ["public.mobile.network"],
+        replacedBy: "mobile_network_model",
+        notes: ["Official historical stationary signal measurements; use as model input, not as current BTS state."]
       };
     case "osm_postgis":
       return {
@@ -591,6 +631,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.overpassCacheTtlSeconds;
     case "ctu_nettest":
       return 3600;
+    case "ctu_stationary_mobile":
+      return config.ctuStationaryMobileCacheTtlSeconds;
     case "pid_gtfs_rt":
       return 20;
     case "safety_data":
@@ -608,6 +650,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "ctu_nettest") {
     return "ctu-nettest";
+  }
+  if (sourceId === "ctu_stationary_mobile") {
+    return "ctu-stationary-mobile";
   }
   return undefined;
 }

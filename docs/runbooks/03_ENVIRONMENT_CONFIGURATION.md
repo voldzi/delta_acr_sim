@@ -213,7 +213,7 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -258,7 +258,7 @@ AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ARDOS partner pilot:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data,ardos_partner
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data,ardos_partner
 ARDOS_PARTNER_BASE_URL=https://ardos-partner.example.cz
 ARDOS_PARTNER_TOKEN=...
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
@@ -293,7 +293,7 @@ OVERPASS_MAX_BBOX_DEGREES=1.6
 Preferovaná produkční varianta pro OSM používá samostatnou databázi `sim_osm` v HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -310,7 +310,7 @@ scripts/import-osm-cz-postgis.sh
 Lokální Docker PostGIS může zůstat jen jako rebuildovatelný read-model/cache s explicitním silným heslem a URL:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
@@ -324,7 +324,7 @@ SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 
 Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COM provider features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
-`mobile_network_model` je hlavní COM vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, ČTÚ NetTest měření a infrastrukturní indicie do jednoho závěru `mobile_network`.
+`mobile_network_model` je hlavní COM vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, aktuální ČTÚ NetTest měření, oficiální historická stacionární měření ČTÚ `ctu_stationary_mobile` a infrastrukturní indicie do jednoho závěru `mobile_network`.
 
 `mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COM kontraktu.
 
@@ -374,7 +374,7 @@ CHMI_HYDRO_MAX_STATIONS=80
 Projekce do `situation-data`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 ```

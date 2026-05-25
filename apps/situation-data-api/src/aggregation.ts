@@ -133,6 +133,9 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "ctu_nettest") {
     return "mobile.ctu_nettest";
   }
+  if (sourceId === "ctu_stationary_mobile") {
+    return "mobile.ctu_stationary";
+  }
   if (sourceId === "pid_gtfs_rt") {
     return "traffic.pid_gtfs_rt";
   }
@@ -172,6 +175,8 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "diagnostic.mobile.coverage";
     case "mobile.ctu_nettest":
       return "diagnostic.mobile.ctu_measurements";
+    case "mobile.ctu_stationary":
+      return "diagnostic.mobile.ctu_stationary_measurements";
     case "mobile.osm_postgis.communications":
       return "reference.infrastructure.communications";
     case "ground.osm_postgis.healthcare":

@@ -33,6 +33,8 @@ export interface SituationDataConfig {
   overpassCacheTtlSeconds: number;
   overpassMaxBboxDegrees: number;
   ctuNettestUrl: string;
+  ctuStationaryMobileUrls: string[];
+  ctuStationaryMobileCacheTtlSeconds: number;
   pidGtfsRtVehiclePositionsUrl: string;
   safetyDataBaseUrl: string;
   safetyDataCacheTtlSeconds: number;
@@ -91,6 +93,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     overpassCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS, 21600),
     overpassMaxBboxDegrees: parseFloatOr(process.env.OVERPASS_MAX_BBOX_DEGREES, 1.6),
     ctuNettestUrl: process.env.CTU_NETTEST_URL ?? "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
+    ctuStationaryMobileUrls: parseStringList(process.env.CTU_STATIONARY_MOBILE_URLS, DEFAULT_CTU_STATIONARY_MOBILE_URLS),
+    ctuStationaryMobileCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CTU_STATIONARY_MOBILE_CACHE_TTL_SECONDS, 86400),
     pidGtfsRtVehiclePositionsUrl:
       process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
     safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030",
@@ -120,6 +124,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
+    "ctu_stationary_mobile",
     "pid_gtfs_rt",
     "safety_data",
     "aviation_weather",
@@ -131,6 +136,15 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     .filter((item): item is SituationDataSourceId => allowed.has(item as SituationDataSourceId));
   return parsed.length > 0 ? parsed : ["mock"];
 }
+
+const DEFAULT_CTU_STATIONARY_MOBILE_URLS = [
+  "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/4g_tm_stacionarni/4g_tm_stacionarni.zip",
+  "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/2g_tm_stacionarni/2g_tm_stacionarni.zip",
+  "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/4g_vf_stacionarni/4g_vf_stacionarni.zip",
+  "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/2g_vf_stacionarni/2g_vf_stacionarni.zip",
+  "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/4g_o2_stacionarni/4g_o2_stacionarni.zip",
+  "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/2g_o2_stacionarni/2g_o2_stacionarni.zip"
+];
 
 function parseBbox(value: string | undefined): BoundingBox | undefined {
   if (!value) {

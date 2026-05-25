@@ -60,4 +60,4 @@ Provider používá `sourceRole`, aby COM nemusel hardcodovat význam názvů:
 - `mock`: syntetická/testovací data.
 - `diagnostic`: pouze diagnostika.
 
-Příklad: běžná mobilní vrstva je `public.mobile.network` z provider layer `mobile_network` a source `mobile_network_model`. `mobile_coverage_model`, `ctu_nettest` a OSM komunikační věže jsou vstupy/provenance, ne tři další běžné vrstvy „Mobilní síť“.
+Příklad: běžná mobilní vrstva je `public.mobile.network` z provider layer `mobile_network` a source `mobile_network_model`. `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mobile` a OSM komunikační věže jsou vstupy/provenance, ne další běžné vrstvy „Mobilní síť“.

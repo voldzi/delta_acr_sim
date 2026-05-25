@@ -85,13 +85,26 @@ const CTU_NETTEST_LICENSE: SituationDataLicense = {
   ]
 };
 
-const MOBILE_NETWORK_LICENSE: SituationDataLicense = {
-  name: "Unified mobile network assessment",
-  attribution: "CSM SIM model; Czech Telecommunication Office / CTU-NetTest; OpenStreetMap contributors where tower hints are used",
+const CTU_STATIONARY_MOBILE_LICENSE: SituationDataLicense = {
+  name: "ČTÚ open data",
+  url: "https://data.ctu.gov.cz/tags/mobilni-site",
+  attribution: "Český telekomunikační úřad",
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "Unified assessment from public measurements, modelled coverage and infrastructure hints.",
+    "Official stationary 2G/4G mobile signal measurements published through the Czech open-data catalog.",
+    "Dataset distributions declare no copyright work, no protected database right and no personal data.",
+    "Measurements are historical reference observations; they do not confirm current BTS/NOC operational state."
+  ]
+};
+
+const MOBILE_NETWORK_LICENSE: SituationDataLicense = {
+  name: "Unified mobile network assessment",
+  attribution: "CSM SIM model; Czech Telecommunication Office / CTU-NetTest / ČTÚ open data; OpenStreetMap contributors where tower hints are used",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Unified assessment from public measurements, official stationary signal measurements, modelled coverage and infrastructure hints.",
     "Not a real-time BTS or operator NOC status feed.",
     "Do not present inferred status as confirmed outage of a concrete BTS."
   ]
@@ -157,6 +170,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     osm_postgis: new OsmPostgisSource(config),
     osm_overpass: new OsmOverpassSource(config),
     ctu_nettest: new CtuNettestSource(config),
+    ctu_stationary_mobile: new CtuStationaryMobileSource(config),
     pid_gtfs_rt: new PidGtfsRtSource(config),
     safety_data: new SafetyDataProjectionSource(config),
     aviation_weather: new AviationWeatherSource(config),
@@ -176,6 +190,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new OsmPostgisSource(config).descriptor,
     new OsmOverpassSource(config).descriptor,
     new CtuNettestSource(config).descriptor,
+    new CtuStationaryMobileSource(config).descriptor,
     new PidGtfsRtSource(config).descriptor,
     new SafetyDataProjectionSource(config).descriptor,
     new AviationWeatherSource(config).descriptor,
@@ -191,6 +206,7 @@ function cacheStatsFor<T>(sourceId: SituationDataSourceId, cache: ManagedRespons
 }
 
 const ctuNettestRecordsCaches = new Map<string, ManagedResponseCache<Array<Record<string, string>>>>();
+const ctuStationaryMobileRecordsCaches = new Map<string, ManagedResponseCache<CtuStationaryMobileRecord[]>>();
 
 function ctuNettestRecordsCache(config: SituationDataConfig): ManagedResponseCache<Array<Record<string, string>>> {
   const key = `${config.ctuNettestUrl}:${config.requestTimeoutMs}`;
@@ -204,6 +220,21 @@ function ctuNettestRecordsCache(config: SituationDataConfig): ManagedResponseCac
     maxEntries: 1
   });
   ctuNettestRecordsCaches.set(key, cache);
+  return cache;
+}
+
+function ctuStationaryMobileRecordsCache(config: SituationDataConfig): ManagedResponseCache<CtuStationaryMobileRecord[]> {
+  const key = `${config.ctuStationaryMobileUrls.join("|")}:${config.requestTimeoutMs}:${config.ctuStationaryMobileCacheTtlSeconds}`;
+  const existing = ctuStationaryMobileRecordsCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<CtuStationaryMobileRecord[]>({
+    ttlMs: Math.max(3600, config.ctuStationaryMobileCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.ctuStationaryMobileCacheTtlSeconds, config.staleIfErrorSeconds, 7 * 24 * 60 * 60) * 1000,
+    maxEntries: 1
+  });
+  ctuStationaryMobileRecordsCaches.set(key, cache);
   return cache;
 }
 
@@ -465,6 +496,92 @@ class CtuNettestSource implements SituationDataSource {
   }
 }
 
+interface CtuStationaryMobileRecord {
+  record: Record<string, string>;
+  operator: "O2" | "T-Mobile" | "Vodafone" | "unknown";
+  technology: MobileCoverageTechnology;
+  datasetUrl: string;
+}
+
+class CtuStationaryMobileSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly recordsCache: ManagedResponseCache<CtuStationaryMobileRecord[]>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.recordsCache = ctuStationaryMobileRecordsCache(config);
+    this.descriptor = {
+      sourceId: "ctu_stationary_mobile",
+      label: "CTU stationary mobile signal measurements",
+      enabled: config.enabledSources.includes("ctu_stationary_mobile"),
+      mode: "reference",
+      priority: 63,
+      layers: ["mobile"],
+      license: CTU_STATIONARY_MOBILE_LICENSE,
+      baseUrl: "https://ctu.gov.cz",
+      updateCadenceSeconds: config.ctuStationaryMobileCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("ctu_stationary_mobile", this.recordsCache)];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    try {
+      const records = await this.recordsCache.getOrLoad("ctu_stationary_mobile_records", () => fetchCtuStationaryMobileRecords(this.config));
+      const lastImportAt = latestCtuStationaryMeasurementAt(records);
+      const lastImportAgeSeconds = lastImportAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastImportAt)) / 1000)) : undefined;
+      const warnings: string[] = [];
+      if (records.length === 0) {
+        warnings.push("ctu_stationary_mobile did not return measurements.");
+      }
+      warnings.push("ctu_stationary_mobile contains official historical measurements, not current BTS/NOC state.");
+      return {
+        sourceId: "ctu_stationary_mobile",
+        status: records.length > 0 ? "ok" : "degraded",
+        backend: "ctu-stationary-mobile",
+        objectCount: records.length,
+        lastImportAt,
+        lastImportAgeSeconds,
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: "ctu_stationary_mobile",
+        status: "degraded",
+        backend: "ctu-stationary-mobile",
+        warnings: [error instanceof Error ? error.message : "Unknown ctu_stationary_mobile health check failure."]
+      };
+    }
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("mobile")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const records = await this.recordsCache.getOrLoad("ctu_stationary_mobile_records", () => fetchCtuStationaryMobileRecords(this.config));
+    const features: SituationFeature[] = [];
+    for (const item of records) {
+      if (features.length >= query.limit) {
+        break;
+      }
+      const feature = mapCtuStationaryMobileRecord(item, query, fetchedAt);
+      if (feature) {
+        features.push(feature);
+      }
+    }
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features,
+      warnings: ["ctu_stationary_mobile is a historical reference measurement source; it is not a confirmed current BTS status feed."]
+    };
+  }
+}
+
 interface MobileNetworkPayload {
   generatedAt: string;
   features: SituationFeature[];
@@ -475,6 +592,8 @@ interface MobileNetworkPayload {
 
 interface MeasurementStats {
   count: number;
+  ctuNettestCount: number;
+  ctuStationaryCount: number;
   medianDownloadMbps?: number;
   medianUploadMbps?: number;
   medianLatencyMs?: number;
@@ -490,6 +609,7 @@ export class MobileNetworkSource implements SituationDataSource {
   private readonly payloadCache: ManagedResponseCache<MobileNetworkPayload>;
   private readonly coverageSource: MobileCoverageSource;
   private readonly ctuNettestSource: CtuNettestSource;
+  private readonly ctuStationaryMobileSource: CtuStationaryMobileSource;
 
   constructor(private readonly config: SituationDataConfig) {
     this.payloadCache = new ManagedResponseCache<MobileNetworkPayload>({
@@ -499,6 +619,7 @@ export class MobileNetworkSource implements SituationDataSource {
     });
     this.coverageSource = new MobileCoverageSource(config);
     this.ctuNettestSource = new CtuNettestSource(config);
+    this.ctuStationaryMobileSource = new CtuStationaryMobileSource(config);
     this.descriptor = {
       sourceId: "mobile_network_model",
       label: "Unified mobile network assessment",
@@ -517,10 +638,15 @@ export class MobileNetworkSource implements SituationDataSource {
   }
 
   async healthStatus(): Promise<SourceHealthStatus> {
-    const [coverageHealth, ctuHealth] = await Promise.all([this.coverageSource.healthStatus?.(), this.ctuNettestSource.healthStatus?.()]);
+    const [coverageHealth, ctuHealth, ctuStationaryHealth] = await Promise.all([
+      this.coverageSource.healthStatus?.(),
+      this.ctuNettestSource.healthStatus?.(),
+      this.config.enabledSources.includes("ctu_stationary_mobile") ? this.ctuStationaryMobileSource.healthStatus?.() : undefined
+    ]);
     const warnings = [
       ...(coverageHealth?.warnings ?? ["mobile_network_model could not inspect mobile_coverage_model health."]),
       ...(ctuHealth?.warnings ?? ["mobile_network_model could not inspect ctu_nettest health."]),
+      ...(ctuStationaryHealth?.warnings ?? []),
       "mobile_network_model has no authorized real-time BTS/NOC status feed."
     ];
     return {
@@ -599,11 +725,27 @@ export class MobileNetworkSource implements SituationDataSource {
       limit: 1000,
       includeRaw: false
     };
+    const stationaryMeasurementQuery: SituationQuery = {
+      bbox,
+      layers: ["mobile"],
+      sourceIds: ["ctu_stationary_mobile"],
+      limit: 1000,
+      includeRaw: false
+    };
 
-    const [coverageSettled, measurementSettled] = await Promise.allSettled([
+    const sourcePromises = [
       this.coverageSource.fetchFeatures(coverageQuery),
-      this.ctuNettestSource.fetchFeatures(measurementQuery)
-    ]);
+      this.ctuNettestSource.fetchFeatures(measurementQuery),
+      this.config.enabledSources.includes("ctu_stationary_mobile")
+        ? this.ctuStationaryMobileSource.fetchFeatures(stationaryMeasurementQuery)
+        : Promise.resolve(undefined)
+    ] as const;
+
+    const [coverageSettled, measurementSettled, stationaryMeasurementSettled] = (await Promise.allSettled(sourcePromises)) as [
+      PromiseSettledResult<SourceFetchResult>,
+      PromiseSettledResult<SourceFetchResult>,
+      PromiseSettledResult<SourceFetchResult | undefined>
+    ];
 
     const coverageFeatures =
       coverageSettled.status === "fulfilled"
@@ -625,14 +767,31 @@ export class MobileNetworkSource implements SituationDataSource {
       warnings.push(measurementSettled.reason instanceof Error ? `ctu_nettest: ${measurementSettled.reason.message}` : "ctu_nettest: unknown failure");
     }
 
+    const stationaryMeasurements =
+      stationaryMeasurementSettled.status === "fulfilled" && stationaryMeasurementSettled.value
+        ? stationaryMeasurementSettled.value.features.filter((feature) => feature.geometry.type === "Point")
+        : [];
+    if (stationaryMeasurementSettled.status === "fulfilled" && stationaryMeasurementSettled.value) {
+      warnings.push(...stationaryMeasurementSettled.value.warnings.map((warning) => `ctu_stationary_mobile: ${warning}`));
+    } else if (stationaryMeasurementSettled.status === "rejected") {
+      warnings.push(
+        stationaryMeasurementSettled.reason instanceof Error
+          ? `ctu_stationary_mobile: ${stationaryMeasurementSettled.reason.message}`
+          : "ctu_stationary_mobile: unknown failure"
+      );
+    }
+
     const selectedCoverage = selectCoverageFeatures(coverageFeatures, technologies);
+    const combinedMeasurements = [...measurements, ...stationaryMeasurements];
     const features =
       selectedCoverage.length > 0
-        ? selectedCoverage.map((coverage) => this.mobileNetworkFeatureFromCoverage(coverage, measurementsInPolygon(measurements, coverage), generatedAt))
-        : [this.mobileNetworkFallbackFeature(bbox, measurements, generatedAt)];
+        ? selectedCoverage.map((coverage) =>
+            this.mobileNetworkFeatureFromCoverage(coverage, measurementsInPolygon(combinedMeasurements, coverage), generatedAt)
+          )
+        : [this.mobileNetworkFallbackFeature(bbox, combinedMeasurements, generatedAt)];
 
-    if (measurements.length === 0) {
-      warnings.push("mobile_network_model has no CTU NetTest measurements in the requested area; assessment is model-only.");
+    if (combinedMeasurements.length === 0) {
+      warnings.push("mobile_network_model has no CTU public measurements in the requested area; assessment is model-only.");
     }
     warnings.push("mobile_network_model does not contain authorized real-time BTS/NOC status; area status is inferred.");
 
@@ -641,7 +800,7 @@ export class MobileNetworkSource implements SituationDataSource {
       features,
       warnings,
       coverageFeatureCount: coverageFeatures.length,
-      measurementCount: measurements.length
+      measurementCount: combinedMeasurements.length
     };
   }
 
@@ -702,6 +861,8 @@ export class MobileNetworkSource implements SituationDataSource {
           coverageConfidence: coverage.properties.confidence,
           coverageQuality,
           measurementCount: stats.count,
+          ctuNettestMeasurementCount: stats.ctuNettestCount,
+          ctuStationaryMeasurementCount: stats.ctuStationaryCount,
           medianDownloadMbps: stats.medianDownloadMbps,
           medianUploadMbps: stats.medianUploadMbps,
           medianLatencyMs: stats.medianLatencyMs,
@@ -766,7 +927,7 @@ export class MobileNetworkSource implements SituationDataSource {
         technology: "mixed",
         quality,
         status,
-        basis: stats.count > 0 ? ["CTU_NETTEST_MEASUREMENT", "NO_OPERATOR_BTS_STATUS"] : ["UNKNOWN", "NO_OPERATOR_BTS_STATUS"],
+        basis: mobileNetworkFallbackBasis(stats),
         summary: mobileNetworkSummary(quality, status, stats),
         dataQuality,
         btsStatus: "operator_feed_unavailable",
@@ -788,6 +949,8 @@ export class MobileNetworkSource implements SituationDataSource {
         disclaimer: "Mobile network quality is an inferred area assessment, not a confirmed BTS or operator outage state.",
         metrics: compactMixedMetrics({
           measurementCount: stats.count,
+          ctuNettestMeasurementCount: stats.ctuNettestCount,
+          ctuStationaryMeasurementCount: stats.ctuStationaryCount,
           medianDownloadMbps: stats.medianDownloadMbps,
           medianUploadMbps: stats.medianUploadMbps,
           medianLatencyMs: stats.medianLatencyMs,
@@ -1261,6 +1424,63 @@ function mapCtuNettestRecord(record: Record<string, string>, query: SituationQue
   });
 }
 
+function mapCtuStationaryMobileRecord(item: CtuStationaryMobileRecord, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+  const record = item.record;
+  const lat = optionalNumber(record.y);
+  const lon = optionalNumber(record.x);
+  if (lat === undefined || lon === undefined || !isPointInBbox(lon, lat, query.bbox)) {
+    return undefined;
+  }
+
+  const observedAt = parseCtuStationaryObservedAt(record) ?? fetchedAt;
+  const rsrpAvg = optionalNumber(record.rsrp_avg);
+  const sinrAvg = optionalNumber(record.sinr_avg);
+  const downloadMbps = kbpsToMbps(optionalNumber(record.dl_speed_avg));
+  const measurementId = stableToken(`${item.operator}:${item.technology}:${record.date}:${record.time_start}:${record.cell_id}:${record.pci}:${lon}:${lat}`);
+
+  return makePointFeature({
+    id: `mobile:ctu_stationary:${item.technology.toLowerCase()}:${stableToken(item.operator)}:${measurementId}`,
+    lon,
+    lat,
+    layer: "mobile",
+    category: "network_stationary_measurement",
+    label: `ČTÚ ${item.technology} ${item.operator} stationary signal`,
+    sourceId: "ctu_stationary_mobile",
+    license: CTU_STATIONARY_MOBILE_LICENSE,
+    observedAt,
+    confidence: ctuStationaryMobileConfidence(rsrpAvg, downloadMbps),
+    severity: mobileNetworkSeverity(downloadMbps, undefined, undefined, rsrpAvg, false),
+    metrics: compactMixedMetrics({
+      frequencyMhz: optionalNumber(record.freq),
+      frequencyBandMhz: optionalNumber(record.freq_band),
+      bandwidthMhz: optionalNumber(record.band_width),
+      lteRsrpDbm: rsrpAvg,
+      lteRsrpMinDbm: optionalNumber(record.rsrp_min),
+      lteRsrpMaxDbm: optionalNumber(record.rsrp_max),
+      sinrDb: sinrAvg,
+      sinrMinDb: optionalNumber(record.sinr_min),
+      sinrMaxDb: optionalNumber(record.sinr_max),
+      downloadMbps,
+      downloadMinMbps: kbpsToMbps(optionalNumber(record.dl_speed_min)),
+      downloadP50Mbps: kbpsToMbps(optionalNumber(record.dl_speed_p50)),
+      downloadMaxMbps: kbpsToMbps(optionalNumber(record.dl_speed_max)),
+      cellId: optionalString(record.cell_id),
+      pci: optionalNumber(record.pci),
+      earfcn: optionalNumber(record.earfcn)
+    }),
+    tags: compactTags({
+      operator: item.operator,
+      technology: item.technology,
+      location: optionalString(record.location),
+      sourceKind: "official_stationary_measurement",
+      measurementAge: "historical",
+      btsStatus: "not_operator_status",
+      datasetUrl: item.datasetUrl
+    }),
+    raw: query.includeRaw ? record : undefined
+  });
+}
+
 function selectCoverageFeatures(features: SituationFeature[], technologies: MobileCoverageTechnology[] | undefined): SituationFeature[] {
   if (technologies?.length === 1) {
     return features.filter((feature) => feature.properties.technology === technologies[0]);
@@ -1322,6 +1542,8 @@ function summarizeMeasurements(measurements: SituationFeature[]): MeasurementSta
   const severity = mobileNetworkSeverity(medianDownloadMbps, medianUploadMbps, medianLatencyMs, medianSignalDbm, false);
   return {
     count: measurements.length,
+    ctuNettestCount: measurements.filter((feature) => feature.properties.sourceId === "ctu_nettest").length,
+    ctuStationaryCount: measurements.filter((feature) => feature.properties.sourceId === "ctu_stationary_mobile").length,
     medianDownloadMbps,
     medianUploadMbps,
     medianLatencyMs,
@@ -1394,10 +1616,24 @@ function mobileNetworkBasis(coverage: SituationFeature, stats: MeasurementStats)
   if (coverage.properties.metrics?.distanceToNearestTowerM !== undefined) {
     basis.splice(1, 0, "OSM_INFRASTRUCTURE_HINT");
   }
-  if (stats.count > 0) {
+  if (stats.ctuNettestCount > 0) {
     basis.splice(0, 0, "CTU_NETTEST_MEASUREMENT");
   }
+  if (stats.ctuStationaryCount > 0) {
+    basis.splice(0, 0, "CTU_STATIONARY_SIGNAL_MEASUREMENT");
+  }
   return basis;
+}
+
+function mobileNetworkFallbackBasis(stats: MeasurementStats): string[] {
+  const basis = ["NO_OPERATOR_BTS_STATUS"];
+  if (stats.ctuStationaryCount > 0) {
+    basis.unshift("CTU_STATIONARY_SIGNAL_MEASUREMENT");
+  }
+  if (stats.ctuNettestCount > 0) {
+    basis.unshift("CTU_NETTEST_MEASUREMENT");
+  }
+  return basis.length > 1 ? basis : ["UNKNOWN", "NO_OPERATOR_BTS_STATUS"];
 }
 
 function mobileNetworkDataQuality(measurementCount: number, coverageQuality: MobileCoverageQuality): "observed" | "modelled" | "mixed" | "unknown" {
@@ -1467,8 +1703,10 @@ function mobileNetworkSummary(quality: MobileCoverageQuality, status: MobileNetw
   };
   const measurementText =
     stats.count > 0
-      ? ` Závěr je zpřesněn ${stats.count} veřejnými měřeními ČTÚ NetTest${stats.medianDownloadMbps ? `, medián downloadu ${stats.medianDownloadMbps} Mb/s` : ""}.`
-      : " V oblasti nejsou v cache dostupná aktuální veřejná měření ČTÚ NetTest.";
+      ? ` Závěr je zpřesněn veřejnými měřeními ČTÚ (${stats.ctuNettestCount} NetTest, ${stats.ctuStationaryCount} stacionární)${
+          stats.medianDownloadMbps ? `, medián downloadu ${stats.medianDownloadMbps} Mb/s` : ""
+        }.`
+      : " V oblasti nejsou v cache dostupná veřejná měření ČTÚ.";
   return `Mobilní síť je v oblasti hodnocena jako ${qualityText[quality]} (${statusText[status]}).${measurementText}`;
 }
 
@@ -2028,6 +2266,42 @@ async function fetchCtuNettestRecords(config: SituationDataConfig): Promise<Arra
   return parseCsvRecords(new TextDecoder().decode(csvFile));
 }
 
+async function fetchCtuStationaryMobileRecords(config: SituationDataConfig): Promise<CtuStationaryMobileRecord[]> {
+  const urls = config.ctuStationaryMobileUrls;
+  if (urls.length === 0) {
+    return [];
+  }
+  const settled = await Promise.allSettled(urls.map((url) => fetchCtuStationaryMobileDataset(url, config.requestTimeoutMs)));
+  const records = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  if (records.length === 0) {
+    const errors = settled
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => (result.reason instanceof Error ? result.reason.message : "unknown failure"));
+    throw new Error(`ctu_stationary_mobile did not load any dataset${errors.length ? `: ${errors.join("; ")}` : "."}`);
+  }
+  return records;
+}
+
+async function fetchCtuStationaryMobileDataset(url: string, timeoutMs: number): Promise<CtuStationaryMobileRecord[]> {
+  const metadata = ctuStationaryMetadataFromUrl(url);
+  const archive = await requestBytes(url, timeoutMs);
+  const files = unzipSync(archive);
+  const csvName = Object.keys(files).find((name) => name.toLowerCase().endsWith(".csv"));
+  if (!csvName) {
+    throw new Error(`ctu_stationary_mobile archive did not contain a CSV file: ${url}`);
+  }
+  const csvFile = files[csvName];
+  if (!csvFile) {
+    throw new Error(`ctu_stationary_mobile CSV file was empty: ${url}`);
+  }
+  return parseCsvRecords(new TextDecoder().decode(csvFile)).map((record) => ({
+    record,
+    datasetUrl: url,
+    operator: metadata.operator,
+    technology: metadata.technology
+  }));
+}
+
 async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise<transit_realtime.FeedMessage> {
   const payload = await requestBytes(config.pidGtfsRtVehiclePositionsUrl, config.requestTimeoutMs, {
     accept: "application/x-protobuf,application/octet-stream"
@@ -2316,8 +2590,37 @@ function latestCtuMeasurementAt(records: Array<Record<string, string>>): string 
     .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
 }
 
+function latestCtuStationaryMeasurementAt(records: CtuStationaryMobileRecord[]): string | undefined {
+  return records
+    .map((item) => parseCtuStationaryObservedAt(item.record))
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+}
+
+function parseCtuStationaryObservedAt(record: Record<string, string>): string | undefined {
+  const date = optionalString(record.date);
+  if (!date) {
+    return undefined;
+  }
+  const time = optionalString(record.time_start) ?? "00:00:00";
+  return parseUtcTimestamp(`${date} ${time}`);
+}
+
 function ctuAccessTechnology(record: Record<string, string>): string {
   return optionalString(record.cat_technology) ?? optionalString(record.network_type) ?? "mobile";
+}
+
+function ctuStationaryMetadataFromUrl(url: string): Pick<CtuStationaryMobileRecord, "operator" | "technology"> {
+  const normalized = url.toLowerCase();
+  const technology: MobileCoverageTechnology = normalized.includes("/2g_") || normalized.includes("2g_") ? "2G" : "4G";
+  const operator = normalized.includes("_tm_")
+    ? "T-Mobile"
+    : normalized.includes("_vf_")
+      ? "Vodafone"
+      : normalized.includes("_o2_")
+        ? "O2"
+        : "unknown";
+  return { operator, technology };
 }
 
 function mobileNetworkSeverity(
@@ -2355,6 +2658,17 @@ function ctuNettestConfidence(locationAccuracyM: number | undefined, implausible
     confidence -= 0.1;
   }
   return clamp(confidence, 0.2, 0.88);
+}
+
+function ctuStationaryMobileConfidence(signalDbm: number | undefined, downloadMbps: number | undefined): number {
+  let confidence = 0.68;
+  if (signalDbm === undefined) {
+    confidence -= 0.16;
+  }
+  if (downloadMbps === undefined) {
+    confidence -= 0.08;
+  }
+  return clamp(confidence, 0.35, 0.68);
 }
 
 function pidVehicleMode(

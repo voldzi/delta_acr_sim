@@ -70,7 +70,7 @@ LOCAL_ADSB_AIRCRAFT_JSON_URLS=
 OURAIRPORTS_ENABLED=true
 OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU
 OURAIRPORTS_CACHE_TTL_SECONDS=86400
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -194,7 +194,7 @@ scripts/import-osm-cz-postgis.sh
 Poté uprav `.env`. Pokud chceš zároveň publikovat sjednocenou mobilní vrstvu nad importovanými OSM věžemi, zapni `mobile_coverage_model` i `mobile_network_model`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -268,13 +268,14 @@ http://docker.home.cz:5020
 - OurAirports import je zapnutý pro letiště v ČR a okolí: `OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU`.
 - Flight Data API používá server-side cache s in-flight deduplikací: `FLIGHT_DATA_CACHE_TTL_SECONDS=10`, `FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60`, `FLIGHT_DATA_CACHE_MAX_ENTRIES=512`.
 - Pro offline test nastav `FLIGHT_DATA_ENABLED_SOURCES=mock`.
-- Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data`.
+- Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data`.
 - Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800`, `SITUATION_DATA_CACHE_MAX_ENTRIES=10000`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
 - `osm_postgis` je produkční OSM zdroj nad Patroni/PostGIS nebo lokálním rebuildovatelným PostGIS read-modelem; `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci.
-- `mobile_network_model` publikuje hlavní občanskou mobilní vrstvu `mobile_network`; kombinuje modelované coverage, ČTÚ NetTest měření a dostupné infrastrukturní indicie do jednoho závěru.
+- `mobile_network_model` publikuje hlavní občanskou mobilní vrstvu `mobile_network`; kombinuje modelované coverage, ČTÚ NetTest měření, oficiální historická stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru.
 - `mobile_coverage_model` publikuje nižší modelovou polygonovou vrstvu `mobile_coverage` nad OSM `communications_tower` referencemi. Zapínej ji jen s nakonfigurovaným `OSM_POSTGIS_DATABASE_URL`; výstup je modelový odhad, ne garantované pokrytí operátora.
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.
+- `ctu_stationary_mobile` stahuje oficiální ZIP balíčky ČTÚ se stacionárním měřením 2G/4G po operátorech. Jde o historická měření v terénu, ne o potvrzený aktuální stav BTS.
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.
 - `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.

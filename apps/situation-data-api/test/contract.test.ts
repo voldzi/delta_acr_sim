@@ -46,6 +46,10 @@ describe("Situation Data API contract", () => {
       overpassCacheTtlSeconds: 21600,
       overpassMaxBboxDegrees: 1.6,
       ctuNettestUrl: "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
+      ctuStationaryMobileUrls: [
+        "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/4g_o2_stacionarni/4g_o2_stacionarni.zip"
+      ],
+      ctuStationaryMobileCacheTtlSeconds: 86400,
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
       safetyDataBaseUrl: "http://127.0.0.1:4030",
       safetyDataCacheTtlSeconds: 300,
@@ -163,7 +167,7 @@ describe("Situation Data API contract", () => {
           selectable: true,
           styleProfile: "mobile-network-quality-v1",
           sourceIds: ["mobile_network_model"],
-          technicalInputs: expect.arrayContaining(["mobile_coverage_model", "ctu_nettest", "osm_postgis"]),
+          technicalInputs: expect.arrayContaining(["mobile_coverage_model", "ctu_nettest", "ctu_stationary_mobile", "osm_postgis"]),
           model: expect.objectContaining({
             modelVersion: "coverage-v1+mobile-network-v1",
             terrainAware: false,
@@ -215,6 +219,14 @@ describe("Situation Data API contract", () => {
           sourceIds: expect.any(Array),
           refreshSeconds: expect.any(Number),
           cacheTtlSeconds: expect.any(Number)
+        }),
+        expect.objectContaining({
+          providerLayerId: "mobile.ctu_stationary",
+          recommendedCatalogLayerId: "diagnostic.mobile.ctu_stationary_measurements",
+          role: "diagnostic",
+          audience: "diagnostic",
+          sourceIds: expect.arrayContaining(["ctu_stationary_mobile"]),
+          replacedBy: "public.mobile.network"
         })
       );
     }
@@ -228,7 +240,7 @@ describe("Situation Data API contract", () => {
           selectableInMap: true,
           visibleInDiagnostics: true,
           feedsLayerIds: ["mobile_network"],
-          technicalInputs: expect.arrayContaining(["mobile_coverage_model", "ctu_nettest", "osm_postgis"]),
+          technicalInputs: expect.arrayContaining(["mobile_coverage_model", "ctu_nettest", "ctu_stationary_mobile", "osm_postgis"]),
           feedsCatalogLayerIds: ["public.mobile.network"]
         }),
         expect.objectContaining({
@@ -249,6 +261,17 @@ describe("Situation Data API contract", () => {
           selectableInMap: false,
           visibleInDiagnostics: true,
           feedsLayerIds: ["mobile.ctu_nettest"],
+          usedByLayerIds: ["mobile_network"],
+          usedByCatalogLayerIds: ["public.mobile.network"],
+          replacedBy: "mobile_network_model"
+        }),
+        expect.objectContaining({
+          sourceId: "ctu_stationary_mobile",
+          sourceRole: "input",
+          audience: "diagnostic",
+          selectableInMap: false,
+          visibleInDiagnostics: true,
+          feedsLayerIds: ["mobile.ctu_stationary"],
           usedByLayerIds: ["mobile_network"],
           usedByCatalogLayerIds: ["public.mobile.network"],
           replacedBy: "mobile_network_model"
@@ -295,6 +318,7 @@ describe("Situation Data API contract", () => {
           mobileCoverage: 21600,
           osmPostgis: 21600,
           osmOverpass: 21600,
+          ctuStationaryMobile: 86400,
           safetyData: 300,
           aviationWeather: 600,
           ardosPartner: 15
@@ -306,6 +330,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "mobile_network_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
+          expect.objectContaining({ sourceId: "ctu_stationary_mobile", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
           expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
           expect.objectContaining({ sourceId: "aviation_weather", authConfigured: true }),
@@ -331,6 +356,7 @@ describe("Situation Data API contract", () => {
         "osm_postgis",
         "osm_overpass",
         "ctu_nettest",
+        "ctu_stationary_mobile",
         "pid_gtfs_rt",
         "safety_data",
         "aviation_weather",
@@ -352,6 +378,9 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_stale_hits{source="ctu_nettest"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="ctu_nettest",backend="ctu-nettest"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_ctu_nettest_backend_info{backend="ctu-nettest"} 1');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="ctu_stationary_mobile"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="ctu_stationary_mobile",backend="ctu-stationary-mobile"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_ctu_stationary_mobile_backend_info{backend="ctu-stationary-mobile"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');

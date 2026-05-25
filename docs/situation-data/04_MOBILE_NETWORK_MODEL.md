@@ -23,6 +23,7 @@ The current implementation combines:
 
 - `mobile_coverage_model`: modelled polygon coverage from imported OSM `communications_tower` references,
 - `ctu_nettest`: public ČTÚ NetTest measurements inside the polygon,
+- `ctu_stationary_mobile`: official ČTÚ stationary 2G/4G mobile signal measurements by operator, used as historical reference evidence,
 - OSM infrastructure hints through the coverage model,
 - model metadata and disclaimers.
 
@@ -48,7 +49,7 @@ Provider map catalog:
 GET /situation-data/api/v1/catalog
 ```
 
-COM should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest` and OSM communication towers are marked as diagnostic/reference inputs.
+COM should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mobile` and OSM communication towers are marked as diagnostic/reference inputs.
 
 The `reference.infrastructure.communications` layer contains OSM communication towers only as reference infrastructure. Features from that layer carry `btsStatus: "unknown"` and `operatorStatusAvailable: false`; COM must not color them as confirmed healthy BTS sites.
 
@@ -107,7 +108,7 @@ Feature properties include:
 ## Configuration
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
@@ -131,9 +132,9 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - Default source TTL is 3600 seconds.
 - External inputs are not queried per COM user when a cached area assessment exists.
 - Health reports `mobile_network_model` as degraded when dependent model/input sources cannot produce an assessment.
-- Health also reports `ctu_nettest` freshness and measurement count when that source is enabled.
+- Health also reports `ctu_nettest` and `ctu_stationary_mobile` freshness and measurement counts when those sources are enabled.
 - Metrics include `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`,
-  `situation_data_ctu_nettest_measurements`, `situation_data_ctu_nettest_latest_measurement_age_seconds`
+  `situation_data_ctu_nettest_measurements`, `situation_data_ctu_stationary_mobile_measurements`
   and per-source cache counters for `mobile_network_model`.
 
 ## COM Interpretation

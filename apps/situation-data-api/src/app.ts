@@ -242,6 +242,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "osm_postgis",
     "osm_overpass",
     "ctu_nettest",
+    "ctu_stationary_mobile",
     "pid_gtfs_rt",
     "safety_data",
     "aviation_weather",
@@ -319,6 +320,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       mobileCoverage: config.mobileCoverageCacheTtlSeconds,
       osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
+      ctuStationaryMobile: config.ctuStationaryMobileCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,
       aviationWeather: config.aviationWeatherCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds
@@ -346,6 +348,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       },
       { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
+      { sourceId: "ctu_stationary_mobile", baseUrl: "https://ctu.gov.cz", authConfigured: config.ctuStationaryMobileUrls.length > 0 },
       { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
       { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true },
       { sourceId: "aviation_weather", baseUrl: config.aviationWeatherBaseUrl, authConfigured: true },
@@ -392,6 +395,18 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     }
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_ctu_nettest_latest_measurement_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+  }
+  if (status.sourceId === "ctu_stationary_mobile") {
+    lines.push(`situation_data_ctu_stationary_mobile_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_ctu_stationary_mobile_measurements{backend="${backend}"} ${status.objectCount}`);
+    }
+    if (status.lastImportAt) {
+      lines.push(`situation_data_ctu_stationary_mobile_latest_measurement_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+    }
+    if (typeof status.lastImportAgeSeconds === "number") {
+      lines.push(`situation_data_ctu_stationary_mobile_latest_measurement_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
     }
   }
   return lines;

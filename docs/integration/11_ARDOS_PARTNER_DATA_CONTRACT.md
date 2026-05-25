@@ -80,7 +80,7 @@ Preferovaný model je pseudonymní identifikátor týmu nebo role a časově ome
 ## Konfigurace v SIM
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,pid_gtfs_rt,safety_data,ardos_partner
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data,ardos_partner
 ARDOS_PARTNER_BASE_URL=https://ardos-partner.example.cz
 ARDOS_PARTNER_TOKEN=...
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15

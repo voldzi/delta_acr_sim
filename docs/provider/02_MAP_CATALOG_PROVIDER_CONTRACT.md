@@ -128,9 +128,9 @@ Pro občanské zobrazení mobilní sítě je jediná doporučená vrstva:
 - audience: `public`
 - style: `mobile-network-quality-v1`
 
-Diagnostické vstupy `mobile_coverage_model`, `ctu_nettest` a OSM komunikační infrastruktura nejsou samostatné běžné uživatelské vrstvy.
+Diagnostické vstupy `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mobile` a OSM komunikační infrastruktura nejsou samostatné běžné uživatelské vrstvy.
 
-V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`, zatímco `mobile_coverage_model` a `ctu_nettest` jsou `sourceRole=input` a `audience=diagnostic`.
+V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`, zatímco `mobile_coverage_model`, `ctu_nettest` a `ctu_stationary_mobile` jsou `sourceRole=input` a `audience=diagnostic`.
 
 ## Doporučená katalogová ID
 

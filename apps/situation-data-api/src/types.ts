@@ -16,6 +16,7 @@ export type SituationDataSourceId =
   | "osm_postgis"
   | "osm_overpass"
   | "ctu_nettest"
+  | "ctu_stationary_mobile"
   | "pid_gtfs_rt"
   | "safety_data"
   | "aviation_weather"
@@ -193,6 +194,7 @@ export interface SituationDataPublicConfig {
     mobileCoverage: number;
     osmPostgis: number;
     osmOverpass: number;
+    ctuStationaryMobile: number;
     safetyData: number;
     aviationWeather: number;
     ardosPartner: number;

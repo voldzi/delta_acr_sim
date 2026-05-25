@@ -155,8 +155,9 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `open_meteo` | `weather` | Obecné počasí u středu bbox, silně cacheované podle weather gridu. |
 | `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo. |
 | `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
+| `ctu_stationary_mobile` | `mobile` | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav. |
 | `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
-| `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
+| `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření, stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `safety_data` | `warnings`, `flood` | Projekce Safety Data API do situačního kontraktu. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
@@ -235,7 +236,7 @@ Health `/situation-data/health/ready` u `mobile_coverage_model` vrací `backend`
 
 ## Mobile Network Model
 
-`mobile_network_model` je preferovaný výstup pro COM. COM má primárně zobrazovat vrstvu `mobile_network`, ne skládat sám závěr z `mobile_coverage`, `ctu_nettest` a OSM bodů. `mobile_coverage` zůstává dostupné jako technická/modelová vrstva pro detail a ladění.
+`mobile_network_model` je preferovaný výstup pro COM. COM má primárně zobrazovat vrstvu `mobile_network`, ne skládat sám závěr z `mobile_coverage`, `ctu_nettest`, `ctu_stationary_mobile` a OSM bodů. `mobile_coverage` zůstává dostupné jako technická/modelová vrstva pro detail a ladění.
 
 Dotaz:
 
@@ -261,7 +262,7 @@ Interpretace:
 
 Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení.
 
-Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. `ctu_nettest` má vlastní health položku s počtem mobilních měření a časem posledního měření. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`, `situation_data_ctu_nettest_measurements`, `situation_data_ctu_nettest_latest_measurement_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
+Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. `ctu_nettest` a `ctu_stationary_mobile` mají vlastní health položky s počtem měření a časem posledního měření. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`, `situation_data_ctu_nettest_measurements`, `situation_data_ctu_stationary_mobile_measurements` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
 
 ## DEM Catalog
 
