@@ -21,6 +21,7 @@ export interface DemTileRef {
 
 interface LoadedDemTile {
   image: GeoTIFFImage;
+  raster: ArrayLike<number>;
   width: number;
   height: number;
   origin: number[];
@@ -105,12 +106,7 @@ export class DemElevationSampler {
     }
     const x = clamp(Math.floor((lon - originX) / resX), 0, loaded.width - 1);
     const y = clamp(Math.floor((lat - originY) / resY), 0, loaded.height - 1);
-    const raster = await loaded.image.readRasters({
-      window: [x, y, x + 1, y + 1],
-      samples: [0],
-      interleave: true
-    });
-    const value = Number(raster[0]);
+    const value = Number(loaded.raster[y * loaded.width + x]);
     if (!Number.isFinite(value) || (loaded.noData !== null && value === loaded.noData)) {
       return undefined;
     }
@@ -125,8 +121,13 @@ export class DemElevationSampler {
     const promise = (async () => {
       const tiff = await fromFile(tile.localPath);
       const image = await tiff.getImage();
+      const raster = (await image.readRasters({
+        samples: [0],
+        interleave: true
+      })) as ArrayLike<number>;
       return {
         image,
+        raster,
         width: image.getWidth(),
         height: image.getHeight(),
         origin: image.getOrigin(),
