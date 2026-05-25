@@ -124,7 +124,7 @@ situation_data_dem_object_store_tiles{dataset="copernicus-glo30-cz",source="cope
 1. Configure SeaweedFS credentials in `/srv/sim/.env`.
 2. Run `scripts/import-dem-copernicus-glo30-cz.sh`.
 3. Set `DEM_ENABLED=true`.
-4. Keep `MOBILE_COVERAGE_TERRAIN_AWARE=false` until terrain sampling is implemented and verified.
+4. After the DEM health check is `ok`, set `MOBILE_COVERAGE_TERRAIN_AWARE=true`, `MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain` and `MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz`.
 5. Restart `situation-data-api` and `sim-web`.
 
 ```bash

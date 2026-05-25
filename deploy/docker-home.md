@@ -200,9 +200,9 @@ SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MAX_CELLS=1000
-MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
-MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
-MOBILE_COVERAGE_TERRAIN_AWARE=false
+MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain
+MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz
+MOBILE_COVERAGE_TERRAIN_AWARE=true
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
@@ -251,7 +251,7 @@ curl -fsS http://localhost:5020/situation-data/api/v1/dem/metadata
 curl -fsS http://localhost:5020/situation-data/metrics | grep dem_
 ```
 
-`MOBILE_COVERAGE_TERRAIN_AWARE` zatím nech `false`, dokud nebude ověřené čtení výšek a line-of-sight model.
+Po úspěšném importu DEM nastav `MOBILE_COVERAGE_TERRAIN_AWARE=true`, `MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain` a `MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz`. SIM potom používá lokální DEM cache pro line-of-sight penalizaci pokrytí; při chybějící DEM dlaždici vrátí varování a pro daný výřez spadne zpět na vzdálenostní model.
 
 ## URL
 

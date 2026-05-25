@@ -4,7 +4,7 @@
 
 SIM publishes `mobile_coverage` as a prepared diagnostic map layer for COM. COM displays and filters the layer only in technical/diagnostic contexts; it does not compute coverage, download DEM/terrain data, or query OSM directly.
 
-The current implementation is phase 1: a conservative estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`. It is suitable for situational context and weak/no-coverage warnings, not for guaranteed operator service availability.
+The current implementation is phase 2: a terrain-aware estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`, local Copernicus DEM GLO-30 tiles and a line-of-sight obstruction penalty. It is suitable for situational context and weak/no-coverage warnings, not for guaranteed operator service availability.
 
 For production COM display, prefer the unified `mobile_network` layer from `mobile_network_model`. This document describes the lower-level coverage model that feeds that assessment and remains useful for diagnostics.
 
@@ -58,18 +58,19 @@ Feature properties include:
   "operator": "unknown",
   "technology": "4G",
   "quality": "fair",
-  "estimatedSignalDbm": -98,
-  "confidence": 0.62,
-  "modelVersion": "coverage-v1",
+  "estimatedSignalDbm": -106,
+  "confidence": 0.58,
+  "modelVersion": "coverage-v2-terrain",
   "generatedAt": "2026-05-21T00:00:00.000Z",
   "resolutionM": 1000,
-  "demSource": "copernicus-glo30-cz available; not applied by coverage-v1",
+  "demSource": "copernicus-glo30-cz",
   "assumptions": {
     "antennaHeightM": 30,
-    "propagationModel": "distance-path-loss-lite",
-    "terrainAware": false,
+    "receiverHeightM": 1.5,
+    "propagationModel": "distance-path-loss-lite+terrain-los-v1",
+    "terrainAware": true,
     "terrainDataAvailable": true,
-    "terrainApplied": false,
+    "terrainApplied": true,
     "demDatasetId": "copernicus-glo30-cz",
     "landCoverAware": false
   },
@@ -89,9 +90,9 @@ SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
 MOBILE_COVERAGE_MAX_CELLS=1000
-MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
-MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
-MOBILE_COVERAGE_TERRAIN_AWARE=false
+MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain
+MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz
+MOBILE_COVERAGE_TERRAIN_AWARE=true
 MOBILE_COVERAGE_DEFAULT_ANTENNA_HEIGHT_M=30
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
@@ -106,19 +107,19 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - Coverage cells are aligned to a deterministic resolution ladder (`250`, `500`, `1000`, `2000`, `5000`, `10000`, `25000`, `50000` m) instead of being generated from the current viewport origin.
 - Default coverage TTL is 21600 seconds.
 - Health reports `mobile_coverage_model` as degraded when PostGIS is not configured or no tower references exist.
-- If DEM is imported but coverage-v1 does not apply line-of-sight yet, health returns a warning so COM can present the model as non-terrain-aware.
+- If `MOBILE_COVERAGE_TERRAIN_AWARE=true`, the source samples Copernicus DEM GLO-30 from the local cache and applies a line-of-sight terrain obstruction penalty. If DEM tiles are unavailable for a requested area, the response warns and falls back to the distance model for that area.
 - Metrics include `situation_data_mobile_coverage_towers` and per-source cache counters for `mobile_coverage_model`.
 
 ## Model Phases
 
-Phase 1 implemented:
+Phase 1:
 
 - OSM tower position,
 - technology-specific default path-loss penalty,
 - nearest-tower distance,
 - grid polygons with normalized quality.
 
-Phase 2:
+Phase 2 implemented:
 
 - local DEM,
 - Copernicus DEM GLO-30 imported through `scripts/import-dem-copernicus-glo30-cz.sh`,

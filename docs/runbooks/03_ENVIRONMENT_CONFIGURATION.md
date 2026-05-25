@@ -301,9 +301,9 @@ SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000
-MOBILE_COVERAGE_MODEL_VERSION=coverage-v1
-MOBILE_COVERAGE_DEM_SOURCE=not-used-phase-1
-MOBILE_COVERAGE_TERRAIN_AWARE=false
+MOBILE_COVERAGE_MODEL_VERSION=coverage-v2-terrain
+MOBILE_COVERAGE_DEM_SOURCE=copernicus-glo30-cz
+MOBILE_COVERAGE_TERRAIN_AWARE=true
 scripts/import-osm-cz-postgis.sh
 ```
 
@@ -326,9 +326,9 @@ Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-la
 
 `mobile_network_model` je hlavní COM vrstva pro občanské zobrazení mobilní sítě. Kombinuje `mobile_coverage_model`, aktuální ČTÚ NetTest měření, oficiální historická stacionární měření ČTÚ `ctu_stationary_mobile` a infrastrukturní indicie do jednoho závěru `mobile_network`.
 
-`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 1 je `MOBILE_COVERAGE_TERRAIN_AWARE=false`; DEM/terrain vstupy se doplní v další fázi bez změny COM kontraktu.
+`mobile_coverage_model` používá stejný `public.osm_poi` zdroj věží jako `osm_postgis`, ale publikuje nižší polygonovou vrstvu `mobile_coverage` jako modelový odhad. Ve fázi 2 při `MOBILE_COVERAGE_TERRAIN_AWARE=true` používá lokální Copernicus DEM GLO-30 cache a line-of-sight penalizaci terénem bez změny COM kontraktu.
 
-DEM katalog pro budoucí terrain-aware model používá Copernicus DEM GLO-30, SeaweedFS a PostGIS:
+DEM katalog pro terrain-aware model používá Copernicus DEM GLO-30, SeaweedFS a PostGIS:
 
 ```bash
 DEM_ENABLED=true

@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { canonicalizeBboxForCache, formatBboxKey } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
+import { DemElevationSampler, type DemTileRef, type ElevationSample } from "./dem-elevation-sampler.js";
 import { ManagedResponseCache } from "./response-cache.js";
 import type { SituationDataSource, SourceCacheStats } from "./sources.js";
 import type {
@@ -32,6 +33,7 @@ const DEFAULT_TECHNOLOGIES: MobileCoverageTechnology[] = ["4G"];
 const QUALITY_LEVELS: MobileCoverageQuality[] = ["good", "fair", "weak", "none", "unknown"];
 const DISCLAIMER = "Coverage is an estimate, not guaranteed service availability.";
 const RESOLUTION_STEPS_M = [250, 500, 1000, 2000, 5000, 10_000, 25_000, 50_000] as const;
+const RECEIVER_HEIGHT_M = 1.5;
 
 interface TowerRow {
   osm_id: string;
@@ -46,6 +48,8 @@ interface CoveragePayload {
   generatedAt: string;
   effectiveResolutionM: number;
   towerCount: number;
+  terrainApplied: boolean;
+  warnings: string[];
   features: SituationFeature[];
 }
 
@@ -149,7 +153,7 @@ export class MobileCoverageSource implements SituationDataSource {
       demSource: this.effectiveDemSource(),
       cacheTtlSeconds: this.config.mobileCoverageCacheTtlSeconds,
       disclaimer: DISCLAIMER,
-      assumptions: this.assumptions()
+      assumptions: this.assumptions(false)
     };
   }
 
@@ -198,10 +202,12 @@ export class MobileCoverageSource implements SituationDataSource {
       source: this.descriptor,
       fetchedAt,
       features,
-      warnings:
-        payload.towerCount > 0
+      warnings: [
+        ...payload.warnings,
+        ...(payload.towerCount > 0
           ? []
-          : ["mobile_coverage_model has no communications_tower references in the requested area; features are marked unknown."]
+          : ["mobile_coverage_model has no communications_tower references in the requested area; features are marked unknown."])
+      ]
     };
   }
 
@@ -211,6 +217,13 @@ export class MobileCoverageSource implements SituationDataSource {
     const maxFeatures = Math.max(1, this.config.mobileCoverageMaxCells);
     const grid = buildGrid(bbox, this.config.mobileCoverageResolutionM, maxCells);
     const towers = await this.fetchTowers(expandBboxByMeters(bbox, 30_000), 10_000);
+    const terrainSampler = this.createTerrainSampler();
+    const demTiles = terrainSampler ? await terrainSampler.tilesForBbox(expandBboxByMeters(bbox, 30_000)) : [];
+    const terrainApplied = Boolean(terrainSampler && demTiles.length > 0);
+    const warnings =
+      this.config.mobileCoverageTerrainAware && !terrainApplied
+        ? ["mobile_coverage_model terrain-aware mode is enabled but DEM tiles are not available for the requested area."]
+        : [];
     const features: SituationFeature[] = [];
 
     for (const cell of grid.cells) {
@@ -219,7 +232,7 @@ export class MobileCoverageSource implements SituationDataSource {
         if (features.length >= maxFeatures) {
           break;
         }
-        features.push(this.coverageFeature(cell, nearest, technology, generatedAt, grid.resolutionM));
+        features.push(await this.coverageFeature(cell, nearest, technology, generatedAt, grid.resolutionM, terrainSampler, demTiles));
       }
       if (features.length >= maxFeatures) {
         break;
@@ -230,20 +243,25 @@ export class MobileCoverageSource implements SituationDataSource {
       generatedAt,
       effectiveResolutionM: grid.resolutionM,
       towerCount: towers.length,
+      terrainApplied,
+      warnings,
       features
     };
   }
 
-  private coverageFeature(
+  private async coverageFeature(
     cell: CoverageCell,
     nearest: NearestTower | undefined,
     technology: MobileCoverageTechnology,
     generatedAt: string,
-    resolutionM: number
-  ): SituationFeature {
-    const estimate = nearest ? estimateSignal(nearest.distanceM, technology) : undefined;
+    resolutionM: number,
+    terrainSampler: DemElevationSampler | undefined,
+    demTiles: DemTileRef[]
+  ): Promise<SituationFeature> {
+    const terrain = nearest && terrainSampler && demTiles.length > 0 ? await terrainAssessment(terrainSampler, demTiles, nearest, cell.center, this.config.mobileCoverageAntennaHeightM) : undefined;
+    const estimate = nearest ? estimateSignal(nearest.distanceM, technology, terrain?.penaltyDb) : undefined;
     const quality = estimate ? qualityForSignal(estimate.signalDbm) : "unknown";
-    const confidence = estimate && nearest ? confidenceForEstimate(nearest.distanceM, technology) : 0.2;
+    const confidence = estimate && nearest ? confidenceForEstimate(nearest.distanceM, technology, terrain) : 0.2;
     const featureId = `coverage:mobile:${technology.toLowerCase()}:${cell.id}`;
     return {
       type: "Feature",
@@ -269,7 +287,13 @@ export class MobileCoverageSource implements SituationDataSource {
         metrics: compactMetrics({
           distanceToNearestTowerM: nearest ? Math.round(nearest.distanceM) : undefined,
           nearestTowerLon: nearest?.tower.lon,
-          nearestTowerLat: nearest?.tower.lat
+          nearestTowerLat: nearest?.tower.lat,
+          baseSignalDbm: estimate?.baseSignalDbm,
+          terrainPenaltyDb: terrain?.penaltyDb,
+          terrainMaxObstructionM: terrain?.maxObstructionM,
+          terrainSamples: terrain?.sampleCount,
+          towerElevationM: terrain?.towerElevationM,
+          targetElevationM: terrain?.targetElevationM
         }),
         tags: compactTags({
           nearestTowerId: nearest?.tower.id,
@@ -284,8 +308,8 @@ export class MobileCoverageSource implements SituationDataSource {
         modelVersion: this.config.mobileCoverageModelVersion,
         generatedAt,
         resolutionM,
-        demSource: this.effectiveDemSource(),
-        assumptions: this.assumptions(),
+        demSource: this.effectiveDemSource(Boolean(terrain)),
+        assumptions: this.assumptions(Boolean(terrain)),
         dataQuality: "modelled",
         btsStatus: "operator_feed_unavailable",
         btsStatusSource: "none",
@@ -293,33 +317,45 @@ export class MobileCoverageSource implements SituationDataSource {
         disclaimer: DISCLAIMER,
         raw: {
           nearestTower: nearest,
-          phase: "phase-1-distance-model"
+          terrain,
+          phase: terrain ? "phase-2-terrain-aware-distance-model" : "phase-1-distance-model"
         }
       }
     };
   }
 
-  private assumptions(): Record<string, string | number | boolean> {
+  private assumptions(terrainApplied: boolean): Record<string, string | number | boolean> {
     return {
       antennaHeightM: this.config.mobileCoverageAntennaHeightM,
-      propagationModel: "distance-path-loss-lite",
+      receiverHeightM: RECEIVER_HEIGHT_M,
+      propagationModel: terrainApplied ? "distance-path-loss-lite+terrain-los-v1" : "distance-path-loss-lite",
       terrainAware: this.config.mobileCoverageTerrainAware,
       terrainDataAvailable: this.config.demEnabled,
-      terrainApplied: false,
+      terrainApplied,
       demDatasetId: this.config.demDatasetId,
       landCoverAware: false,
       btsRealtimeStatus: false
     };
   }
 
-  private effectiveDemSource(): string {
-    if (this.config.mobileCoverageTerrainAware) {
-      return this.config.mobileCoverageDemSource;
+  private effectiveDemSource(terrainApplied = false): string {
+    if (terrainApplied) {
+      return this.config.mobileCoverageDemSource === "not-used-phase-1" ? this.config.demDatasetId : this.config.mobileCoverageDemSource;
+    }
+    if (this.config.mobileCoverageTerrainAware && this.config.demEnabled) {
+      return `${this.config.demDatasetId} available; terrain sampling requested but not applied`;
     }
     if (this.config.demEnabled) {
       return `${this.config.demDatasetId} available; not applied by coverage-v1`;
     }
     return this.config.mobileCoverageDemSource;
+  }
+
+  private createTerrainSampler(): DemElevationSampler | undefined {
+    if (!this.config.mobileCoverageTerrainAware || !this.config.demEnabled || !this.config.demPostgisConnectionString) {
+      return undefined;
+    }
+    return new DemElevationSampler(this.config);
   }
 
   private async fetchTowerCount(): Promise<number> {
@@ -393,6 +429,18 @@ interface NearestTower {
   distanceM: number;
 }
 
+interface TerrainAssessment {
+  applied: true;
+  lineOfSightClear: boolean;
+  penaltyDb: number;
+  maxObstructionM: number;
+  sampleCount: number;
+  towerElevationM: number;
+  targetElevationM: number;
+  towerTileId: string;
+  targetTileId: string;
+}
+
 interface CoverageCell {
   id: string;
   center: { lon: number; lat: number };
@@ -457,11 +505,83 @@ function nearestTower(point: { lon: number; lat: number }, towers: Tower[]): Nea
   return nearest;
 }
 
-function estimateSignal(distanceM: number, technology: MobileCoverageTechnology): { signalDbm: number } {
+async function terrainAssessment(
+  sampler: DemElevationSampler,
+  demTiles: DemTileRef[],
+  nearest: NearestTower,
+  target: { lon: number; lat: number },
+  antennaHeightM: number
+): Promise<TerrainAssessment | undefined> {
+  const towerSample = await sampler.sample(nearest.tower.lon, nearest.tower.lat, demTiles);
+  const targetSample = await sampler.sample(target.lon, target.lat, demTiles);
+  if (!towerSample || !targetSample) {
+    return undefined;
+  }
+
+  const sampleCount = terrainProfileSampleCount(nearest.distanceM);
+  const towerHeightM = towerSample.elevationM + antennaHeightM;
+  const targetHeightM = targetSample.elevationM + RECEIVER_HEIGHT_M;
+  let maxObstructionM = -Infinity;
+  let successfulSamples = 0;
+
+  for (let index = 1; index < sampleCount - 1; index += 1) {
+    const ratio = index / (sampleCount - 1);
+    const lon = nearest.tower.lon + (target.lon - nearest.tower.lon) * ratio;
+    const lat = nearest.tower.lat + (target.lat - nearest.tower.lat) * ratio;
+    const sample = await sampler.sample(lon, lat, demTiles);
+    if (!sample) {
+      continue;
+    }
+    successfulSamples += 1;
+    const expectedClearanceM = towerHeightM + (targetHeightM - towerHeightM) * ratio;
+    maxObstructionM = Math.max(maxObstructionM, sample.elevationM - expectedClearanceM);
+  }
+
+  if (successfulSamples === 0) {
+    return undefined;
+  }
+
+  const normalizedObstructionM = Math.max(0, Math.round(maxObstructionM));
+  return {
+    applied: true,
+    lineOfSightClear: normalizedObstructionM <= 0,
+    penaltyDb: terrainPenaltyDb(normalizedObstructionM, nearest.distanceM),
+    maxObstructionM: normalizedObstructionM,
+    sampleCount: successfulSamples + 2,
+    towerElevationM: towerSample.elevationM,
+    targetElevationM: targetSample.elevationM,
+    towerTileId: towerSample.tileId,
+    targetTileId: targetSample.tileId
+  };
+}
+
+function terrainProfileSampleCount(distanceM: number): number {
+  if (distanceM <= 1500) {
+    return 5;
+  }
+  if (distanceM <= 5000) {
+    return 7;
+  }
+  if (distanceM <= 15_000) {
+    return 9;
+  }
+  return 11;
+}
+
+function terrainPenaltyDb(obstructionM: number, distanceM: number): number {
+  if (obstructionM <= 0) {
+    return 0;
+  }
+  const distanceFactor = distanceM > 10_000 ? 1.15 : distanceM > 4000 ? 1 : 0.85;
+  return Math.round(Math.min(30, (7 + obstructionM * 0.42) * distanceFactor));
+}
+
+function estimateSignal(distanceM: number, technology: MobileCoverageTechnology, terrainPenaltyDb = 0): { signalDbm: number; baseSignalDbm: number } {
   const distance = Math.max(100, distanceM);
   const technologyPenalty = technology === "2G" ? 0 : technology === "4G" ? 7 : 14;
   const pathLoss = 10 * 3.2 * Math.log10(distance / 100);
-  return { signalDbm: Math.round(-58 - pathLoss - technologyPenalty) };
+  const baseSignalDbm = Math.round(-58 - pathLoss - technologyPenalty);
+  return { signalDbm: baseSignalDbm - terrainPenaltyDb, baseSignalDbm };
 }
 
 function qualityForSignal(signalDbm: number): MobileCoverageQuality {
@@ -477,9 +597,14 @@ function qualityForSignal(signalDbm: number): MobileCoverageQuality {
   return "none";
 }
 
-function confidenceForEstimate(distanceM: number, technology: MobileCoverageTechnology): number {
+function confidenceForEstimate(distanceM: number, technology: MobileCoverageTechnology, terrain: TerrainAssessment | undefined): number {
   const rangeM = technology === "2G" ? 25_000 : technology === "4G" ? 12_000 : 4_000;
-  return round(Math.max(0.28, Math.min(0.72, 0.72 - (distanceM / rangeM) * 0.38)), 2);
+  const base = Math.max(0.28, Math.min(0.72, 0.72 - (distanceM / rangeM) * 0.38));
+  if (!terrain) {
+    return round(base, 2);
+  }
+  const terrainAdjustment = terrain.lineOfSightClear ? 0.04 : -Math.min(0.18, terrain.penaltyDb / 120);
+  return round(Math.max(0.24, Math.min(0.78, base + terrainAdjustment)), 2);
 }
 
 function severityForQuality(quality: MobileCoverageQuality): "info" | "advisory" | "warning" | "critical" {

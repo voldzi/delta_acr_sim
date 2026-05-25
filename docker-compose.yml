@@ -138,6 +138,8 @@ services:
       OVERPASS_BASE_URL: ${OVERPASS_BASE_URL:-https://overpass-api.de/api/interpreter}
       OVERPASS_MAX_BBOX_DEGREES: ${OVERPASS_MAX_BBOX_DEGREES:-1.6}
       CTU_NETTEST_URL: ${CTU_NETTEST_URL:-https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip}
+      CTU_STATIONARY_MOBILE_URLS: ${CTU_STATIONARY_MOBILE_URLS:-}
+      SITUATION_DATA_CTU_STATIONARY_MOBILE_CACHE_TTL_SECONDS: ${SITUATION_DATA_CTU_STATIONARY_MOBILE_CACHE_TTL_SECONDS:-86400}
       PID_GTFS_RT_VEHICLE_POSITIONS_URL: ${PID_GTFS_RT_VEHICLE_POSITIONS_URL:-https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb}
       SAFETY_DATA_BASE_URL: ${SAFETY_DATA_BASE_URL:-http://safety-data-api:4030}
       AVIATION_WEATHER_BASE_URL: ${AVIATION_WEATHER_BASE_URL:-https://aviationweather.gov}
