@@ -373,6 +373,29 @@ describe("SIM API contract baseline", () => {
     expect(hostile?.geo?.lon).toBe(interceptor?.geo?.lon);
   });
 
+  it("spreads repeated Ukraine demo waves across deterministic route lanes", () => {
+    const scenario = { ...ukraineFullDemoScenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000104" };
+    const events = generateScenarioEvents(scenario, {
+      sourceSystemId: "sim-air-situation-001",
+      adapterVersion: "0.1.0",
+      tick: 0,
+      elapsedSeconds: 0,
+      tickIntervalSeconds: 1
+    });
+
+    const kyivNorthHostileUavs = events.filter(
+      (event) => event.payload.objectId.startsWith("HOSTILE_UAV")
+        && event.payload.attributes?.routeLabel === "Kyiv north approach"
+    );
+    const laneOffsets = kyivNorthHostileUavs
+      .map((event) => Number(event.payload.attributes?.routeLaneOffsetM))
+      .filter(Number.isFinite);
+
+    expect(kyivNorthHostileUavs).toHaveLength(8);
+    expect(new Set(laneOffsets).size).toBeGreaterThanOrEqual(7);
+    expect(Math.max(...laneOffsets) - Math.min(...laneOffsets)).toBeGreaterThan(45_000);
+  });
+
   it("keeps generated historical positions kinematically continuous", () => {
     const scenario = { ...trajectoryScenarioPayload, scenarioId: "00000000-0000-4000-8000-000000000003" };
     const previousByObjectId = new Map<string, NonNullable<ReturnType<typeof generateScenarioEvents>[number]["geo"]>>();

@@ -198,6 +198,7 @@ function buildEventForBlock(
               engagementFamily: profile.customRoute.family,
               pairedObjectId: profile.customRoute.pairedObjectId,
               routeLabel: profile.customRoute.routeLabel,
+              routeLaneOffsetM: profile.customRoute.laneOffsetM,
               sourceReferenceDate: profile.customRoute.sourceReferenceDate,
               terminalAtSeconds: profile.customRoute.terminalAtSeconds,
               terminalMode: profile.customRoute.terminalMode,
@@ -289,9 +290,19 @@ interface CustomRouteProfile {
   engagementId: string;
   pairedObjectId?: string;
   routeLabel: string;
+  laneOffsetM: number;
   sourceReferenceDate: string;
   destroyed: boolean;
   interceptedRatio: number;
+}
+
+interface UkraineAirDefenseRoute {
+  label: string;
+  hostileStart: { lat: number; lon: number };
+  friendlyUavStart: { lat: number; lon: number };
+  friendlyMissileStart: { lat: number; lon: number };
+  intercept: { lat: number; lon: number };
+  transitEnd: { lat: number; lon: number };
 }
 
 function shouldEmitBlock(block: ScenarioBlock, tick: number, tickIntervalSeconds: number): boolean {
@@ -899,7 +910,8 @@ function buildCustomRoute(
 
   const family = stringParameter(block, "engagementFamily") === "missile" || objectType === "MISSILE_TRACK" ? "missile" : "uav";
   const pairIndex = role === "FRIEND_INTERCEPTOR" ? friendlyIndexToHostileIndex(index) : index;
-  const route = UKRAINE_AIR_DEFENSE_ROUTES[pairIndex % UKRAINE_AIR_DEFENSE_ROUTES.length]!;
+  const baseRoute = UKRAINE_AIR_DEFENSE_ROUTES[pairIndex % UKRAINE_AIR_DEFENSE_ROUTES.length]!;
+  const route = disperseUkraineAirDefenseRoute(baseRoute, pairIndex, family);
   const destroyed = role === "FRIEND_INTERCEPTOR" || isDestroyedHostileIndex(pairIndex);
   const terminalAtSeconds = terminalAtSecondsForUkraineDemo(family, pairIndex, scenarioDurationSeconds);
   const start =
@@ -930,6 +942,7 @@ function buildCustomRoute(
     engagementId: `UKR-DEMO-${family.toUpperCase()}-${String(pairIndex + 1).padStart(4, "0")}`,
     pairedObjectId,
     routeLabel: route.label,
+    laneOffsetM: route.laneOffsetM,
     sourceReferenceDate: UKRAINE_AIR_DEFENSE_SOURCE_DATE,
     destroyed,
     interceptedRatio: UKRAINE_AIR_DEFENSE_INTERCEPTED_RATIO
@@ -966,6 +979,50 @@ function terminalAtSecondsForUkraineDemo(family: "uav" | "missile", pairIndex: n
   return Math.min(Math.max(30, scenarioDurationSeconds - 30), terminalAt);
 }
 
+function disperseUkraineAirDefenseRoute(
+  route: UkraineAirDefenseRoute,
+  pairIndex: number,
+  family: "uav" | "missile"
+): UkraineAirDefenseRoute & { laneOffsetM: number } {
+  const inboundHeading = headingBetweenGeo(route.hostileStart.lat, route.hostileStart.lon, route.intercept.lat, route.intercept.lon);
+  const crossTrackHeading = normalizeHeading(inboundHeading + 90);
+  const laneCount = family === "missile" ? 7 : 11;
+  const laneStepM = family === "missile" ? 6_000 : 9_500;
+  const laneIndex = positiveModulo(pairIndex * 5 + (family === "missile" ? 3 : 0), laneCount);
+  const laneOffsetM = (laneIndex - (laneCount - 1) / 2) * laneStepM;
+  const rng = new SeededRandom((0x9e3779b9 + pairIndex * 2_654_435_761 + hashString(route.label) + hashString(family)) >>> 0);
+  const baseCrossM = laneOffsetM + rng.range(-laneStepM * 0.25, laneStepM * 0.25);
+  const terminalCrossM = baseCrossM + rng.range(-laneStepM * 0.18, laneStepM * 0.18);
+  const terminalAlongM = rng.range(-8_000, 8_000);
+  const hostileStartCrossM = baseCrossM + rng.range(-laneStepM * 0.35, laneStepM * 0.35);
+  const friendlyUavStartCrossM = baseCrossM + rng.range(-laneStepM * 0.55, laneStepM * 0.55);
+  const friendlyMissileStartCrossM = baseCrossM + rng.range(-laneStepM * 0.45, laneStepM * 0.45);
+  const hostileStartAlongM = rng.range(-12_000, 12_000);
+  const friendlyUavStartAlongM = rng.range(-10_000, 10_000);
+  const friendlyMissileStartAlongM = rng.range(-8_000, 8_000);
+
+  return {
+    label: route.label,
+    laneOffsetM: Math.round(baseCrossM),
+    hostileStart: shiftUkraineDemoPoint(route.hostileStart, crossTrackHeading, hostileStartCrossM, inboundHeading, hostileStartAlongM),
+    friendlyUavStart: shiftUkraineDemoPoint(route.friendlyUavStart, crossTrackHeading, friendlyUavStartCrossM, inboundHeading, friendlyUavStartAlongM),
+    friendlyMissileStart: shiftUkraineDemoPoint(route.friendlyMissileStart, crossTrackHeading, friendlyMissileStartCrossM, inboundHeading, friendlyMissileStartAlongM),
+    intercept: shiftUkraineDemoPoint(route.intercept, crossTrackHeading, terminalCrossM, inboundHeading, terminalAlongM),
+    transitEnd: shiftUkraineDemoPoint(route.transitEnd, crossTrackHeading, terminalCrossM, inboundHeading, terminalAlongM)
+  };
+}
+
+function shiftUkraineDemoPoint(
+  point: { lat: number; lon: number },
+  crossTrackHeading: number,
+  crossTrackM: number,
+  alongTrackHeading: number,
+  alongTrackM: number
+): { lat: number; lon: number } {
+  const alongShifted = moveMeters(point.lat, point.lon, alongTrackHeading, alongTrackM);
+  return moveMeters(alongShifted.lat, alongShifted.lon, crossTrackHeading, crossTrackM);
+}
+
 function interpolateGeo(startLat: number, startLon: number, endLat: number, endLon: number, ratio: number): { lat: number; lon: number } {
   return {
     lat: Number(interpolate(startLat, endLat, ratio).toFixed(6)),
@@ -994,14 +1051,7 @@ function hashString(value: string): number {
 const UKRAINE_AIR_DEFENSE_SOURCE_DATE = "2026-05-13";
 const UKRAINE_AIR_DEFENSE_INTERCEPTED_RATIO = 0.9;
 
-const UKRAINE_AIR_DEFENSE_ROUTES: Array<{
-  label: string;
-  hostileStart: { lat: number; lon: number };
-  friendlyUavStart: { lat: number; lon: number };
-  friendlyMissileStart: { lat: number; lon: number };
-  intercept: { lat: number; lon: number };
-  transitEnd: { lat: number; lon: number };
-}> = [
+const UKRAINE_AIR_DEFENSE_ROUTES: UkraineAirDefenseRoute[] = [
   {
     label: "Kyiv north approach",
     hostileStart: { lat: 51.25, lon: 30.15 },
