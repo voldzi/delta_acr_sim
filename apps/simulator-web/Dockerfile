@@ -17,6 +17,8 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/simulator-web build
 
 FROM nginx:1.29-alpine AS runtime
+RUN mkdir -p /etc/nginx/includes
 COPY apps/simulator-web/nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY apps/simulator-web/nginx/internal-provider-access.conf /etc/nginx/includes/internal-provider-access.conf
 COPY --from=build /app/apps/simulator-web/dist /usr/share/nginx/html
 EXPOSE 80

@@ -2,6 +2,8 @@
 
 Pilotní deployment běží ze složky `/srv/sim` a používá port `5020`.
 
+Produkční publikace používá SIM jako server-to-server provider pro COP backend. Veřejná adresa `sim.zeleznalady.cz` nemá být druhý frontend; veřejně zůstává jen `/health/live` a `/docs/`. Provider API jsou chráněná Nginx allowlistem pro interní sítě/VPN a definitivně se mají blokovat i na `dmz.home.cz`.
+
 ## Jednorázové sudo kroky
 
 Tyto kroky musí provést uživatel se sudo oprávněním:
@@ -154,6 +156,15 @@ curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS http://localhost:5020/situation-data/api/v1/catalog
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20'
 test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:5020/metrics)" = "404"
+```
+
+Po nasazení ověř, že simulovaný veřejný klient přes `X-Forwarded-For` nedostane provider API:
+
+```bash
+test "$(curl -sS -H 'X-Forwarded-For: 203.0.113.10' -o /dev/null -w '%{http_code}' http://localhost:5020/situation-data/api/v1/catalog)" = "403"
+test "$(curl -sS -H 'X-Forwarded-For: 203.0.113.10' -o /dev/null -w '%{http_code}' http://localhost:5020/)" = "403"
+curl -fsS http://localhost:5020/health/live
+curl -fsS http://localhost:5020/docs/ >/dev/null
 ```
 
 ## OpenStreetMap/PostGIS import
