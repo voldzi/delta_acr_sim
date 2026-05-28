@@ -226,7 +226,9 @@ export type SituationLayerId =
   | "mobile_network"
   | "traffic"
   | "warnings"
+  | "fire"
   | "flood"
+  | "boundary_admin"
   | "air_quality";
 export type SituationDataSourceId =
   | "mock"
@@ -275,7 +277,7 @@ export interface SituationDataLayer {
   label: string;
   description: string;
   defaultVisible: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
   expectedCadenceSeconds?: number;
 }
 
@@ -336,7 +338,7 @@ export interface SituationDataFeature {
   type: "Feature";
   id: string;
   geometry: {
-    type: "Point" | "LineString" | "Polygon";
+    type: "Point" | "LineString" | "Polygon" | "MultiPolygon";
     coordinates: unknown;
   };
   properties: {
@@ -403,8 +405,8 @@ export interface SituationDataFeatureResponse {
   warnings: string[];
 }
 
-export type SafetyLayerId = "warnings" | "flood";
-export type SafetyDataSourceId = "mock" | "chmi_alerts" | "chmi_hydro";
+export type SafetyLayerId = "weather_alerts" | "warnings" | "fire" | "flood" | "boundary_admin";
+export type SafetyDataSourceId = "mock" | "chmi_alerts" | "chmi_hydro" | "nasa_firms" | "admin_boundaries";
 
 export interface SafetyDataHealth {
   status: string;
@@ -426,7 +428,7 @@ export interface SafetyDataLayer {
   label: string;
   description: string;
   defaultVisible: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
   expectedCadenceSeconds?: number;
 }
 
@@ -467,25 +469,57 @@ export interface SafetyDataFeature {
   type: "Feature";
   id: string;
   geometry: {
-    type: "Point" | "Polygon";
+    type: "Point" | "Polygon" | "MultiPolygon";
     coordinates: unknown;
   };
   properties: {
     featureId: string;
+    layerId?: string;
+    providerId?: string;
+    providerLayerId?: string;
     layer: SafetyLayerId;
     category: string;
+    hazardType?: string;
     headline: string;
     description?: string;
     recommendedAction?: string;
     sourceId: SafetyDataSourceId;
+    source?: string;
+    sourceName?: string;
     observedAt: string;
     effectiveAt?: string;
     expiresAt?: string;
+    validFrom?: string;
+    validUntil?: string;
+    updatedAt?: string;
     confidence: number;
     stale: boolean;
     severity: "info" | "advisory" | "warning" | "critical";
+    status?: string;
     urgency: "immediate" | "expected" | "future" | "past" | "unknown";
     certainty: "observed" | "likely" | "possible" | "unlikely" | "unknown";
+    areaName?: string;
+    adminLevel?: number | string;
+    basis?: string[];
+    fireStatus?: string;
+    detectedAt?: string;
+    sourceSatellite?: string;
+    sourceIncident?: string;
+    intensity?: number;
+    frp?: number;
+    riverName?: string;
+    stationId?: string;
+    waterLevelCm?: number;
+    discharge?: number;
+    floodStage?: number | string;
+    trend?: string;
+    basin?: string;
+    affectedArea?: string;
+    name?: string;
+    code?: string;
+    countryCode?: string;
+    styleHint?: string;
+    iconHint?: string;
     license: {
       name: string;
       attribution: string;
@@ -495,6 +529,7 @@ export interface SafetyDataFeature {
     geocodes?: Array<{ scheme: string; value: string }>;
     metrics?: Record<string, number | string | boolean>;
     tags?: Record<string, string>;
+    providerProperties?: Record<string, unknown>;
   };
 }
 
@@ -665,6 +700,20 @@ export interface ServiceObservability {
   dataFreshness?: DataFreshnessObservability;
   sourceHealth?: SourceHealthObservability[];
   eventStore?: TakEventStoreObservability;
+  lastResult?: {
+    generatedAt?: string;
+    generatedAgeSeconds: number;
+    featureCount: number;
+    sourceCount: number;
+    staleFeatureCount: number;
+    advisoryCount?: number;
+    warningCount: number;
+    criticalCount?: number;
+    responseWarningCount?: number;
+    layerCounts?: Partial<Record<SafetyLayerId, number>>;
+    sourceIds?: string[];
+    layers?: string[];
+  };
 }
 
 export interface TimedServiceObservability {

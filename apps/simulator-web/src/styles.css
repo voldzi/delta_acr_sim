@@ -626,14 +626,20 @@ button svg {
   grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
 }
 
+.overview-grid.safety-ops-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+}
+
 .source-load-panel,
-.cache-panel {
+.cache-panel,
+.safety-ops-panel {
   position: relative;
   overflow: hidden;
 }
 
 .source-load-panel::before,
-.cache-panel::before {
+.cache-panel::before,
+.safety-ops-panel::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -643,7 +649,8 @@ button svg {
 }
 
 .source-load-panel > *,
-.cache-panel > * {
+.cache-panel > *,
+.safety-ops-panel > * {
   position: relative;
   z-index: 1;
 }
@@ -1271,6 +1278,10 @@ button svg {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.safety-ops-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .publisher-stat {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1682,6 +1693,7 @@ button svg {
     .flight-stats,
     .situation-stats,
     .safety-stats,
+    .safety-ops-stats,
     .flight-grid,
     .settings-grid {
     grid-template-columns: 1fr;

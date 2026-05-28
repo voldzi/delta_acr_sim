@@ -2,7 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 import { Pool } from "pg";
 import type { SafetyDataConfig } from "./config.js";
 import { HttpRequestError, requestJson, requestText } from "./http.js";
-import { ManagedResponseCache } from "./response-cache.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
   SafetyCertainty,
@@ -21,6 +21,11 @@ import type {
 export interface SafetyDataSource {
   descriptor: SourceDescriptor;
   fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult>;
+  cacheStats?(): SourceCacheStats[];
+}
+
+export interface SourceCacheStats extends ManagedResponseCacheStats {
+  sourceId: SafetyDataSourceId;
 }
 
 const MOCK_LICENSE: SafetyDataLicense = {
@@ -104,6 +109,36 @@ export function allSourceDescriptors(config: SafetyDataConfig): SourceDescriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
+function cacheStatsFor(sourceId: SafetyDataSourceId, caches: Array<{ stats(): ManagedResponseCacheStats }>): SourceCacheStats {
+  return caches.reduce<SourceCacheStats>(
+    (summary, cache) => {
+      const stats = cache.stats();
+      summary.entries += stats.entries;
+      summary.inflight += stats.inflight;
+      summary.hits += stats.hits;
+      summary.misses += stats.misses;
+      summary.coalescedHits += stats.coalescedHits;
+      summary.staleHits += stats.staleHits;
+      summary.refreshes += stats.refreshes;
+      summary.errors += stats.errors;
+      summary.evictions += stats.evictions;
+      return summary;
+    },
+    {
+      sourceId,
+      entries: 0,
+      inflight: 0,
+      hits: 0,
+      misses: 0,
+      coalescedHits: 0,
+      staleHits: 0,
+      refreshes: 0,
+      errors: 0,
+      evictions: 0
+    }
+  );
+}
+
 class MockSafetyDataSource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor = {
     sourceId: "mock",
@@ -130,6 +165,7 @@ class MockSafetyDataSource implements SafetyDataSource {
       warnings: []
     };
   }
+
 }
 
 class ChmiAlertsSource implements SafetyDataSource {
@@ -214,6 +250,10 @@ class ChmiAlertsSource implements SafetyDataSource {
       : [];
     const features = [...weatherFeatures, ...fireRiskFeatures].filter((feature) => isFeatureInBbox(feature, query.bbox));
     return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings: polygonized.warnings };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("chmi_alerts", [this.listingCache, this.capCache, this.orpCodelistCache, this.boundaryMatchCache])];
   }
 
   private async polygonizeCapFeatures(features: SafetyFeature[], query: SafetyQuery): Promise<{ features: SafetyFeature[]; warnings: string[] }> {
@@ -409,6 +449,10 @@ class ChmiHydroSource implements SafetyDataSource {
     return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings };
   }
 
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("chmi_hydro", [this.metadataCache, this.stationDataCache])];
+  }
+
   private async fetchStationFeature(station: HydroStation, includeRaw: boolean, fetchedAt: string): Promise<HydroStationFetchResult> {
     if (this.isMissingStationDataCached(station.objId)) {
       return { missingCurrentData: true };
@@ -498,6 +542,10 @@ class NasaFirmsSource implements SafetyDataSource {
 
     return { source: this.descriptor, fetchedAt, features, warnings: [] };
   }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("nasa_firms", [this.responseCache])];
+  }
 }
 
 class AdminBoundarySource implements SafetyDataSource {
@@ -565,6 +613,10 @@ class AdminBoundarySource implements SafetyDataSource {
       features: seedAdminBoundaryFeatures(query.bbox, fetchedAt),
       warnings: ["admin_boundaries is using a coarse seed fallback; configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL for production PostGIS boundaries."]
     };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("admin_boundaries", [this.payloadCache])];
   }
 
   private async fetchRows(bbox: BoundingBox, adminLevels: number[], geometryColumn: AdminBoundaryGeometryColumn, limit: number): Promise<AdminBoundaryRow[]> {

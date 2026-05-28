@@ -1,6 +1,6 @@
 import type { SafetyDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type { SafetyDataSource } from "./sources.js";
+import type { SafetyDataSource, SourceCacheStats } from "./sources.js";
 import type {
   BoundingBox,
   SafetyDataSourceId,
@@ -12,8 +12,24 @@ import type {
   SourceFetchResult
 } from "./types.js";
 
+export interface SafetyAggregationTelemetry {
+  generatedAt?: string;
+  generatedAgeSeconds: number;
+  featureCount: number;
+  sourceCount: number;
+  staleFeatureCount: number;
+  advisoryCount: number;
+  warningCount: number;
+  criticalCount: number;
+  responseWarningCount: number;
+  layerCounts: Partial<Record<SafetyLayerId, number>>;
+  sourceIds: SafetyDataSourceId[];
+  layers: SafetyLayerId[];
+}
+
 export class SafetyAggregationService {
   private readonly cache: ManagedResponseCache<SafetyFeatureCollection>;
+  private lastCollection?: SafetyFeatureCollection;
 
   constructor(
     private readonly config: SafetyDataConfig,
@@ -30,8 +46,48 @@ export class SafetyAggregationService {
     return this.cache.stats();
   }
 
+  sourceCacheStats(): SourceCacheStats[] {
+    return this.sources.flatMap((source) => source.cacheStats?.() ?? []);
+  }
+
+  telemetrySnapshot(now = new Date()): SafetyAggregationTelemetry {
+    const collection = this.lastCollection;
+    if (!collection) {
+      return {
+        generatedAgeSeconds: -1,
+        featureCount: 0,
+        sourceCount: 0,
+        staleFeatureCount: 0,
+        advisoryCount: 0,
+        warningCount: 0,
+        criticalCount: 0,
+        responseWarningCount: 0,
+        layerCounts: {},
+        sourceIds: [],
+        layers: []
+      };
+    }
+    const generatedTime = new Date(collection.generatedAt).getTime();
+    return {
+      generatedAt: collection.generatedAt,
+      generatedAgeSeconds: Number.isFinite(generatedTime) ? Math.max(0, Math.round((now.getTime() - generatedTime) / 1000)) : -1,
+      featureCount: collection.summary.featureCount,
+      sourceCount: collection.summary.sourceCount,
+      staleFeatureCount: collection.summary.staleFeatureCount,
+      advisoryCount: collection.summary.advisoryCount,
+      warningCount: collection.summary.warningCount,
+      criticalCount: collection.summary.criticalCount,
+      responseWarningCount: collection.warnings.length,
+      layerCounts: countLayers(collection.features),
+      sourceIds: collection.query.sources,
+      layers: collection.query.layers
+    };
+  }
+
   async getFeatures(query: SafetyQuery): Promise<SafetyFeatureCollection> {
-    return this.cache.getOrLoad(cacheKeyForSafetyQuery(query), () => this.fetchFeatures(query));
+    const collection = await this.cache.getOrLoad(cacheKeyForSafetyQuery(query), () => this.fetchFeatures(query));
+    this.lastCollection = collection;
+    return collection;
   }
 
   private async fetchFeatures(query: SafetyQuery): Promise<SafetyFeatureCollection> {
@@ -89,6 +145,14 @@ export class SafetyAggregationService {
       warnings
     };
   }
+}
+
+function countLayers(features: SafetyFeature[]): Partial<Record<SafetyLayerId, number>> {
+  const counts: Partial<Record<SafetyLayerId, number>> = {};
+  for (const feature of features) {
+    counts[feature.properties.layer] = (counts[feature.properties.layer] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function normalizeProviderFeature(feature: SafetyFeature): SafetyFeature {

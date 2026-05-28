@@ -59,6 +59,19 @@ function registerHealthRoutes(app: Express, context: SafetyDataAppContext): void
 
   app.get("/metrics", (_req, res) => {
     const cache = context.aggregation.cacheStats();
+    const snapshot = context.aggregation.telemetrySnapshot();
+    const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
+      `safety_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
+      `safety_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
+      `safety_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
+      `safety_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
+      `safety_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
+      `safety_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
+      `safety_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
+      `safety_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
+      `safety_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
+    ]);
+    const layerCountLines = Object.entries(snapshot.layerCounts).map(([layer, count]) => `safety_data_last_layer_features{layer="${layer}"} ${count ?? 0}`);
     res
       .type("text/plain")
       .send(
@@ -72,7 +85,17 @@ function registerHealthRoutes(app: Express, context: SafetyDataAppContext): void
           `safety_data_cache_stale_hits ${cache.staleHits}`,
           `safety_data_cache_refreshes ${cache.refreshes}`,
           `safety_data_cache_errors ${cache.errors}`,
-          `safety_data_cache_evictions ${cache.evictions}`
+          `safety_data_cache_evictions ${cache.evictions}`,
+          `safety_data_last_feature_count ${snapshot.featureCount}`,
+          `safety_data_last_source_count ${snapshot.sourceCount}`,
+          `safety_data_last_stale_feature_count ${snapshot.staleFeatureCount}`,
+          `safety_data_last_response_warning_count ${snapshot.responseWarningCount}`,
+          `safety_data_last_advisory_count ${snapshot.advisoryCount}`,
+          `safety_data_last_warning_count ${snapshot.warningCount}`,
+          `safety_data_last_critical_count ${snapshot.criticalCount}`,
+          `safety_data_last_generated_age_seconds ${snapshot.generatedAgeSeconds}`,
+          ...layerCountLines,
+          ...sourceCacheLines
         ].join("\n") + "\n"
       );
   });
@@ -93,20 +116,26 @@ function registerMetadataRoutes(app: Express, context: SafetyDataAppContext): vo
 
   app.get("/api/v1/observability", (_req, res) => {
     const cache = context.aggregation.cacheStats();
+    const snapshot = context.aggregation.telemetrySnapshot();
+    const sourceCaches = context.aggregation.sourceCacheStats();
     res.json({
       serviceId: "safety-data-api",
       generatedAt: new Date().toISOString(),
-      status: "ok",
+      status: snapshot.responseWarningCount > 0 || sourceCaches.some((sourceCache) => sourceCache.errors > 0) ? "degraded" : "ok",
       cache: cacheTelemetry(cache, context.config.cacheMaxEntries),
-      sourceCaches: [],
+      sourceCaches: sourceCaches.map((sourceCache) => ({
+        sourceId: sourceCache.sourceId,
+        cache: cacheTelemetry(sourceCache, context.config.cacheMaxEntries)
+      })),
       dataFreshness: {
         sourceCount: context.config.enabledSources.length,
-        sourcesWithImportAge: 0,
-        newestImportAgeSeconds: -1,
-        oldestImportAgeSeconds: -1,
-        degradedSourceCount: 0,
-        warningCount: 0
-      }
+        sourcesWithImportAge: snapshot.generatedAgeSeconds >= 0 ? 1 : 0,
+        newestImportAgeSeconds: snapshot.generatedAgeSeconds,
+        oldestImportAgeSeconds: snapshot.generatedAgeSeconds,
+        degradedSourceCount: snapshot.responseWarningCount > 0 ? 1 : 0,
+        warningCount: snapshot.responseWarningCount
+      },
+      lastResult: snapshot
     });
   });
 

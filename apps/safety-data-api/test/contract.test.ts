@@ -193,9 +193,36 @@ describe("Safety Data API contract", () => {
   });
 
   it("exposes cache metrics", async () => {
+    await request(app).get("/api/v1/features?layers=weather_alerts,fire,flood,boundary_admin&source=mock&limit=10").expect(200);
+
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("safety_data_cache_entries");
     expect(response.text).toContain("safety_data_cache_coalesced_hits");
+    expect(response.text).toContain("safety_data_last_feature_count");
+    expect(response.text).toContain('safety_data_last_layer_features{layer="fire"}');
+  });
+
+  it("exposes observability with per-source cache state", async () => {
+    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"] });
+    await request(configured.app).get("/api/v1/observability").expect(200).expect((response) => {
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          serviceId: "safety-data-api",
+          cache: expect.objectContaining({ entries: expect.any(Number), hitRate: expect.any(Number) }),
+          sourceCaches: expect.arrayContaining([
+            expect.objectContaining({ sourceId: "chmi_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+            expect.objectContaining({ sourceId: "chmi_hydro", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+            expect.objectContaining({ sourceId: "nasa_firms", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+            expect.objectContaining({ sourceId: "admin_boundaries", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) })
+          ]),
+          lastResult: expect.objectContaining({
+            featureCount: 0,
+            generatedAgeSeconds: -1,
+            layerCounts: {}
+          })
+        })
+      );
+    });
   });
 
   it("skips CHMI hydro stations with missing current data without degrading a partial response", async () => {

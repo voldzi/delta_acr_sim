@@ -491,6 +491,40 @@ export function App() {
     data.safetyData.features.summary.advisoryCount +
     data.safetyData.features.summary.warningCount +
     data.safetyData.features.summary.criticalCount;
+  const safetyLastResult = data.observability.safetyData.payload.lastResult;
+  const safetyGeneratedAgeSeconds = safetyLastResult?.generatedAgeSeconds ?? secondsSinceIso(data.safetyData.features.generatedAt);
+  const safetyLayerCounts = {
+    weather_alerts:
+      (safetyLastResult?.layerCounts?.weather_alerts ?? countSafetyLayer(data.safetyData.features.features, "weather_alerts")) +
+      (safetyLastResult?.layerCounts?.warnings ?? countSafetyLayer(data.safetyData.features.features, "warnings")),
+    fire: safetyLastResult?.layerCounts?.fire ?? countSafetyLayer(data.safetyData.features.features, "fire"),
+    flood: safetyLastResult?.layerCounts?.flood ?? countSafetyLayer(data.safetyData.features.features, "flood"),
+    boundary_admin: safetyLastResult?.layerCounts?.boundary_admin ?? countSafetyLayer(data.safetyData.features.features, "boundary_admin")
+  };
+  const safetyResponseWarningCount = safetyLastResult?.responseWarningCount ?? data.safetyData.features.warnings.length;
+  const safetySourceCacheSummary = summarizeCacheObservability((data.observability.safetyData.payload.sourceCaches ?? []).map((item) => item.cache));
+  const safetySourceCacheChannels: Array<{ label: string; value: string; detail: string; load: number; tone: Tone }> = (data.observability.safetyData.payload.sourceCaches ?? []).map((item) => {
+    const source = data.safetyData.sources.find((candidate) => candidate.sourceId === item.sourceId);
+    return {
+      label: source?.label ?? item.sourceId,
+      value: formatPercentValue(item.cache.hitRate),
+      detail: `${item.cache.hits.toLocaleString("cs-CZ")} hits, ${item.cache.misses.toLocaleString("cs-CZ")} misses, ${item.cache.errors.toLocaleString("cs-CZ")} errors`,
+      load: item.cache.hitRate * 100,
+      tone: item.cache.errors > 0 ? "danger" : item.cache.hitRate >= 0.75 ? "safe" : item.cache.misses > 0 ? "warn" : "neutral"
+    };
+  });
+  const safetyCacheChannels =
+    safetySourceCacheChannels.length > 0
+      ? safetySourceCacheChannels
+      : [
+          {
+            label: "Source cache",
+            value: "cold",
+            detail: "source-level cache will warm after the first non-mock query",
+            load: 12,
+            tone: "neutral" as Tone
+          }
+        ];
   const liveDataProducts =
     data.flightData.tracks.summary.deduplicatedTrackCount +
     data.situationData.features.summary.featureCount +
@@ -1078,6 +1112,35 @@ export function App() {
                     <CacheChannel key={channel.label} channel={channel} />
                   ))}
                   {cacheChannels.map((channel) => (
+                    <CacheChannel key={channel.label} channel={channel} />
+                  ))}
+                </div>
+              </section>
+            </section>
+
+            <section id="safety-operations" className="overview-grid safety-ops-grid" aria-label="Safety data cache and freshness">
+              <section className="ops-panel safety-ops-panel">
+                <PanelTitle
+                  icon={<ShieldAlert />}
+                  title="Safety data operations"
+                  subtitle={`Last safety result ${formatImportAge(safetyGeneratedAgeSeconds)} · ${safetyResponseWarningCount} quality signals`}
+                />
+                <div className="publisher-stats safety-ops-stats">
+                  <PublisherStat label="Weather alerts" value={safetyLayerCounts.weather_alerts.toLocaleString("cs-CZ")} tone={safetyLayerCounts.weather_alerts > 0 ? "warn" : "neutral"} />
+                  <PublisherStat label="Fire" value={safetyLayerCounts.fire.toLocaleString("cs-CZ")} tone={safetyLayerCounts.fire > 0 ? "warn" : "neutral"} />
+                  <PublisherStat label="Flood" value={safetyLayerCounts.flood.toLocaleString("cs-CZ")} tone={safetyLayerCounts.flood > 0 ? "warn" : "neutral"} />
+                  <PublisherStat label="Boundaries" value={safetyLayerCounts.boundary_admin.toLocaleString("cs-CZ")} tone={safetyLayerCounts.boundary_admin > 0 ? "safe" : "neutral"} />
+                </div>
+              </section>
+
+              <section className="ops-panel cache-panel">
+                <PanelTitle
+                  icon={<TimerReset />}
+                  title="Safety source cache"
+                  subtitle={`${formatPercentValue(safetySourceCacheSummary.hitRate)} hit-rate · ${safetySourceCacheSummary.requests.toLocaleString("cs-CZ")} source requests`}
+                />
+                <div className="cache-stack">
+                  {safetyCacheChannels.map((channel) => (
                     <CacheChannel key={channel.label} channel={channel} />
                   ))}
                 </div>
@@ -1704,6 +1767,9 @@ export function App() {
                   <SummaryItem label="Stale after" value={`${data.safetyData.config.staleAfterSeconds}s`} />
                   <SummaryItem label="Timeout" value={`${data.safetyData.config.requestTimeoutMs} ms`} />
                   <SummaryItem label="Hydro station cap" value={`${data.safetyData.config.hydroMaxStations}`} />
+                  <SummaryItem label="Source hit-rate" value={formatPercentValue(safetySourceCacheSummary.hitRate)} />
+                  <SummaryItem label="Last result age" value={formatImportAge(safetyGeneratedAgeSeconds)} />
+                  <SummaryItem label="Quality signals" value={`${safetyResponseWarningCount}`} />
                 </div>
               </section>
 
@@ -2506,6 +2572,14 @@ function formatImportAge(seconds: number | undefined): string {
     return `${Math.round(seconds / 3600)} h`;
   }
   return `${Math.round(seconds / 86_400)} d`;
+}
+
+function secondsSinceIso(value: string | undefined): number {
+  if (!value) {
+    return -1;
+  }
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? Math.max(0, Math.round((Date.now() - timestamp) / 1000)) : -1;
 }
 
 function summarizeCacheObservability(caches: Array<CacheObservability | undefined>): { hits: number; misses: number; requests: number; hitRate: number; errors: number } {

@@ -126,10 +126,21 @@ CAP soubory ČHMÚ mohou obsahovat informační záznamy typu „žádná výstr
 GET /safety-data/health/live
 GET /safety-data/health/ready
 GET /safety-data/metrics
+GET /safety-data/api/v1/observability
 GET /safety-data/api/v1/layers
 GET /safety-data/api/v1/sources
 GET /safety-data/api/v1/config
 ```
+
+`/metrics` obsahuje aggregate cache metriky i per-source cache metriky:
+
+- `safety_data_cache_hits/misses/stale_hits/errors`,
+- `safety_data_source_cache_hits/misses/stale_hits/errors{source="chmi_alerts|chmi_hydro|nasa_firms|admin_boundaries"}`,
+- `safety_data_last_feature_count`,
+- `safety_data_last_layer_features{layer="weather_alerts|fire|flood|boundary_admin"}`,
+- `safety_data_last_generated_age_seconds`.
+
+`/api/v1/observability` je JSON endpoint pro SIM Overview. Vrací aggregate cache, `sourceCaches`, `dataFreshness` a `lastResult`, aby bylo vidět stáří poslední odpovědi, počet features, varování a cache hit-rate bez dotazování externích zdrojů.
 
 `/config` nesmí vracet secrets. V pilotu nejsou pro ČHMÚ zdroje potřeba žádné bearer tokeny.
 `NASA_FIRMS_MAP_KEY` se v `/config` nevrací; endpoint ukáže jen `authConfigured=true/false`.
