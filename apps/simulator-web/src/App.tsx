@@ -14,6 +14,7 @@ import {
   Gauge,
   KeyRound,
   Layers3,
+  LockKeyhole,
   LogOut,
   MapPinned,
   Network,
@@ -445,7 +446,12 @@ export function App() {
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
   const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
-  const operatorActionDisabled = loading || !apiTokenConfigured;
+  const protectedSectionsUnlocked = oidcEnabled ? authSession.status === "authenticated" : apiTokenConfigured;
+  const visibleSection = protectedSectionsUnlocked ? activeSection : "overview";
+  const protectedSectionNotice = oidcEnabled
+    ? "Sign in with Keycloak to access scenario control and source details."
+    : "Enter a valid SIM API token to access scenario control and source details.";
+  const operatorActionDisabled = loading || !protectedSectionsUnlocked || !apiTokenConfigured;
   const operatorAuthRequiredNotice = oidcEnabled
     ? "Login with Keycloak using an account with csm-sim-operator or csm-sim-admin role."
     : operatorTokenRequiredNotice;
@@ -569,7 +575,7 @@ export function App() {
       tone: "safe"
     }
   ] satisfies Array<{ label: string; value: string; detail: string; load: number; tone: Tone }>;
-  const activeSectionMeta = sectionMeta(activeSection);
+  const activeSectionMeta = sectionMeta(visibleSection);
 
   const readinessItems = [
     {
@@ -774,6 +780,12 @@ export function App() {
     }
   }, [authSession.status, authSession.accessToken, refresh]);
 
+  useEffect(() => {
+    if (!protectedSectionsUnlocked && activeSection !== "overview") {
+      setActiveSection("overview");
+    }
+  }, [activeSection, protectedSectionsUnlocked]);
+
   useEffect(
     () =>
       onSimApiAuthChange(() => {
@@ -802,10 +814,10 @@ export function App() {
   }
 
   function requireOperatorToken(): boolean {
-    if (apiTokenConfigured) {
+    if (protectedSectionsUnlocked && apiTokenConfigured) {
       return true;
     }
-    setNotice(operatorAuthRequiredNotice);
+    setNotice(protectedSectionsUnlocked ? operatorAuthRequiredNotice : protectedSectionNotice);
     return false;
   }
 
@@ -816,8 +828,18 @@ export function App() {
 
   function logoutFromKeycloak() {
     setAuthSession({ status: "anonymous" });
+    setActiveSection("overview");
     setSimAuthorizationTokenProvider(undefined);
     endSession(authConfig, authSession);
+  }
+
+  function selectSection(section: AppSection): void {
+    if (section !== "overview" && !protectedSectionsUnlocked) {
+      setActiveSection("overview");
+      setNotice(protectedSectionNotice);
+      return;
+    }
+    setActiveSection(section);
   }
 
   async function runAction<T>(message: string, action: () => Promise<T>) {
@@ -846,14 +868,14 @@ export function App() {
         </div>
 
         <nav className="nav-list" aria-label="Primary">
-          <NavButton section="overview" activeSection={activeSection} onSelect={setActiveSection} icon={<Gauge size={17} />} label="Overview" />
-          <NavButton section="scenario" activeSection={activeSection} onSelect={setActiveSection} icon={<Activity size={17} />} label="Scenario" />
-          <NavButton section="flight-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Plane size={17} />} label="Flight data" />
-          <NavButton section="situation-data" activeSection={activeSection} onSelect={setActiveSection} icon={<Layers3 size={17} />} label="Situation data" />
-          <NavButton section="tak-gateway" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="TAK gateway" />
-          <NavButton section="publisher" activeSection={activeSection} onSelect={setActiveSection} icon={<RadioTower size={17} />} label="Publisher" />
-          <NavButton section="ai" activeSection={activeSection} onSelect={setActiveSection} icon={<Bot size={17} />} label="AI Assistant" />
-          <NavButton section="safety" activeSection={activeSection} onSelect={setActiveSection} icon={<ShieldAlert size={17} />} label="Safety data" />
+          <NavButton section="overview" activeSection={visibleSection} onSelect={selectSection} icon={<Gauge size={17} />} label="Overview" />
+          <NavButton section="scenario" activeSection={visibleSection} onSelect={selectSection} icon={<Activity size={17} />} label="Scenario" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="flight-data" activeSection={visibleSection} onSelect={selectSection} icon={<Plane size={17} />} label="Flight data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="situation-data" activeSection={visibleSection} onSelect={selectSection} icon={<Layers3 size={17} />} label="Situation data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="tak-gateway" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="TAK gateway" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="publisher" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="Publisher" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="ai" activeSection={visibleSection} onSelect={selectSection} icon={<Bot size={17} />} label="AI Assistant" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="safety" activeSection={visibleSection} onSelect={selectSection} icon={<ShieldAlert size={17} />} label="Safety data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
         </nav>
 
         <div className="safety-panel">
@@ -917,7 +939,7 @@ export function App() {
           <span>{notice}</span>
         </div>
 
-        {activeSection === "overview" ? (
+        {visibleSection === "overview" ? (
           <>
             <section id="dashboard" className="overview-hero" aria-label="Live data provider overview">
               <div className="overview-hero-main">
@@ -1010,7 +1032,7 @@ export function App() {
         ) : null}
 
         <section className="section-layout">
-          {activeSection === "scenario" ? (
+          {visibleSection === "scenario" ? (
           <section id="scenario" className="panel scenario-panel">
             <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COM display validation." />
 
@@ -1261,7 +1283,7 @@ export function App() {
           </section>
           ) : null}
 
-          {activeSection === "flight-data" ? (
+          {visibleSection === "flight-data" ? (
           <section id="flight-data" className="panel flight-data-panel">
             <PanelTitle icon={<Plane />} title="Flight Data source" subtitle="Aggregated public or licensed flight tracks prepared for COM." />
 
@@ -1331,7 +1353,7 @@ export function App() {
           </section>
           ) : null}
 
-          {activeSection === "situation-data" ? (
+          {visibleSection === "situation-data" ? (
           <section id="situation-data" className="panel situation-data-panel">
             <PanelTitle icon={<Layers3 />} title="Situation Data source" subtitle="Aggregated public context layers prepared for the COM map." />
 
@@ -1413,7 +1435,7 @@ export function App() {
           </section>
           ) : null}
 
-          {activeSection === "tak-gateway" ? (
+          {visibleSection === "tak-gateway" ? (
           <section id="tak-gateway" className="panel situation-data-panel">
             <PanelTitle icon={<RadioTower />} title="TAK Gateway" subtitle="Cursor-on-Target ingest and normalized COM feature projection for ARDOS/TAK partner data." />
 
@@ -1493,7 +1515,7 @@ export function App() {
           </section>
           ) : null}
 
-          {activeSection === "publisher" ? (
+          {visibleSection === "publisher" ? (
           <section id="publisher" className="panel publisher-panel">
             <PanelTitle icon={<RadioTower />} title="COM publisher" subtitle="Delivery state and recent canonical events." />
             <div className="publisher-status">
@@ -1532,7 +1554,7 @@ export function App() {
           </section>
           ) : null}
 
-          {activeSection === "ai" ? (
+          {visibleSection === "ai" ? (
           <section id="ai" className="panel ai-panel">
             <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
             <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
@@ -1559,7 +1581,7 @@ export function App() {
           </section>
           ) : null}
 
-          {activeSection === "safety" ? (
+          {visibleSection === "safety" ? (
           <section id="safety-data" className="panel safety-data-panel">
             <PanelTitle icon={<ShieldAlert />} title="Safety Data source" subtitle="Official public warnings and hydrological observations prepared for COM map layers." />
 
@@ -1741,18 +1763,30 @@ function NavButton({
   activeSection,
   onSelect,
   icon,
-  label
+  label,
+  locked = false,
+  lockReason
 }: {
   section: AppSection;
   activeSection: AppSection;
   onSelect: (section: AppSection) => void;
   icon: ReactNode;
   label: string;
+  locked?: boolean;
+  lockReason?: string;
 }) {
   return (
-    <button type="button" className={`nav-item ${activeSection === section ? "selected" : ""}`} onClick={() => onSelect(section)} aria-current={activeSection === section ? "page" : undefined}>
+    <button
+      type="button"
+      className={`nav-item ${activeSection === section ? "selected" : ""} ${locked ? "locked" : ""}`}
+      disabled={locked}
+      title={locked ? lockReason : undefined}
+      onClick={() => onSelect(section)}
+      aria-current={activeSection === section ? "page" : undefined}
+    >
       {icon}
       <span>{label}</span>
+      {locked ? <LockKeyhole className="nav-lock" size={13} /> : null}
     </button>
   );
 }

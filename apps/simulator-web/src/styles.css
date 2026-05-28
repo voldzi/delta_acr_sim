@@ -175,6 +175,20 @@ textarea {
   box-shadow: inset 3px 0 0 #28b8a5;
 }
 
+.nav-item.locked {
+  color: rgba(219, 232, 229, 0.46);
+}
+
+.nav-item.locked:hover {
+  background: transparent;
+  color: rgba(219, 232, 229, 0.46);
+}
+
+.nav-item .nav-lock {
+  margin-left: auto;
+  color: rgba(219, 232, 229, 0.42);
+}
+
 .safety-panel {
   margin-top: auto;
   display: grid;
