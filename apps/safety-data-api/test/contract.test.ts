@@ -3,8 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Pool } from "pg";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SafetyAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SafetyDataConfig } from "../src/config.js";
@@ -33,12 +34,17 @@ describe("Safety Data API contract", () => {
       chmiHydroMaxStations: 20,
       nasaFirmsAreaBaseUrl: "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
       nasaFirmsSource: "VIIRS_SNPP_NRT",
-      nasaFirmsDayRange: 1
+      nasaFirmsDayRange: 1,
+      chmiOrpCodelistUrl:
+        "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
+      adminBoundaryTable: "public.osm_admin_boundary",
+      adminBoundaryCacheTtlSeconds: 86_400
     };
     ({ app } = await createApp(config));
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -238,6 +244,74 @@ describe("Safety Data API contract", () => {
         expect(response.body.summary.featureCount).toBe(0);
         expect(response.body.summary.staleFeatureCount).toBe(0);
         expect(response.body.warnings).toEqual([]);
+      }
+    );
+  });
+
+  it("resolves CHMI CAP CISORP geocodes to PostGIS administrative polygons", async () => {
+    const querySpy = vi.spyOn(Pool.prototype, "query").mockResolvedValue({
+      rows: [
+        {
+          cisorp_code: "2101",
+          cisorp_name: "Benešov",
+          osm_id: "-20150098",
+          admin_level: 6,
+          name: "SO ORP Benešov",
+          code: "-20150098",
+          country_code: "CZ",
+          source: "osm_postgis",
+          imported_at: "2026-05-28T00:00:00.000Z",
+          geometry_geojson:
+            '{"type":"Polygon","coordinates":[[[14.3,49.7],[14.9,49.7],[14.9,50.1],[14.3,50.1],[14.3,49.7]]]}',
+          tags: { short_name: "Benešov" }
+        }
+      ]
+    } as never);
+
+    await withFixtureServer(
+      {
+        "/cap/": '<html><body><a href="alert.xml">alert.xml</a> 28-May-2026 12:00</body></html>',
+        "/cap/alert.xml": chmiActiveCapFixture(),
+        "/cisorp.csv": chmiOrpCodelistCsvFixture()
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_alerts"],
+          chmiAlertsCapBaseUrl: `${baseUrl}/cap/`,
+          chmiOrpCodelistUrl: `${baseUrl}/cisorp.csv`,
+          adminBoundaryConnectionString: "postgresql://sim:test@localhost:5432/sim_osm"
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=weather_alerts&source=chmi_alerts&limit=10")
+          .expect(200);
+
+        expect(querySpy).toHaveBeenCalledTimes(1);
+        expect(response.body.warnings).toEqual([]);
+        expect(response.body.summary.featureCount).toBe(1);
+        expect(response.body.features[0]).toEqual(
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "Polygon" }),
+            properties: expect.objectContaining({
+              layerId: "public.safety.weather_alerts",
+              providerLayerId: "safety.weather_alerts",
+              sourceId: "chmi_alerts",
+              adminLevel: "6",
+              basis: expect.arrayContaining(["chmi_cap_cisorp", "osm_postgis_admin_boundary_match"]),
+              metrics: expect.objectContaining({
+                boundaryRequestedCount: 1,
+                boundaryMatchCount: 1,
+                geometryMode: "admin_boundary"
+              }),
+              tags: expect.objectContaining({
+                geometryMode: "admin_boundary",
+                boundaryMatch: "full",
+                boundarySource: "osm_postgis_admin_boundary"
+              })
+            })
+          })
+        );
       }
     );
   });
@@ -529,4 +603,40 @@ function chmiNoWarningCapFixture(): string {
     <area><areaDesc>Hlavní město Praha</areaDesc></area>
   </info>
 </alert>`;
+}
+
+function chmiActiveCapFixture(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>test-active-warning</identifier>
+  <sender>chmi@chmi.cz</sender>
+  <sent>2026-05-28T12:00:00+02:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>cs</language>
+    <event>Silné bouřky</event>
+    <headline>Výstraha před silnými bouřkami</headline>
+    <urgency>Expected</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <onset>2026-05-28T14:00:00+02:00</onset>
+    <expires>2026-05-28T20:00:00+02:00</expires>
+    <description>Očekává se výskyt silných bouřek.</description>
+    <instruction>Sledujte vývoj počasí a dbejte pokynů autorit.</instruction>
+    <area>
+      <areaDesc>Středočeský kraj</areaDesc>
+      <geocode><valueName>CISORP</valueName><value>2101</value></geocode>
+      <geocode><valueName>EMMA_ID</valueName><value>CZ02101</value></geocode>
+    </area>
+  </info>
+</alert>`;
+}
+
+function chmiOrpCodelistCsvFixture(): string {
+  return `"kodjaz","typvaz","akrcis1","kodcis1","chodnota1","text1","akrcis2","kodcis2","chodnota2","text2"
+"CS","Editační vazba","CISORP",65,"1000","Praha","CISPOU",61,"10000","Praha"
+"CS","Editační vazba","CISORP",65,"2101","Benešov","CISPOU",61,"21011","Benešov"
+`;
 }

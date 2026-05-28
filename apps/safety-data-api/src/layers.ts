@@ -6,7 +6,7 @@ export const LAYERS: LayerDescriptor[] = [
     label: "Weather alerts",
     description: "Official weather warnings normalized for a COM civil-risk map layer.",
     defaultVisible: true,
-    geometryTypes: ["Point", "Polygon"],
+    geometryTypes: ["Point", "Polygon", "MultiPolygon"],
     expectedCadenceSeconds: 300
   },
   {
@@ -30,7 +30,7 @@ export const LAYERS: LayerDescriptor[] = [
     label: "Administrative boundaries",
     description: "Administrative boundary reference features for area context.",
     defaultVisible: false,
-    geometryTypes: ["Polygon"],
+    geometryTypes: ["Polygon", "MultiPolygon"],
     expectedCadenceSeconds: 86400
   }
 ];

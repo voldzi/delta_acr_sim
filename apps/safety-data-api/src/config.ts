@@ -14,6 +14,7 @@ export interface SafetyDataConfig {
   cacheMaxEntries: number;
   staleAfterSeconds: number;
   chmiAlertsCapBaseUrl: string;
+  chmiOrpCodelistUrl: string;
   chmiHydroMetadataUrl: string;
   chmiHydroNowBaseUrl: string;
   chmiHydroMaxStations: number;
@@ -48,6 +49,9 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     cacheMaxEntries: parseInteger(process.env.SAFETY_DATA_CACHE_MAX_ENTRIES, 512),
     staleAfterSeconds: parseInteger(process.env.SAFETY_DATA_STALE_AFTER_SECONDS, 3600),
     chmiAlertsCapBaseUrl: process.env.CHMI_ALERTS_CAP_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
+    chmiOrpCodelistUrl:
+      process.env.CHMI_ORP_CODELIST_URL ??
+      "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
     chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
     chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 80),

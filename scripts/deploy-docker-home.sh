@@ -134,6 +134,7 @@ CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-op
 PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,admin_boundaries
+CHMI_ORP_CODELIST_URL=https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400

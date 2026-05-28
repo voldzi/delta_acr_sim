@@ -40,7 +40,7 @@ const CHMI_OPEN_DATA_LICENSE: SafetyDataLicense = {
   notes: [
     "Attribution is required.",
     "Warnings and hydrological observations are public context; operational decisions must rely on official channels.",
-    "CAP alerts can carry administrative geocodes without exact polygons; this API preserves geocodes and uses representative map points when polygons are not available."
+    "CAP alerts can carry administrative geocodes; this API resolves CISORP areas to local/PostGIS administrative polygons when available and falls back to representative map points when polygons are not available."
   ]
 };
 
@@ -136,6 +136,9 @@ class ChmiAlertsSource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly listingCache: ManagedResponseCache<string>;
   private readonly capCache: ManagedResponseCache<unknown>;
+  private readonly orpCodelistCache: ManagedResponseCache<ChmiOrpCodelistEntry[]>;
+  private readonly boundaryMatchCache: ManagedResponseCache<ChmiBoundaryMatchRow[]>;
+  private boundaryPool?: Pool;
 
   constructor(private readonly config: SafetyDataConfig) {
     this.listingCache = new ManagedResponseCache<string>({
@@ -147,6 +150,16 @@ class ChmiAlertsSource implements SafetyDataSource {
       ttlMs: Math.max(60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(10 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 4
+    });
+    this.orpCodelistCache = new ManagedResponseCache<ChmiOrpCodelistEntry[]>({
+      ttlMs: 7 * 24 * 60 * 60 * 1000,
+      staleIfErrorMs: 30 * 24 * 60 * 60 * 1000,
+      maxEntries: 1
+    });
+    this.boundaryMatchCache = new ManagedResponseCache<ChmiBoundaryMatchRow[]>({
+      ttlMs: Math.max(300, config.adminBoundaryCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.adminBoundaryCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(32, Math.min(512, config.cacheMaxEntries))
     });
     this.descriptor = {
       sourceId: "chmi_alerts",
@@ -191,8 +204,130 @@ class ChmiAlertsSource implements SafetyDataSource {
     });
 
     const capLayer = query.layers.includes("warnings") && !query.layers.includes("weather_alerts") ? "warnings" : "weather_alerts";
-    const features = mapCapAlert(parsed, query, fetchedAt, capUrl, capLayer).filter((feature) => isFeatureInBbox(feature, query.bbox));
-    return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings: [] };
+    const pointFeatures = mapCapAlert(parsed, query, fetchedAt, capUrl, capLayer).filter((feature) => isFeatureInBbox(feature, query.bbox));
+    const polygonized = await this.polygonizeCapFeatures(pointFeatures, query);
+    const features = polygonized.features.filter((feature) => isFeatureInBbox(feature, query.bbox));
+    return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings: polygonized.warnings };
+  }
+
+  private async polygonizeCapFeatures(features: SafetyFeature[], query: SafetyQuery): Promise<{ features: SafetyFeature[]; warnings: string[] }> {
+    const requestedCodes = unique(features.flatMap((feature) => capOrpCodes(feature.properties.geocodes)));
+    if (requestedCodes.length === 0) {
+      return { features, warnings: [] };
+    }
+
+    if (!this.config.adminBoundaryConnectionString) {
+      return {
+        features: features.map((feature) => markCapPointFallback(feature, requestedCodes.length, 0, "postgis_not_configured")),
+        warnings: ["chmi_alerts CAP polygonization disabled: configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL to resolve CISORP areas."]
+      };
+    }
+
+    try {
+      const codelist = await this.orpCodelistCache.getOrLoad("chmi_cisorp_codelist", () => fetchChmiOrpCodelist(this.config));
+      const boundaryRows = await this.fetchBoundaryMatches(query.bbox, requestedCodes, codelist);
+      const boundaryByCode = new Map<string, ChmiBoundaryMatchRow>();
+      for (const row of boundaryRows) {
+        if (!boundaryByCode.has(row.cisorp_code)) {
+          boundaryByCode.set(row.cisorp_code, row);
+        }
+      }
+
+      const transformed = features
+        .map((feature) => polygonizeCapFeature(feature, boundaryByCode))
+        .filter((feature): feature is SafetyFeature => Boolean(feature));
+      return { features: transformed, warnings: [] };
+    } catch (error) {
+      return {
+        features: features.map((feature) => markCapPointFallback(feature, requestedCodes.length, 0, "polygonization_failed")),
+        warnings: [
+          error instanceof Error
+            ? `chmi_alerts CAP polygonization failed; using representative points: ${error.message}`
+            : "chmi_alerts CAP polygonization failed; using representative points."
+        ]
+      };
+    }
+  }
+
+  private async fetchBoundaryMatches(bbox: BoundingBox, requestedCodes: string[], codelist: ChmiOrpCodelistEntry[]): Promise<ChmiBoundaryMatchRow[]> {
+    const codelistByCode = new Map(codelist.map((entry) => [entry.code, entry]));
+    const requested = requestedCodes
+      .map((code) => codelistByCode.get(code) ?? (code === "1100" ? { code: "1100", name: "Praha" } : undefined))
+      .filter((entry): entry is ChmiOrpCodelistEntry => Boolean(entry));
+    if (requested.length === 0) {
+      return [];
+    }
+
+    const geometryColumn = boundaryLevelsForBbox(bbox).geometryColumn;
+    const cacheKey = JSON.stringify({
+      bbox: roundBbox(bbox),
+      codes: requested.map((entry) => entry.code).sort(),
+      simplification: geometryColumn
+    });
+    return this.boundaryMatchCache.getOrLoad(cacheKey, () => this.fetchBoundaryMatchRows(bbox, requested, geometryColumn));
+  }
+
+  private async fetchBoundaryMatchRows(
+    bbox: BoundingBox,
+    requested: ChmiOrpCodelistEntry[],
+    geometryColumn: AdminBoundaryGeometryColumn
+  ): Promise<ChmiBoundaryMatchRow[]> {
+    const pool = this.getBoundaryPool();
+    const table = quoteQualifiedIdentifier(this.config.adminBoundaryTable);
+    const geomColumn = `boundary.${quoteIdentifier(geometryColumn)}`;
+    const sql = `
+      with requested(cisorp_code, cisorp_name) as (
+        select * from unnest($5::text[], $6::text[])
+      )
+      select
+        requested.cisorp_code,
+        requested.cisorp_name,
+        boundary.osm_id::text,
+        boundary.admin_level,
+        boundary.name,
+        boundary.code,
+        boundary.country_code,
+        boundary.source,
+        boundary.imported_at,
+        st_asgeojson(${geomColumn}, 6) as geometry_geojson,
+        boundary.tags
+      from requested
+      join ${table} boundary on (
+        (requested.cisorp_name = 'Praha' and boundary.admin_level = 4 and boundary.name = 'Praha')
+        or (
+          boundary.admin_level = 6
+          and (
+            regexp_replace(coalesce(boundary.name, ''), '^SO ORP\\s+', '') = requested.cisorp_name
+            or boundary.tags->>'short_name' = requested.cisorp_name
+            or boundary.tags->>'full_name' = concat('správní obvod obce s rozšířenou působností ', requested.cisorp_name)
+          )
+        )
+      )
+      where boundary.geom && st_makeenvelope($1, $2, $3, $4, 4326)
+        and st_intersects(boundary.geom, st_makeenvelope($1, $2, $3, $4, 4326))
+      order by requested.cisorp_code, boundary.admin_level asc, st_area(boundary.geom::geography) desc
+    `;
+    const result = await pool.query<ChmiBoundaryMatchRow>(sql, [
+      bbox.west,
+      bbox.south,
+      bbox.east,
+      bbox.north,
+      requested.map((entry) => entry.code),
+      requested.map((entry) => entry.name)
+    ]);
+    return result.rows;
+  }
+
+  private getBoundaryPool(): Pool {
+    if (!this.boundaryPool) {
+      this.boundaryPool = new Pool({
+        connectionString: this.config.adminBoundaryConnectionString,
+        max: 3,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: this.config.requestTimeoutMs
+      });
+    }
+    return this.boundaryPool;
   }
 }
 
@@ -485,6 +620,16 @@ interface AdminBoundaryRow {
 }
 
 type AdminBoundaryGeometryColumn = "geom_z5" | "geom_z8" | "geom_z11" | "geom";
+
+interface ChmiOrpCodelistEntry {
+  code: string;
+  name: string;
+}
+
+interface ChmiBoundaryMatchRow extends AdminBoundaryRow {
+  cisorp_code: string;
+  cisorp_name: string;
+}
 
 interface HydroStationFetchResult {
   feature?: SafetyFeature;
@@ -853,6 +998,150 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
       raw: query.includeRaw ? info : undefined
     });
   });
+}
+
+async function fetchChmiOrpCodelist(config: SafetyDataConfig): Promise<ChmiOrpCodelistEntry[]> {
+  const text = await requestText(config.chmiOrpCodelistUrl, config.requestTimeoutMs);
+  const rows = parseCsv(text);
+  const byCode = new Map<string, ChmiOrpCodelistEntry>();
+  for (const row of rows) {
+    const code = normalizeCisorpCode(row.chodnota1);
+    const name = optionalString(row.text1);
+    if (!code || !name || byCode.has(code)) {
+      continue;
+    }
+    byCode.set(code, { code, name });
+  }
+
+  const prague = byCode.get("1000")?.name ?? "Praha";
+  byCode.set("1000", { code: "1000", name: prague });
+  byCode.set("1100", { code: "1100", name: prague });
+  return Array.from(byCode.values());
+}
+
+function polygonizeCapFeature(feature: SafetyFeature, boundaryByCode: Map<string, ChmiBoundaryMatchRow>): SafetyFeature | undefined {
+  const requestedCodes = capOrpCodes(feature.properties.geocodes);
+  if (requestedCodes.length === 0) {
+    return feature;
+  }
+
+  const matchedRows = requestedCodes
+    .map((code) => boundaryByCode.get(code))
+    .filter((row): row is ChmiBoundaryMatchRow => Boolean(row));
+  const geometry = mergeBoundaryGeometries(matchedRows);
+  if (!geometry) {
+    return undefined;
+  }
+
+  const adminLevels = unique(matchedRows.map((row) => String(row.admin_level)).filter(Boolean));
+  const matchedNames = unique(matchedRows.map((row) => row.cisorp_name).filter(Boolean));
+  const matchStatus = matchedRows.length === requestedCodes.length ? "full" : "bbox_subset";
+  return {
+    ...feature,
+    geometry,
+    properties: {
+      ...feature.properties,
+      areaName: feature.properties.areaName ?? boundaryAreaName(matchedNames),
+      adminLevel: adminLevels.length === 1 ? adminLevels[0] : "mixed",
+      basis: unique([...feature.properties.basis, "chmi_cap_cisorp", "osm_postgis_admin_boundary_match"]),
+      metrics: compactMetrics({
+        ...(feature.properties.metrics ?? {}),
+        boundaryRequestedCount: requestedCodes.length,
+        boundaryMatchCount: matchedRows.length,
+        geometryMode: "admin_boundary"
+      }),
+      tags: compactTags({
+        ...(feature.properties.tags ?? {}),
+        geometryMode: "admin_boundary",
+        boundaryMatch: matchStatus,
+        boundarySource: "osm_postgis_admin_boundary"
+      })
+    }
+  };
+}
+
+function markCapPointFallback(feature: SafetyFeature, requestedCount: number, matchedCount: number, reason: string): SafetyFeature {
+  return {
+    ...feature,
+    properties: {
+      ...feature.properties,
+      basis: unique([...feature.properties.basis, "chmi_cap_representative_point"]),
+      metrics: compactMetrics({
+        ...(feature.properties.metrics ?? {}),
+        boundaryRequestedCount: requestedCount,
+        boundaryMatchCount: matchedCount,
+        geometryMode: "representative_point"
+      }),
+      tags: compactTags({
+        ...(feature.properties.tags ?? {}),
+        geometryMode: "representative_point",
+        boundaryMatch: matchedCount > 0 ? "partial" : "none",
+        boundaryFallbackReason: reason
+      })
+    }
+  };
+}
+
+function capOrpCodes(geocodes: Array<{ scheme: string; value: string }> | undefined): string[] {
+  return unique(
+    (geocodes ?? [])
+      .flatMap((geocode) => {
+        const scheme = geocode.scheme.toUpperCase();
+        if (scheme.includes("CISORP")) {
+          return [normalizeCisorpCode(geocode.value)];
+        }
+        if (scheme.includes("EMMA")) {
+          return [normalizeEmmaOrpCode(geocode.value)];
+        }
+        return [];
+      })
+      .filter((code): code is string => Boolean(code))
+  );
+}
+
+function normalizeCisorpCode(value: string | undefined): string | undefined {
+  const digits = value?.replace(/\D/g, "");
+  if (!digits) {
+    return undefined;
+  }
+  return digits.length >= 4 ? digits.slice(-4) : digits.padStart(4, "0");
+}
+
+function normalizeEmmaOrpCode(value: string | undefined): string | undefined {
+  const digits = value?.replace(/\D/g, "");
+  return digits && digits.length >= 4 ? digits.slice(-4) : undefined;
+}
+
+function mergeBoundaryGeometries(rows: ChmiBoundaryMatchRow[]): SafetyGeometry | undefined {
+  const polygons: Array<Array<Array<[number, number]>>> = [];
+  for (const row of rows) {
+    const geometry = parseSafetyGeometry(row.geometry_geojson);
+    if (!geometry) {
+      continue;
+    }
+    if (geometry.type === "Polygon") {
+      polygons.push(geometry.coordinates);
+    } else if (geometry.type === "MultiPolygon") {
+      polygons.push(...geometry.coordinates);
+    }
+  }
+  if (polygons.length === 0) {
+    return undefined;
+  }
+  if (polygons.length === 1) {
+    return { type: "Polygon", coordinates: polygons[0] ?? [] };
+  }
+  return { type: "MultiPolygon", coordinates: polygons };
+}
+
+function boundaryAreaName(names: string[]): string | undefined {
+  if (names.length === 0) {
+    return undefined;
+  }
+  if (names.length === 1) {
+    return names[0];
+  }
+  return `${names.length} správních území`;
 }
 
 interface HydroStation {

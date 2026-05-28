@@ -31,7 +31,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         kind: "vector_features",
         defaultVisible: true,
         selectable: true,
-        geometryTypes: ["Point", "Polygon"],
+        geometryTypes: ["Point", "Polygon", "MultiPolygon"],
         minZoom: 4,
         maxZoom: 18,
         refreshSeconds: 300,
@@ -106,7 +106,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         kind: "vector_features",
         defaultVisible: false,
         selectable: true,
-        geometryTypes: ["Polygon"],
+        geometryTypes: ["Polygon", "MultiPolygon"],
         minZoom: 4,
         maxZoom: 18,
         refreshSeconds: 86400,
@@ -177,7 +177,7 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         selectableInMap: true,
         feedsLayerIds: ["safety.weather_alerts"],
         feedsCatalogLayerIds: ["public.safety.weather_alerts"],
-        notes: ["Primary public weather warning source."]
+        notes: ["Primary public weather warning source; CISORP areas are resolved to local/PostGIS administrative polygons when available."]
       };
     case "chmi_hydro":
       return {

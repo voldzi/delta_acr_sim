@@ -82,7 +82,7 @@ Specializovaná pole:
 - `admin_boundaries`: referenční administrativní hranice. Produkčně čte lokální/PostGIS read-model `public.osm_admin_boundary`; pokud není DB nebo view k dispozici, vrací jen hrubý seed ČR s warningem.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
-ČHMÚ CAP feed může poskytovat administrativní geokódy bez přesných polygonů. SIM proto ukládá `affectedAreas` a `geocodes`, ale pro mapový bod používá reprezentativní bod aktuálního bboxu. COM má tyto body vizualizovat jako výstražné anotace, nikoli jako přesnou hranici území.
+ČHMÚ CAP feed poskytuje administrativní geokódy, typicky `CISORP` a `EMMA_ID`. SIM tyto kódy páruje přes cachovaný číselník ČSÚ CISORP na lokální/PostGIS hranice `public.osm_admin_boundary`; pokud je shoda dostupná, `weather_alerts` vrací `Polygon`/`MultiPolygon` pro zasažené správní území. Pokud PostGIS nebo číselník nejsou dostupné, SIM zachová `affectedAreas` a `geocodes` a vrátí reprezentativní bod s `properties.metrics.geometryMode=representative_point`.
 
 ## Projekce do Situation Data
 
@@ -107,6 +107,7 @@ API používá řízenou cache:
 - limit `CHMI_HYDRO_MAX_STATIONS`.
 - NASA FIRMS zdroj drží vlastní source-level cache alespoň 10 minut a bez `NASA_FIRMS_MAP_KEY` se nedotazuje externího API.
 - Admin hranice se čtou z lokální/PostGIS materializované view s TTL `SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS`; geometrie se vybírá ze zjednodušených sloupců podle velikosti bboxu.
+- ČHMÚ CAP polygonizace drží číselník CISORP z `CHMI_ORP_CODELIST_URL` v dlouhé cache a hranice čte pouze z lokálního PostGIS read-modelu, ne z veřejného Overpass runtime.
 
 Veřejné zdroje se nesmí dotazovat při každém dotazu tisíců COM klientů. COM má dotazovat SIM, SIM drží cache a dotazuje původní zdroje s konzervativní kadencí.
 

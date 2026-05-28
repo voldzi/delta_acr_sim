@@ -46,7 +46,7 @@ export interface LayerDescriptor {
   label: string;
   description: string;
   defaultVisible: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
   expectedCadenceSeconds?: number;
 }
 
