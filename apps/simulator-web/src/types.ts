@@ -229,7 +229,18 @@ export type SituationLayerId =
   | "fire"
   | "flood"
   | "boundary_admin"
-  | "air_quality";
+  | "boundary_country"
+  | "boundary_region"
+  | "boundary_district"
+  | "boundary_orp"
+  | "place_settlements"
+  | "air_quality"
+  | "weather_temperature_grid"
+  | "weather_wind_field"
+  | "weather_precipitation_grid"
+  | "weather_humidity_grid"
+  | "weather_pressure_grid"
+  | "air_quality_grid";
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
@@ -255,6 +266,10 @@ export interface SituationDataSourceHealth {
   objectCount?: number;
   lastImportAt?: string;
   lastImportAgeSeconds?: number;
+  boundaryFeatureCount?: number;
+  boundaryLevels?: string[];
+  boundaryLastImportAt?: string;
+  boundaryLastImportAgeSeconds?: number;
   warnings: string[];
 }
 
@@ -676,6 +691,10 @@ export interface SourceHealthObservability {
   objectCount?: number;
   lastImportAt?: string;
   lastImportAgeSeconds?: number;
+  boundaryFeatureCount?: number;
+  boundaryLevels?: string[];
+  boundaryLastImportAt?: string;
+  boundaryLastImportAgeSeconds?: number;
   warningCount: number;
 }
 
@@ -702,6 +721,8 @@ export interface ServiceObservability {
   sourceCaches?: SourceCacheObservability[];
   referenceCaches?: SourceCacheObservability[];
   dataFreshness?: DataFreshnessObservability;
+  environmentGrid?: Record<string, unknown>;
+  boundaryReadModel?: Record<string, unknown>;
   sourceHealth?: SourceHealthObservability[];
   eventStore?: TakEventStoreObservability;
   lastResult?: {

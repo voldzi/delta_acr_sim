@@ -545,7 +545,7 @@ class ChmiAirQualitySource implements SituationDataSource {
       enabled: config.enabledSources.includes("chmi_air_quality"),
       mode: "live",
       priority: 84,
-      layers: ["air_quality"],
+      layers: ["air_quality", "air_quality_grid"],
       license: CHMI_OPEN_DATA_LICENSE,
       baseUrl: config.chmiAirQualityDataUrl,
       updateCadenceSeconds: config.chmiAirQualityCacheTtlSeconds
@@ -645,7 +645,14 @@ class ChmiWeatherStationsSource implements SituationDataSource {
       enabled: config.enabledSources.includes("chmi_weather_stations"),
       mode: "live",
       priority: 83,
-      layers: ["weather"],
+      layers: [
+        "weather",
+        "weather_temperature_grid",
+        "weather_wind_field",
+        "weather_precipitation_grid",
+        "weather_humidity_grid",
+        "weather_pressure_grid"
+      ],
       license: CHMI_OPEN_DATA_LICENSE,
       baseUrl: config.chmiWeatherDataBaseUrl,
       updateCadenceSeconds: config.chmiWeatherCacheTtlSeconds

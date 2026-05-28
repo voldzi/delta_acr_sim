@@ -40,12 +40,12 @@ Povinné nebo prakticky povinné položky:
 
 - `providerLayerId`: lokální ID vrstvy u providera.
 - `recommendedCatalogLayerId`: doporučené source-neutral COM ID, například `public.mobile.network`.
-- `label`, `description`.
+- `label`, `description`; pro veřejné civilní vrstvy také `labelLocalized` a `descriptionLocalized`, typicky `cs` a `en`.
 - `categoryPath`.
 - `categories`.
 - `role`: `primary`, `reference`, `overlay`, `user`, `partner`, `diagnostic`.
 - `audience`: `public`, `authenticated`, `partner`, `diagnostic`.
-- `kind`: `vector_features`, `mvt_tiles`, `raster_tiles`, `track_stream`, `static_reference`.
+- `kind`: `vector_features`, `grid_field`, `vector_field`, `mvt_tiles`, `raster_tiles`, `track_stream`, `static_reference`.
 - `defaultVisible`, `selectable`.
 - `geometryTypes`.
 - `refreshSeconds`, `cacheTtlSeconds`.
@@ -53,6 +53,8 @@ Povinné nebo prakticky povinné položky:
 - `sourceIds`.
 - `query`.
 - `legal`.
+- `delivery`, pokud jde o grid, tile nebo vector-field vrstvu; např. stabilní WGS84 grid alignment.
+- `readModel`, pokud provider servíruje data z materializované cache/tabulky.
 
 ## Source
 
@@ -140,10 +142,21 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.safety.fire`
 - `public.safety.flood`
 - `public.boundary.admin`
+- `public.boundary.country`
+- `public.boundary.region`
+- `public.boundary.district`
+- `public.boundary.orp`
+- `public.place.settlements`
 - `public.weather.current`
 - `public.weather.aviation`
 - `public.weather.observations`
+- `public.weather.temperature_grid`
+- `public.weather.wind_field`
+- `public.weather.precipitation_grid`
+- `public.weather.humidity_grid`
+- `public.weather.pressure_grid`
 - `public.safety.air_quality`
+- `public.safety.air_quality_grid`
 - `public.mobile.network`
 - `public.traffic.transit`
 - `public.traffic.road_events`

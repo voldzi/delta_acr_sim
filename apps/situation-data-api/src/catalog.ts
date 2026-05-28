@@ -139,6 +139,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
         notes: ["Veřejný situační kontext; nenahrazuje oficiální varování a doporučení ČHMÚ nebo krizových orgánů."]
       }
     },
+    ...buildEnvironmentalGridLayers(config),
     {
       providerLayerId: "mobile_network",
       recommendedCatalogLayerId: "public.mobile.network",
@@ -383,6 +384,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
         notes: ["Referenční veřejný kontext."]
       }
     },
+    ...buildBoundaryProviderLayers(config),
     {
       providerLayerId: "traffic.pid_gtfs_rt",
       recommendedCatalogLayerId: "public.traffic.transit",
@@ -576,6 +578,374 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
   ];
 }
 
+function buildEnvironmentalGridLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+  const weatherLegal = {
+    attribution: "Open-Meteo.com and Czech Hydrometeorological Institute where measured station context is used",
+    notes: ["Grid layers are server-side SIM products prepared from cached upstream data; COM must not call upstream weather providers directly."]
+  };
+  const airQualityLegal = {
+    attribution: "Český hydrometeorologický ústav",
+    notes: ["Interpolated public air-quality context; station observations remain available as point features."]
+  };
+
+  return [
+    {
+      providerLayerId: "weather.temperature_grid",
+      recommendedCatalogLayerId: "public.weather.temperature_grid",
+      label: "Teplota",
+      labelLocalized: { cs: "Teplota", en: "Temperature" },
+      description: "Stabilní grid pro teplotní mapu nad územím ČR, připravený pro COP renderování jako plošný overlay.",
+      descriptionLocalized: {
+        cs: "Stabilní grid pro teplotní mapu nad územím ČR.",
+        en: "Stable grid for temperature map rendering over Czechia."
+      },
+      categoryPath: ["weather", "grid", "temperature"],
+      categories: ["weather", "temperature"],
+      role: "overlay",
+      audience: "public",
+      kind: "grid_field",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.chmiWeatherCacheTtlSeconds,
+      styleProfile: "weather-temperature-grid-v1",
+      sourceIds: ["chmi_weather_stations"],
+      technicalInputs: ["open_meteo"],
+      query: query(["weather_temperature_grid"], ["chmi_weather_stations"]),
+      legend: {
+        profile: "weather-temperature-grid-v1",
+        unit: "°C",
+        opacity: 0.55,
+        stops: [
+          { value: -10, label: "-10 °C", color: "#6b8dff" },
+          { value: 0, label: "0 °C", color: "#a7d8ff" },
+          { value: 15, label: "15 °C", color: "#8ee36a" },
+          { value: 25, label: "25 °C", color: "#ffd166" },
+          { value: 35, label: "35 °C", color: "#ef476f" }
+        ]
+      },
+      delivery: gridDelivery(config.openMeteoGridDegrees),
+      legal: weatherLegal
+    },
+    {
+      providerLayerId: "weather.wind_field",
+      recommendedCatalogLayerId: "public.weather.wind_field",
+      label: "Vítr",
+      labelLocalized: { cs: "Vítr", en: "Wind" },
+      description: "Vektorové pole větru pro animovanou mapovou vrstvu.",
+      descriptionLocalized: { cs: "Vektorové pole větru pro animovanou mapovou vrstvu.", en: "Vector wind field for animated map rendering." },
+      categoryPath: ["weather", "field", "wind"],
+      categories: ["weather", "wind"],
+      role: "overlay",
+      audience: "public",
+      kind: "vector_field",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "LineString"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.chmiWeatherCacheTtlSeconds,
+      styleProfile: "weather-wind-field-v1",
+      sourceIds: ["chmi_weather_stations"],
+      technicalInputs: ["open_meteo"],
+      query: query(["weather_wind_field"], ["chmi_weather_stations"]),
+      legend: {
+        profile: "weather-wind-field-v1",
+        unit: "m/s",
+        opacity: 0.75,
+        stops: [
+          { value: 2, label: "slabý", color: "#76e4f7" },
+          { value: 8, label: "čerstvý", color: "#a0e75a" },
+          { value: 15, label: "silný", color: "#ffd166" },
+          { value: 25, label: "nebezpečný", color: "#ef476f" }
+        ]
+      },
+      delivery: { ...gridDelivery(config.openMeteoGridDegrees), mode: "grid" },
+      legal: weatherLegal
+    },
+    {
+      providerLayerId: "weather.precipitation_grid",
+      recommendedCatalogLayerId: "public.weather.precipitation_grid",
+      label: "Srážky",
+      labelLocalized: { cs: "Srážky", en: "Precipitation" },
+      description: "Stabilní grid pro srážkovou mapu.",
+      descriptionLocalized: { cs: "Stabilní grid pro srážkovou mapu.", en: "Stable grid for precipitation map rendering." },
+      categoryPath: ["weather", "grid", "precipitation"],
+      categories: ["weather", "precipitation"],
+      role: "overlay",
+      audience: "public",
+      kind: "grid_field",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.chmiWeatherCacheTtlSeconds,
+      styleProfile: "weather-precipitation-grid-v1",
+      sourceIds: ["chmi_weather_stations"],
+      technicalInputs: ["open_meteo"],
+      query: query(["weather_precipitation_grid"], ["chmi_weather_stations"]),
+      legend: {
+        profile: "weather-precipitation-grid-v1",
+        unit: "mm/h",
+        opacity: 0.5,
+        stops: [
+          { value: 0.1, label: "slabé", color: "#b7e4c7" },
+          { value: 1, label: "déšť", color: "#52b788" },
+          { value: 5, label: "silné", color: "#168aad" },
+          { value: 20, label: "přívalové", color: "#5e60ce" }
+        ]
+      },
+      delivery: gridDelivery(config.openMeteoGridDegrees),
+      legal: weatherLegal
+    },
+    {
+      providerLayerId: "weather.humidity_grid",
+      recommendedCatalogLayerId: "public.weather.humidity_grid",
+      label: "Vlhkost",
+      labelLocalized: { cs: "Vlhkost", en: "Humidity" },
+      description: "Stabilní grid relativní vlhkosti vzduchu.",
+      descriptionLocalized: { cs: "Stabilní grid relativní vlhkosti vzduchu.", en: "Stable relative humidity grid." },
+      categoryPath: ["weather", "grid", "humidity"],
+      categories: ["weather", "humidity"],
+      role: "overlay",
+      audience: "public",
+      kind: "grid_field",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.chmiWeatherCacheTtlSeconds,
+      styleProfile: "weather-humidity-grid-v1",
+      sourceIds: ["chmi_weather_stations"],
+      technicalInputs: ["open_meteo"],
+      query: query(["weather_humidity_grid"], ["chmi_weather_stations"]),
+      legend: {
+        profile: "weather-humidity-grid-v1",
+        unit: "%",
+        opacity: 0.45,
+        stops: [
+          { value: 20, label: "sucho", color: "#f4a261" },
+          { value: 50, label: "střední", color: "#90be6d" },
+          { value: 80, label: "vlhko", color: "#4d96ff" }
+        ]
+      },
+      delivery: gridDelivery(config.openMeteoGridDegrees),
+      legal: weatherLegal
+    },
+    {
+      providerLayerId: "weather.pressure_grid",
+      recommendedCatalogLayerId: "public.weather.pressure_grid",
+      label: "Tlak",
+      labelLocalized: { cs: "Tlak", en: "Pressure" },
+      description: "Stabilní grid tlaku vzduchu.",
+      descriptionLocalized: { cs: "Stabilní grid tlaku vzduchu.", en: "Stable air pressure grid." },
+      categoryPath: ["weather", "grid", "pressure"],
+      categories: ["weather", "pressure"],
+      role: "overlay",
+      audience: "public",
+      kind: "grid_field",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.chmiWeatherCacheTtlSeconds,
+      styleProfile: "weather-pressure-grid-v1",
+      sourceIds: ["chmi_weather_stations"],
+      technicalInputs: ["open_meteo"],
+      query: query(["weather_pressure_grid"], ["chmi_weather_stations"]),
+      legend: {
+        profile: "weather-pressure-grid-v1",
+        unit: "hPa",
+        opacity: 0.4,
+        stops: [
+          { value: 990, label: "nízký", color: "#5e60ce" },
+          { value: 1013, label: "standard", color: "#f1faee" },
+          { value: 1030, label: "vysoký", color: "#e63946" }
+        ]
+      },
+      delivery: gridDelivery(config.openMeteoGridDegrees),
+      legal: weatherLegal
+    },
+    {
+      providerLayerId: "air_quality.grid",
+      recommendedCatalogLayerId: "public.safety.air_quality_grid",
+      label: "Kvalita ovzduší - plocha",
+      labelLocalized: { cs: "Kvalita ovzduší - plocha", en: "Air quality grid" },
+      description: "Interpolovaná gridová vrstva kvality ovzduší z měřených stanic ČHMÚ.",
+      descriptionLocalized: {
+        cs: "Interpolovaná gridová vrstva kvality ovzduší z měřených stanic ČHMÚ.",
+        en: "Interpolated air-quality grid from CHMI measured stations."
+      },
+      categoryPath: ["safety", "air_quality", "grid"],
+      categories: ["air_quality", "environment"],
+      role: "overlay",
+      audience: "public",
+      kind: "grid_field",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: 900,
+      cacheTtlSeconds: config.chmiAirQualityCacheTtlSeconds,
+      styleProfile: "air-quality-grid-v1",
+      sourceIds: ["chmi_air_quality"],
+      query: query(["air_quality_grid"], ["chmi_air_quality"]),
+      legend: {
+        profile: "air-quality-grid-v1",
+        unit: "AQI",
+        opacity: 0.5,
+        stops: [
+          { value: 1, label: "dobrá", color: "#2dc653" },
+          { value: 3, label: "přijatelná", color: "#ffd166" },
+          { value: 5, label: "špatná", color: "#f77f00" },
+          { value: 6, label: "velmi špatná", color: "#d62828" }
+        ]
+      },
+      delivery: gridDelivery(config.openMeteoGridDegrees),
+      legal: airQualityLegal
+    }
+  ];
+}
+
+function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+  const common = {
+    categoryPath: ["boundary", "admin"],
+    categories: ["admin_boundary", "boundary"],
+    role: "reference" as const,
+    audience: "public" as const,
+    kind: "vector_features" as const,
+    defaultVisible: false,
+    selectable: true,
+    geometryTypes: ["Polygon", "MultiPolygon"] as Array<"Polygon" | "MultiPolygon">,
+    refreshSeconds: 86400,
+    cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+    sourceIds: ["osm_postgis"] as SituationDataSourceId[],
+    legend: { profile: "admin-boundary-v1" },
+    delivery: {
+      mode: "features" as const
+    },
+    readModel: {
+      table: config.osmPostgisAdminBoundaryTable,
+      refreshedBy: "scripts/import-osm-cz-postgis.sh",
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds
+    },
+    legal: {
+      attribution: "OpenStreetMap contributors",
+      notes: ["Read-model z lokálního OSM/PostGIS importu; veřejný Overpass se v produkci nepoužívá."]
+    }
+  };
+
+  return [
+    {
+      ...common,
+      providerLayerId: "boundary.country",
+      recommendedCatalogLayerId: "public.boundary.country",
+      label: "Stát",
+      labelLocalized: { cs: "Stát", en: "Country" },
+      description: "Hranice státu z lokálního OSM/PostGIS read-modelu.",
+      descriptionLocalized: { cs: "Hranice státu z lokálního OSM/PostGIS read-modelu.", en: "Country boundary from local OSM/PostGIS read model." },
+      minZoom: 3,
+      maxZoom: 18,
+      styleProfile: "boundary-country-v1",
+      query: query(["boundary_country"], ["osm_postgis"])
+    },
+    {
+      ...common,
+      providerLayerId: "boundary.region",
+      recommendedCatalogLayerId: "public.boundary.region",
+      label: "Kraje",
+      labelLocalized: { cs: "Kraje", en: "Regions" },
+      description: "Krajské hranice z lokálního OSM/PostGIS read-modelu.",
+      descriptionLocalized: { cs: "Krajské hranice z lokálního OSM/PostGIS read-modelu.", en: "Regional boundaries from local OSM/PostGIS read model." },
+      minZoom: 5,
+      maxZoom: 18,
+      styleProfile: "boundary-region-v1",
+      query: query(["boundary_region"], ["osm_postgis"])
+    },
+    {
+      ...common,
+      providerLayerId: "boundary.district",
+      recommendedCatalogLayerId: "public.boundary.district",
+      label: "Okresy",
+      labelLocalized: { cs: "Okresy", en: "Districts" },
+      description: "Okresní hranice z lokálního OSM/PostGIS read-modelu.",
+      descriptionLocalized: { cs: "Okresní hranice z lokálního OSM/PostGIS read-modelu.", en: "District boundaries from local OSM/PostGIS read model." },
+      minZoom: 7,
+      maxZoom: 18,
+      styleProfile: "boundary-district-v1",
+      query: query(["boundary_district"], ["osm_postgis"])
+    },
+    {
+      ...common,
+      providerLayerId: "boundary.orp",
+      recommendedCatalogLayerId: "public.boundary.orp",
+      label: "ORP",
+      labelLocalized: { cs: "ORP", en: "Municipalities with extended powers" },
+      description: "Hranice ORP, pokud jsou dostupné v OSM/PostGIS read-modelu.",
+      descriptionLocalized: {
+        cs: "Hranice ORP, pokud jsou dostupné v OSM/PostGIS read-modelu.",
+        en: "ORP boundaries where available in the OSM/PostGIS read model."
+      },
+      minZoom: 8,
+      maxZoom: 18,
+      styleProfile: "boundary-orp-v1",
+      query: query(["boundary_orp"], ["osm_postgis"])
+    },
+    {
+      providerLayerId: "place.settlements",
+      recommendedCatalogLayerId: "public.place.settlements",
+      label: "Sídla",
+      labelLocalized: { cs: "Sídla", en: "Settlements" },
+      description: "Referenční vrstva sídel připravená pro civilní basemap kontext.",
+      descriptionLocalized: { cs: "Referenční vrstva sídel připravená pro civilní basemap kontext.", en: "Settlement reference layer for civil basemap context." },
+      categoryPath: ["place", "settlements"],
+      categories: ["place", "settlement"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+      minZoom: 7,
+      maxZoom: 18,
+      refreshSeconds: 86400,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "place-settlements-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["place_settlements"], ["osm_postgis"]),
+      legend: { profile: "place-settlements-v1" },
+      delivery: { mode: "features" },
+      readModel: {
+        table: config.osmPostgisAdminBoundaryTable,
+        refreshedBy: "scripts/import-osm-cz-postgis.sh",
+        cacheTtlSeconds: config.osmPostgisCacheTtlSeconds
+      },
+      legal: common.legal
+    }
+  ];
+}
+
+function gridDelivery(resolutionDegrees: number): NonNullable<ProviderCatalogLayer["delivery"]> {
+  return {
+    mode: "grid",
+    stableGrid: {
+      alignment: "wgs84",
+      resolutionDegrees
+    }
+  };
+}
+
 function buildProviderSource(descriptor: SourceDescriptor, config: SituationDataConfig): ProviderCatalogSource {
   const classification = sourceClassification(descriptor.sourceId);
   return {
@@ -665,9 +1035,23 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
-        feedsLayerIds: ["weather.chmi_station_observations"],
-        feedsCatalogLayerIds: ["public.weather.observations"],
-        notes: ["Measured weather observations from ČHMÚ Open Data; cache server-side."]
+        feedsLayerIds: [
+          "weather.chmi_station_observations",
+          "weather.temperature_grid",
+          "weather.wind_field",
+          "weather.precipitation_grid",
+          "weather.humidity_grid",
+          "weather.pressure_grid"
+        ],
+        feedsCatalogLayerIds: [
+          "public.weather.observations",
+          "public.weather.temperature_grid",
+          "public.weather.wind_field",
+          "public.weather.precipitation_grid",
+          "public.weather.humidity_grid",
+          "public.weather.pressure_grid"
+        ],
+        notes: ["Measured weather observations from ČHMÚ Open Data; cache server-side. Grid layers are cataloged as SIM read-model products."]
       };
     case "chmi_air_quality":
       return {
@@ -675,9 +1059,9 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
-        feedsLayerIds: ["air_quality.chmi_station_observations"],
-        feedsCatalogLayerIds: ["public.safety.air_quality"],
-        notes: ["Measured air-quality observations from ČHMÚ Open Data; cache server-side."]
+        feedsLayerIds: ["air_quality.chmi_station_observations", "air_quality.grid"],
+        feedsCatalogLayerIds: ["public.safety.air_quality", "public.safety.air_quality_grid"],
+        notes: ["Measured air-quality observations from ČHMÚ Open Data; cache server-side. Grid layer is cataloged as a SIM read-model product."]
       };
     case "mobile_network_model":
       return {
@@ -740,13 +1124,23 @@ function sourceClassification(sourceId: SituationDataSourceId): {
           "ground.osm_postgis.healthcare",
           "ground.osm_postgis.emergency",
           "ground.osm_postgis.civic",
-          "mobile.osm_postgis.communications"
+          "mobile.osm_postgis.communications",
+          "boundary.country",
+          "boundary.region",
+          "boundary.district",
+          "boundary.orp",
+          "place.settlements"
         ],
         feedsCatalogLayerIds: [
           "reference.infrastructure.healthcare",
           "reference.infrastructure.emergency",
           "reference.infrastructure.civic",
-          "reference.infrastructure.communications"
+          "reference.infrastructure.communications",
+          "public.boundary.country",
+          "public.boundary.region",
+          "public.boundary.district",
+          "public.boundary.orp",
+          "public.place.settlements"
         ],
         usedByLayerIds: ["mobile_network"],
         usedByCatalogLayerIds: ["public.mobile.network"],

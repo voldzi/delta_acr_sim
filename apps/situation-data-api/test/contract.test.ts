@@ -8,6 +8,7 @@ import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SituationDataConfig } from "../src/config.js";
 import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
+import { OsmPostgisSource } from "../src/osm-postgis-source.js";
 import type { SharedResponseCacheStore } from "../src/response-cache.js";
 import { MobileNetworkSource, type SituationDataSource } from "../src/sources.js";
 
@@ -49,6 +50,7 @@ describe("Situation Data API contract", () => {
       osmPostgisConnectionString: undefined,
       osmPostgisBackend: "unconfigured",
       osmPostgisTable: "public.osm_poi",
+      osmPostgisAdminBoundaryTable: "public.osm_admin_boundary",
       osmPostgisCacheTtlSeconds: 21600,
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
       overpassCacheTtlSeconds: 21600,
@@ -104,7 +106,10 @@ describe("Situation Data API contract", () => {
     expect(layers.body.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ layerId: "weather", defaultVisible: true }),
-        expect.objectContaining({ layerId: "mobile", defaultVisible: false })
+        expect.objectContaining({ layerId: "mobile", defaultVisible: false }),
+        expect.objectContaining({ layerId: "boundary_region", defaultVisible: false }),
+        expect.objectContaining({ layerId: "weather_temperature_grid", defaultVisible: false }),
+        expect.objectContaining({ layerId: "air_quality_grid", defaultVisible: false })
       ])
     );
 
@@ -130,6 +135,7 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "osm_postgis",
+          layers: expect.arrayContaining(["ground", "mobile", "boundary_country", "boundary_region", "boundary_district", "boundary_orp", "place_settlements"]),
           license: expect.objectContaining({ name: "ODbL 1.0" })
         }),
         expect.objectContaining({
@@ -162,11 +168,11 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "chmi_air_quality",
-          layers: expect.arrayContaining(["air_quality"])
+          layers: expect.arrayContaining(["air_quality", "air_quality_grid"])
         }),
         expect.objectContaining({
           sourceId: "chmi_weather_stations",
-          layers: expect.arrayContaining(["weather"])
+          layers: expect.arrayContaining(["weather", "weather_temperature_grid", "weather_wind_field"])
         }),
         expect.objectContaining({
           sourceId: "ardos_partner",
@@ -281,6 +287,45 @@ describe("Situation Data API contract", () => {
           role: "reference",
           audience: "public",
           sourceIds: ["chmi_weather_stations"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.temperature_grid",
+          recommendedCatalogLayerId: "public.weather.temperature_grid",
+          kind: "grid_field",
+          labelLocalized: expect.objectContaining({ cs: "Teplota", en: "Temperature" }),
+          delivery: expect.objectContaining({
+            mode: "grid",
+            stableGrid: expect.objectContaining({ alignment: "wgs84" })
+          })
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.wind_field",
+          recommendedCatalogLayerId: "public.weather.wind_field",
+          kind: "vector_field",
+          legend: expect.objectContaining({ unit: "m/s" })
+        }),
+        expect.objectContaining({
+          providerLayerId: "air_quality.grid",
+          recommendedCatalogLayerId: "public.safety.air_quality_grid",
+          kind: "grid_field",
+          sourceIds: ["chmi_air_quality"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "boundary.region",
+          recommendedCatalogLayerId: "public.boundary.region",
+          role: "reference",
+          sourceIds: ["osm_postgis"],
+          readModel: expect.objectContaining({ table: "public.osm_admin_boundary" })
+        }),
+        expect.objectContaining({
+          providerLayerId: "boundary.orp",
+          recommendedCatalogLayerId: "public.boundary.orp",
+          sourceIds: ["osm_postgis"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "place.settlements",
+          recommendedCatalogLayerId: "public.place.settlements",
+          sourceIds: ["osm_postgis"]
         })
       ])
     );
@@ -377,6 +422,18 @@ describe("Situation Data API contract", () => {
           selectableInMap: false,
           feedsCatalogLayerIds: expect.arrayContaining(["public.safety.warnings", "public.safety.fire", "public.safety.flood", "public.boundary.admin"]),
           preferredProviderId: "sim.safety-data"
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_weather_stations",
+          feedsCatalogLayerIds: expect.arrayContaining(["public.weather.observations", "public.weather.temperature_grid", "public.weather.wind_field"])
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_air_quality",
+          feedsCatalogLayerIds: expect.arrayContaining(["public.safety.air_quality", "public.safety.air_quality_grid"])
+        }),
+        expect.objectContaining({
+          sourceId: "osm_postgis",
+          feedsCatalogLayerIds: expect.arrayContaining(["public.boundary.country", "public.boundary.region", "public.boundary.district", "public.boundary.orp"])
         })
       ])
     );
@@ -508,6 +565,25 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="chmi_weather_stations",backend="chmi-opendata"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_chmi_weather_stations_backend_info{backend="chmi-opendata"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="ardos_partner"}');
+  });
+
+  it("exposes environment grid and boundary read-model observability", async () => {
+    const response = await request(app).get("/api/v1/observability").expect(200);
+
+    expect(response.body.environmentGrid).toEqual(
+      expect.objectContaining({
+        enabledLayers: expect.arrayContaining(["public.weather.temperature_grid", "public.weather.wind_field", "public.safety.air_quality_grid"]),
+        stableGrid: expect.objectContaining({ alignment: "wgs84", resolutionDegrees: 0.05 }),
+        readModel: expect.objectContaining({ mode: "catalog_only" })
+      })
+    );
+    expect(response.body.boundaryReadModel).toEqual(
+      expect.objectContaining({
+        backend: "unconfigured",
+        table: "public.osm_admin_boundary",
+        layers: expect.arrayContaining(["public.boundary.country", "public.boundary.region", "public.boundary.orp"])
+      })
+    );
   });
 
   it("projects fire and administrative boundary features from Safety Data without dropping MultiPolygon geometry", async () => {
@@ -1123,6 +1199,60 @@ describe("Situation Data API contract", () => {
         sourceId: "osm_postgis",
         backend: "unconfigured",
         status: "degraded"
+      })
+    );
+  });
+
+  it("projects OSM PostGIS administrative boundaries as provider catalog layers", async () => {
+    const source = new OsmPostgisSource({
+      ...config,
+      enabledSources: ["osm_postgis"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    (source as unknown as { fetchAdminBoundaryRows: () => Promise<unknown[]> }).fetchAdminBoundaryRows = async () => [
+      {
+        osm_id: "442314",
+        admin_level: 4,
+        name: "Středočeský kraj",
+        code: "CZ-20",
+        country_code: "CZ",
+        source: "osm_postgis",
+        geometry_geojson: {
+          type: "MultiPolygon",
+          coordinates: [[[[14.1, 49.8], [14.8, 49.8], [14.8, 50.3], [14.1, 50.3], [14.1, 49.8]]]]
+        },
+        tags: { "name:en": "Central Bohemian Region", "name:cs": "Středočeský kraj" },
+        imported_at: "2026-05-28T08:00:00.000Z"
+      }
+    ];
+    (source as unknown as { fetchRows: () => Promise<unknown[]> }).fetchRows = async () => [];
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.0, south: 49.7, east: 15.0, north: 50.4 },
+      layers: ["boundary_region"],
+      sourceIds: ["osm_postgis"],
+      limit: 20,
+      includeRaw: true
+    });
+
+    expect(result.features).toHaveLength(1);
+    expect(result.features[0]).toEqual(
+      expect.objectContaining({
+        id: expect.stringContaining("boundary_region:osm_postgis:boundary"),
+        geometry: expect.objectContaining({ type: "MultiPolygon" }),
+        properties: expect.objectContaining({
+          layer: "boundary_region",
+          sourceId: "osm_postgis",
+          category: "admin_boundary",
+          labelLocalized: expect.objectContaining({ cs: "Středočeský kraj", en: "Central Bohemian Region" }),
+          dataQuality: "observed",
+          adminLevel: 4,
+          code: "CZ-20",
+          countryCode: "CZ",
+          readModel: true,
+          basis: expect.arrayContaining(["osm_postgis_admin_boundary"])
+        })
       })
     );
   });

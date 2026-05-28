@@ -82,11 +82,99 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 86400
   },
   {
+    layerId: "boundary_country",
+    label: "Country boundary",
+    description: "Country-level administrative boundary read model from local OSM/PostGIS.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 86400
+  },
+  {
+    layerId: "boundary_region",
+    label: "Regional boundaries",
+    description: "Region-level administrative boundaries read model from local OSM/PostGIS.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 86400
+  },
+  {
+    layerId: "boundary_district",
+    label: "District boundaries",
+    description: "District-level administrative boundaries read model from local OSM/PostGIS.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 86400
+  },
+  {
+    layerId: "boundary_orp",
+    label: "ORP boundaries",
+    description: "Municipality-with-extended-powers boundary read model from local OSM/PostGIS where available.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 86400
+  },
+  {
+    layerId: "place_settlements",
+    label: "Settlements",
+    description: "Simplified settlement reference layer prepared for civil basemap context.",
+    defaultVisible: false,
+    geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 86400
+  },
+  {
     layerId: "air_quality",
     label: "Air quality",
     description: "ČHMÚ measured air-quality station observations and normalized air-quality index context.",
     defaultVisible: false,
     geometryTypes: ["Point"],
+    expectedCadenceSeconds: 900
+  },
+  {
+    layerId: "weather_temperature_grid",
+    label: "Temperature grid",
+    description: "Stable weather grid metadata for temperature overlays. Grid read model is prepared for COP integration.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "weather_wind_field",
+    label: "Wind field",
+    description: "Stable vector-field metadata for wind overlays. Vector read model is prepared for COP integration.",
+    defaultVisible: false,
+    geometryTypes: ["Point", "LineString"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "weather_precipitation_grid",
+    label: "Precipitation grid",
+    description: "Stable weather grid metadata for precipitation overlays.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "weather_humidity_grid",
+    label: "Humidity grid",
+    description: "Stable weather grid metadata for relative humidity overlays.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "weather_pressure_grid",
+    label: "Pressure grid",
+    description: "Stable weather grid metadata for air pressure overlays.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "air_quality_grid",
+    label: "Air quality grid",
+    description: "Stable air-quality grid metadata for interpolated ČHMÚ pollution overlays.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
     expectedCadenceSeconds: 900
   }
 ];

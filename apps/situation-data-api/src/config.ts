@@ -34,6 +34,7 @@ export interface SituationDataConfig {
   osmPostgisConnectionString?: string;
   osmPostgisBackend: OsmPostgisBackend;
   osmPostgisTable: string;
+  osmPostgisAdminBoundaryTable: string;
   osmPostgisCacheTtlSeconds: number;
   overpassBaseUrl: string;
   overpassCacheTtlSeconds: number;
@@ -112,6 +113,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     osmPostgisConnectionString: emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisBackend: parseOsmPostgisBackend(process.env.OSM_POSTGIS_BACKEND, process.env.OSM_POSTGIS_DATABASE_URL),
     osmPostgisTable: process.env.OSM_POSTGIS_TABLE ?? "public.osm_poi",
+    osmPostgisAdminBoundaryTable: process.env.OSM_POSTGIS_ADMIN_BOUNDARY_TABLE ?? "public.osm_admin_boundary",
     osmPostgisCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS, 21600),
     overpassBaseUrl: process.env.OVERPASS_BASE_URL ?? "https://overpass-api.de/api/interpreter",
     overpassCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS, 21600),

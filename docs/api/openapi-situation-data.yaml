@@ -118,6 +118,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DemCatalogStatus"
+  /observability:
+    get:
+      summary: Return cache, upstream and read-model telemetry for SIM Overview
+      responses:
+        "200":
+          description: Situation data observability payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SituationObservability"
 components:
   parameters:
     Bbox:
@@ -186,7 +196,31 @@ components:
   schemas:
     LayerId:
       type: string
-      enum: [weather, ground, mobile, mobile_coverage, mobile_network, traffic, warnings, fire, flood, boundary_admin, air_quality]
+      enum:
+        [
+          weather,
+          ground,
+          mobile,
+          mobile_coverage,
+          mobile_network,
+          traffic,
+          warnings,
+          fire,
+          flood,
+          boundary_admin,
+          boundary_country,
+          boundary_region,
+          boundary_district,
+          boundary_orp,
+          place_settlements,
+          air_quality,
+          weather_temperature_grid,
+          weather_wind_field,
+          weather_precipitation_grid,
+          weather_humidity_grid,
+          weather_pressure_grid,
+          air_quality_grid
+        ]
     SourceId:
       type: string
       enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, ardos_partner]
@@ -207,7 +241,7 @@ components:
       enum: [public, authenticated, partner, admin, diagnostic]
     ProviderCatalogKind:
       type: string
-      enum: [vector_features, mvt_tiles, raster_tiles, track_stream, user_objects, static_reference, aggregate]
+      enum: [vector_features, grid_field, vector_field, mvt_tiles, raster_tiles, track_stream, user_objects, static_reference, aggregate]
     BoundingBox:
       type: object
       required: [west, south, east, north]
@@ -256,7 +290,7 @@ components:
           type: array
           items:
             type: string
-            enum: [Point, LineString, Polygon]
+            enum: [Point, LineString, Polygon, MultiPolygon]
         expectedCadenceSeconds:
           type: integer
     SourceDescriptor:
@@ -357,8 +391,16 @@ components:
           example: public.mobile.network
         label:
           type: string
+        labelLocalized:
+          type: object
+          additionalProperties:
+            type: string
         description:
           type: string
+        descriptionLocalized:
+          type: object
+          additionalProperties:
+            type: string
         categoryPath:
           type: array
           items:
@@ -381,7 +423,7 @@ components:
           type: array
           items:
             type: string
-            enum: [Point, LineString, Polygon]
+            enum: [Point, LineString, Polygon, MultiPolygon]
         minZoom:
           type: integer
         maxZoom:
@@ -461,6 +503,33 @@ components:
               type: string
             confidenceExplanation:
               type: string
+        delivery:
+          type: object
+          properties:
+            mode:
+              type: string
+              enum: [features, grid, vector_tiles, raster_tiles]
+            stableGrid:
+              type: object
+              properties:
+                alignment:
+                  type: string
+                  enum: [wgs84]
+                resolutionDegrees:
+                  type: number
+                resolutionM:
+                  type: number
+            tileTemplate:
+              type: string
+        readModel:
+          type: object
+          properties:
+            table:
+              type: string
+            refreshedBy:
+              type: string
+            cacheTtlSeconds:
+              type: integer
         legal:
           type: object
           required: [attribution, notes]
@@ -659,10 +728,86 @@ components:
           format: date-time
         lastImportAgeSeconds:
           type: integer
+        boundaryFeatureCount:
+          type: integer
+        boundaryLevels:
+          type: array
+          items:
+            type: string
+        boundaryLastImportAt:
+          type: string
+          format: date-time
+        boundaryLastImportAgeSeconds:
+          type: integer
         warnings:
           type: array
           items:
             type: string
+    SituationObservability:
+      type: object
+      properties:
+        serviceId:
+          type: string
+          const: situation-data-api
+        generatedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ok, degraded]
+        cache:
+          type: object
+          additionalProperties: true
+        sharedCache:
+          type: object
+          additionalProperties: true
+        sourceCaches:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        dataFreshness:
+          type: object
+          additionalProperties: true
+        environmentGrid:
+          type: object
+          description: Cataloged grid/field layer health, stable WGS84 grid alignment and upstream status.
+          additionalProperties: true
+        boundaryReadModel:
+          type: object
+          description: PostGIS administrative boundary read-model health, import age and feature count.
+          additionalProperties: true
+        sourceHealth:
+          type: array
+          items:
+            type: object
+            properties:
+              sourceId:
+                $ref: "#/components/schemas/SourceId"
+              status:
+                type: string
+              backend:
+                type: string
+              objectCount:
+                type: integer
+              lastImportAt:
+                type: string
+                format: date-time
+              lastImportAgeSeconds:
+                type: integer
+              boundaryFeatureCount:
+                type: integer
+              boundaryLevels:
+                type: array
+                items:
+                  type: string
+              boundaryLastImportAt:
+                type: string
+                format: date-time
+              boundaryLastImportAgeSeconds:
+                type: integer
+              warningCount:
+                type: integer
     SituationFeatureCollection:
       type: object
       required: [contractVersion, type, generatedAt, source, query, summary, features, sources, warnings]
@@ -741,7 +886,7 @@ components:
           properties:
             type:
               type: string
-              enum: [Point, LineString, Polygon]
+              enum: [Point, LineString, Polygon, MultiPolygon]
             coordinates: {}
         properties:
           type: object
@@ -763,12 +908,30 @@ components:
               type: string
             label:
               type: string
+            labelLocalized:
+              type: object
+              additionalProperties:
+                type: string
+            summaryLocalized:
+              type: object
+              additionalProperties:
+                type: string
             sourceId:
               $ref: "#/components/schemas/SourceId"
+            source:
+              type: string
+            sourceName:
+              type: string
             observedAt:
               type: string
               format: date-time
+            validFrom:
+              type: string
+              format: date-time
             validUntil:
+              type: string
+              format: date-time
+            updatedAt:
               type: string
               format: date-time
             confidence:
@@ -857,6 +1020,20 @@ components:
               type: string
               enum: [observed, modelled, mixed, unknown]
               description: Indicates whether the mobile assessment is based on measurements, modelled coverage, both, or insufficient inputs.
+            adminLevel:
+              type: integer
+            name:
+              type: string
+            code:
+              type: string
+            countryCode:
+              type: string
+            areaName:
+              type: string
+            styleHint:
+              type: string
+            iconHint:
+              type: string
             btsStatus:
               type: string
               enum: [operator_feed_unavailable, unverified, reported_outage, unknown]

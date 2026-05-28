@@ -327,7 +327,7 @@ OVERPASS_MAX_BBOX_DEGREES=1.6
 Preferovaná produkční varianta pro OSM používá samostatnou databázi `sim_osm` v HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -347,7 +347,7 @@ scripts/import-osm-cz-postgis.sh
 Lokální Docker PostGIS může zůstat jen jako rebuildovatelný read-model/cache s explicitním silným heslem a URL:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm

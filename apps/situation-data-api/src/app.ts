@@ -163,6 +163,8 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         cache: cacheTelemetry(sourceCache, context.config.cacheMaxEntries)
       })),
       dataFreshness: sourceFreshness(sourceHealth),
+      environmentGrid: environmentGridTelemetry(context.config, sourceHealth),
+      boundaryReadModel: boundaryReadModelTelemetry(context.config, sourceHealth),
       sourceHealth: sourceHealth.map((source) => ({
         sourceId: source.sourceId,
         status: source.status,
@@ -170,6 +172,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         objectCount: source.objectCount,
         lastImportAt: source.lastImportAt,
         lastImportAgeSeconds: source.lastImportAgeSeconds,
+        boundaryFeatureCount: source.boundaryFeatureCount,
+        boundaryLevels: source.boundaryLevels,
+        boundaryLastImportAt: source.boundaryLastImportAt,
+        boundaryLastImportAgeSeconds: source.boundaryLastImportAgeSeconds,
         warningCount: source.warnings.length
       }))
     });
@@ -269,11 +275,44 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "fire",
     "flood",
     "boundary_admin",
-    "air_quality"
+    "boundary_country",
+    "boundary_region",
+    "boundary_district",
+    "boundary_orp",
+    "place_settlements",
+    "air_quality",
+    "weather_temperature_grid",
+    "weather_wind_field",
+    "weather_precipitation_grid",
+    "weather_humidity_grid",
+    "weather_pressure_grid",
+    "air_quality_grid"
   ]);
   const raw = asString(value);
   if (!raw) {
-    return ["weather", "ground", "mobile", "mobile_network", "traffic", "warnings", "fire", "flood", "boundary_admin", "air_quality"];
+    return [
+      "weather",
+      "ground",
+      "mobile",
+      "mobile_network",
+      "traffic",
+      "warnings",
+      "fire",
+      "flood",
+      "boundary_admin",
+      "boundary_country",
+      "boundary_region",
+      "boundary_district",
+      "boundary_orp",
+      "place_settlements",
+      "air_quality",
+      "weather_temperature_grid",
+      "weather_wind_field",
+      "weather_precipitation_grid",
+      "weather_humidity_grid",
+      "weather_pressure_grid",
+      "air_quality_grid"
+    ];
   }
   return raw
     .split(",")
@@ -444,11 +483,22 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     if (typeof status.objectCount === "number") {
       lines.push(`situation_data_osm_postgis_objects{backend="${backend}"} ${status.objectCount}`);
     }
+    if (typeof status.boundaryFeatureCount === "number") {
+      lines.push(`situation_data_boundary_read_model_features{backend="${backend}"} ${status.boundaryFeatureCount}`);
+    }
     if (status.lastImportAt) {
       lines.push(`situation_data_osm_postgis_last_import_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
     }
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_osm_postgis_import_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+    if (status.boundaryLastImportAt) {
+      lines.push(
+        `situation_data_boundary_read_model_last_import_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.boundaryLastImportAt) / 1000)}`
+      );
+    }
+    if (typeof status.boundaryLastImportAgeSeconds === "number") {
+      lines.push(`situation_data_boundary_read_model_import_age_seconds{backend="${backend}"} ${status.boundaryLastImportAgeSeconds}`);
     }
   }
   if (status.sourceId === "ctu_nettest") {
@@ -543,6 +593,66 @@ function sourceFreshness(sourceHealth: SourceHealthStatus[]): Record<string, num
     oldestImportAgeSeconds: ages.length > 0 ? Math.max(...ages) : -1,
     degradedSourceCount: sourceHealth.filter((source) => source.status === "degraded").length,
     warningCount: sourceHealth.reduce((sum, source) => sum + source.warnings.length, 0)
+  };
+}
+
+function environmentGridTelemetry(config: SituationDataConfig, sourceHealth: SourceHealthStatus[]): Record<string, unknown> {
+  const weather = sourceHealth.find((source) => source.sourceId === "chmi_weather_stations");
+  const airQuality = sourceHealth.find((source) => source.sourceId === "chmi_air_quality");
+  const weatherReady = config.enabledSources.includes("chmi_weather_stations") && weather?.status === "ok";
+  const airQualityReady = config.enabledSources.includes("chmi_air_quality") && airQuality?.status === "ok";
+  const enabledLayers = [
+    "public.weather.temperature_grid",
+    "public.weather.wind_field",
+    "public.weather.precipitation_grid",
+    "public.weather.humidity_grid",
+    "public.weather.pressure_grid",
+    "public.safety.air_quality_grid"
+  ];
+  return {
+    status: weatherReady || airQualityReady ? "cataloged" : "degraded",
+    enabledLayers,
+    sourceIds: ["chmi_weather_stations", "chmi_air_quality"],
+    stableGrid: {
+      alignment: "wgs84",
+      resolutionDegrees: config.openMeteoGridDegrees
+    },
+    cacheTtlSeconds: {
+      weather: config.chmiWeatherCacheTtlSeconds,
+      airQuality: config.chmiAirQualityCacheTtlSeconds
+    },
+    readModel: {
+      mode: "catalog_only",
+      tileCount: 0,
+      cellCount: 0
+    },
+    upstreamStatus: {
+      weather: weather?.status ?? "not_enabled",
+      airQuality: airQuality?.status ?? "not_enabled"
+    },
+    warnings:
+      weatherReady || airQualityReady
+        ? ["Grid layers are cataloged. Phase 2 will materialize tile/grid endpoints from cached station observations."]
+        : ["Environment grid sources are not healthy or not enabled."]
+  };
+}
+
+function boundaryReadModelTelemetry(config: SituationDataConfig, sourceHealth: SourceHealthStatus[]): Record<string, unknown> {
+  const osm = sourceHealth.find((source) => source.sourceId === "osm_postgis");
+  return {
+    status: osm?.boundaryFeatureCount && osm.boundaryFeatureCount > 0 ? "ok" : config.osmPostgisConnectionString ? "degraded" : "unconfigured",
+    backend: config.osmPostgisBackend,
+    table: config.osmPostgisAdminBoundaryTable,
+    featureCount: osm?.boundaryFeatureCount ?? 0,
+    adminLevels: osm?.boundaryLevels ?? [],
+    lastImportAt: osm?.boundaryLastImportAt,
+    lastImportAgeSeconds: osm?.boundaryLastImportAgeSeconds,
+    cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+    layers: ["public.boundary.country", "public.boundary.region", "public.boundary.district", "public.boundary.orp", "public.place.settlements"],
+    warnings:
+      osm?.boundaryFeatureCount && osm.boundaryFeatureCount > 0
+        ? []
+        : [`Boundary read model requires ${config.osmPostgisAdminBoundaryTable} from scripts/import-osm-cz-postgis.sh.`]
   };
 }
 

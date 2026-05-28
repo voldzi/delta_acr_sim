@@ -9,7 +9,18 @@ export type SituationLayerId =
   | "fire"
   | "flood"
   | "boundary_admin"
-  | "air_quality";
+  | "boundary_country"
+  | "boundary_region"
+  | "boundary_district"
+  | "boundary_orp"
+  | "place_settlements"
+  | "air_quality"
+  | "weather_temperature_grid"
+  | "weather_wind_field"
+  | "weather_precipitation_grid"
+  | "weather_humidity_grid"
+  | "weather_pressure_grid"
+  | "air_quality_grid";
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
@@ -39,7 +50,16 @@ export type MobileBtsStatus = "operator_feed_unavailable" | "unverified" | "repo
 export type ProviderCatalogLayerRole = "primary" | "reference" | "overlay" | "user" | "partner" | "diagnostic";
 export type ProviderCatalogSourceRole = "final" | "aggregate" | "reference" | "input" | "projection" | "mock" | "diagnostic";
 export type ProviderCatalogAudience = "public" | "authenticated" | "partner" | "admin" | "diagnostic";
-export type ProviderCatalogKind = "vector_features" | "mvt_tiles" | "raster_tiles" | "track_stream" | "user_objects" | "static_reference" | "aggregate";
+export type ProviderCatalogKind =
+  | "vector_features"
+  | "grid_field"
+  | "vector_field"
+  | "mvt_tiles"
+  | "raster_tiles"
+  | "track_stream"
+  | "user_objects"
+  | "static_reference"
+  | "aggregate";
 
 export interface BoundingBox {
   west: number;
@@ -100,7 +120,9 @@ export interface ProviderCatalogLayer {
   providerLayerId: string;
   recommendedCatalogLayerId: string;
   label: string;
+  labelLocalized?: Record<string, string>;
   description: string;
+  descriptionLocalized?: Record<string, string>;
   categoryPath: string[];
   categories: string[];
   role: ProviderCatalogLayerRole;
@@ -128,6 +150,27 @@ export interface ProviderCatalogLayer {
   };
   legend?: {
     profile: string;
+    unit?: string;
+    opacity?: number;
+    stops?: Array<{
+      value: number | string;
+      label: string;
+      color: string;
+    }>;
+  };
+  delivery?: {
+    mode: "features" | "grid" | "vector_tiles" | "raster_tiles";
+    stableGrid?: {
+      alignment: "wgs84";
+      resolutionDegrees?: number;
+      resolutionM?: number;
+    };
+    tileTemplate?: string;
+  };
+  readModel?: {
+    table?: string;
+    refreshedBy?: string;
+    cacheTtlSeconds?: number;
   };
   model?: {
     modelVersion: string;
@@ -230,6 +273,10 @@ export interface SourceHealthStatus {
   objectCount?: number;
   lastImportAt?: string;
   lastImportAgeSeconds?: number;
+  boundaryFeatureCount?: number;
+  boundaryLevels?: string[];
+  boundaryLastImportAt?: string;
+  boundaryLastImportAgeSeconds?: number;
   warnings: string[];
 }
 
@@ -284,9 +331,15 @@ export interface SituationFeatureProperties {
   layer: SituationLayerId;
   category: string;
   label: string;
+  labelLocalized?: Record<string, string>;
+  summaryLocalized?: Record<string, string>;
   sourceId: SituationDataSourceId;
+  source?: string;
+  sourceName?: string;
   observedAt: string;
+  validFrom?: string;
   validUntil?: string;
+  updatedAt?: string;
   confidence: number;
   stale: boolean;
   severity: SituationSeverity;
@@ -315,6 +368,13 @@ export interface SituationFeatureProperties {
   summary?: string;
   notices?: string[];
   dataQuality?: MobileNetworkDataQuality;
+  adminLevel?: number;
+  name?: string;
+  code?: string;
+  countryCode?: string;
+  areaName?: string;
+  styleHint?: string;
+  iconHint?: string;
   btsStatus?: MobileBtsStatus;
   btsStatusSource?: string;
   operatorStatusAvailable?: boolean;

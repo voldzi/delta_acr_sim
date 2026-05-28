@@ -195,7 +195,7 @@ run_psql -tAc "select count(*) from public.osm_admin_boundary;"
 
 cat <<EOF
 To enable in SIM:
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -205,6 +205,7 @@ MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 OSM_POSTGIS_BACKEND=$OSM_POSTGIS_BACKEND
 OSM_POSTGIS_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
 OSM_POSTGIS_TABLE=public.osm_poi
+OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,admin_boundaries
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary

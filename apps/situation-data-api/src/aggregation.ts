@@ -168,6 +168,21 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
     return "boundary_admin.safety_data_projection";
   }
   if (sourceId === "osm_postgis") {
+    if (layer === "boundary_country") {
+      return "boundary.country";
+    }
+    if (layer === "boundary_region") {
+      return "boundary.region";
+    }
+    if (layer === "boundary_district") {
+      return "boundary.district";
+    }
+    if (layer === "boundary_orp") {
+      return "boundary.orp";
+    }
+    if (layer === "place_settlements") {
+      return "place.settlements";
+    }
     if (category === "communications_tower") {
       return "mobile.osm_postgis.communications";
     }
@@ -225,6 +240,16 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.safety.flood";
     case "boundary_admin.safety_data_projection":
       return "public.boundary.admin";
+    case "boundary.country":
+      return "public.boundary.country";
+    case "boundary.region":
+      return "public.boundary.region";
+    case "boundary.district":
+      return "public.boundary.district";
+    case "boundary.orp":
+      return "public.boundary.orp";
+    case "place.settlements":
+      return "public.place.settlements";
     default:
       return sourceId === "mock" ? `diagnostic.mock.${layer}` : `provider.${sourceId}.${layer}`;
   }
@@ -242,6 +267,19 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     summary,
     notices,
     dataQuality,
+    labelLocalized,
+    summaryLocalized,
+    source,
+    sourceName,
+    validFrom,
+    updatedAt,
+    adminLevel,
+    name,
+    code,
+    countryCode,
+    areaName,
+    styleHint,
+    iconHint,
     btsStatus,
     btsStatusSource,
     operatorStatusAvailable,
@@ -256,7 +294,6 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     raw
   } = feature.properties;
   return compactRecord({
-    ...(providerProperties ?? {}),
     metrics,
     tags,
     operator,
@@ -267,6 +304,19 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     summary,
     notices,
     dataQuality,
+    labelLocalized,
+    summaryLocalized,
+    source,
+    sourceName,
+    validFrom,
+    updatedAt,
+    adminLevel,
+    name,
+    code,
+    countryCode,
+    areaName,
+    styleHint,
+    iconHint,
     btsStatus,
     btsStatusSource,
     operatorStatusAvailable,
@@ -277,6 +327,7 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     demSource,
     assumptions,
     disclaimer,
+    ...(providerProperties ?? {}),
     raw
   });
 }
@@ -423,8 +474,25 @@ function layerRank(value: SituationLayerId): number {
       return 9;
     case "air_quality":
       return 10;
+    case "boundary_country":
+      return 11;
+    case "boundary_region":
+      return 12;
+    case "boundary_district":
+      return 13;
+    case "boundary_orp":
+      return 14;
+    case "place_settlements":
+      return 15;
+    case "weather_temperature_grid":
+    case "weather_wind_field":
+    case "weather_precipitation_grid":
+    case "weather_humidity_grid":
+    case "weather_pressure_grid":
+    case "air_quality_grid":
+      return 16;
     case "ground":
     default:
-      return 11;
+      return 20;
   }
 }

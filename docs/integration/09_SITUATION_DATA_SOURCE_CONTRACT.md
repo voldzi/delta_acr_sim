@@ -27,6 +27,7 @@ GET /catalog
 GET /config
 GET /features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
 GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
+GET /observability
 GET /mobile-coverage/metadata
 GET /dem/metadata
 ```
@@ -60,6 +61,8 @@ Klíčová pravidla katalogu:
 - `diagnostic.mobile.coverage` je diagnostická vrstva `mobile_coverage` ze zdroje `mobile_coverage_model`, `selectable=false`,
 - `diagnostic.mobile.ctu_measurements` jsou diagnostická ČTÚ měření, `selectable=false`,
 - `reference.infrastructure.communications` jsou referenční OSM věže, `defaultVisible=false` a `selectable=false`,
+- `public.boundary.country`, `public.boundary.region`, `public.boundary.district`, `public.boundary.orp` jsou referenční boundary read-model vrstvy z lokálního OSM/PostGIS, ne z veřejného Overpassu,
+- `public.weather.temperature_grid`, `public.weather.wind_field`, `public.weather.precipitation_grid`, `public.weather.humidity_grid`, `public.weather.pressure_grid` a `public.safety.air_quality_grid` jsou katalogově připravené environment grid/field vrstvy se stabilní WGS84 grid definicí,
 - `safety_data` v situation-data je označený jako `sourceRole=projection`; COM má pro primární safety vrstvy preferovat provider `sim.safety-data`.
 
 ## Feature projection
@@ -104,12 +107,17 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
 | `providerId` | string | identifikátor providera, např. `sim.situation-data` |
 | `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `fire`, `flood`, `boundary_admin`, `air_quality` | mapová vrstva |
+| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `air_quality_grid` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
+| `labelLocalized` | object, optional | lokalizované názvy, typicky `cs` a `en` |
+| `summaryLocalized` | object, optional | lokalizovaný stručný popis pro detail v COM |
 | `sourceId` | string | poskytovatel v SIM registry |
+| `sourceName` | string, optional | lidsky čitelný název zdroje/read-modelu |
 | `observedAt` | ISO datetime | čas pozorování nebo publikace |
+| `validFrom` | ISO datetime, optional | začátek platnosti, pokud zdroj poskytuje |
 | `validUntil` | ISO datetime, optional | konec platnosti, pokud zdroj poskytuje |
+| `updatedAt` | ISO datetime, optional | čas poslední aktualizace read-modelu nebo upstream objektu |
 | `confidence` | number 0-1 | kvalita / důvěra agregátu |
 | `stale` | boolean | zda je objekt starší než prahová hodnota |
 | `severity` | `info`, `advisory`, `warning`, `critical` | priorita pro vizualizaci |
@@ -117,6 +125,20 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `metrics` | object | číselné metriky vrstvy |
 | `providerProperties` | object | provider-native hodnoty pro detail a audit |
 | `raw` | object, optional | omezený původní payload pro ladění |
+
+Boundary features ve vrstvách `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp` a `place_settlements` navíc nesou:
+
+| Pole | Typ | Popis |
+| --- | --- | --- |
+| `adminLevel` | number | OSM/RUIAN-like správní úroveň, aktuálně 2/4/6/7/8 podle read-modelu |
+| `name` | string | název území |
+| `code` | string | kód území, typicky ISO/ref/OSM fallback |
+| `countryCode` | string | ISO alpha-2, pro ČR `CZ` |
+| `areaName` | string | název pro detail mapy |
+| `styleHint` | string | doporučený style profile, např. `boundary-region-v1` |
+| `iconHint` | string | `boundary` nebo `place` |
+| `readModel` | boolean | `true`, jde o lokální PostGIS read-model |
+| `sourceRevision` | string | revize/import timestamp read-modelu |
 
 Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:
 
@@ -183,7 +205,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `road_srti_lod` | `traffic` | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď. |
 | `safety_data` | `warnings`, `fire`, `flood`, `boundary_admin` | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
-| `osm_postgis` | `ground`, `mobile` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
+| `osm_postgis` | `ground`, `mobile`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
 | `osm_overpass` | `ground`, `mobile` | Jen omezený vývoj/pilot; veřejný Overpass nesmí být runtime backend pro tisíce uživatelů. |
 
 ## OpenStreetMap PostGIS
@@ -194,9 +216,32 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 - `layer=mobile`: komunikační věže a mobilní infrastruktura odvozená z OSM tagů,
 - `sourceId=osm_postgis`, licence `ODbL 1.0`, atribuce `OpenStreetMap contributors`.
 
+Zároveň vrací administrativní hranice z materializovaného pohledu `public.osm_admin_boundary`:
+
+- `boundary_country`: stát (`admin_level=2`),
+- `boundary_region`: kraje (`admin_level=4`),
+- `boundary_district`: okresy (`admin_level=6`),
+- `boundary_orp`: ORP, pokud jsou dostupné (`admin_level=7`),
+- `place_settlements`: sídla / obecní hranice (`admin_level=8`).
+
+Dotaz:
+
+```http
+GET /features?bbox=12.0,48.5,19.0,51.2&layers=boundary_country,boundary_region&source=osm_postgis&limit=250
+```
+
+Konfigurace:
+
+```env
+OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
+OSM_POSTGIS_TABLE=public.osm_poi
+OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
+```
+
 COM má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
 
-Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt` a `lastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_osm_postgis_import_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
+Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt`, `lastImportAgeSeconds`, `boundaryFeatureCount`, `boundaryLevels`, `boundaryLastImportAt` a `boundaryLastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_boundary_read_model_features`, `situation_data_osm_postgis_import_age_seconds`, `situation_data_boundary_read_model_import_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
 
 ## ČHMÚ Open Data
 
@@ -218,6 +263,32 @@ GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_qualit
 - `SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900`
 
 COM nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
+
+## Environment grid vrstvy
+
+Katalog SIM nově nabízí plošné environment vrstvy pro civilní mapu:
+
+| Katalogové ID | Provider layer | Typ | Vstup |
+| --- | --- | --- | --- |
+| `public.weather.temperature_grid` | `weather.temperature_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
+| `public.weather.wind_field` | `weather.wind_field` | `vector_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
+| `public.weather.precipitation_grid` | `weather.precipitation_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
+| `public.weather.humidity_grid` | `weather.humidity_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
+| `public.weather.pressure_grid` | `weather.pressure_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
+| `public.safety.air_quality_grid` | `air_quality.grid` | `grid_field` | ČHMÚ imisní stanice |
+
+V aktuální fázi jsou vrstvy katalogově stabilní a mají definované `styleProfile`, `legend`, `delivery.stableGrid` a TTL. Materializované grid/tile endpointy jsou další fáze; do té doby COM používá bodové vrstvy `public.weather.observations` a `public.safety.air_quality` pro detaily a může gridové položky v UI skrýt, pokud vyžaduje pouze již materializované features.
+
+Observability:
+
+```http
+GET /observability
+```
+
+Vrací sekce:
+
+- `environmentGrid`: stav katalogovaných gridů, stabilní grid alignment a upstream health,
+- `boundaryReadModel`: stav `public.osm_admin_boundary`, počet prvků, import age, levels.
 
 ## Mobile Coverage Model
 
