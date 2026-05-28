@@ -244,6 +244,8 @@ export type SituationDataSourceId =
   | "road_srti_lod"
   | "safety_data"
   | "aviation_weather"
+  | "chmi_air_quality"
+  | "chmi_weather_stations"
   | "ardos_partner";
 
 export interface SituationDataSourceHealth {
@@ -324,6 +326,8 @@ export interface SituationDataConfig {
     roadSrtiLod: number;
     safetyData: number;
     aviationWeather: number;
+    chmiAirQuality: number;
+    chmiWeatherStations: number;
     ardosPartner: number;
   };
   providers: Array<{

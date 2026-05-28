@@ -362,6 +362,8 @@ export function App() {
           roadSrtiLod: 0,
           safetyData: 0,
           aviationWeather: 0,
+          chmiAirQuality: 0,
+          chmiWeatherStations: 0,
           ardosPartner: 0
         },
         providers: []
@@ -2549,6 +2551,8 @@ function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeco
     `mobile net ${ttls.mobileNetwork}s`,
     `coverage ${ttls.mobileCoverage}s`,
     `aviation ${ttls.aviationWeather}s`,
+    `CHMI air ${ttls.chmiAirQuality}s`,
+    `CHMI meteo ${ttls.chmiWeatherStations}s`,
     `safety ${ttls.safetyData}s`,
     `OSM DB ${ttls.osmPostgis}s`,
     `Overpass ${ttls.osmOverpass}s`,

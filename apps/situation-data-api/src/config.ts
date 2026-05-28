@@ -51,6 +51,13 @@ export interface SituationDataConfig {
   safetyDataCacheTtlSeconds: number;
   aviationWeatherBaseUrl: string;
   aviationWeatherCacheTtlSeconds: number;
+  chmiAirQualityMetadataUrl: string;
+  chmiAirQualityDataUrl: string;
+  chmiAirQualityCacheTtlSeconds: number;
+  chmiWeatherMetadataBaseUrl: string;
+  chmiWeatherDataBaseUrl: string;
+  chmiWeatherCacheTtlSeconds: number;
+  chmiWeatherMaxStations: number;
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
@@ -123,6 +130,17 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300),
     aviationWeatherBaseUrl: process.env.AVIATION_WEATHER_BASE_URL ?? "https://aviationweather.gov",
     aviationWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS, 600),
+    chmiAirQualityMetadataUrl:
+      process.env.CHMI_AIR_QUALITY_METADATA_URL ?? "https://opendata.chmi.cz/air_quality/now/metadata/metadata.json",
+    chmiAirQualityDataUrl:
+      process.env.CHMI_AIR_QUALITY_DATA_URL ?? "https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv",
+    chmiAirQualityCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS, 900),
+    chmiWeatherMetadataBaseUrl:
+      process.env.CHMI_WEATHER_METADATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/metadata/",
+    chmiWeatherDataBaseUrl:
+      process.env.CHMI_WEATHER_DATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/data/",
+    chmiWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS, 600),
+    chmiWeatherMaxStations: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS, 16),
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
@@ -152,6 +170,8 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "road_srti_lod",
     "safety_data",
     "aviation_weather",
+    "chmi_air_quality",
+    "chmi_weather_stations",
     "ardos_partner"
   ]);
   const parsed = (value ?? "mock")

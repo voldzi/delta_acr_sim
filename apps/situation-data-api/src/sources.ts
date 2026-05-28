@@ -58,6 +58,19 @@ const OPEN_METEO_LICENSE: SituationDataLicense = {
   ]
 };
 
+const CHMI_OPEN_DATA_LICENSE: SituationDataLicense = {
+  name: "ČHMÚ Open Data / CC BY 4.0",
+  url: "https://opendata.chmi.cz/",
+  attribution: "Český hydrometeorologický ústav",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Attribution is required.",
+    "SIM caches CHMI Open Data server-side; COM clients must not call CHMI directly.",
+    "Use as public situational context, not as a replacement for official warnings or emergency instructions."
+  ]
+};
+
 const OSM_LICENSE: SituationDataLicense = {
   name: "ODbL 1.0",
   url: "https://opendatacommons.org/licenses/odbl/1-0/",
@@ -202,6 +215,8 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     road_srti_lod: new RoadSrtiLodSource(config),
     safety_data: new SafetyDataProjectionSource(config),
     aviation_weather: new AviationWeatherSource(config),
+    chmi_air_quality: new ChmiAirQualitySource(config),
+    chmi_weather_stations: new ChmiWeatherStationsSource(config),
     ardos_partner: new ArdosPartnerSource(config)
   };
 
@@ -224,6 +239,8 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new RoadSrtiLodSource(config).descriptor,
     new SafetyDataProjectionSource(config).descriptor,
     new AviationWeatherSource(config).descriptor,
+    new ChmiAirQualitySource(config).descriptor,
+    new ChmiWeatherStationsSource(config).descriptor,
     new ArdosPartnerSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
@@ -235,8 +252,57 @@ function cacheStatsFor<T>(sourceId: SituationDataSourceId, cache: ManagedRespons
   };
 }
 
+function aggregateCacheStatsFor(sourceId: SituationDataSourceId, caches: Array<{ stats(): ManagedResponseCacheStats }>): SourceCacheStats {
+  const initial: SourceCacheStats = {
+    sourceId,
+    entries: 0,
+    inflight: 0,
+    hits: 0,
+    misses: 0,
+    coalescedHits: 0,
+    staleHits: 0,
+    refreshes: 0,
+    errors: 0,
+    evictions: 0,
+    sharedEnabled: false,
+    sharedAvailable: false,
+    sharedHits: 0,
+    sharedMisses: 0,
+    sharedStaleHits: 0,
+    sharedWrites: 0,
+    sharedErrors: 0
+  };
+  return caches.reduce<SourceCacheStats>((summary, cache) => {
+    const stats = cache.stats();
+    return {
+      sourceId,
+      entries: summary.entries + stats.entries,
+      inflight: summary.inflight + stats.inflight,
+      hits: summary.hits + stats.hits,
+      misses: summary.misses + stats.misses,
+      coalescedHits: summary.coalescedHits + stats.coalescedHits,
+      staleHits: summary.staleHits + stats.staleHits,
+      refreshes: summary.refreshes + stats.refreshes,
+      errors: summary.errors + stats.errors,
+      evictions: summary.evictions + stats.evictions,
+      sharedEnabled: summary.sharedEnabled || stats.sharedEnabled,
+      sharedAvailable: summary.sharedAvailable || stats.sharedAvailable,
+      sharedHits: summary.sharedHits + stats.sharedHits,
+      sharedMisses: summary.sharedMisses + stats.sharedMisses,
+      sharedStaleHits: summary.sharedStaleHits + stats.sharedStaleHits,
+      sharedWrites: summary.sharedWrites + stats.sharedWrites,
+      sharedErrors: summary.sharedErrors + stats.sharedErrors
+    };
+  }, initial);
+}
+
 const ctuNettestRecordsCaches = new Map<string, ManagedResponseCache<Array<Record<string, string>>>>();
 const ctuStationaryMobileRecordsCaches = new Map<string, ManagedResponseCache<CtuStationaryMobileRecord[]>>();
+const chmiAirQualityMetadataCaches = new Map<string, ManagedResponseCache<ChmiAirQualityMetadata>>();
+const chmiAirQualityRecordsCaches = new Map<string, ManagedResponseCache<Array<Record<string, string>>>>();
+const chmiWeatherIndexCaches = new Map<string, ManagedResponseCache<string>>();
+const chmiWeatherMetadataCaches = new Map<string, ManagedResponseCache<ChmiDataCollectionPayload>>();
+const chmiWeatherStationFileCaches = new Map<string, ManagedResponseCache<ChmiDataCollectionPayload>>();
 
 function ctuNettestRecordsCache(config: SituationDataConfig): ManagedResponseCache<Array<Record<string, string>>> {
   const key = `${config.ctuNettestUrl}:${config.requestTimeoutMs}`;
@@ -265,6 +331,82 @@ function ctuStationaryMobileRecordsCache(config: SituationDataConfig): ManagedRe
     maxEntries: 1
   });
   ctuStationaryMobileRecordsCaches.set(key, cache);
+  return cache;
+}
+
+function chmiAirQualityMetadataCache(config: SituationDataConfig): ManagedResponseCache<ChmiAirQualityMetadata> {
+  const key = `${config.chmiAirQualityMetadataUrl}:${config.chmiAirQualityCacheTtlSeconds}`;
+  const existing = chmiAirQualityMetadataCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<ChmiAirQualityMetadata>({
+    ttlMs: Math.max(300, config.chmiAirQualityCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.chmiAirQualityCacheTtlSeconds, config.staleIfErrorSeconds, 3600) * 1000,
+    maxEntries: 1
+  });
+  chmiAirQualityMetadataCaches.set(key, cache);
+  return cache;
+}
+
+function chmiAirQualityRecordsCache(config: SituationDataConfig): ManagedResponseCache<Array<Record<string, string>>> {
+  const key = `${config.chmiAirQualityDataUrl}:${config.chmiAirQualityCacheTtlSeconds}`;
+  const existing = chmiAirQualityRecordsCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<Array<Record<string, string>>>({
+    ttlMs: Math.max(300, config.chmiAirQualityCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.chmiAirQualityCacheTtlSeconds, config.staleIfErrorSeconds, 3600) * 1000,
+    maxEntries: 1
+  });
+  chmiAirQualityRecordsCaches.set(key, cache);
+  return cache;
+}
+
+function chmiWeatherIndexCache(config: SituationDataConfig, kind: "metadata" | "data"): ManagedResponseCache<string> {
+  const baseUrl = kind === "metadata" ? config.chmiWeatherMetadataBaseUrl : config.chmiWeatherDataBaseUrl;
+  const key = `${kind}:${baseUrl}:${config.chmiWeatherCacheTtlSeconds}`;
+  const existing = chmiWeatherIndexCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<string>({
+    ttlMs: Math.max(300, config.chmiWeatherCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.chmiWeatherCacheTtlSeconds, config.staleIfErrorSeconds, 3600) * 1000,
+    maxEntries: 1
+  });
+  chmiWeatherIndexCaches.set(key, cache);
+  return cache;
+}
+
+function chmiWeatherMetadataCache(config: SituationDataConfig): ManagedResponseCache<ChmiDataCollectionPayload> {
+  const key = `${config.chmiWeatherMetadataBaseUrl}:${config.chmiWeatherCacheTtlSeconds}`;
+  const existing = chmiWeatherMetadataCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<ChmiDataCollectionPayload>({
+    ttlMs: Math.max(300, config.chmiWeatherCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.chmiWeatherCacheTtlSeconds, config.staleIfErrorSeconds, 3600) * 1000,
+    maxEntries: 4
+  });
+  chmiWeatherMetadataCaches.set(key, cache);
+  return cache;
+}
+
+function chmiWeatherStationFileCache(config: SituationDataConfig): ManagedResponseCache<ChmiDataCollectionPayload> {
+  const key = `${config.chmiWeatherDataBaseUrl}:${config.chmiWeatherCacheTtlSeconds}:${config.chmiWeatherMaxStations}`;
+  const existing = chmiWeatherStationFileCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<ChmiDataCollectionPayload>({
+    ttlMs: Math.max(300, config.chmiWeatherCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.chmiWeatherCacheTtlSeconds, config.staleIfErrorSeconds, 3600) * 1000,
+    maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 2048))
+  });
+  chmiWeatherStationFileCaches.set(key, cache);
   return cache;
 }
 
@@ -386,6 +528,241 @@ class OpenMeteoSource implements SituationDataSource {
     });
 
     return { source: this.descriptor, fetchedAt, features: [feature], warnings: [] };
+  }
+}
+
+class ChmiAirQualitySource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly metadataCache: ManagedResponseCache<ChmiAirQualityMetadata>;
+  private readonly recordsCache: ManagedResponseCache<Array<Record<string, string>>>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.metadataCache = chmiAirQualityMetadataCache(config);
+    this.recordsCache = chmiAirQualityRecordsCache(config);
+    this.descriptor = {
+      sourceId: "chmi_air_quality",
+      label: "CHMI air quality observations",
+      enabled: config.enabledSources.includes("chmi_air_quality"),
+      mode: "live",
+      priority: 84,
+      layers: ["air_quality"],
+      license: CHMI_OPEN_DATA_LICENSE,
+      baseUrl: config.chmiAirQualityDataUrl,
+      updateCadenceSeconds: config.chmiAirQualityCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [aggregateCacheStatsFor("chmi_air_quality", [this.metadataCache, this.recordsCache])];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    try {
+      const [metadata, records] = await Promise.all([
+        this.metadataCache.getOrLoad("chmi_air_quality_metadata", () =>
+          requestJson<ChmiAirQualityMetadata>(this.config.chmiAirQualityMetadataUrl, this.config.requestTimeoutMs)
+        ),
+        this.recordsCache.getOrLoad("chmi_air_quality_records", () =>
+          requestText(this.config.chmiAirQualityDataUrl, this.config.requestTimeoutMs).then(parseCsvRecords)
+        )
+      ]);
+      const lastImportAt = latestRecordTimestamp(records, "startTime");
+      const lastImportAgeSeconds = lastImportAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastImportAt)) / 1000)) : undefined;
+      const localityCount = (metadata.data?.Localities ?? []).filter((locality) => chmiLocalityLonLat(locality)).length;
+      const warnings: string[] = [];
+      if (records.length === 0) {
+        warnings.push("chmi_air_quality did not return observation rows.");
+      }
+      if (localityCount === 0) {
+        warnings.push("chmi_air_quality metadata did not contain georeferenced localities.");
+      }
+      if (lastImportAgeSeconds !== undefined && lastImportAgeSeconds > 4 * 60 * 60) {
+        warnings.push("chmi_air_quality newest observation is older than 4 hours.");
+      }
+      return {
+        sourceId: "chmi_air_quality",
+        status: warnings.length === 0 ? "ok" : "degraded",
+        backend: "chmi-opendata",
+        objectCount: localityCount,
+        lastImportAt,
+        lastImportAgeSeconds,
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: "chmi_air_quality",
+        status: "degraded",
+        backend: "chmi-opendata",
+        warnings: [error instanceof Error ? error.message : "Unknown chmi_air_quality health check failure."]
+      };
+    }
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("air_quality")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const [metadata, records] = await Promise.all([
+      this.metadataCache.getOrLoad("chmi_air_quality_metadata", () =>
+        requestJson<ChmiAirQualityMetadata>(this.config.chmiAirQualityMetadataUrl, this.config.requestTimeoutMs)
+      ),
+      this.recordsCache.getOrLoad("chmi_air_quality_records", () =>
+        requestText(this.config.chmiAirQualityDataUrl, this.config.requestTimeoutMs).then(parseCsvRecords)
+      )
+    ]);
+    const registry = chmiAirQualityMeasurementRegistry(metadata);
+    const aggregates = aggregateChmiAirQuality(records, registry);
+    const features = Array.from(aggregates.values())
+      .map((aggregate) => mapChmiAirQualityFeature(aggregate, query, fetchedAt))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .slice(0, query.limit);
+
+    const warnings: string[] = [];
+    if (features.length === 0) {
+      warnings.push("chmi_air_quality returned no georeferenced observations in the requested bbox.");
+    }
+    return { source: this.descriptor, fetchedAt, features, warnings };
+  }
+}
+
+class ChmiWeatherStationsSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly metadataIndexCache: ManagedResponseCache<string>;
+  private readonly dataIndexCache: ManagedResponseCache<string>;
+  private readonly metadataCache: ManagedResponseCache<ChmiDataCollectionPayload>;
+  private readonly stationFileCache: ManagedResponseCache<ChmiDataCollectionPayload>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.metadataIndexCache = chmiWeatherIndexCache(config, "metadata");
+    this.dataIndexCache = chmiWeatherIndexCache(config, "data");
+    this.metadataCache = chmiWeatherMetadataCache(config);
+    this.stationFileCache = chmiWeatherStationFileCache(config);
+    this.descriptor = {
+      sourceId: "chmi_weather_stations",
+      label: "CHMI measured weather stations",
+      enabled: config.enabledSources.includes("chmi_weather_stations"),
+      mode: "live",
+      priority: 83,
+      layers: ["weather"],
+      license: CHMI_OPEN_DATA_LICENSE,
+      baseUrl: config.chmiWeatherDataBaseUrl,
+      updateCadenceSeconds: config.chmiWeatherCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [
+      aggregateCacheStatsFor("chmi_weather_stations", [
+        this.metadataIndexCache,
+        this.dataIndexCache,
+        this.metadataCache,
+        this.stationFileCache
+      ])
+    ];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    try {
+      const [metadataIndex, dataIndex] = await Promise.all([
+        this.metadataIndexCache.getOrLoad("chmi_weather_metadata_index", () => requestText(this.config.chmiWeatherMetadataBaseUrl, this.config.requestTimeoutMs)),
+        this.dataIndexCache.getOrLoad("chmi_weather_data_index", () => requestText(this.config.chmiWeatherDataBaseUrl, this.config.requestTimeoutMs))
+      ]);
+      const metadataHref = latestHrefFromIndex(metadataIndex, /^meta1-\d{8}\.json$/);
+      if (!metadataHref) {
+        throw new Error("chmi_weather_stations metadata index did not contain meta1 files.");
+      }
+      const metadataUrl = joinUrl(this.config.chmiWeatherMetadataBaseUrl, metadataHref);
+      const metadata = await this.metadataCache.getOrLoad(metadataUrl, () => requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs));
+      const stations = chmiWeatherStationsFromMetadata(metadata);
+      const latestDataDate = latestChmiWeatherDataDate(dataIndex);
+      const lastImportAt = latestDataDate ? dateTokenToIso(latestDataDate) : undefined;
+      const lastImportAgeSeconds = lastImportAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastImportAt)) / 1000)) : undefined;
+      const warnings: string[] = [];
+      if (stations.length === 0) {
+        warnings.push("chmi_weather_stations metadata did not contain georeferenced stations.");
+      }
+      if (!latestDataDate) {
+        warnings.push("chmi_weather_stations data index did not contain 10m station data files.");
+      }
+      if (lastImportAgeSeconds !== undefined && lastImportAgeSeconds > 48 * 60 * 60) {
+        warnings.push("chmi_weather_stations data files are older than 48 hours.");
+      }
+      return {
+        sourceId: "chmi_weather_stations",
+        status: warnings.length === 0 ? "ok" : "degraded",
+        backend: "chmi-opendata",
+        objectCount: stations.length,
+        lastImportAt,
+        lastImportAgeSeconds,
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: "chmi_weather_stations",
+        status: "degraded",
+        backend: "chmi-opendata",
+        warnings: [error instanceof Error ? error.message : "Unknown chmi_weather_stations health check failure."]
+      };
+    }
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("weather")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const [metadataIndex, dataIndex] = await Promise.all([
+      this.metadataIndexCache.getOrLoad("chmi_weather_metadata_index", () => requestText(this.config.chmiWeatherMetadataBaseUrl, this.config.requestTimeoutMs)),
+      this.dataIndexCache.getOrLoad("chmi_weather_data_index", () => requestText(this.config.chmiWeatherDataBaseUrl, this.config.requestTimeoutMs))
+    ]);
+    const metadataHref = latestHrefFromIndex(metadataIndex, /^meta1-\d{8}\.json$/);
+    if (!metadataHref) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: ["chmi_weather_stations metadata index did not contain meta1 files."] };
+    }
+    const metadataUrl = joinUrl(this.config.chmiWeatherMetadataBaseUrl, metadataHref);
+    const metadata = await this.metadataCache.getOrLoad(metadataUrl, () => requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs));
+    const stationFiles = chmiWeatherStationFileMap(dataIndex);
+    const center = bboxCenter(query.bbox);
+    const stations = chmiWeatherStationsFromMetadata(metadata)
+      .filter((station) => isPointInBbox(station.lon, station.lat, query.bbox))
+      .sort((a, b) => distanceSquared(a.lon, a.lat, center.lon, center.lat) - distanceSquared(b.lon, b.lat, center.lon, center.lat))
+      .slice(0, Math.max(1, this.config.chmiWeatherMaxStations));
+
+    const warnings: string[] = [];
+    const selected = stations.flatMap((station) => {
+      const file = stationFiles.get(station.stationId);
+      if (!file) {
+        return [];
+      }
+      return [{ station, file }];
+    });
+    if (selected.length < stations.length) {
+      warnings.push(`chmi_weather_stations skipped ${stations.length - selected.length} station(s) without a current 10m data file.`);
+    }
+
+    const settled = await Promise.allSettled(
+      selected.map(async ({ station, file }) => {
+        const url = joinUrl(this.config.chmiWeatherDataBaseUrl, file.href);
+        const payload = await this.stationFileCache.getOrLoad(url, () => requestJson<ChmiDataCollectionPayload>(url, this.config.requestTimeoutMs));
+        return mapChmiWeatherStationFeature(station, payload, query, fetchedAt);
+      })
+    );
+    const features = settled
+      .flatMap((result) => (result.status === "fulfilled" && result.value ? [result.value] : []))
+      .slice(0, query.limit);
+    for (const result of settled) {
+      if (result.status === "rejected") {
+        warnings.push(result.reason instanceof Error ? result.reason.message : "Unknown chmi_weather_stations station-file failure.");
+      }
+    }
+    if (features.length === 0) {
+      warnings.push("chmi_weather_stations returned no measured station observations in the requested bbox.");
+    }
+
+    return { source: this.descriptor, fetchedAt, features, warnings };
   }
 }
 
@@ -2108,6 +2485,566 @@ function mapRoadSrtiLodFeature(event: RoadSrtiLodEvent, query: SituationQuery, f
   });
 }
 
+function chmiAirQualityMeasurementRegistry(metadata: ChmiAirQualityMetadata): Map<string, ChmiAirQualityMeasurementRef> {
+  const registry = new Map<string, ChmiAirQualityMeasurementRef>();
+  for (const locality of metadata.data?.Localities ?? []) {
+    for (const program of locality.MeasuringPrograms ?? []) {
+      for (const measurement of program.Measurements ?? []) {
+        const id = measurement.IdRegistration;
+        if (id !== undefined && id !== null) {
+          registry.set(String(id), { locality, measurement });
+        }
+      }
+    }
+  }
+  return registry;
+}
+
+function aggregateChmiAirQuality(
+  records: Array<Record<string, string>>,
+  registry: Map<string, ChmiAirQualityMeasurementRef>
+): Map<string, ChmiAirQualityAggregate> {
+  const aggregates = new Map<string, ChmiAirQualityAggregate>();
+  const allowedValueTypes = new Set(["8", "9", "10", "11", "148"]);
+  for (const record of records) {
+    const id = record.idRegistration?.trim();
+    const ref = id ? registry.get(id) : undefined;
+    const value = optionalNumber(record.value);
+    if (!ref || value === undefined) {
+      continue;
+    }
+    const valueType = record.idValueType?.trim();
+    if (valueType && !allowedValueTypes.has(valueType)) {
+      continue;
+    }
+    const position = chmiLocalityLonLat(ref.locality);
+    if (!position) {
+      continue;
+    }
+    const localityCode = ref.locality.LocalityCode ?? stableToken(ref.locality.Name ?? `${position.lon}:${position.lat}`);
+    const aggregate =
+      aggregates.get(localityCode) ??
+      ({
+        locality: ref.locality,
+        observedAt: undefined,
+        values: {},
+        components: {},
+        units: {},
+        valueTypes: new Set<string>(),
+        measurementCount: 0,
+        rawRows: []
+      } satisfies ChmiAirQualityAggregate);
+    const observedAt = parseTimestamp(record.startTime) ?? aggregate.observedAt;
+    if (observedAt && (!aggregate.observedAt || Date.parse(observedAt) >= Date.parse(aggregate.observedAt))) {
+      aggregate.observedAt = observedAt;
+    }
+    const componentCode = normalizeChmiComponentCode(ref.measurement.ComponentCode);
+    if (componentCode === "INDX" || valueType === "148") {
+      aggregate.airQualityIndex = value;
+    } else {
+      const metricName = airQualityMetricName(componentCode);
+      if (metricName) {
+        aggregate.values[metricName] = round(value, 2);
+        aggregate.components[metricName] = componentCode;
+        aggregate.units[metricName] = ref.measurement.UnitAsASCII ?? ref.measurement.UnitAsUNICODE ?? "";
+      }
+    }
+    if (valueType) {
+      aggregate.valueTypes.add(valueType);
+    }
+    aggregate.measurementCount += 1;
+    if (aggregate.rawRows.length < 24) {
+      aggregate.rawRows.push(record);
+    }
+    aggregates.set(localityCode, aggregate);
+  }
+  return aggregates;
+}
+
+function mapChmiAirQualityFeature(aggregate: ChmiAirQualityAggregate, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+  const position = chmiLocalityLonLat(aggregate.locality);
+  if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
+    return undefined;
+  }
+  const localityCode = aggregate.locality.LocalityCode ?? stableToken(aggregate.locality.Name ?? `${position.lon}:${position.lat}`);
+  const observedAt = aggregate.observedAt ?? fetchedAt;
+  const severity = maxSeverity([airQualityIndexSeverity(aggregate.airQualityIndex), pollutantSeverity(aggregate.values)]);
+  const dominant = dominantAirPollutant(aggregate.values);
+  const level = airQualityLevel(aggregate.airQualityIndex);
+  const localityName = aggregate.locality.Name ?? aggregate.locality.BasicInfo?.LocalityName ?? "CHMI air quality station";
+
+  return makePointFeature({
+    id: `air_quality:chmi_air_quality:${stableToken(localityCode)}`,
+    lon: position.lon,
+    lat: position.lat,
+    layer: "air_quality",
+    category: "air_quality_observation",
+    label: localityName,
+    sourceId: "chmi_air_quality",
+    license: CHMI_OPEN_DATA_LICENSE,
+    observedAt,
+    validUntil: addSeconds(observedAt, 2 * 60 * 60),
+    confidence: aggregate.airQualityIndex !== undefined ? 0.9 : 0.82,
+    severity,
+    metrics: compactMixedMetrics({
+      airQualityIndex: aggregate.airQualityIndex,
+      measurementCount: aggregate.measurementCount,
+      ...aggregate.values
+    }),
+    tags: compactTags({
+      stationCode: localityCode,
+      region: optionalString(aggregate.locality.BasicInfo?.Region),
+      district: optionalString(aggregate.locality.BasicInfo?.District),
+      municipality: optionalString(aggregate.locality.BasicInfo?.BasicAdministrativeUnit),
+      airQualityLevel: level,
+      dominantPollutant: dominant,
+      valueTypes: Array.from(aggregate.valueTypes).sort().join(",")
+    }),
+    raw: query.includeRaw
+      ? {
+          locality: aggregate.locality,
+          components: aggregate.components,
+          units: aggregate.units,
+          rows: aggregate.rawRows
+        }
+      : undefined
+  });
+}
+
+function chmiWeatherStationsFromMetadata(payload: ChmiDataCollectionPayload): ChmiWeatherStation[] {
+  const collection = chmiCollectionData(payload);
+  const values = collection?.values ?? [];
+  const headers = splitDataCollectionHeader(collection?.header);
+  const stationIndex = headers.indexOf("WSI");
+  const ghIndex = headers.indexOf("GH_ID");
+  const nameIndex = headers.indexOf("FULL_NAME");
+  const lonIndex = headers.indexOf("GEOGR1");
+  const latIndex = headers.indexOf("GEOGR2");
+  const elevationIndex = headers.indexOf("ELEVATION");
+  const beginDateIndex = headers.indexOf("BEGIN_DATE");
+
+  return values
+    .map((row): ChmiWeatherStation | undefined => {
+      const stationId = stringCell(row, stationIndex);
+      const name = stringCell(row, nameIndex);
+      const lon = numberCell(row, lonIndex);
+      const lat = numberCell(row, latIndex);
+      if (!stationId || !name || lon === undefined || lat === undefined) {
+        return undefined;
+      }
+      return {
+        stationId,
+        ghId: stringCell(row, ghIndex),
+        name,
+        lon,
+        lat,
+        elevationM: numberCell(row, elevationIndex),
+        beginDate: parseTimestamp(stringCell(row, beginDateIndex))
+      };
+    })
+    .filter((station): station is ChmiWeatherStation => Boolean(station));
+}
+
+function mapChmiWeatherStationFeature(
+  station: ChmiWeatherStation,
+  payload: ChmiDataCollectionPayload,
+  query: SituationQuery,
+  fetchedAt: string
+): SituationFeature | undefined {
+  const observations = chmiWeatherObservations(payload);
+  if (observations.size === 0) {
+    return undefined;
+  }
+  const observedAt = latestObservationTime(observations) ?? fetchedAt;
+  const windSpeedMps = observations.get("F")?.value;
+  const windGustMps = observations.get("Fmax")?.value;
+  const precipitation10mMm = observations.get("SRA10M")?.value;
+  const severity = weatherSeverity(windGustMps ?? windSpeedMps, precipitation10mMm, undefined);
+  const qualityValues = Array.from(observations.values()).map((observation) => observation.quality).filter(isFiniteNumber);
+  const qualityCode = qualityValues.length > 0 ? Math.max(...qualityValues) : undefined;
+
+  return makePointFeature({
+    id: `weather:chmi_weather_stations:${stableToken(station.stationId)}`,
+    lon: station.lon,
+    lat: station.lat,
+    layer: "weather",
+    category: "weather_station_observation",
+    label: station.name,
+    sourceId: "chmi_weather_stations",
+    license: CHMI_OPEN_DATA_LICENSE,
+    observedAt,
+    validUntil: addSeconds(observedAt, 2 * 60 * 60),
+    confidence: chmiWeatherConfidence(observedAt, qualityCode),
+    severity,
+    metrics: compactMixedMetrics({
+      temperatureC: observations.get("T")?.value,
+      temperatureMaxC: observations.get("TMA")?.value,
+      temperatureMinC: observations.get("TMI")?.value,
+      grassTemperatureC: observations.get("TPM")?.value,
+      relativeHumidityPercent: observations.get("H")?.value,
+      pressureHpa: observations.get("P")?.value,
+      windDirectionDeg: observations.get("D")?.value,
+      windSpeedMps,
+      windGustMps,
+      precipitation10mMm,
+      sunshineDurationSeconds: observations.get("SSV10M")?.value,
+      elevationM: station.elevationM,
+      qualityCode
+    }),
+    tags: compactTags({
+      stationId: station.stationId,
+      ghId: station.ghId,
+      sourceSystem: "chmi_meteorology_climate_now",
+      hasWind: windSpeedMps !== undefined ? "true" : undefined,
+      hasPrecipitation: precipitation10mMm !== undefined ? "true" : undefined
+    }),
+    raw: query.includeRaw
+      ? {
+          station,
+          observations: Object.fromEntries(observations)
+        }
+      : undefined
+  });
+}
+
+function chmiWeatherObservations(payload: ChmiDataCollectionPayload): Map<string, ChmiStationObservation> {
+  const collection = chmiCollectionData(payload);
+  const values = collection?.values ?? [];
+  const headers = splitDataCollectionHeader(collection?.header);
+  const elementIndex = headers.indexOf("ELEMENT");
+  const dtIndex = headers.indexOf("DT");
+  const valueIndex = headers.indexOf("VAL");
+  const qualityIndex = headers.indexOf("QUALITY");
+  const selectedElements = new Set(["T", "TMA", "TMI", "TPM", "H", "P", "D", "F", "Fmax", "SRA10M", "SSV10M"]);
+  const observations = new Map<string, ChmiStationObservation>();
+
+  for (const row of values) {
+    const element = stringCell(row, elementIndex);
+    if (!element || !selectedElements.has(element)) {
+      continue;
+    }
+    const value = numberCell(row, valueIndex);
+    const observedAt = parseTimestamp(stringCell(row, dtIndex));
+    if (value === undefined || !observedAt) {
+      continue;
+    }
+    const existing = observations.get(element);
+    if (existing && Date.parse(existing.observedAt) > Date.parse(observedAt)) {
+      continue;
+    }
+    observations.set(element, {
+      value: round(value, 2),
+      observedAt,
+      quality: numberCell(row, qualityIndex)
+    });
+  }
+  return observations;
+}
+
+function chmiWeatherStationFileMap(indexHtml: string): Map<string, ChmiWeatherFileRef> {
+  const files = new Map<string, ChmiWeatherFileRef>();
+  for (const href of hrefsFromHtmlIndex(indexHtml)) {
+    const fileName = href.split("/").pop() ?? href;
+    const match = /^10m-(.+)-(\d{8})\.json$/.exec(fileName);
+    const stationId = match?.[1];
+    const dateToken = match?.[2];
+    if (!stationId || !dateToken) {
+      continue;
+    }
+    const existing = files.get(stationId);
+    if (!existing || dateToken > existing.dateToken) {
+      files.set(stationId, { href, dateToken });
+    }
+  }
+  return files;
+}
+
+function latestChmiWeatherDataDate(indexHtml: string): string | undefined {
+  return Array.from(chmiWeatherStationFileMap(indexHtml).values())
+    .map((file) => file.dateToken)
+    .sort()
+    .pop();
+}
+
+function latestHrefFromIndex(indexHtml: string, pattern: RegExp): string | undefined {
+  return hrefsFromHtmlIndex(indexHtml)
+    .map((href) => href.split("/").pop() ?? href)
+    .filter((href) => pattern.test(href))
+    .sort()
+    .pop();
+}
+
+function hrefsFromHtmlIndex(indexHtml: string): string[] {
+  return Array.from(indexHtml.matchAll(/href="([^"]+)"/g))
+    .map((match) => match[1])
+    .filter((href): href is string => typeof href === "string" && href.length > 0);
+}
+
+function chmiCollectionData(payload: ChmiDataCollectionPayload): { header?: string; values?: unknown[][] } | undefined {
+  return payload.data?.data;
+}
+
+function splitDataCollectionHeader(header: string | undefined): string[] {
+  return header?.split(",").map((item) => item.trim()) ?? [];
+}
+
+function stringCell(row: unknown[], index: number): string | undefined {
+  if (index < 0) {
+    return undefined;
+  }
+  const value = row[index];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function numberCell(row: unknown[], index: number): number | undefined {
+  if (index < 0) {
+    return undefined;
+  }
+  return optionalNumber(row[index]);
+}
+
+function chmiLocalityLonLat(locality: ChmiAirQualityLocality): { lon: number; lat: number } | undefined {
+  const lon = optionalNumber(locality.Localization?.LonAsNumber);
+  const lat = optionalNumber(locality.Localization?.LatAsNumber);
+  return lon !== undefined && lat !== undefined ? { lon, lat } : undefined;
+}
+
+function normalizeChmiComponentCode(value: string | undefined): string {
+  return value?.trim().toUpperCase().replace(/\./g, "_") ?? "";
+}
+
+function airQualityMetricName(componentCode: string): string | undefined {
+  const metricByComponent: Record<string, string> = {
+    PM10: "pm10UgM3",
+    PM2_5: "pm25UgM3",
+    NO2: "no2UgM3",
+    NOX: "noxUgM3",
+    O3: "o3UgM3",
+    SO2: "so2UgM3",
+    CO: "coUgM3"
+  };
+  return metricByComponent[componentCode];
+}
+
+function airQualityIndexSeverity(value: number | undefined): SituationSeverity {
+  if (value === undefined) {
+    return "info";
+  }
+  if (value >= 6) {
+    return "critical";
+  }
+  if (value >= 5) {
+    return "warning";
+  }
+  if (value >= 3) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function airQualityLevel(value: number | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value >= 6) {
+    return "very_bad";
+  }
+  if (value >= 5) {
+    return "bad";
+  }
+  if (value >= 3) {
+    return "acceptable";
+  }
+  if (value >= 1) {
+    return "good";
+  }
+  return "incomplete";
+}
+
+function pollutantSeverity(values: Record<string, number>): SituationSeverity {
+  const severityByMetric = Object.entries(values).map(([metric, value]) => {
+    switch (metric) {
+      case "pm10UgM3":
+        return thresholdSeverity(value, 25, 50, 100);
+      case "pm25UgM3":
+        return thresholdSeverity(value, 15, 25, 50);
+      case "no2UgM3":
+        return thresholdSeverity(value, 50, 100, 200);
+      case "o3UgM3":
+        return thresholdSeverity(value, 80, 120, 180);
+      case "so2UgM3":
+        return thresholdSeverity(value, 50, 125, 350);
+      case "coUgM3":
+        return thresholdSeverity(value, 3000, 7000, 10000);
+      default:
+        return "info" satisfies SituationSeverity;
+    }
+  });
+  return maxSeverity(severityByMetric);
+}
+
+function thresholdSeverity(value: number, advisory: number, warning: number, critical: number): SituationSeverity {
+  if (value >= critical) {
+    return "critical";
+  }
+  if (value >= warning) {
+    return "warning";
+  }
+  if (value >= advisory) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function dominantAirPollutant(values: Record<string, number>): string | undefined {
+  const warningThresholds: Record<string, number> = {
+    pm10UgM3: 50,
+    pm25UgM3: 25,
+    no2UgM3: 100,
+    noxUgM3: 200,
+    o3UgM3: 120,
+    so2UgM3: 125,
+    coUgM3: 7000
+  };
+  return Object.entries(values)
+    .map(([metric, value]) => ({ metric, score: value / (warningThresholds[metric] ?? Infinity) }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => b.score - a.score)[0]?.metric;
+}
+
+function maxSeverity(values: SituationSeverity[]): SituationSeverity {
+  return values.sort((a, b) => severityRank(b) - severityRank(a))[0] ?? "info";
+}
+
+function severityRank(value: SituationSeverity): number {
+  return { info: 0, advisory: 1, warning: 2, critical: 3 }[value];
+}
+
+function latestObservationTime(observations: Map<string, ChmiStationObservation>): string | undefined {
+  return Array.from(observations.values())
+    .map((observation) => observation.observedAt)
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+}
+
+function chmiWeatherConfidence(observedAt: string, qualityCode: number | undefined): number {
+  const ageSeconds = Math.max(0, Math.round((Date.now() - Date.parse(observedAt)) / 1000));
+  const ageFactor = ageSeconds <= 2 * 60 * 60 ? 0.9 : ageSeconds <= 12 * 60 * 60 ? 0.76 : 0.55;
+  const qualityFactor = qualityCode === undefined ? 0 : Math.min(0.04, Math.max(0, qualityCode) / 100);
+  return round(Math.min(0.94, ageFactor + qualityFactor), 2);
+}
+
+function latestRecordTimestamp(records: Array<Record<string, string>>, field: string): string | undefined {
+  return records
+    .map((record) => parseTimestamp(record[field]))
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+}
+
+function dateTokenToIso(value: string): string | undefined {
+  if (!/^\d{8}$/.test(value)) {
+    return undefined;
+  }
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00.000Z`;
+}
+
+function joinUrl(baseUrl: string, href: string): string {
+  return new URL(href, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
+}
+
+function distanceSquared(lonA: number, latA: number, lonB: number, latB: number): number {
+  return (lonA - lonB) ** 2 + (latA - latB) ** 2;
+}
+
+interface ChmiAirQualityMetadata {
+  datumVytvoreni?: string;
+  verzeDat?: string;
+  data?: {
+    Localities?: ChmiAirQualityLocality[];
+  };
+}
+
+interface ChmiAirQualityLocality {
+  LocalityCode?: string;
+  Name?: string;
+  Localization?: {
+    LatAsNumber?: number;
+    LonAsNumber?: number;
+    Alt?: string;
+  };
+  BasicInfo?: {
+    LocalityName?: string;
+    Region?: string;
+    District?: string;
+    BasicAdministrativeUnit?: string;
+    State?: string;
+    [key: string]: unknown;
+  };
+  MeasuringPrograms?: ChmiAirQualityProgram[];
+}
+
+interface ChmiAirQualityProgram {
+  Code?: string;
+  Type?: string;
+  Measurements?: ChmiAirQualityMeasurement[];
+}
+
+interface ChmiAirQualityMeasurement {
+  IdRegistration?: number | string;
+  ComponentCode?: string;
+  ComponentName?: string;
+  UnitAsASCII?: string;
+  UnitAsUNICODE?: string;
+  HasRealTimeData?: string;
+  IsAuthorized?: string;
+}
+
+interface ChmiAirQualityMeasurementRef {
+  locality: ChmiAirQualityLocality;
+  measurement: ChmiAirQualityMeasurement;
+}
+
+interface ChmiAirQualityAggregate {
+  locality: ChmiAirQualityLocality;
+  observedAt?: string;
+  airQualityIndex?: number;
+  values: Record<string, number>;
+  components: Record<string, string>;
+  units: Record<string, string>;
+  valueTypes: Set<string>;
+  measurementCount: number;
+  rawRows: Array<Record<string, string>>;
+}
+
+interface ChmiDataCollectionPayload {
+  data?: {
+    data?: {
+      header?: string;
+      values?: unknown[][];
+    };
+  };
+}
+
+interface ChmiWeatherStation {
+  stationId: string;
+  ghId?: string;
+  name: string;
+  lon: number;
+  lat: number;
+  elevationM?: number;
+  beginDate?: string;
+}
+
+interface ChmiWeatherFileRef {
+  href: string;
+  dateToken: string;
+}
+
+interface ChmiStationObservation {
+  value: number;
+  observedAt: string;
+  quality?: number;
+}
+
 interface OpenMeteoResponse {
   current?: Record<string, unknown>;
   current_units?: Record<string, string>;
@@ -2630,6 +3567,20 @@ async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
     throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
   }
   return (await response.json()) as T;
+}
+
+async function requestText(url: string, timeoutMs: number): Promise<string> {
+  const response = await fetch(url, {
+    headers: {
+      accept: "text/plain,text/csv,text/html,application/json,*/*",
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  return response.text();
 }
 
 async function requestJsonWithHeaders<T>(url: string, timeoutMs: number, headers: Record<string, string>): Promise<T> {

@@ -134,14 +134,14 @@ components:
       required: false
       schema:
         type: string
-        example: weather,ground,mobile_network,traffic,warnings,flood
+        example: weather,ground,mobile_network,traffic,warnings,flood,air_quality
     Sources:
       name: source
       in: query
       required: false
       schema:
         type: string
-        example: open_meteo,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+        example: open_meteo,chmi_weather_stations,chmi_air_quality,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
     Technologies:
       name: technology
       in: query
@@ -186,10 +186,10 @@ components:
   schemas:
     LayerId:
       type: string
-      enum: [weather, ground, mobile, mobile_coverage, mobile_network, traffic, warnings, flood, air_quality]
+      enum: [weather, ground, mobile, mobile_coverage, mobile_network, traffic, warnings, fire, flood, boundary_admin, air_quality]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -596,7 +596,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, ardosPartner]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, ardosPartner]
           properties:
             openMeteo:
               type: integer
@@ -618,6 +618,10 @@ components:
               type: integer
             aviationWeather:
               type: integer
+            chmiAirQuality:
+              type: integer
+            chmiWeatherStations:
+              type: integer
             ardosPartner:
               type: integer
         providers:
@@ -634,8 +638,7 @@ components:
                 type: boolean
               backend:
                 type: string
-                enum: [unconfigured, local-postgis, patroni-postgis, external-postgis]
-                description: Present for PostGIS-backed providers; indicates the runtime database backend without exposing credentials.
+                description: Optional backend marker, e.g. unconfigured, patroni-postgis, chmi-opendata or ndic-srti-lod, without exposing credentials.
     SourceHealthStatus:
       type: object
       required: [sourceId, status, warnings]

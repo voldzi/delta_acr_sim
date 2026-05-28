@@ -172,6 +172,8 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | --- | --- | --- |
 | `open_meteo` | `weather` | Obecné počasí u středu bbox, silně cacheované podle weather gridu. |
 | `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo. |
+| `chmi_weather_stations` | `weather` | Měřené meteorologické stanice ČHMÚ z `meteorology/climate/now`: teplota, vlhkost, tlak, vítr, srážky a sluneční svit. COM používá katalogovou vrstvu `public.weather.observations`. |
+| `chmi_air_quality` | `air_quality` | Měřené imisní stanice ČHMÚ z `air_quality/now`: index kvality ovzduší a hlavní polutanty. COM používá katalogovou vrstvu `public.safety.air_quality`. |
 | `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
 | `ctu_stationary_mobile` | `mobile` | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav. |
 | `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
@@ -195,6 +197,27 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 COM má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
 
 Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt` a `lastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_osm_postgis_import_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
+
+## ČHMÚ Open Data
+
+SIM publikuje dvě cacheované ČHMÚ vrstvy:
+
+- `public.weather.observations` / provider layer `weather.chmi_station_observations`: bodové features meteorologických stanic s metrikami `temperatureC`, `relativeHumidityPercent`, `pressureHpa`, `windSpeedMps`, `windGustMps`, `windDirectionDeg`, `precipitation10mMm`, `sunshineDurationSeconds`, `elevationM`.
+- `public.safety.air_quality` / provider layer `air_quality.chmi_station_observations`: bodové features imisních stanic s metrikami `airQualityIndex`, `pm10UgM3`, `pm25UgM3`, `no2UgM3`, `noxUgM3`, `o3UgM3`, `so2UgM3`, `coUgM3`.
+
+Dotazy:
+
+```http
+GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=50
+GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_quality&limit=50
+```
+
+ČHMÚ zdroje jsou source-level cacheované. Výchozí TTL:
+
+- `SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS=600`
+- `SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900`
+
+COM nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
 
 ## Mobile Coverage Model
 

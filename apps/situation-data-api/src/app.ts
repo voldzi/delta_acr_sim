@@ -296,6 +296,8 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "road_srti_lod",
     "safety_data",
     "aviation_weather",
+    "chmi_air_quality",
+    "chmi_weather_stations",
     "ardos_partner"
   ]);
   const raw = asString(value);
@@ -381,6 +383,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       roadSrtiLod: config.roadSrtiLodCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,
       aviationWeather: config.aviationWeatherCacheTtlSeconds,
+      chmiAirQuality: config.chmiAirQualityCacheTtlSeconds,
+      chmiWeatherStations: config.chmiWeatherCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds
     },
     providers: [
@@ -412,6 +416,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "road_srti_lod", baseUrl: config.roadSrtiLodSparqlUrl, authConfigured: true },
       { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true },
       { sourceId: "aviation_weather", baseUrl: config.aviationWeatherBaseUrl, authConfigured: true },
+      { sourceId: "chmi_air_quality", baseUrl: config.chmiAirQualityDataUrl, authConfigured: true, backend: "chmi-opendata" },
+      { sourceId: "chmi_weather_stations", baseUrl: config.chmiWeatherDataBaseUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }
     ]
   };
@@ -467,6 +473,30 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     }
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_ctu_stationary_mobile_latest_measurement_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+  }
+  if (status.sourceId === "chmi_air_quality") {
+    lines.push(`situation_data_chmi_air_quality_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_chmi_air_quality_stations{backend="${backend}"} ${status.objectCount}`);
+    }
+    if (status.lastImportAt) {
+      lines.push(`situation_data_chmi_air_quality_latest_observation_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+    }
+    if (typeof status.lastImportAgeSeconds === "number") {
+      lines.push(`situation_data_chmi_air_quality_latest_observation_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+  }
+  if (status.sourceId === "chmi_weather_stations") {
+    lines.push(`situation_data_chmi_weather_stations_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_chmi_weather_stations{backend="${backend}"} ${status.objectCount}`);
+    }
+    if (status.lastImportAt) {
+      lines.push(`situation_data_chmi_weather_latest_observation_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+    }
+    if (typeof status.lastImportAgeSeconds === "number") {
+      lines.push(`situation_data_chmi_weather_latest_observation_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
     }
   }
   return lines;

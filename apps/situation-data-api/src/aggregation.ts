@@ -128,6 +128,12 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "aviation_weather") {
     return "weather.aviation_weather";
   }
+  if (sourceId === "chmi_weather_stations") {
+    return "weather.chmi_station_observations";
+  }
+  if (sourceId === "chmi_air_quality") {
+    return "air_quality.chmi_station_observations";
+  }
   if (sourceId === "mobile_network_model") {
     return "mobile_network";
   }
@@ -185,6 +191,10 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.weather.current";
     case "weather.aviation_weather":
       return "public.weather.aviation";
+    case "weather.chmi_station_observations":
+      return "public.weather.observations";
+    case "air_quality.chmi_station_observations":
+      return "public.safety.air_quality";
     case "mobile_network":
       return "public.mobile.network";
     case "mobile_coverage":

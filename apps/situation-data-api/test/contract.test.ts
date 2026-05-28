@@ -68,6 +68,13 @@ describe("Situation Data API contract", () => {
       safetyDataCacheTtlSeconds: 300,
       aviationWeatherBaseUrl: "https://aviationweather.gov",
       aviationWeatherCacheTtlSeconds: 600,
+      chmiAirQualityMetadataUrl: "https://opendata.chmi.cz/air_quality/now/metadata/metadata.json",
+      chmiAirQualityDataUrl: "https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv",
+      chmiAirQualityCacheTtlSeconds: 900,
+      chmiWeatherMetadataBaseUrl: "https://opendata.chmi.cz/meteorology/climate/now/metadata/",
+      chmiWeatherDataBaseUrl: "https://opendata.chmi.cz/meteorology/climate/now/data/",
+      chmiWeatherCacheTtlSeconds: 600,
+      chmiWeatherMaxStations: 16,
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
@@ -151,6 +158,14 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "aviation_weather",
+          layers: expect.arrayContaining(["weather"])
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_air_quality",
+          layers: expect.arrayContaining(["air_quality"])
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_weather_stations",
           layers: expect.arrayContaining(["weather"])
         }),
         expect.objectContaining({
@@ -252,6 +267,20 @@ describe("Situation Data API contract", () => {
           compatibilityOnly: true,
           preferredProviderId: "sim.safety-data",
           selectable: false
+        }),
+        expect.objectContaining({
+          providerLayerId: "air_quality.chmi_station_observations",
+          recommendedCatalogLayerId: "public.safety.air_quality",
+          role: "overlay",
+          audience: "public",
+          sourceIds: ["chmi_air_quality"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.chmi_station_observations",
+          recommendedCatalogLayerId: "public.weather.observations",
+          role: "reference",
+          audience: "public",
+          sourceIds: ["chmi_weather_stations"]
         })
       ])
     );
@@ -395,6 +424,8 @@ describe("Situation Data API contract", () => {
           roadSrtiLod: 300,
           safetyData: 300,
           aviationWeather: 600,
+          chmiAirQuality: 900,
+          chmiWeatherStations: 600,
           ardosPartner: 15
         },
         providers: expect.arrayContaining([
@@ -410,6 +441,8 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
           expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
           expect.objectContaining({ sourceId: "aviation_weather", authConfigured: true }),
+          expect.objectContaining({ sourceId: "chmi_air_quality", authConfigured: true, backend: "chmi-opendata" }),
+          expect.objectContaining({ sourceId: "chmi_weather_stations", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "ardos_partner", authConfigured: false })
         ])
       })
@@ -440,6 +473,8 @@ describe("Situation Data API contract", () => {
         "road_srti_lod",
         "safety_data",
         "aviation_weather",
+        "chmi_air_quality",
+        "chmi_weather_stations",
         "ardos_partner"
       ]
     });
@@ -466,6 +501,12 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="road_srti_lod"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="chmi_air_quality"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="chmi_air_quality",backend="chmi-opendata"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_chmi_air_quality_backend_info{backend="chmi-opendata"} 1');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="chmi_weather_stations"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="chmi_weather_stations",backend="chmi-opendata"} 0');
+    expect(cachedSourceMetrics.text).toContain('situation_data_chmi_weather_stations_backend_info{backend="chmi-opendata"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="ardos_partner"}');
   });
 
@@ -695,6 +736,162 @@ describe("Situation Data API contract", () => {
           severity: "info",
           metrics: expect.objectContaining({ temperatureC: 18, windSpeedMps: 5.66 }),
           tags: expect.objectContaining({ icaoId: "LKPR", flightCategory: "VFR", tafAvailable: "true" })
+        })
+      })
+    );
+  });
+
+  it("projects CHMI air-quality observations as public safety features", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      if (url.endsWith("/metadata.json")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              Localities: [
+                {
+                  LocalityCode: "APRA",
+                  Name: "Praha test",
+                  Localization: { LatAsNumber: 50.08, LonAsNumber: 14.42, Alt: "250 m" },
+                  BasicInfo: { LocalityName: "Praha test", Region: "Praha", District: "Praha" },
+                  MeasuringPrograms: [
+                    {
+                      Measurements: [
+                        { IdRegistration: 101, ComponentCode: "PM10", ComponentName: "prachove castice PM10", UnitAsASCII: "ug/m^3" },
+                        { IdRegistration: 102, ComponentCode: "INDX", ComponentName: "Index kvality ovzdusi", UnitAsASCII: "1" }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.endsWith("/airquality_1h_avg_CZ.csv")) {
+        return new Response(
+          [
+            "idRegistration, startTime, idValueType, value",
+            "101, 2026-05-28T08:00:00Z, 8, 45.5",
+            "102, 2026-05-28T08:00:00Z, 148, 4"
+          ].join("\n"),
+          { status: 200, headers: { "content-type": "text/csv" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const chmiApp = await createApp({ ...config, enabledSources: ["chmi_air_quality"] });
+
+    const response = await request(chmiApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_quality&limit=20&includeRaw=true")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(1);
+    expect(response.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "air_quality:chmi_air_quality:APRA",
+        properties: expect.objectContaining({
+          sourceId: "chmi_air_quality",
+          layerId: "public.safety.air_quality",
+          providerLayerId: "air_quality.chmi_station_observations",
+          category: "air_quality_observation",
+          severity: "advisory",
+          metrics: expect.objectContaining({ airQualityIndex: 4, pm10UgM3: 45.5 }),
+          tags: expect.objectContaining({ stationCode: "APRA", region: "Praha", airQualityLevel: "acceptable" }),
+          providerProperties: expect.objectContaining({
+            raw: expect.objectContaining({
+              components: expect.objectContaining({ pm10UgM3: "PM10" })
+            })
+          })
+        })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("projects CHMI measured weather stations from source-level caches", async () => {
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      if (url === config.chmiWeatherMetadataBaseUrl) {
+        return new Response('<a href="meta1-20260528.json">meta1-20260528.json</a>', {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      }
+      if (url === config.chmiWeatherDataBaseUrl) {
+        return new Response('<a href="10m-0-20000-0-11518-20260528.json">10m-0-20000-0-11518-20260528.json</a>', {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      }
+      if (url.endsWith("/meta1-20260528.json")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "WSI,GH_ID,FULL_NAME,GEOGR1,GEOGR2,ELEVATION,BEGIN_DATE",
+                values: [["0-20000-0-11518", "ZIS11518", "Praha-Karlov", 14.42, 50.08, 260, "1900-01-01T00:00:00Z"]]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.endsWith("/10m-0-20000-0-11518-20260528.json")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+                values: [
+                  ["0-20000-0-11518", "T", "2026-05-28T08:00:00Z", 17.2, "", 5],
+                  ["0-20000-0-11518", "H", "2026-05-28T08:00:00Z", 63, "", 5],
+                  ["0-20000-0-11518", "D", "2026-05-28T08:00:00Z", 270, "", 5],
+                  ["0-20000-0-11518", "F", "2026-05-28T08:00:00Z", 4.2, "", 5],
+                  ["0-20000-0-11518", "Fmax", "2026-05-28T08:00:00Z", 7.8, "", 5],
+                  ["0-20000-0-11518", "SRA10M", "2026-05-28T08:00:00Z", 0.4, "", 5]
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const chmiApp = await createApp({ ...config, enabledSources: ["chmi_weather_stations"] });
+
+    const first = await request(chmiApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=20&includeRaw=true")
+      .expect(200);
+    const second = await request(chmiApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=21")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(first.body.features).toHaveLength(1);
+    expect(second.body.features).toHaveLength(1);
+    expect(first.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "weather:chmi_weather_stations:0-20000-0-11518",
+        properties: expect.objectContaining({
+          sourceId: "chmi_weather_stations",
+          layerId: "public.weather.observations",
+          providerLayerId: "weather.chmi_station_observations",
+          category: "weather_station_observation",
+          metrics: expect.objectContaining({
+            temperatureC: 17.2,
+            relativeHumidityPercent: 63,
+            windSpeedMps: 4.2,
+            precipitation10mMm: 0.4
+          }),
+          tags: expect.objectContaining({ stationId: "0-20000-0-11518", ghId: "ZIS11518" }),
+          providerProperties: expect.objectContaining({
+            raw: expect.objectContaining({ station: expect.any(Object) })
+          })
         })
       })
     );

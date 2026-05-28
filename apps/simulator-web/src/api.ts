@@ -455,6 +455,8 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
         roadSrtiLod: 0,
         safetyData: 0,
         aviationWeather: 0,
+        chmiAirQuality: 0,
+        chmiWeatherStations: 0,
         ardosPartner: 0
       },
       providers: []

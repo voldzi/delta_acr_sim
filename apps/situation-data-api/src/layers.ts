@@ -84,9 +84,9 @@ export const LAYERS: LayerDescriptor[] = [
   {
     layerId: "air_quality",
     label: "Air quality",
-    description: "Reserved public safety layer for air quality observations.",
+    description: "ČHMÚ measured air-quality station observations and normalized air-quality index context.",
     defaultVisible: false,
-    geometryTypes: ["Point", "Polygon"],
+    geometryTypes: ["Point"],
     expectedCadenceSeconds: 900
   }
 ];

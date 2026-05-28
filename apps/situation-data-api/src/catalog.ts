@@ -88,6 +88,58 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       }
     },
     {
+      providerLayerId: "weather.chmi_station_observations",
+      recommendedCatalogLayerId: "public.weather.observations",
+      label: "Měřené počasí ČHMÚ",
+      description: "Aktuální měřené meteorologické hodnoty ze stanic ČHMÚ v mapovém výřezu.",
+      categoryPath: ["weather", "observations"],
+      categories: ["weather", "weather_station_observation"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 7,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.chmiWeatherCacheTtlSeconds,
+      styleProfile: "chmi-weather-stations-v1",
+      sourceIds: ["chmi_weather_stations"],
+      query: query(["weather"], ["chmi_weather_stations"]),
+      legend: { profile: "chmi-weather-stations-v1" },
+      legal: {
+        attribution: "Český hydrometeorologický ústav",
+        notes: ["SIM dotazuje ČHMÚ Open Data server-side a výsledek cacheuje; COM nemá ČHMÚ volat přímo."]
+      }
+    },
+    {
+      providerLayerId: "air_quality.chmi_station_observations",
+      recommendedCatalogLayerId: "public.safety.air_quality",
+      label: "Kvalita ovzduší",
+      description: "Měřené hodnoty imisních stanic ČHMÚ včetně indexu kvality ovzduší a hlavních polutantů.",
+      categoryPath: ["safety", "air_quality"],
+      categories: ["air_quality", "environment"],
+      role: "overlay",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 7,
+      maxZoom: 18,
+      refreshSeconds: 900,
+      cacheTtlSeconds: config.chmiAirQualityCacheTtlSeconds,
+      styleProfile: "air-quality-index-v1",
+      sourceIds: ["chmi_air_quality"],
+      query: query(["air_quality"], ["chmi_air_quality"]),
+      legend: { profile: "air-quality-index-v1" },
+      legal: {
+        attribution: "Český hydrometeorologický ústav",
+        notes: ["Veřejný situační kontext; nenahrazuje oficiální varování a doporučení ČHMÚ nebo krizových orgánů."]
+      }
+    },
+    {
       providerLayerId: "mobile_network",
       recommendedCatalogLayerId: "public.mobile.network",
       label: "Mobilní síť",
@@ -607,6 +659,26 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsLayerIds: ["weather.aviation_weather"],
         feedsCatalogLayerIds: ["public.weather.aviation"]
       };
+    case "chmi_weather_stations":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["weather.chmi_station_observations"],
+        feedsCatalogLayerIds: ["public.weather.observations"],
+        notes: ["Measured weather observations from ČHMÚ Open Data; cache server-side."]
+      };
+    case "chmi_air_quality":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["air_quality.chmi_station_observations"],
+        feedsCatalogLayerIds: ["public.safety.air_quality"],
+        notes: ["Measured air-quality observations from ČHMÚ Open Data; cache server-side."]
+      };
     case "mobile_network_model":
       return {
         sourceRole: "final",
@@ -754,6 +826,10 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.openMeteoCacheTtlSeconds;
     case "aviation_weather":
       return config.aviationWeatherCacheTtlSeconds;
+    case "chmi_air_quality":
+      return config.chmiAirQualityCacheTtlSeconds;
+    case "chmi_weather_stations":
+      return config.chmiWeatherCacheTtlSeconds;
     case "mobile_network_model":
       return config.mobileNetworkCacheTtlSeconds;
     case "mobile_coverage_model":
@@ -796,6 +872,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "road_srti_lod") {
     return "ndic-srti-lod";
+  }
+  if (sourceId === "chmi_air_quality" || sourceId === "chmi_weather_stations") {
+    return "chmi-opendata";
   }
   return undefined;
 }
