@@ -659,6 +659,29 @@ export function App() {
     };
     const previous = telemetrySampleRef.current;
     if (previous) {
+      const previousWasEmpty = previous.generatedEvents === 0 && previous.publishedEvents === 0 && previous.dataProducts === 0;
+      const nextHasHydratedData = nextSample.generatedEvents > 0 || nextSample.publishedEvents > 0 || nextSample.dataProducts > 0;
+      if (previousWasEmpty && nextHasHydratedData) {
+        const loadPercent = estimateLiveLoadPercent({
+          generatedPerMinute: 0,
+          publishedPerMinute: 0,
+          dataDeltaPerMinute: 0,
+          queueSize: data.publisher.queueSize,
+          deadLetterSize: data.publisher.deadLetterSize,
+          liveDataProducts,
+          running: isRunning,
+          warningCount
+        });
+        setLiveTelemetry({
+          generatedPerMinute: 0,
+          publishedPerMinute: 0,
+          dataDeltaPerMinute: 0,
+          loadPercent,
+          trend: loadPercent >= 62 ? "active" : loadPercent >= 24 ? "warming" : "steady"
+        });
+        telemetrySampleRef.current = nextSample;
+        return;
+      }
       const elapsedMinutes = Math.max((now - previous.at) / 60_000, 1 / 60);
       const generatedPerMinute = Math.max(0, (nextSample.generatedEvents - previous.generatedEvents) / elapsedMinutes);
       const publishedPerMinute = Math.max(0, (nextSample.publishedEvents - previous.publishedEvents) / elapsedMinutes);
