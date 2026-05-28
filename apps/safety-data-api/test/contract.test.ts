@@ -220,6 +220,33 @@ describe("Safety Data API contract", () => {
         expect(response.body.summary.featureCount).toBe(1);
         expect(response.body.warnings).toEqual([]);
         expect(response.body.features[0].properties.tags.stationId).toBe("0-203-1-good");
+        expect(response.body.features[0].properties).toEqual(
+          expect.objectContaining({
+            layerId: "public.safety.flood",
+            providerLayerId: "safety.flood",
+            floodStage: 2,
+            severity: "warning",
+            status: "active",
+            trend: "rising",
+            basin: "1-01-01-0000",
+            affectedArea: "Vltava - Good station",
+            metrics: expect.objectContaining({
+              waterLevelCm: 160,
+              waterLevelDeltaCm: 20,
+              waterLevelRateCmPerHour: 20,
+              flowM3s: 40,
+              flowDeltaM3s: 5,
+              flowRateM3sPerHour: 5,
+              catchmentAreaKm2: 123.45,
+              spa2Cm: 150,
+              spa2FlowM3s: 35
+            }),
+            tags: expect.objectContaining({
+              hydrologicalOrder: "1-01-01-0000",
+              trendBasis: "water_level"
+            })
+          })
+        );
       }
     );
   });
@@ -546,10 +573,11 @@ function chmiHydroMetadataFixture(): unknown {
   return {
     data: {
       data: {
-        header: "objID,DBC,STATION_NAME,STREAM_NAME,GEOGR1,GEOGR2,SPA_TYP,DRYH,SPA1H,SPA2H,SPA3H,SPA4H",
+        header:
+          "objID,DBC,STATION_NAME,STREAM_NAME,GEOGR1,GEOGR2,SPA_TYP,DRYH,SPA1H,SPA2H,SPA3H,SPA4H,DRYQ,SPA1Q,SPA2Q,SPA3Q,SPA4Q,PLO_STA,HLGP4",
         values: [
-          ["0-203-1-good", "GOOD", "Good station", "Vltava", 50.05, 14.4, "H", 10, 100, 150, 200, 250],
-          ["0-203-1-missing", "MISS", "Missing station", "Vltava", 50.06, 14.41, "H", 10, 100, 150, 200, 250]
+          ["0-203-1-good", "GOOD", "Good station", "Vltava", 50.05, 14.4, "H", 10, 100, 150, 200, 250, 2, 20, 35, 50, 70, 123.45, "1-01-01-0000"],
+          ["0-203-1-missing", "MISS", "Missing station", "Vltava", 50.06, 14.41, "H", 10, 100, 150, 200, 250, 2, 20, 35, 50, 70, 123.45, "1-01-01-0000"]
         ]
       }
     }
@@ -557,6 +585,8 @@ function chmiHydroMetadataFixture(): unknown {
 }
 
 function chmiHydroNowFixture(stationId: string): unknown {
+  const latest = "2026-05-28T10:00:00Z";
+  const previous = "2026-05-28T09:00:00Z";
   return {
     objList: [
       {
@@ -565,7 +595,18 @@ function chmiHydroNowFixture(stationId: string): unknown {
           {
             tsConID: "H",
             unit: "CM",
-            tsData: [{ dt: new Date().toISOString(), value: 42 }]
+            tsData: [
+              { dt: previous, value: 140 },
+              { dt: latest, value: 160 }
+            ]
+          },
+          {
+            tsConID: "Q",
+            unit: "M3_S",
+            tsData: [
+              { dt: previous, value: 35 },
+              { dt: latest, value: 40 }
+            ]
           }
         ]
       }

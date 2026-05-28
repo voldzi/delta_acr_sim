@@ -1157,6 +1157,13 @@ interface HydroStation {
   spa2H?: number;
   spa3H?: number;
   spa4H?: number;
+  dryQ?: number;
+  spa1Q?: number;
+  spa2Q?: number;
+  spa3Q?: number;
+  spa4Q?: number;
+  catchmentAreaKm2?: number;
+  hydrologicalOrder?: string;
 }
 
 interface HydroNowResponse {
@@ -1177,6 +1184,13 @@ interface HydroObservation {
   observedAt: string;
   value: number;
   unit?: string;
+}
+
+interface HydroTrend {
+  trend: string;
+  delta: number;
+  ratePerHour: number;
+  windowMinutes: number;
 }
 
 async function fetchHydroStations(config: SafetyDataConfig): Promise<HydroStation[]> {
@@ -1218,14 +1232,23 @@ function mapHydroStationMetadata(record: Record<string, unknown>): HydroStation 
     spa1H: optionalNumber(record.SPA1H),
     spa2H: optionalNumber(record.SPA2H),
     spa3H: optionalNumber(record.SPA3H),
-    spa4H: optionalNumber(record.SPA4H)
+    spa4H: optionalNumber(record.SPA4H),
+    dryQ: optionalNumber(record.DRYQ),
+    spa1Q: optionalNumber(record.SPA1Q),
+    spa2Q: optionalNumber(record.SPA2Q),
+    spa3Q: optionalNumber(record.SPA3Q),
+    spa4Q: optionalNumber(record.SPA4Q),
+    catchmentAreaKm2: optionalNumber(record.PLO_STA),
+    hydrologicalOrder: optionalString(record.HLGP4)
   };
 }
 
 function mapHydroStation(station: HydroStation, payload: HydroNowResponse, includeRaw: boolean, fetchedAt: string): SafetyFeature | undefined {
   const object = payload.objList?.find((item) => item.objID === station.objId) ?? payload.objList?.[0];
-  const waterLevel = latestObservation(object?.tsList?.find((series) => series.tsConID === "H"));
-  const flow = latestObservation(object?.tsList?.find((series) => series.tsConID === "Q"));
+  const waterLevelSeries = object?.tsList?.find((series) => series.tsConID === "H");
+  const flowSeries = object?.tsList?.find((series) => series.tsConID === "Q");
+  const waterLevel = latestObservation(waterLevelSeries);
+  const flow = latestObservation(flowSeries);
   if (!waterLevel && !flow) {
     return undefined;
   }
@@ -1235,9 +1258,13 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     return undefined;
   }
 
-  const floodActivityLevel = floodLevel(waterLevel?.value, station);
+  const waterTrend = hydroTrend(waterLevelSeries, "H");
+  const flowTrend = hydroTrend(flowSeries, "Q");
+  const selectedTrend = waterTrend ?? flowTrend;
+  const floodActivityLevel = floodLevel(waterLevel?.value, flow?.value, station);
   const severity = floodSeverity(floodActivityLevel);
   const stream = station.streamName ? ` - ${station.streamName}` : "";
+  const status = floodActivityLevel > 0 ? "active" : "monitoring";
 
   return makePointFeature({
     id: `flood:chmi_hydro:${stableToken(station.objId)}`,
@@ -1258,7 +1285,7 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     expiresAt: addSeconds(fetchedAt, 2 * 60 * 60),
     confidence: hydroConfidence(observed.observedAt),
     severity,
-    status: floodActivityLevel > 0 ? "active" : "monitoring",
+    status,
     urgency: floodActivityLevel >= 2 ? "expected" : "unknown",
     certainty: "observed",
     areaName: station.stationName,
@@ -1268,25 +1295,41 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     waterLevelCm: waterLevel?.value,
     discharge: flow?.value,
     floodStage: floodActivityLevel,
-    affectedArea: station.stationName,
+    trend: selectedTrend?.trend ?? "unknown",
+    basin: station.hydrologicalOrder,
+    affectedArea: station.streamName ? `${station.streamName} - ${station.stationName}` : station.stationName,
     iconHint: "flood",
     basis: ["chmi_hydro_now", station.objId],
     metrics: compactMetrics({
       waterLevelCm: waterLevel?.value,
       flowM3s: flow?.value,
       floodActivityLevel,
+      waterLevelDeltaCm: waterTrend?.delta,
+      waterLevelRateCmPerHour: waterTrend?.ratePerHour,
+      flowDeltaM3s: flowTrend?.delta,
+      flowRateM3sPerHour: flowTrend?.ratePerHour,
+      trendWindowMinutes: selectedTrend?.windowMinutes,
+      observationAgeSeconds: Math.round(Math.max(0, (Date.parse(fetchedAt) - Date.parse(observed.observedAt)) / 1000)),
+      catchmentAreaKm2: station.catchmentAreaKm2,
       dryLevelCm: station.dryH,
       spa1Cm: station.spa1H,
       spa2Cm: station.spa2H,
       spa3Cm: station.spa3H,
-      spa4Cm: station.spa4H
+      spa4Cm: station.spa4H,
+      dryFlowM3s: station.dryQ,
+      spa1FlowM3s: station.spa1Q,
+      spa2FlowM3s: station.spa2Q,
+      spa3FlowM3s: station.spa3Q,
+      spa4FlowM3s: station.spa4Q
     }),
     tags: compactTags({
       stationId: station.objId,
       stationCode: station.stationCode,
       stationName: station.stationName,
       streamName: station.streamName,
-      spaType: station.spaType
+      spaType: station.spaType,
+      hydrologicalOrder: station.hydrologicalOrder,
+      trendBasis: selectedTrend ? (waterTrend ? "water_level" : "discharge") : undefined
     }),
     raw: includeRaw ? payload : undefined
   });
@@ -1365,16 +1408,43 @@ function mapFirmsDetection(
 type HydroSeries = NonNullable<NonNullable<HydroNowResponse["objList"]>[number]["tsList"]>[number];
 
 function latestObservation(series: HydroSeries | undefined): HydroObservation | undefined {
+  return hydroObservations(series)[0];
+}
+
+function hydroObservations(series: HydroSeries | undefined): HydroObservation[] {
   const data = series?.tsData ?? [];
-  const sorted = data
+  return data
     .map((point) => ({
       observedAt: normalizeTimestamp(optionalString(point.dt)),
       value: optionalNumber(point.value)
     }))
     .filter((point): point is { observedAt: string; value: number } => point.observedAt !== undefined && point.value !== undefined)
-    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt));
-  const latest = sorted[0];
-  return latest ? { ...latest, unit: series?.unit } : undefined;
+    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))
+    .map((point) => ({ ...point, unit: series?.unit }));
+}
+
+function hydroTrend(series: HydroSeries | undefined, seriesType: "H" | "Q"): HydroTrend | undefined {
+  const [latest, previous] = hydroObservations(series);
+  if (!latest || !previous) {
+    return undefined;
+  }
+  const latestMs = Date.parse(latest.observedAt);
+  const previousMs = Date.parse(previous.observedAt);
+  const deltaHours = Math.max((latestMs - previousMs) / (60 * 60 * 1000), 0);
+  if (deltaHours <= 0) {
+    return undefined;
+  }
+
+  const delta = latest.value - previous.value;
+  const ratePerHour = delta / deltaHours;
+  const threshold = seriesType === "H" ? 0.5 : Math.max(0.01, Math.abs(previous.value) * 0.02);
+  const trend = Math.abs(ratePerHour) < threshold ? "stable" : ratePerHour > 0 ? "rising" : "falling";
+  return {
+    trend,
+    delta: round(delta, 2),
+    ratePerHour: round(ratePerHour, 2),
+    windowMinutes: Math.round(deltaHours * 60)
+  };
 }
 
 function latestCapUrl(listing: string, baseUrl: string): string | undefined {
@@ -1429,20 +1499,27 @@ function parseDirectoryDate(value: string | undefined): number | undefined {
   return Date.UTC(Number(year), month, Number(day), Number(hour), Number(minute));
 }
 
-function floodLevel(waterLevelCm: number | undefined, station: HydroStation): number {
-  if (waterLevelCm === undefined) {
+function floodLevel(waterLevelCm: number | undefined, flowM3s: number | undefined, station: HydroStation): number {
+  return Math.max(
+    thresholdLevel(waterLevelCm, station.spa1H, station.spa2H, station.spa3H, station.spa4H),
+    thresholdLevel(flowM3s, station.spa1Q, station.spa2Q, station.spa3Q, station.spa4Q)
+  );
+}
+
+function thresholdLevel(value: number | undefined, spa1: number | undefined, spa2: number | undefined, spa3: number | undefined, spa4: number | undefined): number {
+  if (value === undefined) {
     return 0;
   }
-  if (station.spa4H !== undefined && waterLevelCm >= station.spa4H) {
+  if (spa4 !== undefined && value >= spa4) {
     return 4;
   }
-  if (station.spa3H !== undefined && waterLevelCm >= station.spa3H) {
+  if (spa3 !== undefined && value >= spa3) {
     return 3;
   }
-  if (station.spa2H !== undefined && waterLevelCm >= station.spa2H) {
+  if (spa2 !== undefined && value >= spa2) {
     return 2;
   }
-  if (station.spa1H !== undefined && waterLevelCm >= station.spa1H) {
+  if (spa1 !== undefined && value >= spa1) {
     return 1;
   }
   return 0;

@@ -186,7 +186,7 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         selectableInMap: true,
         feedsLayerIds: ["safety.flood"],
         feedsCatalogLayerIds: ["public.safety.flood"],
-        notes: ["Hydrological station source; missing current station data is reported as warnings/stale."]
+        notes: ["Hydrological station source with water-level/discharge SPA classification, trend and catchment metadata; missing current station data is handled with negative cache."]
       };
     case "nasa_firms":
       return {
