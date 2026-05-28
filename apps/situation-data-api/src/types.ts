@@ -18,6 +18,8 @@ export type SituationDataSourceId =
   | "ctu_nettest"
   | "ctu_stationary_mobile"
   | "pid_gtfs_rt"
+  | "idsjmk_vehicle_positions"
+  | "road_srti_lod"
   | "safety_data"
   | "aviation_weather"
   | "ardos_partner";
@@ -195,6 +197,8 @@ export interface SituationDataPublicConfig {
     osmPostgis: number;
     osmOverpass: number;
     ctuStationaryMobile: number;
+    idsjmkVehiclePositions: number;
+    roadSrtiLod: number;
     safetyData: number;
     aviationWeather: number;
     ardosPartner: number;

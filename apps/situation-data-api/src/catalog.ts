@@ -358,6 +358,58 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       }
     },
     {
+      providerLayerId: "traffic.idsjmk_vehicle_positions",
+      recommendedCatalogLayerId: "public.traffic.transit",
+      label: "Veřejná doprava IDS JMK",
+      description: "Živé polohy vozidel IDS JMK z cacheovaného serverového zdroje.",
+      categoryPath: ["traffic", "transit"],
+      categories: ["traffic", "transit_vehicle"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: config.idsjmkVehiclePositionsCacheTtlSeconds,
+      cacheTtlSeconds: config.idsjmkVehiclePositionsCacheTtlSeconds,
+      styleProfile: "transit-vehicle-position-v1",
+      sourceIds: ["idsjmk_vehicle_positions"],
+      query: query(["traffic"], ["idsjmk_vehicle_positions"]),
+      legend: { profile: "transit-vehicle-position-v1" },
+      legal: {
+        attribution: "IDS JMK / Brno Open Data",
+        notes: ["Dopravní kontext, ne bezpečnostní track. SIM drží zdrojovou cache a filtruje odpovědi podle bbox."]
+      }
+    },
+    {
+      providerLayerId: "traffic.road_events.srti",
+      recommendedCatalogLayerId: "public.traffic.road_events",
+      label: "Silniční dopravní události",
+      description: "Aktuální SRTI/NDIC/ŘSD dopravní události z cacheovaného Linked Open Data zdroje.",
+      categoryPath: ["traffic", "road_events"],
+      categories: ["traffic", "road_event", "road_accident", "roadworks"],
+      role: "overlay",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: config.roadSrtiLodCacheTtlSeconds,
+      cacheTtlSeconds: config.roadSrtiLodCacheTtlSeconds,
+      styleProfile: "road-event-v1",
+      sourceIds: ["road_srti_lod"],
+      query: query(["traffic"], ["road_srti_lod"]),
+      legend: { profile: "road-event-v1" },
+      legal: {
+        attribution: "Ředitelství silnic a dálnic / NDIC; LOD conversion by TamTam Research",
+        notes: ["Veřejný dopravní kontext. SIM dotazuje upstream po TTL, ne per uživatel/per bbox."]
+      }
+    },
+    {
       providerLayerId: "warnings.safety_data_projection",
       recommendedCatalogLayerId: "public.safety.warnings",
       label: "Veřejné výstrahy (kompatibilní projekce)",
@@ -591,6 +643,26 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsLayerIds: ["traffic.pid_gtfs_rt"],
         feedsCatalogLayerIds: ["public.traffic.transit"]
       };
+    case "idsjmk_vehicle_positions":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["traffic.idsjmk_vehicle_positions"],
+        feedsCatalogLayerIds: ["public.traffic.transit"],
+        notes: ["Regional public-transit context. SIM must cache this source server-side and COM must not call IDS JMK upstream directly."]
+      };
+    case "road_srti_lod":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["traffic.road_events.srti"],
+        feedsCatalogLayerIds: ["public.traffic.road_events"],
+        notes: ["Road-event context from a cached SRTI/NDIC Linked Open Data source."]
+      };
     case "safety_data":
       return {
         sourceRole: "projection",
@@ -635,6 +707,10 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.ctuStationaryMobileCacheTtlSeconds;
     case "pid_gtfs_rt":
       return 20;
+    case "idsjmk_vehicle_positions":
+      return config.idsjmkVehiclePositionsCacheTtlSeconds;
+    case "road_srti_lod":
+      return config.roadSrtiLodCacheTtlSeconds;
     case "safety_data":
       return config.safetyDataCacheTtlSeconds;
     case "ardos_partner":
@@ -653,6 +729,12 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "ctu_stationary_mobile") {
     return "ctu-stationary-mobile";
+  }
+  if (sourceId === "idsjmk_vehicle_positions") {
+    return "idsjmk-open-data";
+  }
+  if (sourceId === "road_srti_lod") {
+    return "ndic-srti-lod";
   }
   return undefined;
 }

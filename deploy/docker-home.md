@@ -70,7 +70,7 @@ LOCAL_ADSB_AIRCRAFT_JSON_URLS=
 OURAIRPORTS_ENABLED=true
 OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU
 OURAIRPORTS_CACHE_TTL_SECONDS=86400
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -82,6 +82,11 @@ SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
+IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json
+SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
+ROAD_SRTI_LOD_SPARQL_URL=https://lod.tamtamresearch.com/sparql/
+SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=300
+ROAD_SRTI_LOD_MAX_RECORDS=1500
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -197,7 +202,7 @@ scripts/import-osm-cz-postgis.sh
 Poté uprav `.env`. Pokud chceš zároveň publikovat sjednocenou mobilní vrstvu nad importovanými OSM věžemi, zapni `mobile_coverage_model` i `mobile_network_model`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -274,7 +279,7 @@ http://docker.home.cz:5020
 - OurAirports import je zapnutý pro letiště v ČR a okolí: `OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU`.
 - Flight Data API používá server-side cache s in-flight deduplikací: `FLIGHT_DATA_CACHE_TTL_SECONDS=10`, `FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60`, `FLIGHT_DATA_CACHE_MAX_ENTRIES=512`.
 - Pro offline test nastav `FLIGHT_DATA_ENABLED_SOURCES=mock`.
-- Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data`.
+- Situation Data API ve výchozím pilotu používá reálné zdroje `open_meteo,aviation_weather,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data`.
 - Situation Data API používá server-side cache a source-level cache pro velké feedy: `SITUATION_DATA_CACHE_TTL_SECONDS=30`, `SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800`, `SITUATION_DATA_CACHE_MAX_ENTRIES=10000`.
 - Pro offline test nastav `SITUATION_DATA_ENABLED_SOURCES=mock`.
 - `osm_postgis` je produkční OSM zdroj nad Patroni/PostGIS nebo lokálním rebuildovatelným PostGIS read-modelem; `osm_overpass` drž jen pro malé bbox dotazy a nízkou frekvenci.
@@ -283,6 +288,8 @@ http://docker.home.cz:5020
 - `ctu_nettest` stahuje poslední otevřený ZIP export ČTÚ NetTest a publikuje mobilní měření jako kontextovou vrstvu.
 - `ctu_stationary_mobile` stahuje oficiální ZIP balíčky ČTÚ se stacionárním měřením 2G/4G po operátorech. Jde o historická měření v terénu, ne o potvrzený aktuální stav BTS.
 - `pid_gtfs_rt` stahuje GTFS-RT vozidla PID/Golemio a publikuje živý dopravní kontext ve vrstvě `traffic`.
+- `road_srti_lod` stahuje dopravní události NDIC/ŘSD přes cacheovaný SRTI Linked Open Data SPARQL dotaz; COM nikdy nemá dotazovat SPARQL endpoint přímo.
+- `idsjmk_vehicle_positions` je připravený volitelný zdroj pro IDS JMK/Brno polohy vozidel. Zapínej ho až po ověření aktuálního JSON endpointu v `IDSJMK_VEHICLE_POSITIONS_URL`.
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.
 - `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.
 - `tak-gateway-api` přijímá TAK/CoT XML přes chráněný ingest endpoint `/tak-gateway/api/v1/cot/events`; COM backend čte normalizovaný GeoJSON endpoint `/tak-gateway/api/v1/features`. Starý `/cop/features` zůstává jen jako kompatibilní alias.

@@ -54,6 +54,11 @@ describe("Situation Data API contract", () => {
       ],
       ctuStationaryMobileCacheTtlSeconds: 86400,
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
+      idsjmkVehiclePositionsUrl: "https://example.test/idsjmk/vehicles.json",
+      idsjmkVehiclePositionsCacheTtlSeconds: 20,
+      roadSrtiLodSparqlUrl: "https://example.test/sparql",
+      roadSrtiLodCacheTtlSeconds: 300,
+      roadSrtiLodMaxRecords: 1500,
       safetyDataBaseUrl: "http://127.0.0.1:4030",
       safetyDataCacheTtlSeconds: 300,
       aviationWeatherBaseUrl: "https://aviationweather.gov",
@@ -128,6 +133,14 @@ describe("Situation Data API contract", () => {
           layers: expect.arrayContaining(["traffic"])
         }),
         expect.objectContaining({
+          sourceId: "idsjmk_vehicle_positions",
+          layers: expect.arrayContaining(["traffic"])
+        }),
+        expect.objectContaining({
+          sourceId: "road_srti_lod",
+          layers: expect.arrayContaining(["traffic"])
+        }),
+        expect.objectContaining({
           sourceId: "safety_data",
           layers: expect.arrayContaining(["warnings", "flood"])
         }),
@@ -199,6 +212,20 @@ describe("Situation Data API contract", () => {
           role: "reference",
           audience: "public",
           selectable: false
+        }),
+        expect.objectContaining({
+          providerLayerId: "traffic.idsjmk_vehicle_positions",
+          recommendedCatalogLayerId: "public.traffic.transit",
+          role: "reference",
+          audience: "public",
+          sourceIds: ["idsjmk_vehicle_positions"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "traffic.road_events.srti",
+          recommendedCatalogLayerId: "public.traffic.road_events",
+          role: "overlay",
+          audience: "public",
+          sourceIds: ["road_srti_lod"]
         }),
         expect.objectContaining({
           providerLayerId: "warnings.safety_data_projection",
@@ -280,6 +307,22 @@ describe("Situation Data API contract", () => {
           replacedBy: "mobile_network_model"
         }),
         expect.objectContaining({
+          sourceId: "idsjmk_vehicle_positions",
+          sourceRole: "final",
+          audience: "public",
+          selectableInMap: true,
+          feedsLayerIds: ["traffic.idsjmk_vehicle_positions"],
+          feedsCatalogLayerIds: ["public.traffic.transit"]
+        }),
+        expect.objectContaining({
+          sourceId: "road_srti_lod",
+          sourceRole: "final",
+          audience: "public",
+          selectableInMap: true,
+          feedsLayerIds: ["traffic.road_events.srti"],
+          feedsCatalogLayerIds: ["public.traffic.road_events"]
+        }),
+        expect.objectContaining({
           sourceId: "safety_data",
           sourceRole: "projection",
           audience: "public",
@@ -322,6 +365,8 @@ describe("Situation Data API contract", () => {
           osmPostgis: 21600,
           osmOverpass: 21600,
           ctuStationaryMobile: 86400,
+          idsjmkVehiclePositions: 20,
+          roadSrtiLod: 300,
           safetyData: 300,
           aviationWeather: 600,
           ardosPartner: 15
@@ -335,6 +380,8 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "ctu_stationary_mobile", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
+          expect.objectContaining({ sourceId: "idsjmk_vehicle_positions", authConfigured: true }),
+          expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
           expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
           expect.objectContaining({ sourceId: "aviation_weather", authConfigured: true }),
           expect.objectContaining({ sourceId: "ardos_partner", authConfigured: false })
@@ -361,6 +408,8 @@ describe("Situation Data API contract", () => {
         "ctu_nettest",
         "ctu_stationary_mobile",
         "pid_gtfs_rt",
+        "idsjmk_vehicle_positions",
+        "road_srti_lod",
         "safety_data",
         "aviation_weather",
         "ardos_partner"
@@ -385,6 +434,8 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="ctu_stationary_mobile",backend="ctu-stationary-mobile"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_ctu_stationary_mobile_backend_info{backend="ctu-stationary-mobile"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="idsjmk_vehicle_positions"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="road_srti_lod"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="ardos_partner"}');
@@ -488,6 +539,113 @@ describe("Situation Data API contract", () => {
           severity: "info",
           metrics: expect.objectContaining({ temperatureC: 18, windSpeedMps: 5.66 }),
           tags: expect.objectContaining({ icaoId: "LKPR", flightCategory: "VFR", tafAvailable: "true" })
+        })
+      })
+    );
+  });
+
+  it("projects IDS JMK vehicle positions from a source-level cache", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          LastUpdate: "2026-05-28T08:00:00.000Z",
+          features: [
+            {
+              attributes: {
+                VehicleId: "idsjmk-veh-1",
+                LineName: "12",
+                VehicleType: "tram",
+                Speed: 9,
+                Bearing: 88
+              },
+              geometry: {
+                x: 16.607,
+                y: 49.195
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const idsjmkApp = await createApp({
+      ...config,
+      cacheTtlSeconds: 0,
+      enabledSources: ["idsjmk_vehicle_positions"]
+    });
+
+    const first = await request(idsjmkApp.app)
+      .get("/api/v1/features?bbox=16.2,48.9,16.9,49.4&layers=traffic&source=idsjmk_vehicle_positions&limit=20")
+      .expect(200);
+    const second = await request(idsjmkApp.app)
+      .get("/api/v1/features?bbox=16.2,48.9,16.9,49.4&layers=traffic&source=idsjmk_vehicle_positions&limit=21")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first.body.features).toHaveLength(1);
+    expect(second.body.features).toHaveLength(1);
+    expect(first.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "traffic:idsjmk_vehicle_positions:idsjmk-veh-1",
+        properties: expect.objectContaining({
+          sourceId: "idsjmk_vehicle_positions",
+          layerId: "public.traffic.transit",
+          providerLayerId: "traffic.idsjmk_vehicle_positions",
+          category: "public_transport_tram",
+          metrics: expect.objectContaining({ speedMps: 9, headingDeg: 88 }),
+          tags: expect.objectContaining({ line: "12", transportMode: "tram" })
+        })
+      })
+    );
+  });
+
+  it("projects NDIC SRTI road events from a source-level cache", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          head: { vars: ["SituationRecord", "Type", "VersionTime", "GeometryWKT"] },
+          results: {
+            bindings: [
+              {
+                SituationRecord: { type: "uri", value: "https://lod.tamtamresearch.com/resource/situation/road-1" },
+                Type: { type: "uri", value: "http://cef.uv.es/lodroadtran18/def/transporte/dtx_srti#Accident" },
+                VersionTime: { type: "literal", value: "2026-05-28T08:30:00.000Z" },
+                GeometryWKT: { type: "literal", value: "POINT(14.42 50.08)" }
+              }
+            ]
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/sparql-results+json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const roadApp = await createApp({
+      ...config,
+      cacheTtlSeconds: 0,
+      enabledSources: ["road_srti_lod"]
+    });
+
+    const first = await request(roadApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=road_srti_lod&limit=20")
+      .expect(200);
+    const second = await request(roadApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=road_srti_lod&limit=21")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first.body.features).toHaveLength(1);
+    expect(second.body.features).toHaveLength(1);
+    expect(first.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "traffic:road_srti_lod:https:__lod.tamtamresearch.com_resource_situation_road-1",
+        properties: expect.objectContaining({
+          sourceId: "road_srti_lod",
+          layerId: "public.traffic.road_events",
+          providerLayerId: "traffic.road_events.srti",
+          category: "road_accident",
+          severity: "warning",
+          tags: expect.objectContaining({ srtiType: "Accident", sourceSystem: "ndic_srti_lod" })
         })
       })
     );

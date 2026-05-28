@@ -244,6 +244,8 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "ctu_nettest",
     "ctu_stationary_mobile",
     "pid_gtfs_rt",
+    "idsjmk_vehicle_positions",
+    "road_srti_lod",
     "safety_data",
     "aviation_weather",
     "ardos_partner"
@@ -321,6 +323,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
       ctuStationaryMobile: config.ctuStationaryMobileCacheTtlSeconds,
+      idsjmkVehiclePositions: config.idsjmkVehiclePositionsCacheTtlSeconds,
+      roadSrtiLod: config.roadSrtiLodCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,
       aviationWeather: config.aviationWeatherCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds
@@ -350,6 +354,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
       { sourceId: "ctu_stationary_mobile", baseUrl: "https://ctu.gov.cz", authConfigured: config.ctuStationaryMobileUrls.length > 0 },
       { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
+      { sourceId: "idsjmk_vehicle_positions", baseUrl: config.idsjmkVehiclePositionsUrl, authConfigured: true },
+      { sourceId: "road_srti_lod", baseUrl: config.roadSrtiLodSparqlUrl, authConfigured: true },
       { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true },
       { sourceId: "aviation_weather", baseUrl: config.aviationWeatherBaseUrl, authConfigured: true },
       { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }

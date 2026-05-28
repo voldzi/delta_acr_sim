@@ -123,6 +123,32 @@ const PID_GTFS_RT_LICENSE: SituationDataLicense = {
   ]
 };
 
+const IDSJMK_VEHICLE_POSITIONS_LICENSE: SituationDataLicense = {
+  name: "IDS JMK / Brno Open Data",
+  url: "https://data.gov.cz/datové-sady?klíčová-slova=polohy",
+  attribution: "KORDIS JMK / Statutární město Brno open data",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Public transit vehicle positions for IDS JMK are updated roughly every 10 seconds according to NKOD metadata.",
+    "SIM caches the feed server-side; COM must not poll the upstream endpoint directly.",
+    "Vehicle positions are public transport context, not an emergency or security track source."
+  ]
+};
+
+const ROAD_SRTI_LOD_LICENSE: SituationDataLicense = {
+  name: "NDIC/ŘSD SRTI Linked Open Data",
+  url: "https://lod.tamtamresearch.com/docs/",
+  attribution: "Ředitelství silnic a dálnic / NDIC; LOD conversion by TamTam Research",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Safety-related road traffic information from NDIC/ŘSD transformed from DATEX II to Linked Open Data.",
+    "SIM queries the SPARQL endpoint as a coarse server-side source and filters cached results by COM bbox.",
+    "Use as public traffic context; follow official police/emergency instructions for safety decisions."
+  ]
+};
+
 const SAFETY_DATA_LICENSE: SituationDataLicense = {
   name: "Delegated Safety Data aggregate",
   url: "https://opendata.chmi.cz/",
@@ -172,6 +198,8 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     ctu_nettest: new CtuNettestSource(config),
     ctu_stationary_mobile: new CtuStationaryMobileSource(config),
     pid_gtfs_rt: new PidGtfsRtSource(config),
+    idsjmk_vehicle_positions: new IdsjmkVehiclePositionsSource(config),
+    road_srti_lod: new RoadSrtiLodSource(config),
     safety_data: new SafetyDataProjectionSource(config),
     aviation_weather: new AviationWeatherSource(config),
     ardos_partner: new ArdosPartnerSource(config)
@@ -192,6 +220,8 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new CtuNettestSource(config).descriptor,
     new CtuStationaryMobileSource(config).descriptor,
     new PidGtfsRtSource(config).descriptor,
+    new IdsjmkVehiclePositionsSource(config).descriptor,
+    new RoadSrtiLodSource(config).descriptor,
     new SafetyDataProjectionSource(config).descriptor,
     new AviationWeatherSource(config).descriptor,
     new ArdosPartnerSource(config).descriptor
@@ -1027,6 +1057,94 @@ class PidGtfsRtSource implements SituationDataSource {
   }
 }
 
+class IdsjmkVehiclePositionsSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly feedCache: ManagedResponseCache<IdsjmkVehicleFeed>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.feedCache = new ManagedResponseCache<IdsjmkVehicleFeed>({
+      ttlMs: Math.max(10, config.idsjmkVehiclePositionsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
+    this.descriptor = {
+      sourceId: "idsjmk_vehicle_positions",
+      label: "IDS JMK vehicle positions",
+      enabled: config.enabledSources.includes("idsjmk_vehicle_positions"),
+      mode: "live",
+      priority: 74,
+      layers: ["traffic"],
+      license: IDSJMK_VEHICLE_POSITIONS_LICENSE,
+      baseUrl: config.idsjmkVehiclePositionsUrl,
+      updateCadenceSeconds: config.idsjmkVehiclePositionsCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("idsjmk_vehicle_positions", this.feedCache)];
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("traffic")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const feed = await this.feedCache.getOrLoad("idsjmk_vehicle_positions", () => fetchIdsjmkVehicleFeed(this.config));
+    const observedAt = parseTimestamp(feed.LastUpdate ?? feed.lastUpdate) ?? fetchedAt;
+    const vehicles = normalizeIdsjmkVehicles(feed);
+    const features = vehicles
+      .map((vehicle) => mapIdsjmkVehiclePosition(vehicle, query, observedAt))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .slice(0, query.limit);
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
+class RoadSrtiLodSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly eventsCache: ManagedResponseCache<RoadSrtiLodEvent[]>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.eventsCache = new ManagedResponseCache<RoadSrtiLodEvent[]>({
+      ttlMs: Math.max(60, config.roadSrtiLodCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.roadSrtiLodCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
+    this.descriptor = {
+      sourceId: "road_srti_lod",
+      label: "NDIC/ŘSD SRTI road events",
+      enabled: config.enabledSources.includes("road_srti_lod"),
+      mode: "live",
+      priority: 82,
+      layers: ["traffic"],
+      license: ROAD_SRTI_LOD_LICENSE,
+      baseUrl: config.roadSrtiLodSparqlUrl,
+      updateCadenceSeconds: config.roadSrtiLodCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("road_srti_lod", this.eventsCache)];
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("traffic")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const events = await this.eventsCache.getOrLoad("road_srti_lod_recent", () => fetchRoadSrtiLodEvents(this.config));
+    const features = events
+      .map((event) => mapRoadSrtiLodFeature(event, query, fetchedAt))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .slice(0, query.limit);
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
 class SafetyDataProjectionSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<SafetyProjectionCollection>;
@@ -1847,9 +1965,130 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
   });
 }
 
+function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQuery, sourceObservedAt: string): SituationFeature | undefined {
+  const position = idsjmkVehicleLonLat(record);
+  if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
+    return undefined;
+  }
+
+  const observedAt =
+    parseTimestamp(recordValue(record, ["lastUpdate", "LastUpdate", "last_update", "timestamp", "Timestamp", "time", "Time", "updatedAt", "UpdatedAt"])) ??
+    sourceObservedAt;
+  const vehicleId =
+    stringFromRecord(record, ["vehicleId", "VehicleId", "vehicle_id", "id", "Id", "ID", "objectId", "OBJECTID", "vehicle", "Vehicle"]) ??
+    stableToken(`${position.lon}:${position.lat}:${observedAt}`);
+  const line = stringFromRecord(record, ["line", "Line", "lineName", "LineName", "lineNumber", "LineNumber", "route", "Route", "routeId", "RouteId"]);
+  const tripId = stringFromRecord(record, ["tripId", "TripId", "trip_id", "course", "Course"]);
+  const mode = idsjmkVehicleMode(record);
+
+  return makePointFeature({
+    id: `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}`,
+    lon: position.lon,
+    lat: position.lat,
+    layer: "traffic",
+    category: mode.category,
+    label: line ? `IDS JMK ${mode.label} ${line}` : `IDS JMK ${mode.label}`,
+    sourceId: "idsjmk_vehicle_positions",
+    license: IDSJMK_VEHICLE_POSITIONS_LICENSE,
+    observedAt,
+    validUntil: addSeconds(observedAt, 120),
+    confidence: pidPositionConfidence(observedAt),
+    severity: "info",
+    metrics: compactMetrics({
+      speedMps: numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"]),
+      headingDeg: numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "course", "Course", "azimuth", "Azimuth"]),
+      delaySeconds: numberFromRecord(record, ["delay", "Delay", "delaySeconds", "DelaySeconds"])
+    }),
+    tags: compactTags({
+      vehicleId,
+      line,
+      routeId: stringFromRecord(record, ["routeId", "RouteId", "route_id"]),
+      tripId,
+      operator: stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]),
+      transportMode: mode.tag,
+      sourceSystem: "idsjmk"
+    }),
+    raw: query.includeRaw ? record : undefined
+  });
+}
+
+function mapRoadSrtiLodFeature(event: RoadSrtiLodEvent, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+  if (!isPointInBbox(event.lon, event.lat, query.bbox)) {
+    return undefined;
+  }
+  const category = roadSrtiCategory(event.typeLabel);
+  const observedAt = event.observedAt || fetchedAt;
+  const label = roadSrtiLabel(event.typeLabel);
+
+  return makePointFeature({
+    id: `traffic:road_srti_lod:${stableToken(event.iri)}`,
+    lon: event.lon,
+    lat: event.lat,
+    layer: "traffic",
+    category,
+    label: `Silniční událost: ${label}`,
+    sourceId: "road_srti_lod",
+    license: ROAD_SRTI_LOD_LICENSE,
+    observedAt,
+    validUntil: addSeconds(observedAt, 2 * 60 * 60),
+    confidence: 0.82,
+    severity: roadSrtiSeverity(category, event.typeLabel),
+    metrics: compactMetrics({
+      ageSeconds: Math.max(0, Math.round((Date.now() - Date.parse(observedAt)) / 1000))
+    }),
+    tags: compactTags({
+      situationRecord: event.iri,
+      srtiType: event.typeLabel,
+      srtiTypeUri: event.typeUri,
+      sourceSystem: "ndic_srti_lod"
+    }),
+    raw: query.includeRaw ? event.raw ?? event : undefined
+  });
+}
+
 interface OpenMeteoResponse {
   current?: Record<string, unknown>;
   current_units?: Record<string, string>;
+}
+
+interface IdsjmkVehicleFeed extends Record<string, unknown> {
+  LastUpdate?: unknown;
+  lastUpdate?: unknown;
+  Vehicles?: unknown;
+  vehicles?: unknown;
+  features?: Array<{
+    attributes?: Record<string, unknown>;
+    geometry?: Record<string, unknown>;
+  }>;
+}
+
+type IdsjmkVehicleRecord = Record<string, unknown>;
+
+interface RoadSrtiLodEvent {
+  iri: string;
+  typeUri: string;
+  typeLabel: string;
+  observedAt: string;
+  wkt: string;
+  lon: number;
+  lat: number;
+  raw?: unknown;
+}
+
+interface SparqlBindingValue {
+  type?: string;
+  value?: string;
+  datatype?: string;
+  "xml:lang"?: string;
+}
+
+interface SparqlResults {
+  head?: {
+    vars?: string[];
+  };
+  results?: {
+    bindings?: Array<Record<string, SparqlBindingValue>>;
+  };
 }
 
 interface OverpassResponse {
@@ -2317,6 +2556,82 @@ async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise
   return gtfsRealtime.transit_realtime.FeedMessage.decode(payload);
 }
 
+async function fetchIdsjmkVehicleFeed(config: SituationDataConfig): Promise<IdsjmkVehicleFeed> {
+  return requestJsonWithHeaders<IdsjmkVehicleFeed>(config.idsjmkVehiclePositionsUrl, config.requestTimeoutMs, {
+    accept: "application/json",
+    "user-agent": "csm-sim-situation-data/0.1"
+  });
+}
+
+function normalizeIdsjmkVehicles(feed: IdsjmkVehicleFeed): IdsjmkVehicleRecord[] {
+  if (Array.isArray(feed)) {
+    return feed.filter(isRecord);
+  }
+  const explicitVehicles = feed.Vehicles ?? feed.vehicles ?? feed.items ?? feed.data;
+  if (Array.isArray(explicitVehicles)) {
+    return explicitVehicles.filter(isRecord);
+  }
+  if (Array.isArray(feed.features)) {
+    return feed.features.map((feature) => ({ ...(feature.attributes ?? {}), geometry: feature.geometry })).filter(isRecord);
+  }
+  return [];
+}
+
+async function fetchRoadSrtiLodEvents(config: SituationDataConfig): Promise<RoadSrtiLodEvent[]> {
+  const limit = Math.max(100, Math.min(config.roadSrtiLodMaxRecords, 5000));
+  const query = `
+PREFIX dtx_srti: <http://cef.uv.es/lodroadtran18/def/transporte/dtx_srti#>
+PREFIX geosparql: <http://www.opengis.net/ont/geosparql#>
+SELECT DISTINCT ?SituationRecord ?Type ?VersionTime ?GeometryWKT WHERE {
+  ?SituationRecord a ?Type ;
+    dtx_srti:situationRecordVersionTime ?VersionTime ;
+    geosparql:hasGeometry / geosparql:asWKT ?GeometryWKT .
+}
+ORDER BY DESC(?VersionTime)
+LIMIT ${limit}
+`;
+  const results = await requestSparqlJson(config.roadSrtiLodSparqlUrl, query, config.requestTimeoutMs);
+  return (results.results?.bindings ?? [])
+    .map((binding): RoadSrtiLodEvent | undefined => {
+      const iri = sparqlValue(binding, "SituationRecord");
+      const typeUri = sparqlValue(binding, "Type");
+      const observedAt = parseTimestamp(sparqlValue(binding, "VersionTime"));
+      const wkt = sparqlValue(binding, "GeometryWKT");
+      const point = wkt ? representativePointFromWkt(wkt) : undefined;
+      if (!iri || !typeUri || !observedAt || !wkt || !point) {
+        return undefined;
+      }
+      return {
+        iri,
+        typeUri,
+        typeLabel: roadSrtiLabel(typeUri),
+        observedAt,
+        wkt,
+        lon: point.lon,
+        lat: point.lat,
+        raw: binding
+      };
+    })
+    .filter((event): event is RoadSrtiLodEvent => Boolean(event));
+}
+
+async function requestSparqlJson(baseUrl: string, query: string, timeoutMs: number): Promise<SparqlResults> {
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      accept: "application/sparql-results+json,application/json",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    body: new URLSearchParams({ query, format: "application/sparql-results+json" }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(baseUrl).hostname}`);
+  }
+  return (await response.json()) as SparqlResults;
+}
+
 async function requestOverpass(baseUrl: string, query: string, timeoutMs: number): Promise<OverpassResponse> {
   const response = await fetch(baseUrl, {
     method: "POST",
@@ -2571,6 +2886,162 @@ function optionalNumber(value: unknown): number | undefined {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function parseTimestamp(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const milliseconds = value > 10_000_000_000 ? value : value * 1000;
+    const date = new Date(milliseconds);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && /^\d+(\.\d+)?$/.test(trimmed)) {
+    return parseTimestamp(numeric);
+  }
+  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+  const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordValue(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function numberFromRecord(record: Record<string, unknown>, keys: string[]): number | undefined {
+  return optionalNumber(recordValue(record, keys));
+}
+
+function stringFromRecord(record: Record<string, unknown>, keys: string[]): string | undefined {
+  const value = recordValue(record, keys);
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return String(value).trim() || undefined;
+}
+
+function idsjmkVehicleLonLat(record: IdsjmkVehicleRecord): { lon: number; lat: number } | undefined {
+  const geometry = isRecord(record.geometry) ? record.geometry : undefined;
+  const rawLon =
+    numberFromRecord(record, ["lon", "lng", "longitude", "Longitude", "LON", "LNG", "GPSX", "gpsX", "x", "X"]) ??
+    (geometry ? numberFromRecord(geometry, ["lon", "lng", "longitude", "Longitude", "x", "X"]) : undefined);
+  const rawLat =
+    numberFromRecord(record, ["lat", "latitude", "Latitude", "LAT", "GPSY", "gpsY", "y", "Y"]) ??
+    (geometry ? numberFromRecord(geometry, ["lat", "latitude", "Latitude", "y", "Y"]) : undefined);
+  if (rawLon === undefined || rawLat === undefined) {
+    return undefined;
+  }
+  if (Math.abs(rawLon) <= 180 && Math.abs(rawLat) <= 90) {
+    return { lon: rawLon, lat: rawLat };
+  }
+  return webMercatorToLonLat(rawLon, rawLat);
+}
+
+function webMercatorToLonLat(x: number, y: number): { lon: number; lat: number } | undefined {
+  const max = 20_037_508.342789244;
+  if (Math.abs(x) > max || Math.abs(y) > max) {
+    return undefined;
+  }
+  const lon = (x / max) * 180;
+  const lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(((y / max) * 180 * Math.PI) / 180)) - Math.PI / 2);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    return undefined;
+  }
+  return { lon, lat };
+}
+
+function idsjmkVehicleMode(record: IdsjmkVehicleRecord): { category: string; label: string; tag: string } {
+  const routeType = numberFromRecord(record, ["routeType", "RouteType", "route_type", "gtfsRouteType"]);
+  if (routeType !== undefined) {
+    const pidMode = pidModeFromRouteType(routeType);
+    return { category: pidMode.category, label: pidMode.label, tag: pidMode.tag };
+  }
+  const type = (stringFromRecord(record, ["vehicleType", "VehicleType", "type", "Type", "mode", "Mode", "transportMode"]) ?? "").toLowerCase();
+  if (type.includes("tram") || type.includes("šalina")) {
+    return { category: "public_transport_tram", label: "tram", tag: "tram" };
+  }
+  if (type.includes("train") || type.includes("vlak")) {
+    return { category: "public_transport_train", label: "train", tag: "train" };
+  }
+  if (type.includes("trolley") || type.includes("trolej")) {
+    return { category: "public_transport_trolleybus", label: "trolleybus", tag: "trolleybus" };
+  }
+  return { category: "public_transport_bus", label: "bus", tag: "bus" };
+}
+
+function sparqlValue(binding: Record<string, SparqlBindingValue>, key: string): string | undefined {
+  return optionalString(binding[key]?.value);
+}
+
+function representativePointFromWkt(wkt: string): { lon: number; lat: number } | undefined {
+  const coordinatePairs = Array.from(wkt.matchAll(/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)(?:\s+-?\d+(?:\.\d+)?)?/g))
+    .map((match) => ({ lon: Number(match[1]), lat: Number(match[2]) }))
+    .filter((point) => Number.isFinite(point.lon) && Number.isFinite(point.lat));
+  if (coordinatePairs.length === 0) {
+    return undefined;
+  }
+  const sum = coordinatePairs.reduce(
+    (acc, point) => ({
+      lon: acc.lon + point.lon,
+      lat: acc.lat + point.lat
+    }),
+    { lon: 0, lat: 0 }
+  );
+  return {
+    lon: sum.lon / coordinatePairs.length,
+    lat: sum.lat / coordinatePairs.length
+  };
+}
+
+function roadSrtiLabel(value: string): string {
+  const localName = decodeURIComponent(value.split(/[\/#]/).filter(Boolean).pop() ?? value);
+  return localName
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+}
+
+function roadSrtiCategory(typeLabel: string): string {
+  const normalized = typeLabel.toLowerCase();
+  if (normalized.includes("accident")) {
+    return "road_accident";
+  }
+  if (normalized.includes("roadwork") || normalized.includes("maintenance") || normalized.includes("construction")) {
+    return "roadworks";
+  }
+  if (normalized.includes("weather")) {
+    return "road_weather";
+  }
+  if (normalized.includes("obstruction") || normalized.includes("closure")) {
+    return "road_obstruction";
+  }
+  if (normalized.includes("abnormal") || normalized.includes("traffic")) {
+    return "road_traffic_abnormal";
+  }
+  return "road_event";
+}
+
+function roadSrtiSeverity(category: string, typeLabel: string): SituationSeverity {
+  const normalized = typeLabel.toLowerCase();
+  if (category === "road_accident" || normalized.includes("closure") || normalized.includes("blocked")) {
+    return "warning";
+  }
+  if (category === "road_obstruction" || category === "road_weather" || category === "road_traffic_abnormal") {
+    return "advisory";
+  }
+  return "info";
 }
 
 function kbpsToMbps(value: number | undefined): number | undefined {

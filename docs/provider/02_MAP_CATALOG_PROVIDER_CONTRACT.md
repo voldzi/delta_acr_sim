@@ -142,6 +142,7 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.weather.aviation`
 - `public.mobile.network`
 - `public.traffic.transit`
+- `public.traffic.road_events`
 - `reference.infrastructure.healthcare`
 - `reference.infrastructure.emergency`
 - `reference.infrastructure.communications`

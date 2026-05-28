@@ -141,7 +141,7 @@ components:
       required: false
       schema:
         type: string
-        example: open_meteo,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,safety_data
+        example: open_meteo,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
     Technologies:
       name: technology
       in: query
@@ -189,7 +189,7 @@ components:
       enum: [weather, ground, mobile, mobile_coverage, mobile_network, traffic, warnings, flood, air_quality]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, safety_data, aviation_weather, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -596,7 +596,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, safetyData, aviationWeather, ardosPartner]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, ardosPartner]
           properties:
             openMeteo:
               type: integer
@@ -607,6 +607,12 @@ components:
             osmPostgis:
               type: integer
             osmOverpass:
+              type: integer
+            ctuStationaryMobile:
+              type: integer
+            idsjmkVehiclePositions:
+              type: integer
+            roadSrtiLod:
               type: integer
             safetyData:
               type: integer

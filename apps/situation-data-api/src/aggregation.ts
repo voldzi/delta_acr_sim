@@ -139,6 +139,12 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "pid_gtfs_rt") {
     return "traffic.pid_gtfs_rt";
   }
+  if (sourceId === "idsjmk_vehicle_positions") {
+    return "traffic.idsjmk_vehicle_positions";
+  }
+  if (sourceId === "road_srti_lod") {
+    return "traffic.road_events.srti";
+  }
   if (sourceId === "safety_data" && layer === "warnings") {
     return "warnings.safety_data_projection";
   }
@@ -187,6 +193,10 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "reference.infrastructure.civic";
     case "traffic.pid_gtfs_rt":
       return "public.traffic.transit";
+    case "traffic.idsjmk_vehicle_positions":
+      return "public.traffic.transit";
+    case "traffic.road_events.srti":
+      return "public.traffic.road_events";
     case "warnings.safety_data_projection":
       return "public.safety.warnings";
     case "flood.safety_data_projection":

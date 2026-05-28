@@ -11,6 +11,8 @@ SIM má poskytovat COM doplňkové vrstvy, které rozšiřují vzdušný obraz o
 | `ground` | OpenStreetMap přes OSM extract/PostGIS (`osm_postgis`); Overpass jen pro vývoj | implementováno jako PostGIS provider pro referenční POI po importu Geofabrik PBF extractu; produkčně preferovat Patroni/PostGIS, lokální Docker DB jen jako rebuildovatelný read-model/cache; veřejný Overpass pouze pro malé testovací bbox dotazy | ODbL 1.0, atribuce a share-alike povinnosti pro databáze; veřejné Overpass instance nejsou produkční runtime backend |
 | `mobile` | ČTÚ NetTest open-data ZIP export | implementováno jako live/periodický zdroj `ctu_nettest`; vhodné pro kontext kvality mobilní sítě, ne pro real-time výpadky operátorů | CC BY 4.0 podle exportu; nutná atribuce a práce s anonymizací/accuracy |
 | `traffic` | PID/Golemio GTFS-RT vehicle positions | implementováno jako live zdroj `pid_gtfs_rt` pro pohyb veřejné dopravy v Praze a okolí | open-data podmínky PID/Golemio; nutná atribuce, bez garance operační dostupnosti |
+| `traffic` | IDS JMK / Brno Open Data vehicle positions | implementováno jako volitelný zdroj `idsjmk_vehicle_positions`; zdrojová cache 20 s, COM nesmí volat upstream přímo | podmínky otevřených dat IDS JMK / Brno; endpoint může vyžadovat úpravu URL podle aktuální distribuce |
+| `traffic` | NDIC/ŘSD SRTI Linked Open Data | implementováno jako `road_srti_lod`; SIM dotazuje SPARQL endpoint po TTL a bbox filtruje nad cache | dopravní události jako veřejný kontext, nutná atribuce ŘSD/NDIC a respektování provozních limitů endpointu |
 | `ground/mobile/traffic` | ARDOS partner feed | implementováno jako vypnutý `ardos_partner` konektor | Není open-data; vyžaduje partnerskou dohodu, token, datovou minimalizaci a oprávnění uživatele v COM |
 | `mobile` | OpenCellID, M-Lab | kandidáti pro další rozšíření | OpenCellID CC BY-SA 4.0; M-Lab CC0 |
 | `traffic` | JSDI/NDIC/DATEX II | kandidát pro dopravní incidenty po potvrzení licence a způsobu přístupu | podmínky je nutné ověřit pro konkrétní distribuci a způsob odběru |
@@ -36,6 +38,9 @@ Veřejný real-time zdroj stavu BTS nebo aktuálních výpadků mobilních oper�
 - ČTÚ NetTest dataset detail: https://data.ctu.gov.cz/dataset/nettest
 - ČTÚ NetTest Open Data: https://nettest.ctu.gov.cz/en/Opendata
 - PID/Golemio API docs: https://api.golemio.cz/pid/docs/openapi/
+- IDS JMK / Brno Open Data katalog: https://data.brno.cz/
+- TamTam Research SRTI LOD SPARQL endpoint: https://lod.tamtamresearch.com/sparql/
+- TamTam Research LOD documentation: https://lod.tamtamresearch.com/docs/
 - NOAA AWC Data API: https://aviationweather.gov/data/api/
 - ARDOS / ARDOS partner network: https://radioklub.mo.gov.cz/ardos
 - OpenCellID licence: https://wiki.opencellid.org/wiki/Licensing:

@@ -159,6 +159,8 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
 | `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření, stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
+| `idsjmk_vehicle_positions` | `traffic` | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features. |
+| `road_srti_lod` | `traffic` | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď. |
 | `safety_data` | `warnings`, `flood` | Projekce Safety Data API do situačního kontraktu. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
 | `osm_postgis` | `ground`, `mobile` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
