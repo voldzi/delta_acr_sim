@@ -1,6 +1,7 @@
 import type { SituationDataConfig } from "./config.js";
 import { canonicalizeBboxForCache } from "./bbox-cache.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import type { SharedResponseCacheStore } from "./response-cache.js";
 import type { SituationDataSource, SourceCacheStats } from "./sources.js";
 import type {
   SituationDataSourceId,
@@ -18,12 +19,15 @@ export class SituationAggregationService {
 
   constructor(
     private readonly config: SituationDataConfig,
-    private readonly sources: SituationDataSource[]
+    private readonly sources: SituationDataSource[],
+    sharedCache?: SharedResponseCacheStore
   ) {
     this.cache = new ManagedResponseCache<SituationFeatureCollection>({
       ttlMs: config.cacheTtlSeconds * 1000,
       staleIfErrorMs: config.staleIfErrorSeconds * 1000,
-      maxEntries: config.cacheMaxEntries
+      maxEntries: config.cacheMaxEntries,
+      sharedStore: sharedCache,
+      sharedKeyPrefix: `${config.sharedCacheKeyPrefix}:features:v1`
     });
   }
 

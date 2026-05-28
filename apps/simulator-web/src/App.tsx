@@ -334,6 +334,7 @@ export function App() {
         cacheTtlSeconds: 0,
         staleIfErrorSeconds: 0,
         cacheMaxEntries: 0,
+        sharedCache: { enabled: false, backend: "memory", keyPrefix: "-", connectTimeoutMs: 0 },
         bboxCachePaddingDegrees: 0,
         staleAfterSeconds: 0,
         requestTimeoutMs: 0,
@@ -343,6 +344,9 @@ export function App() {
           mobileCoverage: 0,
           osmPostgis: 0,
           osmOverpass: 0,
+          ctuStationaryMobile: 0,
+          idsjmkVehiclePositions: 0,
+          roadSrtiLod: 0,
           safetyData: 0,
           aviationWeather: 0,
           ardosPartner: 0
@@ -1382,6 +1386,10 @@ export function App() {
                   <SummaryItem label="Cache TTL" value={`${data.situationData.config.cacheTtlSeconds}s`} />
                   <SummaryItem label="Stale fallback" value={`${data.situationData.config.staleIfErrorSeconds}s`} />
                   <SummaryItem label="Cache entries" value={`${data.situationData.config.cacheMaxEntries}`} />
+                  <SummaryItem
+                    label="Shared cache"
+                    value={`${data.situationData.config.sharedCache.backend}${data.situationData.config.sharedCache.enabled ? " enabled" : " local only"}`}
+                  />
                   <SummaryItem label="BBox padding" value={`${data.situationData.config.bboxCachePaddingDegrees} deg`} />
                   <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
                   <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
@@ -2376,7 +2384,10 @@ function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeco
     `aviation ${ttls.aviationWeather}s`,
     `safety ${ttls.safetyData}s`,
     `OSM DB ${ttls.osmPostgis}s`,
-    `Overpass ${ttls.osmOverpass}s`
+    `Overpass ${ttls.osmOverpass}s`,
+    `CTU ${ttls.ctuStationaryMobile}s`,
+    `IDS JMK ${ttls.idsjmkVehiclePositions}s`,
+    `roads ${ttls.roadSrtiLod}s`
   ].join(" / ");
 }
 

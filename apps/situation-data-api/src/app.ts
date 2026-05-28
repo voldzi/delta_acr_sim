@@ -7,6 +7,7 @@ import { DemCatalog } from "./dem-catalog.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
+import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
 import type {
   BoundingBox,
@@ -26,7 +27,8 @@ export interface SituationDataAppContext {
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
   const sources = createSituationDataSources(config);
-  const aggregation = new SituationAggregationService(config, sources);
+  const sharedCache = await createSharedResponseCacheStore(config);
+  const aggregation = new SituationAggregationService(config, sources, sharedCache);
   const demCatalog = new DemCatalog(config);
   const context: SituationDataAppContext = { config, aggregation, demCatalog };
   const app = express();
@@ -104,6 +106,13 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           `situation_data_cache_refreshes ${cache.refreshes}`,
           `situation_data_cache_errors ${cache.errors}`,
           `situation_data_cache_evictions ${cache.evictions}`,
+          `situation_data_cache_shared_enabled ${cache.sharedEnabled ? 1 : 0}`,
+          `situation_data_cache_shared_available ${cache.sharedAvailable ? 1 : 0}`,
+          `situation_data_cache_shared_hits ${cache.sharedHits}`,
+          `situation_data_cache_shared_misses ${cache.sharedMisses}`,
+          `situation_data_cache_shared_stale_hits ${cache.sharedStaleHits}`,
+          `situation_data_cache_shared_writes ${cache.sharedWrites}`,
+          `situation_data_cache_shared_errors ${cache.sharedErrors}`,
           ...sourceCacheLines,
           ...sourceHealthLines,
           ...demMetricLines(dem)
@@ -313,6 +322,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     cacheTtlSeconds: config.cacheTtlSeconds,
     staleIfErrorSeconds: config.staleIfErrorSeconds,
     cacheMaxEntries: config.cacheMaxEntries,
+    sharedCache: {
+      enabled: Boolean(config.sharedCacheRedisUrl),
+      backend: config.sharedCacheRedisUrl ? "redis" : "memory",
+      keyPrefix: config.sharedCacheKeyPrefix,
+      connectTimeoutMs: config.sharedCacheConnectTimeoutMs
+    },
     bboxCachePaddingDegrees: config.bboxCachePaddingDegrees,
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,

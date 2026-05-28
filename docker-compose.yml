@@ -92,11 +92,27 @@ services:
       timeout: 5s
       retries: 3
 
+  situation-data-cache:
+    image: valkey/valkey:8-alpine
+    container_name: csm-sim-situation-data-cache
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    expose:
+      - "6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   situation-data-api:
     build:
       context: .
       dockerfile: apps/situation-data-api/Dockerfile
     container_name: csm-sim-situation-data-api
+    depends_on:
+      situation-data-cache:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       SITUATION_DATA_API_PORT: 4020
@@ -107,6 +123,9 @@ services:
       SITUATION_DATA_CACHE_TTL_SECONDS: ${SITUATION_DATA_CACHE_TTL_SECONDS:-30}
       SITUATION_DATA_STALE_IF_ERROR_SECONDS: ${SITUATION_DATA_STALE_IF_ERROR_SECONDS:-1800}
       SITUATION_DATA_CACHE_MAX_ENTRIES: ${SITUATION_DATA_CACHE_MAX_ENTRIES:-10000}
+      SITUATION_DATA_SHARED_CACHE_REDIS_URL: ${SITUATION_DATA_SHARED_CACHE_REDIS_URL:-redis://situation-data-cache:6379/0}
+      SITUATION_DATA_SHARED_CACHE_KEY_PREFIX: ${SITUATION_DATA_SHARED_CACHE_KEY_PREFIX:-csm-sim:situation-data}
+      SITUATION_DATA_SHARED_CACHE_CONNECT_TIMEOUT_MS: ${SITUATION_DATA_SHARED_CACHE_CONNECT_TIMEOUT_MS:-1000}
       SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES: ${SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES:-0.18}
       SITUATION_DATA_STALE_AFTER_SECONDS: ${SITUATION_DATA_STALE_AFTER_SECONDS:-900}
       SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS: ${SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS:-600}

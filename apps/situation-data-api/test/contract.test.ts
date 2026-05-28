@@ -7,6 +7,7 @@ import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { SituationDataConfig } from "../src/config.js";
 import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
+import type { SharedResponseCacheStore } from "../src/response-cache.js";
 import { MobileNetworkSource, type SituationDataSource } from "../src/sources.js";
 
 describe("Situation Data API contract", () => {
@@ -25,6 +26,9 @@ describe("Situation Data API contract", () => {
       cacheTtlSeconds: 1,
       staleIfErrorSeconds: 600,
       cacheMaxEntries: 128,
+      sharedCacheRedisUrl: undefined,
+      sharedCacheKeyPrefix: "test:situation-data",
+      sharedCacheConnectTimeoutMs: 1000,
       bboxCachePaddingDegrees: 0.18,
       staleAfterSeconds: 900,
       openMeteoBaseUrl: "https://api.open-meteo.com",
@@ -356,6 +360,12 @@ describe("Situation Data API contract", () => {
         cacheTtlSeconds: 1,
         staleIfErrorSeconds: 600,
         cacheMaxEntries: 128,
+        sharedCache: {
+          enabled: false,
+          backend: "memory",
+          keyPrefix: "test:situation-data",
+          connectTimeoutMs: 1000
+        },
         bboxCachePaddingDegrees: 0.18,
         staleAfterSeconds: 900,
         sourceCacheTtlSeconds: {
@@ -395,6 +405,8 @@ describe("Situation Data API contract", () => {
     const response = await request(app).get("/metrics").expect(200);
     expect(response.text).toContain("situation_data_cache_entries");
     expect(response.text).toContain("situation_data_cache_coalesced_hits");
+    expect(response.text).toContain("situation_data_cache_shared_enabled");
+    expect(response.text).toContain("situation_data_cache_shared_errors");
 
     vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
     const cachedSources = await createApp({
@@ -1110,4 +1122,91 @@ describe("Situation Data API contract", () => {
     expect(calls).toBe(1);
     expect(service.cacheStats().hits).toBe(1);
   });
+
+  it("reuses aggregate responses from a shared cache store", async () => {
+    let calls = 0;
+    const sharedStore = new InMemorySharedResponseCacheStore();
+    const descriptor: SituationDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "test",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      layers: ["weather"],
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const source: SituationDataSource = {
+      descriptor,
+      async fetchFeatures() {
+        calls += 1;
+        const fetchedAt = new Date().toISOString();
+        return {
+          source: descriptor,
+          fetchedAt,
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "weather:test",
+              geometry: { type: "Point", coordinates: [14.4, 50.1] },
+              properties: {
+                featureId: "weather:test",
+                layer: "weather",
+                category: "weather_observation",
+                label: "test",
+                sourceId: "mock",
+                observedAt: fetchedAt,
+                confidence: 1,
+                stale: false,
+                severity: "info",
+                license: { name: "test", attribution: "test" }
+              }
+            }
+          ]
+        };
+      }
+    };
+    const query = {
+      bbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
+      layers: ["weather" as const],
+      sourceIds: ["mock" as const],
+      limit: 10,
+      includeRaw: false
+    };
+
+    const firstService = new SituationAggregationService(config, [source], sharedStore);
+    await firstService.getFeatures(query);
+    const secondService = new SituationAggregationService(config, [source], sharedStore);
+    await secondService.getFeatures(query);
+
+    expect(calls).toBe(1);
+    expect(firstService.cacheStats().sharedWrites).toBe(1);
+    expect(secondService.cacheStats().sharedHits).toBe(1);
+  });
 });
+
+class InMemorySharedResponseCacheStore implements SharedResponseCacheStore {
+  private readonly values = new Map<string, { value: string; expiresAtMs: number }>();
+
+  async get(key: string): Promise<string | undefined> {
+    const item = this.values.get(key);
+    if (!item || item.expiresAtMs <= Date.now()) {
+      return undefined;
+    }
+    return item.value;
+  }
+
+  async set(key: string, value: string, ttlMs: number): Promise<void> {
+    this.values.set(key, { value, expiresAtMs: Date.now() + ttlMs });
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+}

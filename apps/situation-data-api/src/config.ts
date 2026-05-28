@@ -12,6 +12,9 @@ export interface SituationDataConfig {
   cacheTtlSeconds: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
+  sharedCacheRedisUrl?: string;
+  sharedCacheKeyPrefix: string;
+  sharedCacheConnectTimeoutMs: number;
   bboxCachePaddingDegrees: number;
   staleAfterSeconds: number;
   openMeteoBaseUrl: string;
@@ -80,6 +83,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     cacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CACHE_TTL_SECONDS, 30),
     staleIfErrorSeconds: parseInteger(process.env.SITUATION_DATA_STALE_IF_ERROR_SECONDS, 1800),
     cacheMaxEntries: parseInteger(process.env.SITUATION_DATA_CACHE_MAX_ENTRIES, 10000),
+    sharedCacheRedisUrl: emptyToUndefined(process.env.SITUATION_DATA_SHARED_CACHE_REDIS_URL),
+    sharedCacheKeyPrefix: process.env.SITUATION_DATA_SHARED_CACHE_KEY_PREFIX ?? "csm-sim:situation-data",
+    sharedCacheConnectTimeoutMs: parseInteger(process.env.SITUATION_DATA_SHARED_CACHE_CONNECT_TIMEOUT_MS, 1000),
     bboxCachePaddingDegrees: parseFloatOr(process.env.SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES, 0.18),
     staleAfterSeconds: parseInteger(process.env.SITUATION_DATA_STALE_AFTER_SECONDS, 900),
     openMeteoBaseUrl: process.env.OPEN_METEO_BASE_URL ?? "https://api.open-meteo.com",

@@ -299,6 +299,12 @@ export interface SituationDataConfig {
   cacheTtlSeconds: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
+  sharedCache: {
+    enabled: boolean;
+    backend: "memory" | "redis";
+    keyPrefix: string;
+    connectTimeoutMs: number;
+  };
   bboxCachePaddingDegrees: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;
@@ -308,6 +314,9 @@ export interface SituationDataConfig {
     mobileCoverage: number;
     osmPostgis: number;
     osmOverpass: number;
+    ctuStationaryMobile: number;
+    idsjmkVehiclePositions: number;
+    roadSrtiLod: number;
     safetyData: number;
     aviationWeather: number;
     ardosPartner: number;

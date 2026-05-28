@@ -187,6 +187,12 @@ export interface SituationDataPublicConfig {
   cacheTtlSeconds: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
+  sharedCache: {
+    enabled: boolean;
+    backend: "memory" | "redis";
+    keyPrefix: string;
+    connectTimeoutMs: number;
+  };
   bboxCachePaddingDegrees: number;
   staleAfterSeconds: number;
   requestTimeoutMs: number;

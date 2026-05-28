@@ -423,6 +423,7 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       cacheTtlSeconds: 0,
       staleIfErrorSeconds: 0,
       cacheMaxEntries: 0,
+      sharedCache: { enabled: false, backend: "memory", keyPrefix: "-", connectTimeoutMs: 0 },
       bboxCachePaddingDegrees: 0,
       staleAfterSeconds: 0,
       requestTimeoutMs: 0,
@@ -432,6 +433,9 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
         mobileCoverage: 0,
         osmPostgis: 0,
         osmOverpass: 0,
+        ctuStationaryMobile: 0,
+        idsjmkVehiclePositions: 0,
+        roadSrtiLod: 0,
         safetyData: 0,
         aviationWeather: 0,
         ardosPartner: 0
