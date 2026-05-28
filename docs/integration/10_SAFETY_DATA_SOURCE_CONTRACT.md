@@ -125,14 +125,15 @@ CAP soubory ČHMÚ mohou obsahovat informační záznamy typu „žádná výstr
 ```text
 GET /safety-data/health/live
 GET /safety-data/health/ready
-GET /safety-data/metrics
 GET /safety-data/api/v1/observability
 GET /safety-data/api/v1/layers
 GET /safety-data/api/v1/sources
 GET /safety-data/api/v1/config
 ```
 
-`/metrics` obsahuje aggregate cache metriky i per-source cache metriky:
+Interní Prometheus endpoint `GET /metrics` běží na službě `safety-data-api` uvnitř docker sítě. Veřejný web proxy endpoint `/safety-data/metrics` záměrně vrací 404, aby se nepublikovaly provozní detaily.
+
+Interní `/metrics` obsahuje aggregate cache metriky i per-source cache metriky:
 
 - `safety_data_cache_hits/misses/stale_hits/errors`,
 - `safety_data_source_cache_hits/misses/stale_hits/errors{source="chmi_alerts|chmi_hydro|nasa_firms|admin_boundaries"}`,
