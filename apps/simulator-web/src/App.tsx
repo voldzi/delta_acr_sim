@@ -1,11 +1,13 @@
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
   Bot,
   CheckCircle2,
   CirclePause,
   CirclePlay,
   CloudSun,
+  Cpu,
   Database,
   ExternalLink,
   FlaskConical,
@@ -14,20 +16,25 @@ import {
   Layers3,
   LogOut,
   MapPinned,
+  Network,
   Pause,
   Plane,
   Play,
   Plus,
   RadioTower,
   RotateCcw,
+  Server,
   ShieldAlert,
   ShieldCheck,
+  Signal,
   Settings2,
   Square,
+  TimerReset,
   Trash2,
+  TrendingUp,
   Zap
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import {
   acceptAiDraft,
   addConnectivityFault,
@@ -138,6 +145,31 @@ interface AffiliationSummaryItem {
   label: string;
   value: number;
   detail: string;
+}
+
+interface LiveTelemetry {
+  generatedPerMinute: number;
+  publishedPerMinute: number;
+  dataDeltaPerMinute: number;
+  loadPercent: number;
+  trend: "warming" | "steady" | "active";
+}
+
+interface TelemetrySample {
+  at: number;
+  generatedEvents: number;
+  publishedEvents: number;
+  dataProducts: number;
+}
+
+interface OverviewChannel {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  value: string;
+  detail: string;
+  load: number;
+  tone: Tone;
 }
 
 const copDisplayUrl = import.meta.env.VITE_COP_DISPLAY_URL ?? "https://cop.zeleznalady.cz";
@@ -372,6 +404,14 @@ export function App() {
   const [apiTokenConfigured, setApiTokenConfigured] = useState(() => Boolean(authSession.accessToken) || hasSimAuthorizationToken());
   const [manualTokenConfigured, setManualTokenConfigured] = useState(hasSimApiToken);
   const [apiTokenInput, setApiTokenInput] = useState("");
+  const telemetrySampleRef = useRef<TelemetrySample | undefined>(undefined);
+  const [liveTelemetry, setLiveTelemetry] = useState<LiveTelemetry>({
+    generatedPerMinute: 0,
+    publishedPerMinute: 0,
+    dataDeltaPerMinute: 0,
+    loadPercent: 0,
+    trend: "steady"
+  });
 
   const selectedScenario = useMemo(
     () => data.scenarios.find((scenario) => scenario.scenarioId === selectedScenarioId) ?? data.scenarios[0],
@@ -427,6 +467,108 @@ export function App() {
     data.safetyData.features.summary.advisoryCount +
     data.safetyData.features.summary.warningCount +
     data.safetyData.features.summary.criticalCount;
+  const liveDataProducts =
+    data.flightData.tracks.summary.deduplicatedTrackCount +
+    data.situationData.features.summary.featureCount +
+    data.safetyData.features.summary.featureCount +
+    data.takGateway.features.summary.featureCount +
+    data.takGateway.health.currentEvents;
+  const enabledSourceCount =
+    data.flightData.sources.filter((source) => source.enabled).length +
+    data.situationData.sources.filter((source) => source.enabled).length +
+    data.safetyData.sources.filter((source) => source.enabled).length +
+    data.takGateway.sources.filter((source) => source.enabled).length;
+  const healthyProviderCount =
+    data.providers.filter((provider) => provider.enabled && provider.healthy).length +
+    (data.flightData.health.status === "ok" ? 1 : 0) +
+    (data.situationData.health.status === "ok" ? 1 : 0) +
+    (data.safetyData.health.status === "ok" ? 1 : 0) +
+    (data.takGateway.health.status === "ok" ? 1 : 0);
+  const warningCount =
+    data.warnings.length +
+    data.flightData.tracks.warnings.length +
+    data.situationData.features.warnings.length +
+    data.safetyData.features.warnings.length +
+    data.takGateway.features.warnings.length +
+    (data.situationData.health.sourceHealth ?? []).reduce((sum, source) => sum + source.warnings.length, 0);
+  const cacheMaxEntries = data.flightData.config.cacheMaxEntries + data.situationData.config.cacheMaxEntries + data.safetyData.config.cacheMaxEntries;
+  const cacheTtlValues = [
+    data.flightData.config.cacheTtlSeconds,
+    data.situationData.config.cacheTtlSeconds,
+    data.safetyData.config.cacheTtlSeconds,
+    ...Object.values(data.situationData.config.sourceCacheTtlSeconds)
+  ].filter((value) => value > 0);
+  const cacheProtectionScore = estimateCacheProtectionScore(cacheMaxEntries, cacheTtlValues);
+  const overviewChannels: OverviewChannel[] = [
+    {
+      id: "flight",
+      icon: <Plane />,
+      label: "Flight stream",
+      value: `${data.flightData.tracks.summary.deduplicatedTrackCount.toLocaleString("cs-CZ")} tracks`,
+      detail: `${data.flightData.health.enabledSources.length} enabled sources`,
+      load: boundedPercent(data.flightData.tracks.summary.deduplicatedTrackCount, 80),
+      tone: flightDataTone
+    },
+    {
+      id: "situation",
+      icon: <Layers3 />,
+      label: "Situation feed",
+      value: `${data.situationData.features.summary.featureCount.toLocaleString("cs-CZ")} features`,
+      detail: `${data.situationData.health.enabledSources.length} enabled sources`,
+      load: boundedPercent(data.situationData.features.summary.featureCount, 120),
+      tone: situationDataTone
+    },
+    {
+      id: "safety",
+      icon: <ShieldAlert />,
+      label: "Safety feed",
+      value: `${data.safetyData.features.summary.featureCount.toLocaleString("cs-CZ")} features`,
+      detail: `${elevatedSafetyCount.toLocaleString("cs-CZ")} elevated signals`,
+      load: boundedPercent(elevatedSafetyCount + data.safetyData.features.summary.featureCount, 80),
+      tone: safetyDataTone
+    },
+    {
+      id: "tak",
+      icon: <RadioTower />,
+      label: "TAK gateway",
+      value: `${data.takGateway.health.currentEvents.toLocaleString("cs-CZ")} events`,
+      detail: `${data.takGateway.health.staleEvents.toLocaleString("cs-CZ")} stale events`,
+      load: boundedPercent(data.takGateway.health.currentEvents, Math.max(1, data.takGateway.config.maxEvents || 100)),
+      tone: takGatewayTone
+    },
+    {
+      id: "publisher",
+      icon: <Signal />,
+      label: "COM publisher",
+      value: `${data.publisher.queueSize.toLocaleString("cs-CZ")} queued`,
+      detail: `${deliveryRate} delivery, ${data.publisher.deadLetterSize} dead-letter`,
+      load: Math.max(boundedPercent(data.publisher.queueSize, 80), data.publisher.deadLetterSize > 0 ? 82 : 0),
+      tone: queueTone
+    }
+  ];
+  const cacheChannels = [
+    {
+      label: "Aggregate cache",
+      value: `${Math.max(data.flightData.config.cacheTtlSeconds, data.situationData.config.cacheTtlSeconds, data.safetyData.config.cacheTtlSeconds)}s max TTL`,
+      detail: `${cacheMaxEntries.toLocaleString("cs-CZ")} configured entries`,
+      load: cacheProtectionScore,
+      tone: cacheProtectionScore >= 75 ? "safe" : cacheProtectionScore >= 45 ? "warn" : "danger"
+    },
+    {
+      label: "Source cache",
+      value: `${cacheTtlValues.length} guarded feeds`,
+      detail: cacheTtlValues.length > 0 ? `${Math.max(...cacheTtlValues).toLocaleString("cs-CZ")}s longest TTL` : "no TTL configured",
+      load: boundedPercent(cacheTtlValues.length, 10),
+      tone: cacheTtlValues.length >= 6 ? "safe" : cacheTtlValues.length >= 3 ? "warn" : "danger"
+    },
+    {
+      label: "Stale-if-error",
+      value: `${Math.max(data.flightData.config.staleIfErrorSeconds, data.situationData.config.staleIfErrorSeconds, data.safetyData.config.staleIfErrorSeconds).toLocaleString("cs-CZ")}s`,
+      detail: "continues serving cached data during upstream outage",
+      load: boundedPercent(Math.max(data.flightData.config.staleIfErrorSeconds, data.situationData.config.staleIfErrorSeconds, data.safetyData.config.staleIfErrorSeconds), 1800),
+      tone: "safe"
+    }
+  ] satisfies Array<{ label: string; value: string; detail: string; load: number; tone: Tone }>;
   const activeSectionMeta = sectionMeta(activeSection);
 
   const readinessItems = [
@@ -506,6 +648,63 @@ export function App() {
       setSelectedScenarioId(next.scenarios[0].scenarioId);
     }
   }, [selectedScenarioId]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const nextSample: TelemetrySample = {
+      at: now,
+      generatedEvents: data.runtime.generatedEvents,
+      publishedEvents: data.runtime.publishedEvents,
+      dataProducts: liveDataProducts
+    };
+    const previous = telemetrySampleRef.current;
+    if (previous) {
+      const elapsedMinutes = Math.max((now - previous.at) / 60_000, 1 / 60);
+      const generatedPerMinute = Math.max(0, (nextSample.generatedEvents - previous.generatedEvents) / elapsedMinutes);
+      const publishedPerMinute = Math.max(0, (nextSample.publishedEvents - previous.publishedEvents) / elapsedMinutes);
+      const dataDeltaPerMinute = Math.max(0, (nextSample.dataProducts - previous.dataProducts) / elapsedMinutes);
+      const loadPercent = estimateLiveLoadPercent({
+        generatedPerMinute,
+        publishedPerMinute,
+        dataDeltaPerMinute,
+        queueSize: data.publisher.queueSize,
+        deadLetterSize: data.publisher.deadLetterSize,
+        liveDataProducts,
+        running: isRunning,
+        warningCount
+      });
+      setLiveTelemetry({
+        generatedPerMinute,
+        publishedPerMinute,
+        dataDeltaPerMinute,
+        loadPercent,
+        trend: loadPercent >= 62 || generatedPerMinute > 0 || publishedPerMinute > 0 ? "active" : loadPercent >= 24 ? "warming" : "steady"
+      });
+    } else {
+      setLiveTelemetry((current) => ({
+        ...current,
+        loadPercent: estimateLiveLoadPercent({
+          generatedPerMinute: 0,
+          publishedPerMinute: 0,
+          dataDeltaPerMinute: 0,
+          queueSize: data.publisher.queueSize,
+          deadLetterSize: data.publisher.deadLetterSize,
+          liveDataProducts,
+          running: isRunning,
+          warningCount
+        })
+      }));
+    }
+    telemetrySampleRef.current = nextSample;
+  }, [
+    data.publisher.deadLetterSize,
+    data.publisher.queueSize,
+    data.runtime.generatedEvents,
+    data.runtime.publishedEvents,
+    isRunning,
+    liveDataProducts,
+    warningCount
+  ]);
 
   useEffect(() => {
     void refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
@@ -697,20 +896,67 @@ export function App() {
 
         {activeSection === "overview" ? (
           <>
-            <section id="dashboard" className="metrics-grid" aria-label="Runtime metrics">
-              <Metric icon={<Activity />} label="Generated events" value={data.runtime.generatedEvents} detail={`${data.runtime.tick ?? 0} ticks`} />
-              <Metric icon={<RadioTower />} label="Delivered events" value={data.runtime.publishedEvents} detail={`${deliveryRate} delivery`} />
-              <Metric icon={<Database />} label="Active tracks" value={data.runtime.activeObjects ?? totalObjects} detail={`${totalObjects} configured`} />
-              <Metric icon={<Plane />} label="Flight tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount} detail={`${data.flightData.tracks.summary.rawObservationCount} raw observations`} />
-              <Metric icon={<Layers3 />} label="Situation features" value={data.situationData.features.summary.featureCount} detail={`${data.situationData.layers.length} layers available`} />
-              <Metric icon={<ShieldAlert />} label="Safety features" value={data.safetyData.features.summary.featureCount} detail={`${data.safetyData.features.summary.criticalCount} critical`} />
-              <Metric icon={<RadioTower />} label="TAK CoT events" value={data.takGateway.health.currentEvents} detail={`${data.takGateway.features.summary.featureCount} provider features`} />
+            <section id="dashboard" className="overview-hero" aria-label="Live data provider overview">
+              <div className="overview-hero-main">
+                <div className="overview-signal">
+                  <div className={`load-ring ${liveTelemetry.trend}`} style={{ "--load": `${liveTelemetry.loadPercent}%` } as CSSProperties}>
+                    <div>
+                      <span>Live load</span>
+                      <strong>{liveTelemetry.loadPercent}%</strong>
+                    </div>
+                  </div>
+                  <div className="signal-copy">
+                    <span>CSM data fabric</span>
+                    <h2>Provider pulse</h2>
+                    <p>
+                      SIM is serving cached, normalized map data for COM while protecting external sources from repeat queries.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overview-flow" aria-label="Data flow to COM">
+                  <FlowNode icon={<Plane />} label="Flight" tone={flightDataTone} />
+                  <FlowArrow />
+                  <FlowNode icon={<Layers3 />} label="Situation" tone={situationDataTone} />
+                  <FlowArrow />
+                  <FlowNode icon={<ShieldAlert />} label="Safety" tone={safetyDataTone} />
+                  <FlowArrow />
+                  <FlowNode icon={<RadioTower />} label="COM" tone={publisherTone} />
+                </div>
+              </div>
+
+              <div className="overview-command-grid">
+                <CommandStat icon={<TrendingUp />} label="Events / min" value={formatRatePerMinute(liveTelemetry.generatedPerMinute)} detail={`${formatRatePerMinute(liveTelemetry.publishedPerMinute)} published`} />
+                <CommandStat icon={<Database />} label="Live data products" value={liveDataProducts.toLocaleString("cs-CZ")} detail={`${enabledSourceCount} enabled feeds`} />
+                <CommandStat icon={<Server />} label="Source health" value={`${healthyProviderCount}/${Math.max(healthyProviderCount, enabledSourceCount || 1)}`} detail={`${warningCount} quality signals`} />
+                <CommandStat icon={<TimerReset />} label="Cache shield" value={`${cacheProtectionScore}%`} detail={`${cacheMaxEntries.toLocaleString("cs-CZ")} entries`} />
+              </div>
             </section>
 
-            <section id="readiness" className="operations-grid" aria-label="Operational readiness">
+            <section id="live-load" className="overview-grid" aria-label="Live source load and cache state">
+              <section className="ops-panel source-load-panel">
+                <PanelTitle icon={<Cpu />} title="Live source load" subtitle={`Polling refresh ${formatTime(lastRefreshAt)} · no additional upstream fan-out`} />
+                <div className="channel-list">
+                  {overviewChannels.map((channel) => (
+                    <LiveChannelRow key={channel.id} channel={channel} />
+                  ))}
+                </div>
+              </section>
+
+              <section className="ops-panel cache-panel">
+                <PanelTitle icon={<Database />} title="Cache posture" subtitle="Designed to absorb repeated COM and client queries" />
+                <div className="cache-stack">
+                  {cacheChannels.map((channel) => (
+                    <CacheChannel key={channel.label} channel={channel} />
+                  ))}
+                </div>
+              </section>
+            </section>
+
+            <section id="readiness" className="overview-grid secondary" aria-label="Operational readiness">
               <section className="ops-panel readiness-panel">
-                <PanelTitle icon={<ShieldCheck />} title="Operational readiness" subtitle={`Last refresh ${formatTime(lastRefreshAt)}`} />
-                <div className="readiness-list">
+                <PanelTitle icon={<ShieldCheck />} title="Operational readiness" subtitle={`Runtime ${data.runtime.state} · publisher ${data.publisher.mode}`} />
+                <div className="readiness-list compact">
                   {readinessItems.map((item) => (
                     <div key={item.label} className={`readiness-item ${item.tone}`}>
                       <div className="readiness-icon">{item.icon}</div>
@@ -725,7 +971,7 @@ export function App() {
               </section>
 
               <section className="ops-panel affiliation-panel">
-                <PanelTitle icon={<ShieldAlert />} title="Track ownership mix" subtitle="COM affiliation source" />
+                <PanelTitle icon={<Network />} title="Synthetic track mix" subtitle={`${data.runtime.activeObjects ?? totalObjects} active / ${totalObjects} configured`} />
                 <div className="affiliation-grid">
                   {affiliationSummary.map((item) => (
                     <div key={item.category} className={`affiliation-card ${item.category}`}>
@@ -1385,6 +1631,72 @@ function Metric({ icon, label, value, detail }: { icon: ReactNode; label: string
       <span>{label}</span>
       <strong>{typeof value === "number" ? value.toLocaleString("cs-CZ") : value}</strong>
       {detail ? <small>{detail}</small> : null}
+    </div>
+  );
+}
+
+function CommandStat({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
+  return (
+    <div className="command-stat">
+      <div className="command-stat-icon">{icon}</div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function FlowNode({ icon, label, tone }: { icon: ReactNode; label: string; tone: Tone }) {
+  return (
+    <div className={`flow-node ${tone}`}>
+      <div>{icon}</div>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function FlowArrow() {
+  return (
+    <div className="flow-arrow" aria-hidden="true">
+      <span />
+      <ArrowRight size={15} />
+    </div>
+  );
+}
+
+function LiveChannelRow({ channel }: { channel: OverviewChannel }) {
+  return (
+    <div className={`channel-row ${channel.tone}`}>
+      <div className="channel-icon">{channel.icon}</div>
+      <div className="channel-main">
+        <div>
+          <strong>{channel.label}</strong>
+          <span>{channel.detail}</span>
+        </div>
+        <em>{channel.value}</em>
+      </div>
+      <ProgressBar value={channel.load} tone={channel.tone} />
+    </div>
+  );
+}
+
+function CacheChannel({ channel }: { channel: { label: string; value: string; detail: string; load: number; tone: Tone } }) {
+  return (
+    <div className={`cache-channel ${channel.tone}`}>
+      <div>
+        <span>{channel.label}</span>
+        <strong>{channel.value}</strong>
+        <small>{channel.detail}</small>
+      </div>
+      <ProgressBar value={channel.load} tone={channel.tone} />
+    </div>
+  );
+}
+
+function ProgressBar({ value, tone }: { value: number; tone: Tone }) {
+  return (
+    <div className={`progress-bar ${tone}`} aria-label={`${Math.round(value)} percent`}>
+      <span style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
     </div>
   );
 }
@@ -2058,6 +2370,49 @@ function formatPercent(part: number, total: number): string {
     return "0%";
   }
   return `${Math.round((part / total) * 100)}%`;
+}
+
+function boundedPercent(value: number, maxValue: number): number {
+  if (maxValue <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((value / maxValue) * 100)));
+}
+
+function estimateCacheProtectionScore(maxEntries: number, ttlValues: number[]): number {
+  const capacityScore = boundedPercent(maxEntries, 20_000);
+  const ttlScore = ttlValues.length > 0 ? boundedPercent(Math.max(...ttlValues), 21_600) : 0;
+  const spreadScore = boundedPercent(ttlValues.length, 10);
+  return Math.round(capacityScore * 0.35 + ttlScore * 0.35 + spreadScore * 0.3);
+}
+
+function estimateLiveLoadPercent(input: {
+  generatedPerMinute: number;
+  publishedPerMinute: number;
+  dataDeltaPerMinute: number;
+  queueSize: number;
+  deadLetterSize: number;
+  liveDataProducts: number;
+  running: boolean;
+  warningCount: number;
+}): number {
+  const runtimeBase = input.running ? 20 : 7;
+  const eventPressure = Math.min(26, Math.max(input.generatedPerMinute, input.publishedPerMinute) / 2.4);
+  const dataPressure = Math.min(24, input.liveDataProducts / 18);
+  const queuePressure = Math.min(22, input.queueSize * 2.2 + input.deadLetterSize * 4.8);
+  const warningPressure = Math.min(12, input.warningCount * 1.5);
+  const deltaPressure = Math.min(16, input.dataDeltaPerMinute / 3);
+  return Math.max(0, Math.min(100, Math.round(runtimeBase + eventPressure + dataPressure + queuePressure + warningPressure + deltaPressure)));
+}
+
+function formatRatePerMinute(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0/min";
+  }
+  if (value < 10) {
+    return `${value.toFixed(1)}/min`;
+  }
+  return `${Math.round(value).toLocaleString("cs-CZ")}/min`;
 }
 
 function formatRate(value: number): string {
