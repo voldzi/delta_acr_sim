@@ -76,7 +76,12 @@ export interface PolygonGeometry {
   coordinates: Array<Array<[number, number]>>;
 }
 
-export type SafetyGeometry = PointGeometry | PolygonGeometry;
+export interface MultiPolygonGeometry {
+  type: "MultiPolygon";
+  coordinates: Array<Array<Array<[number, number]>>>;
+}
+
+export type SafetyGeometry = PointGeometry | PolygonGeometry | MultiPolygonGeometry;
 
 export interface SafetyFeatureProperties {
   featureId: string;

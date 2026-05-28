@@ -185,8 +185,13 @@ fi
 echo "Building materialized COP POI view."
 run_psql < deploy/osm/osm-poi-view.sql
 
+echo "Building materialized administrative boundary view."
+run_psql < deploy/osm/osm-admin-boundary-view.sql
+
 echo "OSM POI rows:"
 run_psql -tAc "select count(*) from public.osm_poi;"
+echo "OSM admin boundary rows:"
+run_psql -tAc "select count(*) from public.osm_admin_boundary;"
 
 cat <<EOF
 To enable in SIM:
@@ -200,4 +205,8 @@ MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 OSM_POSTGIS_BACKEND=$OSM_POSTGIS_BACKEND
 OSM_POSTGIS_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
 OSM_POSTGIS_TABLE=public.osm_poi
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,admin_boundaries
+SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
+SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 EOF

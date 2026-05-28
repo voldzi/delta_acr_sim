@@ -218,6 +218,12 @@ components:
                   const: Polygon
                 coordinates:
                   type: array
+            - type: object
+              properties:
+                type:
+                  const: MultiPolygon
+                coordinates:
+                  type: array
         properties:
           type: object
           required:

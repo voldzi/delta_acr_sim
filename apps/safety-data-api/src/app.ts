@@ -246,7 +246,7 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
       { sourceId: "chmi_alerts", baseUrl: config.chmiAlertsCapBaseUrl, authConfigured: true },
       { sourceId: "chmi_hydro", baseUrl: config.chmiHydroNowBaseUrl, authConfigured: true },
       { sourceId: "nasa_firms", baseUrl: config.nasaFirmsAreaBaseUrl, authConfigured: Boolean(config.nasaFirmsMapKey) },
-      { sourceId: "admin_boundaries", authConfigured: true }
+      { sourceId: "admin_boundaries", baseUrl: publicPostgisBaseUrl(config.adminBoundaryConnectionString), authConfigured: Boolean(config.adminBoundaryConnectionString) }
     ]
   };
 }
@@ -285,4 +285,16 @@ function cacheTelemetry(stats: CacheStatsLike, maxEntries: number): Record<strin
 
 function ratio(value: number, total: number): number {
   return total > 0 ? Number((value / total).toFixed(4)) : 0;
+}
+
+function publicPostgisBaseUrl(connectionString: string | undefined): string | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  try {
+    const url = new URL(connectionString);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "postgresql://configured";
+  }
 }

@@ -21,6 +21,9 @@ export interface SafetyDataConfig {
   nasaFirmsAreaBaseUrl: string;
   nasaFirmsSource: string;
   nasaFirmsDayRange: number;
+  adminBoundaryConnectionString?: string;
+  adminBoundaryTable: string;
+  adminBoundaryCacheTtlSeconds: number;
   corsOrigins?: string[];
 }
 
@@ -52,6 +55,9 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     nasaFirmsAreaBaseUrl: process.env.NASA_FIRMS_AREA_BASE_URL ?? "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
     nasaFirmsSource: process.env.NASA_FIRMS_SOURCE ?? "VIIRS_SNPP_NRT",
     nasaFirmsDayRange: parseInteger(process.env.NASA_FIRMS_DAY_RANGE, 1),
+    adminBoundaryConnectionString: emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
+    adminBoundaryTable: process.env.SAFETY_DATA_ADMIN_BOUNDARY_TABLE ?? "public.osm_admin_boundary",
+    adminBoundaryCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS, 86_400),
     corsOrigins: parseStringList(process.env.SAFETY_DATA_CORS_ORIGINS)
   };
 }
@@ -94,4 +100,9 @@ function parseInteger(value: string | undefined, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+}
+
+function emptyToUndefined(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }

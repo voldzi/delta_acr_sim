@@ -79,7 +79,7 @@ Specializovaná pole:
 - `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`.
 - `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`.
 - `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
-- `admin_boundaries`: referenční administrativní hranice. Pilot obsahuje jen hrubý seed ČR; produkční provoz má používat autoritativní PostGIS import, například RÚIAN nebo jiný licencovaný boundary dataset.
+- `admin_boundaries`: referenční administrativní hranice. Produkčně čte lokální/PostGIS read-model `public.osm_admin_boundary`; pokud není DB nebo view k dispozici, vrací jen hrubý seed ČR s warningem.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
 ČHMÚ CAP feed může poskytovat administrativní geokódy bez přesných polygonů. SIM proto ukládá `affectedAreas` a `geocodes`, ale pro mapový bod používá reprezentativní bod aktuálního bboxu. COM má tyto body vizualizovat jako výstražné anotace, nikoli jako přesnou hranici území.
@@ -106,6 +106,7 @@ API používá řízenou cache:
 - negativní cache pro hydrologické stanice, u kterých ČHMÚ vrací `404` pro aktuální data; pokud alespoň část stanic v bbox vrací platná data, jednotlivé `404` se neposílají jako COM warning,
 - limit `CHMI_HYDRO_MAX_STATIONS`.
 - NASA FIRMS zdroj drží vlastní source-level cache alespoň 10 minut a bez `NASA_FIRMS_MAP_KEY` se nedotazuje externího API.
+- Admin hranice se čtou z lokální/PostGIS materializované view s TTL `SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS`; geometrie se vybírá ze zjednodušených sloupců podle velikosti bboxu.
 
 Veřejné zdroje se nesmí dotazovat při každém dotazu tisíců COM klientů. COM má dotazovat SIM, SIM drží cache a dotazuje původní zdroje s konzervativní kadencí.
 

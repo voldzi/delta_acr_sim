@@ -115,8 +115,10 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         sourceIds: ["admin_boundaries"],
         query: query(["boundary_admin"], ["admin_boundaries"]),
         legal: {
-          attribution: "CSM SIM seed boundary reference",
-          notes: ["Do produkce importovat autoritativní hranice do PostGIS; aktuální seed je určen pro kontrakt a vizualizaci."]
+          attribution: config.adminBoundaryConnectionString ? "OpenStreetMap contributors" : "CSM SIM seed boundary reference",
+          notes: config.adminBoundaryConnectionString
+            ? ["Hranice jsou čtené z lokální/PostGIS materializované view, ne z veřejného Overpass runtime."]
+            : ["Bez SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL služba vrací jen hrubý seed ČR."]
         }
       }
     ],

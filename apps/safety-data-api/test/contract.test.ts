@@ -102,7 +102,7 @@ describe("Safety Data API contract", () => {
           expect.objectContaining({ sourceId: "chmi_alerts", authConfigured: true }),
           expect.objectContaining({ sourceId: "chmi_hydro", authConfigured: true }),
           expect.objectContaining({ sourceId: "nasa_firms", authConfigured: false }),
-          expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: true })
+          expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: false })
         ])
       })
     );
@@ -323,6 +323,32 @@ describe("Safety Data API contract", () => {
 
     expect(response.body.features.length).toBeGreaterThan(0);
     expect(response.body.features.every((feature: { properties: { layer: string } }) => feature.properties.layer === "flood")).toBe(true);
+  });
+
+  it("returns a coarse admin boundary fallback when PostGIS boundaries are not configured", async () => {
+    const configured = await createApp({ ...config, enabledSources: ["admin_boundaries"] });
+
+    const response = await request(configured.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=boundary_admin&source=admin_boundaries&limit=5")
+      .expect(200);
+
+    expect(response.body.summary.featureCount).toBe(1);
+    expect(response.body.warnings[0]).toContain("coarse seed fallback");
+    expect(response.body.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Polygon" }),
+        properties: expect.objectContaining({
+          layerId: "public.boundary.admin",
+          providerLayerId: "boundary.admin",
+          layer: "boundary_admin",
+          sourceId: "admin_boundaries",
+          sourceName: "Administrative boundary seed reference",
+          adminLevel: 2,
+          countryCode: "CZ",
+          status: "reference"
+        })
+      })
+    );
   });
 
   it("keeps layers represented when a low limit is requested", async () => {

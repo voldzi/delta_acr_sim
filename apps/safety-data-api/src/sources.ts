@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { Pool } from "pg";
 import type { SafetyDataConfig } from "./config.js";
 import { HttpRequestError, requestJson, requestText } from "./http.js";
 import { ManagedResponseCache } from "./response-cache.js";
@@ -8,6 +9,7 @@ import type {
   SafetyDataLicense,
   SafetyDataSourceId,
   SafetyFeature,
+  SafetyGeometry,
   SafetyLayerId,
   SafetyQuery,
   SafetySeverity,
@@ -63,6 +65,19 @@ const ADMIN_BOUNDARY_SEED_LICENSE: SafetyDataLicense = {
   notes: [
     "Built-in coarse Czechia boundary seed for contract validation.",
     "Production-grade administrative boundaries should be imported from an authoritative dataset such as RUIAN or another licensed boundary source."
+  ]
+};
+
+const OSM_ADMIN_BOUNDARY_LICENSE: SafetyDataLicense = {
+  name: "ODbL 1.0",
+  url: "https://opendatacommons.org/licenses/odbl/1-0/",
+  attribution: "OpenStreetMap contributors",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Attribution is required.",
+    "Public adapted databases must follow ODbL obligations.",
+    "Administrative boundaries are served from a local/PostGIS read-model, not from public Overpass."
   ]
 };
 
@@ -346,8 +361,15 @@ class NasaFirmsSource implements SafetyDataSource {
 
 class AdminBoundarySource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
+  private readonly payloadCache: ManagedResponseCache<AdminBoundaryRow[]>;
+  private pool?: Pool;
 
-  constructor(config: SafetyDataConfig) {
+  constructor(private readonly config: SafetyDataConfig) {
+    this.payloadCache = new ManagedResponseCache<AdminBoundaryRow[]>({
+      ttlMs: Math.max(300, config.adminBoundaryCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.adminBoundaryCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(16, Math.min(512, config.cacheMaxEntries))
+    });
     this.descriptor = {
       sourceId: "admin_boundaries",
       label: "Administrative boundary reference",
@@ -355,8 +377,9 @@ class AdminBoundarySource implements SafetyDataSource {
       mode: "reference",
       priority: 45,
       layers: ["boundary_admin"],
-      license: ADMIN_BOUNDARY_SEED_LICENSE,
-      updateCadenceSeconds: 86_400
+      license: config.adminBoundaryConnectionString ? OSM_ADMIN_BOUNDARY_LICENSE : ADMIN_BOUNDARY_SEED_LICENSE,
+      baseUrl: publicPostgisBaseUrl(config.adminBoundaryConnectionString),
+      updateCadenceSeconds: config.adminBoundaryCacheTtlSeconds
     };
   }
 
@@ -366,57 +389,102 @@ class AdminBoundarySource implements SafetyDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const czechiaBbox: BoundingBox = { west: 12.09, south: 48.55, east: 18.86, north: 51.06 };
-    if (!bboxIntersects(query.bbox, czechiaBbox)) {
-      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    if (this.config.adminBoundaryConnectionString) {
+      try {
+        const levelSet = boundaryLevelsForBbox(query.bbox);
+        const cacheKey = JSON.stringify({
+          bbox: roundBbox(query.bbox),
+          levels: levelSet.levels,
+          simplification: levelSet.geometryColumn
+        });
+        const rows = await this.payloadCache.getOrLoad(cacheKey, () => this.fetchRows(query.bbox, levelSet.levels, levelSet.geometryColumn, query.limit));
+        const features = rows
+          .map((row) => mapAdminBoundaryRow(row, fetchedAt, query.includeRaw))
+          .filter((feature): feature is SafetyFeature => Boolean(feature))
+          .slice(0, query.limit);
+        return {
+          source: this.descriptor,
+          fetchedAt,
+          features,
+          warnings: features.length === 0 ? ["admin_boundaries PostGIS read-model returned no boundaries for the requested bbox."] : []
+        };
+      } catch (error) {
+        return {
+          source: this.descriptor,
+          fetchedAt,
+          features: seedAdminBoundaryFeatures(query.bbox, fetchedAt),
+          warnings: [error instanceof Error ? `admin_boundaries PostGIS read-model failed; using coarse seed fallback: ${error.message}` : "admin_boundaries PostGIS read-model failed; using coarse seed fallback."]
+        };
+      }
     }
-
-    const feature = makePolygonFeature({
-      id: "boundary_admin:admin_boundaries:CZ",
-      layer: "boundary_admin",
-      category: "admin_boundary",
-      hazardType: "admin_boundary",
-      headline: "Czechia administrative boundary reference",
-      description:
-        "Coarse built-in Czechia boundary used until an authoritative RUIAN/PostGIS boundary import is available.",
-      sourceId: "admin_boundaries",
-      sourceName: "Administrative boundary reference",
-      license: ADMIN_BOUNDARY_SEED_LICENSE,
-      observedAt: fetchedAt,
-      effectiveAt: fetchedAt,
-      confidence: 0.45,
-      severity: "info",
-      status: "reference",
-      urgency: "unknown",
-      certainty: "unknown",
-      areaName: "Czechia",
-      adminLevel: 2,
-      name: "Czechia",
-      code: "CZ",
-      countryCode: "CZ",
-      styleHint: "boundary-admin-country-v1",
-      iconHint: "boundary",
-      basis: ["sim_seed_boundary", "replace_with_ruian_postgis"],
-      coordinates: [
-        [
-          [12.09, 48.55],
-          [18.86, 48.55],
-          [18.86, 51.06],
-          [12.09, 51.06],
-          [12.09, 48.55]
-        ]
-      ],
-      tags: { boundaryType: "country", precision: "coarse_seed" }
-    });
 
     return {
       source: this.descriptor,
       fetchedAt,
-      features: [feature],
-      warnings: []
+      features: seedAdminBoundaryFeatures(query.bbox, fetchedAt),
+      warnings: ["admin_boundaries is using a coarse seed fallback; configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL for production PostGIS boundaries."]
     };
   }
+
+  private async fetchRows(bbox: BoundingBox, adminLevels: number[], geometryColumn: AdminBoundaryGeometryColumn, limit: number): Promise<AdminBoundaryRow[]> {
+    const pool = this.getPool();
+    const table = quoteQualifiedIdentifier(this.config.adminBoundaryTable);
+    const geomColumn = quoteIdentifier(geometryColumn);
+    const sql = `
+      select
+        osm_id::text,
+        admin_level,
+        name,
+        code,
+        country_code,
+        source,
+        imported_at,
+        st_asgeojson(${geomColumn}, 6) as geometry_geojson,
+        tags
+      from ${table}
+      where geom && st_makeenvelope($1, $2, $3, $4, 4326)
+        and st_intersects(geom, st_makeenvelope($1, $2, $3, $4, 4326))
+        and admin_level = any($5::int[])
+      order by admin_level asc, st_area(geom::geography) asc, name nulls last
+      limit $6
+    `;
+    const result = await pool.query<AdminBoundaryRow>(sql, [
+      bbox.west,
+      bbox.south,
+      bbox.east,
+      bbox.north,
+      adminLevels,
+      Math.max(1, Math.min(500, limit))
+    ]);
+    return result.rows;
+  }
+
+  private getPool(): Pool {
+    if (!this.pool) {
+      this.pool = new Pool({
+        connectionString: this.config.adminBoundaryConnectionString,
+        max: 3,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: this.config.requestTimeoutMs
+      });
+    }
+    return this.pool;
+  }
 }
+
+interface AdminBoundaryRow {
+  osm_id: string;
+  admin_level: number | string;
+  name: string | null;
+  code: string | null;
+  country_code: string | null;
+  source: string | null;
+  imported_at: Date | string | null;
+  geometry_geojson: string | null;
+  tags: Record<string, unknown> | null;
+}
+
+type AdminBoundaryGeometryColumn = "geom_z5" | "geom_z8" | "geom_z11" | "geom";
 
 interface HydroStationFetchResult {
   feature?: SafetyFeature;
@@ -497,6 +565,15 @@ function makePolygonFeature(input: Omit<FeatureInput, "lon" | "lat"> & { coordin
       type: "Polygon",
       coordinates: input.coordinates.map((ring) => ring.map(([lon, lat]) => [round(lon, 6), round(lat, 6)] as [number, number]))
     },
+    properties: makeFeatureProperties(input)
+  };
+}
+
+function makeGeometryFeature(input: Omit<FeatureInput, "lon" | "lat"> & { geometry: SafetyGeometry }): SafetyFeature {
+  return {
+    type: "Feature",
+    id: input.id,
+    geometry: input.geometry,
     properties: makeFeatureProperties(input)
   };
 }
@@ -1348,6 +1425,165 @@ function layerRequested(layers: SafetyLayerId[], featureLayer: SafetyLayerId): b
 
 function isWeatherAlertsRequested(layers: SafetyLayerId[]): boolean {
   return layers.includes("weather_alerts") || layers.includes("warnings");
+}
+
+function mapAdminBoundaryRow(row: AdminBoundaryRow, fetchedAt: string, includeRaw: boolean): SafetyFeature | undefined {
+  const geometry = parseSafetyGeometry(row.geometry_geojson);
+  const adminLevel = optionalNumber(row.admin_level);
+  const name = optionalString(row.name) ?? "Administrative boundary";
+  const code = optionalString(row.code) ?? optionalString(row.osm_id);
+  if (!geometry || adminLevel === undefined) {
+    return undefined;
+  }
+
+  const observedAt = normalizeTimestamp(row.imported_at instanceof Date ? row.imported_at.toISOString() : optionalString(row.imported_at)) ?? fetchedAt;
+  return makeGeometryFeature({
+    id: `boundary_admin:admin_boundaries:${stableToken(`${adminLevel}:${code ?? ""}:${row.osm_id}`)}`,
+    layer: "boundary_admin",
+    category: "admin_boundary",
+    hazardType: "admin_boundary",
+    headline: name,
+    description: `Administrative boundary level ${adminLevel}.`,
+    sourceId: "admin_boundaries",
+    source: "admin_boundaries",
+    sourceName: "OSM PostGIS administrative boundaries",
+    license: OSM_ADMIN_BOUNDARY_LICENSE,
+    observedAt,
+    effectiveAt: observedAt,
+    confidence: 0.82,
+    severity: "info",
+    status: "reference",
+    urgency: "unknown",
+    certainty: "observed",
+    areaName: name,
+    adminLevel,
+    name,
+    code,
+    countryCode: optionalString(row.country_code) ?? "CZ",
+    styleHint: adminBoundaryStyle(adminLevel),
+    iconHint: "boundary",
+    basis: ["osm_postgis_admin_boundary", row.source ?? "osm_postgis"],
+    geometry,
+    tags: compactTags({
+      osmId: optionalString(row.osm_id),
+      source: optionalString(row.source),
+      precision: "postgis_read_model"
+    }),
+    raw: includeRaw ? { tags: row.tags } : undefined
+  });
+}
+
+function seedAdminBoundaryFeatures(bbox: BoundingBox, observedAt: string): SafetyFeature[] {
+  const czechiaBbox: BoundingBox = { west: 12.09, south: 48.55, east: 18.86, north: 51.06 };
+  if (!bboxIntersects(bbox, czechiaBbox)) {
+    return [];
+  }
+  return [
+    makePolygonFeature({
+      id: "boundary_admin:admin_boundaries:CZ",
+      layer: "boundary_admin",
+      category: "admin_boundary",
+      hazardType: "admin_boundary",
+      headline: "Czechia administrative boundary reference",
+      description: "Coarse built-in Czechia boundary used until an authoritative PostGIS boundary import is available.",
+      sourceId: "admin_boundaries",
+      sourceName: "Administrative boundary seed reference",
+      license: ADMIN_BOUNDARY_SEED_LICENSE,
+      observedAt,
+      effectiveAt: observedAt,
+      confidence: 0.45,
+      severity: "info",
+      status: "reference",
+      urgency: "unknown",
+      certainty: "unknown",
+      areaName: "Czechia",
+      adminLevel: 2,
+      name: "Czechia",
+      code: "CZ",
+      countryCode: "CZ",
+      styleHint: "boundary-admin-country-v1",
+      iconHint: "boundary",
+      basis: ["sim_seed_boundary", "replace_with_postgis"],
+      coordinates: [
+        [
+          [12.09, 48.55],
+          [18.86, 48.55],
+          [18.86, 51.06],
+          [12.09, 51.06],
+          [12.09, 48.55]
+        ]
+      ],
+      tags: { boundaryType: "country", precision: "coarse_seed" }
+    })
+  ];
+}
+
+function boundaryLevelsForBbox(bbox: BoundingBox): { levels: number[]; geometryColumn: AdminBoundaryGeometryColumn } {
+  const span = Math.max(Math.abs(bbox.east - bbox.west), Math.abs(bbox.north - bbox.south));
+  if (span >= 4) {
+    return { levels: [2, 4], geometryColumn: "geom_z5" };
+  }
+  if (span >= 1) {
+    return { levels: [4, 6], geometryColumn: "geom_z8" };
+  }
+  if (span >= 0.25) {
+    return { levels: [6, 7, 8], geometryColumn: "geom_z11" };
+  }
+  return { levels: [8], geometryColumn: "geom" };
+}
+
+function parseSafetyGeometry(value: string | null): SafetyGeometry | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value) as SafetyGeometry;
+    return parsed.type === "Polygon" || parsed.type === "MultiPolygon" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function adminBoundaryStyle(adminLevel: number): string {
+  if (adminLevel <= 2) {
+    return "boundary-admin-country-v1";
+  }
+  if (adminLevel <= 4) {
+    return "boundary-admin-region-v1";
+  }
+  if (adminLevel <= 6) {
+    return "boundary-admin-district-v1";
+  }
+  return "boundary-admin-municipality-v1";
+}
+
+function roundBbox(bbox: BoundingBox): BoundingBox {
+  return {
+    west: round(bbox.west, 4),
+    south: round(bbox.south, 4),
+    east: round(bbox.east, 4),
+    north: round(bbox.north, 4)
+  };
+}
+
+function publicPostgisBaseUrl(connectionString: string | undefined): string | undefined {
+  if (!connectionString) {
+    return undefined;
+  }
+  try {
+    const url = new URL(connectionString);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return "postgresql://configured";
+  }
+}
+
+function quoteQualifiedIdentifier(value: string): string {
+  return value.split(".").map(quoteIdentifier).join(".");
+}
+
+function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
 }
 
 function stripRawIfNeeded(feature: SafetyFeature, includeRaw: boolean): SafetyFeature {
