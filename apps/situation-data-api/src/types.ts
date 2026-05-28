@@ -286,6 +286,16 @@ export interface SituationFeatureProperties {
   };
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
+  transportMode?: string;
+  routeShortName?: string;
+  destination?: string;
+  delaySeconds?: number;
+  vehicleId?: string;
+  tripId?: string;
+  occupancyStatus?: string;
+  occupancyPercent?: number;
+  headingDeg?: number;
+  speedMps?: number;
   operator?: string;
   technology?: MobileNetworkTechnology;
   quality?: MobileCoverageQuality;

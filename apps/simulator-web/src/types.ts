@@ -357,6 +357,18 @@ export interface SituationDataFeature {
     };
     metrics?: Record<string, number | string | boolean>;
     tags?: Record<string, string>;
+    transportMode?: string;
+    routeShortName?: string;
+    destination?: string;
+    delaySeconds?: number;
+    vehicleId?: string;
+    tripId?: string;
+    occupancyStatus?: string;
+    occupancyPercent?: number;
+    operator?: string;
+    headingDeg?: number;
+    speedMps?: number;
+    providerProperties?: Record<string, unknown>;
   };
 }
 

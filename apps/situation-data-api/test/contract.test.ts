@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import gtfsRealtime from "gtfs-realtime-bindings";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SituationAggregationService } from "../src/aggregation.js";
@@ -556,6 +557,81 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("projects PID GTFS-RT vehicle positions with normalized traffic attributes", async () => {
+    const feed = gtfsRealtime.transit_realtime.FeedMessage.create({
+      header: {
+        gtfsRealtimeVersion: "2.0",
+        timestamp: Math.round(Date.parse("2026-05-28T08:00:00.000Z") / 1000)
+      },
+      entity: [
+        {
+          id: "pid-entity-1",
+          vehicle: {
+            trip: {
+              tripId: "trip-136-1",
+              routeId: "L136",
+              startDate: "20260528",
+              startTime: "08:00:00"
+            },
+            vehicle: {
+              id: "service-3-pid-veh-1",
+              label: "PID vehicle 1"
+            },
+            position: {
+              latitude: 50.08,
+              longitude: 14.42,
+              bearing: 82,
+              speed: 7.5
+            },
+            timestamp: Math.round(Date.parse("2026-05-28T08:01:00.000Z") / 1000),
+            occupancyStatus: gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.MANY_SEATS_AVAILABLE,
+            occupancyPercentage: 37
+          }
+        }
+      ]
+    });
+    const payload = gtfsRealtime.transit_realtime.FeedMessage.encode(feed).finish();
+    const fetchMock = vi.fn(async () => {
+      return new Response(payload, { status: 200, headers: { "content-type": "application/octet-stream" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const pidApp = await createApp({
+      ...config,
+      cacheTtlSeconds: 0,
+      enabledSources: ["pid_gtfs_rt"]
+    });
+
+    const response = await request(pidApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=pid_gtfs_rt&limit=20&includeRaw=true")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.body.features).toHaveLength(1);
+    expect(response.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "traffic:pid_gtfs_rt:service-3-pid-veh-1",
+        properties: expect.objectContaining({
+          sourceId: "pid_gtfs_rt",
+          layerId: "public.traffic.transit",
+          providerLayerId: "traffic.pid_gtfs_rt",
+          category: "public_transport_bus",
+          transportMode: "bus",
+          routeShortName: "136",
+          vehicleId: "service-3-pid-veh-1",
+          tripId: "trip-136-1",
+          occupancyStatus: "many_seats_available",
+          occupancyPercent: 37,
+          speedMps: 7.5,
+          headingDeg: 82,
+          operator: "PID",
+          providerProperties: expect.objectContaining({
+            raw: expect.any(Object)
+          })
+        })
+      })
+    );
+  });
+
   it("projects IDS JMK vehicle positions from a source-level cache", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
@@ -568,7 +644,10 @@ describe("Situation Data API contract", () => {
                 LineName: "12",
                 VehicleType: "tram",
                 Speed: 9,
-                Bearing: 88
+                Bearing: 88,
+                DelaySeconds: 60,
+                Destination: "Technologický park",
+                Operator: "DPMB"
               },
               geometry: {
                 x: 16.607,
@@ -588,7 +667,7 @@ describe("Situation Data API contract", () => {
     });
 
     const first = await request(idsjmkApp.app)
-      .get("/api/v1/features?bbox=16.2,48.9,16.9,49.4&layers=traffic&source=idsjmk_vehicle_positions&limit=20")
+      .get("/api/v1/features?bbox=16.2,48.9,16.9,49.4&layers=traffic&source=idsjmk_vehicle_positions&limit=20&includeRaw=true")
       .expect(200);
     const second = await request(idsjmkApp.app)
       .get("/api/v1/features?bbox=16.2,48.9,16.9,49.4&layers=traffic&source=idsjmk_vehicle_positions&limit=21")
@@ -605,8 +684,19 @@ describe("Situation Data API contract", () => {
           layerId: "public.traffic.transit",
           providerLayerId: "traffic.idsjmk_vehicle_positions",
           category: "public_transport_tram",
+          transportMode: "tram",
+          routeShortName: "12",
+          destination: "Technologický park",
+          delaySeconds: 60,
+          vehicleId: "idsjmk-veh-1",
+          operator: "DPMB",
+          speedMps: 9,
+          headingDeg: 88,
           metrics: expect.objectContaining({ speedMps: 9, headingDeg: 88 }),
-          tags: expect.objectContaining({ line: "12", transportMode: "tram" })
+          tags: expect.objectContaining({ line: "12", transportMode: "tram" }),
+          providerProperties: expect.objectContaining({
+            raw: expect.any(Object)
+          })
         })
       })
     );
@@ -657,6 +747,8 @@ describe("Situation Data API contract", () => {
           providerLayerId: "traffic.road_events.srti",
           category: "road_accident",
           severity: "warning",
+          transportMode: "road",
+          operator: "NDIC/ŘSD",
           tags: expect.objectContaining({ srtiType: "Accident", sourceSystem: "ndic_srti_lod" })
         })
       })

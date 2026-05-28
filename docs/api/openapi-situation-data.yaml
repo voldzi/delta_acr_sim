@@ -794,6 +794,40 @@ components:
               type: object
               additionalProperties:
                 type: string
+            transportMode:
+              type: string
+              description: Normalized public-transport or road mode, e.g. bus, tram, train, metro, trolleybus, road.
+            routeShortName:
+              type: string
+              description: Normalized route or line short name for transit vehicles.
+            destination:
+              type: string
+              description: Normalized destination/headsign when provided by the source.
+            delaySeconds:
+              type: number
+              description: Normalized delay in seconds when provided by the source.
+            vehicleId:
+              type: string
+              description: Stable provider vehicle identifier for transit vehicles.
+            tripId:
+              type: string
+              description: Provider trip identifier for transit vehicles.
+            occupancyStatus:
+              type: string
+              description: Normalized GTFS-style occupancy status when provided by the source.
+            occupancyPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+              description: Vehicle occupancy estimate in percent when provided by the source.
+            headingDeg:
+              type: number
+              minimum: 0
+              maximum: 360
+              description: Vehicle heading in degrees.
+            speedMps:
+              type: number
+              description: Vehicle speed in metres per second.
             operator:
               type: string
             technology:

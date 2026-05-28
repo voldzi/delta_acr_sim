@@ -1360,6 +1360,17 @@ interface FeatureInput {
   severity: SituationSeverity;
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
+  transportMode?: string;
+  routeShortName?: string;
+  destination?: string;
+  delaySeconds?: number;
+  vehicleId?: string;
+  tripId?: string;
+  occupancyStatus?: string;
+  occupancyPercent?: number;
+  headingDeg?: number;
+  speedMps?: number;
+  operator?: string;
   raw?: unknown;
 }
 
@@ -1389,6 +1400,17 @@ function makePointFeature(input: FeatureInput): SituationFeature {
       },
       metrics: input.metrics,
       tags: input.tags,
+      transportMode: input.transportMode,
+      routeShortName: input.routeShortName,
+      destination: input.destination,
+      delaySeconds: input.delaySeconds,
+      vehicleId: input.vehicleId,
+      tripId: input.tripId,
+      occupancyStatus: input.occupancyStatus,
+      occupancyPercent: input.occupancyPercent,
+      headingDeg: input.headingDeg,
+      speedMps: input.speedMps,
+      operator: input.operator,
       raw: input.raw
     }
   };
@@ -1925,6 +1947,11 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
   const routeLabel = pidRouteLabel(vehicle?.trip?.routeId, vehicleId);
   const timestampSeconds = longToNumber(vehicle?.timestamp);
   const observedAt = timestampSeconds && timestampSeconds > 0 ? new Date(timestampSeconds * 1000).toISOString() : fetchedAt;
+  const speedMps = optionalNumber(position?.speed);
+  const headingDeg = optionalNumber(position?.bearing);
+  const occupancyPercent = optionalNumber(vehicle?.occupancyPercentage);
+  const occupancyStatus = pidOccupancyStatus(vehicle?.occupancyStatus);
+  const tripId = optionalString(vehicle?.trip?.tripId);
 
   return makePointFeature({
     id: `traffic:pid_gtfs_rt:${stableToken(vehicleId || entity.id)}`,
@@ -1940,17 +1967,17 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
     confidence: pidPositionConfidence(observedAt),
     severity: pidTrafficSeverity(vehicle?.congestionLevel),
     metrics: compactMetrics({
-      speedMps: optionalNumber(position?.speed),
-      headingDeg: optionalNumber(position?.bearing),
+      speedMps,
+      headingDeg,
       odometerM: optionalNumber(position?.odometer),
       currentStopSequence: optionalNumber(vehicle?.currentStopSequence),
-      occupancyPercent: optionalNumber(vehicle?.occupancyPercentage),
+      occupancyPercent,
       routeTypeCode: mode.routeTypeCode
     }),
     tags: compactTags({
       vehicleId: optionalString(vehicleId),
       vehicleLabel: optionalString(vehicle?.vehicle?.label),
-      tripId: optionalString(vehicle?.trip?.tripId),
+      tripId,
       routeId: optionalString(vehicle?.trip?.routeId),
       route: optionalString(routeLabel),
       startDate: optionalString(vehicle?.trip?.startDate),
@@ -1958,9 +1985,18 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
       stopId: optionalString(vehicle?.stopId),
       currentStatus: pidVehicleStopStatus(vehicle?.currentStatus),
       congestionLevel: pidCongestionLevel(vehicle?.congestionLevel),
-      occupancyStatus: pidOccupancyStatus(vehicle?.occupancyStatus),
+      occupancyStatus,
       transportMode: mode.tag
     }),
+    transportMode: mode.tag,
+    routeShortName: routeLabel,
+    vehicleId: optionalString(vehicleId),
+    tripId,
+    occupancyStatus,
+    occupancyPercent,
+    headingDeg,
+    speedMps,
+    operator: "PID",
     raw: query.includeRaw ? entity : undefined
   });
 }
@@ -1980,6 +2016,11 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
   const line = stringFromRecord(record, ["line", "Line", "lineName", "LineName", "lineNumber", "LineNumber", "route", "Route", "routeId", "RouteId"]);
   const tripId = stringFromRecord(record, ["tripId", "TripId", "trip_id", "course", "Course"]);
   const mode = idsjmkVehicleMode(record);
+  const speedMps = numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"]);
+  const headingDeg = numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "course", "Course", "azimuth", "Azimuth"]);
+  const delaySeconds = numberFromRecord(record, ["delay", "Delay", "delaySeconds", "DelaySeconds"]);
+  const destination = stringFromRecord(record, ["destination", "Destination", "headsign", "Headsign", "tripHeadsign", "TripHeadsign"]);
+  const operator = stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]) ?? "IDS JMK";
 
   return makePointFeature({
     id: `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}`,
@@ -1995,19 +2036,28 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
     confidence: pidPositionConfidence(observedAt),
     severity: "info",
     metrics: compactMetrics({
-      speedMps: numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"]),
-      headingDeg: numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "course", "Course", "azimuth", "Azimuth"]),
-      delaySeconds: numberFromRecord(record, ["delay", "Delay", "delaySeconds", "DelaySeconds"])
+      speedMps,
+      headingDeg,
+      delaySeconds
     }),
     tags: compactTags({
       vehicleId,
       line,
       routeId: stringFromRecord(record, ["routeId", "RouteId", "route_id"]),
       tripId,
-      operator: stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]),
+      operator,
       transportMode: mode.tag,
       sourceSystem: "idsjmk"
     }),
+    transportMode: mode.tag,
+    routeShortName: line,
+    destination,
+    delaySeconds,
+    vehicleId,
+    tripId,
+    operator,
+    headingDeg,
+    speedMps,
     raw: query.includeRaw ? record : undefined
   });
 }
@@ -2042,6 +2092,8 @@ function mapRoadSrtiLodFeature(event: RoadSrtiLodEvent, query: SituationQuery, f
       srtiTypeUri: event.typeUri,
       sourceSystem: "ndic_srti_lod"
     }),
+    transportMode: "road",
+    operator: "NDIC/ŘSD",
     raw: query.includeRaw ? event.raw ?? event : undefined
   });
 }

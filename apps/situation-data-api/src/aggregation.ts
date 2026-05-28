@@ -231,7 +231,8 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     resolutionM,
     demSource,
     assumptions,
-    disclaimer
+    disclaimer,
+    raw
   } = feature.properties;
   return compactRecord({
     metrics,
@@ -253,7 +254,8 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     resolutionM,
     demSource,
     assumptions,
-    disclaimer
+    disclaimer,
+    raw
   });
 }
 

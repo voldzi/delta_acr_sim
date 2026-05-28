@@ -27,6 +27,8 @@
 
 ## Fáze 2: Normalizovaná doprava pro civilní UI
 
+**Status:** základní normalizace implementována pro PID GTFS-RT, IDS JMK a SRTI road events. Provider-specific raw data zůstávají v `providerProperties`.
+
 1. Doplnit normalizované dopravní atributy do všech veřejných `traffic` features:
    - `transportMode`,
    - `routeShortName`,

@@ -118,6 +118,24 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `providerProperties` | object | provider-native hodnoty pro detail a audit |
 | `raw` | object, optional | omezený původní payload pro ladění |
 
+Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:
+
+| Pole | Typ | Popis |
+| --- | --- | --- |
+| `transportMode` | string | normalizovaný mód, např. `bus`, `tram`, `train`, `metro`, `trolleybus`, `road` |
+| `routeShortName` | string | krátké označení linky/trasy |
+| `destination` | string | cílová stanice/směr, pokud zdroj poskytuje |
+| `delaySeconds` | number | zpoždění v sekundách |
+| `vehicleId` | string | stabilní identifikátor vozidla ve zdroji |
+| `tripId` | string | identifikátor jízdy/spoje ve zdroji |
+| `occupancyStatus` | string | normalizovaný GTFS occupancy status |
+| `occupancyPercent` | number | procentuální obsazenost, pokud zdroj poskytuje |
+| `operator` | string | dopravce nebo systém, např. `PID`, `IDS JMK`, `NDIC/ŘSD` |
+| `headingDeg` | number | směr pohybu ve stupních |
+| `speedMps` | number | rychlost v m/s |
+
+COM má pro civilní UI používat tato plochá pole v `properties`. Provider-specific PID/GTFS/IDS JMK/SRTI data jsou určena pouze pro detail, audit a diagnostiku v `providerProperties`; COM nemá parsovat raw provider payload jako běžný zdroj významu.
+
 Coverage features ve vrstvě `mobile_coverage` navíc nesou:
 
 | Pole | Typ | Popis |
