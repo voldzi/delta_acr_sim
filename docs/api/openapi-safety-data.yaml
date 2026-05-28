@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: CSM SIM Safety Data API
   version: 0.1.0
-  description: Aggregated public safety warnings and hydrological observations for COM/server-side map context.
+  description: Aggregated civil safety risks, weather alerts, fire detections, flood observations and boundary context for COM/server-side map context.
 servers:
   - url: https://sim.zeleznalady.cz/safety-data/api/v1
   - url: http://localhost:4030/api/v1
@@ -110,14 +110,14 @@ components:
       required: false
       schema:
         type: string
-        example: warnings,flood
+        example: weather_alerts,fire,flood,boundary_admin
     Sources:
       name: source
       in: query
       required: false
       schema:
         type: string
-        example: chmi_alerts,chmi_hydro
+        example: chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries
     Limit:
       name: limit
       in: query
@@ -220,22 +220,25 @@ components:
                   type: array
         properties:
           type: object
-          required: [featureId, layer, category, headline, sourceId, observedAt, confidence, stale, severity, urgency, certainty, license]
+          required:
+            [featureId, layer, category, hazardType, headline, sourceId, source, sourceName, observedAt, validFrom, updatedAt, confidence, stale, severity, status, urgency, certainty, basis, license]
           properties:
             featureId:
               type: string
             layerId:
               type: string
-              enum: [public.safety.warnings, public.safety.flood]
+              enum: [public.safety.weather_alerts, public.safety.fire, public.safety.flood, public.boundary.admin]
             providerId:
               type: string
               const: sim.safety-data
             providerLayerId:
               type: string
-              enum: [safety.warnings, safety.flood]
+              enum: [safety.weather_alerts, safety.fire, safety.flood, boundary.admin]
             layer:
-              enum: [warnings, flood]
+              enum: [weather_alerts, warnings, fire, flood, boundary_admin]
             category:
+              type: string
+            hazardType:
               type: string
             headline:
               type: string
@@ -244,7 +247,11 @@ components:
             recommendedAction:
               type: string
             sourceId:
-              enum: [mock, chmi_alerts, chmi_hydro]
+              enum: [mock, chmi_alerts, chmi_hydro, nasa_firms, admin_boundaries]
+            source:
+              type: string
+            sourceName:
+              type: string
             observedAt:
               type: string
               format: date-time
@@ -252,6 +259,15 @@ components:
               type: string
               format: date-time
             expiresAt:
+              type: string
+              format: date-time
+            validFrom:
+              type: string
+              format: date-time
+            validUntil:
+              type: string
+              format: date-time
+            updatedAt:
               type: string
               format: date-time
             confidence:
@@ -262,10 +278,63 @@ components:
               type: boolean
             severity:
               enum: [info, advisory, warning, critical]
+            status:
+              type: string
             urgency:
               enum: [immediate, expected, future, past, unknown]
             certainty:
               enum: [observed, likely, possible, unlikely, unknown]
+            areaName:
+              type: string
+            adminLevel:
+              oneOf:
+                - type: integer
+                - type: string
+            styleHint:
+              type: string
+            iconHint:
+              type: string
+            basis:
+              type: array
+              items:
+                type: string
+            fireStatus:
+              type: string
+            detectedAt:
+              type: string
+              format: date-time
+            sourceSatellite:
+              type: string
+            sourceIncident:
+              type: string
+            intensity:
+              type: number
+            frp:
+              type: number
+            riverName:
+              type: string
+            stationId:
+              type: string
+            waterLevelCm:
+              type: number
+            discharge:
+              type: number
+            floodStage:
+              oneOf:
+                - type: number
+                - type: string
+            trend:
+              type: string
+            basin:
+              type: string
+            affectedArea:
+              type: string
+            name:
+              type: string
+            code:
+              type: string
+            countryCode:
+              type: string
             affectedAreas:
               type: array
               items:

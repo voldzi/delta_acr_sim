@@ -20,12 +20,12 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
     },
     layers: [
       {
-        providerLayerId: "safety.warnings",
-        recommendedCatalogLayerId: "public.safety.warnings",
-        label: "Veřejné výstrahy",
-        description: "Oficiální veřejné výstrahy normalizované pro občanský situační obraz.",
-        categoryPath: ["safety", "warnings"],
-        categories: ["warning", "safety_warning"],
+        providerLayerId: "safety.weather_alerts",
+        recommendedCatalogLayerId: "public.safety.weather_alerts",
+        label: "Meteorologické výstrahy",
+        description: "Oficiální meteorologické výstrahy normalizované pro občanský situační obraz.",
+        categoryPath: ["safety", "weather_alerts"],
+        categories: ["weather_alert", "safety_warning"],
         role: "overlay",
         audience: "public",
         kind: "vector_features",
@@ -36,12 +36,37 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         maxZoom: 18,
         refreshSeconds: 300,
         cacheTtlSeconds: config.cacheTtlSeconds,
-        styleProfile: "safety-warning-v1",
+        styleProfile: "safety-weather-alert-v1",
         sourceIds: ["chmi_alerts"],
-        query: query(["warnings"], ["chmi_alerts"]),
+        query: query(["weather_alerts"], ["chmi_alerts"]),
         legal: {
           attribution: "Czech Hydrometeorological Institute (CHMI)",
           notes: ["Veřejný bezpečnostní kontext; operativní rozhodnutí musí používat oficiální kanály."]
+        }
+      },
+      {
+        providerLayerId: "safety.fire",
+        recommendedCatalogLayerId: "public.safety.fire",
+        label: "Požáry",
+        description: "Aktivní požáry a tepelné anomálie z normalizovaných veřejných zdrojů.",
+        categoryPath: ["safety", "fire"],
+        categories: ["fire", "thermal_anomaly"],
+        role: "overlay",
+        audience: "public",
+        kind: "vector_features",
+        defaultVisible: false,
+        selectable: true,
+        geometryTypes: ["Point"],
+        minZoom: 4,
+        maxZoom: 18,
+        refreshSeconds: 600,
+        cacheTtlSeconds: Math.max(600, config.cacheTtlSeconds),
+        styleProfile: "safety-fire-v1",
+        sourceIds: ["nasa_firms"],
+        query: query(["fire"], ["nasa_firms"]),
+        legal: {
+          attribution: "NASA FIRMS",
+          notes: ["Satelitní detekce jsou situační kontext; pro zásah používejte oficiální kanály HZS/IZS."]
         }
       },
       {
@@ -67,6 +92,31 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         legal: {
           attribution: "Czech Hydrometeorological Institute (CHMI)",
           notes: ["Stav externích CHMI endpointů může degradovat část odpovědi; sledujte stale/warnings."]
+        }
+      },
+      {
+        providerLayerId: "boundary.admin",
+        recommendedCatalogLayerId: "public.boundary.admin",
+        label: "Administrativní hranice",
+        description: "Referenční administrativní hranice pro vyhodnocování oblastí a popis rizik.",
+        categoryPath: ["boundary", "admin"],
+        categories: ["boundary", "admin_boundary"],
+        role: "reference",
+        audience: "public",
+        kind: "vector_features",
+        defaultVisible: false,
+        selectable: true,
+        geometryTypes: ["Polygon"],
+        minZoom: 4,
+        maxZoom: 18,
+        refreshSeconds: 86400,
+        cacheTtlSeconds: 86400,
+        styleProfile: "boundary-admin-v1",
+        sourceIds: ["admin_boundaries"],
+        query: query(["boundary_admin"], ["admin_boundaries"]),
+        legal: {
+          attribution: "CSM SIM seed boundary reference",
+          notes: ["Do produkce importovat autoritativní hranice do PostGIS; aktuální seed je určen pro kontrakt a vizualizaci."]
         }
       }
     ],
@@ -123,9 +173,9 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         sourceRole: "final",
         audience: "public",
         selectableInMap: true,
-        feedsLayerIds: ["safety.warnings"],
-        feedsCatalogLayerIds: ["public.safety.warnings"],
-        notes: ["Primary public safety warning source."]
+        feedsLayerIds: ["safety.weather_alerts"],
+        feedsCatalogLayerIds: ["public.safety.weather_alerts"],
+        notes: ["Primary public weather warning source."]
       };
     case "chmi_hydro":
       return {
@@ -135,6 +185,24 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         feedsLayerIds: ["safety.flood"],
         feedsCatalogLayerIds: ["public.safety.flood"],
         notes: ["Hydrological station source; missing current station data is reported as warnings/stale."]
+      };
+    case "nasa_firms":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        feedsLayerIds: ["safety.fire"],
+        feedsCatalogLayerIds: ["public.safety.fire"],
+        notes: ["Satellite active fire detection source; requires NASA_FIRMS_MAP_KEY."]
+      };
+    case "admin_boundaries":
+      return {
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: true,
+        feedsLayerIds: ["boundary.admin"],
+        feedsCatalogLayerIds: ["public.boundary.admin"],
+        notes: ["Reference administrative boundaries; replace the built-in seed with authoritative PostGIS data for production detail."]
       };
   }
 }

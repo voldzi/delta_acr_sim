@@ -136,8 +136,10 @@ V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`
 
 SIM používá nebo doporučuje tato stabilní COM layer ID:
 
-- `public.safety.warnings`
+- `public.safety.weather_alerts`
+- `public.safety.fire`
 - `public.safety.flood`
+- `public.boundary.admin`
 - `public.weather.current`
 - `public.weather.aviation`
 - `public.mobile.network`

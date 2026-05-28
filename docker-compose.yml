@@ -224,7 +224,7 @@ services:
       NODE_ENV: production
       SAFETY_DATA_API_PORT: 4030
       SAFETY_DATA_DIR: /data
-      SAFETY_DATA_ENABLED_SOURCES: ${SAFETY_DATA_ENABLED_SOURCES:-chmi_alerts,chmi_hydro}
+      SAFETY_DATA_ENABLED_SOURCES: ${SAFETY_DATA_ENABLED_SOURCES:-chmi_alerts,chmi_hydro,admin_boundaries}
       SAFETY_DATA_DEFAULT_BBOX: ${SAFETY_DATA_DEFAULT_BBOX:-11.8,48.5,19.2,51.2}
       SAFETY_DATA_REQUEST_TIMEOUT_MS: ${SAFETY_DATA_REQUEST_TIMEOUT_MS:-8000}
       SAFETY_DATA_CACHE_TTL_SECONDS: ${SAFETY_DATA_CACHE_TTL_SECONDS:-300}
@@ -235,6 +235,10 @@ services:
       CHMI_HYDRO_METADATA_URL: ${CHMI_HYDRO_METADATA_URL:-https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json}
       CHMI_HYDRO_NOW_BASE_URL: ${CHMI_HYDRO_NOW_BASE_URL:-https://opendata.chmi.cz/hydrology/now/data}
       CHMI_HYDRO_MAX_STATIONS: ${CHMI_HYDRO_MAX_STATIONS:-80}
+      NASA_FIRMS_MAP_KEY: ${NASA_FIRMS_MAP_KEY:-}
+      NASA_FIRMS_AREA_BASE_URL: ${NASA_FIRMS_AREA_BASE_URL:-https://firms.modaps.eosdis.nasa.gov/api/area/csv}
+      NASA_FIRMS_SOURCE: ${NASA_FIRMS_SOURCE:-VIIRS_SNPP_NRT}
+      NASA_FIRMS_DAY_RANGE: ${NASA_FIRMS_DAY_RANGE:-1}
       SAFETY_DATA_CORS_ORIGINS: ${SAFETY_DATA_CORS_ORIGINS:-}
     volumes:
       - safety-data:/data

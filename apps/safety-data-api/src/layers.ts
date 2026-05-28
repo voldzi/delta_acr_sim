@@ -2,12 +2,20 @@ import type { LayerDescriptor } from "./types.js";
 
 export const LAYERS: LayerDescriptor[] = [
   {
-    layerId: "warnings",
-    label: "Official warnings",
-    description: "Public safety warnings and alerts normalized for a COM map layer.",
+    layerId: "weather_alerts",
+    label: "Weather alerts",
+    description: "Official weather warnings normalized for a COM civil-risk map layer.",
     defaultVisible: true,
     geometryTypes: ["Point", "Polygon"],
     expectedCadenceSeconds: 300
+  },
+  {
+    layerId: "fire",
+    label: "Fire detections",
+    description: "Active fire and thermal anomaly detections normalized for map context.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 600
   },
   {
     layerId: "flood",
@@ -16,5 +24,13 @@ export const LAYERS: LayerDescriptor[] = [
     defaultVisible: true,
     geometryTypes: ["Point"],
     expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "boundary_admin",
+    label: "Administrative boundaries",
+    description: "Administrative boundary reference features for area context.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 86400
   }
 ];

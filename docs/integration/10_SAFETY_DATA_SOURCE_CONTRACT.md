@@ -22,8 +22,9 @@ https://sim.zeleznalady.cz/safety-data/api/v1/features
 Podporované query parametry:
 
 - `bbox=west,south,east,north` ve WGS84.
-- `layers=warnings,flood`.
-- `source=chmi_alerts,chmi_hydro` nebo `source=mock`.
+- `layers=weather_alerts,fire,flood,boundary_admin`.
+- `layers=warnings` je pouze kompatibilní alias pro starší adaptéry.
+- `source=chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries` nebo `source=mock`.
 - `limit=1..1000`.
 - `includeRaw=1` pouze pro diagnostiku.
 
@@ -51,12 +52,14 @@ Odpověď je GeoJSON `FeatureCollection` s verzí:
 }
 ```
 
-Každá feature nese:
+Každá feature nese minimálně:
 
-- `properties.layerId`: `public.safety.warnings` nebo `public.safety.flood`.
+- `properties.layerId`: `public.safety.weather_alerts`, `public.safety.fire`, `public.safety.flood` nebo `public.boundary.admin`.
 - `properties.providerId`: `sim.safety-data`.
-- `properties.providerLayerId`: `safety.warnings` nebo `safety.flood`.
-- `properties.layer`: `warnings` nebo `flood`.
+- `properties.providerLayerId`: `safety.weather_alerts`, `safety.fire`, `safety.flood` nebo `boundary.admin`.
+- `properties.layer`: `weather_alerts`, `fire`, `flood` nebo `boundary_admin`.
+- `properties.hazardType`, `properties.status`, `properties.validFrom`, `properties.validUntil`, `properties.updatedAt`.
+- `properties.source`, `properties.sourceName`, `properties.basis`, `properties.styleHint`, `properties.iconHint`.
 - `properties.severity`: `info`, `advisory`, `warning`, `critical`.
 - `properties.urgency` a `properties.certainty`.
 - `properties.observedAt`, volitelně `effectiveAt` a `expiresAt`.
@@ -65,10 +68,18 @@ Každá feature nese:
 - `properties.tags` pro strojově čitelné doplňky.
 - `properties.providerProperties` pro provider-native hodnoty a auditní detail.
 
+Specializovaná pole:
+
+- Požáry: `fireStatus`, `detectedAt`, `sourceSatellite`, `sourceIncident`, `confidence`, `intensity`, `frp`.
+- Povodně: `riverName`, `stationId`, `waterLevelCm`, `discharge`, `floodStage`, `trend`, `basin`, `affectedArea`.
+- Hranice: `adminLevel`, `name`, `code`, `countryCode`, `validFrom`, `source`.
+
 ## Zdroje v pilotu
 
 - `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`.
 - `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`.
+- `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
+- `admin_boundaries`: referenční administrativní hranice. Pilot obsahuje jen hrubý seed ČR; produkční provoz má používat autoritativní PostGIS import, například RÚIAN nebo jiný licencovaný boundary dataset.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
 ČHMÚ CAP feed může poskytovat administrativní geokódy bez přesných polygonů. SIM proto ukládá `affectedAreas` a `geocodes`, ale pro mapový bod používá reprezentativní bod aktuálního bboxu. COM má tyto body vizualizovat jako výstražné anotace, nikoli jako přesnou hranici území.
@@ -94,6 +105,7 @@ API používá řízenou cache:
 - per-station cache aktuálních hydrologických dat,
 - negativní cache pro hydrologické stanice, u kterých ČHMÚ vrací `404` pro aktuální data; pokud alespoň část stanic v bbox vrací platná data, jednotlivé `404` se neposílají jako COM warning,
 - limit `CHMI_HYDRO_MAX_STATIONS`.
+- NASA FIRMS zdroj drží vlastní source-level cache alespoň 10 minut a bez `NASA_FIRMS_MAP_KEY` se nedotazuje externího API.
 
 Veřejné zdroje se nesmí dotazovat při každém dotazu tisíců COM klientů. COM má dotazovat SIM, SIM drží cache a dotazuje původní zdroje s konzervativní kadencí.
 
@@ -111,3 +123,4 @@ GET /safety-data/api/v1/config
 ```
 
 `/config` nesmí vracet secrets. V pilotu nejsou pro ČHMÚ zdroje potřeba žádné bearer tokeny.
+`NASA_FIRMS_MAP_KEY` se v `/config` nevrací; endpoint ukáže jen `authConfigured=true/false`.

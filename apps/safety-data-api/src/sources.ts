@@ -42,11 +42,37 @@ const CHMI_OPEN_DATA_LICENSE: SafetyDataLicense = {
   ]
 };
 
+const NASA_FIRMS_LICENSE: SafetyDataLicense = {
+  name: "NASA FIRMS active fire detections",
+  url: "https://firms.modaps.eosdis.nasa.gov/",
+  attribution: "NASA FIRMS",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Requires a FIRMS MAP_KEY for API access.",
+    "Satellite fire detections are situational context and can include false positives, delayed detections or missed fires.",
+    "Operational response must use official fire and emergency services channels."
+  ]
+};
+
+const ADMIN_BOUNDARY_SEED_LICENSE: SafetyDataLicense = {
+  name: "SIM seed administrative boundary reference",
+  attribution: "CSM SIM",
+  commercialUse: "allowed",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Built-in coarse Czechia boundary seed for contract validation.",
+    "Production-grade administrative boundaries should be imported from an authoritative dataset such as RUIAN or another licensed boundary source."
+  ]
+};
+
 export function createSafetyDataSources(config: SafetyDataConfig): SafetyDataSource[] {
   const allSources: Record<SafetyDataSourceId, SafetyDataSource> = {
     mock: new MockSafetyDataSource(),
     chmi_alerts: new ChmiAlertsSource(config),
-    chmi_hydro: new ChmiHydroSource(config)
+    chmi_hydro: new ChmiHydroSource(config),
+    nasa_firms: new NasaFirmsSource(config),
+    admin_boundaries: new AdminBoundarySource(config)
   };
 
   return config.enabledSources.map((sourceId) => allSources[sourceId]);
@@ -54,9 +80,13 @@ export function createSafetyDataSources(config: SafetyDataConfig): SafetyDataSou
 
 export function allSourceDescriptors(config: SafetyDataConfig): SourceDescriptor[] {
   const enabled = new Set(config.enabledSources);
-  return [new MockSafetyDataSource().descriptor, new ChmiAlertsSource(config).descriptor, new ChmiHydroSource(config).descriptor].map(
-    (descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) })
-  );
+  return [
+    new MockSafetyDataSource().descriptor,
+    new ChmiAlertsSource(config).descriptor,
+    new ChmiHydroSource(config).descriptor,
+    new NasaFirmsSource(config).descriptor,
+    new AdminBoundarySource(config).descriptor
+  ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
 class MockSafetyDataSource implements SafetyDataSource {
@@ -66,7 +96,7 @@ class MockSafetyDataSource implements SafetyDataSource {
     enabled: true,
     mode: "mock",
     priority: 10,
-    layers: ["warnings", "flood"],
+    layers: ["weather_alerts", "fire", "flood", "boundary_admin"],
     license: MOCK_LICENSE,
     updateCadenceSeconds: 10
   };
@@ -74,7 +104,7 @@ class MockSafetyDataSource implements SafetyDataSource {
   async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     const features = mockFeatures(query.bbox, fetchedAt)
-      .filter((feature) => query.layers.includes(feature.properties.layer))
+      .filter((feature) => layerRequested(query.layers, feature.properties.layer))
       .filter((feature) => isFeatureInBbox(feature, query.bbox))
       .map((feature) => stripRawIfNeeded(feature, query.includeRaw));
 
@@ -109,7 +139,7 @@ class ChmiAlertsSource implements SafetyDataSource {
       enabled: config.enabledSources.includes("chmi_alerts"),
       mode: "live",
       priority: 90,
-      layers: ["warnings"],
+      layers: ["weather_alerts"],
       license: CHMI_OPEN_DATA_LICENSE,
       baseUrl: config.chmiAlertsCapBaseUrl,
       updateCadenceSeconds: 300
@@ -118,7 +148,7 @@ class ChmiAlertsSource implements SafetyDataSource {
 
   async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    if (!query.layers.includes("warnings")) {
+    if (!isWeatherAlertsRequested(query.layers)) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
@@ -145,7 +175,8 @@ class ChmiAlertsSource implements SafetyDataSource {
       return parser.parse(xml) as unknown;
     });
 
-    const features = mapCapAlert(parsed, query, fetchedAt, capUrl).filter((feature) => isFeatureInBbox(feature, query.bbox));
+    const capLayer = query.layers.includes("warnings") && !query.layers.includes("weather_alerts") ? "warnings" : "weather_alerts";
+    const features = mapCapAlert(parsed, query, fetchedAt, capUrl, capLayer).filter((feature) => isFeatureInBbox(feature, query.bbox));
     return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings: [] };
   }
 }
@@ -256,6 +287,137 @@ class ChmiHydroSource implements SafetyDataSource {
   }
 }
 
+class NasaFirmsSource implements SafetyDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly responseCache: ManagedResponseCache<string>;
+
+  constructor(private readonly config: SafetyDataConfig) {
+    this.responseCache = new ManagedResponseCache<string>({
+      ttlMs: Math.max(10 * 60_000, config.cacheTtlSeconds * 1000),
+      staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
+      maxEntries: Math.max(16, Math.min(256, config.cacheMaxEntries))
+    });
+    this.descriptor = {
+      sourceId: "nasa_firms",
+      label: "NASA FIRMS active fire detections",
+      enabled: config.enabledSources.includes("nasa_firms"),
+      mode: "live",
+      priority: 70,
+      layers: ["fire"],
+      license: NASA_FIRMS_LICENSE,
+      baseUrl: config.nasaFirmsAreaBaseUrl,
+      updateCadenceSeconds: 600
+    };
+  }
+
+  async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("fire")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    if (!this.config.nasaFirmsMapKey) {
+      return {
+        source: this.descriptor,
+        fetchedAt,
+        features: [],
+        warnings: ["nasa_firms skipped: NASA_FIRMS_MAP_KEY is not configured."]
+      };
+    }
+
+    const bbox = `${round(query.bbox.west, 4)},${round(query.bbox.south, 4)},${round(query.bbox.east, 4)},${round(query.bbox.north, 4)}`;
+    const dayRange = Math.max(1, Math.min(10, this.config.nasaFirmsDayRange));
+    const url = `${trimTrailingSlash(this.config.nasaFirmsAreaBaseUrl)}/${encodeURIComponent(this.config.nasaFirmsMapKey)}/${encodeURIComponent(
+      this.config.nasaFirmsSource
+    )}/${bbox}/${dayRange}`;
+    const cacheKey = `nasa_firms:${this.config.nasaFirmsSource}:${bbox}:${dayRange}`;
+    const csv = await this.responseCache.getOrLoad(cacheKey, () => requestText(url, this.config.requestTimeoutMs));
+    const rows = parseCsv(csv);
+    const features = rows
+      .map((row, index) => mapFirmsDetection(row, index, query, fetchedAt, this.config.nasaFirmsSource))
+      .filter((feature): feature is SafetyFeature => Boolean(feature))
+      .filter((feature) => isFeatureInBbox(feature, query.bbox))
+      .slice(0, query.limit)
+      .map((feature) => stripRawIfNeeded(feature, query.includeRaw));
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
+class AdminBoundarySource implements SafetyDataSource {
+  readonly descriptor: SourceDescriptor;
+
+  constructor(config: SafetyDataConfig) {
+    this.descriptor = {
+      sourceId: "admin_boundaries",
+      label: "Administrative boundary reference",
+      enabled: config.enabledSources.includes("admin_boundaries"),
+      mode: "reference",
+      priority: 45,
+      layers: ["boundary_admin"],
+      license: ADMIN_BOUNDARY_SEED_LICENSE,
+      updateCadenceSeconds: 86_400
+    };
+  }
+
+  async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("boundary_admin")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const czechiaBbox: BoundingBox = { west: 12.09, south: 48.55, east: 18.86, north: 51.06 };
+    if (!bboxIntersects(query.bbox, czechiaBbox)) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const feature = makePolygonFeature({
+      id: "boundary_admin:admin_boundaries:CZ",
+      layer: "boundary_admin",
+      category: "admin_boundary",
+      hazardType: "admin_boundary",
+      headline: "Czechia administrative boundary reference",
+      description:
+        "Coarse built-in Czechia boundary used until an authoritative RUIAN/PostGIS boundary import is available.",
+      sourceId: "admin_boundaries",
+      sourceName: "Administrative boundary reference",
+      license: ADMIN_BOUNDARY_SEED_LICENSE,
+      observedAt: fetchedAt,
+      effectiveAt: fetchedAt,
+      confidence: 0.45,
+      severity: "info",
+      status: "reference",
+      urgency: "unknown",
+      certainty: "unknown",
+      areaName: "Czechia",
+      adminLevel: 2,
+      name: "Czechia",
+      code: "CZ",
+      countryCode: "CZ",
+      styleHint: "boundary-admin-country-v1",
+      iconHint: "boundary",
+      basis: ["sim_seed_boundary", "replace_with_ruian_postgis"],
+      coordinates: [
+        [
+          [12.09, 48.55],
+          [18.86, 48.55],
+          [18.86, 51.06],
+          [12.09, 51.06],
+          [12.09, 48.55]
+        ]
+      ],
+      tags: { boundaryType: "country", precision: "coarse_seed" }
+    });
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features: [feature],
+      warnings: []
+    };
+  }
+}
+
 interface HydroStationFetchResult {
   feature?: SafetyFeature;
   missingCurrentData?: boolean;
@@ -267,18 +429,47 @@ interface FeatureInput {
   lat: number;
   layer: SafetyLayerId;
   category: string;
+  hazardType?: string;
   headline: string;
   description?: string;
   recommendedAction?: string;
   sourceId: SafetyDataSourceId;
+  source?: string;
+  sourceName?: string;
   license: SafetyDataLicense;
   observedAt: string;
   effectiveAt?: string;
   expiresAt?: string;
+  validFrom?: string;
+  validUntil?: string;
+  updatedAt?: string;
   confidence: number;
   severity: SafetySeverity;
+  status?: string;
   urgency?: SafetyUrgency;
   certainty?: SafetyCertainty;
+  areaName?: string;
+  adminLevel?: number | string;
+  styleHint?: string;
+  iconHint?: string;
+  basis?: string[];
+  fireStatus?: string;
+  detectedAt?: string;
+  sourceSatellite?: string;
+  sourceIncident?: string;
+  intensity?: number;
+  frp?: number;
+  riverName?: string;
+  stationId?: string;
+  waterLevelCm?: number;
+  discharge?: number;
+  floodStage?: number | string;
+  trend?: string;
+  basin?: string;
+  affectedArea?: string;
+  name?: string;
+  code?: string;
+  countryCode?: string;
   affectedAreas?: string[];
   geocodes?: Array<{ scheme: string; value: string }>;
   metrics?: Record<string, number | string | boolean>;
@@ -294,33 +485,78 @@ function makePointFeature(input: FeatureInput): SafetyFeature {
       type: "Point",
       coordinates: [round(input.lon, 6), round(input.lat, 6)]
     },
-    properties: {
-      featureId: input.id,
-      layer: input.layer,
-      category: input.category,
-      headline: input.headline,
-      description: input.description,
-      recommendedAction: input.recommendedAction,
-      sourceId: input.sourceId,
-      observedAt: input.observedAt,
-      effectiveAt: input.effectiveAt,
-      expiresAt: input.expiresAt,
-      confidence: round(Math.max(0, Math.min(1, input.confidence)), 2),
-      stale: false,
-      severity: input.severity,
-      urgency: input.urgency ?? "unknown",
-      certainty: input.certainty ?? "unknown",
-      license: {
-        name: input.license.name,
-        attribution: input.license.attribution,
-        url: input.license.url
-      },
-      affectedAreas: input.affectedAreas,
-      geocodes: input.geocodes,
-      metrics: input.metrics,
-      tags: input.tags,
-      raw: input.raw
-    }
+    properties: makeFeatureProperties(input)
+  };
+}
+
+function makePolygonFeature(input: Omit<FeatureInput, "lon" | "lat"> & { coordinates: Array<Array<[number, number]>> }): SafetyFeature {
+  return {
+    type: "Feature",
+    id: input.id,
+    geometry: {
+      type: "Polygon",
+      coordinates: input.coordinates.map((ring) => ring.map(([lon, lat]) => [round(lon, 6), round(lat, 6)] as [number, number]))
+    },
+    properties: makeFeatureProperties(input)
+  };
+}
+
+function makeFeatureProperties(input: Omit<FeatureInput, "lon" | "lat">): SafetyFeature["properties"] {
+  return {
+    featureId: input.id,
+    layer: input.layer,
+    category: input.category,
+    hazardType: input.hazardType ?? input.category,
+    headline: input.headline,
+    description: input.description,
+    recommendedAction: input.recommendedAction,
+    sourceId: input.sourceId,
+    source: input.source ?? input.sourceId,
+    sourceName: input.sourceName ?? input.license.attribution,
+    observedAt: input.observedAt,
+    effectiveAt: input.effectiveAt,
+    expiresAt: input.expiresAt,
+    validFrom: input.validFrom ?? input.effectiveAt ?? input.observedAt,
+    validUntil: input.validUntil ?? input.expiresAt,
+    updatedAt: input.updatedAt ?? input.observedAt,
+    confidence: round(Math.max(0, Math.min(1, input.confidence)), 2),
+    stale: false,
+    severity: input.severity,
+    status: input.status ?? "active",
+    urgency: input.urgency ?? "unknown",
+    certainty: input.certainty ?? "unknown",
+    areaName: input.areaName,
+    adminLevel: input.adminLevel,
+    styleHint: input.styleHint ?? styleHint(input.layer, input.severity),
+    iconHint: input.iconHint ?? iconHint(input.layer, input.category),
+    basis: input.basis ?? [input.sourceId],
+    fireStatus: input.fireStatus,
+    detectedAt: input.detectedAt,
+    sourceSatellite: input.sourceSatellite,
+    sourceIncident: input.sourceIncident,
+    intensity: input.intensity,
+    frp: input.frp,
+    riverName: input.riverName,
+    stationId: input.stationId,
+    waterLevelCm: input.waterLevelCm,
+    discharge: input.discharge,
+    floodStage: input.floodStage,
+    trend: input.trend,
+    basin: input.basin,
+    affectedArea: input.affectedArea,
+    name: input.name,
+    code: input.code,
+    countryCode: input.countryCode,
+    license: {
+      name: input.license.name,
+      attribution: input.license.attribution,
+      url: input.license.url
+    },
+    affectedAreas: input.affectedAreas,
+    geocodes: input.geocodes,
+    metrics: input.metrics,
+    tags: input.tags,
+    raw: input.raw
   };
 }
 
@@ -328,15 +564,17 @@ function mockFeatures(bbox: BoundingBox, observedAt: string): SafetyFeature[] {
   const center = bboxCenter(bbox);
   return [
     makePointFeature({
-      id: "warnings:mock:wind-prague-west",
+      id: "weather_alerts:mock:wind-prague-west",
       lon: center.lon,
       lat: center.lat,
-      layer: "warnings",
+      layer: "weather_alerts",
       category: "weather_warning",
+      hazardType: "wind",
       headline: "Synthetic wind warning",
       description: "Synthetic advisory feature used to validate COP safety rendering.",
       recommendedAction: "Validate layer rendering and stale handling only.",
       sourceId: "mock",
+      sourceName: "Synthetic local safety feed",
       license: MOCK_LICENSE,
       observedAt,
       effectiveAt: observedAt,
@@ -345,8 +583,44 @@ function mockFeatures(bbox: BoundingBox, observedAt: string): SafetyFeature[] {
       severity: "advisory",
       urgency: "expected",
       certainty: "likely",
+      status: "active",
+      areaName: "Pilot area",
+      adminLevel: "synthetic",
+      iconHint: "wind",
+      basis: ["synthetic_fixture", "weather_alerts"],
       affectedAreas: ["Pilot area"],
       metrics: { windGustMps: 19 }
+    }),
+    makePointFeature({
+      id: "fire:mock:thermal-hotspot",
+      lon: Math.min(bbox.east, Math.max(bbox.west, center.lon + 0.08)),
+      lat: Math.min(bbox.north, Math.max(bbox.south, center.lat - 0.05)),
+      layer: "fire",
+      category: "active_fire",
+      hazardType: "fire",
+      headline: "Synthetic thermal fire detection",
+      description: "Synthetic NASA FIRMS-like active fire detection for COM rendering validation.",
+      recommendedAction: "Validate fire icon, severity color and detail panel only.",
+      sourceId: "mock",
+      sourceName: "Synthetic local safety feed",
+      license: MOCK_LICENSE,
+      observedAt,
+      effectiveAt: observedAt,
+      expiresAt: addSeconds(observedAt, 3 * 60 * 60),
+      confidence: 0.74,
+      severity: "warning",
+      urgency: "expected",
+      certainty: "possible",
+      status: "active",
+      fireStatus: "detected",
+      detectedAt: observedAt,
+      sourceSatellite: "synthetic-viirs",
+      intensity: 13.5,
+      frp: 13.5,
+      areaName: "Pilot area",
+      adminLevel: "synthetic",
+      iconHint: "fire",
+      basis: ["synthetic_fixture", "fire"]
     }),
     makePointFeature({
       id: "flood:mock:vltava-reference",
@@ -357,6 +631,7 @@ function mockFeatures(bbox: BoundingBox, observedAt: string): SafetyFeature[] {
       headline: "Synthetic Vltava water level",
       description: "Synthetic station observation for flood layer validation.",
       sourceId: "mock",
+      sourceName: "Synthetic local safety feed",
       license: MOCK_LICENSE,
       observedAt,
       expiresAt: addSeconds(observedAt, 60 * 60),
@@ -364,13 +639,59 @@ function mockFeatures(bbox: BoundingBox, observedAt: string): SafetyFeature[] {
       severity: "info",
       urgency: "unknown",
       certainty: "observed",
+      status: "monitoring",
+      riverName: "Vltava",
+      stationId: "synthetic-vltava",
+      waterLevelCm: 142,
+      floodStage: 0,
+      affectedArea: "Pilot reference",
+      areaName: "Pilot reference",
+      adminLevel: "synthetic",
+      iconHint: "flood",
+      basis: ["synthetic_fixture", "flood"],
       metrics: { waterLevelCm: 142, floodActivityLevel: 0 },
       tags: { streamName: "Vltava", stationName: "Pilot reference" }
+    }),
+    makePolygonFeature({
+      id: "boundary_admin:mock:czechia-seed",
+      layer: "boundary_admin",
+      category: "admin_boundary",
+      hazardType: "admin_boundary",
+      headline: "Czechia coarse reference boundary",
+      description: "Coarse synthetic administrative boundary seed used for COM contract validation.",
+      sourceId: "mock",
+      sourceName: "Synthetic local safety feed",
+      license: MOCK_LICENSE,
+      observedAt,
+      effectiveAt: observedAt,
+      confidence: 0.4,
+      severity: "info",
+      urgency: "unknown",
+      certainty: "unknown",
+      status: "reference",
+      areaName: "Czechia",
+      adminLevel: 2,
+      name: "Czechia",
+      code: "CZ",
+      countryCode: "CZ",
+      styleHint: "boundary-admin-country-v1",
+      iconHint: "boundary",
+      basis: ["synthetic_fixture", "boundary_admin"],
+      coordinates: [
+        [
+          [12.09, 48.55],
+          [18.86, 48.55],
+          [18.86, 51.06],
+          [12.09, 51.06],
+          [12.09, 48.55]
+        ]
+      ],
+      tags: { boundaryType: "country", precision: "coarse_seed" }
     })
   ];
 }
 
-function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, capUrl: string): SafetyFeature[] {
+function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, capUrl: string, layer: Extract<SafetyLayerId, "weather_alerts" | "warnings">): SafetyFeature[] {
   const root = asRecord(payload) ?? {};
   const alert = asRecord(root.alert) ?? root;
   const identifier = optionalString(alert.identifier) ?? stableToken(capUrl);
@@ -410,25 +731,34 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
     );
     const headline = optionalString(info.headline) ?? event;
     const category = isNoWarning(event, optionalString(info.description)) ? "no_active_warning" : "weather_warning";
+    const icon = weatherIconHint(event, headline);
+    const primaryArea = affectedAreas[0];
 
     return makePointFeature({
-      id: `warnings:chmi_alerts:${stableToken(`${identifier}:${event}:${onset ?? sent}:${index}`)}`,
+      id: `${layer}:chmi_alerts:${stableToken(`${identifier}:${event}:${onset ?? sent}:${index}`)}`,
       lon: center.lon,
       lat: center.lat,
-      layer: "warnings",
+      layer,
       category,
+      hazardType: weatherHazardType(event, headline),
       headline,
       description,
       recommendedAction: instruction,
       sourceId: "chmi_alerts",
+      sourceName: "CHMI CAP weather warnings",
       license: CHMI_OPEN_DATA_LICENSE,
       observedAt: sent,
       effectiveAt: onset ?? sent,
       expiresAt: expires ?? addSeconds(sent, 24 * 60 * 60),
       confidence: capConfidence(optionalString(info.certainty), severity),
       severity,
+      status: capStatus(status, msgType),
       urgency: capUrgency(optionalString(info.urgency)),
       certainty: capCertainty(optionalString(info.certainty)),
+      areaName: primaryArea,
+      adminLevel: primaryArea ? "cap_area" : "unknown",
+      iconHint: icon,
+      basis: ["chmi_cap", capUrl],
       affectedAreas,
       geocodes,
       metrics: compactMetrics({
@@ -549,19 +879,32 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     lat: station.lat,
     layer: "flood",
     category: "water_level",
+    hazardType: "flood",
     headline: `${station.stationName}${stream}`,
     description:
       waterLevel !== undefined
         ? `CHMI hydrological station water level ${Math.round(waterLevel.value)} ${waterLevel.unit ?? "cm"}.`
         : "CHMI hydrological station discharge observation.",
     sourceId: "chmi_hydro",
+    sourceName: "CHMI hydrological stations",
     license: CHMI_OPEN_DATA_LICENSE,
     observedAt: observed.observedAt,
     expiresAt: addSeconds(fetchedAt, 2 * 60 * 60),
     confidence: hydroConfidence(observed.observedAt),
     severity,
+    status: floodActivityLevel > 0 ? "active" : "monitoring",
     urgency: floodActivityLevel >= 2 ? "expected" : "unknown",
     certainty: "observed",
+    areaName: station.stationName,
+    adminLevel: "station",
+    riverName: station.streamName,
+    stationId: station.objId,
+    waterLevelCm: waterLevel?.value,
+    discharge: flow?.value,
+    floodStage: floodActivityLevel,
+    affectedArea: station.stationName,
+    iconHint: "flood",
+    basis: ["chmi_hydro_now", station.objId],
     metrics: compactMetrics({
       waterLevelCm: waterLevel?.value,
       flowM3s: flow?.value,
@@ -580,6 +923,76 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
       spaType: station.spaType
     }),
     raw: includeRaw ? payload : undefined
+  });
+}
+
+function mapFirmsDetection(
+  row: Record<string, string>,
+  index: number,
+  query: SafetyQuery,
+  fetchedAt: string,
+  sourceProduct: string
+): SafetyFeature | undefined {
+  const lat = optionalNumber(row.latitude);
+  const lon = optionalNumber(row.longitude);
+  if (lat === undefined || lon === undefined || !isPointInBbox(lon, lat, query.bbox)) {
+    return undefined;
+  }
+
+  const detectedAt = firmsDetectedAt(row.acq_date, row.acq_time) ?? fetchedAt;
+  const confidence = firmsConfidence(row.confidence);
+  const frp = optionalNumber(row.frp);
+  const brightTi4 = optionalNumber(row.bright_ti4);
+  const satellite = [optionalString(row.satellite), optionalString(row.instrument)].filter(Boolean).join(" ");
+  const severity = fireSeverity(confidence, frp);
+  const token = stableToken(`${sourceProduct}:${detectedAt}:${lon}:${lat}:${frp ?? ""}:${index}`);
+
+  return makePointFeature({
+    id: `fire:nasa_firms:${token}`,
+    lon,
+    lat,
+    layer: "fire",
+    category: "active_fire",
+    hazardType: "fire",
+    headline: "Satellite fire detection",
+    description: `NASA FIRMS ${sourceProduct} active fire or thermal anomaly detection.`,
+    recommendedAction: "Treat as situational context; verify through official fire and emergency services channels.",
+    sourceId: "nasa_firms",
+    sourceName: "NASA FIRMS active fire detections",
+    license: NASA_FIRMS_LICENSE,
+    observedAt: detectedAt,
+    effectiveAt: detectedAt,
+    expiresAt: addSeconds(fetchedAt, 6 * 60 * 60),
+    confidence,
+    severity,
+    status: "active",
+    urgency: severity === "critical" || severity === "warning" ? "expected" : "unknown",
+    certainty: confidence >= 0.8 ? "likely" : confidence >= 0.55 ? "possible" : "unknown",
+    fireStatus: "detected",
+    detectedAt,
+    sourceSatellite: satellite || sourceProduct,
+    sourceIncident: sourceProduct,
+    intensity: frp ?? brightTi4,
+    frp,
+    areaName: "satellite detection",
+    adminLevel: "unknown",
+    iconHint: "fire",
+    basis: ["nasa_firms_area_csv", sourceProduct],
+    metrics: compactMetrics({
+      frp,
+      brightTi4,
+      brightTi5: optionalNumber(row.bright_ti5),
+      scan: optionalNumber(row.scan),
+      track: optionalNumber(row.track)
+    }),
+    tags: compactTags({
+      satellite: optionalString(row.satellite),
+      instrument: optionalString(row.instrument),
+      daynight: optionalString(row.daynight),
+      confidenceRaw: optionalString(row.confidence),
+      version: optionalString(row.version)
+    }),
+    raw: query.includeRaw ? row : undefined
   });
 }
 
@@ -757,6 +1170,119 @@ function hydroConfidence(observedAt: string): number {
   return 0.35;
 }
 
+function firmsDetectedAt(date: string | undefined, time: string | undefined): string | undefined {
+  if (!date || !time) {
+    return undefined;
+  }
+  const padded = time.padStart(4, "0");
+  const timestamp = `${date}T${padded.slice(0, 2)}:${padded.slice(2, 4)}:00Z`;
+  return normalizeTimestamp(timestamp);
+}
+
+function firmsConfidence(value: string | undefined): number {
+  const text = (value ?? "").trim().toLowerCase();
+  const numeric = optionalNumber(text);
+  if (numeric !== undefined) {
+    return numeric > 1 ? round(Math.max(0, Math.min(100, numeric)) / 100, 2) : round(Math.max(0, Math.min(1, numeric)), 2);
+  }
+  if (["h", "high"].includes(text)) {
+    return 0.88;
+  }
+  if (["n", "nominal", "medium"].includes(text)) {
+    return 0.68;
+  }
+  if (["l", "low"].includes(text)) {
+    return 0.45;
+  }
+  return 0.55;
+}
+
+function fireSeverity(confidence: number, frp: number | undefined): SafetySeverity {
+  if ((frp ?? 0) >= 50 || confidence >= 0.9) {
+    return "critical";
+  }
+  if ((frp ?? 0) >= 10 || confidence >= 0.7) {
+    return "warning";
+  }
+  if (confidence >= 0.5) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function capStatus(status: string | undefined, msgType: string | undefined): string {
+  const normalizedStatus = (status ?? "").toLowerCase();
+  const normalizedType = (msgType ?? "").toLowerCase();
+  if (normalizedStatus === "actual" && normalizedType === "cancel") {
+    return "cancelled";
+  }
+  if (normalizedStatus === "actual") {
+    return "active";
+  }
+  return normalizedStatus || "active";
+}
+
+function weatherHazardType(event: string, headline: string): string {
+  const text = `${event} ${headline}`.toLowerCase();
+  if (text.includes("wind") || text.includes("vítr") || text.includes("vitr")) {
+    return "wind";
+  }
+  if (text.includes("thunder") || text.includes("bouř") || text.includes("bour")) {
+    return "thunderstorm";
+  }
+  if (text.includes("rain") || text.includes("déšť") || text.includes("dest") || text.includes("sráž")) {
+    return "rain";
+  }
+  if (text.includes("flood") || text.includes("povod")) {
+    return "flood";
+  }
+  if (text.includes("snow") || text.includes("sníh") || text.includes("sneh")) {
+    return "snow";
+  }
+  if (text.includes("ice") || text.includes("náled") || text.includes("naled")) {
+    return "ice";
+  }
+  if (text.includes("heat") || text.includes("teplot") || text.includes("hork")) {
+    return "temperature";
+  }
+  if (text.includes("fire") || text.includes("požár") || text.includes("pozar")) {
+    return "fire_weather";
+  }
+  return "weather_alert";
+}
+
+function weatherIconHint(event: string, headline: string): string {
+  const hazard = weatherHazardType(event, headline);
+  return hazard === "weather_alert" ? "weather-alert" : hazard;
+}
+
+function styleHint(layer: SafetyLayerId, severity: SafetySeverity): string {
+  switch (layer) {
+    case "weather_alerts":
+    case "warnings":
+      return `safety-weather-${severity}`;
+    case "fire":
+      return `safety-fire-${severity}`;
+    case "flood":
+      return `safety-flood-${severity}`;
+    case "boundary_admin":
+      return "boundary-admin-v1";
+  }
+}
+
+function iconHint(layer: SafetyLayerId, category: string): string {
+  if (layer === "fire") {
+    return "fire";
+  }
+  if (layer === "flood") {
+    return "flood";
+  }
+  if (layer === "boundary_admin") {
+    return "boundary";
+  }
+  return category.includes("weather") ? "weather-alert" : "warning";
+}
+
 function isNoWarning(event: string | undefined, description?: string): boolean {
   const text = `${event ?? ""} ${description ?? ""}`.toLowerCase();
   return text.includes("žádná výstraha") || text.includes("zadna vystraha") || text.includes("no warning");
@@ -768,6 +1294,60 @@ function isInactiveCapInfo(event: string | undefined, description: string | unde
   }
   const normalizedEvent = (event ?? "").toLowerCase();
   return !description && severity?.toLowerCase() === "minor" && certainty?.toLowerCase() === "unlikely" && normalizedEvent.includes("warning");
+}
+
+function parseCsv(text: string): Array<Record<string, string>> {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const [headerLine, ...rows] = lines;
+  if (!headerLine) {
+    return [];
+  }
+  const headers = splitCsvLine(headerLine).map((header) => header.trim());
+  return rows.map((row) => {
+    const values = splitCsvLine(row);
+    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]));
+  });
+}
+
+function splitCsvLine(line: string): string[] {
+  const output: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === "," && !quoted) {
+      output.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  output.push(current);
+  return output.map((value) => value.trim());
+}
+
+function layerRequested(layers: SafetyLayerId[], featureLayer: SafetyLayerId): boolean {
+  if (featureLayer === "weather_alerts" || featureLayer === "warnings") {
+    return isWeatherAlertsRequested(layers);
+  }
+  return layers.includes(featureLayer);
+}
+
+function isWeatherAlertsRequested(layers: SafetyLayerId[]): boolean {
+  return layers.includes("weather_alerts") || layers.includes("warnings");
 }
 
 function stripRawIfNeeded(feature: SafetyFeature, includeRaw: boolean): SafetyFeature {
@@ -793,6 +1373,10 @@ function isFeatureInBbox(feature: SafetyFeature, bbox: BoundingBox): boolean {
 
 function isPointInBbox(lon: number, lat: number, bbox: BoundingBox): boolean {
   return lon >= bbox.west && lon <= bbox.east && lat >= bbox.south && lat <= bbox.north;
+}
+
+function bboxIntersects(a: BoundingBox, b: BoundingBox): boolean {
+  return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
 }
 
 function bboxCenter(bbox: BoundingBox): { lon: number; lat: number } {

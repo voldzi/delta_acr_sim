@@ -56,7 +56,7 @@ export class SafetyAggregationService {
       sourcePriorityById,
       this.config.staleAfterSeconds
     )
-      .filter((feature) => query.layers.includes(feature.properties.layer))
+      .filter((feature) => layerRequested(query.layers, feature.properties.layer))
       .map(normalizeProviderFeature);
     const features = limitBalancedByLayer(deduplicatedFeatures, query.layers, query.limit);
 
@@ -109,18 +109,63 @@ function normalizeProviderFeature(feature: SafetyFeature): SafetyFeature {
         affectedAreas: feature.properties.affectedAreas,
         geocodes: feature.properties.geocodes,
         metrics: feature.properties.metrics,
-        tags: feature.properties.tags
+        tags: feature.properties.tags,
+        hazardType: feature.properties.hazardType,
+        status: feature.properties.status,
+        sourceName: feature.properties.sourceName,
+        areaName: feature.properties.areaName,
+        adminLevel: feature.properties.adminLevel,
+        styleHint: feature.properties.styleHint,
+        iconHint: feature.properties.iconHint,
+        basis: feature.properties.basis,
+        fireStatus: feature.properties.fireStatus,
+        detectedAt: feature.properties.detectedAt,
+        sourceSatellite: feature.properties.sourceSatellite,
+        sourceIncident: feature.properties.sourceIncident,
+        intensity: feature.properties.intensity,
+        frp: feature.properties.frp,
+        riverName: feature.properties.riverName,
+        stationId: feature.properties.stationId,
+        waterLevelCm: feature.properties.waterLevelCm,
+        discharge: feature.properties.discharge,
+        floodStage: feature.properties.floodStage,
+        trend: feature.properties.trend,
+        basin: feature.properties.basin,
+        affectedArea: feature.properties.affectedArea,
+        name: feature.properties.name,
+        code: feature.properties.code,
+        countryCode: feature.properties.countryCode
       })
     }
   };
 }
 
 function providerLayerIdForFeature(layer: SafetyLayerId): string {
-  return layer === "flood" ? "safety.flood" : "safety.warnings";
+  switch (layer) {
+    case "flood":
+      return "safety.flood";
+    case "fire":
+      return "safety.fire";
+    case "boundary_admin":
+      return "boundary.admin";
+    case "weather_alerts":
+    case "warnings":
+      return "safety.weather_alerts";
+  }
 }
 
 function catalogLayerIdForFeature(layer: SafetyLayerId): string {
-  return layer === "flood" ? "public.safety.flood" : "public.safety.warnings";
+  switch (layer) {
+    case "flood":
+      return "public.safety.flood";
+    case "fire":
+      return "public.safety.fire";
+    case "boundary_admin":
+      return "public.boundary.admin";
+    case "weather_alerts":
+    case "warnings":
+      return "public.safety.weather_alerts";
+  }
 }
 
 function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
@@ -155,7 +200,7 @@ function limitBalancedByLayer(features: SafetyFeature[], layers: SafetyLayerId[]
   for (const layer of layers) {
     buckets.set(
       layer,
-      features.filter((feature) => feature.properties.layer === layer)
+      features.filter((feature) => layerRequested([layer], feature.properties.layer))
     );
   }
 
@@ -253,12 +298,24 @@ function severityRank(value: string): number {
 
 function layerRank(value: SafetyLayerId): number {
   switch (value) {
+    case "weather_alerts":
     case "warnings":
       return 1;
-    case "flood":
-    default:
+    case "fire":
       return 2;
+    case "flood":
+      return 3;
+    case "boundary_admin":
+    default:
+      return 4;
   }
+}
+
+function layerRequested(layers: SafetyLayerId[], featureLayer: SafetyLayerId): boolean {
+  if (featureLayer === "weather_alerts" || featureLayer === "warnings") {
+    return layers.includes("weather_alerts") || layers.includes("warnings");
+  }
+  return layers.includes(featureLayer);
 }
 
 function round(value: number, precision: number): number {

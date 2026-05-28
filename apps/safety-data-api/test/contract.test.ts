@@ -30,7 +30,10 @@ describe("Safety Data API contract", () => {
       chmiAlertsCapBaseUrl: "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
       chmiHydroMetadataUrl: "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
       chmiHydroNowBaseUrl: "https://opendata.chmi.cz/hydrology/now/data",
-      chmiHydroMaxStations: 20
+      chmiHydroMaxStations: 20,
+      nasaFirmsAreaBaseUrl: "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
+      nasaFirmsSource: "VIIRS_SNPP_NRT",
+      nasaFirmsDayRange: 1
     };
     ({ app } = await createApp(config));
   });
@@ -47,8 +50,10 @@ describe("Safety Data API contract", () => {
     const layers = await request(app).get("/api/v1/layers").expect(200);
     expect(layers.body.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ layerId: "warnings", defaultVisible: true }),
-        expect.objectContaining({ layerId: "flood", defaultVisible: true })
+        expect.objectContaining({ layerId: "weather_alerts", defaultVisible: true }),
+        expect.objectContaining({ layerId: "fire", defaultVisible: false }),
+        expect.objectContaining({ layerId: "flood", defaultVisible: true }),
+        expect.objectContaining({ layerId: "boundary_admin", defaultVisible: false })
       ])
     );
 
@@ -58,7 +63,7 @@ describe("Safety Data API contract", () => {
         expect.objectContaining({
           sourceId: "mock",
           enabled: true,
-          layers: expect.arrayContaining(["warnings", "flood"])
+          layers: expect.arrayContaining(["weather_alerts", "fire", "flood", "boundary_admin"])
         }),
         expect.objectContaining({
           sourceId: "chmi_alerts",
@@ -67,6 +72,14 @@ describe("Safety Data API contract", () => {
         expect.objectContaining({
           sourceId: "chmi_hydro",
           layers: expect.arrayContaining(["flood"])
+        }),
+        expect.objectContaining({
+          sourceId: "nasa_firms",
+          layers: expect.arrayContaining(["fire"])
+        }),
+        expect.objectContaining({
+          sourceId: "admin_boundaries",
+          layers: expect.arrayContaining(["boundary_admin"])
         })
       ])
     );
@@ -87,7 +100,9 @@ describe("Safety Data API contract", () => {
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "chmi_alerts", authConfigured: true }),
-          expect.objectContaining({ sourceId: "chmi_hydro", authConfigured: true })
+          expect.objectContaining({ sourceId: "chmi_hydro", authConfigured: true }),
+          expect.objectContaining({ sourceId: "nasa_firms", authConfigured: false }),
+          expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: true })
         ])
       })
     );
@@ -112,11 +127,18 @@ describe("Safety Data API contract", () => {
     expect(response.body.layers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          providerLayerId: "safety.warnings",
-          recommendedCatalogLayerId: "public.safety.warnings",
-          categories: expect.arrayContaining(["warning"]),
+          providerLayerId: "safety.weather_alerts",
+          recommendedCatalogLayerId: "public.safety.weather_alerts",
+          categories: expect.arrayContaining(["weather_alert"]),
           role: "overlay",
           sourceIds: ["chmi_alerts"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "safety.fire",
+          recommendedCatalogLayerId: "public.safety.fire",
+          categories: expect.arrayContaining(["fire"]),
+          role: "overlay",
+          sourceIds: ["nasa_firms"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.flood",
@@ -124,6 +146,13 @@ describe("Safety Data API contract", () => {
           categories: expect.arrayContaining(["hydrology"]),
           role: "overlay",
           sourceIds: ["chmi_hydro"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "boundary.admin",
+          recommendedCatalogLayerId: "public.boundary.admin",
+          categories: expect.arrayContaining(["admin_boundary"]),
+          role: "reference",
+          sourceIds: ["admin_boundaries"]
         })
       ])
     );
@@ -132,14 +161,26 @@ describe("Safety Data API contract", () => {
         expect.objectContaining({
           sourceId: "chmi_alerts",
           sourceRole: "final",
-          feedsLayerIds: ["safety.warnings"],
-          feedsCatalogLayerIds: ["public.safety.warnings"]
+          feedsLayerIds: ["safety.weather_alerts"],
+          feedsCatalogLayerIds: ["public.safety.weather_alerts"]
         }),
         expect.objectContaining({
           sourceId: "chmi_hydro",
           sourceRole: "final",
           feedsLayerIds: ["safety.flood"],
           feedsCatalogLayerIds: ["public.safety.flood"]
+        }),
+        expect.objectContaining({
+          sourceId: "nasa_firms",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.fire"],
+          feedsCatalogLayerIds: ["public.safety.fire"]
+        }),
+        expect.objectContaining({
+          sourceId: "admin_boundaries",
+          sourceRole: "reference",
+          feedsLayerIds: ["boundary.admin"],
+          feedsCatalogLayerIds: ["public.boundary.admin"]
         })
       ])
     );
@@ -201,6 +242,47 @@ describe("Safety Data API contract", () => {
     );
   });
 
+  it("normalizes NASA FIRMS fire detections when a map key is configured", async () => {
+    await withFixtureServer(
+      {
+        "/firms/test-map-key/VIIRS_SNPP_NRT/13.85,49.65,15.35,50.45/1":
+          "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight\n50.1000,14.4000,333.1,0.39,0.36,2026-05-28,0930,N,VIIRS,n,2.0NRT,291.5,14.2,D\n"
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["nasa_firms"],
+          nasaFirmsMapKey: "test-map-key",
+          nasaFirmsAreaBaseUrl: `${baseUrl}/firms`
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=fire&source=nasa_firms&limit=10")
+          .expect(200);
+
+        expect(response.body.summary.featureCount).toBe(1);
+        expect(response.body.features[0].properties).toEqual(
+          expect.objectContaining({
+            layerId: "public.safety.fire",
+            providerLayerId: "safety.fire",
+            layer: "fire",
+            hazardType: "fire",
+            status: "active",
+            fireStatus: "detected",
+            detectedAt: "2026-05-28T09:30:00.000Z",
+            source: "nasa_firms",
+            sourceName: "NASA FIRMS active fire detections",
+            sourceSatellite: "N VIIRS",
+            frp: 14.2,
+            styleHint: "safety-fire-warning",
+            iconHint: "fire",
+            basis: ["nasa_firms_area_csv", "VIIRS_SNPP_NRT"]
+          })
+        );
+      }
+    );
+  });
+
   it("returns the COP GeoJSON projection", async () => {
     const response = await request(app)
       .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=warnings,flood&source=mock&limit=20")
@@ -222,6 +304,13 @@ describe("Safety Data API contract", () => {
           providerLayerId: expect.stringMatching(/^safety\./),
           sourceId: "mock",
           confidence: expect.any(Number),
+          hazardType: expect.any(String),
+          status: expect.any(String),
+          validFrom: expect.any(String),
+          updatedAt: expect.any(String),
+          source: "mock",
+          sourceName: "Synthetic local safety feed",
+          basis: expect.any(Array),
           stale: false,
           license: expect.objectContaining({ attribution: "CSM SIM" })
         })
@@ -240,7 +329,7 @@ describe("Safety Data API contract", () => {
     const response = await request(app).get("/api/v1/features?layers=warnings,flood&source=mock&limit=2").expect(200);
 
     const layers = new Set(response.body.features.map((feature: { properties: { layer: string } }) => feature.properties.layer));
-    expect(layers).toEqual(new Set(["warnings", "flood"]));
+    expect(layers).toEqual(new Set(["weather_alerts", "flood"]));
   });
 
   it("validates bbox and layers", async () => {

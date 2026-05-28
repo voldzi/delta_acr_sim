@@ -387,7 +387,7 @@ SAFETY_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými ČHMÚ open-data zdroji:
 
 ```bash
-SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,admin_boundaries
 SAFETY_DATA_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 SAFETY_DATA_CACHE_TTL_SECONDS=300
 SAFETY_DATA_STALE_IF_ERROR_SECONDS=3600
@@ -398,6 +398,11 @@ CHMI_ALERTS_CAP_BASE_URL=https://opendata.chmi.cz/meteorology/weather/alerts/cap
 CHMI_HYDRO_METADATA_URL=https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json
 CHMI_HYDRO_NOW_BASE_URL=https://opendata.chmi.cz/hydrology/now/data
 CHMI_HYDRO_MAX_STATIONS=80
+# Volitelně pro požáry. Bez klíče neaktivovat nasa_firms ve zdrojích.
+NASA_FIRMS_MAP_KEY=
+NASA_FIRMS_AREA_BASE_URL=https://firms.modaps.eosdis.nasa.gov/api/area/csv
+NASA_FIRMS_SOURCE=VIIRS_SNPP_NRT
+NASA_FIRMS_DAY_RANGE=1
 ```
 
 Projekce do `situation-data`:

@@ -187,10 +187,10 @@ function parseBbox(value: unknown, fallback: BoundingBox): { ok: true; value: Bo
 }
 
 function parseLayers(value: unknown): SafetyLayerId[] {
-  const allowed = new Set<SafetyLayerId>(["warnings", "flood"]);
+  const allowed = new Set<SafetyLayerId>(["weather_alerts", "warnings", "fire", "flood", "boundary_admin"]);
   const raw = asString(value);
   if (!raw) {
-    return ["warnings", "flood"];
+    return ["weather_alerts", "fire", "flood", "boundary_admin"];
   }
   return raw
     .split(",")
@@ -199,7 +199,7 @@ function parseLayers(value: unknown): SafetyLayerId[] {
 }
 
 function parseSources(value: unknown, fallback: SafetyDataSourceId[]): SafetyDataSourceId[] {
-  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro"]);
+  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -244,7 +244,9 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
     providers: [
       { sourceId: "mock", authConfigured: true },
       { sourceId: "chmi_alerts", baseUrl: config.chmiAlertsCapBaseUrl, authConfigured: true },
-      { sourceId: "chmi_hydro", baseUrl: config.chmiHydroNowBaseUrl, authConfigured: true }
+      { sourceId: "chmi_hydro", baseUrl: config.chmiHydroNowBaseUrl, authConfigured: true },
+      { sourceId: "nasa_firms", baseUrl: config.nasaFirmsAreaBaseUrl, authConfigured: Boolean(config.nasaFirmsMapKey) },
+      { sourceId: "admin_boundaries", authConfigured: true }
     ]
   };
 }

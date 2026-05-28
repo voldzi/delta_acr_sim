@@ -17,6 +17,10 @@ export interface SafetyDataConfig {
   chmiHydroMetadataUrl: string;
   chmiHydroNowBaseUrl: string;
   chmiHydroMaxStations: number;
+  nasaFirmsMapKey?: string;
+  nasaFirmsAreaBaseUrl: string;
+  nasaFirmsSource: string;
+  nasaFirmsDayRange: number;
   corsOrigins?: string[];
 }
 
@@ -44,12 +48,16 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
     chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 80),
+    nasaFirmsMapKey: process.env.NASA_FIRMS_MAP_KEY,
+    nasaFirmsAreaBaseUrl: process.env.NASA_FIRMS_AREA_BASE_URL ?? "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
+    nasaFirmsSource: process.env.NASA_FIRMS_SOURCE ?? "VIIRS_SNPP_NRT",
+    nasaFirmsDayRange: parseInteger(process.env.NASA_FIRMS_DAY_RANGE, 1),
     corsOrigins: parseStringList(process.env.SAFETY_DATA_CORS_ORIGINS)
   };
 }
 
 function parseSourceList(value: string | undefined): SafetyDataSourceId[] {
-  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro"]);
+  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())
