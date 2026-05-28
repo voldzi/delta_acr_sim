@@ -66,6 +66,9 @@ import {
 } from "./auth";
 import type {
   AiDraft,
+  DashboardObservability,
+  ServiceObservability,
+  CacheObservability,
   FlightDataConfig,
   FlightDataHealth,
   FlightDataSource,
@@ -138,6 +141,7 @@ interface DashboardData {
     config: TakGatewayConfig;
     features: TakGatewayFeatureResponse;
   };
+  observability: DashboardObservability;
   warnings: string[];
 }
 
@@ -297,6 +301,15 @@ const emptyTakFeatures: TakGatewayFeatureResponse = {
   warnings: []
 };
 
+const emptyObservability: DashboardObservability = {
+  generatedAt: new Date(0).toISOString(),
+  loadDurationMs: 0,
+  flightData: emptyTimedObservability("flight-data-api"),
+  situationData: emptyTimedObservability("situation-data-api"),
+  safetyData: emptyTimedObservability("safety-data-api"),
+  takGateway: emptyTimedObservability("tak-gateway-api")
+};
+
 export function App() {
   const authConfig = useMemo(() => readAuthConfig(), []);
   const oidcEnabled = isOidcEnabled(authConfig);
@@ -396,6 +409,7 @@ export function App() {
       },
       features: emptyTakFeatures
     },
+    observability: emptyObservability,
     warnings: []
   });
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
@@ -509,6 +523,64 @@ export function App() {
     ...Object.values(data.situationData.config.sourceCacheTtlSeconds)
   ].filter((value) => value > 0);
   const cacheProtectionScore = estimateCacheProtectionScore(cacheMaxEntries, cacheTtlValues);
+  const aggregateCacheSummary = summarizeCacheObservability([
+    data.observability.flightData.payload.cache,
+    data.observability.situationData.payload.cache,
+    data.observability.safetyData.payload.cache
+  ]);
+  const sourceCacheSummary = summarizeCacheObservability([
+    ...(data.observability.flightData.payload.sourceCaches ?? []).map((item) => item.cache),
+    ...(data.observability.flightData.payload.referenceCaches ?? []).map((item) => item.cache),
+    ...(data.observability.situationData.payload.sourceCaches ?? []).map((item) => item.cache),
+    ...(data.observability.safetyData.payload.sourceCaches ?? []).map((item) => item.cache)
+  ]);
+  const effectiveCacheHitRate = Math.max(aggregateCacheSummary.hitRate, sourceCacheSummary.hitRate);
+  const sharedCache = data.observability.situationData.payload.sharedCache;
+  const sharedCacheTone: Tone =
+    sharedCache?.enabled && sharedCache.available && sharedCache.errors === 0 ? "safe" : sharedCache?.enabled ? "warn" : "neutral";
+  const observabilityLatencies = [
+    data.observability.flightData.latencyMs,
+    data.observability.situationData.latencyMs,
+    data.observability.safetyData.latencyMs,
+    data.observability.takGateway.latencyMs
+  ].filter((value) => value > 0);
+  const maxObservabilityLatencyMs = observabilityLatencies.length > 0 ? Math.max(...observabilityLatencies) : data.observability.loadDurationMs;
+  const importFreshness = summarizeImportFreshness([
+    data.observability.flightData.payload,
+    data.observability.situationData.payload,
+    data.observability.safetyData.payload,
+    data.observability.takGateway.payload
+  ]);
+  const telemetryChannels = [
+    {
+      label: "Cache hit-rate",
+      value: formatPercentValue(effectiveCacheHitRate),
+      detail: `${aggregateCacheSummary.requests.toLocaleString("cs-CZ")} aggregate / ${sourceCacheSummary.requests.toLocaleString("cs-CZ")} source requests`,
+      load: effectiveCacheHitRate * 100,
+      tone: effectiveCacheHitRate >= 0.75 ? "safe" : effectiveCacheHitRate >= 0.35 ? "warn" : "neutral"
+    },
+    {
+      label: "Overview latency",
+      value: formatLatencyMs(data.observability.loadDurationMs),
+      detail: `slowest probe ${formatLatencyMs(maxObservabilityLatencyMs)}`,
+      load: 100 - boundedPercent(maxObservabilityLatencyMs, 1800),
+      tone: maxObservabilityLatencyMs <= 500 ? "safe" : maxObservabilityLatencyMs <= 1500 ? "warn" : "danger"
+    },
+    {
+      label: "Import freshness",
+      value: importFreshness.value,
+      detail: importFreshness.detail,
+      load: importFreshness.load,
+      tone: importFreshness.tone
+    },
+    {
+      label: "Shared cache",
+      value: sharedCache?.enabled ? (sharedCache.available ? "available" : "degraded") : "local only",
+      detail: sharedCache ? `${formatPercentValue(sharedCache.hitRate)} hit-rate, ${sharedCache.writes.toLocaleString("cs-CZ")} writes` : "no shared cache configured",
+      load: sharedCache?.enabled ? (sharedCache.available ? 92 : 45) : 28,
+      tone: sharedCacheTone
+    }
+  ] satisfies Array<{ label: string; value: string; detail: string; load: number; tone: Tone }>;
   const overviewChannels: OverviewChannel[] = [
     {
       id: "flight",
@@ -524,7 +596,7 @@ export function App() {
       icon: <Layers3 />,
       label: "Situation feed",
       value: `${data.situationData.features.summary.featureCount.toLocaleString("cs-CZ")} features`,
-      detail: `${data.situationData.health.enabledSources.length} enabled sources`,
+      detail: `${data.situationData.health.enabledSources.length} enabled sources · ${formatLatencyMs(data.observability.situationData.latencyMs)}`,
       load: boundedPercent(data.situationData.features.summary.featureCount, 120),
       tone: situationDataTone
     },
@@ -559,17 +631,17 @@ export function App() {
   const cacheChannels = [
     {
       label: "Aggregate cache",
-      value: `${Math.max(data.flightData.config.cacheTtlSeconds, data.situationData.config.cacheTtlSeconds, data.safetyData.config.cacheTtlSeconds)}s max TTL`,
-      detail: `${cacheMaxEntries.toLocaleString("cs-CZ")} configured entries`,
-      load: cacheProtectionScore,
-      tone: cacheProtectionScore >= 75 ? "safe" : cacheProtectionScore >= 45 ? "warn" : "danger"
+      value: formatPercentValue(aggregateCacheSummary.hitRate),
+      detail: `${aggregateCacheSummary.hits.toLocaleString("cs-CZ")} hits, ${aggregateCacheSummary.misses.toLocaleString("cs-CZ")} misses`,
+      load: aggregateCacheSummary.hitRate * 100,
+      tone: aggregateCacheSummary.hitRate >= 0.75 ? "safe" : aggregateCacheSummary.hitRate >= 0.35 ? "warn" : "neutral"
     },
     {
       label: "Source cache",
-      value: `${cacheTtlValues.length} guarded feeds`,
-      detail: cacheTtlValues.length > 0 ? `${Math.max(...cacheTtlValues).toLocaleString("cs-CZ")}s longest TTL` : "no TTL configured",
-      load: boundedPercent(cacheTtlValues.length, 10),
-      tone: cacheTtlValues.length >= 6 ? "safe" : cacheTtlValues.length >= 3 ? "warn" : "danger"
+      value: formatPercentValue(sourceCacheSummary.hitRate),
+      detail: `${sourceCacheSummary.hits.toLocaleString("cs-CZ")} hits, ${sourceCacheSummary.misses.toLocaleString("cs-CZ")} misses`,
+      load: sourceCacheSummary.hitRate * 100,
+      tone: sourceCacheSummary.hitRate >= 0.75 ? "safe" : sourceCacheSummary.hitRate >= 0.35 ? "warn" : "neutral"
     },
     {
       label: "Stale-if-error",
@@ -577,6 +649,13 @@ export function App() {
       detail: "continues serving cached data during upstream outage",
       load: boundedPercent(Math.max(data.flightData.config.staleIfErrorSeconds, data.situationData.config.staleIfErrorSeconds, data.safetyData.config.staleIfErrorSeconds), 1800),
       tone: "safe"
+    },
+    {
+      label: "Cache capacity",
+      value: `${cacheProtectionScore}% shield`,
+      detail: `${cacheMaxEntries.toLocaleString("cs-CZ")} configured entries, ${cacheTtlValues.length} TTL guards`,
+      load: cacheProtectionScore,
+      tone: cacheProtectionScore >= 75 ? "safe" : cacheProtectionScore >= 45 ? "warn" : "danger"
     }
   ] satisfies Array<{ label: string; value: string; detail: string; load: number; tone: Tone }>;
   const activeSectionMeta = sectionMeta(visibleSection);
@@ -978,7 +1057,7 @@ export function App() {
                 <CommandStat icon={<TrendingUp />} label="Events / min" value={formatRatePerMinute(liveTelemetry.generatedPerMinute)} detail={`${formatRatePerMinute(liveTelemetry.publishedPerMinute)} published`} />
                 <CommandStat icon={<Database />} label="Live data products" value={liveDataProducts.toLocaleString("cs-CZ")} detail={`${enabledSourceCount} enabled feeds`} />
                 <CommandStat icon={<Server />} label="Source health" value={`${healthyProviderCount}/${Math.max(healthyProviderCount, enabledSourceCount || 1)}`} detail={`${warningCount} quality signals`} />
-                <CommandStat icon={<TimerReset />} label="Cache shield" value={`${cacheProtectionScore}%`} detail={`${cacheMaxEntries.toLocaleString("cs-CZ")} entries`} />
+                <CommandStat icon={<TimerReset />} label="Cache hit-rate" value={formatPercentValue(effectiveCacheHitRate)} detail={`${formatLatencyMs(data.observability.loadDurationMs)} overview latency`} />
               </div>
             </section>
 
@@ -995,6 +1074,9 @@ export function App() {
               <section className="ops-panel cache-panel">
                 <PanelTitle icon={<Database />} title="Cache posture" subtitle="Designed to absorb repeated COM and client queries" />
                 <div className="cache-stack">
+                  {telemetryChannels.map((channel) => (
+                    <CacheChannel key={channel.label} channel={channel} />
+                  ))}
                   {cacheChannels.map((channel) => (
                     <CacheChannel key={channel.label} channel={channel} />
                   ))}
@@ -1686,6 +1768,25 @@ function Metric({ icon, label, value, detail }: { icon: ReactNode; label: string
       {detail ? <small>{detail}</small> : null}
     </div>
   );
+}
+
+function emptyTimedObservability(serviceId: string): DashboardObservability["flightData"] {
+  return {
+    latencyMs: 0,
+    payload: {
+      serviceId,
+      generatedAt: new Date(0).toISOString(),
+      status: "unavailable",
+      dataFreshness: {
+        sourceCount: 0,
+        sourcesWithImportAge: 0,
+        newestImportAgeSeconds: -1,
+        oldestImportAgeSeconds: -1,
+        degradedSourceCount: 0,
+        warningCount: 0
+      }
+    }
+  };
 }
 
 function CommandStat({ icon, label, value, detail }: { icon: ReactNode; label: string; value: string; detail: string }) {
@@ -2395,6 +2496,9 @@ function formatImportAge(seconds: number | undefined): string {
   if (typeof seconds !== "number" || !Number.isFinite(seconds)) {
     return "-";
   }
+  if (seconds < 0) {
+    return "n/a";
+  }
   if (seconds < 3600) {
     return `${Math.round(seconds / 60)} min`;
   }
@@ -2402,6 +2506,72 @@ function formatImportAge(seconds: number | undefined): string {
     return `${Math.round(seconds / 3600)} h`;
   }
   return `${Math.round(seconds / 86_400)} d`;
+}
+
+function summarizeCacheObservability(caches: Array<CacheObservability | undefined>): { hits: number; misses: number; requests: number; hitRate: number; errors: number } {
+  const totals = caches.reduce(
+    (summary, cache) => {
+      if (!cache) {
+        return summary;
+      }
+      summary.hits += cache.hits;
+      summary.misses += cache.misses;
+      summary.errors += cache.errors;
+      return summary;
+    },
+    { hits: 0, misses: 0, errors: 0 }
+  );
+  const requests = totals.hits + totals.misses;
+  return {
+    ...totals,
+    requests,
+    hitRate: requests > 0 ? totals.hits / requests : 0
+  };
+}
+
+function summarizeImportFreshness(services: ServiceObservability[]): { value: string; detail: string; load: number; tone: Tone } {
+  const freshness = services
+    .map((service) => service.dataFreshness)
+    .filter((item): item is NonNullable<ServiceObservability["dataFreshness"]> => Boolean(item));
+  const newestAges = freshness.map((item) => item.newestImportAgeSeconds).filter((age) => age >= 0);
+  const oldestAges = freshness.map((item) => item.oldestImportAgeSeconds).filter((age) => age >= 0);
+  const warningCount = freshness.reduce((sum, item) => sum + item.warningCount + item.degradedSourceCount, 0);
+
+  if (newestAges.length === 0) {
+    return {
+      value: "n/a",
+      detail: `${warningCount} quality signals`,
+      load: warningCount > 0 ? 45 : 25,
+      tone: warningCount > 0 ? "warn" : "neutral"
+    };
+  }
+
+  const newest = Math.min(...newestAges);
+  const oldest = Math.max(...oldestAges);
+  const load = Math.max(10, 100 - boundedPercent(oldest, 7 * 24 * 3600));
+  return {
+    value: formatImportAge(newest),
+    detail: `oldest ${formatImportAge(oldest)}, ${warningCount} quality signals`,
+    load,
+    tone: warningCount > 0 || oldest > 7 * 24 * 3600 ? "warn" : "safe"
+  };
+}
+
+function formatPercentValue(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0%";
+  }
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatLatencyMs(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "n/a";
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}s`;
+  }
+  return `${Math.round(value)} ms`;
 }
 
 function formatAltitude(value: number | undefined): string {

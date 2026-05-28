@@ -14,6 +14,8 @@ import type {
   SafetyDataSource,
   Scenario,
   ScenarioBlock,
+  DashboardObservability,
+  ServiceObservability,
   TakGatewayConfig,
   TakGatewayFeatureResponse,
   TakGatewayHealth,
@@ -66,6 +68,15 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+async function timedApi<T>(path: string, init?: RequestInit): Promise<{ latencyMs: number; payload: T }> {
+  const startedAt = performance.now();
+  const payload = await api<T>(path, init);
+  return {
+    latencyMs: Math.round(performance.now() - startedAt),
+    payload
+  };
 }
 
 export function getSimApiToken(): string {
@@ -305,6 +316,7 @@ export interface DashboardLoadResult {
     config: TakGatewayConfig;
     features: TakGatewayFeatureResponse;
   };
+  observability: DashboardObservability;
   warnings: string[];
 }
 
@@ -336,6 +348,7 @@ const emptyTakFeatureResponse: TakGatewayFeatureResponse = {
 };
 
 export async function loadDashboard(): Promise<DashboardLoadResult> {
+  const dashboardStartedAt = performance.now();
   const operatorTokenConfigured = hasSimAuthorizationToken();
   const results = await Promise.allSettled([
     api<{ items: Scenario[] }>("/api/v1/scenarios"),
@@ -362,7 +375,11 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     api<{ items: TakGatewayLayer[] }>("/tak-gateway/api/v1/layers"),
     api<{ items: TakGatewaySource[] }>("/tak-gateway/api/v1/sources"),
     api<TakGatewayConfig>("/tak-gateway/api/v1/config"),
-    operatorTokenConfigured ? api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12") : Promise.resolve(emptyTakFeatureResponse)
+    operatorTokenConfigured ? api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12") : Promise.resolve(emptyTakFeatureResponse),
+    timedApi<ServiceObservability>("/flight-data/api/v1/observability"),
+    timedApi<ServiceObservability>("/situation-data/api/v1/observability"),
+    timedApi<ServiceObservability>("/safety-data/api/v1/observability"),
+    timedApi<ServiceObservability>("/tak-gateway/api/v1/observability")
   ]);
 
   const warnings: string[] = [];
@@ -551,6 +568,15 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
     "TAK gateway features",
     warnings
   );
+  const flightDataObservability = unwrapDashboardResult(results[25], emptyTimedServiceObservability("flight-data-api"), "flight data observability", warnings);
+  const situationDataObservability = unwrapDashboardResult(
+    results[26],
+    emptyTimedServiceObservability("situation-data-api"),
+    "situation data observability",
+    warnings
+  );
+  const safetyDataObservability = unwrapDashboardResult(results[27], emptyTimedServiceObservability("safety-data-api"), "safety data observability", warnings);
+  const takGatewayObservability = unwrapDashboardResult(results[28], emptyTimedServiceObservability("tak-gateway-api"), "TAK gateway observability", warnings);
 
   return {
     scenarios: scenarios.items,
@@ -587,6 +613,14 @@ export async function loadDashboard(): Promise<DashboardLoadResult> {
       config: takConfig,
       features: takFeatures
     },
+    observability: {
+      generatedAt: new Date().toISOString(),
+      loadDurationMs: Math.round(performance.now() - dashboardStartedAt),
+      flightData: flightDataObservability,
+      situationData: situationDataObservability,
+      safetyData: safetyDataObservability,
+      takGateway: takGatewayObservability
+    },
     warnings
   };
 }
@@ -609,6 +643,25 @@ function normalizeFlightTrackPayload(payload: FlightDataTrackPayload): FlightDat
     tracks: payload.tracks,
     sources: payload.sources,
     warnings: payload.warnings
+  };
+}
+
+function emptyTimedServiceObservability(serviceId: string): { latencyMs: number; payload: ServiceObservability } {
+  return {
+    latencyMs: 0,
+    payload: {
+      serviceId,
+      generatedAt: new Date(0).toISOString(),
+      status: "unavailable",
+      dataFreshness: {
+        sourceCount: 0,
+        sourcesWithImportAge: 0,
+        newestImportAgeSeconds: -1,
+        oldestImportAgeSeconds: -1,
+        degradedSourceCount: 0,
+        warningCount: 0
+      }
+    }
   };
 }
 

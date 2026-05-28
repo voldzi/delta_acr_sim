@@ -99,6 +99,36 @@ function registerMetadataRoutes(app: Express, context: TakGatewayAppContext): vo
     res.json(buildTakMapCatalog(context.config));
   });
 
+  app.get("/api/v1/observability", (_req, res) => {
+    const stats = context.store.getStats();
+    res.json({
+      serviceId: "tak-gateway-api",
+      generatedAt: new Date().toISOString(),
+      status: isOperationallyReady(context.config) ? "ok" : "degraded",
+      eventStore: {
+        currentEvents: stats.currentEvents,
+        staleEvents: stats.staleEvents,
+        acceptedEvents: stats.acceptedEvents,
+        invalidEvents: stats.invalidEvents,
+        droppedEvents: stats.droppedEvents,
+        authFailures: stats.authFailures,
+        parseErrors: stats.parseErrors,
+        lastIngestAt: stats.lastIngestAt,
+        lastErrorAt: stats.lastErrorAt,
+        staleRate: ratio(stats.staleEvents, Math.max(1, stats.currentEvents + stats.staleEvents)),
+        errorCount: stats.invalidEvents + stats.droppedEvents + stats.authFailures + stats.parseErrors
+      },
+      dataFreshness: {
+        sourceCount: 1,
+        sourcesWithImportAge: stats.lastIngestAt ? 1 : 0,
+        newestImportAgeSeconds: stats.lastIngestAt ? secondsSince(stats.lastIngestAt) : -1,
+        oldestImportAgeSeconds: stats.lastIngestAt ? secondsSince(stats.lastIngestAt) : -1,
+        degradedSourceCount: isOperationallyReady(context.config) ? 0 : 1,
+        warningCount: context.config.publicRead ? 1 : 0
+      }
+    });
+  });
+
   app.get("/api/v1/config", (_req, res) => {
     res.json(publicConfig(context.config));
   });
@@ -285,6 +315,15 @@ function asString(value: unknown): string | undefined {
     return asString(value[0]);
   }
   return typeof value === "string" ? value : undefined;
+}
+
+function ratio(value: number, total: number): number {
+  return total > 0 ? Number((value / total).toFixed(4)) : 0;
+}
+
+function secondsSince(isoTimestamp: string): number {
+  const timestampMs = new Date(isoTimestamp).getTime();
+  return Number.isFinite(timestampMs) ? Math.max(0, Math.round((Date.now() - timestampMs) / 1000)) : -1;
 }
 
 function publicConfig(config: TakGatewayConfig): TakGatewayPublicConfig {

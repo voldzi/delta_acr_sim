@@ -30,6 +30,9 @@ importers:
       '@types/express':
         specifier: ^5.0.5
         version: 5.0.6
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
@@ -41,7 +44,7 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
+        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   apps/safety-data-api:
     dependencies:
@@ -61,6 +64,9 @@ importers:
       '@types/express':
         specifier: ^5.0.5
         version: 5.0.6
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
@@ -72,7 +78,7 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
+        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   apps/simulator-api:
     dependencies:
@@ -212,6 +218,9 @@ importers:
       '@types/express':
         specifier: ^5.0.5
         version: 5.0.6
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
@@ -223,7 +232,7 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
+        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   packages/ai-assistant:
     dependencies:

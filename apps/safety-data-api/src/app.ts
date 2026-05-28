@@ -91,6 +91,25 @@ function registerMetadataRoutes(app: Express, context: SafetyDataAppContext): vo
     res.json(buildSafetyMapCatalog(context.config));
   });
 
+  app.get("/api/v1/observability", (_req, res) => {
+    const cache = context.aggregation.cacheStats();
+    res.json({
+      serviceId: "safety-data-api",
+      generatedAt: new Date().toISOString(),
+      status: "ok",
+      cache: cacheTelemetry(cache, context.config.cacheMaxEntries),
+      sourceCaches: [],
+      dataFreshness: {
+        sourceCount: context.config.enabledSources.length,
+        sourcesWithImportAge: 0,
+        newestImportAgeSeconds: -1,
+        oldestImportAgeSeconds: -1,
+        degradedSourceCount: 0,
+        warningCount: 0
+      }
+    });
+  });
+
   app.get("/api/v1/config", (_req, res) => {
     res.json(publicConfig(context.config));
   });
@@ -228,4 +247,40 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
       { sourceId: "chmi_hydro", baseUrl: config.chmiHydroNowBaseUrl, authConfigured: true }
     ]
   };
+}
+
+interface CacheStatsLike {
+  entries: number;
+  inflight: number;
+  hits: number;
+  misses: number;
+  coalescedHits: number;
+  staleHits: number;
+  refreshes: number;
+  errors: number;
+  evictions: number;
+}
+
+function cacheTelemetry(stats: CacheStatsLike, maxEntries: number): Record<string, number | string> {
+  const requestCount = stats.hits + stats.misses;
+  const pressure = ratio(stats.entries, Math.max(1, maxEntries));
+  return {
+    entries: stats.entries,
+    inflight: stats.inflight,
+    maxEntries,
+    pressure,
+    hits: stats.hits,
+    misses: stats.misses,
+    hitRate: ratio(stats.hits, requestCount),
+    coalescedHits: stats.coalescedHits,
+    staleHits: stats.staleHits,
+    refreshes: stats.refreshes,
+    errors: stats.errors,
+    evictions: stats.evictions,
+    state: stats.errors > 0 || stats.evictions > 0 ? "degraded" : pressure > 0.85 ? "pressure" : requestCount > 0 ? "warm" : "cold"
+  };
+}
+
+function ratio(value: number, total: number): number {
+  return total > 0 ? Number((value / total).toFixed(4)) : 0;
 }

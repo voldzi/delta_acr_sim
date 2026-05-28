@@ -236,7 +236,10 @@ export type SituationDataSourceId =
   | "osm_postgis"
   | "osm_overpass"
   | "ctu_nettest"
+  | "ctu_stationary_mobile"
   | "pid_gtfs_rt"
+  | "idsjmk_vehicle_positions"
+  | "road_srti_lod"
   | "safety_data"
   | "aviation_weather"
   | "ardos_partner";
@@ -571,6 +574,99 @@ export interface TakGatewayConfig {
   readAuthConfigured: boolean;
   publicRead: boolean;
   sourceLabel: string;
+}
+
+export interface CacheObservability {
+  entries: number;
+  inflight: number;
+  maxEntries: number;
+  pressure: number;
+  hits: number;
+  misses: number;
+  hitRate: number;
+  coalescedHits: number;
+  staleHits: number;
+  refreshes: number;
+  errors: number;
+  evictions: number;
+  state: "cold" | "warm" | "pressure" | "degraded" | string;
+}
+
+export interface DataFreshnessObservability {
+  sourceCount: number;
+  sourcesWithImportAge: number;
+  newestImportAgeSeconds: number;
+  oldestImportAgeSeconds: number;
+  degradedSourceCount: number;
+  warningCount: number;
+}
+
+export interface SourceCacheObservability {
+  sourceId: string;
+  cache: CacheObservability;
+}
+
+export interface SharedCacheObservability {
+  enabled: boolean;
+  available: boolean;
+  hits: number;
+  misses: number;
+  hitRate: number;
+  staleHits: number;
+  writes: number;
+  errors: number;
+  state: "ok" | "degraded" | "disabled" | string;
+}
+
+export interface SourceHealthObservability {
+  sourceId: string;
+  status: string;
+  backend?: string;
+  objectCount?: number;
+  lastImportAt?: string;
+  lastImportAgeSeconds?: number;
+  warningCount: number;
+}
+
+export interface TakEventStoreObservability {
+  currentEvents: number;
+  staleEvents: number;
+  acceptedEvents: number;
+  invalidEvents: number;
+  droppedEvents: number;
+  authFailures: number;
+  parseErrors: number;
+  lastIngestAt?: string;
+  lastErrorAt?: string;
+  staleRate: number;
+  errorCount: number;
+}
+
+export interface ServiceObservability {
+  serviceId: string;
+  generatedAt: string;
+  status: string;
+  cache?: CacheObservability;
+  sharedCache?: SharedCacheObservability;
+  sourceCaches?: SourceCacheObservability[];
+  referenceCaches?: SourceCacheObservability[];
+  dataFreshness?: DataFreshnessObservability;
+  sourceHealth?: SourceHealthObservability[];
+  eventStore?: TakEventStoreObservability;
+}
+
+export interface TimedServiceObservability {
+  latencyMs: number;
+  payload: ServiceObservability;
+}
+
+export interface DashboardObservability {
+  generatedAt: string;
+  loadDurationMs: number;
+  flightData: TimedServiceObservability;
+  situationData: TimedServiceObservability;
+  safetyData: TimedServiceObservability;
+  takGateway: TimedServiceObservability;
 }
 
 export interface TakGatewayFeature {

@@ -138,6 +138,43 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
     res.json(publicConfig(context.config));
   });
 
+  app.get("/api/v1/observability", async (_req, res) => {
+    const cache = context.aggregation.cacheStats();
+    const sourceHealth = await context.aggregation.sourceHealthStatuses();
+    const dem = await context.demCatalog.status();
+    res.json({
+      serviceId: "situation-data-api",
+      generatedAt: new Date().toISOString(),
+      status: sourceHealth.some((source) => source.status === "degraded") || dem.status === "degraded" ? "degraded" : "ok",
+      cache: cacheTelemetry(cache, context.config.cacheMaxEntries),
+      sharedCache: {
+        enabled: cache.sharedEnabled,
+        available: cache.sharedAvailable,
+        hits: cache.sharedHits,
+        misses: cache.sharedMisses,
+        hitRate: ratio(cache.sharedHits, cache.sharedHits + cache.sharedMisses),
+        staleHits: cache.sharedStaleHits,
+        writes: cache.sharedWrites,
+        errors: cache.sharedErrors,
+        state: cache.sharedEnabled ? (cache.sharedAvailable && cache.sharedErrors === 0 ? "ok" : "degraded") : "disabled"
+      },
+      sourceCaches: context.aggregation.sourceCacheStats().map((sourceCache) => ({
+        sourceId: sourceCache.sourceId,
+        cache: cacheTelemetry(sourceCache, context.config.cacheMaxEntries)
+      })),
+      dataFreshness: sourceFreshness(sourceHealth),
+      sourceHealth: sourceHealth.map((source) => ({
+        sourceId: source.sourceId,
+        status: source.status,
+        backend: source.backend,
+        objectCount: source.objectCount,
+        lastImportAt: source.lastImportAt,
+        lastImportAgeSeconds: source.lastImportAgeSeconds,
+        warningCount: source.warnings.length
+      }))
+    });
+  });
+
   app.get("/api/v1/mobile-coverage/metadata", (_req, res) => {
     res.json(new MobileCoverageSource(context.config).metadata());
   });
@@ -431,6 +468,54 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     }
   }
   return lines;
+}
+
+interface CacheStatsLike {
+  entries: number;
+  inflight: number;
+  hits: number;
+  misses: number;
+  coalescedHits: number;
+  staleHits: number;
+  refreshes: number;
+  errors: number;
+  evictions: number;
+}
+
+function cacheTelemetry(stats: CacheStatsLike, maxEntries: number): Record<string, number | string> {
+  const requestCount = stats.hits + stats.misses;
+  const pressure = ratio(stats.entries, Math.max(1, maxEntries));
+  return {
+    entries: stats.entries,
+    inflight: stats.inflight,
+    maxEntries,
+    pressure,
+    hits: stats.hits,
+    misses: stats.misses,
+    hitRate: ratio(stats.hits, requestCount),
+    coalescedHits: stats.coalescedHits,
+    staleHits: stats.staleHits,
+    refreshes: stats.refreshes,
+    errors: stats.errors,
+    evictions: stats.evictions,
+    state: stats.errors > 0 || stats.evictions > 0 ? "degraded" : pressure > 0.85 ? "pressure" : requestCount > 0 ? "warm" : "cold"
+  };
+}
+
+function sourceFreshness(sourceHealth: SourceHealthStatus[]): Record<string, number> {
+  const ages = sourceHealth.map((source) => source.lastImportAgeSeconds).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return {
+    sourceCount: sourceHealth.length,
+    sourcesWithImportAge: ages.length,
+    newestImportAgeSeconds: ages.length > 0 ? Math.min(...ages) : -1,
+    oldestImportAgeSeconds: ages.length > 0 ? Math.max(...ages) : -1,
+    degradedSourceCount: sourceHealth.filter((source) => source.status === "degraded").length,
+    warningCount: sourceHealth.reduce((sum, source) => sum + source.warnings.length, 0)
+  };
+}
+
+function ratio(value: number, total: number): number {
+  return total > 0 ? Number((value / total).toFixed(4)) : 0;
 }
 
 function demMetricLines(status: Awaited<ReturnType<DemCatalog["status"]>>): string[] {
