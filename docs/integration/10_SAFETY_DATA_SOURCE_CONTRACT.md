@@ -71,6 +71,8 @@ Každá feature nese minimálně:
 Specializovaná pole:
 
 - Požáry: `fireStatus`, `detectedAt`, `sourceSatellite`, `sourceIncident`, `confidence`, `intensity`, `frp`.
+  - `fireStatus=detected` znamená satelitní detekci nebo tepelnou anomálii.
+  - `fireStatus=risk` znamená oficiální meteorologické požární nebezpečí, typicky ČHMÚ CAP výstrahu.
 - Povodně: `riverName`, `stationId`, `waterLevelCm`, `discharge`, `floodStage`, `trend`, `basin`, `affectedArea`.
   - `floodStage` je normalizovaný stupeň `0..4` podle dostupných hladinových nebo průtokových SPA prahů ČHMÚ.
   - `trend` je `rising`, `falling`, `stable` nebo `unknown`, počítaný z posledních dvou hodnot časové řady.
@@ -79,13 +81,15 @@ Specializovaná pole:
 
 ## Zdroje v pilotu
 
-- `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`.
+- `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`; požární nebezpečí se kromě `public.safety.weather_alerts` projektuje také do `public.safety.fire` jako `fire_weather_risk`.
 - `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`; SIM používá aktuální časové řady i metadata stanic pro trend, SPA klasifikaci, průtokové prahy, plochu povodí a hydrologické pořadí.
 - `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
 - `admin_boundaries`: referenční administrativní hranice. Produkčně čte lokální/PostGIS read-model `public.osm_admin_boundary`; pokud není DB nebo view k dispozici, vrací jen hrubý seed ČR s warningem.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
 ČHMÚ CAP feed poskytuje administrativní geokódy, typicky `CISORP` a `EMMA_ID`. SIM tyto kódy páruje přes cachovaný číselník ČSÚ CISORP na lokální/PostGIS hranice `public.osm_admin_boundary`; pokud je shoda dostupná, `weather_alerts` vrací `Polygon`/`MultiPolygon` pro zasažené správní území. Pokud PostGIS nebo číselník nejsou dostupné, SIM zachová `affectedAreas` a `geocodes` a vrátí reprezentativní bod s `properties.metrics.geometryMode=representative_point`.
+
+Podrobnější vyhodnocení českých požárních zdrojů je v `docs/situation-data/05_FIRE_DATA_SOURCES_CZ.md`.
 
 ## Projekce do Situation Data
 

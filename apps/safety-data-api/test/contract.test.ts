@@ -142,9 +142,9 @@ describe("Safety Data API contract", () => {
         expect.objectContaining({
           providerLayerId: "safety.fire",
           recommendedCatalogLayerId: "public.safety.fire",
-          categories: expect.arrayContaining(["fire"]),
+          categories: expect.arrayContaining(["fire", "fire_weather_risk"]),
           role: "overlay",
-          sourceIds: ["nasa_firms"]
+          sourceIds: ["chmi_alerts", "nasa_firms"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.flood",
@@ -167,8 +167,8 @@ describe("Safety Data API contract", () => {
         expect.objectContaining({
           sourceId: "chmi_alerts",
           sourceRole: "final",
-          feedsLayerIds: ["safety.weather_alerts"],
-          feedsCatalogLayerIds: ["public.safety.weather_alerts"]
+          feedsLayerIds: ["safety.weather_alerts", "safety.fire"],
+          feedsCatalogLayerIds: ["public.safety.weather_alerts", "public.safety.fire"]
         }),
         expect.objectContaining({
           sourceId: "chmi_hydro",
@@ -378,6 +378,77 @@ describe("Safety Data API contract", () => {
             styleHint: "safety-fire-warning",
             iconHint: "fire",
             basis: ["nasa_firms_area_csv", "VIIRS_SNPP_NRT"]
+          })
+        );
+      }
+    );
+  });
+
+  it("projects CHMI fire danger warnings into the fire layer", async () => {
+    vi.spyOn(Pool.prototype, "query").mockResolvedValue({
+      rows: [
+        {
+          cisorp_code: "2101",
+          cisorp_name: "Benešov",
+          osm_id: "-20150098",
+          admin_level: 6,
+          name: "SO ORP Benešov",
+          code: "-20150098",
+          country_code: "CZ",
+          source: "osm_postgis",
+          imported_at: "2026-05-28T00:00:00.000Z",
+          geometry_geojson:
+            '{"type":"Polygon","coordinates":[[[14.3,49.7],[14.9,49.7],[14.9,50.1],[14.3,50.1],[14.3,49.7]]]}',
+          tags: { short_name: "Benešov" }
+        }
+      ]
+    } as never);
+
+    await withFixtureServer(
+      {
+        "/cap/": '<html><body><a href="alert.xml">alert.xml</a> 28-May-2026 12:00</body></html>',
+        "/cap/alert.xml": chmiFireDangerCapFixture(),
+        "/cisorp.csv": chmiOrpCodelistCsvFixture()
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_alerts"],
+          chmiAlertsCapBaseUrl: `${baseUrl}/cap/`,
+          chmiOrpCodelistUrl: `${baseUrl}/cisorp.csv`,
+          adminBoundaryConnectionString: "postgresql://sim:test@localhost:5432/sim_osm"
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=fire&source=chmi_alerts&limit=10")
+          .expect(200);
+
+        expect(response.body.summary.featureCount).toBe(1);
+        expect(response.body.features[0]).toEqual(
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "Polygon" }),
+            properties: expect.objectContaining({
+              layerId: "public.safety.fire",
+              providerLayerId: "safety.fire",
+              layer: "fire",
+              category: "fire_weather_risk",
+              hazardType: "fire_weather",
+              sourceId: "chmi_alerts",
+              sourceName: "CHMI CAP fire danger warnings",
+              status: "risk",
+              fireStatus: "risk",
+              sourceIncident: "CHMI_CAP_FIRE_DANGER",
+              iconHint: "fire",
+              basis: expect.arrayContaining(["chmi_cap_fire_weather", "osm_postgis_admin_boundary_match"]),
+              metrics: expect.objectContaining({
+                fireRiskFromWeatherWarning: true,
+                geometryMode: "admin_boundary"
+              }),
+              tags: expect.objectContaining({
+                fireRiskSource: "chmi_cap",
+                boundaryMatch: "full"
+              })
+            })
           })
         );
       }
@@ -666,6 +737,35 @@ function chmiActiveCapFixture(): string {
     <expires>2026-05-28T20:00:00+02:00</expires>
     <description>Očekává se výskyt silných bouřek.</description>
     <instruction>Sledujte vývoj počasí a dbejte pokynů autorit.</instruction>
+    <area>
+      <areaDesc>Středočeský kraj</areaDesc>
+      <geocode><valueName>CISORP</valueName><value>2101</value></geocode>
+      <geocode><valueName>EMMA_ID</valueName><value>CZ02101</value></geocode>
+    </area>
+  </info>
+</alert>`;
+}
+
+function chmiFireDangerCapFixture(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>test-fire-danger-warning</identifier>
+  <sender>chmi@chmi.cz</sender>
+  <sent>2026-05-28T12:00:00+02:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>cs</language>
+    <event>Nebezpečí požárů</event>
+    <headline>Výstraha před nebezpečím požárů</headline>
+    <urgency>Expected</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <onset>2026-05-28T14:00:00+02:00</onset>
+    <expires>2026-05-28T20:00:00+02:00</expires>
+    <description>V důsledku sucha hrozí zvýšené riziko vzniku a šíření požárů.</description>
+    <instruction>Nerozdělávejte oheň ve volné přírodě a respektujte místní omezení.</instruction>
     <area>
       <areaDesc>Středočeský kraj</areaDesc>
       <geocode><valueName>CISORP</valueName><value>2101</value></geocode>

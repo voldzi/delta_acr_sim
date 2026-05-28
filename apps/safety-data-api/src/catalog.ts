@@ -48,9 +48,9 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         providerLayerId: "safety.fire",
         recommendedCatalogLayerId: "public.safety.fire",
         label: "Požáry",
-        description: "Aktivní požáry a tepelné anomálie z normalizovaných veřejných zdrojů.",
+        description: "Aktivní požáry, tepelné anomálie a oficiální požární nebezpečí z normalizovaných veřejných zdrojů.",
         categoryPath: ["safety", "fire"],
-        categories: ["fire", "thermal_anomaly"],
+        categories: ["fire", "thermal_anomaly", "fire_weather_risk"],
         role: "overlay",
         audience: "public",
         kind: "vector_features",
@@ -62,11 +62,14 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 600,
         cacheTtlSeconds: Math.max(600, config.cacheTtlSeconds),
         styleProfile: "safety-fire-v1",
-        sourceIds: ["nasa_firms"],
-        query: query(["fire"], ["nasa_firms"]),
+        sourceIds: ["chmi_alerts", "nasa_firms"],
+        query: query(["fire"], ["chmi_alerts", "nasa_firms"]),
         legal: {
-          attribution: "NASA FIRMS",
-          notes: ["Satelitní detekce jsou situační kontext; pro zásah používejte oficiální kanály HZS/IZS."]
+          attribution: "Czech Hydrometeorological Institute (CHMI), NASA FIRMS",
+          notes: [
+            "ČHMÚ poskytuje požární nebezpečí jako oficiální meteorologickou výstrahu, nikoli potvrzený požár.",
+            "NASA FIRMS satelitní detekce jsou situační kontext; pro zásah používejte oficiální kanály HZS/IZS."
+          ]
         }
       },
       {
@@ -175,9 +178,9 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         sourceRole: "final",
         audience: "public",
         selectableInMap: true,
-        feedsLayerIds: ["safety.weather_alerts"],
-        feedsCatalogLayerIds: ["public.safety.weather_alerts"],
-        notes: ["Primary public weather warning source; CISORP areas are resolved to local/PostGIS administrative polygons when available."]
+        feedsLayerIds: ["safety.weather_alerts", "safety.fire"],
+        feedsCatalogLayerIds: ["public.safety.weather_alerts", "public.safety.fire"],
+        notes: ["Primary public weather warning source; CISORP areas are resolved to local/PostGIS administrative polygons when available. Fire-danger warnings are also projected into the public.safety.fire layer as risk features."]
       };
     case "chmi_hydro":
       return {

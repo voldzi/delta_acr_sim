@@ -167,7 +167,7 @@ class ChmiAlertsSource implements SafetyDataSource {
       enabled: config.enabledSources.includes("chmi_alerts"),
       mode: "live",
       priority: 90,
-      layers: ["weather_alerts"],
+      layers: ["weather_alerts", "fire"],
       license: CHMI_OPEN_DATA_LICENSE,
       baseUrl: config.chmiAlertsCapBaseUrl,
       updateCadenceSeconds: 300
@@ -176,7 +176,9 @@ class ChmiAlertsSource implements SafetyDataSource {
 
   async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    if (!isWeatherAlertsRequested(query.layers)) {
+    const weatherRequested = isWeatherAlertsRequested(query.layers);
+    const fireRequested = query.layers.includes("fire");
+    if (!weatherRequested && !fireRequested) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
@@ -206,7 +208,11 @@ class ChmiAlertsSource implements SafetyDataSource {
     const capLayer = query.layers.includes("warnings") && !query.layers.includes("weather_alerts") ? "warnings" : "weather_alerts";
     const pointFeatures = mapCapAlert(parsed, query, fetchedAt, capUrl, capLayer).filter((feature) => isFeatureInBbox(feature, query.bbox));
     const polygonized = await this.polygonizeCapFeatures(pointFeatures, query);
-    const features = polygonized.features.filter((feature) => isFeatureInBbox(feature, query.bbox));
+    const weatherFeatures = weatherRequested ? polygonized.features : [];
+    const fireRiskFeatures = fireRequested
+      ? polygonized.features.map((feature) => mapCapFireRiskFeature(feature)).filter((feature): feature is SafetyFeature => Boolean(feature))
+      : [];
+    const features = [...weatherFeatures, ...fireRiskFeatures].filter((feature) => isFeatureInBbox(feature, query.bbox));
     return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings: polygonized.warnings };
   }
 
@@ -997,6 +1003,55 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
       }),
       raw: query.includeRaw ? info : undefined
     });
+  });
+}
+
+function mapCapFireRiskFeature(feature: SafetyFeature): SafetyFeature | undefined {
+  if (feature.properties.hazardType !== "fire_weather") {
+    return undefined;
+  }
+
+  return makeGeometryFeature({
+    id: `fire:chmi_alerts:${stableToken(feature.id)}`,
+    layer: "fire",
+    category: "fire_weather_risk",
+    hazardType: "fire_weather",
+    headline: feature.properties.headline,
+    description: feature.properties.description,
+    recommendedAction: feature.properties.recommendedAction,
+    sourceId: "chmi_alerts",
+    sourceName: "CHMI CAP fire danger warnings",
+    license: CHMI_OPEN_DATA_LICENSE,
+    observedAt: feature.properties.observedAt,
+    effectiveAt: feature.properties.effectiveAt,
+    expiresAt: feature.properties.expiresAt,
+    validFrom: feature.properties.validFrom,
+    validUntil: feature.properties.validUntil,
+    updatedAt: feature.properties.updatedAt,
+    confidence: feature.properties.confidence,
+    severity: feature.properties.severity,
+    status: "risk",
+    urgency: feature.properties.urgency,
+    certainty: feature.properties.certainty,
+    areaName: feature.properties.areaName,
+    adminLevel: feature.properties.adminLevel,
+    fireStatus: "risk",
+    sourceIncident: "CHMI_CAP_FIRE_DANGER",
+    iconHint: "fire",
+    basis: unique([...feature.properties.basis, "chmi_cap_fire_weather"]),
+    geometry: feature.geometry,
+    affectedAreas: feature.properties.affectedAreas,
+    geocodes: feature.properties.geocodes,
+    metrics: compactMetrics({
+      ...(feature.properties.metrics ?? {}),
+      fireRiskFromWeatherWarning: true
+    }),
+    tags: compactTags({
+      ...(feature.properties.tags ?? {}),
+      sourceLayer: feature.properties.layer,
+      fireRiskSource: "chmi_cap"
+    }),
+    raw: feature.properties.raw
   });
 }
 
