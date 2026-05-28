@@ -54,7 +54,15 @@ export const LAYERS: LayerDescriptor[] = [
     label: "Safety warnings",
     description: "Official public warning features projected from the Safety Data contract.",
     defaultVisible: true,
-    geometryTypes: ["Point", "Polygon"],
+    geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
+    layerId: "fire",
+    label: "Fire and fire danger",
+    description: "Active fire detections and official fire danger warnings projected from the Safety Data contract.",
+    defaultVisible: false,
+    geometryTypes: ["Point", "Polygon", "MultiPolygon"],
     expectedCadenceSeconds: 300
   },
   {
@@ -64,6 +72,14 @@ export const LAYERS: LayerDescriptor[] = [
     defaultVisible: true,
     geometryTypes: ["Point"],
     expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "boundary_admin",
+    label: "Administrative boundaries",
+    description: "Administrative boundary reference features projected from the Safety Data contract.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 86400
   },
   {
     layerId: "air_quality",

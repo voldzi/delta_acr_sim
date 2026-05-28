@@ -6,7 +6,9 @@ export type SituationLayerId =
   | "mobile_network"
   | "traffic"
   | "warnings"
+  | "fire"
   | "flood"
+  | "boundary_admin"
   | "air_quality";
 export type SituationDataSourceId =
   | "mock"
@@ -80,7 +82,7 @@ export interface LayerDescriptor {
   label: string;
   description: string;
   defaultVisible: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
   expectedCadenceSeconds?: number;
 }
 
@@ -104,7 +106,7 @@ export interface ProviderCatalogLayer {
   kind: ProviderCatalogKind;
   defaultVisible: boolean;
   selectable: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon">;
+  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
   minZoom: number;
   maxZoom: number;
   refreshSeconds: number;
@@ -263,7 +265,12 @@ export interface PolygonGeometry {
   coordinates: Array<Array<[number, number]>>;
 }
 
-export type SituationGeometry = PointGeometry | LineStringGeometry | PolygonGeometry;
+export interface MultiPolygonGeometry {
+  type: "MultiPolygon";
+  coordinates: Array<Array<Array<[number, number]>>>;
+}
+
+export type SituationGeometry = PointGeometry | LineStringGeometry | PolygonGeometry | MultiPolygonGeometry;
 
 export interface SituationFeatureProperties {
   featureId: string;

@@ -152,8 +152,14 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "safety_data" && layer === "warnings") {
     return "warnings.safety_data_projection";
   }
+  if (sourceId === "safety_data" && layer === "fire") {
+    return "fire.safety_data_projection";
+  }
   if (sourceId === "safety_data" && layer === "flood") {
     return "flood.safety_data_projection";
+  }
+  if (sourceId === "safety_data" && layer === "boundary_admin") {
+    return "boundary_admin.safety_data_projection";
   }
   if (sourceId === "osm_postgis") {
     if (category === "communications_tower") {
@@ -203,8 +209,12 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.traffic.road_events";
     case "warnings.safety_data_projection":
       return "public.safety.warnings";
+    case "fire.safety_data_projection":
+      return "public.safety.fire";
     case "flood.safety_data_projection":
       return "public.safety.flood";
+    case "boundary_admin.safety_data_projection":
+      return "public.boundary.admin";
     default:
       return sourceId === "mock" ? `diagnostic.mock.${layer}` : `provider.${sourceId}.${layer}`;
   }
@@ -232,9 +242,11 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     demSource,
     assumptions,
     disclaimer,
+    providerProperties,
     raw
   } = feature.properties;
   return compactRecord({
+    ...(providerProperties ?? {}),
     metrics,
     tags,
     operator,
@@ -391,8 +403,18 @@ function layerRank(value: SituationLayerId): number {
       return 4;
     case "mobile_coverage":
       return 5;
+    case "warnings":
+      return 6;
+    case "fire":
+      return 7;
+    case "flood":
+      return 8;
+    case "boundary_admin":
+      return 9;
+    case "air_quality":
+      return 10;
     case "ground":
     default:
-      return 6;
+      return 11;
   }
 }

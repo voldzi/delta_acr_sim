@@ -421,7 +421,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       kind: "vector_features",
       defaultVisible: false,
       selectable: false,
-      geometryTypes: ["Point", "Polygon"],
+      geometryTypes: ["Point", "Polygon", "MultiPolygon"],
       minZoom: 4,
       maxZoom: 18,
       refreshSeconds: 300,
@@ -430,6 +430,34 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       sourceIds: ["safety_data"],
       query: query(["warnings"], ["safety_data"]),
       legend: { profile: "safety-warning-v1" },
+      legal: {
+        attribution: "Safety Data API; feature-level attribution preserved from original public sources",
+        notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for safety layers."]
+      },
+      compatibilityOnly: true,
+      preferredProviderId: "sim.safety-data"
+    },
+    {
+      providerLayerId: "fire.safety_data_projection",
+      recommendedCatalogLayerId: "public.safety.fire",
+      label: "Požáry a požární riziko (kompatibilní projekce)",
+      description: "Kompatibilní projekce aktivních požárních detekcí a požárního nebezpečí ze Safety Data API. COM má preferovat provider sim.safety-data.",
+      categoryPath: ["safety", "fire"],
+      categories: ["fire", "thermal_anomaly", "fire_weather_risk"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+      minZoom: 4,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: config.safetyDataCacheTtlSeconds,
+      styleProfile: "safety-fire-v1",
+      sourceIds: ["safety_data"],
+      query: query(["fire"], ["safety_data"]),
+      legend: { profile: "safety-fire-v1" },
       legal: {
         attribution: "Safety Data API; feature-level attribution preserved from original public sources",
         notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for safety layers."]
@@ -461,6 +489,34 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       legal: {
         attribution: "Safety Data API; feature-level attribution preserved from original public sources",
         notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for safety layers."]
+      },
+      compatibilityOnly: true,
+      preferredProviderId: "sim.safety-data"
+    },
+    {
+      providerLayerId: "boundary_admin.safety_data_projection",
+      recommendedCatalogLayerId: "public.boundary.admin",
+      label: "Administrativní hranice (kompatibilní projekce)",
+      description: "Kompatibilní projekce administrativních hranic ze Safety Data API. COM má preferovat provider sim.safety-data nebo vlastní boundary provider.",
+      categoryPath: ["boundary", "admin"],
+      categories: ["admin_boundary", "boundary"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Polygon", "MultiPolygon"],
+      minZoom: 4,
+      maxZoom: 18,
+      refreshSeconds: 86400,
+      cacheTtlSeconds: config.safetyDataCacheTtlSeconds,
+      styleProfile: "admin-boundary-v1",
+      sourceIds: ["safety_data"],
+      query: query(["boundary_admin"], ["safety_data"]),
+      legend: { profile: "admin-boundary-v1" },
+      legal: {
+        attribution: "Safety Data API; feature-level attribution preserved from original public sources",
+        notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for boundary layers."]
       },
       compatibilityOnly: true,
       preferredProviderId: "sim.safety-data"
@@ -669,8 +725,13 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: false,
         visibleInDiagnostics: true,
-        feedsLayerIds: ["warnings.safety_data_projection", "flood.safety_data_projection"],
-        feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.flood"],
+        feedsLayerIds: [
+          "warnings.safety_data_projection",
+          "fire.safety_data_projection",
+          "flood.safety_data_projection",
+          "boundary_admin.safety_data_projection"
+        ],
+        feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire", "public.safety.flood", "public.boundary.admin"],
         preferredProviderId: "sim.safety-data",
         notes: ["Compatibility projection only; prefer the dedicated safety-data provider."]
       };

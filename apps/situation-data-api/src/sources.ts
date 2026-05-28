@@ -1161,7 +1161,7 @@ class SafetyDataProjectionSource implements SituationDataSource {
       enabled: config.enabledSources.includes("safety_data"),
       mode: "live",
       priority: 95,
-      layers: ["warnings", "flood"],
+      layers: ["warnings", "fire", "flood", "boundary_admin"],
       license: SAFETY_DATA_LICENSE,
       baseUrl: config.safetyDataBaseUrl,
       updateCadenceSeconds: config.safetyDataCacheTtlSeconds
@@ -1174,7 +1174,9 @@ class SafetyDataProjectionSource implements SituationDataSource {
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    const layers = query.layers.filter((layer): layer is "warnings" | "flood" => layer === "warnings" || layer === "flood");
+    const layers = query.layers.filter(
+      (layer): layer is SafetyProjectionLayer => layer === "warnings" || layer === "fire" || layer === "flood" || layer === "boundary_admin"
+    );
     if (layers.length === 0) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
@@ -1867,12 +1869,7 @@ function featureIntersectsBboxByEnvelope(feature: SituationFeature, bbox: Boundi
 }
 
 function featureEnvelope(feature: SituationFeature): BoundingBox | undefined {
-  const coordinates =
-    feature.geometry.type === "Point"
-      ? [feature.geometry.coordinates]
-      : feature.geometry.type === "LineString"
-        ? feature.geometry.coordinates
-        : feature.geometry.coordinates.flat();
+  const coordinates = featureCoordinates(feature.geometry);
   if (coordinates.length === 0) {
     return undefined;
   }
@@ -1885,6 +1882,19 @@ function featureEnvelope(feature: SituationFeature): BoundingBox | undefined {
     }),
     { west: Infinity, south: Infinity, east: -Infinity, north: -Infinity }
   );
+}
+
+function featureCoordinates(geometry: SituationFeature["geometry"]): Array<[number, number]> {
+  switch (geometry.type) {
+    case "Point":
+      return [geometry.coordinates];
+    case "LineString":
+      return geometry.coordinates;
+    case "Polygon":
+      return geometry.coordinates.flat();
+    case "MultiPolygon":
+      return geometry.coordinates.flat(2);
+  }
 }
 
 function numericMetric(feature: SituationFeature, metric: string): number | undefined {
@@ -2164,29 +2174,63 @@ interface SafetyProjectionCollection {
   warnings?: string[];
 }
 
+type SafetyProjectionLayer = "warnings" | "fire" | "flood" | "boundary_admin";
+
 interface SafetyProjectionFeature {
   type: "Feature";
   id: string;
   geometry: {
-    type: "Point" | "Polygon";
+    type: "Point" | "Polygon" | "MultiPolygon";
     coordinates: unknown;
   };
   properties: {
     featureId: string;
-    layer: "warnings" | "flood";
+    layerId?: string;
+    providerId?: string;
+    providerLayerId?: string;
+    layer: SafetyProjectionLayer;
     category: string;
+    hazardType?: string;
     headline: string;
     description?: string;
     recommendedAction?: string;
     sourceId: string;
+    source?: string;
+    sourceName?: string;
     observedAt: string;
     effectiveAt?: string;
     expiresAt?: string;
+    validFrom?: string;
+    validUntil?: string;
+    updatedAt?: string;
     confidence: number;
     stale: boolean;
     severity: SituationSeverity;
+    status?: string;
     urgency?: string;
     certainty?: string;
+    areaName?: string;
+    adminLevel?: number | string;
+    name?: string;
+    code?: string;
+    countryCode?: string;
+    styleHint?: string;
+    iconHint?: string;
+    basis?: string[];
+    fireStatus?: string;
+    detectedAt?: string;
+    sourceSatellite?: string;
+    sourceIncident?: string;
+    intensity?: number;
+    frp?: number;
+    riverName?: string;
+    stationId?: string;
+    waterLevelCm?: number;
+    discharge?: number;
+    floodStage?: number | string;
+    trend?: string;
+    basin?: string;
+    affectedArea?: string;
     license: {
       name: string;
       attribution: string;
@@ -2309,24 +2353,69 @@ function mapSafetyProjectionFeature(
     affectedAreas: feature.properties.affectedAreas?.slice(0, 4).join("; "),
     geocodes: feature.properties.geocodes?.slice(0, 6).map((geocode) => `${geocode.scheme}:${geocode.value}`).join("; ")
   });
+  const providerProperties = compactProviderProperties({
+    nativeFeatureId: feature.properties.featureId,
+    nativeLayerId: feature.properties.layerId,
+    nativeProviderId: feature.properties.providerId,
+    nativeProviderLayerId: feature.properties.providerLayerId,
+    nativeSourceId: feature.properties.sourceId,
+    source: feature.properties.source,
+    sourceName: feature.properties.sourceName,
+    headline: feature.properties.headline,
+    description: feature.properties.description,
+    recommendedAction: feature.properties.recommendedAction,
+    hazardType: feature.properties.hazardType,
+    status: feature.properties.status,
+    urgency: feature.properties.urgency,
+    certainty: feature.properties.certainty,
+    validFrom: feature.properties.validFrom,
+    validUntil: feature.properties.validUntil,
+    updatedAt: feature.properties.updatedAt,
+    areaName: feature.properties.areaName,
+    adminLevel: feature.properties.adminLevel,
+    name: feature.properties.name,
+    code: feature.properties.code,
+    countryCode: feature.properties.countryCode,
+    styleHint: feature.properties.styleHint,
+    iconHint: feature.properties.iconHint,
+    basis: feature.properties.basis,
+    fireStatus: feature.properties.fireStatus,
+    detectedAt: feature.properties.detectedAt,
+    sourceSatellite: feature.properties.sourceSatellite,
+    sourceIncident: feature.properties.sourceIncident,
+    intensity: feature.properties.intensity,
+    frp: feature.properties.frp,
+    riverName: feature.properties.riverName,
+    stationId: feature.properties.stationId,
+    waterLevelCm: feature.properties.waterLevelCm,
+    discharge: feature.properties.discharge,
+    floodStage: feature.properties.floodStage,
+    trend: feature.properties.trend,
+    basin: feature.properties.basin,
+    affectedArea: feature.properties.affectedArea
+  });
   return {
     type: "Feature",
     id,
     geometry,
     properties: {
       featureId: id,
+      layerId: safetyProjectionCatalogLayerId(layer),
+      providerId: "sim.situation-data",
+      providerLayerId: safetyProjectionProviderLayerId(layer),
       layer,
       category: feature.properties.category,
-      label: feature.properties.headline,
+      label: feature.properties.headline || feature.properties.name || layer,
       sourceId: "safety_data",
       observedAt: feature.properties.observedAt,
-      validUntil: feature.properties.expiresAt,
+      validUntil: feature.properties.validUntil ?? feature.properties.expiresAt,
       confidence: feature.properties.confidence,
       stale: feature.properties.stale,
       severity: feature.properties.severity,
       license: feature.properties.license,
       metrics: compactMixedMetrics(feature.properties.metrics ?? {}),
       tags,
+      providerProperties,
       raw: includeRaw
         ? {
             ...feature,
@@ -2344,7 +2433,7 @@ function mapSafetyProjectionGeometry(
   geometry: SafetyProjectionFeature["geometry"],
   pointOverride?: { lon: number; lat: number }
 ): SituationFeature["geometry"] | undefined {
-  if (pointOverride) {
+  if (pointOverride && geometry.type === "Point") {
     return { type: "Point", coordinates: [round(pointOverride.lon, 6), round(pointOverride.lat, 6)] };
   }
   if (geometry.type === "Point" && Array.isArray(geometry.coordinates)) {
@@ -2356,7 +2445,36 @@ function mapSafetyProjectionGeometry(
   if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
     return geometry as SituationFeature["geometry"];
   }
+  if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+    return geometry as SituationFeature["geometry"];
+  }
   return undefined;
+}
+
+function safetyProjectionCatalogLayerId(layer: SafetyProjectionLayer): string {
+  switch (layer) {
+    case "fire":
+      return "public.safety.fire";
+    case "flood":
+      return "public.safety.flood";
+    case "boundary_admin":
+      return "public.boundary.admin";
+    case "warnings":
+      return "public.safety.warnings";
+  }
+}
+
+function safetyProjectionProviderLayerId(layer: SafetyProjectionLayer): string {
+  switch (layer) {
+    case "fire":
+      return "fire.safety_data_projection";
+    case "flood":
+      return "flood.safety_data_projection";
+    case "boundary_admin":
+      return "boundary_admin.safety_data_projection";
+    case "warnings":
+      return "warnings.safety_data_projection";
+  }
 }
 
 async function fetchAviationWeatherBundle(config: SituationDataConfig, bbox: BoundingBox): Promise<AviationWeatherBundle> {
@@ -3430,6 +3548,22 @@ function compactMixedMetrics(values: Record<string, number | string | boolean | 
 
 function compactTags(values: Record<string, string | undefined>): Record<string, string> | undefined {
   const entries = Object.entries(values).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function compactProviderProperties(values: Record<string, unknown>): Record<string, unknown> | undefined {
+  const entries = Object.entries(values).filter(([, value]) => {
+    if (value === undefined || value === null) {
+      return false;
+    }
+    if (typeof value === "string") {
+      return value.length > 0;
+    }
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    return true;
+  });
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 

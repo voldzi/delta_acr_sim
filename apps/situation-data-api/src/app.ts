@@ -266,12 +266,14 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "mobile_network",
     "traffic",
     "warnings",
+    "fire",
     "flood",
+    "boundary_admin",
     "air_quality"
   ]);
   const raw = asString(value);
   if (!raw) {
-    return ["weather", "ground", "mobile", "mobile_network", "traffic", "warnings", "flood", "air_quality"];
+    return ["weather", "ground", "mobile", "mobile_network", "traffic", "warnings", "fire", "flood", "boundary_admin", "air_quality"];
   }
   return raw
     .split(",")

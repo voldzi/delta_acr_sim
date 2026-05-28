@@ -104,7 +104,7 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
 | `providerId` | string | identifikátor providera, např. `sim.situation-data` |
 | `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `flood`, `air_quality` | mapová vrstva |
+| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `fire`, `flood`, `boundary_admin`, `air_quality` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
 | `sourceId` | string | poskytovatel v SIM registry |
@@ -179,7 +179,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `idsjmk_vehicle_positions` | `traffic` | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features. |
 | `road_srti_lod` | `traffic` | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď. |
-| `safety_data` | `warnings`, `flood` | Projekce Safety Data API do situačního kontraktu. |
+| `safety_data` | `warnings`, `fire`, `flood`, `boundary_admin` | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
 | `osm_postgis` | `ground`, `mobile` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
 | `osm_overpass` | `ground`, `mobile` | Jen omezený vývoj/pilot; veřejný Overpass nesmí být runtime backend pro tisíce uživatelů. |

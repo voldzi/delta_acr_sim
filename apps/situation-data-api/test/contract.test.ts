@@ -147,7 +147,7 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "safety_data",
-          layers: expect.arrayContaining(["warnings", "flood"])
+          layers: expect.arrayContaining(["warnings", "fire", "flood", "boundary_admin"])
         }),
         expect.objectContaining({
           sourceId: "aviation_weather",
@@ -235,6 +235,20 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           providerLayerId: "warnings.safety_data_projection",
           recommendedCatalogLayerId: "public.safety.warnings",
+          compatibilityOnly: true,
+          preferredProviderId: "sim.safety-data",
+          selectable: false
+        }),
+        expect.objectContaining({
+          providerLayerId: "fire.safety_data_projection",
+          recommendedCatalogLayerId: "public.safety.fire",
+          compatibilityOnly: true,
+          preferredProviderId: "sim.safety-data",
+          selectable: false
+        }),
+        expect.objectContaining({
+          providerLayerId: "boundary_admin.safety_data_projection",
+          recommendedCatalogLayerId: "public.boundary.admin",
           compatibilityOnly: true,
           preferredProviderId: "sim.safety-data",
           selectable: false
@@ -332,6 +346,7 @@ describe("Situation Data API contract", () => {
           sourceRole: "projection",
           audience: "public",
           selectableInMap: false,
+          feedsCatalogLayerIds: expect.arrayContaining(["public.safety.warnings", "public.safety.fire", "public.safety.flood", "public.boundary.admin"]),
           preferredProviderId: "sim.safety-data"
         })
       ])
@@ -452,6 +467,134 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_misses{source="ardos_partner"}');
+  });
+
+  it("projects fire and administrative boundary features from Safety Data without dropping MultiPolygon geometry", async () => {
+    const safetyFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe("/api/v1/features");
+      expect(url.searchParams.get("layers")).toBe("fire,boundary_admin");
+      return new Response(
+        JSON.stringify({
+          features: [
+            {
+              type: "Feature",
+              id: "fire:chmi_alerts:risk-orp",
+              geometry: {
+                type: "MultiPolygon",
+                coordinates: [[[[14.2, 50.0], [14.3, 50.0], [14.3, 50.1], [14.2, 50.1], [14.2, 50.0]]]]
+              },
+              properties: {
+                featureId: "fire:chmi_alerts:risk-orp",
+                layerId: "public.safety.fire",
+                providerId: "sim.safety-data",
+                providerLayerId: "safety.fire",
+                layer: "fire",
+                category: "fire_weather_risk",
+                hazardType: "fire_weather",
+                headline: "Nebezpečí požárů",
+                description: "Test fire danger warning.",
+                recommendedAction: "Sledujte oficiální pokyny.",
+                sourceId: "chmi_alerts",
+                source: "chmi_alerts",
+                sourceName: "CHMI CAP fire danger warnings",
+                observedAt: "2026-05-28T08:00:00.000Z",
+                validFrom: "2026-05-28T08:00:00.000Z",
+                validUntil: "2026-05-28T18:00:00.000Z",
+                updatedAt: "2026-05-28T08:00:00.000Z",
+                confidence: 0.9,
+                stale: false,
+                severity: "warning",
+                status: "risk",
+                urgency: "expected",
+                certainty: "likely",
+                areaName: "ORP Praha",
+                styleHint: "safety-fire-warning",
+                iconHint: "fire",
+                basis: ["chmi_cap_fire_weather"],
+                fireStatus: "risk",
+                license: { name: "CC BY 4.0", attribution: "CHMI" },
+                affectedAreas: ["ORP Praha"],
+                geocodes: [{ scheme: "CISORP", value: "3100" }],
+                metrics: { fireRiskFromWeatherWarning: true },
+                tags: { test: "fire" }
+              }
+            },
+            {
+              type: "Feature",
+              id: "boundary_admin:admin_boundaries:CZ",
+              geometry: {
+                type: "MultiPolygon",
+                coordinates: [[[[14.0, 49.9], [14.5, 49.9], [14.5, 50.3], [14.0, 50.3], [14.0, 49.9]]]]
+              },
+              properties: {
+                featureId: "boundary_admin:admin_boundaries:CZ",
+                layerId: "public.boundary.admin",
+                providerId: "sim.safety-data",
+                providerLayerId: "boundary.admin",
+                layer: "boundary_admin",
+                category: "admin_boundary",
+                hazardType: "boundary",
+                headline: "Czechia",
+                sourceId: "admin_boundaries",
+                source: "admin_boundaries",
+                sourceName: "Administrative boundaries",
+                observedAt: "2026-05-28T08:00:00.000Z",
+                validFrom: "2026-05-28T08:00:00.000Z",
+                updatedAt: "2026-05-28T08:00:00.000Z",
+                confidence: 0.95,
+                stale: false,
+                severity: "info",
+                status: "reference",
+                urgency: "unknown",
+                certainty: "observed",
+                adminLevel: 2,
+                name: "Czechia",
+                code: "CZ",
+                countryCode: "CZ",
+                basis: ["postgis_admin_boundary"],
+                license: { name: "ODbL 1.0", attribution: "OpenStreetMap contributors" },
+                metrics: { adminLevel: 2 }
+              }
+            }
+          ],
+          warnings: []
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+
+    vi.stubGlobal("fetch", safetyFetch);
+    const safetyApp = await createApp({ ...config, enabledSources: ["safety_data"] });
+    const response = await request(safetyApp.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=fire,boundary_admin&source=safety_data&limit=10")
+      .expect(200);
+
+    expect(response.body.summary.featureCount).toBe(2);
+    expect(response.body.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "MultiPolygon" }),
+          properties: expect.objectContaining({
+            layer: "fire",
+            layerId: "public.safety.fire",
+            providerId: "sim.situation-data",
+            providerLayerId: "fire.safety_data_projection",
+            providerProperties: expect.objectContaining({ fireStatus: "risk", nativeProviderId: "sim.safety-data" })
+          })
+        }),
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "MultiPolygon" }),
+          properties: expect.objectContaining({
+            layer: "boundary_admin",
+            layerId: "public.boundary.admin",
+            providerLayerId: "boundary_admin.safety_data_projection",
+            providerProperties: expect.objectContaining({ adminLevel: 2, code: "CZ" })
+          })
+        })
+      ])
+    );
+    expect(safetyFetch).toHaveBeenCalledTimes(1);
   });
 
   it("returns the COP GeoJSON projection", async () => {

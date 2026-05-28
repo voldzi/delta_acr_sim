@@ -96,10 +96,10 @@ Podrobnější vyhodnocení českých požárních zdrojů je v `docs/situation-
 Kvůli kompatibilitě je stejný obsah dostupný i přes:
 
 ```text
-GET /situation-data/api/v1/features?layers=warnings,flood&source=safety_data
+GET /situation-data/api/v1/features?layers=warnings,fire,flood,boundary_admin&source=safety_data
 ```
 
-Tato projekce je určena pro COM mapu, která už umí načítat `situation-data`. Nová implementace COM by měla preferovat čistý `safety-data` kontrakt, protože obsahuje plnou bezpečnostní sémantiku.
+Tato projekce je určena pro starší serverové adaptéry COM, které už umí načítat `situation-data`. Nová implementace COM by měla preferovat čistý `safety-data` kontrakt, protože obsahuje plnou bezpečnostní sémantiku. Projekce zachovává `MultiPolygon` geometrii a v `providerProperties` předává nativní safety atributy jako `fireStatus`, `floodStage`, `adminLevel`, `basis`, `sourceName` a původní provider identifikátory.
 
 ## Cache a zátěž
 
