@@ -39,6 +39,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         styleProfile: "safety-weather-alert-v1",
         sourceIds: ["chmi_alerts"],
         query: query(["weather_alerts"], ["chmi_alerts"]),
+        notificationPolicy: notificationPolicy("weather_alert"),
         legal: {
           attribution: "Czech Hydrometeorological Institute (CHMI)",
           notes: ["Veřejný bezpečnostní kontext; operativní rozhodnutí musí používat oficiální kanály."]
@@ -64,6 +65,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         styleProfile: "safety-fire-v1",
         sourceIds: ["chmi_alerts", "nasa_firms"],
         query: query(["fire"], ["chmi_alerts", "nasa_firms"]),
+        notificationPolicy: notificationPolicy("fire"),
         legal: {
           attribution: "Czech Hydrometeorological Institute (CHMI), NASA FIRMS",
           notes: [
@@ -92,6 +94,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         styleProfile: "safety-flood-v1",
         sourceIds: ["chmi_hydro"],
         query: query(["flood"], ["chmi_hydro"]),
+        notificationPolicy: notificationPolicy("flood"),
         legal: {
           attribution: "Czech Hydrometeorological Institute (CHMI)",
           notes: ["Stav externích CHMI endpointů může degradovat část odpovědi; sledujte stale/warnings."]
@@ -117,6 +120,10 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         styleProfile: "boundary-admin-v1",
         sourceIds: ["admin_boundaries"],
         query: query(["boundary_admin"], ["admin_boundaries"]),
+        notificationPolicy: {
+          eligible: false,
+          reason: "Reference boundary layer. COP may use it for geofencing, but it must not generate user notifications by itself."
+        },
         legal: {
           attribution: config.adminBoundaryConnectionString ? "OpenStreetMap contributors" : "CSM SIM seed boundary reference",
           notes: config.adminBoundaryConnectionString
@@ -137,6 +144,38 @@ function query(providerLayerIds: SafetyLayerId[], providerSourceIds: SafetyDataS
     providerLayerIds,
     providerSourceIds,
     maxFeatures: 250
+  };
+}
+
+function notificationPolicy(hazardType: "weather_alert" | "fire" | "flood") {
+  return {
+    eligible: true,
+    audienceDecisionOwner: "cop",
+    deliveryOwner: "csm-messaging",
+    hazardType,
+    deduplicationKeyFields: ["providerId", "providerLayerId", "featureId", "validFrom", "validUntil"],
+    recommendedNotificationTypes: ["safety.alert"],
+    minimumSeverityForUserPush: "advisory",
+    requiredFeatureProperties: [
+      "featureId",
+      "layerId",
+      "providerId",
+      "providerLayerId",
+      "severity",
+      "urgency",
+      "certainty",
+      "confidence",
+      "validFrom",
+      "validUntil",
+      "updatedAt",
+      "source",
+      "sourceName",
+      "headline",
+      "description",
+      "recommendedAction",
+      "stale"
+    ],
+    technicalWarningsPolicy: "never_push_to_public_users"
   };
 }
 

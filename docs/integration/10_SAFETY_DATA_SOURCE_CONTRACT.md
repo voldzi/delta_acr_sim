@@ -79,6 +79,26 @@ Specializovaná pole:
   - `metrics` obsahují např. `waterLevelRateCmPerHour`, `flowRateM3sPerHour`, `trendWindowMinutes`, `catchmentAreaKm2` a prahy `spa1..spa4`.
 - Hranice: `adminLevel`, `name`, `code`, `countryCode`, `validFrom`, `source`.
 
+## Vztah k uzivatelskym notifikacim
+
+Safety Data API je vstup pro rozhodovani COP, ne notifikacni sluzba. SIM
+neposila push notifikace a nezna uzivatele, zarizeni, skupiny ani sledovane
+oblasti.
+
+Katalogove vrstvy `public.safety.weather_alerts`, `public.safety.fire` a
+`public.safety.flood` obsahuji metadata `notificationPolicy`, ktera popisuji,
+ze vrstva je vhodna pro civilni vyhodnoceni notifikace. COP ma z feature
+vytvorit stabilni `Idempotency-Key` a poslat pozadavek do CSM Messaging pouze
+tehdy, kdyz se udalost tyka konkretniho uzivatele, skupiny nebo sledovane
+oblasti.
+
+Technicke `warnings`, stale stav zdroju a degradace upstreamu patri do
+provozniho dohledu. Nesmí se posilat obcanum jako safety push, pokud nejsou
+soucasti realne safety feature.
+
+Detailni kontrakt je v
+[`14_CSM_NOTIFICATION_INPUT_CONTRACT.md`](14_CSM_NOTIFICATION_INPUT_CONTRACT.md).
+
 ## Zdroje v pilotu
 
 - `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`; požární nebezpečí se kromě `public.safety.weather_alerts` projektuje také do `public.safety.fire` jako `fire_weather_risk`.

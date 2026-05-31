@@ -137,7 +137,14 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.safety.weather_alerts",
           categories: expect.arrayContaining(["weather_alert"]),
           role: "overlay",
-          sourceIds: ["chmi_alerts"]
+          sourceIds: ["chmi_alerts"],
+          notificationPolicy: expect.objectContaining({
+            eligible: true,
+            audienceDecisionOwner: "cop",
+            deliveryOwner: "csm-messaging",
+            recommendedNotificationTypes: ["safety.alert"],
+            technicalWarningsPolicy: "never_push_to_public_users"
+          })
         }),
         expect.objectContaining({
           providerLayerId: "safety.fire",
@@ -158,7 +165,10 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.boundary.admin",
           categories: expect.arrayContaining(["admin_boundary"]),
           role: "reference",
-          sourceIds: ["admin_boundaries"]
+          sourceIds: ["admin_boundaries"],
+          notificationPolicy: expect.objectContaining({
+            eligible: false
+          })
         })
       ])
     );

@@ -55,6 +55,29 @@ Povinné nebo prakticky povinné položky:
 - `legal`.
 - `delivery`, pokud jde o grid, tile nebo vector-field vrstvu; např. stabilní WGS84 grid alignment.
 - `readModel`, pokud provider servíruje data z materializované cache/tabulky.
+- `notificationPolicy`, pokud vrstva obsahuje civilní události vhodné pro
+  uživatelské notifikace. Toto pole je instrukce pro COP backend; provider
+  samotný notifikace neposílá.
+
+Příklad `notificationPolicy`:
+
+```json
+{
+  "eligible": true,
+  "audienceDecisionOwner": "cop",
+  "deliveryOwner": "csm-messaging",
+  "deduplicationKeyFields": [
+    "providerId",
+    "providerLayerId",
+    "featureId",
+    "validFrom",
+    "validUntil"
+  ],
+  "recommendedNotificationTypes": ["safety.alert"],
+  "minimumSeverityForUserPush": "advisory",
+  "technicalWarningsPolicy": "never_push_to_public_users"
+}
+```
 
 ## Source
 
