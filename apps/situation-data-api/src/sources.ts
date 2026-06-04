@@ -44,6 +44,7 @@ const CHMI_WEATHER_GRID_LAYERS = [
   "weather_pressure_grid"
 ] satisfies SituationLayerId[];
 const CHMI_WEATHER_GRID_LAYER_SET = new Set<SituationLayerId>(CHMI_WEATHER_GRID_LAYERS);
+const CHMI_AIR_QUALITY_VALIDITY_SECONDS = 4 * 60 * 60;
 
 const MOCK_LICENSE: SituationDataLicense = {
   name: "Synthetic internal test data",
@@ -2613,7 +2614,7 @@ function mapChmiAirQualityFeature(aggregate: ChmiAirQualityAggregate, query: Sit
     sourceId: "chmi_air_quality",
     license: CHMI_OPEN_DATA_LICENSE,
     observedAt,
-    validUntil: addSeconds(observedAt, 2 * 60 * 60),
+    validUntil: addSeconds(observedAt, CHMI_AIR_QUALITY_VALIDITY_SECONDS),
     confidence: aggregate.airQualityIndex !== undefined ? 0.9 : 0.82,
     severity,
     metrics: compactMixedMetrics({
@@ -2962,7 +2963,7 @@ function mapChmiAirQualityGridFeature(
       lat: position.lat
     },
     observedAt,
-    validUntil: addSeconds(observedAt, 2 * 60 * 60),
+    validUntil: addSeconds(observedAt, CHMI_AIR_QUALITY_VALIDITY_SECONDS),
     confidence: aggregate.airQualityIndex !== undefined ? 0.82 : 0.74,
     resolutionDegrees: normalizeGridResolutionDegrees(resolutionDegrees),
     resolutionM: approximateGridResolutionM(normalizeGridResolutionDegrees(resolutionDegrees)),
