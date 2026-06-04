@@ -140,6 +140,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       }
     },
     ...buildEnvironmentalGridLayers(config),
+    ...buildWeatherRadarProviderLayers(config),
     {
       providerLayerId: "mobile_network",
       recommendedCatalogLayerId: "public.mobile.network",
@@ -818,6 +819,128 @@ function buildEnvironmentalGridLayers(config: SituationDataConfig): ProviderCata
   ];
 }
 
+function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+  const legal = {
+    attribution: "Český hydrometeorologický ústav",
+    notes: [
+      "Radarové PNG/HDF5 produkty pochází z ČHMÚ Open Data a SIM je indexuje server-side přes cache.",
+      "Vrstva thunderstorm risk není raw feed blesků; jde o radarový kontext a musí být prezentována společně s oficiálními výstrahami."
+    ]
+  };
+  const common = {
+    categoryPath: ["weather", "radar"],
+    categories: ["weather", "radar"],
+    role: "overlay" as const,
+    audience: "public" as const,
+    kind: "raster_overlay" as const,
+    defaultVisible: false,
+    selectable: true,
+    geometryTypes: ["Polygon"] as Array<"Polygon">,
+    minZoom: 5,
+    maxZoom: 18,
+    refreshSeconds: 300,
+    cacheTtlSeconds: config.chmiWeatherRadarCacheTtlSeconds,
+    sourceIds: ["chmi_weather_radar"] as SituationDataSourceId[],
+    delivery: rasterOverlayDelivery(),
+    legal
+  };
+
+  return [
+    {
+      ...common,
+      providerLayerId: "weather.radar_reflectivity",
+      recommendedCatalogLayerId: "public.weather.radar_reflectivity",
+      label: "Radarová odrazivost",
+      labelLocalized: { cs: "Radarová odrazivost", en: "Weather radar reflectivity" },
+      description: "Aktuální radarová odrazivost MAX_Z z ČHMÚ Open Data jako georeferencovaný raster overlay.",
+      descriptionLocalized: {
+        cs: "Aktuální radarová odrazivost MAX_Z z ČHMÚ Open Data jako georeferencovaný raster overlay.",
+        en: "Current CHMI MAX_Z weather radar reflectivity as a georeferenced raster overlay."
+      },
+      styleProfile: "weather-radar-reflectivity-v1",
+      query: query(["weather_radar_reflectivity"], ["chmi_weather_radar"]),
+      legend: {
+        profile: "weather-radar-reflectivity-v1",
+        unit: "dBZ / mm/h",
+        opacity: 0.62,
+        stops: [
+          { value: 7, label: "slabé echo", color: "#65d46e" },
+          { value: 25, label: "déšť", color: "#f9e45b" },
+          { value: 45, label: "silné jádro", color: "#f76d3c" },
+          { value: 55, label: "konvektivní jádro", color: "#aa2bff" }
+        ]
+      }
+    },
+    {
+      ...common,
+      providerLayerId: "weather.radar_precipitation",
+      recommendedCatalogLayerId: "public.weather.radar_precipitation",
+      label: "Radarové srážky",
+      labelLocalized: { cs: "Radarové srážky", en: "Radar precipitation" },
+      description: "Radarový odhad srážek ČHMÚ: PseudoCAPPI 2 km a sloučený 1h odhad radar+stanice.",
+      descriptionLocalized: {
+        cs: "Radarový odhad srážek ČHMÚ: PseudoCAPPI 2 km a sloučený 1h odhad radar+stanice.",
+        en: "CHMI radar precipitation estimate: PseudoCAPPI 2 km and merged 1h radar+gauge precipitation."
+      },
+      refreshSeconds: 600,
+      styleProfile: "weather-radar-precipitation-v1",
+      query: query(["weather_radar_precipitation"], ["chmi_weather_radar"]),
+      legend: {
+        profile: "weather-radar-precipitation-v1",
+        unit: "mm/h, mm/1h",
+        opacity: 0.58,
+        stops: [
+          { value: 0.1, label: "slabé", color: "#b7e4c7" },
+          { value: 1, label: "déšť", color: "#52b788" },
+          { value: 5, label: "silné", color: "#168aad" },
+          { value: 20, label: "přívalové", color: "#5e60ce" }
+        ]
+      }
+    },
+    {
+      ...common,
+      providerLayerId: "weather.radar_nowcast",
+      recommendedCatalogLayerId: "public.weather.radar_nowcast",
+      label: "Radarový nowcast",
+      labelLocalized: { cs: "Radarový nowcast", en: "Radar nowcast" },
+      description: "Metadata ČHMÚ extrapolačního radarového nowcastu pro +10 až +60 minut.",
+      descriptionLocalized: {
+        cs: "Metadata ČHMÚ extrapolačního radarového nowcastu pro +10 až +60 minut.",
+        en: "CHMI radar extrapolation nowcast metadata for +10 to +60 minutes."
+      },
+      styleProfile: "weather-radar-nowcast-v1",
+      query: query(["weather_radar_nowcast"], ["chmi_weather_radar"]),
+      legend: { profile: "weather-radar-nowcast-v1", opacity: 0.55 }
+    },
+    {
+      ...common,
+      categoryPath: ["safety", "weather", "thunderstorm"],
+      categories: ["weather", "thunderstorm", "safety"],
+      providerLayerId: "weather.thunderstorm_risk",
+      recommendedCatalogLayerId: "public.safety.thunderstorm_risk",
+      label: "Bouřkové riziko",
+      labelLocalized: { cs: "Bouřkové riziko", en: "Thunderstorm risk" },
+      description: "Radarový kontext pro bouřková jádra z ČHMÚ MAX_Z/EchoTop. Neobsahuje raw polohy blesků.",
+      descriptionLocalized: {
+        cs: "Radarový kontext pro bouřková jádra z ČHMÚ MAX_Z/EchoTop. Neobsahuje raw polohy blesků.",
+        en: "Radar context for convective cores from CHMI MAX_Z/EchoTop. It does not include raw lightning strikes."
+      },
+      styleProfile: "weather-thunderstorm-risk-v1",
+      query: query(["weather_thunderstorm_risk"], ["chmi_weather_radar"]),
+      legend: {
+        profile: "weather-thunderstorm-risk-v1",
+        unit: "risk",
+        opacity: 0.64,
+        stops: [
+          { value: "watch", label: "sledovat", color: "#ffd166" },
+          { value: "warning", label: "pravděpodobná bouřka", color: "#f77f00" },
+          { value: "critical", label: "silné jádro", color: "#d62828" }
+        ]
+      }
+    }
+  ];
+}
+
 function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
   const common = {
     categoryPath: ["boundary", "admin"],
@@ -946,6 +1069,12 @@ function gridDelivery(resolutionDegrees: number): NonNullable<ProviderCatalogLay
   };
 }
 
+function rasterOverlayDelivery(): NonNullable<ProviderCatalogLayer["delivery"]> {
+  return {
+    mode: "raster_overlay"
+  };
+}
+
 function buildProviderSource(descriptor: SourceDescriptor, config: SituationDataConfig): ProviderCatalogSource {
   const classification = sourceClassification(descriptor.sourceId);
   return {
@@ -1052,6 +1181,30 @@ function sourceClassification(sourceId: SituationDataSourceId): {
           "public.weather.pressure_grid"
         ],
         notes: ["Measured weather observations from ČHMÚ Open Data; cache server-side. Grid layers are cataloged as SIM read-model products."]
+      };
+    case "chmi_weather_radar":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: [
+          "weather.radar_reflectivity",
+          "weather.radar_precipitation",
+          "weather.radar_nowcast",
+          "weather.thunderstorm_risk"
+        ],
+        feedsCatalogLayerIds: [
+          "public.weather.radar_reflectivity",
+          "public.weather.radar_precipitation",
+          "public.weather.radar_nowcast",
+          "public.safety.thunderstorm_risk"
+        ],
+        technicalInputs: ["safety_data"],
+        notes: [
+          "ČHMÚ radar Open Data indexed server-side by SIM.",
+          "No raw lightning strike feed is published by this source; thunderstorm layer is radar/CAP warning context."
+        ]
       };
     case "chmi_air_quality":
       return {
@@ -1224,6 +1377,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.chmiAirQualityCacheTtlSeconds;
     case "chmi_weather_stations":
       return config.chmiWeatherCacheTtlSeconds;
+    case "chmi_weather_radar":
+      return config.chmiWeatherRadarCacheTtlSeconds;
     case "mobile_network_model":
       return config.mobileNetworkCacheTtlSeconds;
     case "mobile_coverage_model":
@@ -1267,7 +1422,7 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   if (sourceId === "road_srti_lod") {
     return "ndic-srti-lod";
   }
-  if (sourceId === "chmi_air_quality" || sourceId === "chmi_weather_stations") {
+  if (sourceId === "chmi_air_quality" || sourceId === "chmi_weather_stations" || sourceId === "chmi_weather_radar") {
     return "chmi-opendata";
   }
   return undefined;

@@ -62,7 +62,7 @@ Klíčová pravidla katalogu:
 - `diagnostic.mobile.ctu_measurements` jsou diagnostická ČTÚ měření, `selectable=false`,
 - `reference.infrastructure.communications` jsou referenční OSM věže, `defaultVisible=false` a `selectable=false`,
 - `public.boundary.country`, `public.boundary.region`, `public.boundary.district`, `public.boundary.orp` jsou referenční boundary read-model vrstvy z lokálního OSM/PostGIS, ne z veřejného Overpassu,
-- `public.weather.temperature_grid`, `public.weather.wind_field`, `public.weather.precipitation_grid`, `public.weather.humidity_grid`, `public.weather.pressure_grid` a `public.safety.air_quality_grid` jsou katalogově připravené environment grid/field vrstvy se stabilní WGS84 grid definicí,
+- `public.weather.temperature_grid`, `public.weather.wind_field`, `public.weather.precipitation_grid`, `public.weather.humidity_grid`, `public.weather.pressure_grid`, `public.weather.radar_reflectivity`, `public.weather.radar_precipitation`, `public.weather.radar_nowcast`, `public.safety.thunderstorm_risk` a `public.safety.air_quality_grid` jsou katalogově připravené environment vrstvy; radarové vrstvy jsou raster overlay metadata, ne raw lightning feed,
 - `safety_data` v situation-data je označený jako `sourceRole=projection`; COM má pro primární safety vrstvy preferovat provider `sim.safety-data`.
 
 ## Feature projection
@@ -107,7 +107,7 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
 | `providerId` | string | identifikátor providera, např. `sim.situation-data` |
 | `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `air_quality_grid` | mapová vrstva |
+| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `air_quality_grid` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
 | `labelLocalized` | object, optional | lokalizované názvy, typicky `cs` a `en` |
@@ -195,6 +195,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `open_meteo` | `weather` | Obecné počasí u středu bbox, silně cacheované podle weather gridu. |
 | `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo. |
 | `chmi_weather_stations` | `weather` | Měřené meteorologické stanice ČHMÚ z `meteorology/climate/now`: teplota, vlhkost, tlak, vítr, srážky a sluneční svit. COM používá katalogovou vrstvu `public.weather.observations`. |
+| `chmi_weather_radar` | `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk` | Radarové kompozity ČHMÚ z `meteorology/weather/radar/composite`: aktuální MAX_Z, PseudoCAPPI 2 km, MERGE 1h a nowcast archivy. COM používá katalogové vrstvy `public.weather.radar_reflectivity`, `public.weather.radar_precipitation`, `public.weather.radar_nowcast`, `public.safety.thunderstorm_risk`. Neobsahuje raw polohy blesků. |
 | `chmi_air_quality` | `air_quality` | Měřené imisní stanice ČHMÚ z `air_quality/now`: index kvality ovzduší a hlavní polutanty. COM používá katalogovou vrstvu `public.safety.air_quality`. |
 | `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
 | `ctu_stationary_mobile` | `mobile` | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav. |
@@ -250,6 +251,10 @@ SIM publikuje dvě cacheované ČHMÚ vrstvy:
 - `public.weather.observations` / provider layer `weather.chmi_station_observations`: bodové features meteorologických stanic s metrikami `temperatureC`, `relativeHumidityPercent`, `pressureHpa`, `windSpeedMps`, `windGustMps`, `windDirectionDeg`, `precipitation10mMm`, `sunshineDurationSeconds`, `elevationM`.
 - `public.safety.air_quality` / provider layer `air_quality.chmi_station_observations`: bodové features imisních stanic s metrikami `airQualityIndex`, `pm10UgM3`, `pm25UgM3`, `no2UgM3`, `noxUgM3`, `o3UgM3`, `so2UgM3`, `coUgM3`.
 - Environment grid/field vrstvy jsou dostupné přes stejné bbox query jako station-backed read model. Každá feature nese `readModel=true`, `sourceRevision`, `resolutionM`, `basis` a `providerProperties.upstreamStationId`.
+- `public.weather.radar_reflectivity` / provider layer `weather.radar_reflectivity`: georeferencované raster overlay metadata pro ČHMÚ MAX_Z PNG + doprovodný HDF5 odkaz.
+- `public.weather.radar_precipitation` / provider layer `weather.radar_precipitation`: PseudoCAPPI 2 km a MERGE 1h radar-srážkový kontext.
+- `public.weather.radar_nowcast` / provider layer `weather.radar_nowcast`: metadata TAR archivů ČHMÚ extrapolačních nowcast produktů pro +10 až +60 minut.
+- `public.safety.thunderstorm_risk` / provider layer `weather.thunderstorm_risk`: radarový kontext bouřkových jader z MAX_Z masked + EchoTop HDF5. `providerProperties.lightningStrikeFeed=false`; nejde o raw feed blesků.
 
 Dotazy:
 
@@ -258,14 +263,48 @@ GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_statio
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_quality&limit=50
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather_temperature_grid,weather_wind_field,weather_precipitation_grid,weather_humidity_grid,weather_pressure_grid&source=chmi_weather_stations&limit=250
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality_grid&source=chmi_air_quality&limit=250
+GET /features?bbox=12.0,48.5,19.0,51.2&layers=weather_radar_reflectivity,weather_radar_precipitation,weather_radar_nowcast,weather_thunderstorm_risk&source=chmi_weather_radar&limit=20
 ```
 
 ČHMÚ zdroje jsou source-level cacheované. Výchozí TTL:
 
 - `SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS=600`
 - `SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900`
+- `SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS=300`
 
 COM nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
+
+Radarové features jsou polygonové metadata pro raster overlay, ne vektorová buňková analýza. Klíčová pole:
+
+```json
+{
+  "properties": {
+    "layerId": "public.weather.radar_reflectivity",
+    "providerLayerId": "weather.radar_reflectivity",
+    "sourceId": "chmi_weather_radar",
+    "observedAt": "2026-06-04T21:20:00.000Z",
+    "validUntil": "2026-06-04T21:35:00.000Z",
+    "providerProperties": {
+      "raster": {
+        "url": "https://opendata.chmi.cz/.../pacz2gmaps3.z_max3d.YYYYMMDD.hhmm.0.png",
+        "archiveUrl": "https://opendata.chmi.cz/.../pacz2gmaps3.fct_z_max.YYYYMMDD.hhmm.ft60s10.tar",
+        "contentType": "image/png",
+        "projection": "EPSG:3857",
+        "boundsWgs84": [11.267, 48.047, 20.770, 52.167],
+        "dataBoundsWgs84": [11.267, 48.047, 19.624, 51.458],
+        "renderMode": "image_overlay"
+      },
+      "hdf5": {
+        "url": "https://opendata.chmi.cz/.../T_PABV23_C_OKPR_YYYYMMDDhhmmss.hdf"
+      },
+      "colorScaleUrl": "https://opendata.chmi.cz/meteorology/weather/radar/scl/scl-dbzmmh.png",
+      "lightningStrikeFeed": false
+    }
+  }
+}
+```
+
+Poznámka k bleskům: SIM aktuálně nezveřejňuje polohy blesků. Čistý veřejný redistribuovatelný raw lightning feed pro ČR není v SIM nakonfigurován; komunitní sítě typu Blitzortung mají omezení použití pro varování/rizikovou analýzu. Pokud vznikne partnerství/licence, přidá se samostatný source a vrstva s explicitním licenčním a kvalitativním režimem.
 
 ## Environment grid vrstvy
 
@@ -278,6 +317,10 @@ Katalog SIM nově nabízí plošné environment vrstvy pro civilní mapu:
 | `public.weather.precipitation_grid` | `weather.precipitation_grid` | `grid_field` | ČHMÚ měřené stanice |
 | `public.weather.humidity_grid` | `weather.humidity_grid` | `grid_field` | ČHMÚ měřené stanice |
 | `public.weather.pressure_grid` | `weather.pressure_grid` | `grid_field` | ČHMÚ měřené stanice |
+| `public.weather.radar_reflectivity` | `weather.radar_reflectivity` | `raster_overlay` | ČHMÚ radar MAX_Z |
+| `public.weather.radar_precipitation` | `weather.radar_precipitation` | `raster_overlay` | ČHMÚ PseudoCAPPI/MERGE |
+| `public.weather.radar_nowcast` | `weather.radar_nowcast` | `raster_overlay` | ČHMÚ COTREC nowcast |
+| `public.safety.thunderstorm_risk` | `weather.thunderstorm_risk` | `raster_overlay` | ČHMÚ MAX_Z masked/EchoTop, bez raw blesků |
 | `public.safety.air_quality_grid` | `air_quality.grid` | `grid_field` | ČHMÚ imisní stanice |
 
 V aktuální fázi SIM vrací grid jako GeoJSON features nad stabilní WGS84 buňkou. Hodnota buňky je odvozena z nejbližší měřené stanice uvnitř výřezu; nejde o meteorologický numerický model ani právně závaznou interpolaci. Materializované tile endpointy jsou další výkonová fáze pro velmi vysoký provoz.

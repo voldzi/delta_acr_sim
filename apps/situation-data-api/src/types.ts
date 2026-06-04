@@ -20,6 +20,10 @@ export type SituationLayerId =
   | "weather_precipitation_grid"
   | "weather_humidity_grid"
   | "weather_pressure_grid"
+  | "weather_radar_reflectivity"
+  | "weather_radar_precipitation"
+  | "weather_radar_nowcast"
+  | "weather_thunderstorm_risk"
   | "air_quality_grid";
 export type SituationDataSourceId =
   | "mock"
@@ -37,6 +41,7 @@ export type SituationDataSourceId =
   | "aviation_weather"
   | "chmi_air_quality"
   | "chmi_weather_stations"
+  | "chmi_weather_radar"
   | "ardos_partner";
 export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
@@ -54,6 +59,7 @@ export type ProviderCatalogKind =
   | "vector_features"
   | "grid_field"
   | "vector_field"
+  | "raster_overlay"
   | "mvt_tiles"
   | "raster_tiles"
   | "track_stream"
@@ -159,7 +165,7 @@ export interface ProviderCatalogLayer {
     }>;
   };
   delivery?: {
-    mode: "features" | "grid" | "vector_tiles" | "raster_tiles";
+    mode: "features" | "grid" | "vector_tiles" | "raster_tiles" | "raster_overlay";
     stableGrid?: {
       alignment: "wgs84";
       resolutionDegrees?: number;
@@ -256,6 +262,7 @@ export interface SituationDataPublicConfig {
     aviationWeather: number;
     chmiAirQuality: number;
     chmiWeatherStations: number;
+    chmiWeatherRadar: number;
     ardosPartner: number;
   };
   providers: Array<{

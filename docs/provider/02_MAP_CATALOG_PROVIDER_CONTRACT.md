@@ -178,6 +178,10 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.weather.precipitation_grid`
 - `public.weather.humidity_grid`
 - `public.weather.pressure_grid`
+- `public.weather.radar_reflectivity`
+- `public.weather.radar_precipitation`
+- `public.weather.radar_nowcast`
+- `public.safety.thunderstorm_risk`
 - `public.safety.air_quality`
 - `public.safety.air_quality_grid`
 - `public.mobile.network`

@@ -45,6 +45,17 @@ const CHMI_WEATHER_GRID_LAYERS = [
 ] satisfies SituationLayerId[];
 const CHMI_WEATHER_GRID_LAYER_SET = new Set<SituationLayerId>(CHMI_WEATHER_GRID_LAYERS);
 const CHMI_AIR_QUALITY_VALIDITY_SECONDS = 4 * 60 * 60;
+const CHMI_RADAR_LAYERS = [
+  "weather_radar_reflectivity",
+  "weather_radar_precipitation",
+  "weather_radar_nowcast",
+  "weather_thunderstorm_risk"
+] satisfies SituationLayerId[];
+const CHMI_RADAR_LAYER_SET = new Set<SituationLayerId>(CHMI_RADAR_LAYERS);
+const CHMI_RADAR_DATA_BBOX: BoundingBox = { west: 11.267, south: 48.047, east: 19.624, north: 51.458 };
+const CHMI_RADAR_IMAGE_BBOX: BoundingBox = { west: 11.267, south: 48.047, east: 20.77, north: 52.167 };
+const CHMI_RADAR_REFLECTIVITY_LEGEND_URL = "https://opendata.chmi.cz/meteorology/weather/radar/scl/scl-dbzmmh.png";
+const CHMI_RADAR_PRECIPITATION_LEGEND_URL = "https://opendata.chmi.cz/meteorology/weather/radar/scl/scl-mm.png";
 
 const MOCK_LICENSE: SituationDataLicense = {
   name: "Synthetic internal test data",
@@ -226,6 +237,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     aviation_weather: new AviationWeatherSource(config),
     chmi_air_quality: new ChmiAirQualitySource(config),
     chmi_weather_stations: new ChmiWeatherStationsSource(config),
+    chmi_weather_radar: new ChmiWeatherRadarSource(config),
     ardos_partner: new ArdosPartnerSource(config)
   };
 
@@ -250,6 +262,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new AviationWeatherSource(config).descriptor,
     new ChmiAirQualitySource(config).descriptor,
     new ChmiWeatherStationsSource(config).descriptor,
+    new ChmiWeatherRadarSource(config).descriptor,
     new ArdosPartnerSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
@@ -312,6 +325,7 @@ const chmiAirQualityRecordsCaches = new Map<string, ManagedResponseCache<Array<R
 const chmiWeatherIndexCaches = new Map<string, ManagedResponseCache<string>>();
 const chmiWeatherMetadataCaches = new Map<string, ManagedResponseCache<ChmiDataCollectionPayload>>();
 const chmiWeatherStationFileCaches = new Map<string, ManagedResponseCache<ChmiDataCollectionPayload>>();
+const chmiWeatherRadarIndexCaches = new Map<string, ManagedResponseCache<string>>();
 
 function ctuNettestRecordsCache(config: SituationDataConfig): ManagedResponseCache<Array<Record<string, string>>> {
   const key = `${config.ctuNettestUrl}:${config.requestTimeoutMs}`;
@@ -416,6 +430,21 @@ function chmiWeatherStationFileCache(config: SituationDataConfig): ManagedRespon
     maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 2048))
   });
   chmiWeatherStationFileCaches.set(key, cache);
+  return cache;
+}
+
+function chmiWeatherRadarIndexCache(config: SituationDataConfig): ManagedResponseCache<string> {
+  const key = `${config.chmiWeatherRadarBaseUrl}:${config.chmiWeatherRadarCacheTtlSeconds}`;
+  const existing = chmiWeatherRadarIndexCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const cache = new ManagedResponseCache<string>({
+    ttlMs: Math.max(60, config.chmiWeatherRadarCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.chmiWeatherRadarCacheTtlSeconds, config.staleIfErrorSeconds, 1800) * 1000,
+    maxEntries: 16
+  });
+  chmiWeatherRadarIndexCaches.set(key, cache);
   return cache;
 }
 
@@ -794,6 +823,147 @@ class ChmiWeatherStationsSource implements SituationDataSource {
     }
 
     return { source: this.descriptor, fetchedAt, features, warnings };
+  }
+}
+
+interface ChmiRadarAsset {
+  href: string;
+  url: string;
+  observedAt: string;
+}
+
+interface ChmiRadarProductDefinition {
+  productId: string;
+  layer: SituationLayerId;
+  category: string;
+  label: string;
+  description: string;
+  indexPath: string;
+  filePattern: RegExp;
+  contentType: string;
+  hdfIndexPath?: string;
+  hdfFilePattern?: RegExp;
+  legendUrl?: string;
+  updateCadenceSeconds: number;
+  validForSeconds: number;
+  styleHint: string;
+  severity: SituationSeverity;
+  confidence: number;
+  forecastArchive: boolean;
+  forecastHorizonMinutes?: number;
+  basis: string[];
+}
+
+class ChmiWeatherRadarSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly indexCache: ManagedResponseCache<string>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.indexCache = chmiWeatherRadarIndexCache(config);
+    this.descriptor = {
+      sourceId: "chmi_weather_radar",
+      label: "CHMI weather radar overlays",
+      enabled: config.enabledSources.includes("chmi_weather_radar"),
+      mode: "live",
+      priority: 86,
+      layers: [...CHMI_RADAR_LAYERS],
+      license: CHMI_OPEN_DATA_LICENSE,
+      baseUrl: config.chmiWeatherRadarBaseUrl,
+      updateCadenceSeconds: config.chmiWeatherRadarCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("chmi_weather_radar", this.indexCache)];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    try {
+      const products = await this.resolveProducts(chmiRadarProductDefinitions());
+      const latest = latestChmiRadarProductTimestamp(products);
+      const lastImportAgeSeconds = latest ? Math.max(0, Math.round((Date.now() - Date.parse(latest)) / 1000)) : undefined;
+      const warnings = products
+        .filter((product) => !product.asset)
+        .map((product) => `chmi_weather_radar missing ${product.definition.productId} product in upstream index.`);
+      if (lastImportAgeSeconds !== undefined && lastImportAgeSeconds > 2 * 60 * 60) {
+        warnings.push("chmi_weather_radar latest product is older than 2 hours.");
+      }
+      return {
+        sourceId: "chmi_weather_radar",
+        status: warnings.length === 0 ? "ok" : "degraded",
+        backend: "chmi-opendata",
+        objectCount: products.filter((product) => product.asset).length,
+        lastImportAt: latest,
+        lastImportAgeSeconds,
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: "chmi_weather_radar",
+        status: "degraded",
+        backend: "chmi-opendata",
+        warnings: [error instanceof Error ? error.message : "Unknown chmi_weather_radar health check failure."]
+      };
+    }
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    const requestedLayers = query.layers.filter((layer) => CHMI_RADAR_LAYER_SET.has(layer));
+    if (requestedLayers.length === 0) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+    if (!bboxIntersects(query.bbox, CHMI_RADAR_IMAGE_BBOX)) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const definitions = chmiRadarProductDefinitions().filter((definition) => requestedLayers.includes(definition.layer));
+    const products = await this.resolveProducts(definitions);
+    const warnings = products
+      .filter((product) => !product.asset)
+      .map((product) => `chmi_weather_radar missing ${product.definition.productId} product in upstream index.`);
+    const features = products
+      .flatMap((product) => {
+        if (!product.asset) {
+          return [];
+        }
+        return [makeChmiRadarFeature(product.definition, product.asset, product.hdfAsset, fetchedAt, query.includeRaw)];
+      })
+      .slice(0, query.limit);
+
+    return { source: this.descriptor, fetchedAt, features, warnings };
+  }
+
+  private async resolveProducts(
+    definitions: ChmiRadarProductDefinition[]
+  ): Promise<Array<{ definition: ChmiRadarProductDefinition; asset?: ChmiRadarAsset; hdfAsset?: ChmiRadarAsset }>> {
+    return Promise.all(
+      definitions.map(async (definition) => {
+        const [asset, hdfAsset] = await Promise.all([
+          this.resolveLatestAsset(definition.indexPath, definition.filePattern),
+          definition.hdfIndexPath && definition.hdfFilePattern ? this.resolveLatestAsset(definition.hdfIndexPath, definition.hdfFilePattern) : Promise.resolve(undefined)
+        ]);
+        return { definition, asset, hdfAsset };
+      })
+    );
+  }
+
+  private async resolveLatestAsset(indexPath: string, pattern: RegExp): Promise<ChmiRadarAsset | undefined> {
+    const indexUrl = joinUrl(this.config.chmiWeatherRadarBaseUrl, indexPath);
+    const html = await this.indexCache.getOrLoad(indexUrl, () => requestText(indexUrl, this.config.requestTimeoutMs));
+    const href = latestChmiRadarHrefFromIndex(html, pattern);
+    if (!href) {
+      return undefined;
+    }
+    const observedAt = parseChmiRadarTimestampFromHref(href);
+    if (!observedAt) {
+      return undefined;
+    }
+    return {
+      href,
+      url: joinUrl(indexUrl, href),
+      observedAt
+    };
   }
 }
 
@@ -3329,6 +3499,301 @@ function dateTokenToIso(value: string): string | undefined {
 
 function joinUrl(baseUrl: string, href: string): string {
   return new URL(href, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
+}
+
+function chmiRadarProductDefinitions(): ChmiRadarProductDefinition[] {
+  return [
+    {
+      productId: "maxz",
+      layer: "weather_radar_reflectivity",
+      category: "weather_radar_reflectivity",
+      label: "ČHMÚ radar MAX_Z",
+      description: "Maximum radar reflectivity over the Czech Republic territory.",
+      indexPath: "maxz/png/",
+      filePattern: /^pacz2gmaps3\.z_max3d\.\d{8}\.\d{4}\.0\.png$/,
+      contentType: "image/png",
+      hdfIndexPath: "maxz/hdf5/",
+      hdfFilePattern: /^T_PABV23_C_OKPR_\d{14}\.hdf$/,
+      legendUrl: CHMI_RADAR_REFLECTIVITY_LEGEND_URL,
+      updateCadenceSeconds: 300,
+      validForSeconds: 900,
+      styleHint: "weather-radar-reflectivity-v1",
+      severity: "info",
+      confidence: 0.9,
+      forecastArchive: false,
+      basis: ["chmi_radar_maxz_png", "chmi_radar_hdf5_metadata"]
+    },
+    {
+      productId: "pseudocappi2km",
+      layer: "weather_radar_precipitation",
+      category: "weather_radar_precipitation_intensity",
+      label: "ČHMÚ radar PseudoCAPPI 2 km",
+      description: "Radar reflectivity at 2 km constant altitude, used for surface precipitation intensity estimate.",
+      indexPath: "pseudocappi2km/png/",
+      filePattern: /^pacz2gmaps3\.z_cappi020\.\d{8}\.\d{4}\.0\.png$/,
+      contentType: "image/png",
+      hdfIndexPath: "pseudocappi2km/hdf5/",
+      hdfFilePattern: /^T_PANV23_C_OKPR_\d{14}\.hdf$/,
+      legendUrl: CHMI_RADAR_REFLECTIVITY_LEGEND_URL,
+      updateCadenceSeconds: 300,
+      validForSeconds: 900,
+      styleHint: "weather-radar-precipitation-v1",
+      severity: "info",
+      confidence: 0.88,
+      forecastArchive: false,
+      basis: ["chmi_radar_pseudocappi2km_png", "chmi_radar_hdf5_metadata"]
+    },
+    {
+      productId: "merge1h",
+      layer: "weather_radar_precipitation",
+      category: "weather_radar_precipitation_1h",
+      label: "ČHMÚ MERGE 1h precipitation",
+      description: "Merged 1h precipitation estimate from radar and rain gauges.",
+      indexPath: "merge1h/png/",
+      filePattern: /^pacz2gmaps3\.merge\.\d{8}\.\d{4}\.60\.png$/,
+      contentType: "image/png",
+      hdfIndexPath: "merge1h/hdf5/",
+      hdfFilePattern: /^T_PASV23_C_OKPR_\d{14}\.hdf$/,
+      legendUrl: CHMI_RADAR_PRECIPITATION_LEGEND_URL,
+      updateCadenceSeconds: 600,
+      validForSeconds: 1800,
+      styleHint: "weather-radar-precipitation-1h-v1",
+      severity: "info",
+      confidence: 0.9,
+      forecastArchive: false,
+      basis: ["chmi_radar_merge1h_png", "chmi_rain_gauge_kriging_context"]
+    },
+    {
+      productId: "fct_maxz",
+      layer: "weather_radar_nowcast",
+      category: "weather_radar_nowcast_reflectivity",
+      label: "ČHMÚ radar MAX_Z nowcast",
+      description: "Extrapolation forecast archive for maximum radar reflectivity, +10 to +60 minutes.",
+      indexPath: "fct_maxz/png/",
+      filePattern: /^pacz2gmaps3\.fct_z_max\.\d{8}\.\d{4}\.ft60s10\.tar$/,
+      contentType: "application/x-tar",
+      legendUrl: CHMI_RADAR_REFLECTIVITY_LEGEND_URL,
+      updateCadenceSeconds: 300,
+      validForSeconds: 3600,
+      styleHint: "weather-radar-nowcast-v1",
+      severity: "info",
+      confidence: 0.72,
+      forecastArchive: true,
+      forecastHorizonMinutes: 60,
+      basis: ["chmi_radar_cotrec_nowcast", "forecast_archive_metadata"]
+    },
+    {
+      productId: "fct_pseudocappi2km",
+      layer: "weather_radar_nowcast",
+      category: "weather_radar_nowcast_precipitation",
+      label: "ČHMÚ PseudoCAPPI 2 km nowcast",
+      description: "Extrapolation forecast archive for PseudoCAPPI 2 km, +10 to +60 minutes.",
+      indexPath: "fct_pseudocappi2km/png/",
+      filePattern: /^pacz2gmaps3\.fct_z_cappi020\.\d{8}\.\d{4}\.ft60s10\.tar$/,
+      contentType: "application/x-tar",
+      legendUrl: CHMI_RADAR_REFLECTIVITY_LEGEND_URL,
+      updateCadenceSeconds: 300,
+      validForSeconds: 3600,
+      styleHint: "weather-radar-nowcast-v1",
+      severity: "info",
+      confidence: 0.7,
+      forecastArchive: true,
+      forecastHorizonMinutes: 60,
+      basis: ["chmi_radar_cotrec_nowcast", "forecast_archive_metadata"]
+    },
+    {
+      productId: "thunderstorm_risk",
+      layer: "weather_thunderstorm_risk",
+      category: "weather_thunderstorm_risk",
+      label: "ČHMÚ radar thunderstorm context",
+      description: "Radar context for convective cores from MAX_Z masked PNG and EchoTop HDF5 metadata. No raw lightning strikes.",
+      indexPath: "maxz/png_masked/",
+      filePattern: /^pacz2gmaps3\.z_max3d\.\d{8}\.\d{4}\.0\.png$/,
+      contentType: "image/png",
+      hdfIndexPath: "echotop/hdf5/",
+      hdfFilePattern: /^T_PADV23_C_OKPR_\d{14}\.hdf$/,
+      legendUrl: CHMI_RADAR_REFLECTIVITY_LEGEND_URL,
+      updateCadenceSeconds: 300,
+      validForSeconds: 900,
+      styleHint: "weather-thunderstorm-risk-v1",
+      severity: "advisory",
+      confidence: 0.68,
+      forecastArchive: false,
+      basis: ["chmi_radar_maxz_masked_png", "chmi_radar_echotop_hdf5", "no_public_raw_lightning_feed"]
+    }
+  ];
+}
+
+function latestChmiRadarHrefFromIndex(indexHtml: string, pattern: RegExp): string | undefined {
+  return hrefsFromHtmlIndex(indexHtml)
+    .map((href) => href.split("/").pop() ?? href)
+    .filter((href) => pattern.test(href) && parseChmiRadarTimestampFromHref(href))
+    .sort((a, b) => Date.parse(parseChmiRadarTimestampFromHref(b) ?? "") - Date.parse(parseChmiRadarTimestampFromHref(a) ?? ""))
+    [0];
+}
+
+function parseChmiRadarTimestampFromHref(href: string): string | undefined {
+  const pngOrTar = href.match(/(\d{8})\.(\d{4})/);
+  const date = pngOrTar?.[1];
+  const time = pngOrTar?.[2];
+  if (date && time) {
+    return parseTimestamp(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T${time.slice(0, 2)}:${time.slice(2, 4)}:00Z`);
+  }
+  const hdf = href.match(/_(\d{14})\.hdf$/);
+  const token = hdf?.[1];
+  if (token) {
+    return parseTimestamp(
+      `${token.slice(0, 4)}-${token.slice(4, 6)}-${token.slice(6, 8)}T${token.slice(8, 10)}:${token.slice(10, 12)}:${token.slice(12, 14)}Z`
+    );
+  }
+  return undefined;
+}
+
+function latestChmiRadarProductTimestamp(
+  products: Array<{ asset?: ChmiRadarAsset; hdfAsset?: ChmiRadarAsset }>
+): string | undefined {
+  return products
+    .flatMap((product) => [product.asset?.observedAt, product.hdfAsset?.observedAt])
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+}
+
+function makeChmiRadarFeature(
+  definition: ChmiRadarProductDefinition,
+  asset: ChmiRadarAsset,
+  hdfAsset: ChmiRadarAsset | undefined,
+  fetchedAt: string,
+  includeRaw: boolean
+): SituationFeature {
+  const id = `weather_radar:chmi_weather_radar:${definition.productId}:${stableToken(asset.href)}`;
+  const observedAt = asset.observedAt;
+  const ageSeconds = Math.max(0, Math.round((Date.now() - Date.parse(observedAt)) / 1000));
+  const validUntil = addSecondsIso(observedAt, definition.validForSeconds);
+  const feature: SituationFeature = {
+    type: "Feature",
+    id,
+    geometry: bboxPolygon(CHMI_RADAR_IMAGE_BBOX),
+    properties: {
+      featureId: id,
+      layer: definition.layer,
+      category: definition.category,
+      label: definition.label,
+      sourceId: "chmi_weather_radar",
+      source: "chmi_weather_radar",
+      sourceName: "ČHMÚ weather radar Open Data",
+      observedAt,
+      validUntil,
+      updatedAt: fetchedAt,
+      confidence: radarConfidence(definition, ageSeconds),
+      stale: ageSeconds > definition.validForSeconds,
+      severity: definition.severity,
+      license: {
+        name: CHMI_OPEN_DATA_LICENSE.name,
+        attribution: CHMI_OPEN_DATA_LICENSE.attribution,
+        url: CHMI_OPEN_DATA_LICENSE.url
+      },
+      metrics: compactMixedMetrics({
+        productAgeSeconds: ageSeconds,
+        updateCadenceSeconds: definition.updateCadenceSeconds,
+        validitySeconds: definition.validForSeconds,
+        resolutionM: 1000,
+        forecastArchive: definition.forecastArchive,
+        forecastHorizonMinutes: definition.forecastHorizonMinutes
+      }),
+      tags: compactTags({
+        sourceSystem: "chmi_weather_radar",
+        productId: definition.productId,
+        productFormat: definition.forecastArchive ? "tar" : "png",
+        projection: "EPSG:3857",
+        lightningStrikeFeed: "false"
+      }),
+      basis: definition.basis,
+      summary: definition.description,
+      notices: [
+        "Radar overlay metadata only; COM must render the supplied raster URL or request a future SIM tile/proxy endpoint.",
+        "Raw lightning strike positions are not included."
+      ],
+      styleHint: definition.styleHint,
+      iconHint: definition.layer === "weather_thunderstorm_risk" ? "thunderstorm" : "radar",
+      sourceRevision: asset.href,
+      readModel: true,
+      generatedAt: fetchedAt,
+      resolutionM: 1000,
+      providerProperties: compactProviderProperties({
+        productId: definition.productId,
+        productDescription: definition.description,
+        raster: {
+          url: definition.forecastArchive ? undefined : asset.url,
+          archiveUrl: definition.forecastArchive ? asset.url : undefined,
+          contentType: definition.contentType,
+          projection: "EPSG:3857",
+          boundsWgs84: bboxToArray(CHMI_RADAR_IMAGE_BBOX),
+          dataBoundsWgs84: bboxToArray(CHMI_RADAR_DATA_BBOX),
+          opacity: definition.layer === "weather_thunderstorm_risk" ? 0.64 : 0.58,
+          renderMode: definition.forecastArchive ? "archive_sequence" : "image_overlay"
+        },
+        hdf5: hdfAsset
+          ? {
+              url: hdfAsset.url,
+              observedAt: hdfAsset.observedAt,
+              contentType: "application/x-hdf5"
+            }
+          : undefined,
+        colorScaleUrl: definition.legendUrl,
+        cadenceSeconds: definition.updateCadenceSeconds,
+        forecastHorizonMinutes: definition.forecastHorizonMinutes,
+        lightningStrikeFeed: false,
+        sourceLimitation: definition.layer === "weather_thunderstorm_risk" ? "No redistributable official raw lightning-strike feed is configured." : undefined
+      }),
+      disclaimer: "Radarová vrstva je situační kontext z ČHMÚ Open Data, ne náhrada oficiálních výstrah a pokynů krizových orgánů.",
+      raw: includeRaw
+        ? {
+            definition,
+            asset,
+            hdfAsset,
+            dataBbox: CHMI_RADAR_DATA_BBOX,
+            imageBbox: CHMI_RADAR_IMAGE_BBOX
+          }
+        : undefined
+    }
+  };
+  return stripRawIfNeeded(feature, includeRaw);
+}
+
+function radarConfidence(definition: ChmiRadarProductDefinition, ageSeconds: number): number {
+  const agePenalty = ageSeconds <= definition.updateCadenceSeconds * 2 ? 0 : ageSeconds <= definition.validForSeconds ? 0.08 : 0.22;
+  return round(Math.max(0.35, definition.confidence - agePenalty), 2);
+}
+
+function bboxPolygon(bbox: BoundingBox): SituationFeature["geometry"] {
+  return {
+    type: "Polygon",
+    coordinates: [
+      [
+        [round(bbox.west, 6), round(bbox.south, 6)],
+        [round(bbox.east, 6), round(bbox.south, 6)],
+        [round(bbox.east, 6), round(bbox.north, 6)],
+        [round(bbox.west, 6), round(bbox.north, 6)],
+        [round(bbox.west, 6), round(bbox.south, 6)]
+      ]
+    ]
+  };
+}
+
+function bboxToArray(bbox: BoundingBox): [number, number, number, number] {
+  return [bbox.west, bbox.south, bbox.east, bbox.north];
+}
+
+function bboxIntersects(a: BoundingBox, b: BoundingBox): boolean {
+  return a.west <= b.east && a.east >= b.west && a.south <= b.north && a.north >= b.south;
+}
+
+function addSecondsIso(value: string, seconds: number): string | undefined {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return undefined;
+  }
+  return new Date(timestamp + seconds * 1000).toISOString();
 }
 
 function distanceSquared(lonA: number, latA: number, lonB: number, latB: number): number {

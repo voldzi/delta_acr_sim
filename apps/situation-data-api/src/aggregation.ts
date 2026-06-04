@@ -152,6 +152,20 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
     }
     return "air_quality.chmi_station_observations";
   }
+  if (sourceId === "chmi_weather_radar") {
+    if (layer === "weather_radar_reflectivity") {
+      return "weather.radar_reflectivity";
+    }
+    if (layer === "weather_radar_precipitation") {
+      return "weather.radar_precipitation";
+    }
+    if (layer === "weather_radar_nowcast") {
+      return "weather.radar_nowcast";
+    }
+    if (layer === "weather_thunderstorm_risk") {
+      return "weather.thunderstorm_risk";
+    }
+  }
   if (sourceId === "mobile_network_model") {
     return "mobile_network";
   }
@@ -240,6 +254,14 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.safety.air_quality";
     case "air_quality.grid":
       return "public.safety.air_quality_grid";
+    case "weather.radar_reflectivity":
+      return "public.weather.radar_reflectivity";
+    case "weather.radar_precipitation":
+      return "public.weather.radar_precipitation";
+    case "weather.radar_nowcast":
+      return "public.weather.radar_nowcast";
+    case "weather.thunderstorm_risk":
+      return "public.safety.thunderstorm_risk";
     case "mobile_network":
       return "public.mobile.network";
     case "mobile_coverage":

@@ -170,6 +170,38 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 600
   },
   {
+    layerId: "weather_radar_reflectivity",
+    label: "Weather radar reflectivity",
+    description: "ČHMÚ radar reflectivity raster overlay metadata for current precipitation and convective context.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
+    layerId: "weather_radar_precipitation",
+    label: "Weather radar precipitation",
+    description: "ČHMÚ radar-derived precipitation raster overlay metadata including surface reflectivity and 1h merged precipitation.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 600
+  },
+  {
+    layerId: "weather_radar_nowcast",
+    label: "Weather radar nowcast",
+    description: "ČHMÚ radar extrapolation forecast metadata for the next 60 minutes.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
+    layerId: "weather_thunderstorm_risk",
+    label: "Thunderstorm risk",
+    description: "Radar-derived thunderstorm context overlay. It does not contain a raw lightning-strike feed.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
     layerId: "air_quality_grid",
     label: "Air quality grid",
     description: "Stable air-quality grid metadata for interpolated ČHMÚ pollution overlays.",

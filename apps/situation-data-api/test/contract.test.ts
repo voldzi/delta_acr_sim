@@ -77,6 +77,8 @@ describe("Situation Data API contract", () => {
       chmiWeatherDataBaseUrl: "https://opendata.chmi.cz/meteorology/climate/now/data/",
       chmiWeatherCacheTtlSeconds: 600,
       chmiWeatherMaxStations: 16,
+      chmiWeatherRadarBaseUrl: "https://opendata.chmi.cz/meteorology/weather/radar/composite/",
+      chmiWeatherRadarCacheTtlSeconds: 300,
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
@@ -109,6 +111,8 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({ layerId: "mobile", defaultVisible: false }),
         expect.objectContaining({ layerId: "boundary_region", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_temperature_grid", defaultVisible: false }),
+        expect.objectContaining({ layerId: "weather_radar_reflectivity", defaultVisible: false }),
+        expect.objectContaining({ layerId: "weather_thunderstorm_risk", defaultVisible: false }),
         expect.objectContaining({ layerId: "air_quality_grid", defaultVisible: false })
       ])
     );
@@ -173,6 +177,10 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "chmi_weather_stations",
           layers: expect.arrayContaining(["weather", "weather_temperature_grid", "weather_wind_field"])
+        }),
+        expect.objectContaining({
+          sourceId: "chmi_weather_radar",
+          layers: expect.arrayContaining(["weather_radar_reflectivity", "weather_radar_precipitation", "weather_radar_nowcast", "weather_thunderstorm_risk"])
         }),
         expect.objectContaining({
           sourceId: "ardos_partner",
@@ -311,6 +319,28 @@ describe("Situation Data API contract", () => {
           sourceIds: ["chmi_air_quality"]
         }),
         expect.objectContaining({
+          providerLayerId: "weather.radar_reflectivity",
+          recommendedCatalogLayerId: "public.weather.radar_reflectivity",
+          kind: "raster_overlay",
+          sourceIds: ["chmi_weather_radar"],
+          delivery: expect.objectContaining({ mode: "raster_overlay" })
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.radar_precipitation",
+          recommendedCatalogLayerId: "public.weather.radar_precipitation",
+          kind: "raster_overlay",
+          sourceIds: ["chmi_weather_radar"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.thunderstorm_risk",
+          recommendedCatalogLayerId: "public.safety.thunderstorm_risk",
+          kind: "raster_overlay",
+          sourceIds: ["chmi_weather_radar"],
+          legal: expect.objectContaining({
+            notes: expect.arrayContaining([expect.stringContaining("blesků")])
+          })
+        }),
+        expect.objectContaining({
           providerLayerId: "boundary.region",
           recommendedCatalogLayerId: "public.boundary.region",
           role: "reference",
@@ -428,6 +458,17 @@ describe("Situation Data API contract", () => {
           feedsCatalogLayerIds: expect.arrayContaining(["public.weather.observations", "public.weather.temperature_grid", "public.weather.wind_field"])
         }),
         expect.objectContaining({
+          sourceId: "chmi_weather_radar",
+          sourceRole: "final",
+          selectableInMap: true,
+          feedsCatalogLayerIds: expect.arrayContaining([
+            "public.weather.radar_reflectivity",
+            "public.weather.radar_precipitation",
+            "public.weather.radar_nowcast",
+            "public.safety.thunderstorm_risk"
+          ])
+        }),
+        expect.objectContaining({
           sourceId: "chmi_air_quality",
           feedsCatalogLayerIds: expect.arrayContaining(["public.safety.air_quality", "public.safety.air_quality_grid"])
         }),
@@ -483,6 +524,7 @@ describe("Situation Data API contract", () => {
           aviationWeather: 600,
           chmiAirQuality: 900,
           chmiWeatherStations: 600,
+          chmiWeatherRadar: 300,
           ardosPartner: 15
         },
         providers: expect.arrayContaining([
@@ -500,6 +542,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "aviation_weather", authConfigured: true }),
           expect.objectContaining({ sourceId: "chmi_air_quality", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "chmi_weather_stations", authConfigured: true, backend: "chmi-opendata" }),
+          expect.objectContaining({ sourceId: "chmi_weather_radar", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "ardos_partner", authConfigured: false })
         ])
       })
@@ -1050,6 +1093,99 @@ describe("Situation Data API contract", () => {
         })
       ])
     );
+  });
+
+  it("exposes CHMI radar overlay and thunderstorm context metadata", async () => {
+    const radarIndex = (names: string[]) => `<html><body><pre>${names.map((name) => `<a href="${name}">${name}</a>`).join("\n")}</pre></body></html>`;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const indexes: Record<string, string> = {
+        "/maxz/png/": radarIndex(["pacz2gmaps3.z_max3d.20260604.2115.0.png", "pacz2gmaps3.z_max3d.20260604.2120.0.png"]),
+        "/maxz/hdf5/": radarIndex(["T_PABV23_C_OKPR_20260604211500.hdf", "T_PABV23_C_OKPR_20260604212000.hdf"]),
+        "/pseudocappi2km/png/": radarIndex(["pacz2gmaps3.z_cappi020.20260604.2115.0.png", "pacz2gmaps3.z_cappi020.20260604.2120.0.png"]),
+        "/pseudocappi2km/hdf5/": radarIndex(["T_PANV23_C_OKPR_20260604211500.hdf", "T_PANV23_C_OKPR_20260604212000.hdf"]),
+        "/merge1h/png/": radarIndex(["pacz2gmaps3.merge.20260604.2110.60.png", "pacz2gmaps3.merge.20260604.2120.60.png"]),
+        "/merge1h/hdf5/": radarIndex(["T_PASV23_C_OKPR_20260604211000.hdf", "T_PASV23_C_OKPR_20260604212000.hdf"]),
+        "/fct_maxz/png/": radarIndex(["pacz2gmaps3.fct_z_max.20260604.2115.ft60s10.tar", "pacz2gmaps3.fct_z_max.20260604.2120.ft60s10.tar"]),
+        "/fct_pseudocappi2km/png/": radarIndex(["pacz2gmaps3.fct_z_cappi020.20260604.2115.ft60s10.tar", "pacz2gmaps3.fct_z_cappi020.20260604.2120.ft60s10.tar"]),
+        "/maxz/png_masked/": radarIndex(["pacz2gmaps3.z_max3d.20260604.2115.0.png", "pacz2gmaps3.z_max3d.20260604.2120.0.png"]),
+        "/echotop/hdf5/": radarIndex(["T_PADV23_C_OKPR_20260604211500.hdf", "T_PADV23_C_OKPR_20260604212000.hdf"])
+      };
+      const match = Object.entries(indexes).find(([suffix]) => url.endsWith(suffix));
+      if (match) {
+        return new Response(match[1], { status: 200, headers: { "content-type": "text/html" } });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const radarApp = await createApp({ ...config, enabledSources: ["chmi_weather_radar"] });
+
+    const response = await request(radarApp.app)
+      .get(
+        "/api/v1/features?bbox=12.0,48.5,19.0,51.2&layers=weather_radar_reflectivity,weather_radar_precipitation,weather_radar_nowcast,weather_thunderstorm_risk&source=chmi_weather_radar&limit=20"
+      )
+      .expect(200);
+
+    expect(response.body.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "Polygon" }),
+          properties: expect.objectContaining({
+            layer: "weather_radar_reflectivity",
+            layerId: "public.weather.radar_reflectivity",
+            providerLayerId: "weather.radar_reflectivity",
+            category: "weather_radar_reflectivity",
+            sourceId: "chmi_weather_radar",
+            sourceRevision: "pacz2gmaps3.z_max3d.20260604.2120.0.png",
+            providerProperties: expect.objectContaining({
+              raster: expect.objectContaining({
+                url: expect.stringContaining("pacz2gmaps3.z_max3d.20260604.2120.0.png"),
+                boundsWgs84: [11.267, 48.047, 20.77, 52.167],
+                dataBoundsWgs84: [11.267, 48.047, 19.624, 51.458],
+                renderMode: "image_overlay"
+              }),
+              hdf5: expect.objectContaining({
+                url: expect.stringContaining("T_PABV23_C_OKPR_20260604212000.hdf")
+              })
+            })
+          })
+        }),
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            layer: "weather_radar_precipitation",
+            layerId: "public.weather.radar_precipitation",
+            providerLayerId: "weather.radar_precipitation"
+          })
+        }),
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            layer: "weather_radar_nowcast",
+            layerId: "public.weather.radar_nowcast",
+            providerLayerId: "weather.radar_nowcast",
+            providerProperties: expect.objectContaining({
+              raster: expect.objectContaining({
+                archiveUrl: expect.stringContaining("pacz2gmaps3.fct_z_max.20260604.2120.ft60s10.tar"),
+                renderMode: "archive_sequence"
+              })
+            })
+          })
+        }),
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            layer: "weather_thunderstorm_risk",
+            layerId: "public.safety.thunderstorm_risk",
+            providerLayerId: "weather.thunderstorm_risk",
+            tags: expect.objectContaining({ lightningStrikeFeed: "false" }),
+            providerProperties: expect.objectContaining({
+              lightningStrikeFeed: false,
+              sourceLimitation: expect.stringContaining("No redistributable official raw lightning-strike feed")
+            })
+          })
+        })
+      ])
+    );
+    expect(response.body.summary.featureCount).toBe(6);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
   });
 
   it("projects PID GTFS-RT vehicle positions with normalized traffic attributes", async () => {

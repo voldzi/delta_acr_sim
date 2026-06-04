@@ -286,6 +286,10 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "weather_precipitation_grid",
     "weather_humidity_grid",
     "weather_pressure_grid",
+    "weather_radar_reflectivity",
+    "weather_radar_precipitation",
+    "weather_radar_nowcast",
+    "weather_thunderstorm_risk",
     "air_quality_grid"
   ]);
   const raw = asString(value);
@@ -311,6 +315,10 @@ function parseLayers(value: unknown): SituationLayerId[] {
       "weather_precipitation_grid",
       "weather_humidity_grid",
       "weather_pressure_grid",
+      "weather_radar_reflectivity",
+      "weather_radar_precipitation",
+      "weather_radar_nowcast",
+      "weather_thunderstorm_risk",
       "air_quality_grid"
     ];
   }
@@ -337,6 +345,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "aviation_weather",
     "chmi_air_quality",
     "chmi_weather_stations",
+    "chmi_weather_radar",
     "ardos_partner"
   ]);
   const raw = asString(value);
@@ -424,6 +433,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       aviationWeather: config.aviationWeatherCacheTtlSeconds,
       chmiAirQuality: config.chmiAirQualityCacheTtlSeconds,
       chmiWeatherStations: config.chmiWeatherCacheTtlSeconds,
+      chmiWeatherRadar: config.chmiWeatherRadarCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds
     },
     providers: [
@@ -457,6 +467,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "aviation_weather", baseUrl: config.aviationWeatherBaseUrl, authConfigured: true },
       { sourceId: "chmi_air_quality", baseUrl: config.chmiAirQualityDataUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "chmi_weather_stations", baseUrl: config.chmiWeatherDataBaseUrl, authConfigured: true, backend: "chmi-opendata" },
+      { sourceId: "chmi_weather_radar", baseUrl: config.chmiWeatherRadarBaseUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }
     ]
   };
@@ -549,6 +560,18 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
       lines.push(`situation_data_chmi_weather_latest_observation_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
     }
   }
+  if (status.sourceId === "chmi_weather_radar") {
+    lines.push(`situation_data_chmi_weather_radar_backend_info{backend="${backend}"} 1`);
+    if (typeof status.objectCount === "number") {
+      lines.push(`situation_data_chmi_weather_radar_products{backend="${backend}"} ${status.objectCount}`);
+    }
+    if (status.lastImportAt) {
+      lines.push(`situation_data_chmi_weather_radar_latest_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+    }
+    if (typeof status.lastImportAgeSeconds === "number") {
+      lines.push(`situation_data_chmi_weather_radar_latest_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
+    }
+  }
   return lines;
 }
 
@@ -599,26 +622,33 @@ function sourceFreshness(sourceHealth: SourceHealthStatus[]): Record<string, num
 function environmentGridTelemetry(config: SituationDataConfig, sourceHealth: SourceHealthStatus[]): Record<string, unknown> {
   const weather = sourceHealth.find((source) => source.sourceId === "chmi_weather_stations");
   const airQuality = sourceHealth.find((source) => source.sourceId === "chmi_air_quality");
+  const radar = sourceHealth.find((source) => source.sourceId === "chmi_weather_radar");
   const weatherReady = config.enabledSources.includes("chmi_weather_stations") && weather?.status === "ok";
   const airQualityReady = config.enabledSources.includes("chmi_air_quality") && airQuality?.status === "ok";
+  const radarReady = config.enabledSources.includes("chmi_weather_radar") && radar?.status === "ok";
   const enabledLayers = [
     "public.weather.temperature_grid",
     "public.weather.wind_field",
     "public.weather.precipitation_grid",
     "public.weather.humidity_grid",
     "public.weather.pressure_grid",
+    "public.weather.radar_reflectivity",
+    "public.weather.radar_precipitation",
+    "public.weather.radar_nowcast",
+    "public.safety.thunderstorm_risk",
     "public.safety.air_quality_grid"
   ];
   return {
-    status: weatherReady || airQualityReady ? "cataloged" : "degraded",
+    status: weatherReady || airQualityReady || radarReady ? "cataloged" : "degraded",
     enabledLayers,
-    sourceIds: ["chmi_weather_stations", "chmi_air_quality"],
+    sourceIds: ["chmi_weather_stations", "chmi_weather_radar", "chmi_air_quality"],
     stableGrid: {
       alignment: "wgs84",
       resolutionDegrees: config.openMeteoGridDegrees
     },
     cacheTtlSeconds: {
       weather: config.chmiWeatherCacheTtlSeconds,
+      radar: config.chmiWeatherRadarCacheTtlSeconds,
       airQuality: config.chmiAirQualityCacheTtlSeconds
     },
     readModel: {
@@ -628,11 +658,12 @@ function environmentGridTelemetry(config: SituationDataConfig, sourceHealth: Sou
     },
     upstreamStatus: {
       weather: weather?.status ?? "not_enabled",
+      radar: radar?.status ?? "not_enabled",
       airQuality: airQuality?.status ?? "not_enabled"
     },
     warnings:
-      weatherReady || airQualityReady
-        ? ["Grid layers are cataloged. Phase 2 will materialize tile/grid endpoints from cached station observations."]
+      weatherReady || airQualityReady || radarReady
+        ? ["Weather grid and radar overlay layers are cataloged. Raster proxy/tile materialization remains a future optimization."]
         : ["Environment grid sources are not healthy or not enabled."]
   };
 }
