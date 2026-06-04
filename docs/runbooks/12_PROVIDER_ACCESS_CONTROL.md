@@ -42,6 +42,14 @@ Allowed by default:
 
 If COP backend is moved to a non-private network, add that exact source range to `apps/simulator-web/nginx/internal-provider-access.conf` or enforce the allowlist at `dmz.home.cz`.
 
+The same Nginx layer also protects the intentionally public paths:
+
+- `GET /health/live` is rate limited to `30r/m` per client IP with a short burst.
+- Public static/provider-notice paths are rate limited to `240r/m` per client IP.
+- Static hashed frontend assets and icons are cacheable; `index.html` and internal UI/provider responses are `no-store`.
+- Responses include security headers from `apps/simulator-web/nginx/security-headers.conf`: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Cross-Origin-Resource-Policy`, `Permissions-Policy` and a restrictive `Content-Security-Policy`.
+- `client_max_body_size` is set to `1m`, matching the Express body parser limits used by the APIs.
+
 ## DMZ-side protection
 
 Docker-side protection is a second line of defense. The primary internet boundary is `dmz.home.cz` Nginx. Its `sim.zeleznalady.cz` vhost should block provider paths before proxying them to `docker.home.cz:5020`.
@@ -134,6 +142,7 @@ curl -i https://sim.zeleznalady.cz/health/live
 curl -i https://sim.zeleznalady.cz/docs/
 curl -i https://sim.zeleznalady.cz/situation-data/api/v1/catalog
 curl -i https://sim.zeleznalady.cz/
+curl -I https://sim.zeleznalady.cz/docs/
 ```
 
 Expected public result:
@@ -141,4 +150,12 @@ Expected public result:
 - `/health/live`: `200`
 - `/docs/`: `200`
 - provider paths and `/`: `403`
+- response headers include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`
 
+Rate-limit smoke test from a non-critical host:
+
+```bash
+for i in $(seq 1 60); do curl -fsS -o /dev/null -w "%{http_code}\n" https://sim.zeleznalady.cz/health/live; done | sort | uniq -c
+```
+
+Expected result is mostly `200`, with `429` after the allowed public-health burst if the loop is fast enough.

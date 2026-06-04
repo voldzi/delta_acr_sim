@@ -100,11 +100,18 @@ export class ManagedResponseCache<T> {
   private evictIfNeeded(): void {
     const maxEntries = Math.max(1, this.options.maxEntries);
     while (this.entries.size > maxEntries) {
-      const oldest = Array.from(this.entries.entries()).sort((a, b) => a[1].lastAccessedAtMs - b[1].lastAccessedAtMs)[0];
-      if (!oldest) {
+      let oldestKey: string | undefined;
+      let oldestAccessedAtMs = Number.POSITIVE_INFINITY;
+      for (const [key, entry] of this.entries) {
+        if (entry.lastAccessedAtMs < oldestAccessedAtMs) {
+          oldestKey = key;
+          oldestAccessedAtMs = entry.lastAccessedAtMs;
+        }
+      }
+      if (!oldestKey) {
         return;
       }
-      this.entries.delete(oldest[0]);
+      this.entries.delete(oldestKey);
       this.counters.evictions += 1;
     }
   }
