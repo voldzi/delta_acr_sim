@@ -36,6 +36,14 @@ export interface SourceCacheStats extends ManagedResponseCacheStats {
 }
 
 const DEFAULT_MOBILE_NETWORK_TECHNOLOGIES: MobileCoverageTechnology[] = ["4G"];
+const CHMI_WEATHER_GRID_LAYERS = [
+  "weather_temperature_grid",
+  "weather_wind_field",
+  "weather_precipitation_grid",
+  "weather_humidity_grid",
+  "weather_pressure_grid"
+] satisfies SituationLayerId[];
+const CHMI_WEATHER_GRID_LAYER_SET = new Set<SituationLayerId>(CHMI_WEATHER_GRID_LAYERS);
 
 const MOCK_LICENSE: SituationDataLicense = {
   name: "Synthetic internal test data",
@@ -600,7 +608,9 @@ class ChmiAirQualitySource implements SituationDataSource {
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    if (!query.layers.includes("air_quality")) {
+    const includeStationObservations = query.layers.includes("air_quality");
+    const includeGrid = query.layers.includes("air_quality_grid");
+    if (!includeStationObservations && !includeGrid) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
@@ -614,10 +624,17 @@ class ChmiAirQualitySource implements SituationDataSource {
     ]);
     const registry = chmiAirQualityMeasurementRegistry(metadata);
     const aggregates = aggregateChmiAirQuality(records, registry);
-    const features = Array.from(aggregates.values())
-      .map((aggregate) => mapChmiAirQualityFeature(aggregate, query, fetchedAt))
-      .filter((feature): feature is SituationFeature => Boolean(feature))
-      .slice(0, query.limit);
+    const stationFeatures = includeStationObservations
+      ? Array.from(aggregates.values())
+          .map((aggregate) => mapChmiAirQualityFeature(aggregate, query, fetchedAt))
+          .filter((feature): feature is SituationFeature => Boolean(feature))
+      : [];
+    const gridFeatures = includeGrid
+      ? Array.from(aggregates.values())
+          .map((aggregate) => mapChmiAirQualityGridFeature(aggregate, query, fetchedAt, this.config.openMeteoGridDegrees))
+          .filter((feature): feature is SituationFeature => Boolean(feature))
+      : [];
+    const features = [...stationFeatures.slice(0, query.limit), ...gridFeatures.slice(0, query.limit)];
 
     const warnings: string[] = [];
     if (features.length === 0) {
@@ -717,7 +734,9 @@ class ChmiWeatherStationsSource implements SituationDataSource {
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    if (!query.layers.includes("weather")) {
+    const requestedWeatherGridLayers = query.layers.filter((layer) => CHMI_WEATHER_GRID_LAYER_SET.has(layer));
+    const includeStationObservations = query.layers.includes("weather");
+    if (!includeStationObservations && requestedWeatherGridLayers.length === 0) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
@@ -754,12 +773,16 @@ class ChmiWeatherStationsSource implements SituationDataSource {
       selected.map(async ({ station, file }) => {
         const url = joinUrl(this.config.chmiWeatherDataBaseUrl, file.href);
         const payload = await this.stationFileCache.getOrLoad(url, () => requestJson<ChmiDataCollectionPayload>(url, this.config.requestTimeoutMs));
-        return mapChmiWeatherStationFeature(station, payload, query, fetchedAt);
+        const pointFeature = mapChmiWeatherStationFeature(station, payload, query, fetchedAt);
+        const gridFeatures = pointFeature
+          ? requestedWeatherGridLayers.flatMap((layer) => mapChmiWeatherGridFeature(layer, station, pointFeature, this.config.openMeteoGridDegrees))
+          : [];
+        return [...(includeStationObservations && pointFeature ? [pointFeature] : []), ...gridFeatures];
       })
     );
     const features = settled
-      .flatMap((result) => (result.status === "fulfilled" && result.value ? [result.value] : []))
-      .slice(0, query.limit);
+      .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+      .slice(0, Math.max(query.limit, query.limit * Math.max(1, requestedWeatherGridLayers.length)));
     for (const result of settled) {
       if (result.status === "rejected") {
         warnings.push(result.reason instanceof Error ? result.reason.message : "Unknown chmi_weather_stations station-file failure.");
@@ -2714,6 +2737,355 @@ function mapChmiWeatherStationFeature(
   });
 }
 
+function mapChmiWeatherGridFeature(
+  layer: SituationLayerId,
+  station: ChmiWeatherStation,
+  stationFeature: SituationFeature,
+  resolutionDegrees: number
+): SituationFeature[] {
+  const metrics = stationFeature.properties.metrics ?? {};
+  const observedAt = stationFeature.properties.observedAt;
+  const validUntil = stationFeature.properties.validUntil;
+  const confidence = Math.max(0, stationFeature.properties.confidence - 0.08);
+  const resolution = normalizeGridResolutionDegrees(resolutionDegrees);
+  const base = {
+    station,
+    observedAt,
+    validUntil,
+    confidence,
+    resolutionDegrees: resolution,
+    resolutionM: approximateGridResolutionM(resolution),
+    sourceRevision: observedAt
+  };
+
+  switch (layer) {
+    case "weather_temperature_grid": {
+      const value = numberMetric(metrics, "temperatureC");
+      if (value === undefined) {
+        return [];
+      }
+      return [
+        makeStationBackedGridFeature({
+          ...base,
+          idPrefix: "weather_temperature_grid",
+          layer,
+          category: "weather_temperature_cell",
+          label: `${station.name} temperature`,
+          valueMetric: "temperatureC",
+          value,
+          unit: "°C",
+          severity: temperatureSeverity(value),
+          styleHint: "weather-temperature-grid-v1"
+        })
+      ];
+    }
+    case "weather_precipitation_grid": {
+      const value = numberMetric(metrics, "precipitation10mMm");
+      if (value === undefined) {
+        return [];
+      }
+      return [
+        makeStationBackedGridFeature({
+          ...base,
+          idPrefix: "weather_precipitation_grid",
+          layer,
+          category: "weather_precipitation_cell",
+          label: `${station.name} precipitation`,
+          valueMetric: "precipitation10mMm",
+          value,
+          unit: "mm/10min",
+          severity: weatherSeverity(undefined, value, undefined),
+          styleHint: "weather-precipitation-grid-v1"
+        })
+      ];
+    }
+    case "weather_humidity_grid": {
+      const value = numberMetric(metrics, "relativeHumidityPercent");
+      if (value === undefined) {
+        return [];
+      }
+      return [
+        makeStationBackedGridFeature({
+          ...base,
+          idPrefix: "weather_humidity_grid",
+          layer,
+          category: "weather_humidity_cell",
+          label: `${station.name} humidity`,
+          valueMetric: "relativeHumidityPercent",
+          value,
+          unit: "%",
+          severity: "info",
+          styleHint: "weather-humidity-grid-v1"
+        })
+      ];
+    }
+    case "weather_pressure_grid": {
+      const value = numberMetric(metrics, "pressureHpa");
+      if (value === undefined) {
+        return [];
+      }
+      return [
+        makeStationBackedGridFeature({
+          ...base,
+          idPrefix: "weather_pressure_grid",
+          layer,
+          category: "weather_pressure_cell",
+          label: `${station.name} pressure`,
+          valueMetric: "pressureHpa",
+          value,
+          unit: "hPa",
+          severity: pressureSeverity(value),
+          styleHint: "weather-pressure-grid-v1"
+        })
+      ];
+    }
+    case "weather_wind_field":
+      return mapChmiWeatherWindFeature(station, stationFeature, resolution);
+    default:
+      return [];
+  }
+}
+
+function mapChmiWeatherWindFeature(station: ChmiWeatherStation, stationFeature: SituationFeature, resolutionDegrees: number): SituationFeature[] {
+  const metrics = stationFeature.properties.metrics ?? {};
+  const windSpeedMps = numberMetric(metrics, "windSpeedMps");
+  const windGustMps = numberMetric(metrics, "windGustMps");
+  const windDirectionDeg = numberMetric(metrics, "windDirectionDeg");
+  if (windSpeedMps === undefined) {
+    return [];
+  }
+  const severity = weatherSeverity(windGustMps ?? windSpeedMps, undefined, undefined);
+  const sourceRevision = stationFeature.properties.observedAt;
+  const id = `weather_wind_field:chmi_weather_stations:${stableGridCellToken(station.lon, station.lat, resolutionDegrees)}`;
+  const properties = {
+    featureId: id,
+    layer: "weather_wind_field" as const,
+    category: "weather_wind_vector",
+    label: `${station.name} wind`,
+    sourceId: "chmi_weather_stations" as const,
+    source: "chmi_weather_stations",
+    sourceName: "ČHMÚ measured meteorological station",
+    observedAt: stationFeature.properties.observedAt,
+    validUntil: stationFeature.properties.validUntil,
+    confidence: round(Math.max(0, stationFeature.properties.confidence - 0.08), 2),
+    stale: false,
+    severity,
+    license: {
+      name: CHMI_OPEN_DATA_LICENSE.name,
+      attribution: CHMI_OPEN_DATA_LICENSE.attribution,
+      url: CHMI_OPEN_DATA_LICENSE.url
+    },
+    metrics: compactMixedMetrics({
+      value: windSpeedMps,
+      windSpeedMps,
+      windGustMps,
+      windDirectionDeg,
+      resolutionDegrees,
+      resolutionM: approximateGridResolutionM(resolutionDegrees)
+    }),
+    tags: compactTags({
+      stationId: station.stationId,
+      ghId: station.ghId,
+      sourceSystem: "chmi_meteorology_climate_now",
+      unit: "m/s"
+    }),
+    basis: ["chmi_measured_station", "station_backed_vector_field"],
+    styleHint: "weather-wind-field-v1",
+    sourceRevision,
+    readModel: true,
+    generatedAt: new Date().toISOString(),
+    resolutionM: approximateGridResolutionM(resolutionDegrees),
+    providerProperties: compactProviderProperties({
+      upstreamFeatureId: stationFeature.id,
+      upstreamStationId: station.stationId,
+      upstreamStationName: station.name,
+      gridResolutionDegrees: resolutionDegrees
+    })
+  };
+
+  if (windDirectionDeg === undefined) {
+    return [
+      {
+        type: "Feature",
+        id,
+        geometry: { type: "Point", coordinates: [round(station.lon, 6), round(station.lat, 6)] },
+        properties
+      }
+    ];
+  }
+
+  const end = windVectorEndpoint(station.lon, station.lat, windDirectionDeg, windSpeedMps, resolutionDegrees);
+  return [
+    {
+      type: "Feature",
+      id,
+      geometry: {
+        type: "LineString",
+        coordinates: [
+          [round(station.lon, 6), round(station.lat, 6)],
+          [round(end.lon, 6), round(end.lat, 6)]
+        ]
+      },
+      properties
+    }
+  ];
+}
+
+function mapChmiAirQualityGridFeature(
+  aggregate: ChmiAirQualityAggregate,
+  query: SituationQuery,
+  fetchedAt: string,
+  resolutionDegrees: number
+): SituationFeature | undefined {
+  const position = chmiLocalityLonLat(aggregate.locality);
+  if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
+    return undefined;
+  }
+  const observedAt = aggregate.observedAt ?? fetchedAt;
+  const dominant = dominantAirPollutant(aggregate.values);
+  const value = aggregate.airQualityIndex ?? (dominant ? aggregate.values[dominant] : undefined);
+  if (value === undefined) {
+    return undefined;
+  }
+  const localityCode = aggregate.locality.LocalityCode ?? stableToken(aggregate.locality.Name ?? `${position.lon}:${position.lat}`);
+  const localityName = aggregate.locality.Name ?? aggregate.locality.BasicInfo?.LocalityName ?? "CHMI air quality station";
+  const severity = maxSeverity([airQualityIndexSeverity(aggregate.airQualityIndex), pollutantSeverity(aggregate.values)]);
+  return makeStationBackedGridFeature({
+    idPrefix: "air_quality_grid",
+    layer: "air_quality_grid",
+    category: "air_quality_cell",
+    label: `${localityName} air quality`,
+    station: {
+      stationId: localityCode,
+      name: localityName,
+      lon: position.lon,
+      lat: position.lat
+    },
+    observedAt,
+    validUntil: addSeconds(observedAt, 2 * 60 * 60),
+    confidence: aggregate.airQualityIndex !== undefined ? 0.82 : 0.74,
+    resolutionDegrees: normalizeGridResolutionDegrees(resolutionDegrees),
+    resolutionM: approximateGridResolutionM(normalizeGridResolutionDegrees(resolutionDegrees)),
+    sourceRevision: observedAt,
+    valueMetric: aggregate.airQualityIndex !== undefined ? "airQualityIndex" : dominant ?? "pollutantValue",
+    value,
+    unit: aggregate.airQualityIndex !== undefined ? "AQI" : undefined,
+    severity,
+    styleHint: "air-quality-grid-v1",
+    sourceId: "chmi_air_quality",
+    sourceName: "ČHMÚ measured air-quality station",
+    extraMetrics: {
+      airQualityIndex: aggregate.airQualityIndex,
+      dominantPollutant: dominant,
+      ...(aggregate.values ?? {})
+    },
+    tags: compactTags({
+      stationCode: localityCode,
+      region: optionalString(aggregate.locality.BasicInfo?.Region),
+      district: optionalString(aggregate.locality.BasicInfo?.District),
+      airQualityLevel: airQualityLevel(aggregate.airQualityIndex),
+      dominantPollutant: dominant
+    }),
+    providerProperties: compactProviderProperties({
+      upstreamStationId: localityCode,
+      upstreamStationName: localityName,
+      components: aggregate.components
+    })
+  });
+}
+
+interface StationBackedGridFeatureInput {
+  idPrefix: string;
+  layer: SituationLayerId;
+  category: string;
+  label: string;
+  station: Pick<ChmiWeatherStation, "stationId" | "ghId" | "name" | "lon" | "lat">;
+  observedAt: string;
+  validUntil?: string;
+  confidence: number;
+  resolutionDegrees: number;
+  resolutionM: number;
+  sourceRevision: string;
+  valueMetric: string;
+  value: number;
+  unit?: string;
+  severity: SituationSeverity;
+  styleHint: string;
+  sourceId?: SituationDataSourceId;
+  sourceName?: string;
+  extraMetrics?: Record<string, number | string | boolean | undefined>;
+  tags?: Record<string, string> | undefined;
+  providerProperties?: Record<string, unknown> | undefined;
+}
+
+function makeStationBackedGridFeature(input: StationBackedGridFeatureInput): SituationFeature {
+  const cell = stableGridCell(input.station.lon, input.station.lat, input.resolutionDegrees);
+  const id = `${input.idPrefix}:${input.sourceId ?? "chmi_weather_stations"}:${cell.token}`;
+  const sourceId = input.sourceId ?? "chmi_weather_stations";
+  const ring: Array<[number, number]> = [
+    [cell.west, cell.south],
+    [cell.east, cell.south],
+    [cell.east, cell.north],
+    [cell.west, cell.north],
+    [cell.west, cell.south]
+  ];
+  return {
+    type: "Feature",
+    id,
+    geometry: {
+      type: "Polygon",
+      coordinates: [ring.map(([lon, lat]) => [round(lon, 6), round(lat, 6)] as [number, number])]
+    },
+    properties: {
+      featureId: id,
+      layer: input.layer,
+      category: input.category,
+      label: input.label,
+      sourceId,
+      source: sourceId,
+      sourceName: input.sourceName ?? "ČHMÚ measured meteorological station",
+      observedAt: input.observedAt,
+      validUntil: input.validUntil,
+      confidence: round(Math.max(0, Math.min(1, input.confidence)), 2),
+      stale: false,
+      severity: input.severity,
+      license: {
+        name: CHMI_OPEN_DATA_LICENSE.name,
+        attribution: CHMI_OPEN_DATA_LICENSE.attribution,
+        url: CHMI_OPEN_DATA_LICENSE.url
+      },
+      metrics: compactMixedMetrics({
+        value: input.value,
+        [input.valueMetric]: input.value,
+        unit: input.unit,
+        resolutionDegrees: input.resolutionDegrees,
+        resolutionM: input.resolutionM,
+        ...input.extraMetrics
+      }),
+      tags: {
+        ...(input.tags ?? {}),
+        ...compactTags({
+          stationId: input.station.stationId,
+          ghId: input.station.ghId,
+          sourceSystem: sourceId === "chmi_air_quality" ? "chmi_air_quality_now" : "chmi_meteorology_climate_now"
+        })
+      },
+      basis: ["chmi_measured_station", "station_backed_grid_cell"],
+      styleHint: input.styleHint,
+      sourceRevision: input.sourceRevision,
+      readModel: true,
+      generatedAt: new Date().toISOString(),
+      resolutionM: input.resolutionM,
+      providerProperties: compactProviderProperties({
+        upstreamStationId: input.station.stationId,
+        upstreamStationName: input.station.name,
+        gridResolutionDegrees: input.resolutionDegrees,
+        ...input.providerProperties
+      })
+    }
+  };
+}
+
 function chmiWeatherObservations(payload: ChmiDataCollectionPayload): Map<string, ChmiStationObservation> {
   const collection = chmiCollectionData(payload);
   const values = collection?.values ?? [];
@@ -3944,6 +4316,69 @@ function bboxCenter(bbox: BoundingBox): { lat: number; lon: number } {
   return {
     lat: (bbox.south + bbox.north) / 2,
     lon: (bbox.west + bbox.east) / 2
+  };
+}
+
+function normalizeGridResolutionDegrees(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0.05;
+  }
+  return round(Math.max(0.01, Math.min(0.5, value)), 4);
+}
+
+function stableGridCell(lon: number, lat: number, resolutionDegrees: number): { west: number; south: number; east: number; north: number; token: string } {
+  const resolution = normalizeGridResolutionDegrees(resolutionDegrees);
+  const west = Math.floor(lon / resolution) * resolution;
+  const south = Math.floor(lat / resolution) * resolution;
+  const east = west + resolution;
+  const north = south + resolution;
+  return {
+    west,
+    south,
+    east,
+    north,
+    token: `${round(west, 5)}:${round(south, 5)}:${resolution}`
+  };
+}
+
+function stableGridCellToken(lon: number, lat: number, resolutionDegrees: number): string {
+  return stableGridCell(lon, lat, resolutionDegrees).token;
+}
+
+function approximateGridResolutionM(resolutionDegrees: number): number {
+  return Math.round(normalizeGridResolutionDegrees(resolutionDegrees) * 111_320);
+}
+
+function numberMetric(metrics: Record<string, number | string | boolean>, key: string): number | undefined {
+  const value = metrics[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function temperatureSeverity(value: number): SituationSeverity {
+  if (value <= -15 || value >= 35) {
+    return "warning";
+  }
+  if (value <= -8 || value >= 30) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function pressureSeverity(value: number): SituationSeverity {
+  if (value <= 985 || value >= 1040) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function windVectorEndpoint(lon: number, lat: number, windDirectionDeg: number, windSpeedMps: number, resolutionDegrees: number): { lon: number; lat: number } {
+  const travelDirectionDeg = (windDirectionDeg + 180) % 360;
+  const radians = (travelDirectionDeg * Math.PI) / 180;
+  const length = normalizeGridResolutionDegrees(resolutionDegrees) * clamp(0.25 + windSpeedMps / 40, 0.25, 0.9);
+  const latScale = Math.max(0.25, Math.cos((lat * Math.PI) / 180));
+  return {
+    lon: lon + (Math.sin(radians) * length) / latScale,
+    lat: lat + Math.cos(radians) * length
   };
 }
 

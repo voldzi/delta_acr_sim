@@ -885,6 +885,31 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const grid = await request(chmiApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=air_quality_grid&source=chmi_air_quality&limit=20")
+      .expect(200);
+
+    expect(grid.body.features).toHaveLength(1);
+    expect(grid.body.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Polygon" }),
+        properties: expect.objectContaining({
+          sourceId: "chmi_air_quality",
+          layer: "air_quality_grid",
+          layerId: "public.safety.air_quality_grid",
+          providerLayerId: "air_quality.grid",
+          category: "air_quality_cell",
+          readModel: true,
+          styleHint: "air-quality-grid-v1",
+          metrics: expect.objectContaining({ airQualityIndex: 4, value: 4 }),
+          providerProperties: expect.objectContaining({
+            upstreamStationId: "APRA"
+          })
+        })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("projects CHMI measured weather stations from source-level caches", async () => {
@@ -970,6 +995,60 @@ describe("Situation Data API contract", () => {
           })
         })
       })
+    );
+
+    const grid = await request(chmiApp.app)
+      .get(
+        "/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather_temperature_grid,weather_wind_field,weather_precipitation_grid,weather_humidity_grid&source=chmi_weather_stations&limit=20"
+      )
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(grid.body.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "Polygon" }),
+          properties: expect.objectContaining({
+            sourceId: "chmi_weather_stations",
+            layer: "weather_temperature_grid",
+            layerId: "public.weather.temperature_grid",
+            providerLayerId: "weather.temperature_grid",
+            readModel: true,
+            styleHint: "weather-temperature-grid-v1",
+            metrics: expect.objectContaining({ temperatureC: 17.2, value: 17.2 })
+          })
+        }),
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "LineString" }),
+          properties: expect.objectContaining({
+            sourceId: "chmi_weather_stations",
+            layer: "weather_wind_field",
+            layerId: "public.weather.wind_field",
+            providerLayerId: "weather.wind_field",
+            readModel: true,
+            styleHint: "weather-wind-field-v1",
+            metrics: expect.objectContaining({ windSpeedMps: 4.2, windDirectionDeg: 270 })
+          })
+        }),
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "Polygon" }),
+          properties: expect.objectContaining({
+            layer: "weather_precipitation_grid",
+            layerId: "public.weather.precipitation_grid",
+            providerLayerId: "weather.precipitation_grid",
+            metrics: expect.objectContaining({ precipitation10mMm: 0.4, value: 0.4 })
+          })
+        }),
+        expect.objectContaining({
+          geometry: expect.objectContaining({ type: "Polygon" }),
+          properties: expect.objectContaining({
+            layer: "weather_humidity_grid",
+            layerId: "public.weather.humidity_grid",
+            providerLayerId: "weather.humidity_grid",
+            metrics: expect.objectContaining({ relativeHumidityPercent: 63, value: 63 })
+          })
+        })
+      ])
     );
   });
 

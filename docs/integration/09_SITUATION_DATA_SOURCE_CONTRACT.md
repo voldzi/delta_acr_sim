@@ -249,12 +249,15 @@ SIM publikuje dvě cacheované ČHMÚ vrstvy:
 
 - `public.weather.observations` / provider layer `weather.chmi_station_observations`: bodové features meteorologických stanic s metrikami `temperatureC`, `relativeHumidityPercent`, `pressureHpa`, `windSpeedMps`, `windGustMps`, `windDirectionDeg`, `precipitation10mMm`, `sunshineDurationSeconds`, `elevationM`.
 - `public.safety.air_quality` / provider layer `air_quality.chmi_station_observations`: bodové features imisních stanic s metrikami `airQualityIndex`, `pm10UgM3`, `pm25UgM3`, `no2UgM3`, `noxUgM3`, `o3UgM3`, `so2UgM3`, `coUgM3`.
+- Environment grid/field vrstvy jsou dostupné přes stejné bbox query jako station-backed read model. Každá feature nese `readModel=true`, `sourceRevision`, `resolutionM`, `basis` a `providerProperties.upstreamStationId`.
 
 Dotazy:
 
 ```http
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=50
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_quality&limit=50
+GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather_temperature_grid,weather_wind_field,weather_precipitation_grid,weather_humidity_grid,weather_pressure_grid&source=chmi_weather_stations&limit=250
+GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality_grid&source=chmi_air_quality&limit=250
 ```
 
 ČHMÚ zdroje jsou source-level cacheované. Výchozí TTL:
@@ -270,14 +273,14 @@ Katalog SIM nově nabízí plošné environment vrstvy pro civilní mapu:
 
 | Katalogové ID | Provider layer | Typ | Vstup |
 | --- | --- | --- | --- |
-| `public.weather.temperature_grid` | `weather.temperature_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
-| `public.weather.wind_field` | `weather.wind_field` | `vector_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
-| `public.weather.precipitation_grid` | `weather.precipitation_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
-| `public.weather.humidity_grid` | `weather.humidity_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
-| `public.weather.pressure_grid` | `weather.pressure_grid` | `grid_field` | ČHMÚ měřené stanice + Open-Meteo fallback |
+| `public.weather.temperature_grid` | `weather.temperature_grid` | `grid_field` | ČHMÚ měřené stanice |
+| `public.weather.wind_field` | `weather.wind_field` | `vector_field` | ČHMÚ měřené stanice |
+| `public.weather.precipitation_grid` | `weather.precipitation_grid` | `grid_field` | ČHMÚ měřené stanice |
+| `public.weather.humidity_grid` | `weather.humidity_grid` | `grid_field` | ČHMÚ měřené stanice |
+| `public.weather.pressure_grid` | `weather.pressure_grid` | `grid_field` | ČHMÚ měřené stanice |
 | `public.safety.air_quality_grid` | `air_quality.grid` | `grid_field` | ČHMÚ imisní stanice |
 
-V aktuální fázi jsou vrstvy katalogově stabilní a mají definované `styleProfile`, `legend`, `delivery.stableGrid` a TTL. Materializované grid/tile endpointy jsou další fáze; do té doby COM používá bodové vrstvy `public.weather.observations` a `public.safety.air_quality` pro detaily a může gridové položky v UI skrýt, pokud vyžaduje pouze již materializované features.
+V aktuální fázi SIM vrací grid jako GeoJSON features nad stabilní WGS84 buňkou. Hodnota buňky je odvozena z nejbližší měřené stanice uvnitř výřezu; nejde o meteorologický numerický model ani právně závaznou interpolaci. Materializované tile endpointy jsou další výkonová fáze pro velmi vysoký provoz.
 
 Observability:
 

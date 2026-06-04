@@ -129,9 +129,27 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
     return "weather.aviation_weather";
   }
   if (sourceId === "chmi_weather_stations") {
+    if (layer === "weather_temperature_grid") {
+      return "weather.temperature_grid";
+    }
+    if (layer === "weather_wind_field") {
+      return "weather.wind_field";
+    }
+    if (layer === "weather_precipitation_grid") {
+      return "weather.precipitation_grid";
+    }
+    if (layer === "weather_humidity_grid") {
+      return "weather.humidity_grid";
+    }
+    if (layer === "weather_pressure_grid") {
+      return "weather.pressure_grid";
+    }
     return "weather.chmi_station_observations";
   }
   if (sourceId === "chmi_air_quality") {
+    if (layer === "air_quality_grid") {
+      return "air_quality.grid";
+    }
     return "air_quality.chmi_station_observations";
   }
   if (sourceId === "mobile_network_model") {
@@ -208,8 +226,20 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.weather.aviation";
     case "weather.chmi_station_observations":
       return "public.weather.observations";
+    case "weather.temperature_grid":
+      return "public.weather.temperature_grid";
+    case "weather.wind_field":
+      return "public.weather.wind_field";
+    case "weather.precipitation_grid":
+      return "public.weather.precipitation_grid";
+    case "weather.humidity_grid":
+      return "public.weather.humidity_grid";
+    case "weather.pressure_grid":
+      return "public.weather.pressure_grid";
     case "air_quality.chmi_station_observations":
       return "public.safety.air_quality";
+    case "air_quality.grid":
+      return "public.safety.air_quality_grid";
     case "mobile_network":
       return "public.mobile.network";
     case "mobile_coverage":
@@ -285,6 +315,8 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     operatorStatusAvailable,
     estimatedSignalDbm,
     modelVersion,
+    sourceRevision,
+    readModel,
     generatedAt,
     resolutionM,
     demSource,
@@ -322,6 +354,8 @@ function providerPropertiesForFeature(feature: SituationFeature): Record<string,
     operatorStatusAvailable,
     estimatedSignalDbm,
     modelVersion,
+    sourceRevision,
+    readModel,
     generatedAt,
     resolutionM,
     demSource,
