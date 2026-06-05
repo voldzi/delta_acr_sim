@@ -3742,7 +3742,7 @@ function makeChmiRadarFeature(
       summary: definition.description,
       notices: [
         "Radar overlay metadata only; polygon geometry is the raster extent and must not be rendered as a filled vector polygon.",
-        "COM must render the supplied raster URL or request a future SIM tile/proxy endpoint.",
+        "COP must render the supplied raster URL or request a future SIM tile/proxy endpoint.",
         "Raw lightning strike positions are not included."
       ],
       styleHint: definition.styleHint,

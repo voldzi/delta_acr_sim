@@ -272,7 +272,7 @@ GET /features?bbox=12.0,48.5,19.0,51.2&layers=weather_radar_reflectivity,weather
 - `SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900`
 - `SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS=300`
 
-COM nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
+COP nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
 
 Radarové features jsou polygonové metadata pro raster overlay, ne vektorová buňková analýza. Polygon v `geometry` je pouze rozsah rastru; klient ho nesmí vykreslovat jako běžný vyplněný polygon. Klíčová pole:
 
