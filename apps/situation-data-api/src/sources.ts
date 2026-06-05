@@ -3238,8 +3238,21 @@ function makeStationBackedGridFeature(input: StationBackedGridFeatureInput): Sit
         ...compactTags({
           stationId: input.station.stationId,
           ghId: input.station.ghId,
-          sourceSystem: sourceId === "chmi_air_quality" ? "chmi_air_quality_now" : "chmi_meteorology_climate_now"
+          sourceSystem: sourceId === "chmi_air_quality" ? "chmi_air_quality_now" : "chmi_meteorology_climate_now",
+          geometryRole: "grid_cell",
+          renderAs: "grid_field",
+          valueMetric: input.valueMetric,
+          unit: input.unit,
+          interpolation: "station_backed_nearest_cell"
         })
+      },
+      rendering: {
+        mode: "grid_field",
+        geometryRole: "grid_cell",
+        valueMetric: input.valueMetric,
+        unit: input.unit,
+        opacity: 0.55,
+        fallbackPolicy: "hide_if_unsupported"
       },
       basis: ["chmi_measured_station", "station_backed_grid_cell"],
       styleHint: input.styleHint,
@@ -3248,6 +3261,12 @@ function makeStationBackedGridFeature(input: StationBackedGridFeatureInput): Sit
       generatedAt: new Date().toISOString(),
       resolutionM: input.resolutionM,
       providerProperties: compactProviderProperties({
+        geometryRole: "grid_cell",
+        renderAs: "grid_field",
+        valueMetric: input.valueMetric,
+        value: input.value,
+        unit: input.unit,
+        interpolationMethod: "station_backed_nearest_cell",
         upstreamStationId: input.station.stationId,
         upstreamStationName: input.station.name,
         gridResolutionDegrees: input.resolutionDegrees,
@@ -3705,12 +3724,25 @@ function makeChmiRadarFeature(
         productId: definition.productId,
         productFormat: definition.forecastArchive ? "tar" : "png",
         projection: "EPSG:3857",
+        geometryRole: "raster_extent",
+        renderAs: "raster_overlay",
+        rasterRenderMode: definition.forecastArchive ? "archive_sequence" : "image_overlay",
+        doNotRenderGeometryFill: "true",
+        fallbackPolicy: "hide_if_raster_overlay_unsupported",
         lightningStrikeFeed: "false"
       }),
+      rendering: {
+        mode: "raster_overlay",
+        geometryRole: "raster_extent",
+        opacity: definition.layer === "weather_thunderstorm_risk" ? 0.64 : 0.58,
+        doNotRenderGeometryFill: true,
+        fallbackPolicy: "hide_if_raster_overlay_unsupported"
+      },
       basis: definition.basis,
       summary: definition.description,
       notices: [
-        "Radar overlay metadata only; COM must render the supplied raster URL or request a future SIM tile/proxy endpoint.",
+        "Radar overlay metadata only; polygon geometry is the raster extent and must not be rendered as a filled vector polygon.",
+        "COM must render the supplied raster URL or request a future SIM tile/proxy endpoint.",
         "Raw lightning strike positions are not included."
       ],
       styleHint: definition.styleHint,
@@ -3720,6 +3752,10 @@ function makeChmiRadarFeature(
       generatedAt: fetchedAt,
       resolutionM: 1000,
       providerProperties: compactProviderProperties({
+        geometryRole: "raster_extent",
+        renderAs: "raster_overlay",
+        doNotRenderGeometryFill: true,
+        fallbackPolicy: "hide_if_raster_overlay_unsupported",
         productId: definition.productId,
         productDescription: definition.description,
         raster: {

@@ -693,7 +693,7 @@ function buildEnvironmentalGridLayers(config: SituationDataConfig): ProviderCata
       query: query(["weather_precipitation_grid"], ["chmi_weather_stations"]),
       legend: {
         profile: "weather-precipitation-grid-v1",
-        unit: "mm/h",
+        unit: "mm/10min",
         opacity: 0.5,
         stops: [
           { value: 0.1, label: "slabé", color: "#b7e4c7" },
@@ -1062,6 +1062,9 @@ function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatal
 function gridDelivery(resolutionDegrees: number): NonNullable<ProviderCatalogLayer["delivery"]> {
   return {
     mode: "grid",
+    geometryRole: "grid_cell",
+    fallbackPolicy: "hide_if_unsupported",
+    valueField: "metrics.value",
     stableGrid: {
       alignment: "wgs84",
       resolutionDegrees
@@ -1071,7 +1074,10 @@ function gridDelivery(resolutionDegrees: number): NonNullable<ProviderCatalogLay
 
 function rasterOverlayDelivery(): NonNullable<ProviderCatalogLayer["delivery"]> {
   return {
-    mode: "raster_overlay"
+    mode: "raster_overlay",
+    geometryRole: "raster_extent",
+    fallbackPolicy: "hide_if_raster_overlay_unsupported",
+    doNotRenderGeometryFill: true
   };
 }
 

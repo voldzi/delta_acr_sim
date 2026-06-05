@@ -307,6 +307,13 @@ describe("Situation Data API contract", () => {
           })
         }),
         expect.objectContaining({
+          providerLayerId: "weather.precipitation_grid",
+          recommendedCatalogLayerId: "public.weather.precipitation_grid",
+          kind: "grid_field",
+          legend: expect.objectContaining({ unit: "mm/10min" }),
+          delivery: expect.objectContaining({ mode: "grid", geometryRole: "grid_cell", valueField: "metrics.value" })
+        }),
+        expect.objectContaining({
           providerLayerId: "weather.wind_field",
           recommendedCatalogLayerId: "public.weather.wind_field",
           kind: "vector_field",
@@ -323,7 +330,12 @@ describe("Situation Data API contract", () => {
           recommendedCatalogLayerId: "public.weather.radar_reflectivity",
           kind: "raster_overlay",
           sourceIds: ["chmi_weather_radar"],
-          delivery: expect.objectContaining({ mode: "raster_overlay" })
+          delivery: expect.objectContaining({
+            mode: "raster_overlay",
+            geometryRole: "raster_extent",
+            doNotRenderGeometryFill: true,
+            fallbackPolicy: "hide_if_raster_overlay_unsupported"
+          })
         }),
         expect.objectContaining({
           providerLayerId: "weather.radar_precipitation",
@@ -1058,7 +1070,15 @@ describe("Situation Data API contract", () => {
             providerLayerId: "weather.temperature_grid",
             readModel: true,
             styleHint: "weather-temperature-grid-v1",
-            metrics: expect.objectContaining({ temperatureC: 17.2, value: 17.2 })
+            metrics: expect.objectContaining({ temperatureC: 17.2, value: 17.2 }),
+            rendering: expect.objectContaining({ mode: "grid_field", geometryRole: "grid_cell", valueMetric: "temperatureC" }),
+            tags: expect.objectContaining({ geometryRole: "grid_cell", renderAs: "grid_field", valueMetric: "temperatureC" }),
+            providerProperties: expect.objectContaining({
+              geometryRole: "grid_cell",
+              renderAs: "grid_field",
+              valueMetric: "temperatureC",
+              interpolationMethod: "station_backed_nearest_cell"
+            })
           })
         }),
         expect.objectContaining({
@@ -1079,7 +1099,8 @@ describe("Situation Data API contract", () => {
             layer: "weather_precipitation_grid",
             layerId: "public.weather.precipitation_grid",
             providerLayerId: "weather.precipitation_grid",
-            metrics: expect.objectContaining({ precipitation10mMm: 0.4, value: 0.4 })
+            metrics: expect.objectContaining({ precipitation10mMm: 0.4, value: 0.4, unit: "mm/10min" }),
+            rendering: expect.objectContaining({ mode: "grid_field", geometryRole: "grid_cell", valueMetric: "precipitation10mMm", unit: "mm/10min" })
           })
         }),
         expect.objectContaining({
@@ -1137,7 +1158,21 @@ describe("Situation Data API contract", () => {
             category: "weather_radar_reflectivity",
             sourceId: "chmi_weather_radar",
             sourceRevision: "pacz2gmaps3.z_max3d.20260604.2120.0.png",
+            rendering: expect.objectContaining({
+              mode: "raster_overlay",
+              geometryRole: "raster_extent",
+              doNotRenderGeometryFill: true,
+              fallbackPolicy: "hide_if_raster_overlay_unsupported"
+            }),
+            tags: expect.objectContaining({
+              geometryRole: "raster_extent",
+              renderAs: "raster_overlay",
+              doNotRenderGeometryFill: "true"
+            }),
             providerProperties: expect.objectContaining({
+              geometryRole: "raster_extent",
+              renderAs: "raster_overlay",
+              doNotRenderGeometryFill: true,
               raster: expect.objectContaining({
                 url: expect.stringContaining("pacz2gmaps3.z_max3d.20260604.2120.0.png"),
                 boundsWgs84: [11.267, 48.047, 20.77, 52.167],

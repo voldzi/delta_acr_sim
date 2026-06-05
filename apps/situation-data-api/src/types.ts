@@ -166,6 +166,10 @@ export interface ProviderCatalogLayer {
   };
   delivery?: {
     mode: "features" | "grid" | "vector_tiles" | "raster_tiles" | "raster_overlay";
+    geometryRole?: "feature_geometry" | "grid_cell" | "raster_extent";
+    fallbackPolicy?: "hide_if_unsupported" | "hide_if_raster_overlay_unsupported";
+    doNotRenderGeometryFill?: boolean;
+    valueField?: string;
     stableGrid?: {
       alignment: "wgs84";
       resolutionDegrees?: number;
@@ -357,6 +361,15 @@ export interface SituationFeatureProperties {
   };
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
+  rendering?: {
+    mode: "feature" | "grid_field" | "vector_field" | "raster_overlay";
+    geometryRole: "feature_geometry" | "grid_cell" | "raster_extent" | "wind_vector";
+    valueMetric?: string;
+    unit?: string;
+    opacity?: number;
+    doNotRenderGeometryFill?: boolean;
+    fallbackPolicy?: "hide_if_unsupported" | "hide_if_raster_overlay_unsupported";
+  };
   transportMode?: string;
   routeShortName?: string;
   destination?: string;

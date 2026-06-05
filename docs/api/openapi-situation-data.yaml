@@ -241,7 +241,7 @@ components:
       enum: [public, authenticated, partner, admin, diagnostic]
     ProviderCatalogKind:
       type: string
-      enum: [vector_features, grid_field, vector_field, mvt_tiles, raster_tiles, track_stream, user_objects, static_reference, aggregate]
+      enum: [vector_features, grid_field, vector_field, raster_overlay, mvt_tiles, raster_tiles, track_stream, user_objects, static_reference, aggregate]
     BoundingBox:
       type: object
       required: [west, south, east, north]
@@ -508,7 +508,19 @@ components:
           properties:
             mode:
               type: string
-              enum: [features, grid, vector_tiles, raster_tiles]
+              enum: [features, grid, vector_tiles, raster_tiles, raster_overlay]
+            geometryRole:
+              type: string
+              enum: [feature_geometry, grid_cell, raster_extent]
+            fallbackPolicy:
+              type: string
+              enum: [hide_if_unsupported, hide_if_raster_overlay_unsupported]
+            doNotRenderGeometryFill:
+              type: boolean
+              description: When true, polygon geometry is metadata extent only and must not be displayed as a filled vector feature.
+            valueField:
+              type: string
+              example: metrics.value
             stableGrid:
               type: object
               properties:
@@ -960,6 +972,27 @@ components:
               type: object
               additionalProperties:
                 type: string
+            rendering:
+              type: object
+              description: Provider-side rendering contract for geometries that are grid cells or raster extents rather than ordinary vector polygons.
+              properties:
+                mode:
+                  type: string
+                  enum: [feature, grid_field, vector_field, raster_overlay]
+                geometryRole:
+                  type: string
+                  enum: [feature_geometry, grid_cell, raster_extent, wind_vector]
+                valueMetric:
+                  type: string
+                unit:
+                  type: string
+                opacity:
+                  type: number
+                doNotRenderGeometryFill:
+                  type: boolean
+                fallbackPolicy:
+                  type: string
+                  enum: [hide_if_unsupported, hide_if_raster_overlay_unsupported]
             transportMode:
               type: string
               description: Normalized public-transport or road mode, e.g. bus, tram, train, metro, trolleybus, road.

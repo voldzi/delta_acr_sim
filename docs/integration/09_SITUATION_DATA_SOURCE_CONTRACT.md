@@ -274,7 +274,7 @@ GET /features?bbox=12.0,48.5,19.0,51.2&layers=weather_radar_reflectivity,weather
 
 COM nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
 
-Radarové features jsou polygonové metadata pro raster overlay, ne vektorová buňková analýza. Klíčová pole:
+Radarové features jsou polygonové metadata pro raster overlay, ne vektorová buňková analýza. Polygon v `geometry` je pouze rozsah rastru; klient ho nesmí vykreslovat jako běžný vyplněný polygon. Klíčová pole:
 
 ```json
 {
@@ -284,7 +284,21 @@ Radarové features jsou polygonové metadata pro raster overlay, ne vektorová b
     "sourceId": "chmi_weather_radar",
     "observedAt": "2026-06-04T21:20:00.000Z",
     "validUntil": "2026-06-04T21:35:00.000Z",
+    "tags": {
+      "geometryRole": "raster_extent",
+      "renderAs": "raster_overlay",
+      "doNotRenderGeometryFill": "true"
+    },
+    "rendering": {
+      "mode": "raster_overlay",
+      "geometryRole": "raster_extent",
+      "doNotRenderGeometryFill": true,
+      "fallbackPolicy": "hide_if_raster_overlay_unsupported"
+    },
     "providerProperties": {
+      "geometryRole": "raster_extent",
+      "renderAs": "raster_overlay",
+      "doNotRenderGeometryFill": true,
       "raster": {
         "url": "https://opendata.chmi.cz/.../pacz2gmaps3.z_max3d.YYYYMMDD.hhmm.0.png",
         "archiveUrl": "https://opendata.chmi.cz/.../pacz2gmaps3.fct_z_max.YYYYMMDD.hhmm.ft60s10.tar",
@@ -323,7 +337,7 @@ Katalog SIM nově nabízí plošné environment vrstvy pro civilní mapu:
 | `public.safety.thunderstorm_risk` | `weather.thunderstorm_risk` | `raster_overlay` | ČHMÚ MAX_Z masked/EchoTop, bez raw blesků |
 | `public.safety.air_quality_grid` | `air_quality.grid` | `grid_field` | ČHMÚ imisní stanice |
 
-V aktuální fázi SIM vrací grid jako GeoJSON features nad stabilní WGS84 buňkou. Hodnota buňky je odvozena z nejbližší měřené stanice uvnitř výřezu; nejde o meteorologický numerický model ani právně závaznou interpolaci. Materializované tile endpointy jsou další výkonová fáze pro velmi vysoký provoz.
+V aktuální fázi SIM vrací grid jako GeoJSON features nad stabilní WGS84 buňkou. Hodnota buňky je odvozena z nejbližší měřené stanice uvnitř výřezu; nejde o meteorologický numerický model ani právně závaznou interpolaci. Feature proto nese `rendering.mode=grid_field`, `rendering.geometryRole=grid_cell`, `tags.renderAs=grid_field`, `providerProperties.valueMetric` a `metrics.value`. Srážkový grid je jednotkově `mm/10min`, protože vychází z metriky ČHMÚ `precipitation10mMm`. Materializované tile endpointy jsou další výkonová fáze pro velmi vysoký provoz.
 
 Observability:
 
