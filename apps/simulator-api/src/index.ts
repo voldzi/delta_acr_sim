@@ -1,8 +1,16 @@
-import { createApp } from "./app.js";
+import { initializeObservability } from "@csm-sim/observability";
 import { loadConfig } from "./config.js";
 
+const observability = await initializeObservability({ serviceName: "csm-sim-api" });
+const { createApp } = await import("./app.js");
 const config = await loadConfig();
 const { app } = await createApp(config);
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    void observability.shutdown().finally(() => process.exit(0));
+  });
+}
 
 app.listen(config.port, () => {
   console.log(`SIM API listening on ${config.port}`);

@@ -1,5 +1,6 @@
 import { aiProviders, createMockScenarioDraft, type AiDraftRequest } from "@csm-sim/ai-assistant";
 import { CONTRACT_VERSION, type CanonicalEventEnvelope, type FaultInjection, type Scenario } from "@csm-sim/contracts";
+import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import { PublisherClient } from "@csm-sim/publisher-client";
 import { availableBlocks } from "@csm-sim/simulation-core";
 import cors from "cors";
@@ -47,6 +48,7 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
   const app = express();
   app.locals.runtimeRunner = runtimeRunner;
 
+  app.use(createHttpRequestTracingMiddleware("csm-sim-api"));
   app.use(cors(createCorsOptions(config)));
   app.use(createSecurityMiddleware(config, audit));
   app.use(express.json({ limit: "2mb" }));

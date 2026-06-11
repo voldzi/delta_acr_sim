@@ -1,3 +1,4 @@
+import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import cors, { type CorsOptions } from "cors";
 import express, { type Express, type Request } from "express";
 import { buildTakMapCatalog } from "./catalog.js";
@@ -19,6 +20,7 @@ export async function createApp(config: TakGatewayConfig): Promise<{ app: Expres
   const context: TakGatewayAppContext = { config, store };
   const app = express();
 
+  app.use(createHttpRequestTracingMiddleware("csm-sim-tak-gateway-api"));
   app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 

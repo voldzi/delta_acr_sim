@@ -16,7 +16,7 @@ map layers consumed by COP server-side adapters.
   - `search_all` when the location is unclear
   - `get_file_context` after selecting a relevant hit
 - If MCP tools are not exposed, use the CLI fallback:
-  - `"/Users/voldzi/Documents/Development/18 2026/chromadb/tools/chroma-dev.sh" search-all "<query>" --root . --limit 5`
+  - `"/Users/voldzi/Documents/Development/18 2026/chromadb/tools/chroma-dev.sh" search-all "<query>" --root . --repo-name csm-sim --limit 5`
 - If retrieval is unavailable or insufficient, fall back to direct repository
   inspection and state that retrieval was unavailable.
 - After meaningful repository changes, reindex with `chroma-dev reindex --root .`
@@ -133,8 +133,8 @@ openapi:validate`.
 If Chroma is available after meaningful changes:
 
 ```bash
-chroma-dev reindex --root .
-chroma-dev search-all "CSM SIM documentation" --root . --limit 5
+chroma-dev reindex --root . --repo-name csm-sim
+chroma-dev search-all "CSM SIM documentation" --root . --repo-name csm-sim --limit 5
 ```
 
 If a check cannot be run, state that explicitly.

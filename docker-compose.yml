@@ -1,4 +1,17 @@
 services:
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.117.0
+    container_name: csm-sim-otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    expose:
+      - "4317"
+      - "4318"
+      - "13133"
+    restart: unless-stopped
+
   sim-api:
     build:
       context: .
@@ -6,6 +19,8 @@ services:
     container_name: csm-sim-api
     environment:
       NODE_ENV: production
+      OTEL_SDK_DISABLED: ${SIM_OTEL_SDK_DISABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       API_PORT: 4000
       SIM_DATA_DIR: /data
       SIM_PUBLISHER_MODE: ${SIM_PUBLISHER_MODE:-DRY_RUN}
@@ -48,6 +63,8 @@ services:
     container_name: csm-sim-flight-data-api
     environment:
       NODE_ENV: production
+      OTEL_SDK_DISABLED: ${SIM_OTEL_SDK_DISABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       FLIGHT_DATA_API_PORT: 4010
       FLIGHT_DATA_DIR: /data
       FLIGHT_DATA_ENABLED_SOURCES: ${FLIGHT_DATA_ENABLED_SOURCES:-mock}
@@ -115,6 +132,8 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      OTEL_SDK_DISABLED: ${SIM_OTEL_SDK_DISABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       SITUATION_DATA_API_PORT: 4020
       SITUATION_DATA_DIR: /data
       SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data}
@@ -224,6 +243,8 @@ services:
     container_name: csm-sim-safety-data-api
     environment:
       NODE_ENV: production
+      OTEL_SDK_DISABLED: ${SIM_OTEL_SDK_DISABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       SAFETY_DATA_API_PORT: 4030
       SAFETY_DATA_DIR: /data
       SAFETY_DATA_ENABLED_SOURCES: ${SAFETY_DATA_ENABLED_SOURCES:-chmi_alerts,chmi_hydro,admin_boundaries}
@@ -265,6 +286,8 @@ services:
     container_name: csm-sim-tak-gateway-api
     environment:
       NODE_ENV: production
+      OTEL_SDK_DISABLED: ${SIM_OTEL_SDK_DISABLED:-true}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       TAK_GATEWAY_API_PORT: 4040
       TAK_GATEWAY_DATA_DIR: /data
       TAK_GATEWAY_INGEST_TOKEN: ${TAK_GATEWAY_INGEST_TOKEN:-dev-tak-ingest-token}

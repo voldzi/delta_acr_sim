@@ -1,3 +1,4 @@
+import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { SafetyAggregationService } from "./aggregation.js";
@@ -19,6 +20,7 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   const context: SafetyDataAppContext = { config, aggregation };
   const app = express();
 
+  app.use(createHttpRequestTracingMiddleware("csm-sim-safety-data-api"));
   app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 

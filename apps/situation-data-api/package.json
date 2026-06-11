@@ -13,6 +13,7 @@
     "rebuild:mobile-coverage": "node dist/rebuild-mobile-coverage.js"
   },
   "dependencies": {
+    "@csm-sim/observability": "workspace:*",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "fflate": "^0.8.3",

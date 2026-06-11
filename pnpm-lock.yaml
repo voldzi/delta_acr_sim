@@ -17,6 +17,9 @@ importers:
 
   apps/flight-data-api:
     dependencies:
+      '@csm-sim/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -44,10 +47,13 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   apps/safety-data-api:
     dependencies:
+      '@csm-sim/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -84,7 +90,7 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   apps/simulator-api:
     dependencies:
@@ -94,6 +100,9 @@ importers:
       '@csm-sim/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@csm-sim/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@csm-sim/publisher-client':
         specifier: workspace:*
         version: link:../../packages/publisher-client
@@ -130,7 +139,7 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
 
   apps/simulator-web:
     dependencies:
@@ -159,6 +168,9 @@ importers:
 
   apps/situation-data-api:
     dependencies:
+      '@csm-sim/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -179,7 +191,7 @@ importers:
         version: 8.21.0
       redis:
         specifier: ^5.12.1
-        version: 5.12.1
+        version: 5.12.1(@opentelemetry/api@1.9.1)
     devDependencies:
       '@types/cors':
         specifier: ^2.8.19
@@ -204,10 +216,13 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   apps/tak-gateway-api:
     dependencies:
+      '@csm-sim/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -238,7 +253,7 @@ importers:
         version: 4.22.2
       vitest:
         specifier: ^4.0.13
-        version: 4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
 
   packages/ai-assistant:
     dependencies:
@@ -247,6 +262,15 @@ importers:
         version: link:../contracts
 
   packages/contracts: {}
+
+  packages/observability:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.0
+        version: 24.12.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
   packages/publisher-client:
     dependencies:
@@ -683,6 +707,10 @@ packages:
 
   '@nodable/entities@2.1.0':
     resolution: {integrity: sha512-nyT7T3nbMyBI/lvr6L5TyWbFJAI9FTgVRakNoBqCD+PmID8DzFrrNdLLtHMwMszOtqZa8PAOV24ZqDnQrhQINA==}
+
+  '@opentelemetry/api@1.9.1':
+    resolution: {integrity: sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q==}
+    engines: {node: '>=8.0.0'}
 
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
@@ -2309,6 +2337,9 @@ snapshots:
 
   '@nodable/entities@2.1.0': {}
 
+  '@opentelemetry/api@1.9.1':
+    optional: true
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -2337,25 +2368,27 @@ snapshots:
 
   '@protobufjs/utf8@1.1.1': {}
 
-  '@redis/bloom@5.12.1(@redis/client@5.12.1)':
+  '@redis/bloom@5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@redis/client': 5.12.1
+      '@redis/client': 5.12.1(@opentelemetry/api@1.9.1)
 
-  '@redis/client@5.12.1':
+  '@redis/client@5.12.1(@opentelemetry/api@1.9.1)':
     dependencies:
       cluster-key-slot: 1.1.2
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.1
 
-  '@redis/json@5.12.1(@redis/client@5.12.1)':
+  '@redis/json@5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@redis/client': 5.12.1
+      '@redis/client': 5.12.1(@opentelemetry/api@1.9.1)
 
-  '@redis/search@5.12.1(@redis/client@5.12.1)':
+  '@redis/search@5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@redis/client': 5.12.1
+      '@redis/client': 5.12.1(@opentelemetry/api@1.9.1)
 
-  '@redis/time-series@5.12.1(@redis/client@5.12.1)':
+  '@redis/time-series@5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@redis/client': 5.12.1
+      '@redis/client': 5.12.1(@opentelemetry/api@1.9.1)
 
   '@rolldown/pluginutils@1.0.0-rc.3': {}
 
@@ -2460,7 +2493,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
 
   '@types/chai@5.2.3':
     dependencies:
@@ -2469,7 +2502,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
 
   '@types/cookiejar@2.1.5': {}
 
@@ -2485,7 +2518,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.1':
     dependencies:
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -2537,18 +2570,18 @@ snapshots:
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
 
   '@types/superagent@8.1.9':
     dependencies:
       '@types/cookiejar': 2.1.5
       '@types/methods': 1.1.4
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
       form-data: 4.0.5
 
   '@types/supertest@6.0.3':
@@ -3300,7 +3333,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 24.12.4
+      '@types/node': 22.15.30
       long: 5.3.2
 
   proxy-addr@2.0.7:
@@ -3334,13 +3367,13 @@ snapshots:
 
   react@19.2.6: {}
 
-  redis@5.12.1:
+  redis@5.12.1(@opentelemetry/api@1.9.1):
     dependencies:
-      '@redis/bloom': 5.12.1(@redis/client@5.12.1)
-      '@redis/client': 5.12.1
-      '@redis/json': 5.12.1(@redis/client@5.12.1)
-      '@redis/search': 5.12.1(@redis/client@5.12.1)
-      '@redis/time-series': 5.12.1(@redis/client@5.12.1)
+      '@redis/bloom': 5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))
+      '@redis/client': 5.12.1(@opentelemetry/api@1.9.1)
+      '@redis/json': 5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))
+      '@redis/search': 5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))
+      '@redis/time-series': 5.12.1(@redis/client@5.12.1(@opentelemetry/api@1.9.1))
     transitivePeerDependencies:
       - '@node-rs/xxhash'
       - '@opentelemetry/api'
@@ -3579,7 +3612,7 @@ snapshots:
       fsevents: 2.3.3
       tsx: 4.22.2
 
-  vitest@4.1.6(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2)):
+  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.15.30)(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2)):
     dependencies:
       '@vitest/expect': 4.1.6
       '@vitest/mocker': 4.1.6(vite@7.3.3(@types/node@22.15.30)(tsx@4.22.2))
@@ -3602,11 +3635,12 @@ snapshots:
       vite: 7.3.3(@types/node@22.15.30)(tsx@4.22.2)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@opentelemetry/api': 1.9.1
       '@types/node': 22.15.30
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.6(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2)):
+  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2)):
     dependencies:
       '@vitest/expect': 4.1.6
       '@vitest/mocker': 4.1.6(vite@7.3.3(@types/node@24.12.4)(tsx@4.22.2))
@@ -3629,6 +3663,7 @@ snapshots:
       vite: 7.3.3(@types/node@24.12.4)(tsx@4.22.2)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@opentelemetry/api': 1.9.1
       '@types/node': 24.12.4
     transitivePeerDependencies:
       - msw

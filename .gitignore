@@ -1,4 +1,5 @@
 .DS_Store
+.chroma-state/
 node_modules/
 dist/
 coverage/

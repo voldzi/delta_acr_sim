@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "chroma-dev": {
+      "command": "/Users/voldzi/Documents/Development/18 2026/chromadb/tools/chroma-dev-mcp.sh",
+      "args": [
+        "--root",
+        "/Users/voldzi/Documents/Development/18 2026/DELTA_ACR/02 SIM",
+        "--repo-name",
+        "csm-sim"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

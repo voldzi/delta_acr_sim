@@ -12,6 +12,7 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
+    "@csm-sim/observability": "workspace:*",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "fast-xml-parser": "^5.3.2",

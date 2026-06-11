@@ -1,3 +1,4 @@
+import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { SituationAggregationService } from "./aggregation.js";
@@ -33,6 +34,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const context: SituationDataAppContext = { config, aggregation, demCatalog };
   const app = express();
 
+  app.use(createHttpRequestTracingMiddleware("csm-sim-situation-data-api"));
   app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 
