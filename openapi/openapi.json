@@ -1,0 +1,6980 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CSM SIM Composite API",
+    "version": "0.1.0",
+    "description": "JSON-first composite OpenAPI contract for CSM SIM REST API surfaces."
+  },
+  "servers": [
+    {
+      "url": "https://sim.zeleznalady.cz",
+      "description": "Published SIM reverse proxy"
+    },
+    {
+      "url": "http://docker.home.cz:5020",
+      "description": "Pilot reverse proxy"
+    },
+    {
+      "url": "http://localhost:5020",
+      "description": "Local Docker Compose reverse proxy"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Simulator: Scenarios",
+      "description": "Simulator Scenarios"
+    },
+    {
+      "name": "Simulator: Runtime",
+      "description": "Simulator Runtime"
+    },
+    {
+      "name": "Simulator: Faults",
+      "description": "Simulator Faults"
+    },
+    {
+      "name": "Simulator: Publisher",
+      "description": "Simulator Publisher"
+    },
+    {
+      "name": "Simulator: AI",
+      "description": "Simulator AI"
+    },
+    {
+      "name": "Simulator: Health",
+      "description": "Simulator Health"
+    },
+    {
+      "name": "Flight Data: FlightTracks",
+      "description": "Flight Data FlightTracks"
+    },
+    {
+      "name": "Flight Data: Reference",
+      "description": "Flight Data Reference"
+    },
+    {
+      "name": "Flight Data: Sources",
+      "description": "Flight Data Sources"
+    },
+    {
+      "name": "Flight Data: Health",
+      "description": "Flight Data Health"
+    }
+  ],
+  "paths": {
+    "/api/v1/scenarios": {
+      "get": {
+        "tags": [
+          "Simulator: Scenarios"
+        ],
+        "summary": "Vrátí seznam scénářů.",
+        "operationId": "simulator_listScenarios",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorScenarioListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Simulator: Scenarios"
+        ],
+        "summary": "Vytvoří scénář.",
+        "operationId": "simulator_createScenario",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/scenario.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorScenarioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}": {
+      "get": {
+        "tags": [
+          "Simulator: Scenarios"
+        ],
+        "summary": "Vrátí detail scénáře.",
+        "operationId": "simulator_getScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/scenario.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Simulator: Scenarios"
+        ],
+        "summary": "Upraví draft scénáře.",
+        "operationId": "simulator_updateScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/scenario.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/scenario.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Simulator: Scenarios"
+        ],
+        "summary": "Smaže scénář, pokud není spuštěný.",
+        "operationId": "simulator_deleteScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Smazáno"
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/start": {
+      "post": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Spustí validovaný scénář.",
+        "operationId": "simulator_startScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRuntimeCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/pause": {
+      "post": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Pozastaví běžící scénář.",
+        "operationId": "simulator_pauseScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRuntimeCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/resume": {
+      "post": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Obnoví pozastavený scénář.",
+        "operationId": "simulator_resumeScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRuntimeCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/stop": {
+      "post": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Zastaví scénář.",
+        "operationId": "simulator_stopScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRuntimeCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/reset": {
+      "post": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Resetuje scénář do READY stavu.",
+        "operationId": "simulator_resetScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRuntimeCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/step": {
+      "post": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Provede jeden step v režimu krokování.",
+        "operationId": "simulator_stepScenario",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRuntimeCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/faults": {
+      "post": {
+        "tags": [
+          "Simulator: Faults"
+        ],
+        "summary": "Přidá fault injection do scénáře.",
+        "operationId": "simulator_addFault",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/fault-injection.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/fault-injection.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Simulator: Faults"
+        ],
+        "summary": "Vrátí faults pro scénář.",
+        "operationId": "simulator_listFaults",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorFaultListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/scenarios/{scenarioId}/faults/{faultId}": {
+      "delete": {
+        "tags": [
+          "Simulator: Faults"
+        ],
+        "summary": "Odstraní fault injection.",
+        "operationId": "simulator_deleteFault",
+        "parameters": [
+          {
+            "name": "scenarioId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor scénáře.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "faultId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor fault injection.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Smazáno"
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/runtime/status": {
+      "get": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Vrátí runtime status.",
+        "operationId": "simulator_getRuntimeStatus",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorRuntimeStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/runtime/metrics": {
+      "get": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Vrátí runtime metriky.",
+        "operationId": "simulator_getRuntimeMetrics",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorMetricsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/runtime/blocks": {
+      "get": {
+        "tags": [
+          "Simulator: Runtime"
+        ],
+        "summary": "Vrátí dostupné simulační bloky.",
+        "operationId": "simulator_getRuntimeBlocks",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorBlocksResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/runtime/publisher": {
+      "get": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Vrátí stav publisheru pro runtime.",
+        "operationId": "simulator_getRuntimePublisher",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorPublisherStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/test-connection": {
+      "post": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Otestuje spojení na COP nebo mock endpoint.",
+        "operationId": "simulator_testPublisherConnection",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/publisher-config.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorPublisherTestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/send-sample": {
+      "post": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Odešle sample syntetický event nebo dry-run validaci.",
+        "operationId": "simulator_sendPublisherSample",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "./schemas/canonical-event-envelope.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorPublisherSendResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/status": {
+      "get": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Vrátí stav publisheru.",
+        "operationId": "simulator_getPublisherStatus",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorPublisherStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/queue": {
+      "get": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Vrátí položky publisher queue.",
+        "operationId": "simulator_getPublisherQueue",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorPublisherQueueResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/queue/retry": {
+      "post": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Naplánuje retry queue položek.",
+        "operationId": "simulator_retryPublisherQueue",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorQueueActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorQueueActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/queue/clear": {
+      "post": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Vyčistí queue v povoleném režimu.",
+        "operationId": "simulator_clearPublisherQueue",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorQueueActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorQueueActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/publisher/stop": {
+      "post": {
+        "tags": [
+          "Simulator: Publisher"
+        ],
+        "summary": "Okamžitě zastaví live publikaci bez smazání queue.",
+        "operationId": "simulator_stopPublisher",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorPublisherStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenario-drafts": {
+      "post": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Vytvoří AI draft syntetického scénáře.",
+        "operationId": "simulator_createScenarioDraft",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorAiDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/ai-scenario-draft.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenario-drafts/{draftId}": {
+      "get": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Vrátí AI draft.",
+        "operationId": "simulator_getScenarioDraft",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor AI draftu.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas/ai-scenario-draft.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenario-drafts/{draftId}/validate": {
+      "post": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Validuje AI draft.",
+        "operationId": "simulator_validateScenarioDraft",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor AI draftu.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorValidationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenario-drafts/{draftId}/accept": {
+      "post": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Přijme AI draft jako scénář.",
+        "operationId": "simulator_acceptScenarioDraft",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor AI draftu.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorScenarioResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenario-drafts/{draftId}/reject": {
+      "post": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Odmítne AI draft.",
+        "operationId": "simulator_rejectScenarioDraft",
+        "parameters": [
+          {
+            "name": "draftId",
+            "in": "path",
+            "required": true,
+            "description": "Identifikátor AI draftu.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorRejectDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorAiDraftActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/providers": {
+      "get": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Vrátí AI providery a jejich stav.",
+        "operationId": "simulator_listAiProviders",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorAiProvidersResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/api/v1/ai/config": {
+      "patch": {
+        "tags": [
+          "Simulator: AI"
+        ],
+        "summary": "Upraví AI konfiguraci.",
+        "operationId": "simulator_updateAiConfig",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulatorAiConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorAiConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": [
+          "Simulator: Health"
+        ],
+        "summary": "Liveness probe.",
+        "operationId": "simulator_liveHealth",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorHealthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "Simulator: Health"
+        ],
+        "summary": "Readiness probe.",
+        "operationId": "simulator_readyHealth",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorHealthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/health/dependencies": {
+      "get": {
+        "tags": [
+          "Simulator: Health"
+        ],
+        "summary": "Dependency health.",
+        "operationId": "simulator_dependenciesHealth",
+        "responses": {
+          "200": {
+            "description": "Úspěšná odpověď",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulatorDependenciesHealthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Simulator: Health"
+        ],
+        "summary": "Prometheus-style metrics endpoint.",
+        "operationId": "simulator_metrics",
+        "responses": {
+          "200": {
+            "description": "Metrics in Prometheus text format",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "403": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          },
+          "500": {
+            "$ref": "#/components/responses/SimulatorProblem"
+          }
+        }
+      }
+    },
+    "/flight-data/api/v1/cop/tracks": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Kompatibilní projekce deduplikovaných letových tracků pro existující backend adapter.",
+        "deprecated": true,
+        "description": "Nové integrace mají preferovat source-neutral COM mapový kontrakt a normalizovaná data z /api/v1/aircraft/positions.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataSource"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataIncludeStale"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Compatibility flight source response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataCopTrackResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_cop_tracks"
+      }
+    },
+    "/flight-data/api/v1/aircraft/positions": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Vrátí normalizované deduplikované letové tracky.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataSource"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataIncludeStale"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flight track response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataFlightTrackResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_aircraft_positions"
+      }
+    },
+    "/flight-data/api/v1/sources": {
+      "get": {
+        "tags": [
+          "Flight Data: Sources"
+        ],
+        "summary": "Vrátí dostupné zdroje a licenční metadata.",
+        "responses": {
+          "200": {
+            "description": "Source list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FlightDataSourceDescriptor"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_sources"
+      }
+    },
+    "/flight-data/api/v1/catalog": {
+      "get": {
+        "tags": [
+          "Flight Data: Sources"
+        ],
+        "summary": "Vrátí Flight Data provider katalog pro COM Map Catalog v1.",
+        "description": "Katalog odděluje uživatelské vrstvy flight.public.tracks a flight.reference.airports od technických upstream zdrojů.",
+        "responses": {
+          "200": {
+            "description": "Provider map catalog metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "contractVersion",
+                    "providerId",
+                    "generatedAt",
+                    "status",
+                    "layers",
+                    "sources"
+                  ],
+                  "properties": {
+                    "contractVersion": {
+                      "type": "string",
+                      "const": "provider-map-catalog-v1"
+                    },
+                    "providerId": {
+                      "type": "string",
+                      "const": "sim.flight-data"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "online"
+                      ]
+                    },
+                    "layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_catalog"
+      }
+    },
+    "/flight-data/api/v1/config": {
+      "get": {
+        "tags": [
+          "Flight Data: Sources"
+        ],
+        "summary": "Vrátí aktuální non-secret konfiguraci Flight Data API.",
+        "responses": {
+          "200": {
+            "description": "Public runtime configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataFlightDataConfig"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_config"
+      }
+    },
+    "/flight-data/api/v1/airports": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vyhledá letiště.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Airport list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FlightDataAirport"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_airports"
+      }
+    },
+    "/flight-data/api/v1/airports/{ident}": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vrátí letiště podle ICAO nebo IATA kódu.",
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Airport",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataAirport"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_airports_ident"
+      }
+    },
+    "/flight-data/api/v1/airspaces": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vrátí referenční letecké prostory jako GeoJSON FeatureCollection.",
+        "description": "Cacheovaná referenční vrstva AIP/eAIP ENR 5.1 pro zakázané, omezené a nebezpečné prostory. Výstup je situační reference, ne navigační ani právně závazná letecká informace.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Comma-separated airspace types.",
+            "schema": {
+              "type": "string",
+              "example": "prohibited,restricted,danger"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Airspace GeoJSON FeatureCollection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataAirspaceFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_airspaces"
+      }
+    },
+    "/flight-data/api/v1/uas-geozones": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vrátí referenční UAS zeměpisné zóny jako GeoJSON FeatureCollection.",
+        "description": "Cacheovaná vrstva oficiálních AIM/ŘLP JSON datových sad pro UAS geoawareness. Výchozí konfigurace importuje jen vybrané vrstvy vhodné pro runtime API; velké balíčky mají být řešené importem do PostGIS/tile cache.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "name": "layer",
+            "in": "query",
+            "description": "Comma-separated AIM publication/layer ids.",
+            "schema": {
+              "type": "string",
+              "example": "LKR314A,LKR320A"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "UAS geozone GeoJSON FeatureCollection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataUasGeozoneFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_uas_geozones"
+      }
+    },
+    "/flight-data/api/v1/airspace-activations": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vrátí aktuální aktivace vzdušných prostorů z AUP/UUP jako GeoJSON FeatureCollection.",
+        "description": "Dynamická vrstva AUP/UUP, kde SIM páruje TRA/TSA aktivace na dostupnou geometrii z importovaných AIM UAS zón.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "name": "includeCancelled",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Airspace activation GeoJSON FeatureCollection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataAirspaceActivationFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_airspace_activations"
+      }
+    },
+    "/flight-data/api/v1/aircraft-types": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vyhledá typy letadel.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aircraft type list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FlightDataAircraftType"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_aircraft_types"
+      }
+    },
+    "/flight-data/api/v1/aircraft-types/{designator}": {
+      "get": {
+        "tags": [
+          "Flight Data: Reference"
+        ],
+        "summary": "Vrátí typ letadla podle ICAO designátoru.",
+        "parameters": [
+          {
+            "name": "designator",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aircraft type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataAircraftType"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_aircraft_types_designator"
+      }
+    },
+    "/flight-data/health/live": {
+      "get": {
+        "tags": [
+          "Flight Data: Health"
+        ],
+        "summary": "Liveness check.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "operationId": "flightData_get_flight_data_health_live"
+      }
+    },
+    "/flight-data/health/ready": {
+      "get": {
+        "tags": [
+          "Flight Data: Health"
+        ],
+        "summary": "Readiness check.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "operationId": "flightData_get_flight_data_health_ready"
+      }
+    },
+    "/situation-data/api/v1/layers": {
+      "get": {
+        "summary": "List available situation layers",
+        "responses": {
+          "200": {
+            "description": "Layer registry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SituationDataLayerDescriptor"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_layers",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/sources": {
+      "get": {
+        "summary": "List provider metadata and license state",
+        "responses": {
+          "200": {
+            "description": "Source registry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SituationDataSourceDescriptor"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_sources",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/catalog": {
+      "get": {
+        "summary": "Return SIM provider metadata for COM Map Catalog v1",
+        "description": "Separates user-facing map products from technical upstream sources. Existing /layers and /sources remain compatibility endpoints.",
+        "responses": {
+          "200": {
+            "description": "Provider map catalog metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataProviderMapCatalog"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_catalog",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/config": {
+      "get": {
+        "summary": "Read non-secret runtime configuration",
+        "responses": {
+          "200": {
+            "description": "Public runtime configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataPublicConfig"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_config",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/features": {
+      "get": {
+        "summary": "Return aggregated GeoJSON situation features",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SituationDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataLayers"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataSources"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataTechnologies"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataOperators"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection with SIM metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataSituationFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_features",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/cop/features": {
+      "get": {
+        "summary": "Compatibility alias for the server-side situation feature stream",
+        "deprecated": true,
+        "description": "Kept for existing COM/COP backend adapters. New provider integrations should prefer /features or the COM /api/v1/map/query facade.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SituationDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataLayers"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataSources"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataTechnologies"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataOperators"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Situation FeatureCollection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataSituationFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_cop_features",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/mobile-coverage/metadata": {
+      "get": {
+        "summary": "Return mobile coverage model metadata",
+        "responses": {
+          "200": {
+            "description": "Mobile coverage model metadata and disclaimer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataMobileCoverageMetadata"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_mobile_coverage_metadata",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/dem/metadata": {
+      "get": {
+        "summary": "Return DEM catalog metadata",
+        "responses": {
+          "200": {
+            "description": "DEM catalog metadata, storage state and import warnings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataDemCatalogStatus"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_dem_metadata",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/observability": {
+      "get": {
+        "summary": "Return cache, upstream and read-model telemetry for SIM Overview",
+        "responses": {
+          "200": {
+            "description": "Situation data observability payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataSituationObservability"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_observability",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/layers": {
+      "get": {
+        "summary": "List available safety layers",
+        "responses": {
+          "200": {
+            "description": "Layer registry"
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_layers",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/sources": {
+      "get": {
+        "summary": "List provider metadata and license state",
+        "responses": {
+          "200": {
+            "description": "Source registry"
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_sources",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/catalog": {
+      "get": {
+        "summary": "Return SIM safety provider metadata for COM Map Catalog v1",
+        "description": "Separates user-facing safety layers from technical upstream sources.",
+        "responses": {
+          "200": {
+            "description": "Provider map catalog metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "contractVersion",
+                    "providerId",
+                    "generatedAt",
+                    "status",
+                    "layers",
+                    "sources"
+                  ],
+                  "properties": {
+                    "contractVersion": {
+                      "type": "string",
+                      "const": "provider-map-catalog-v1"
+                    },
+                    "providerId": {
+                      "type": "string",
+                      "const": "sim.safety-data"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "online"
+                      ]
+                    },
+                    "layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_catalog",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/config": {
+      "get": {
+        "summary": "Read non-secret runtime configuration",
+        "responses": {
+          "200": {
+            "description": "Public runtime configuration"
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_config",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/features": {
+      "get": {
+        "summary": "Return aggregated GeoJSON safety features",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SafetyDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataLayers"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataSources"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safety FeatureCollection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SafetyDataSafetyFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SafetyDataProblem"
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_features",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/cop/features": {
+      "get": {
+        "summary": "Compatibility alias for the server-side safety feature stream",
+        "deprecated": true,
+        "description": "Kept for existing COM/COP backend adapters. New provider integrations should prefer /features or the COM /api/v1/map/query facade.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SafetyDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataLayers"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataSources"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataLimit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safety FeatureCollection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SafetyDataSafetyFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SafetyDataProblem"
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_cop_features",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/catalog": {
+      "get": {
+        "summary": "Return TAK Gateway provider metadata for COM Map Catalog v1",
+        "description": "Partner catalog for TAK mobile, ground and traffic layers. Metadata is public-safe; feature reads can still require a read token.",
+        "responses": {
+          "200": {
+            "description": "Provider map catalog metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "contractVersion",
+                    "providerId",
+                    "generatedAt",
+                    "status",
+                    "layers",
+                    "sources"
+                  ],
+                  "properties": {
+                    "contractVersion": {
+                      "type": "string",
+                      "const": "provider-map-catalog-v1"
+                    },
+                    "providerId": {
+                      "type": "string",
+                      "const": "sim.tak-gateway"
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "online",
+                        "degraded"
+                      ]
+                    },
+                    "layers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_catalog",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/cot/events": {
+      "post": {
+        "summary": "Ingest Cursor-on-Target XML event payload",
+        "security": [
+          {
+            "bearerAuth": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/xml": {
+              "schema": {
+                "type": "string"
+              }
+            },
+            "text/xml": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "CoT payload accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accepted",
+                    "eventCount",
+                    "warningCount",
+                    "warnings"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "eventCount": {
+                      "type": "integer"
+                    },
+                    "warningCount": {
+                      "type": "integer"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid CoT XML",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "takGateway_post_tak_gateway_api_v1_cot_events",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/cop/features": {
+      "get": {
+        "summary": "Compatibility alias for TAK GeoJSON feature projection",
+        "deprecated": true,
+        "description": "Kept for existing COM/COP backend adapters. New provider integrations should prefer /features through a server-side COM adapter.",
+        "security": [
+          {
+            "bearerAuth": [
+
+            ]
+          },
+          {
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bbox",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "west,south,east,north in WGS84"
+          },
+          {
+            "name": "layers",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated mobile,ground,traffic"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "name": "includeRaw",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TAK feature collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayTakFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bbox, layers or limit query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token when public read is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_cop_features",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/features": {
+      "get": {
+        "summary": "TAK GeoJSON feature projection for server-side COM adapters",
+        "security": [
+          {
+            "bearerAuth": [
+
+            ]
+          },
+          {
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bbox",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "west,south,east,north in WGS84"
+          },
+          {
+            "name": "layers",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated mobile,ground,traffic"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          },
+          {
+            "name": "includeRaw",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TAK feature collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayTakFeatureCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bbox, layers or limit query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token when public read is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_features",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/layers": {
+      "get": {
+        "summary": "List TAK layers",
+        "responses": {
+          "200": {
+            "description": "Layer registry"
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_layers",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/sources": {
+      "get": {
+        "summary": "List TAK source descriptors",
+        "responses": {
+          "200": {
+            "description": "Source registry"
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_sources",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/config": {
+      "get": {
+        "summary": "Public runtime config without secrets",
+        "responses": {
+          "200": {
+            "description": "Runtime configuration"
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_config",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/events": {
+      "get": {
+        "summary": "Current normalized CoT event state",
+        "security": [
+          {
+            "bearerAuth": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event list"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "takGateway_get_tak_gateway_api_v1_events",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/tak-gateway/api/v1/admin/clear": {
+      "post": {
+        "summary": "Clear current TAK event state",
+        "security": [
+          {
+            "bearerAuth": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current event state cleared"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakGatewayProblem"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "takGateway_post_tak_gateway_api_v1_admin_clear",
+        "tags": [
+          "TAK Gateway: TAK Gateway"
+        ]
+      }
+    },
+    "/situation-data/health/live": {
+      "get": {
+        "summary": "Situation Data liveness",
+        "operationId": "situationData_health_live_live",
+        "tags": [
+          "Situation Data: Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/situation-data/health/ready": {
+      "get": {
+        "summary": "Situation Data readiness",
+        "operationId": "situationData_health_ready_ready",
+        "tags": [
+          "Situation Data: Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/safety-data/health/live": {
+      "get": {
+        "summary": "Safety Data liveness",
+        "operationId": "safetyData_health_live_live",
+        "tags": [
+          "Safety Data: Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/safety-data/health/ready": {
+      "get": {
+        "summary": "Safety Data readiness",
+        "operationId": "safetyData_health_ready_ready",
+        "tags": [
+          "Safety Data: Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tak-gateway/health/live": {
+      "get": {
+        "summary": "TAK Gateway liveness",
+        "operationId": "takGateway_health_live_live",
+        "tags": [
+          "TAK Gateway: Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tak-gateway/health/ready": {
+      "get": {
+        "summary": "TAK Gateway readiness",
+        "operationId": "takGateway_health_ready_ready",
+        "tags": [
+          "TAK Gateway: Health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Service health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "timestamp"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "requestId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "SimulatorErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "correlationId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "VALIDATION_ERROR",
+                  "UNAUTHORIZED",
+                  "FORBIDDEN",
+                  "RATE_LIMITED",
+                  "SOURCE_REVOKED",
+                  "CONFLICT",
+                  "INTERNAL_ERROR",
+                  "DEPENDENCY_UNAVAILABLE"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "correlationId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        }
+      },
+      "SimulatorScenarioResponse": {
+        "type": "object",
+        "required": [
+          "scenarioId",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "scenarioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "READY",
+              "RUNNING",
+              "PAUSED",
+              "STOPPED",
+              "ERROR"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SimulatorScenarioListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "./schemas/scenario.schema.json"
+            }
+          }
+        }
+      },
+      "SimulatorDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SimulatorRuntimeCommandRequest": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SimulatorRuntimeStatus": {
+        "type": "object",
+        "required": [
+          "state",
+          "generatedEvents",
+          "publishedEvents",
+          "queuedEvents"
+        ],
+        "properties": {
+          "scenarioId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "runtimeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "READY",
+              "RUNNING",
+              "PAUSED",
+              "STOPPED",
+              "ERROR"
+            ]
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "generatedEvents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "publishedEvents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queuedEvents": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SimulatorMetricsResponse": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        }
+      },
+      "SimulatorBlocksResponse": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "./schemas/scenario-block.schema.json"
+            }
+          }
+        }
+      },
+      "SimulatorFaultListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "./schemas/fault-injection.schema.json"
+            }
+          }
+        }
+      },
+      "SimulatorPublisherStatus": {
+        "type": "object",
+        "required": [
+          "mode",
+          "queueSize",
+          "deadLetterSize",
+          "publishingEnabled"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "DRY_RUN",
+              "MOCK",
+              "LIVE"
+            ]
+          },
+          "queueSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deadLetterSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "publishingEnabled": {
+            "type": "boolean"
+          },
+          "lastSuccessAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastFailureAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SimulatorPublisherTestResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "latencyMs": {
+            "type": "integer"
+          }
+        }
+      },
+      "SimulatorPublisherSendResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SimulatorPublisherQueueResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "queueId": {
+                  "type": "string"
+                },
+                "eventId": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "PENDING",
+                    "SENDING",
+                    "SENT",
+                    "RETRY_SCHEDULED",
+                    "DEAD_LETTER",
+                    "DRY_RUN_VALIDATED"
+                  ]
+                },
+                "attempts": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SimulatorQueueActionRequest": {
+        "type": "object",
+        "properties": {
+          "queueIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SimulatorQueueActionResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "affectedCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "SimulatorAiDraftRequest": {
+        "type": "object",
+        "required": [
+          "prompt",
+          "purpose",
+          "allowedBlocks",
+          "limits"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "LATENCY_TEST",
+              "LOAD_TEST",
+              "CONFLICT_TEST",
+              "DEGRADED_CONNECTIVITY",
+              "DEMO",
+              "DOCUMENTATION"
+            ]
+          },
+          "allowedBlocks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "maxObjects": {
+                "type": "integer"
+              },
+              "maxDurationSeconds": {
+                "type": "integer"
+              },
+              "externalProviderAllowed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "providerPreference": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "codex",
+              "local",
+              "mock",
+              "auto"
+            ]
+          }
+        }
+      },
+      "SimulatorValidationResponse": {
+        "type": "object",
+        "properties": {
+          "schemaValid": {
+            "type": "boolean"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "SimulatorRejectDraftRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SimulatorAiDraftActionResponse": {
+        "type": "object",
+        "properties": {
+          "draftId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "REJECTED"
+            ]
+          }
+        }
+      },
+      "SimulatorAiProvidersResponse": {
+        "type": "object",
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "external": {
+                  "type": "boolean"
+                },
+                "healthy": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SimulatorAiConfigRequest": {
+        "type": "object",
+        "properties": {
+          "providerMode": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "codex",
+              "local",
+              "mock",
+              "auto"
+            ]
+          },
+          "externalProviderAllowed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SimulatorAiConfigResponse": {
+        "type": "object",
+        "properties": {
+          "saved": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SimulatorHealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "down"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SimulatorDependenciesHealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "dependencies": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FlightDataCopTrackResponse": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "source",
+          "summary",
+          "tracks",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "cop-flight-source-v1"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string"
+              },
+              "sourceType": {
+                "type": "string",
+                "const": "PUBLIC_FLIGHT_AGGREGATE"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FlightDataFlightTrackSummary"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataFlightTrack"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataSourceDescriptor"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FlightDataFlightTrackResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FlightDataFlightTrackSummary"
+          },
+          "tracks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataFlightTrack"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataSourceDescriptor"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FlightDataFlightTrackSummary": {
+        "type": "object",
+        "properties": {
+          "rawObservationCount": {
+            "type": "integer"
+          },
+          "deduplicatedTrackCount": {
+            "type": "integer"
+          },
+          "droppedWithoutPositionCount": {
+            "type": "integer"
+          },
+          "staleTrackCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "FlightDataFlightTrack": {
+        "type": "object",
+        "required": [
+          "trackId",
+          "icao24",
+          "objectType",
+          "domain",
+          "lat",
+          "lon",
+          "position",
+          "lastSeenAt",
+          "sources",
+          "deduplication",
+          "quality"
+        ],
+        "properties": {
+          "trackId": {
+            "type": "string"
+          },
+          "icao24": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{6}$"
+          },
+          "callsign": {
+            "type": "string"
+          },
+          "registration": {
+            "type": "string"
+          },
+          "objectType": {
+            "type": "string",
+            "enum": [
+              "AIRCRAFT",
+              "UAV",
+              "UNKNOWN"
+            ]
+          },
+          "domain": {
+            "type": "string",
+            "const": "AIR"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "position": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lon"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lon": {
+                "type": "number"
+              }
+            }
+          },
+          "altitudeM": {
+            "type": "number"
+          },
+          "speedMps": {
+            "type": "number"
+          },
+          "headingDeg": {
+            "type": "number"
+          },
+          "verticalRateMps": {
+            "type": "number"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "originCountry": {
+            "type": "string"
+          },
+          "aircraft": {
+            "$ref": "#/components/schemas/FlightDataAircraftTypePartial"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string"
+                },
+                "sourceRecordId": {
+                  "type": "string"
+                },
+                "fetchedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "seenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "deduplication": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "const": "icao24"
+              },
+              "mergedRecordCount": {
+                "type": "integer"
+              },
+              "primarySourceId": {
+                "type": "string"
+              }
+            }
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "confidence": {
+                "type": "number"
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "positionAgeSeconds": {
+                "type": "integer"
+              }
+            }
+          },
+          "metadata": {
+            "type": "object"
+          }
+        }
+      },
+      "FlightDataSourceDescriptor": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "enum": [
+              "mock",
+              "adsb_lol",
+              "opensky",
+              "local_adsb"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "mock",
+              "reference"
+            ]
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "license": {
+            "type": "object"
+          }
+        }
+      },
+      "FlightDataFlightDataConfig": {
+        "type": "object",
+        "properties": {
+          "enabledSources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "mock",
+                "adsb_lol",
+                "opensky",
+                "local_adsb"
+              ]
+            }
+          },
+          "defaultArea": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lon": {
+                "type": "number"
+              },
+              "radiusNm": {
+                "type": "number"
+              }
+            }
+          },
+          "cacheTtlSeconds": {
+            "type": "integer"
+          },
+          "staleIfErrorSeconds": {
+            "type": "integer"
+          },
+          "cacheMaxEntries": {
+            "type": "integer"
+          },
+          "staleAfterSeconds": {
+            "type": "integer"
+          },
+          "requestTimeoutMs": {
+            "type": "integer"
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "enum": [
+                    "mock",
+                    "adsb_lol",
+                    "opensky",
+                    "local_adsb"
+                  ]
+                },
+                "baseUrl": {
+                  "type": "string"
+                },
+                "authConfigured": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "referenceData": {
+            "type": "object",
+            "properties": {
+              "ourAirportsEnabled": {
+                "type": "boolean"
+              },
+              "ourAirportsCountries": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "ourAirportsCacheTtlSeconds": {
+                "type": "integer"
+              },
+              "aipAirspacesEnabled": {
+                "type": "boolean"
+              },
+              "aipAirspacesCacheTtlSeconds": {
+                "type": "integer"
+              },
+              "aipAirspacesSourceUrl": {
+                "type": "string"
+              },
+              "uasGeozonesEnabled": {
+                "type": "boolean"
+              },
+              "uasGeozonesLayerIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "uasGeozonesCacheTtlSeconds": {
+                "type": "integer"
+              },
+              "uasGeozonesCatalogUrl": {
+                "type": "string"
+              },
+              "airspaceActivationEnabled": {
+                "type": "boolean"
+              },
+              "airspaceActivationCacheTtlSeconds": {
+                "type": "integer"
+              },
+              "airspaceActivationBaseUrl": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "FlightDataAirport": {
+        "type": "object",
+        "properties": {
+          "ident": {
+            "type": "string"
+          },
+          "iata": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "municipality": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "elevationFt": {
+            "type": "integer"
+          },
+          "dataSource": {
+            "type": "string"
+          }
+        }
+      },
+      "FlightDataAirspaceFeatureCollection": {
+        "type": "object",
+        "required": [
+          "type",
+          "contractVersion",
+          "generatedAt",
+          "features",
+          "source",
+          "summary",
+          "warnings"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection"
+          },
+          "contractVersion": {
+            "type": "string",
+            "const": "flight-airspace-reference-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataAirspaceFeature"
+            }
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "const": "czech_aip_airspaces"
+              },
+              "label": {
+                "type": "string"
+              },
+              "sourceUrl": {
+                "type": "string"
+              },
+              "sourceSection": {
+                "type": "string"
+              },
+              "loadedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalReferenceAirspaces": {
+                "type": "integer"
+              },
+              "returnedAirspaces": {
+                "type": "integer"
+              },
+              "notForNavigation": {
+                "type": "boolean"
+              },
+              "geometryQuality": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FlightDataAirspaceFeature": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "Feature"
+          },
+          "id": {
+            "type": "string"
+          },
+          "geometry": {
+            "type": "object",
+            "required": [
+              "type",
+              "coordinates"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Polygon"
+              },
+              "coordinates": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "layerId": {
+                "type": "string",
+                "const": "flight.reference.airspaces"
+              },
+              "providerId": {
+                "type": "string",
+                "const": "sim.flight-data"
+              },
+              "providerLayerId": {
+                "type": "string",
+                "const": "flight.airspaces"
+              },
+              "sourceId": {
+                "type": "string",
+                "const": "czech_aip_airspaces"
+              },
+              "category": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "warning"
+                ]
+              },
+              "airspaceId": {
+                "type": "string"
+              },
+              "designator": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "airspaceType": {
+                "type": "string",
+                "enum": [
+                  "prohibited",
+                  "restricted",
+                  "danger",
+                  "temporary_reserved",
+                  "temporary_segregated",
+                  "other"
+                ]
+              },
+              "lowerLimit": {
+                "type": "string"
+              },
+              "upperLimit": {
+                "type": "string"
+              },
+              "verticalLimitText": {
+                "type": "string"
+              },
+              "notForNavigation": {
+                "type": "boolean"
+              },
+              "providerProperties": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "FlightDataUasGeozoneFeatureCollection": {
+        "type": "object",
+        "required": [
+          "type",
+          "contractVersion",
+          "generatedAt",
+          "features",
+          "source",
+          "summary",
+          "warnings"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection"
+          },
+          "contractVersion": {
+            "type": "string",
+            "const": "flight-uas-geozone-reference-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "const": "czech_uas_geozones"
+              },
+              "catalogUrl": {
+                "type": "string"
+              },
+              "importedLayerIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "totalReferenceGeozones": {
+                "type": "integer"
+              },
+              "returnedGeozones": {
+                "type": "integer"
+              },
+              "notForNavigation": {
+                "type": "boolean"
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FlightDataAirspaceActivationFeatureCollection": {
+        "type": "object",
+        "required": [
+          "type",
+          "contractVersion",
+          "generatedAt",
+          "features",
+          "source",
+          "summary",
+          "warnings"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection"
+          },
+          "contractVersion": {
+            "type": "string",
+            "const": "flight-airspace-activation-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "const": "czech_aup_uup"
+              },
+              "baseUrl": {
+                "type": "string"
+              },
+              "validFrom": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validTo": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "activationCount": {
+                "type": "integer"
+              },
+              "returnedActivations": {
+                "type": "integer"
+              },
+              "cancelledCount": {
+                "type": "integer"
+              },
+              "withGeometryCount": {
+                "type": "integer"
+              },
+              "notForNavigation": {
+                "type": "boolean"
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FlightDataAircraftType": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FlightDataAircraftTypePartial"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "dataSource": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "FlightDataAircraftTypePartial": {
+        "type": "object",
+        "properties": {
+          "typeDesignator": {
+            "type": "string"
+          },
+          "designator": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "engineType": {
+            "type": "string"
+          },
+          "wakeTurbulenceCategory": {
+            "type": "string"
+          },
+          "iconHint": {
+            "type": "string",
+            "enum": [
+              "jet",
+              "turboprop",
+              "small_aircraft",
+              "helicopter",
+              "glider",
+              "uav",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "SituationDataLayerId": {
+        "type": "string",
+        "enum": [
+          "weather",
+          "ground",
+          "mobile",
+          "mobile_coverage",
+          "mobile_network",
+          "traffic",
+          "warnings",
+          "fire",
+          "flood",
+          "boundary_admin",
+          "boundary_country",
+          "boundary_region",
+          "boundary_district",
+          "boundary_orp",
+          "place_settlements",
+          "air_quality",
+          "weather_temperature_grid",
+          "weather_wind_field",
+          "weather_precipitation_grid",
+          "weather_humidity_grid",
+          "weather_pressure_grid",
+          "air_quality_grid"
+        ]
+      },
+      "SituationDataSourceId": {
+        "type": "string",
+        "enum": [
+          "mock",
+          "open_meteo",
+          "mobile_coverage_model",
+          "mobile_network_model",
+          "osm_postgis",
+          "osm_overpass",
+          "ctu_nettest",
+          "ctu_stationary_mobile",
+          "pid_gtfs_rt",
+          "idsjmk_vehicle_positions",
+          "road_srti_lod",
+          "safety_data",
+          "aviation_weather",
+          "chmi_air_quality",
+          "chmi_weather_stations",
+          "ardos_partner"
+        ]
+      },
+      "SituationDataMobileCoverageTechnology": {
+        "type": "string",
+        "enum": [
+          "2G",
+          "4G",
+          "5G"
+        ]
+      },
+      "SituationDataMobileCoverageQuality": {
+        "type": "string",
+        "enum": [
+          "good",
+          "fair",
+          "weak",
+          "none",
+          "unknown"
+        ]
+      },
+      "SituationDataProviderCatalogLayerRole": {
+        "type": "string",
+        "enum": [
+          "primary",
+          "reference",
+          "overlay",
+          "user",
+          "partner",
+          "diagnostic"
+        ]
+      },
+      "SituationDataProviderCatalogSourceRole": {
+        "type": "string",
+        "enum": [
+          "final",
+          "aggregate",
+          "reference",
+          "input",
+          "projection",
+          "mock",
+          "diagnostic"
+        ]
+      },
+      "SituationDataProviderCatalogAudience": {
+        "type": "string",
+        "enum": [
+          "public",
+          "authenticated",
+          "partner",
+          "admin",
+          "diagnostic"
+        ]
+      },
+      "SituationDataProviderCatalogKind": {
+        "type": "string",
+        "enum": [
+          "vector_features",
+          "grid_field",
+          "vector_field",
+          "raster_overlay",
+          "mvt_tiles",
+          "raster_tiles",
+          "track_stream",
+          "user_objects",
+          "static_reference",
+          "aggregate"
+        ]
+      },
+      "SituationDataBoundingBox": {
+        "type": "object",
+        "required": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ],
+        "properties": {
+          "west": {
+            "type": "number"
+          },
+          "south": {
+            "type": "number"
+          },
+          "east": {
+            "type": "number"
+          },
+          "north": {
+            "type": "number"
+          }
+        }
+      },
+      "SituationDataLicense": {
+        "type": "object",
+        "required": [
+          "name",
+          "attribution",
+          "commercialUse",
+          "operationalUse",
+          "notes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "attribution": {
+            "type": "string"
+          },
+          "commercialUse": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "allowed_with_obligations",
+              "requires_license",
+              "unknown"
+            ]
+          },
+          "operationalUse": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "allowed_with_obligations",
+              "requires_license",
+              "unknown"
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataLayerDescriptor": {
+        "type": "object",
+        "required": [
+          "layerId",
+          "label",
+          "description",
+          "defaultVisible",
+          "geometryTypes"
+        ],
+        "properties": {
+          "layerId": {
+            "$ref": "#/components/schemas/SituationDataLayerId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "defaultVisible": {
+            "type": "boolean"
+          },
+          "geometryTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Point",
+                "LineString",
+                "Polygon",
+                "MultiPolygon"
+              ]
+            }
+          },
+          "expectedCadenceSeconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "SituationDataSourceDescriptor": {
+        "type": "object",
+        "required": [
+          "sourceId",
+          "label",
+          "enabled",
+          "mode",
+          "priority",
+          "layers",
+          "license"
+        ],
+        "properties": {
+          "sourceId": {
+            "$ref": "#/components/schemas/SituationDataSourceId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "mock",
+              "reference"
+            ]
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataLayerId"
+            }
+          },
+          "license": {
+            "$ref": "#/components/schemas/SituationDataLicense"
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "updateCadenceSeconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "SituationDataProviderMapCatalog": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "providerId",
+          "generatedAt",
+          "status",
+          "authority",
+          "layers",
+          "sources"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "provider-map-catalog-v1"
+          },
+          "catalogVersion": {
+            "type": "string",
+            "const": "provider-map-catalog-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.situation-data"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "online"
+            ]
+          },
+          "authority": {
+            "type": "object",
+            "required": [
+              "contractVersion",
+              "document"
+            ],
+            "properties": {
+              "contractVersion": {
+                "type": "string",
+                "const": "map-catalog-v1"
+              },
+              "catalogVersion": {
+                "type": "string",
+                "const": "map-catalog-v1"
+              },
+              "document": {
+                "type": "string",
+                "description": "URL or path to the authoritative source-neutral COM Map Catalog provider document."
+              }
+            }
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataProviderCatalogLayer"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataProviderCatalogSource"
+            }
+          }
+        }
+      },
+      "SituationDataProviderCatalogLayer": {
+        "type": "object",
+        "required": [
+          "providerLayerId",
+          "recommendedCatalogLayerId",
+          "label",
+          "description",
+          "categoryPath",
+          "categories",
+          "role",
+          "audience",
+          "kind",
+          "defaultVisible",
+          "selectable",
+          "geometryTypes",
+          "minZoom",
+          "maxZoom",
+          "refreshSeconds",
+          "cacheTtlSeconds",
+          "styleProfile",
+          "sourceIds",
+          "query",
+          "legal"
+        ],
+        "properties": {
+          "providerLayerId": {
+            "type": "string"
+          },
+          "recommendedCatalogLayerId": {
+            "type": "string",
+            "example": "public.mobile.network"
+          },
+          "label": {
+            "type": "string"
+          },
+          "labelLocalized": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "descriptionLocalized": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "categoryPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/SituationDataProviderCatalogLayerRole"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/SituationDataProviderCatalogAudience"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SituationDataProviderCatalogKind"
+          },
+          "defaultVisible": {
+            "type": "boolean"
+          },
+          "selectable": {
+            "type": "boolean"
+          },
+          "geometryTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Point",
+                "LineString",
+                "Polygon",
+                "MultiPolygon"
+              ]
+            }
+          },
+          "minZoom": {
+            "type": "integer"
+          },
+          "maxZoom": {
+            "type": "integer"
+          },
+          "refreshSeconds": {
+            "type": "integer"
+          },
+          "cacheTtlSeconds": {
+            "type": "integer"
+          },
+          "styleProfile": {
+            "type": "string"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSourceId"
+            }
+          },
+          "technicalInputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSourceId"
+            }
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "filterId",
+                "type"
+              ],
+              "properties": {
+                "filterId": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "single_select",
+                    "multi_select",
+                    "boolean",
+                    "range"
+                  ]
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "defaultValue": {
+                }
+              }
+            }
+          },
+          "query": {
+            "type": "object",
+            "required": [
+              "mode",
+              "providerId",
+              "streamId",
+              "providerLayerIds",
+              "providerSourceIds",
+              "maxFeatures"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "const": "bbox"
+              },
+              "providerId": {
+                "type": "string",
+                "const": "sim.situation-data"
+              },
+              "streamId": {
+                "type": "string",
+                "description": "Opaque provider stream id consumed by the COM backend; it is not a public browser URL."
+              },
+              "providerLayerIds": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SituationDataLayerId"
+                }
+              },
+              "providerSourceIds": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SituationDataSourceId"
+                }
+              },
+              "maxFeatures": {
+                "type": "integer"
+              },
+              "categoryFilter": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "legend": {
+            "type": "object",
+            "properties": {
+              "profile": {
+                "type": "string"
+              }
+            }
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "modelVersion": {
+                "type": "string"
+              },
+              "terrainAware": {
+                "type": "boolean"
+              },
+              "demSource": {
+                "type": "string"
+              },
+              "confidenceExplanation": {
+                "type": "string"
+              }
+            }
+          },
+          "delivery": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "features",
+                  "grid",
+                  "vector_tiles",
+                  "raster_tiles",
+                  "raster_overlay"
+                ]
+              },
+              "geometryRole": {
+                "type": "string",
+                "enum": [
+                  "feature_geometry",
+                  "grid_cell",
+                  "raster_extent"
+                ]
+              },
+              "fallbackPolicy": {
+                "type": "string",
+                "enum": [
+                  "hide_if_unsupported",
+                  "hide_if_raster_overlay_unsupported"
+                ]
+              },
+              "doNotRenderGeometryFill": {
+                "type": "boolean",
+                "description": "When true, polygon geometry is metadata extent only and must not be displayed as a filled vector feature."
+              },
+              "valueField": {
+                "type": "string",
+                "example": "metrics.value"
+              },
+              "stableGrid": {
+                "type": "object",
+                "properties": {
+                  "alignment": {
+                    "type": "string",
+                    "enum": [
+                      "wgs84"
+                    ]
+                  },
+                  "resolutionDegrees": {
+                    "type": "number"
+                  },
+                  "resolutionM": {
+                    "type": "number"
+                  }
+                }
+              },
+              "tileTemplate": {
+                "type": "string"
+              }
+            }
+          },
+          "readModel": {
+            "type": "object",
+            "properties": {
+              "table": {
+                "type": "string"
+              },
+              "refreshedBy": {
+                "type": "string"
+              },
+              "cacheTtlSeconds": {
+                "type": "integer"
+              }
+            }
+          },
+          "legal": {
+            "type": "object",
+            "required": [
+              "attribution",
+              "notes"
+            ],
+            "properties": {
+              "attribution": {
+                "type": "string"
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "supersedes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replacedBy": {
+            "type": "string"
+          },
+          "compatibilityOnly": {
+            "type": "boolean"
+          },
+          "preferredProviderId": {
+            "type": "string"
+          }
+        }
+      },
+      "SituationDataProviderCatalogSource": {
+        "type": "object",
+        "required": [
+          "sourceId",
+          "label",
+          "enabled",
+          "mode",
+          "layers",
+          "sourceRole",
+          "audience",
+          "selectableInMap",
+          "visibleInDiagnostics",
+          "feedsLayerIds",
+          "feedsCatalogLayerIds",
+          "cacheTtlSeconds",
+          "license"
+        ],
+        "properties": {
+          "sourceId": {
+            "$ref": "#/components/schemas/SituationDataSourceId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "mock",
+              "reference"
+            ]
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataLayerId"
+            }
+          },
+          "sourceRole": {
+            "$ref": "#/components/schemas/SituationDataProviderCatalogSourceRole"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/SituationDataProviderCatalogAudience"
+          },
+          "selectableInMap": {
+            "type": "boolean",
+            "description": "Whether COM may expose the whole source as a normal map selection. Prefer layer metadata for user-facing selection."
+          },
+          "visibleInDiagnostics": {
+            "type": "boolean"
+          },
+          "feedsLayerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "feedsCatalogLayerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "usedByLayerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "usedByCatalogLayerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "technicalInputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSourceId"
+            }
+          },
+          "replacedBy": {
+            "$ref": "#/components/schemas/SituationDataSourceId"
+          },
+          "preferredProviderId": {
+            "type": "string"
+          },
+          "updateCadenceSeconds": {
+            "type": "integer"
+          },
+          "cacheTtlSeconds": {
+            "type": "integer"
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "backend": {
+            "type": "string"
+          },
+          "license": {
+            "$ref": "#/components/schemas/SituationDataLicense"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataPublicConfig": {
+        "type": "object",
+        "required": [
+          "enabledSources",
+          "defaultBbox",
+          "cacheTtlSeconds",
+          "staleIfErrorSeconds",
+          "cacheMaxEntries",
+          "bboxCachePaddingDegrees",
+          "staleAfterSeconds",
+          "requestTimeoutMs",
+          "sourceCacheTtlSeconds",
+          "providers"
+        ],
+        "properties": {
+          "enabledSources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSourceId"
+            }
+          },
+          "defaultBbox": {
+            "$ref": "#/components/schemas/SituationDataBoundingBox"
+          },
+          "cacheTtlSeconds": {
+            "type": "integer"
+          },
+          "staleIfErrorSeconds": {
+            "type": "integer"
+          },
+          "cacheMaxEntries": {
+            "type": "integer"
+          },
+          "bboxCachePaddingDegrees": {
+            "type": "number"
+          },
+          "staleAfterSeconds": {
+            "type": "integer"
+          },
+          "requestTimeoutMs": {
+            "type": "integer"
+          },
+          "sourceCacheTtlSeconds": {
+            "type": "object",
+            "required": [
+              "openMeteo",
+              "mobileNetwork",
+              "mobileCoverage",
+              "osmPostgis",
+              "osmOverpass",
+              "ctuStationaryMobile",
+              "idsjmkVehiclePositions",
+              "roadSrtiLod",
+              "safetyData",
+              "aviationWeather",
+              "chmiAirQuality",
+              "chmiWeatherStations",
+              "ardosPartner"
+            ],
+            "properties": {
+              "openMeteo": {
+                "type": "integer"
+              },
+              "mobileNetwork": {
+                "type": "integer"
+              },
+              "mobileCoverage": {
+                "type": "integer"
+              },
+              "osmPostgis": {
+                "type": "integer"
+              },
+              "osmOverpass": {
+                "type": "integer"
+              },
+              "ctuStationaryMobile": {
+                "type": "integer"
+              },
+              "idsjmkVehiclePositions": {
+                "type": "integer"
+              },
+              "roadSrtiLod": {
+                "type": "integer"
+              },
+              "safetyData": {
+                "type": "integer"
+              },
+              "aviationWeather": {
+                "type": "integer"
+              },
+              "chmiAirQuality": {
+                "type": "integer"
+              },
+              "chmiWeatherStations": {
+                "type": "integer"
+              },
+              "ardosPartner": {
+                "type": "integer"
+              }
+            }
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "sourceId",
+                "authConfigured"
+              ],
+              "properties": {
+                "sourceId": {
+                  "$ref": "#/components/schemas/SituationDataSourceId"
+                },
+                "baseUrl": {
+                  "type": "string"
+                },
+                "authConfigured": {
+                  "type": "boolean"
+                },
+                "backend": {
+                  "type": "string",
+                  "description": "Optional backend marker, e.g. unconfigured, patroni-postgis, chmi-opendata or ndic-srti-lod, without exposing credentials."
+                }
+              }
+            }
+          }
+        }
+      },
+      "SituationDataSourceHealthStatus": {
+        "type": "object",
+        "required": [
+          "sourceId",
+          "status",
+          "warnings"
+        ],
+        "properties": {
+          "sourceId": {
+            "$ref": "#/components/schemas/SituationDataSourceId"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "unconfigured",
+              "local-postgis",
+              "patroni-postgis",
+              "external-postgis"
+            ]
+          },
+          "objectCount": {
+            "type": "integer",
+            "description": "Present for PostGIS-backed providers when public.osm_poi is readable."
+          },
+          "lastImportAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastImportAgeSeconds": {
+            "type": "integer"
+          },
+          "boundaryFeatureCount": {
+            "type": "integer"
+          },
+          "boundaryLevels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "boundaryLastImportAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "boundaryLastImportAgeSeconds": {
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataSituationObservability": {
+        "type": "object",
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "const": "situation-data-api"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          },
+          "cache": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "sharedCache": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "sourceCaches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "dataFreshness": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "environmentGrid": {
+            "type": "object",
+            "description": "Cataloged grid/field layer health, stable WGS84 grid alignment and upstream status.",
+            "additionalProperties": true
+          },
+          "boundaryReadModel": {
+            "type": "object",
+            "description": "PostGIS administrative boundary read-model health, import age and feature count.",
+            "additionalProperties": true
+          },
+          "sourceHealth": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "$ref": "#/components/schemas/SituationDataSourceId"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "backend": {
+                  "type": "string"
+                },
+                "objectCount": {
+                  "type": "integer"
+                },
+                "lastImportAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastImportAgeSeconds": {
+                  "type": "integer"
+                },
+                "boundaryFeatureCount": {
+                  "type": "integer"
+                },
+                "boundaryLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "boundaryLastImportAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "boundaryLastImportAgeSeconds": {
+                  "type": "integer"
+                },
+                "warningCount": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SituationDataSituationFeatureCollection": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "type",
+          "generatedAt",
+          "source",
+          "query",
+          "summary",
+          "features",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "cop-situation-source-v1"
+          },
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "const": "situation-data-api"
+              },
+              "sourceType": {
+                "type": "string",
+                "const": "PUBLIC_SITUATION_AGGREGATE"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "bbox": {
+                "$ref": "#/components/schemas/SituationDataBoundingBox"
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SituationDataLayerId"
+                }
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SituationDataSourceId"
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "featureCount": {
+                "type": "integer"
+              },
+              "sourceCount": {
+                "type": "integer"
+              },
+              "staleFeatureCount": {
+                "type": "integer"
+              },
+              "warningCount": {
+                "type": "integer"
+              }
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSituationFeature"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSourceDescriptor"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataSituationFeature": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "Feature"
+          },
+          "id": {
+            "type": "string"
+          },
+          "geometry": {
+            "type": "object",
+            "required": [
+              "type",
+              "coordinates"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Point",
+                  "LineString",
+                  "Polygon",
+                  "MultiPolygon"
+                ]
+              },
+              "coordinates": {
+              }
+            }
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "featureId",
+              "layer",
+              "category",
+              "label",
+              "sourceId",
+              "observedAt",
+              "confidence",
+              "stale",
+              "severity",
+              "license"
+            ],
+            "properties": {
+              "featureId": {
+                "type": "string"
+              },
+              "layerId": {
+                "type": "string",
+                "description": "Recommended COM catalog layer id, e.g. public.mobile.network."
+              },
+              "providerId": {
+                "type": "string",
+                "const": "sim.situation-data"
+              },
+              "providerLayerId": {
+                "type": "string"
+              },
+              "layer": {
+                "$ref": "#/components/schemas/SituationDataLayerId"
+              },
+              "category": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "labelLocalized": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "summaryLocalized": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "sourceId": {
+                "$ref": "#/components/schemas/SituationDataSourceId"
+              },
+              "source": {
+                "type": "string"
+              },
+              "sourceName": {
+                "type": "string"
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validFrom": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "advisory",
+                  "warning",
+                  "critical"
+                ]
+              },
+              "license": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "attribution"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "attribution": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                }
+              },
+              "metrics": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "rendering": {
+                "type": "object",
+                "description": "Provider-side rendering contract for geometries that are grid cells or raster extents rather than ordinary vector polygons.",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "feature",
+                      "grid_field",
+                      "vector_field",
+                      "raster_overlay"
+                    ]
+                  },
+                  "geometryRole": {
+                    "type": "string",
+                    "enum": [
+                      "feature_geometry",
+                      "grid_cell",
+                      "raster_extent",
+                      "wind_vector"
+                    ]
+                  },
+                  "valueMetric": {
+                    "type": "string"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "opacity": {
+                    "type": "number"
+                  },
+                  "doNotRenderGeometryFill": {
+                    "type": "boolean"
+                  },
+                  "fallbackPolicy": {
+                    "type": "string",
+                    "enum": [
+                      "hide_if_unsupported",
+                      "hide_if_raster_overlay_unsupported"
+                    ]
+                  }
+                }
+              },
+              "transportMode": {
+                "type": "string",
+                "description": "Normalized public-transport or road mode, e.g. bus, tram, train, metro, trolleybus, road."
+              },
+              "routeShortName": {
+                "type": "string",
+                "description": "Normalized route or line short name for transit vehicles."
+              },
+              "destination": {
+                "type": "string",
+                "description": "Normalized destination/headsign when provided by the source."
+              },
+              "delaySeconds": {
+                "type": "number",
+                "description": "Normalized delay in seconds when provided by the source."
+              },
+              "vehicleId": {
+                "type": "string",
+                "description": "Stable provider vehicle identifier for transit vehicles."
+              },
+              "tripId": {
+                "type": "string",
+                "description": "Provider trip identifier for transit vehicles."
+              },
+              "occupancyStatus": {
+                "type": "string",
+                "description": "Normalized GTFS-style occupancy status when provided by the source."
+              },
+              "occupancyPercent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Vehicle occupancy estimate in percent when provided by the source."
+              },
+              "headingDeg": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 360,
+                "description": "Vehicle heading in degrees."
+              },
+              "speedMps": {
+                "type": "number",
+                "description": "Vehicle speed in metres per second."
+              },
+              "operator": {
+                "type": "string"
+              },
+              "technology": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SituationDataMobileCoverageTechnology"
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "mixed",
+                      "unknown"
+                    ]
+                  }
+                ]
+              },
+              "quality": {
+                "$ref": "#/components/schemas/SituationDataMobileCoverageQuality"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "weak_signal",
+                  "degraded_possible",
+                  "outage_reported",
+                  "unknown"
+                ]
+              },
+              "basis": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "summary": {
+                "type": "string"
+              },
+              "notices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dataQuality": {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "modelled",
+                  "mixed",
+                  "unknown"
+                ],
+                "description": "Indicates whether the mobile assessment is based on measurements, modelled coverage, both, or insufficient inputs."
+              },
+              "adminLevel": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "countryCode": {
+                "type": "string"
+              },
+              "areaName": {
+                "type": "string"
+              },
+              "styleHint": {
+                "type": "string"
+              },
+              "iconHint": {
+                "type": "string"
+              },
+              "btsStatus": {
+                "type": "string",
+                "enum": [
+                  "operator_feed_unavailable",
+                  "unverified",
+                  "reported_outage",
+                  "unknown"
+                ],
+                "description": "Status of the concrete BTS/operator feed. `operator_feed_unavailable` means SIM has no authorized BTS/NOC status."
+              },
+              "btsStatusSource": {
+                "type": "string"
+              },
+              "operatorStatusAvailable": {
+                "type": "boolean"
+              },
+              "estimatedSignalDbm": {
+                "type": "integer"
+              },
+              "modelVersion": {
+                "type": "string"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "resolutionM": {
+                "type": "integer"
+              },
+              "demSource": {
+                "type": "string"
+              },
+              "assumptions": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "disclaimer": {
+                "type": "string"
+              },
+              "providerProperties": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      },
+      "SituationDataMobileCoverageMetadata": {
+        "type": "object",
+        "required": [
+          "layerId",
+          "modelVersion",
+          "generatedAt",
+          "resolutionM",
+          "technologies",
+          "operators",
+          "qualityLevels",
+          "demSource",
+          "cacheTtlSeconds",
+          "disclaimer",
+          "assumptions"
+        ],
+        "properties": {
+          "layerId": {
+            "type": "string",
+            "const": "mobile_coverage"
+          },
+          "modelVersion": {
+            "type": "string",
+            "example": "coverage-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolutionM": {
+            "type": "integer",
+            "example": 1000
+          },
+          "technologies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataMobileCoverageTechnology"
+            }
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "qualityLevels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataMobileCoverageQuality"
+            }
+          },
+          "demSource": {
+            "type": "string"
+          },
+          "cacheTtlSeconds": {
+            "type": "integer"
+          },
+          "disclaimer": {
+            "type": "string"
+          },
+          "assumptions": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SituationDataDemCatalogStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "status",
+          "datasetId",
+          "warnings"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "disabled"
+            ]
+          },
+          "datasetId": {
+            "type": "string",
+            "example": "copernicus-glo30-cz"
+          },
+          "source": {
+            "type": "string",
+            "example": "copernicus-dem-glo30"
+          },
+          "version": {
+            "type": "string",
+            "example": "2021"
+          },
+          "resolutionM": {
+            "type": "integer",
+            "example": 30
+          },
+          "tileCount": {
+            "type": "integer"
+          },
+          "localTileCount": {
+            "type": "integer"
+          },
+          "objectStoreTileCount": {
+            "type": "integer"
+          },
+          "importedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bbox": {
+            "$ref": "#/components/schemas/SituationDataBoundingBox"
+          },
+          "localCacheDir": {
+            "type": "string"
+          },
+          "objectStore": {
+            "type": "object",
+            "properties": {
+              "endpoint": {
+                "type": "string"
+              },
+              "bucket": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SafetyDataSafetyFeatureCollection": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "type",
+          "generatedAt",
+          "source",
+          "query",
+          "summary",
+          "features",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-safety-source-v1"
+          },
+          "type": {
+            "const": "FeatureCollection"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "const": "safety-data-api"
+              },
+              "sourceType": {
+                "const": "PUBLIC_SAFETY_AGGREGATE"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "query": {
+            "type": "object"
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "featureCount": {
+                "type": "integer"
+              },
+              "sourceCount": {
+                "type": "integer"
+              },
+              "staleFeatureCount": {
+                "type": "integer"
+              },
+              "advisoryCount": {
+                "type": "integer"
+              },
+              "warningCount": {
+                "type": "integer"
+              },
+              "criticalCount": {
+                "type": "integer"
+              }
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SafetyDataSafetyFeature"
+            }
+          },
+          "sources": {
+            "type": "array"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SafetyDataSafetyFeature": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "const": "Feature"
+          },
+          "id": {
+            "type": "string"
+          },
+          "geometry": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "Point"
+                  },
+                  "coordinates": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "Polygon"
+                  },
+                  "coordinates": {
+                    "type": "array"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "MultiPolygon"
+                  },
+                  "coordinates": {
+                    "type": "array"
+                  }
+                }
+              }
+            ]
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "featureId",
+              "layer",
+              "category",
+              "hazardType",
+              "headline",
+              "sourceId",
+              "source",
+              "sourceName",
+              "observedAt",
+              "validFrom",
+              "updatedAt",
+              "confidence",
+              "stale",
+              "severity",
+              "status",
+              "urgency",
+              "certainty",
+              "basis",
+              "license"
+            ],
+            "properties": {
+              "featureId": {
+                "type": "string"
+              },
+              "layerId": {
+                "type": "string",
+                "enum": [
+                  "public.safety.weather_alerts",
+                  "public.safety.fire",
+                  "public.safety.flood",
+                  "public.boundary.admin"
+                ]
+              },
+              "providerId": {
+                "type": "string",
+                "const": "sim.safety-data"
+              },
+              "providerLayerId": {
+                "type": "string",
+                "enum": [
+                  "safety.weather_alerts",
+                  "safety.fire",
+                  "safety.flood",
+                  "boundary.admin"
+                ]
+              },
+              "layer": {
+                "enum": [
+                  "weather_alerts",
+                  "warnings",
+                  "fire",
+                  "flood",
+                  "boundary_admin"
+                ]
+              },
+              "category": {
+                "type": "string"
+              },
+              "hazardType": {
+                "type": "string"
+              },
+              "headline": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "recommendedAction": {
+                "type": "string"
+              },
+              "sourceId": {
+                "enum": [
+                  "mock",
+                  "chmi_alerts",
+                  "chmi_hydro",
+                  "nasa_firms",
+                  "admin_boundaries"
+                ]
+              },
+              "source": {
+                "type": "string"
+              },
+              "sourceName": {
+                "type": "string"
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validFrom": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "stale": {
+                "type": "boolean"
+              },
+              "severity": {
+                "enum": [
+                  "info",
+                  "advisory",
+                  "warning",
+                  "critical"
+                ]
+              },
+              "status": {
+                "type": "string"
+              },
+              "urgency": {
+                "enum": [
+                  "immediate",
+                  "expected",
+                  "future",
+                  "past",
+                  "unknown"
+                ]
+              },
+              "certainty": {
+                "enum": [
+                  "observed",
+                  "likely",
+                  "possible",
+                  "unlikely",
+                  "unknown"
+                ]
+              },
+              "areaName": {
+                "type": "string"
+              },
+              "adminLevel": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "styleHint": {
+                "type": "string"
+              },
+              "iconHint": {
+                "type": "string"
+              },
+              "basis": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fireStatus": {
+                "type": "string"
+              },
+              "detectedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "sourceSatellite": {
+                "type": "string"
+              },
+              "sourceIncident": {
+                "type": "string"
+              },
+              "intensity": {
+                "type": "number"
+              },
+              "frp": {
+                "type": "number"
+              },
+              "riverName": {
+                "type": "string"
+              },
+              "stationId": {
+                "type": "string"
+              },
+              "waterLevelCm": {
+                "type": "number"
+              },
+              "discharge": {
+                "type": "number"
+              },
+              "floodStage": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "trend": {
+                "type": "string"
+              },
+              "basin": {
+                "type": "string"
+              },
+              "affectedArea": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "countryCode": {
+                "type": "string"
+              },
+              "affectedAreas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "geocodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "scheme": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "metrics": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "providerProperties": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      },
+      "TakGatewayBoundingBox": {
+        "type": "object",
+        "required": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ],
+        "properties": {
+          "west": {
+            "type": "number"
+          },
+          "south": {
+            "type": "number"
+          },
+          "east": {
+            "type": "number"
+          },
+          "north": {
+            "type": "number"
+          }
+        }
+      },
+      "TakGatewayTakFeatureCollection": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "type",
+          "generatedAt",
+          "source",
+          "query",
+          "summary",
+          "features",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "cop-tak-source-v1"
+          },
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "sourceId",
+              "sourceType",
+              "generatedAt"
+            ],
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "const": "tak-gateway-api"
+              },
+              "sourceType": {
+                "type": "string",
+                "const": "TAK_COT_GATEWAY"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "query": {
+            "type": "object",
+            "required": [
+              "bbox",
+              "layers",
+              "limit"
+            ],
+            "properties": {
+              "bbox": {
+                "$ref": "#/components/schemas/TakGatewayBoundingBox"
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "ground",
+                    "mobile",
+                    "traffic"
+                  ]
+                }
+              },
+              "limit": {
+                "type": "integer"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "eventCount",
+              "featureCount",
+              "sourceCount",
+              "staleFeatureCount",
+              "warningCount",
+              "affiliationCounts"
+            ],
+            "properties": {
+              "eventCount": {
+                "type": "integer"
+              },
+              "featureCount": {
+                "type": "integer"
+              },
+              "sourceCount": {
+                "type": "integer"
+              },
+              "staleFeatureCount": {
+                "type": "integer"
+              },
+              "warningCount": {
+                "type": "integer"
+              },
+              "affiliationCounts": {
+                "type": "object",
+                "required": [
+                  "friend",
+                  "hostile",
+                  "neutral",
+                  "unknown"
+                ],
+                "properties": {
+                  "friend": {
+                    "type": "integer"
+                  },
+                  "hostile": {
+                    "type": "integer"
+                  },
+                  "neutral": {
+                    "type": "integer"
+                  },
+                  "unknown": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TakGatewayProblem": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "correlationId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "correlationId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "SimulatorbearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "TakGatewaybearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "responses": {
+      "SimulatorProblem": {
+        "description": "Standardizovaná chybová odpověď.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SimulatorErrorResponse"
+            }
+          }
+        }
+      },
+      "FlightDataProblem": {
+        "description": "Problem response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SituationDataProblem": {
+        "description": "Problem response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SafetyDataProblem": {
+        "description": "Problem response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "FlightDataBbox": {
+        "name": "bbox",
+        "in": "query",
+        "description": "Bounding box `west,south,east,north`.",
+        "schema": {
+          "type": "string",
+          "example": "13.5,49.5,15.5,50.6"
+        }
+      },
+      "FlightDataSource": {
+        "name": "source",
+        "in": "query",
+        "description": "Comma-separated source list.",
+        "schema": {
+          "type": "string",
+          "example": "mock"
+        }
+      },
+      "FlightDataLimit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 250
+        }
+      },
+      "FlightDataIncludeStale": {
+        "name": "includeStale",
+        "in": "query",
+        "schema": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "SituationDataBbox": {
+        "name": "bbox",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "13.85,49.65,15.35,50.45"
+        },
+        "description": "WGS84 bbox in west,south,east,north order. Defaults to configured Prague pilot bbox."
+      },
+      "SituationDataLayers": {
+        "name": "layers",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "weather,ground,mobile_network,traffic,warnings,flood,air_quality"
+        }
+      },
+      "SituationDataSources": {
+        "name": "source",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "open_meteo,chmi_weather_stations,chmi_air_quality,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data"
+        }
+      },
+      "SituationDataTechnologies": {
+        "name": "technology",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "4G,5G"
+        },
+        "description": "Optional mobile coverage/mobile network technology filter. Alias `technologies` is also accepted."
+      },
+      "SituationDataOperators": {
+        "name": "operator",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "unknown"
+        },
+        "description": "Optional mobile coverage/mobile network operator filter. The unified mobile_network layer currently publishes aggregate/unknown operator assessment."
+      },
+      "SituationDataLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "default": 250,
+          "maximum": 1000
+        }
+      },
+      "SafetyDataBbox": {
+        "name": "bbox",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "13.85,49.65,15.35,50.45"
+        },
+        "description": "WGS84 bbox in west,south,east,north order."
+      },
+      "SafetyDataLayers": {
+        "name": "layers",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "weather_alerts,fire,flood,boundary_admin"
+        }
+      },
+      "SafetyDataSources": {
+        "name": "source",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries"
+        }
+      },
+      "SafetyDataLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "default": 250,
+          "maximum": 1000
+        }
+      }
+    }
+  },
+  "x-csm-sim": {
+    "source": "Composite generated from archived service-local YAML snapshots.",
+    "generator": "scripts/build-openapi-json.rb",
+    "notes": [
+      "openapi/openapi.json is the binding artifact.",
+      "Current runtime error responses may use correlationId; requestId unification is a compatibility-safe follow-up."
+    ]
+  }
+}

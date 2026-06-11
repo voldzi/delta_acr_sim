@@ -4,6 +4,10 @@
   "private": true,
   "description": "CSM SIM - standalone data provider and synthetic scenario simulator.",
   "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10 <11"
+  },
   "scripts": {
     "dev": "pnpm --parallel --filter @csm-sim/simulator-api --filter @csm-sim/simulator-web --filter @csm-sim/flight-data-api --filter @csm-sim/situation-data-api --filter @csm-sim/safety-data-api --filter @csm-sim/tak-gateway-api dev",
     "dev:api": "pnpm --filter @csm-sim/simulator-api dev",
@@ -13,9 +17,15 @@
     "dev:tak-gateway": "pnpm --filter @csm-sim/tak-gateway-api dev",
     "dev:web": "pnpm --filter @csm-sim/simulator-web dev",
     "build": "pnpm -r build",
+    "lint": "pnpm typecheck",
     "typecheck": "pnpm -r --filter './packages/**' build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:contract": "pnpm --filter @csm-sim/simulator-api test",
+    "skeleton:validate": "bash scripts/validate-skeleton.sh",
+    "openapi:build": "ruby scripts/build-openapi-json.rb",
+    "openapi:check": "ruby scripts/build-openapi-json.rb --check",
+    "openapi:validate": "python3 -m json.tool openapi/openapi.json >/dev/null && ruby scripts/validate-openapi-json.rb openapi/openapi.json",
+    "openapi:lint": "REDOCLY_TELEMETRY=off npx --yes @redocly/cli@2.31.1 lint openapi/openapi.json",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"

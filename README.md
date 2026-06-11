@@ -1,12 +1,13 @@
 # CSM SIM
 
-SIM je samostatný datový a simulační provider pro centrální zobrazovací aplikaci COM. Generuje syntetické scénáře, provozuje dry-run/mock publisher workflow a poskytuje cacheované provider API pro mapové vrstvy: lety, počasí, bezpečnostní výstrahy, mobilní síť, OSM/PostGIS kontext a partnerské TAK/CoT streamy.
+SIM je samostatný datový a simulační provider pro centrální zobrazovací aplikaci COP. Generuje syntetické scénáře, provozuje dry-run/mock publisher workflow a poskytuje cacheované provider API pro mapové vrstvy: lety, počasí, bezpečnostní výstrahy, mobilní síť, OSM/PostGIS kontext a partnerské TAK/CoT streamy.
 
-COP je aktuální implementace COM. Veřejný klient COP/COM má používat pouze COM endpointy `GET /api/v1/map/catalog` a `POST /api/v1/map/query`; SIM endpointy jsou server-side provider API.
+Veřejný klient COP má používat pouze COP endpointy `GET /api/v1/map/catalog` a `POST /api/v1/map/query`; SIM endpointy jsou server-side provider API.
 
 ## Lokální spuštění
 
 ```bash
+# Node 24.x is required; .node-version and .nvmrc pin the local runtime.
 pnpm install
 pnpm dev
 ```
@@ -43,6 +44,13 @@ http://localhost:5020/tak-gateway/api/v1/features
 
 Historické `/api/v1/cop/*` endpointy zůstávají pouze jako kompatibilní backend aliasy pro současné server-side adaptéry.
 
+## Dokumentace
+
+Aktivní dokumentační sada začíná v [docs/README.md](docs/README.md).
+Kanonický machine-readable API kontrakt pro všechny REST plochy je
+[openapi/openapi.json](openapi/openapi.json). Historické service-local YAML
+snapshoty jsou archivované v [docs/archive/openapi-yaml/](docs/archive/openapi-yaml/).
+
 ## Provider kontrakt
 
 Veřejná dokumentace pro další poskytovatele dat začíná v [docs/provider/00_INDEX.md](docs/provider/00_INDEX.md). Kanonický discovery endpoint SIM providera je:
@@ -57,8 +65,8 @@ Katalog odděluje uživatelské vrstvy od technických zdrojů. Například bě�
 
 - Flight Data API: agregované veřejné nebo licencované letové tracky, letiště a referenční data. Dokumentace je v [docs/flight-data/00_INDEX.md](docs/flight-data/00_INDEX.md).
 - Situation Data API: cacheované mapové vrstvy pro počasí, OSM/PostGIS, mobilní síť, dopravu a kompatibilní safety projekce. Dokumentace je v [docs/situation-data/00_INDEX.md](docs/situation-data/00_INDEX.md).
-- Safety Data API: veřejné bezpečnostní výstrahy a hydrologická data. OpenAPI je v [docs/api/openapi-safety-data.yaml](docs/api/openapi-safety-data.yaml).
-- TAK Gateway API: chráněný partner ingest Cursor-on-Target XML a normalizovaná GeoJSON projekce pro COM backend. Dokumentace je v [docs/tak-gateway/00_INDEX.md](docs/tak-gateway/00_INDEX.md).
+- Safety Data API: veřejné bezpečnostní výstrahy a hydrologická data. Dokumentace je v [docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md](docs/integration/10_SAFETY_DATA_SOURCE_CONTRACT.md).
+- TAK Gateway API: chráněný partner ingest Cursor-on-Target XML a normalizovaná GeoJSON projekce pro COP backend. Dokumentace je v [docs/tak-gateway/00_INDEX.md](docs/tak-gateway/00_INDEX.md).
 
 ## Produkční poznámky
 
@@ -71,7 +79,7 @@ DEM katalog pro budoucí terrain-aware coverage model používá Copernicus DEM 
 ## Bezpečnostní hranice
 
 - Publisher odmítá syntetický event bez `SYNTHETIC` handling caveat a `simulation.synthetic: true`.
-- Provider endpointy nejsou veřejný klientský kontrakt; tokeny a partner data drží server-side COM.
+- Provider endpointy nejsou veřejný klientský kontrakt; tokeny a partner data drží server-side COP.
 - TAK/CoT read endpoint má mít pro reálná data `TAK_GATEWAY_PUBLIC_READ=false` a nastavený `TAK_GATEWAY_READ_TOKEN`.
 - Flight, Situation a Safety API oddělují licenci, atribuci, stale stav a varování zdrojů.
 - AI vrstva vytváří pouze draft, nikdy přímo nespouští scénář.
@@ -83,4 +91,6 @@ DEM katalog pro budoucí terrain-aware coverage model používá Copernicus DEM 
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm openapi:validate
+bash scripts/validate-skeleton.sh
 ```

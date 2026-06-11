@@ -15,7 +15,7 @@ Stav: implementováno v první verzi.
 - Cacheovaný OurAirports `airports.csv` import pro ČR a okolí s fallbackem na seed.
 - Normalizované tracky `/api/v1/aircraft/positions`; kompatibilní projekce `/api/v1/cop/tracks`.
 - Server-side cache s in-flight deduplikací, stale-if-error fallbackem, LRU limitem a cache metrikami.
-- OpenAPI dokument `docs/api/openapi-flight-data.yaml`.
+- OpenAPI kontrakt je součástí kanonického `openapi/openapi.json`; původní service-local YAML snapshot je archivovaný v `docs/archive/openapi-yaml/`.
 
 ## Fáze 2: datová kvalita
 

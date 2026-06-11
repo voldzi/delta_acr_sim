@@ -1,12 +1,17 @@
 # API dokumentace
 
-Provider model a pravidla pro COM integraci jsou v [../provider/00_INDEX.md](../provider/00_INDEX.md). OpenAPI soubory níže popisují jednotlivé SIM služby a jejich server-side provider endpointy.
+Provider model a pravidla pro COM integraci jsou v [../provider/00_INDEX.md](../provider/00_INDEX.md).
+Kanonický machine-readable OpenAPI kontrakt je JSON-first:
 
-- [openapi-simulator.yaml](openapi-simulator.yaml)
-- [openapi-flight-data.yaml](openapi-flight-data.yaml)
-- [openapi-situation-data.yaml](openapi-situation-data.yaml)
-- [openapi-safety-data.yaml](openapi-safety-data.yaml)
-- [openapi-tak-gateway.yaml](openapi-tak-gateway.yaml)
+```text
+openapi/openapi.json
+```
+
+Historické service-local YAML snapshoty jsou archivované v
+[../archive/openapi-yaml/](../archive/openapi-yaml/).
+
+## JSON Schema
+
 - [schemas/00_INDEX.md](schemas/00_INDEX.md)
 - [schemas/scenario.schema.json](schemas/scenario.schema.json)
 - [schemas/scenario-block.schema.json](schemas/scenario-block.schema.json)

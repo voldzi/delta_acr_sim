@@ -23,7 +23,7 @@ Tento adresář je dokumentace samostatného projektu **CSM SIM**. SIM je datov�
 - [provider/00_INDEX.md](provider/00_INDEX.md)
 - [integration/00_INDEX.md](integration/00_INDEX.md)
 - [api/00_INDEX.md](api/00_INDEX.md)
-- [api/openapi-simulator.yaml](api/openapi-simulator.yaml)
+- [../openapi/openapi.json](../openapi/openapi.json)
 - [ai/00_INDEX.md](ai/00_INDEX.md)
 - [security/00_INDEX.md](security/00_INDEX.md)
 - [ui/00_INDEX.md](ui/00_INDEX.md)
