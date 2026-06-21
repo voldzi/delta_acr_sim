@@ -225,7 +225,7 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -241,10 +241,17 @@ SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
 SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS=600
+SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS=300
+SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_HISTORY_HOURS=6
+SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT=72
+SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=false
+SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
+SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
 SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900
 SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=16
 CHMI_WEATHER_METADATA_BASE_URL=https://opendata.chmi.cz/meteorology/climate/now/metadata/
 CHMI_WEATHER_DATA_BASE_URL=https://opendata.chmi.cz/meteorology/climate/now/data/
+CHMI_WEATHER_RADAR_BASE_URL=https://opendata.chmi.cz/meteorology/weather/radar/composite/
 CHMI_AIR_QUALITY_METADATA_URL=https://opendata.chmi.cz/air_quality/now/metadata/metadata.json
 CHMI_AIR_QUALITY_DATA_URL=https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv
 IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json

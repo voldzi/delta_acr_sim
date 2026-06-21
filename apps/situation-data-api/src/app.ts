@@ -8,6 +8,7 @@ import { DemCatalog } from "./dem-catalog.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
+import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
 import type {
@@ -24,6 +25,7 @@ export interface SituationDataAppContext {
   config: SituationDataConfig;
   aggregation: SituationAggregationService;
   demCatalog: DemCatalog;
+  radarFrames: ChmiWeatherRadarFrameCatalog;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -31,7 +33,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const sharedCache = await createSharedResponseCacheStore(config);
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
   const demCatalog = new DemCatalog(config);
-  const context: SituationDataAppContext = { config, aggregation, demCatalog };
+  const radarFrames = new ChmiWeatherRadarFrameCatalog(config);
+  const context: SituationDataAppContext = { config, aggregation, demCatalog, radarFrames };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-situation-data-api"));
@@ -189,6 +192,47 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
 
   app.get("/api/v1/dem/metadata", async (_req, res) => {
     res.json(await context.demCatalog.metadata());
+  });
+
+  app.get("/api/v1/weather-radar/frames", async (req, res) => {
+    res.json(
+      await context.radarFrames.listFrames({
+        productIds: parseStringList(req.query.product ?? req.query.products),
+        historyHours: parseOptionalNumber(req.query.historyHours ?? req.query.hours),
+        limit: parseOptionalNumber(req.query.limit),
+        materialize: parseBoolean(req.query.materialize)
+      })
+    );
+  });
+
+  app.get("/api/v1/weather-radar/assets/:productId/:fileName", async (req, res) => {
+    const asset = await context.radarFrames.storedAsset(req.params.productId, req.params.fileName);
+    if (!asset) {
+      return problem(req, res, 404, "NOT_FOUND", "Weather radar frame is not stored locally.");
+    }
+    res.type(asset.contentType);
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+    res.sendFile(asset.path);
+  });
+
+  app.get("/api/v1/weather-radar/clean/:productId/:fileName", async (req, res) => {
+    try {
+      const asset = await context.radarFrames.cleanAsset(req.params.productId, req.params.fileName);
+      if (!asset) {
+        return problem(req, res, 404, "NOT_FOUND", "Clean weather radar frame is not available for this product.");
+      }
+      res.type(asset.contentType);
+      res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+      res.sendFile(asset.path);
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `Clean weather radar frame generation failed: ${error.message}` : "Clean weather radar frame generation failed."
+      );
+    }
   });
 }
 
@@ -399,6 +443,27 @@ function parseBoolean(value: unknown): boolean {
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
+function parseOptionalNumber(value: unknown): number | undefined {
+  const raw = asString(value);
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseStringList(value: unknown): string[] | undefined {
+  const raw = asString(value);
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : undefined;
+}
+
 function asString(value: unknown): string | undefined {
   if (Array.isArray(value)) {
     return asString(value[0]);
@@ -437,6 +502,13 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       chmiWeatherStations: config.chmiWeatherCacheTtlSeconds,
       chmiWeatherRadar: config.chmiWeatherRadarCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds
+    },
+    weatherRadarFrames: {
+      historyHours: config.chmiWeatherRadarFrameHistoryHours,
+      maxCount: config.chmiWeatherRadarFrameMaxCount,
+      storeEnabled: config.chmiWeatherRadarFrameStoreEnabled,
+      mode: config.chmiWeatherRadarFrameStoreEnabled ? "local_filesystem" : "metadata_only",
+      cleanCropInsetPixels: config.chmiWeatherRadarCleanCropInsetPixels
     },
     providers: [
       { sourceId: "mock", authConfigured: true },
@@ -658,6 +730,14 @@ function environmentGridTelemetry(config: SituationDataConfig, sourceHealth: Sou
       tileCount: 0,
       cellCount: 0
     },
+    radarFrames: {
+      endpoint: "/api/v1/weather-radar/frames",
+      historyHours: config.chmiWeatherRadarFrameHistoryHours,
+      maxCount: config.chmiWeatherRadarFrameMaxCount,
+      storeEnabled: config.chmiWeatherRadarFrameStoreEnabled,
+      mode: config.chmiWeatherRadarFrameStoreEnabled ? "local_filesystem" : "metadata_only",
+      cleanCropInsetPixels: config.chmiWeatherRadarCleanCropInsetPixels
+    },
     upstreamStatus: {
       weather: weather?.status ?? "not_enabled",
       radar: radar?.status ?? "not_enabled",
@@ -665,7 +745,7 @@ function environmentGridTelemetry(config: SituationDataConfig, sourceHealth: Sou
     },
     warnings:
       weatherReady || airQualityReady || radarReady
-        ? ["Weather grid and radar overlay layers are cataloged. Raster proxy/tile materialization remains a future optimization."]
+        ? ["Weather grid and radar overlay layers are cataloged. SIM provides clean cropped radar PNG frames; tiled radar delivery remains a future optimization."]
         : ["Environment grid sources are not healthy or not enabled."]
   };
 }

@@ -269,6 +269,13 @@ export interface SituationDataPublicConfig {
     chmiWeatherRadar: number;
     ardosPartner: number;
   };
+  weatherRadarFrames: {
+    historyHours: number;
+    maxCount: number;
+    storeEnabled: boolean;
+    mode: "metadata_only" | "local_filesystem";
+    cleanCropInsetPixels: number;
+  };
   providers: Array<{
     sourceId: SituationDataSourceId;
     baseUrl?: string;

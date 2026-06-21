@@ -118,6 +118,114 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DemCatalogStatus"
+  /weather-radar/frames:
+    get:
+      summary: Return CHMI weather radar frame catalog metadata
+      description: Lists recent CHMI radar frames indexed by SIM for timeline and replay integration. PNG frames include clean SIM crop URLs; raw upstream URLs remain available for diagnostics.
+      parameters:
+        - name: product
+          in: query
+          required: false
+          schema:
+            type: string
+            example: merge1h
+          description: Optional comma-separated product ids, e.g. maxz,pseudocappi2km,merge1h,thunderstorm_risk.
+        - name: hours
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 6
+            minimum: 1
+            maximum: 72
+          description: Time window for indexed frames.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 72
+            minimum: 1
+            maximum: 288
+          description: Maximum frames per product.
+        - name: materialize
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Optional server-side fetch into local frame store. Normally enabled by server configuration, not by clients.
+      responses:
+        "200":
+          description: Radar frame catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherRadarFrameCatalog"
+  /weather-radar/assets/{productId}/{fileName}:
+    get:
+      summary: Return a locally stored CHMI weather radar frame asset
+      description: Serves only frames previously materialized into the SIM local radar frame store.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: merge1h
+        - name: fileName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: pacz2gmaps3.merge.20260621.1200.60.png
+      responses:
+        "200":
+          description: Stored radar image or archive
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            application/x-tar:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/Problem"
+  /weather-radar/clean/{productId}/{fileName}:
+    get:
+      summary: Return a clean SIM-processed CHMI weather radar PNG frame
+      description: Lazily fetches a raw CHMI PNG frame, crops it to the radar data bounds, stores the processed PNG in the SIM local frame cache and returns it for COP raster overlay rendering.
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: merge1h
+        - name: fileName
+          in: path
+          required: true
+          schema:
+            type: string
+            example: pacz2gmaps3.merge.20260621.1200.60.png
+      responses:
+        "200":
+          description: Clean cropped radar PNG
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /observability:
     get:
       summary: Return cache, upstream and read-model telemetry for SIM Overview
@@ -219,11 +327,15 @@ components:
           weather_precipitation_grid,
           weather_humidity_grid,
           weather_pressure_grid,
+          weather_radar_reflectivity,
+          weather_radar_precipitation,
+          weather_radar_nowcast,
+          weather_thunderstorm_risk,
           air_quality_grid
         ]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -654,6 +766,7 @@ components:
           staleAfterSeconds,
           requestTimeoutMs,
           sourceCacheTtlSeconds,
+          weatherRadarFrames,
           providers
         ]
       properties:
@@ -677,7 +790,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, ardosPartner]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, ardosPartner]
           properties:
             openMeteo:
               type: integer
@@ -703,7 +816,24 @@ components:
               type: integer
             chmiWeatherStations:
               type: integer
+            chmiWeatherRadar:
+              type: integer
             ardosPartner:
+              type: integer
+        weatherRadarFrames:
+          type: object
+          required: [historyHours, maxCount, storeEnabled, mode, cleanCropInsetPixels]
+          properties:
+            historyHours:
+              type: integer
+            maxCount:
+              type: integer
+            storeEnabled:
+              type: boolean
+            mode:
+              type: string
+              enum: [metadata_only, local_filesystem]
+            cleanCropInsetPixels:
               type: integer
         providers:
           type: array
@@ -720,6 +850,160 @@ components:
               backend:
                 type: string
                 description: Optional backend marker, e.g. unconfigured, patroni-postgis, chmi-opendata or ndic-srti-lod, without exposing credentials.
+    WeatherRadarFrameCatalog:
+      type: object
+      required: [contractVersion, providerId, sourceId, generatedAt, historyHours, frameStore, rasterSemantics, products, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-weather-radar-frames-v1
+        providerId:
+          type: string
+          const: sim.situation-data
+        sourceId:
+          type: string
+          const: chmi_weather_radar
+        generatedAt:
+          type: string
+          format: date-time
+        historyHours:
+          type: integer
+        frameStore:
+          type: object
+          required: [enabled, mode, assetBasePath, cleanAssetBasePath]
+          properties:
+            enabled:
+              type: boolean
+            mode:
+              type: string
+              enum: [metadata_only, local_filesystem]
+            assetBasePath:
+              type: string
+            cleanAssetBasePath:
+              type: string
+        rasterSemantics:
+          type: object
+          required: [projection, boundsWgs84, dataBoundsWgs84, sourceImageMayContainFrame, sourceImageMayContainEmbeddedLabels, cleanRasterAvailable, cleanMethod, cleanCropInsetPixels]
+          properties:
+            projection:
+              type: string
+              const: EPSG:3857
+            boundsWgs84:
+              type: array
+              minItems: 4
+              maxItems: 4
+              items:
+                type: number
+            dataBoundsWgs84:
+              type: array
+              minItems: 4
+              maxItems: 4
+              items:
+                type: number
+            sourceImageMayContainFrame:
+              type: boolean
+            sourceImageMayContainEmbeddedLabels:
+              type: boolean
+            cleanRasterAvailable:
+              type: boolean
+            cleanMethod:
+              type: string
+              enum: [server_crop_to_data_bounds]
+            cleanCropInsetPixels:
+              type: integer
+        products:
+          type: array
+          items:
+            type: object
+            required: [productId, layer, providerLayerId, catalogLayerId, label, description, contentType, updateCadenceSeconds, validForSeconds, styleHint, forecastArchive, frames]
+            properties:
+              productId:
+                type: string
+              layer:
+                $ref: "#/components/schemas/LayerId"
+              providerLayerId:
+                type: string
+              catalogLayerId:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+              contentType:
+                type: string
+              updateCadenceSeconds:
+                type: integer
+              validForSeconds:
+                type: integer
+              styleHint:
+                type: string
+              forecastArchive:
+                type: boolean
+              forecastHorizonMinutes:
+                type: integer
+              colorScaleUrl:
+                type: string
+              frames:
+                type: array
+                items:
+                  type: object
+                  required: [frameId, productId, observedAt, sourceUrl, sourceRevision, contentType, sourceImageMayContainFrame, sourceImageMayContainEmbeddedLabels, cleanRasterAvailable, boundsWgs84, dataBoundsWgs84, stored]
+                  properties:
+                    frameId:
+                      type: string
+                    productId:
+                      type: string
+                    observedAt:
+                      type: string
+                      format: date-time
+                    validUntil:
+                      type: string
+                      format: date-time
+                    sourceUrl:
+                      type: string
+                    sourceRevision:
+                      type: string
+                    contentType:
+                      type: string
+                    sourceImageMayContainFrame:
+                      type: boolean
+                    sourceImageMayContainEmbeddedLabels:
+                      type: boolean
+                    cleanRasterAvailable:
+                      type: boolean
+                    cleanUrl:
+                      type: string
+                    cleanStored:
+                      type: boolean
+                    cleanBoundsWgs84:
+                      type: array
+                      minItems: 4
+                      maxItems: 4
+                      items:
+                        type: number
+                    cleanMethod:
+                      type: string
+                      enum: [server_crop_to_data_bounds]
+                    boundsWgs84:
+                      type: array
+                      minItems: 4
+                      maxItems: 4
+                      items:
+                        type: number
+                    dataBoundsWgs84:
+                      type: array
+                      minItems: 4
+                      maxItems: 4
+                      items:
+                        type: number
+                    stored:
+                      type: boolean
+                    localUrl:
+                      type: string
+        warnings:
+          type: array
+          items:
+            type: string
     SourceHealthStatus:
       type: object
       required: [sourceId, status, warnings]

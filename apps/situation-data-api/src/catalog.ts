@@ -38,8 +38,8 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
     {
       providerLayerId: "weather.open_meteo",
       recommendedCatalogLayerId: "public.weather.current",
-      label: "Počasí",
-      description: "Aktuální počasí pro mapový výřez z cacheovaného Open-Meteo zdroje.",
+      label: "Počasí ve středu oblasti",
+      description: "Bodový souhrn aktuálního počasí pro střed mapového výřezu z cacheovaného Open-Meteo zdroje.",
       categoryPath: ["weather", "current"],
       categories: ["weather"],
       role: "primary",
@@ -58,7 +58,10 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       legend: { profile: "current-weather-v1" },
       legal: {
         attribution: "Weather data by Open-Meteo.com",
-        notes: ["Free API conditions and commercial use restrictions are described in source metadata."]
+        notes: [
+          "Free API conditions and commercial use restrictions are described in source metadata.",
+          "This layer is a point summary for the bbox center; use the CHMI grid layers for area overlays."
+        ]
       }
     },
     {
@@ -824,6 +827,8 @@ function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderC
     attribution: "Český hydrometeorologický ústav",
     notes: [
       "Radarové PNG/HDF5 produkty pochází z ČHMÚ Open Data a SIM je indexuje server-side přes cache.",
+      "Některé ČHMÚ PNG produkty obsahují zdrojový rám, mřížku nebo embedded popisky; SIM pro PNG publikuje clean cropped raster endpoint a raw URL nechává pro diagnostiku.",
+      "Historii a budoucí timeline/replay čtěte z /api/v1/weather-radar/frames.",
       "Vrstva thunderstorm risk není raw feed blesků; jde o radarový kontext a musí být prezentována společně s oficiálními výstrahami."
     ]
   };
@@ -842,6 +847,10 @@ function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderC
     cacheTtlSeconds: config.chmiWeatherRadarCacheTtlSeconds,
     sourceIds: ["chmi_weather_radar"] as SituationDataSourceId[],
     delivery: rasterOverlayDelivery(),
+    readModel: {
+      refreshedBy: "/api/v1/weather-radar/frames",
+      cacheTtlSeconds: config.chmiWeatherRadarCacheTtlSeconds
+    },
     legal
   };
 

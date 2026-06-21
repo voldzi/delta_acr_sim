@@ -61,6 +61,11 @@ export interface SituationDataConfig {
   chmiWeatherMaxStations: number;
   chmiWeatherRadarBaseUrl: string;
   chmiWeatherRadarCacheTtlSeconds: number;
+  chmiWeatherRadarFrameHistoryHours: number;
+  chmiWeatherRadarFrameMaxCount: number;
+  chmiWeatherRadarFrameStoreEnabled: boolean;
+  chmiWeatherRadarFrameStoreDir: string;
+  chmiWeatherRadarCleanCropInsetPixels: number;
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
@@ -148,6 +153,13 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     chmiWeatherRadarBaseUrl:
       process.env.CHMI_WEATHER_RADAR_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/radar/composite/",
     chmiWeatherRadarCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS, 300),
+    chmiWeatherRadarFrameHistoryHours: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_HISTORY_HOURS, 6),
+    chmiWeatherRadarFrameMaxCount: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT, 72),
+    chmiWeatherRadarFrameStoreEnabled: parseBoolean(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED, false),
+    chmiWeatherRadarFrameStoreDir: resolve(
+      process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR ?? `${dataDir}/weather-radar-frames`
+    ),
+    chmiWeatherRadarCleanCropInsetPixels: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS, 2),
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),

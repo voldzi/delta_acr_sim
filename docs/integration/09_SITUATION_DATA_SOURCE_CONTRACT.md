@@ -244,10 +244,11 @@ COM má tento zdroj používat stejně jako ostatní situační features. Nejde 
 
 Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt`, `lastImportAgeSeconds`, `boundaryFeatureCount`, `boundaryLevels`, `boundaryLastImportAt` a `boundaryLastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_boundary_read_model_features`, `situation_data_osm_postgis_import_age_seconds`, `situation_data_boundary_read_model_import_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
 
-## ČHMÚ Open Data
+## Weather a ČHMÚ Open Data
 
-SIM publikuje dvě cacheované ČHMÚ vrstvy:
+SIM publikuje bodové aktuální počasí a cacheované ČHMÚ vrstvy:
 
+- `public.weather.current` / provider layer `weather.open_meteo`: bodový souhrn pro střed bbox z Open-Meteo. Není to plošná vrstva. Pro plošné počasové overlaye používej `public.weather.temperature_grid`, `public.weather.wind_field`, `public.weather.precipitation_grid`, `public.weather.humidity_grid` a `public.weather.pressure_grid`.
 - `public.weather.observations` / provider layer `weather.chmi_station_observations`: bodové features meteorologických stanic s metrikami `temperatureC`, `relativeHumidityPercent`, `pressureHpa`, `windSpeedMps`, `windGustMps`, `windDirectionDeg`, `precipitation10mMm`, `sunshineDurationSeconds`, `elevationM`.
 - `public.safety.air_quality` / provider layer `air_quality.chmi_station_observations`: bodové features imisních stanic s metrikami `airQualityIndex`, `pm10UgM3`, `pm25UgM3`, `no2UgM3`, `noxUgM3`, `o3UgM3`, `so2UgM3`, `coUgM3`.
 - Environment grid/field vrstvy jsou dostupné přes stejné bbox query jako station-backed read model. Každá feature nese `readModel=true`, `sourceRevision`, `resolutionM`, `basis` a `providerProperties.upstreamStationId`.
@@ -264,6 +265,7 @@ GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_qualit
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather_temperature_grid,weather_wind_field,weather_precipitation_grid,weather_humidity_grid,weather_pressure_grid&source=chmi_weather_stations&limit=250
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality_grid&source=chmi_air_quality&limit=250
 GET /features?bbox=12.0,48.5,19.0,51.2&layers=weather_radar_reflectivity,weather_radar_precipitation,weather_radar_nowcast,weather_thunderstorm_risk&source=chmi_weather_radar&limit=20
+GET /weather-radar/frames?product=merge1h&hours=6&limit=24
 ```
 
 ČHMÚ zdroje jsou source-level cacheované. Výchozí TTL:
@@ -271,6 +273,11 @@ GET /features?bbox=12.0,48.5,19.0,51.2&layers=weather_radar_reflectivity,weather
 - `SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS=600`
 - `SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900`
 - `SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS=300`
+- `SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_HISTORY_HOURS=6`
+- `SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT=72`
+- `SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=false`
+- `SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames`
+- `SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2`
 
 COP nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
 
@@ -300,13 +307,24 @@ Radarové features jsou polygonové metadata pro raster overlay, ne vektorová b
       "renderAs": "raster_overlay",
       "doNotRenderGeometryFill": true,
       "raster": {
-        "url": "https://opendata.chmi.cz/.../pacz2gmaps3.z_max3d.YYYYMMDD.hhmm.0.png",
+        "url": "/api/v1/weather-radar/clean/maxz/pacz2gmaps3.z_max3d.YYYYMMDD.hhmm.0.png",
+        "rawUrl": "https://opendata.chmi.cz/.../pacz2gmaps3.z_max3d.YYYYMMDD.hhmm.0.png",
         "archiveUrl": "https://opendata.chmi.cz/.../pacz2gmaps3.fct_z_max.YYYYMMDD.hhmm.ft60s10.tar",
         "contentType": "image/png",
         "projection": "EPSG:3857",
-        "boundsWgs84": [11.267, 48.047, 20.770, 52.167],
+        "boundsWgs84": [11.267, 48.047, 19.624, 51.458],
+        "sourceBoundsWgs84": [11.267, 48.047, 20.770, 52.167],
         "dataBoundsWgs84": [11.267, 48.047, 19.624, 51.458],
-        "renderMode": "image_overlay"
+        "renderMode": "clean_image_overlay",
+        "sourceImageMayContainFrame": true,
+        "sourceImageMayContainEmbeddedLabels": true,
+        "servedImageMayContainFrame": false,
+        "servedImageMayContainEmbeddedLabels": false,
+        "cleanRasterAvailable": true,
+        "cleanMethod": "server_crop_to_data_bounds",
+        "artifactPolicy": "sim_clean_crop_from_raw_chmi_png",
+        "recommendedCropBoundsWgs84": [11.267, 48.047, 19.624, 51.458],
+        "frameCatalogUrl": "/api/v1/weather-radar/frames?product=maxz"
       },
       "hdf5": {
         "url": "https://opendata.chmi.cz/.../T_PABV23_C_OKPR_YYYYMMDDhhmmss.hdf"
@@ -317,6 +335,59 @@ Radarové features jsou polygonové metadata pro raster overlay, ne vektorová b
   }
 }
 ```
+
+ČHMÚ radarové PNG produkty jsou raw framed rasters. Některé produkty obsahují zdrojový rám, mřížku nebo textový popisek přímo v obrázku, například název produktu `CZRAD - ... MERGE`. SIM proto publikuje jako primární `providerProperties.raster.url` vlastní clean endpoint `/api/v1/weather-radar/clean/{productId}/{fileName}`. Tento endpoint raw PNG server-side stáhne, ořízne na `dataBoundsWgs84`, uloží do lokální cache a vrací PNG bez zdrojového horního/vnějšího rámu. Raw upstream obrázek je ponechaný v `rawUrl`/`sourceUrl` pouze pro diagnostiku a audit.
+
+Frame katalog pro časovou osu:
+
+```http
+GET /weather-radar/frames?product=maxz,merge1h&hours=6&limit=24
+```
+
+Odpověď:
+
+```json
+{
+  "contractVersion": "sim-weather-radar-frames-v1",
+  "providerId": "sim.situation-data",
+  "sourceId": "chmi_weather_radar",
+  "historyHours": 6,
+  "frameStore": {
+    "enabled": false,
+    "mode": "metadata_only",
+    "assetBasePath": "/api/v1/weather-radar/assets",
+    "cleanAssetBasePath": "/api/v1/weather-radar/clean"
+  },
+  "rasterSemantics": {
+    "projection": "EPSG:3857",
+    "boundsWgs84": [11.267, 48.047, 20.77, 52.167],
+    "dataBoundsWgs84": [11.267, 48.047, 19.624, 51.458],
+    "sourceImageMayContainFrame": true,
+    "sourceImageMayContainEmbeddedLabels": true,
+    "cleanRasterAvailable": true,
+    "cleanMethod": "server_crop_to_data_bounds",
+    "cleanCropInsetPixels": 2
+  },
+  "products": [
+    {
+      "productId": "merge1h",
+      "layer": "weather_radar_precipitation",
+      "catalogLayerId": "public.weather.radar_precipitation",
+      "frames": [
+        {
+          "observedAt": "2026-06-21T12:00:00.000Z",
+          "sourceUrl": "https://opendata.chmi.cz/...",
+          "cleanUrl": "/api/v1/weather-radar/clean/merge1h/pacz2gmaps3.merge.20260621.1200.60.png",
+          "stored": false
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
+```
+
+Pokud je `SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=true`, SIM může materializovat raw frames na lokální filesystem a frame položky dostanou `stored=true` a `localUrl`. Clean frame se materializuje lazy při prvním požadavku na `cleanUrl`; následné požadavky už jdou z lokální cache.
 
 Poznámka k bleskům: SIM aktuálně nezveřejňuje polohy blesků. Čistý veřejný redistribuovatelný raw lightning feed pro ČR není v SIM nakonfigurován; komunitní sítě typu Blitzortung mají omezení použití pro varování/rizikovou analýzu. Pokud vznikne partnerství/licence, přidá se samostatný source a vrstva s explicitním licenčním a kvalitativním režimem.
 

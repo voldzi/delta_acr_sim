@@ -79,6 +79,10 @@ describe("Situation Data API contract", () => {
       chmiWeatherMaxStations: 16,
       chmiWeatherRadarBaseUrl: "https://opendata.chmi.cz/meteorology/weather/radar/composite/",
       chmiWeatherRadarCacheTtlSeconds: 300,
+      chmiWeatherRadarFrameHistoryHours: 6,
+      chmiWeatherRadarFrameMaxCount: 72,
+      chmiWeatherRadarFrameStoreEnabled: false,
+      chmiWeatherRadarFrameStoreDir: join(dataDir, "weather-radar-frames"),
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
@@ -187,6 +191,49 @@ describe("Situation Data API contract", () => {
           license: expect.objectContaining({ name: "ARDOS partner data under MoU" })
         })
       ])
+    );
+  });
+
+  it("exposes CHMI weather radar frame metadata", async () => {
+    const now = new Date();
+    const dateToken = now.toISOString().slice(0, 10).replace(/-/g, "");
+    const timeToken = `${String(now.getUTCHours()).padStart(2, "0")}${String(now.getUTCMinutes()).padStart(2, "0")}`;
+    const href = `pacz2gmaps3.merge.${dateToken}.${timeToken}.60.png`;
+    const fetchMock = vi.fn(async () => new Response(`<html><body><a href="${href}">${href}</a></body></html>`, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await request(app).get("/api/v1/weather-radar/frames?product=merge1h&hours=72&limit=1").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-weather-radar-frames-v1",
+        providerId: "sim.situation-data",
+        sourceId: "chmi_weather_radar",
+        frameStore: expect.objectContaining({ enabled: false, mode: "metadata_only" }),
+        rasterSemantics: expect.objectContaining({
+          sourceImageMayContainFrame: true,
+          sourceImageMayContainEmbeddedLabels: true,
+          cleanRasterAvailable: true,
+          cleanMethod: "server_crop_to_data_bounds",
+          cleanCropInsetPixels: 2
+        }),
+        products: [
+          expect.objectContaining({
+            productId: "merge1h",
+            catalogLayerId: "public.weather.radar_precipitation",
+            frames: [
+              expect.objectContaining({
+                sourceRevision: href,
+                cleanRasterAvailable: true,
+                cleanUrl: `/api/v1/weather-radar/clean/merge1h/${href}`,
+                stored: false,
+                sourceImageMayContainFrame: true,
+                sourceImageMayContainEmbeddedLabels: true
+              })
+            ]
+          })
+        ]
+      })
     );
   });
 
@@ -330,6 +377,9 @@ describe("Situation Data API contract", () => {
           recommendedCatalogLayerId: "public.weather.radar_reflectivity",
           kind: "raster_overlay",
           sourceIds: ["chmi_weather_radar"],
+          readModel: expect.objectContaining({
+            refreshedBy: "/api/v1/weather-radar/frames"
+          }),
           delivery: expect.objectContaining({
             mode: "raster_overlay",
             geometryRole: "raster_extent",
@@ -1167,7 +1217,9 @@ describe("Situation Data API contract", () => {
             tags: expect.objectContaining({
               geometryRole: "raster_extent",
               renderAs: "raster_overlay",
-              doNotRenderGeometryFill: "true"
+              doNotRenderGeometryFill: "true",
+              sourceImageMayContainFrame: "true",
+              sourceImageMayContainEmbeddedLabels: "true"
             }),
             providerProperties: expect.objectContaining({
               geometryRole: "raster_extent",
@@ -1175,9 +1227,16 @@ describe("Situation Data API contract", () => {
               doNotRenderGeometryFill: true,
               raster: expect.objectContaining({
                 url: expect.stringContaining("pacz2gmaps3.z_max3d.20260604.2120.0.png"),
-                boundsWgs84: [11.267, 48.047, 20.77, 52.167],
+                rawUrl: expect.stringContaining("pacz2gmaps3.z_max3d.20260604.2120.0.png"),
+                boundsWgs84: [11.267, 48.047, 19.624, 51.458],
+                sourceBoundsWgs84: [11.267, 48.047, 20.77, 52.167],
                 dataBoundsWgs84: [11.267, 48.047, 19.624, 51.458],
-                renderMode: "image_overlay"
+                sourceImageMayContainFrame: true,
+                sourceImageMayContainEmbeddedLabels: true,
+                cleanRasterAvailable: true,
+                cleanMethod: "server_crop_to_data_bounds",
+                frameCatalogUrl: "/api/v1/weather-radar/frames?product=maxz",
+                renderMode: "clean_image_overlay"
               }),
               hdf5: expect.objectContaining({
                 url: expect.stringContaining("T_PABV23_C_OKPR_20260604212000.hdf")
