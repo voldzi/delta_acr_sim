@@ -39,7 +39,9 @@ The clean endpoint:
    materialization Promise.
 3. Reads locally stored raw frame when available, otherwise fetches the raw CHMI
    PNG once.
-4. Crops the PNG to radar data bounds.
+4. Detects the actual CHMI radar data frame, crops the PNG to that data area,
+   and removes neutral gray/black source-frame pixels by making them
+   transparent.
 5. Stores the clean PNG under the radar frame cache directory.
 6. Returns the clean PNG with cacheable HTTP headers.
 

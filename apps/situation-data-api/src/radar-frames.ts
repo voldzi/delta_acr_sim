@@ -14,6 +14,8 @@ import {
 } from "./chmi-radar.js";
 import type { BoundingBox } from "./types.js";
 
+const CHMI_RADAR_CLEAN_CACHE_DIR = "clean-v2";
+
 export interface WeatherRadarFrameCatalogQuery {
   productIds?: string[];
   historyHours?: number;
@@ -309,7 +311,7 @@ export class ChmiWeatherRadarFrameCatalog {
   private async createCleanFrame(definition: ChmiRadarProductDefinition, href: string): Promise<boolean> {
     const sourceUrl = joinUrl(joinUrl(this.config.chmiWeatherRadarBaseUrl, definition.indexPath), href);
     const destination = this.cleanFramePath(definition.productId, href);
-    await mkdir(resolve(this.config.chmiWeatherRadarFrameStoreDir, "clean", definition.productId), { recursive: true });
+    await mkdir(resolve(this.config.chmiWeatherRadarFrameStoreDir, CHMI_RADAR_CLEAN_CACHE_DIR, definition.productId), { recursive: true });
     const rawBody = await this.rawFrameBody(definition, href, sourceUrl);
     const cleanBody = cropPngToDataBounds(rawBody, this.config.chmiWeatherRadarCleanCropInsetPixels);
     await writeFile(destination, cleanBody);
@@ -329,13 +331,14 @@ export class ChmiWeatherRadarFrameCatalog {
   }
 
   private cleanFramePath(productId: string, fileName: string): string {
-    return resolve(this.config.chmiWeatherRadarFrameStoreDir, "clean", productId, fileName);
+    return resolve(this.config.chmiWeatherRadarFrameStoreDir, CHMI_RADAR_CLEAN_CACHE_DIR, productId, fileName);
   }
 }
 
 function cropPngToDataBounds(input: Uint8Array, insetPixels: number): Uint8Array {
   const source = PNG.sync.read(Buffer.from(input));
-  const crop = cropBoxForDataBounds(source.width, source.height, Math.max(0, Math.trunc(insetPixels)));
+  const inset = Math.max(0, Math.trunc(insetPixels));
+  const crop = detectedDataAreaCropBox(source, inset) ?? cropBoxForDataBounds(source.width, source.height, inset);
   const output = new PNG({ width: crop.width, height: crop.height });
   for (let y = 0; y < crop.height; y += 1) {
     const sourceStart = ((crop.y + y) * source.width + crop.x) * 4;
@@ -343,7 +346,116 @@ function cropPngToDataBounds(input: Uint8Array, insetPixels: number): Uint8Array
     const destinationStart = y * crop.width * 4;
     source.data.copy(output.data, destinationStart, sourceStart, sourceEnd);
   }
+  removeFrameArtifactPixels(output);
   return PNG.sync.write(output);
+}
+
+function detectedDataAreaCropBox(source: PNG, insetPixels: number): { x: number; y: number; width: number; height: number } | undefined {
+  const minRunWidth = Math.max(24, Math.floor(source.width * 0.2));
+  const minFramePixels = Math.max(12, Math.floor(source.width * 0.03));
+  let minX = source.width;
+  let minY = source.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < source.height; y += 1) {
+    const run = longestDataAreaRunInRow(source, y);
+    if (!run || run.width < minRunWidth || frameArtifactPixelsInRow(source, y) < minFramePixels) {
+      continue;
+    }
+    minX = Math.min(minX, run.x);
+    maxX = Math.max(maxX, run.x + run.width - 1);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return undefined;
+  }
+
+  const x = clampInt(minX + insetPixels, 0, source.width - 1);
+  const y = clampInt(minY + insetPixels, 0, source.height - 1);
+  const right = clampInt(maxX + 1 - insetPixels, x + 1, source.width);
+  const bottom = clampInt(maxY + 1 - insetPixels, y + 1, source.height);
+  if (right - x < 32 || bottom - y < 32) {
+    return undefined;
+  }
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+function frameArtifactPixelsInRow(source: PNG, y: number): number {
+  let count = 0;
+  for (let x = 0; x < source.width; x += 1) {
+    if (isFrameArtifactPixel(source.data, (y * source.width + x) * 4)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function longestDataAreaRunInRow(source: PNG, y: number): { x: number; width: number } | undefined {
+  let bestX = -1;
+  let bestWidth = 0;
+  let currentX = -1;
+  let currentWidth = 0;
+
+  for (let x = 0; x < source.width; x += 1) {
+    const offset = (y * source.width + x) * 4;
+    if (isDataAreaPixel(source.data, offset)) {
+      if (currentX < 0) {
+        currentX = x;
+        currentWidth = 0;
+      }
+      currentWidth += 1;
+    } else if (currentX >= 0) {
+      if (currentWidth > bestWidth) {
+        bestX = currentX;
+        bestWidth = currentWidth;
+      }
+      currentX = -1;
+      currentWidth = 0;
+    }
+  }
+
+  if (currentX >= 0 && currentWidth > bestWidth) {
+    bestX = currentX;
+    bestWidth = currentWidth;
+  }
+  return bestX >= 0 ? { x: bestX, width: bestWidth } : undefined;
+}
+
+function isDataAreaPixel(data: Buffer, offset: number): boolean {
+  const alpha = data[offset + 3] ?? 0;
+  if (alpha === 0) {
+    return true;
+  }
+  return !isFrameArtifactPixel(data, offset);
+}
+
+function removeFrameArtifactPixels(image: PNG): void {
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (isFrameArtifactPixel(image.data, offset)) {
+      image.data[offset] = 0;
+      image.data[offset + 1] = 0;
+      image.data[offset + 2] = 0;
+      image.data[offset + 3] = 0;
+    }
+  }
+}
+
+function isFrameArtifactPixel(data: Buffer, offset: number): boolean {
+  const red = data[offset] ?? 0;
+  const green = data[offset + 1] ?? 0;
+  const blue = data[offset + 2] ?? 0;
+  const alpha = data[offset + 3] ?? 0;
+  if (alpha === 0) {
+    return false;
+  }
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const isNeutralGrayFrame = max - min <= 8 && red >= 110 && green >= 110 && blue >= 110;
+  const isBlackFrameOrLabel = red <= 8 && green <= 8 && blue <= 8;
+  return isNeutralGrayFrame || isBlackFrameOrLabel;
 }
 
 function cropBoxForDataBounds(width: number, height: number, insetPixels: number): { x: number; y: number; width: number; height: number } {

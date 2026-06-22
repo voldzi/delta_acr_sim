@@ -336,7 +336,7 @@ Radarové features jsou polygonové metadata pro raster overlay, ne vektorová b
 }
 ```
 
-ČHMÚ radarové PNG produkty jsou raw framed rasters. Některé produkty obsahují zdrojový rám, mřížku nebo textový popisek přímo v obrázku, například název produktu `CZRAD - ... MERGE`. SIM proto publikuje jako primární `providerProperties.raster.url` vlastní clean endpoint `/api/v1/weather-radar/clean/{productId}/{fileName}`. Tento endpoint raw PNG server-side stáhne, ořízne na `dataBoundsWgs84`, uloží do lokální cache a vrací PNG bez zdrojového horního/vnějšího rámu. Raw upstream obrázek je ponechaný v `rawUrl`/`sourceUrl` pouze pro diagnostiku a audit.
+ČHMÚ radarové PNG produkty jsou raw framed rasters. Některé produkty obsahují zdrojový rám, šedé okraje nebo textový popisek přímo v obrázku, například název produktu `CZRAD - ... MERGE`. SIM proto publikuje jako primární `providerProperties.raster.url` vlastní clean endpoint `/api/v1/weather-radar/clean/{productId}/{fileName}`. Tento endpoint raw PNG server-side stáhne, detekuje skutečnou radarovou datovou oblast, ořízne titulkový pás, převede neutrální šedé/černé rámové pixely na transparentní pixely, uloží výsledek do lokální cache a vrací PNG bez zdrojového horního/vnějšího rámu. Raw upstream obrázek je ponechaný v `rawUrl`/`sourceUrl` pouze pro diagnostiku a audit.
 
 Frame katalog pro časovou osu:
 

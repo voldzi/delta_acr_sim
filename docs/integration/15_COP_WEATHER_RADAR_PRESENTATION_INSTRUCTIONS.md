@@ -51,7 +51,9 @@ Current ČHMÚ PNG products are raw framed rasters. They can contain source fram
 lines, grid lines and embedded product text such as `CZRAD - ... MERGE`.
 This is source-data content, not a COP rendering defect.
 
-SIM now serves PNG radar frames through a clean server-side crop endpoint. For
+SIM now serves PNG radar frames through a clean server-side crop endpoint. The
+clean endpoint detects the actual CHMI radar data frame, crops away the title
+band, and turns neutral gray/black frame pixels into transparent pixels. For
 non-forecast PNG products, `providerProperties.raster.url` points to:
 
 ```http
