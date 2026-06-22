@@ -14,7 +14,8 @@ import {
 } from "./chmi-radar.js";
 import type { BoundingBox } from "./types.js";
 
-const CHMI_RADAR_CLEAN_CACHE_DIR = "clean-v2";
+const CHMI_RADAR_CLEAN_CACHE_VERSION = 2;
+const CHMI_RADAR_CLEAN_CACHE_DIR = `clean-v${CHMI_RADAR_CLEAN_CACHE_VERSION}`;
 
 export interface WeatherRadarFrameCatalogQuery {
   productIds?: string[];
@@ -250,7 +251,7 @@ export class ChmiWeatherRadarFrameCatalog {
       sourceImageMayContainFrame: true,
       sourceImageMayContainEmbeddedLabels: true,
       cleanRasterAvailable,
-      cleanUrl: cleanRasterAvailable ? `/api/v1/weather-radar/clean/${encodeURIComponent(definition.productId)}/${encodeURIComponent(href)}` : undefined,
+      cleanUrl: cleanRasterAvailable ? cleanFrameUrl(definition.productId, href) : undefined,
       cleanStored,
       cleanBoundsWgs84: cleanRasterAvailable ? bboxToArray(CHMI_RADAR_DATA_BBOX) : undefined,
       cleanMethod: cleanRasterAvailable ? "server_crop_to_data_bounds" : undefined,
@@ -333,6 +334,10 @@ export class ChmiWeatherRadarFrameCatalog {
   private cleanFramePath(productId: string, fileName: string): string {
     return resolve(this.config.chmiWeatherRadarFrameStoreDir, CHMI_RADAR_CLEAN_CACHE_DIR, productId, fileName);
   }
+}
+
+function cleanFrameUrl(productId: string, href: string): string {
+  return `/api/v1/weather-radar/clean/${encodeURIComponent(productId)}/${encodeURIComponent(href)}?v=${CHMI_RADAR_CLEAN_CACHE_VERSION}`;
 }
 
 function cropPngToDataBounds(input: Uint8Array, insetPixels: number): Uint8Array {

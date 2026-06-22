@@ -3655,7 +3655,7 @@ function radarConfidence(definition: ChmiRadarProductDefinition, ageSeconds: num
 }
 
 function cleanRadarFrameUrl(productId: string, href: string): string {
-  return `/api/v1/weather-radar/clean/${encodeURIComponent(productId)}/${encodeURIComponent(href)}`;
+  return `/api/v1/weather-radar/clean/${encodeURIComponent(productId)}/${encodeURIComponent(href)}?v=2`;
 }
 
 function bboxPolygon(bbox: BoundingBox): SituationFeature["geometry"] {

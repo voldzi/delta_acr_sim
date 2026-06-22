@@ -225,7 +225,7 @@ describe("Situation Data API contract", () => {
               expect.objectContaining({
                 sourceRevision: href,
                 cleanRasterAvailable: true,
-                cleanUrl: `/api/v1/weather-radar/clean/merge1h/${href}`,
+                cleanUrl: `/api/v1/weather-radar/clean/merge1h/${href}?v=2`,
                 stored: false,
                 sourceImageMayContainFrame: true,
                 sourceImageMayContainEmbeddedLabels: true
