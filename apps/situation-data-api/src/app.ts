@@ -3,6 +3,7 @@ import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { SituationAggregationService } from "./aggregation.js";
 import { buildSituationMapCatalog } from "./catalog.js";
+import { ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { problem } from "./http.js";
@@ -26,6 +27,7 @@ export interface SituationDataAppContext {
   aggregation: SituationAggregationService;
   demCatalog: DemCatalog;
   radarFrames: ChmiWeatherRadarFrameCatalog;
+  weatherWebcams: ChmiWeatherWebcamCatalog;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -34,7 +36,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
   const demCatalog = new DemCatalog(config);
   const radarFrames = new ChmiWeatherRadarFrameCatalog(config);
-  const context: SituationDataAppContext = { config, aggregation, demCatalog, radarFrames };
+  const weatherWebcams = new ChmiWeatherWebcamCatalog(config);
+  const context: SituationDataAppContext = { config, aggregation, demCatalog, radarFrames, weatherWebcams };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-situation-data-api"));
@@ -234,6 +237,70 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
       );
     }
   });
+
+  app.get("/api/v1/weather-cameras", async (req, res) => {
+    const bbox = parseOptionalBbox(req.query.bbox);
+    if (!bbox.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", bbox.error);
+    }
+    try {
+      res.json(
+        await context.weatherWebcams.listCatalog({
+          bbox: bbox.value,
+          limit: parseOptionalNumber(req.query.limit),
+          includeRaw: parseBoolean(req.query.includeRaw)
+        })
+      );
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `CHMI weather camera catalog fetch failed: ${error.message}` : "CHMI weather camera catalog fetch failed."
+      );
+    }
+  });
+
+  app.get("/api/v1/weather-cameras/:locationId", async (req, res) => {
+    try {
+      const detail = await context.weatherWebcams.getDetail(req.params.locationId);
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "Weather camera location was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `CHMI weather camera detail fetch failed: ${error.message}` : "CHMI weather camera detail fetch failed."
+      );
+    }
+  });
+
+  app.get("/api/v1/weather-cameras/:locationId/snapshot", async (req, res) => {
+    try {
+      const asset = await context.weatherWebcams.snapshot(req.params.locationId, asString(req.query.cameraId));
+      if (!asset) {
+        return problem(req, res, 404, "NOT_FOUND", "Weather camera snapshot was not found.");
+      }
+      res.type(asset.contentType);
+      res.set("Cache-Control", `public, max-age=${asset.cacheSeconds}, stale-while-revalidate=${asset.cacheSeconds * 2}`);
+      res.set("X-SIM-Camera-Id", asset.cameraId);
+      res.set("X-SIM-Camera-Name", encodeURIComponent(asset.name));
+      res.send(asset.body);
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `CHMI weather camera snapshot fetch failed: ${error.message}` : "CHMI weather camera snapshot fetch failed."
+      );
+    }
+  });
 }
 
 function registerFeatureRoutes(app: Express, context: SituationDataAppContext): void {
@@ -336,6 +403,7 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "weather_radar_precipitation",
     "weather_radar_nowcast",
     "weather_thunderstorm_risk",
+    "weather_webcams",
     "air_quality_grid"
   ]);
   const raw = asString(value);
@@ -365,6 +433,7 @@ function parseLayers(value: unknown): SituationLayerId[] {
       "weather_radar_precipitation",
       "weather_radar_nowcast",
       "weather_thunderstorm_risk",
+      "weather_webcams",
       "air_quality_grid"
     ];
   }
@@ -392,6 +461,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "chmi_air_quality",
     "chmi_weather_stations",
     "chmi_weather_radar",
+    "chmi_weather_webcams",
     "ardos_partner"
   ]);
   const raw = asString(value);
@@ -501,6 +571,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       chmiAirQuality: config.chmiAirQualityCacheTtlSeconds,
       chmiWeatherStations: config.chmiWeatherCacheTtlSeconds,
       chmiWeatherRadar: config.chmiWeatherRadarCacheTtlSeconds,
+      chmiWeatherWebcams: config.chmiWeatherWebcamsCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds
     },
     weatherRadarFrames: {
@@ -542,9 +613,18 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "chmi_air_quality", baseUrl: config.chmiAirQualityDataUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "chmi_weather_stations", baseUrl: config.chmiWeatherDataBaseUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "chmi_weather_radar", baseUrl: config.chmiWeatherRadarBaseUrl, authConfigured: true, backend: "chmi-opendata" },
+      { sourceId: "chmi_weather_webcams", baseUrl: config.chmiWeatherWebcamsMapUrl, authConfigured: true, backend: "chmi-data-provider" },
       { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }
     ]
   };
+}
+
+function parseOptionalBbox(value: unknown): { ok: true; value?: BoundingBox } | { ok: false; error: string } {
+  const raw = asString(value);
+  if (!raw) {
+    return { ok: true, value: undefined };
+  }
+  return parseBbox(raw, { west: -180, south: -90, east: 180, north: 90 });
 }
 
 function sourceHealthMetricLines(status: SourceHealthStatus): string[] {

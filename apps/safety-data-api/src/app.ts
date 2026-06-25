@@ -7,17 +7,24 @@ import type { SafetyDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
-import type { BoundingBox, SafetyDataPublicConfig, SafetyDataSourceId, SafetyLayerId, SafetyQuery } from "./types.js";
+import type { BoundingBox, HydroSeriesId, HydroStationDetail, HydroStationDetailQuery, SafetyDataPublicConfig, SafetyDataSourceId, SafetyLayerId, SafetyQuery } from "./types.js";
 
 export interface SafetyDataAppContext {
   config: SafetyDataConfig;
   aggregation: SafetyAggregationService;
+  hydroDetails?: {
+    getHydroStationDetail(stationId: string, query: HydroStationDetailQuery): Promise<HydroStationDetail | undefined>;
+  };
 }
 
 export async function createApp(config: SafetyDataConfig): Promise<{ app: Express; context: SafetyDataAppContext }> {
   const sources = createSafetyDataSources(config);
   const aggregation = new SafetyAggregationService(config, sources);
-  const context: SafetyDataAppContext = { config, aggregation };
+  const hydroSource = sources.find((source) => source.descriptor.sourceId === "chmi_hydro" && source.getHydroStationDetail);
+  const hydroDetails = hydroSource?.getHydroStationDetail
+    ? { getHydroStationDetail: hydroSource.getHydroStationDetail.bind(hydroSource) }
+    : undefined;
+  const context: SafetyDataAppContext = { config, aggregation, hydroDetails };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-safety-data-api"));
@@ -27,6 +34,7 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   registerHealthRoutes(app, context);
   registerMetadataRoutes(app, context);
   registerFeatureRoutes(app, context);
+  registerHydroDetailRoutes(app, context);
 
   app.use((req, res) => {
     problem(req, res, 404, "NOT_FOUND", "Endpoint not found.");
@@ -165,6 +173,23 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
   });
 }
 
+function registerHydroDetailRoutes(app: Express, context: SafetyDataAppContext): void {
+  app.get("/api/v1/hydro/stations/:stationId/observations", async (req, res) => {
+    if (!context.hydroDetails) {
+      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "CHMI hydro source is not enabled.");
+    }
+    const query = parseHydroDetailQuery(req.query);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const detail = await context.hydroDetails.getHydroStationDetail(req.params.stationId, query.value);
+    if (!detail) {
+      return problem(req, res, 404, "NOT_FOUND", "CHMI hydro station was not found.");
+    }
+    res.json(detail);
+  });
+}
+
 function compatibilityAliasHeaders(successorPath: string): Record<string, string> {
   return {
     Deprecation: "true",
@@ -255,6 +280,58 @@ function parseBoolean(value: unknown): boolean {
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
+function parseHydroDetailQuery(
+  raw: Record<string, unknown>
+): { ok: true; value: HydroStationDetailQuery } | { ok: false; error: string } {
+  const from = parseIsoDateParam(raw.from, "from");
+  if (!from.ok) {
+    return from;
+  }
+  const to = parseIsoDateParam(raw.to, "to");
+  if (!to.ok) {
+    return to;
+  }
+  if (from.value && to.value && Date.parse(from.value) >= Date.parse(to.value)) {
+    return { ok: false, error: "from must be earlier than to." };
+  }
+  const seriesIds = parseHydroSeries(raw.series);
+  if (seriesIds.length === 0 && asString(raw.series)) {
+    return { ok: false, error: "series must contain at least one of H,Q,TH,H_F,Q_F." };
+  }
+  return {
+    ok: true,
+    value: {
+      from: from.value,
+      to: to.value,
+      seriesIds: seriesIds.length > 0 ? seriesIds : undefined
+    }
+  };
+}
+
+function parseIsoDateParam(value: unknown, name: string): { ok: true; value?: string } | { ok: false; error: string } {
+  const raw = asString(value);
+  if (!raw) {
+    return { ok: true };
+  }
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) {
+    return { ok: false, error: `${name} must be an ISO-8601 timestamp.` };
+  }
+  return { ok: true, value: date.toISOString() };
+}
+
+function parseHydroSeries(value: unknown): HydroSeriesId[] {
+  const allowed = new Set<HydroSeriesId>(["H", "Q", "TH", "H_F", "Q_F"]);
+  const raw = asString(value);
+  if (!raw) {
+    return [];
+  }
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item): item is HydroSeriesId => allowed.has(item as HydroSeriesId));
+}
+
 function asString(value: unknown): string | undefined {
   if (Array.isArray(value)) {
     return asString(value[0]);
@@ -272,6 +349,9 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
     hydroMaxStations: config.chmiHydroMaxStations,
+    hydroDetailDefaultPastHours: config.chmiHydroDetailDefaultPastHours,
+    hydroDetailForecastHours: config.chmiHydroDetailForecastHours,
+    hydroDetailBackfillDays: config.chmiHydroDetailBackfillDays,
     providers: [
       { sourceId: "mock", authConfigured: true },
       { sourceId: "chmi_alerts", baseUrl: config.chmiAlertsCapBaseUrl, authConfigured: true },

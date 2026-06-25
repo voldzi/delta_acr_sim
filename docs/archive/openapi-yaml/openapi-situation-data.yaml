@@ -226,6 +226,101 @@ paths:
           $ref: "#/components/responses/Problem"
         "502":
           $ref: "#/components/responses/Problem"
+  /weather-cameras:
+    get:
+      summary: Return CHMI weather camera locations
+      description: Lists CHMI public webcam locations normalized by SIM. Image payloads are intentionally omitted; COP should request detail or snapshot endpoints on click.
+      parameters:
+        - name: bbox
+          in: query
+          required: false
+          schema:
+            type: string
+            example: 14.4,50.0,14.5,50.1
+          description: Optional WGS84 bbox west,south,east,north.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 250
+            minimum: 1
+            maximum: 1000
+      responses:
+        "200":
+          description: CHMI weather camera catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherCameraCatalog"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /weather-cameras/{locationId}:
+    get:
+      summary: Return CHMI weather camera detail
+      description: Returns camera choices for one CHMI webcam location. The response contains snapshot URLs but not the base64 image payload.
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: wgs84_14p445358_50p007510
+      responses:
+        "200":
+          description: CHMI weather camera detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeatherCameraDetail"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /weather-cameras/{locationId}/snapshot:
+    get:
+      summary: Return a CHMI weather camera snapshot image
+      description: Decodes the selected CHMI base64 webcam image server-side and returns it as an image response for COP preview windows.
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: wgs84_14p445358_50p007510
+        - name: cameraId
+          in: query
+          required: false
+          schema:
+            type: string
+            example: praha_libus-praha-libus
+          description: Optional camera id from the detail response. If omitted, SIM returns the first camera at the location.
+      responses:
+        "200":
+          description: Weather camera image
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            image/gif:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /observability:
     get:
       summary: Return cache, upstream and read-model telemetry for SIM Overview
@@ -331,11 +426,12 @@ components:
           weather_radar_precipitation,
           weather_radar_nowcast,
           weather_thunderstorm_risk,
+          weather_webcams,
           air_quality_grid
         ]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -790,7 +886,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, ardosPartner]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner]
           properties:
             openMeteo:
               type: integer
@@ -817,6 +913,8 @@ components:
             chmiWeatherStations:
               type: integer
             chmiWeatherRadar:
+              type: integer
+            chmiWeatherWebcams:
               type: integer
             ardosPartner:
               type: integer
@@ -850,6 +948,133 @@ components:
               backend:
                 type: string
                 description: Optional backend marker, e.g. unconfigured, patroni-postgis, chmi-opendata or ndic-srti-lod, without exposing credentials.
+    WeatherCameraLocation:
+      type: object
+      required: [locationId, label, lon, lat, sourceDataUrl, detailUrl, snapshotUrl, providerPageUrl, camerasKnownAfterDetail]
+      properties:
+        locationId:
+          type: string
+          example: wgs84_14p445358_50p007510
+        label:
+          type: string
+          example: ČHMÚ webkamera 50.00751, 14.44536
+        lon:
+          type: number
+          format: double
+          example: 14.445358
+        lat:
+          type: number
+          format: double
+          example: 50.00751
+        sourceDataUrl:
+          type: string
+          format: uri
+        detailUrl:
+          type: string
+          example: /api/v1/weather-cameras/wgs84_14p445358_50p007510
+        snapshotUrl:
+          type: string
+          example: /api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot
+        providerPageUrl:
+          type: string
+          format: uri
+          example: https://www.chmi.cz/namerena-data/webkamery
+        camerasKnownAfterDetail:
+          type: boolean
+          example: true
+      additionalProperties: false
+    WeatherCamera:
+      type: object
+      required: [cameraId, name, snapshotUrl]
+      properties:
+        cameraId:
+          type: string
+          example: praha_libus-praha-libus
+        name:
+          type: string
+          example: Praha-Libuš (VSV)
+        providerUrl:
+          type: string
+          format: uri
+        snapshotUrl:
+          type: string
+          example: /api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot?cameraId=praha_libus-praha-libus
+        contentType:
+          type: string
+          example: image/gif
+      additionalProperties: false
+    WeatherCameraCatalog:
+      type: object
+      required: [contractVersion, providerId, sourceId, generatedAt, updateCadenceSeconds, snapshotPolicy, locations, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-weather-cameras-v1
+        providerId:
+          type: string
+          const: sim.situation-data
+        sourceId:
+          type: string
+          const: chmi_weather_webcams
+        generatedAt:
+          type: string
+          format: date-time
+        updateCadenceSeconds:
+          type: integer
+          example: 300
+        snapshotPolicy:
+          type: object
+          required: [mode, imagePayloadInFeatureStream, detailEndpoint, snapshotEndpoint]
+          properties:
+            mode:
+              type: string
+              const: on_demand_detail_snapshot
+            imagePayloadInFeatureStream:
+              type: boolean
+              const: false
+            detailEndpoint:
+              type: string
+              example: /api/v1/weather-cameras/{locationId}
+            snapshotEndpoint:
+              type: string
+              example: /api/v1/weather-cameras/{locationId}/snapshot
+          additionalProperties: false
+        locations:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeatherCameraLocation"
+        warnings:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    WeatherCameraDetail:
+      type: object
+      required: [contractVersion, providerId, sourceId, generatedAt, location, cameras, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-weather-cameras-v1
+        providerId:
+          type: string
+          const: sim.situation-data
+        sourceId:
+          type: string
+          const: chmi_weather_webcams
+        generatedAt:
+          type: string
+          format: date-time
+        location:
+          $ref: "#/components/schemas/WeatherCameraLocation"
+        cameras:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeatherCamera"
+        warnings:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
     WeatherRadarFrameCatalog:
       type: object
       required: [contractVersion, providerId, sourceId, generatedAt, historyHours, frameStore, rasterSemantics, products, warnings]

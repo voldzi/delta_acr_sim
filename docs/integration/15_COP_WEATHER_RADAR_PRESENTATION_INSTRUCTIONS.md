@@ -31,6 +31,56 @@ The current point feature carries normalized metrics such as `temperatureC`,
 `relativeHumidityPercent`, `precipitationMm`, `cloudCoverPercent`,
 `windSpeedMps`, `windDirectionDeg`, `windGustMps` and `weatherCode`.
 
+## CHMI Webcam Preview Layer
+
+SIM publishes ČHMÚ weather cameras as the catalog layer
+`public.weather.webcams` backed by provider layer `weather.chmi_webcams` and
+feature layer `weather_webcams`.
+
+COP should render webcam features as selectable point icons. The feature stream
+does not contain image payloads. On click, COP should open its own camera
+preview window and use one of these SIM-provided URLs:
+
+- `properties.providerProperties.camera.detailUrl`
+- `properties.providerProperties.camera.snapshotUrl`
+
+The detail endpoint returns contract `sim-weather-cameras-v1`:
+
+```http
+GET /situation-data/api/v1/weather-cameras/{locationId}
+```
+
+If COP calls SIM through its internal provider base URL, use:
+
+```http
+GET /api/v1/weather-cameras/{locationId}
+```
+
+The detail response contains a `cameras[]` array. Each item has:
+
+- `cameraId`
+- `name`
+- optional `providerUrl`
+- `snapshotUrl`
+- `contentType`
+
+For the actual image, render `snapshotUrl` as an image source. SIM decodes the
+ČHMÚ base64 payload server-side and responds with `image/gif`, `image/png` or
+`image/jpeg` when available:
+
+```http
+GET /api/v1/weather-cameras/{locationId}/snapshot?cameraId={cameraId}
+```
+
+If a location has multiple cameras, COP should show them as tabs or a compact
+selector inside the same preview window. If `cameraId` is omitted, SIM returns
+the first camera for that location.
+
+COP must keep attribution visible in the preview window:
+`Český hydrometeorologický ústav`. Treat webcam imagery as visual weather
+context only. Do not convert camera availability or image content into a user
+facing warning, incident or automatic alert.
+
 ## Radar Overlay Rendering
 
 Radar features from `chmi_weather_radar` are metadata carriers for a raster
@@ -113,6 +163,8 @@ In the layer tree:
 
 - Show `public.weather.current` as a point weather observation.
 - Show CHMI station weather/grid layers as measured/grid weather context.
+- Show `public.weather.webcams` as point camera locations; open a custom preview
+  window on click and load the snapshot through SIM.
 - Show radar layers as raster overlays, not polygons.
 - Label radar source as `ČHMÚ radar clean frame (SIM processed)`.
 

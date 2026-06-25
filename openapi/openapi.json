@@ -2495,6 +2495,165 @@
         ]
       }
     },
+    "/situation-data/api/v1/weather-cameras": {
+      "get": {
+        "summary": "Return CHMI weather camera locations",
+        "description": "Lists CHMI public webcam locations normalized by SIM. Image payloads are intentionally omitted; COP should request detail or snapshot endpoints on click.",
+        "parameters": [
+          {
+            "name": "bbox",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "14.4,50.0,14.5,50.1"
+            },
+            "description": "Optional WGS84 bbox west,south,east,north."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 250,
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CHMI weather camera catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataWeatherCameraCatalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_weather_cameras",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/weather-cameras/{locationId}": {
+      "get": {
+        "summary": "Return CHMI weather camera detail",
+        "description": "Returns camera choices for one CHMI webcam location. The response contains snapshot URLs but not the base64 image payload.",
+        "parameters": [
+          {
+            "name": "locationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "wgs84_14p445358_50p007510"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CHMI weather camera detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataWeatherCameraDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_weather_cameras_locationId",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/weather-cameras/{locationId}/snapshot": {
+      "get": {
+        "summary": "Return a CHMI weather camera snapshot image",
+        "description": "Decodes the selected CHMI base64 webcam image server-side and returns it as an image response for COP preview windows.",
+        "parameters": [
+          {
+            "name": "locationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "wgs84_14p445358_50p007510"
+            }
+          },
+          {
+            "name": "cameraId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "praha_libus-praha-libus"
+            },
+            "description": "Optional camera id from the detail response. If omitted, SIM returns the first camera at the location."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Weather camera image",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/gif": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_weather_cameras_locationId_snapshot",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
     "/situation-data/api/v1/observability": {
       "get": {
         "summary": "Return cache, upstream and read-model telemetry for SIM Overview",
@@ -2693,6 +2852,51 @@
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_cop_features",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
+    "/safety-data/api/v1/hydro/stations/{stationId}/observations": {
+      "get": {
+        "summary": "Return CHMI hydrological station detail series",
+        "description": "Returns locally persisted and recently backfilled CHMI hydro observations and forecasts for COP station detail charts.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SafetyDataHydroStationId"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataHydroDetailFrom"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataHydroDetailTo"
+          },
+          {
+            "$ref": "#/components/parameters/SafetyDataHydroDetailSeries"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CHMI hydro station detail series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SafetyDataHydroStationDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SafetyDataProblem"
+          },
+          "404": {
+            "$ref": "#/components/responses/SafetyDataProblem"
+          },
+          "503": {
+            "$ref": "#/components/responses/SafetyDataProblem"
+          }
+        },
+        "operationId": "safetyData_get_safety_data_api_v1_hydro_stations_stationId_observations",
         "tags": [
           "Safety Data: Safety Data"
         ]
@@ -4654,6 +4858,7 @@
           "weather_radar_precipitation",
           "weather_radar_nowcast",
           "weather_thunderstorm_risk",
+          "weather_webcams",
           "air_quality_grid"
         ]
       },
@@ -4676,6 +4881,7 @@
           "chmi_air_quality",
           "chmi_weather_stations",
           "chmi_weather_radar",
+          "chmi_weather_webcams",
           "ardos_partner"
         ]
       },
@@ -5471,6 +5677,7 @@
               "chmiAirQuality",
               "chmiWeatherStations",
               "chmiWeatherRadar",
+              "chmiWeatherWebcams",
               "ardosPartner"
             ],
             "properties": {
@@ -5511,6 +5718,9 @@
                 "type": "integer"
               },
               "chmiWeatherRadar": {
+                "type": "integer"
+              },
+              "chmiWeatherWebcams": {
                 "type": "integer"
               },
               "ardosPartner": {
@@ -5575,6 +5785,215 @@
             }
           }
         }
+      },
+      "SituationDataWeatherCameraLocation": {
+        "type": "object",
+        "required": [
+          "locationId",
+          "label",
+          "lon",
+          "lat",
+          "sourceDataUrl",
+          "detailUrl",
+          "snapshotUrl",
+          "providerPageUrl",
+          "camerasKnownAfterDetail"
+        ],
+        "properties": {
+          "locationId": {
+            "type": "string",
+            "example": "wgs84_14p445358_50p007510"
+          },
+          "label": {
+            "type": "string",
+            "example": "ČHMÚ webkamera 50.00751, 14.44536"
+          },
+          "lon": {
+            "type": "number",
+            "format": "double",
+            "example": 14.445358
+          },
+          "lat": {
+            "type": "number",
+            "format": "double",
+            "example": 50.00751
+          },
+          "sourceDataUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "detailUrl": {
+            "type": "string",
+            "example": "/api/v1/weather-cameras/wgs84_14p445358_50p007510"
+          },
+          "snapshotUrl": {
+            "type": "string",
+            "example": "/api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot"
+          },
+          "providerPageUrl": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://www.chmi.cz/namerena-data/webkamery"
+          },
+          "camerasKnownAfterDetail": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SituationDataWeatherCamera": {
+        "type": "object",
+        "required": [
+          "cameraId",
+          "name",
+          "snapshotUrl"
+        ],
+        "properties": {
+          "cameraId": {
+            "type": "string",
+            "example": "praha_libus-praha-libus"
+          },
+          "name": {
+            "type": "string",
+            "example": "Praha-Libuš (VSV)"
+          },
+          "providerUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "snapshotUrl": {
+            "type": "string",
+            "example": "/api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot?cameraId=praha_libus-praha-libus"
+          },
+          "contentType": {
+            "type": "string",
+            "example": "image/gif"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SituationDataWeatherCameraCatalog": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "providerId",
+          "sourceId",
+          "generatedAt",
+          "updateCadenceSeconds",
+          "snapshotPolicy",
+          "locations",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-weather-cameras-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.situation-data"
+          },
+          "sourceId": {
+            "type": "string",
+            "const": "chmi_weather_webcams"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updateCadenceSeconds": {
+            "type": "integer",
+            "example": 300
+          },
+          "snapshotPolicy": {
+            "type": "object",
+            "required": [
+              "mode",
+              "imagePayloadInFeatureStream",
+              "detailEndpoint",
+              "snapshotEndpoint"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "const": "on_demand_detail_snapshot"
+              },
+              "imagePayloadInFeatureStream": {
+                "type": "boolean",
+                "const": false
+              },
+              "detailEndpoint": {
+                "type": "string",
+                "example": "/api/v1/weather-cameras/{locationId}"
+              },
+              "snapshotEndpoint": {
+                "type": "string",
+                "example": "/api/v1/weather-cameras/{locationId}/snapshot"
+              }
+            },
+            "additionalProperties": false
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataWeatherCameraLocation"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SituationDataWeatherCameraDetail": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "providerId",
+          "sourceId",
+          "generatedAt",
+          "location",
+          "cameras",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-weather-cameras-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.situation-data"
+          },
+          "sourceId": {
+            "type": "string",
+            "const": "chmi_weather_webcams"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SituationDataWeatherCameraLocation"
+          },
+          "cameras": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataWeatherCamera"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "SituationDataWeatherRadarFrameCatalog": {
         "type": "object",
@@ -6966,6 +7385,9 @@
               "discharge": {
                 "type": "number"
               },
+              "waterTemperatureC": {
+                "type": "number"
+              },
               "floodStage": {
                 "oneOf": [
                   {
@@ -6978,6 +7400,19 @@
               },
               "trend": {
                 "type": "string"
+              },
+              "detailUrl": {
+                "type": "string"
+              },
+              "timelineUrl": {
+                "type": "string"
+              },
+              "forecastAvailable": {
+                "type": "boolean"
+              },
+              "forecastUntil": {
+                "type": "string",
+                "format": "date-time"
               },
               "basin": {
                 "type": "string"
@@ -7031,6 +7466,279 @@
             }
           }
         }
+      },
+      "SafetyDataHydroStationDetail": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "providerId",
+          "sourceId",
+          "station",
+          "window",
+          "thresholds",
+          "series",
+          "chart",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "chmi-hydro-station-detail-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "providerId": {
+            "const": "sim.safety-data"
+          },
+          "sourceId": {
+            "const": "chmi_hydro"
+          },
+          "station": {
+            "type": "object",
+            "required": [
+              "stationId",
+              "stationName",
+              "lat",
+              "lon"
+            ],
+            "properties": {
+              "stationId": {
+                "type": "string"
+              },
+              "stationCode": {
+                "type": "string"
+              },
+              "stationName": {
+                "type": "string"
+              },
+              "streamName": {
+                "type": "string"
+              },
+              "lat": {
+                "type": "number"
+              },
+              "lon": {
+                "type": "number"
+              },
+              "spaType": {
+                "type": "string"
+              },
+              "catchmentAreaKm2": {
+                "type": "number"
+              },
+              "hydrologicalOrder": {
+                "type": "string"
+              }
+            }
+          },
+          "window": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "to": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "thresholds": {
+            "type": "object",
+            "required": [
+              "waterLevel",
+              "discharge"
+            ],
+            "properties": {
+              "waterLevel": {
+                "$ref": "#/components/schemas/SafetyDataHydroThresholdSet"
+              },
+              "discharge": {
+                "$ref": "#/components/schemas/SafetyDataHydroThresholdSet"
+              }
+            }
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SafetyDataHydroStationSeries"
+            }
+          },
+          "chart": {
+            "type": "object",
+            "required": [
+              "title",
+              "currentTime",
+              "panels"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "currentTime": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "panels": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title",
+                    "yAxis",
+                    "seriesIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "enum": [
+                        "water_level",
+                        "discharge",
+                        "temperature"
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "yAxis": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "unit": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "seriesIds": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SafetyDataHydroSeriesId"
+                      }
+                    },
+                    "thresholdSet": {
+                      "enum": [
+                        "waterLevel",
+                        "discharge"
+                      ]
+                    },
+                    "forecastSeriesIds": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SafetyDataHydroSeriesId"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SafetyDataHydroStationSeries": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "unit",
+          "role",
+          "points"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SafetyDataHydroSeriesId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "observation",
+              "forecast"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "at",
+                "value",
+                "source",
+                "ingestedAt"
+              ],
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "source": {
+                  "enum": [
+                    "local_history",
+                    "live_now",
+                    "recent_backfill"
+                  ]
+                },
+                "ingestedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SafetyDataHydroThresholdSet": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string"
+          },
+          "dry": {
+            "type": "number"
+          },
+          "spa1": {
+            "type": "number"
+          },
+          "spa2": {
+            "type": "number"
+          },
+          "spa3": {
+            "type": "number"
+          },
+          "spa4": {
+            "type": "number"
+          }
+        }
+      },
+      "SafetyDataHydroSeriesId": {
+        "enum": [
+          "H",
+          "Q",
+          "TH",
+          "H_F",
+          "Q_F"
+        ]
       },
       "TakGatewayBoundingBox": {
         "type": "object",
@@ -7461,6 +8169,45 @@
           "default": 250,
           "maximum": 1000
         }
+      },
+      "SafetyDataHydroStationId": {
+        "name": "stationId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "CHMI hydrological station objID, or station DBC code when unique in metadata."
+      },
+      "SafetyDataHydroDetailFrom": {
+        "name": "from",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Inclusive start of the requested station detail time window. Defaults to configured past horizon."
+      },
+      "SafetyDataHydroDetailTo": {
+        "name": "to",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Inclusive end of the requested station detail time window. Defaults to configured forecast horizon."
+      },
+      "SafetyDataHydroDetailSeries": {
+        "name": "series",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "example": "H,Q,TH,H_F,Q_F"
+        },
+        "description": "Comma separated series IDs. H=water level, Q=discharge, TH=water temperature, H_F/Q_F=forecasts."
       }
     }
   },

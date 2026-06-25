@@ -157,6 +157,8 @@ Diagnostické vstupy `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mob
 
 V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`, zatímco `mobile_coverage_model`, `ctu_nettest` a `ctu_stationary_mobile` jsou `sourceRole=input` a `audience=diagnostic`.
 
+`mobile_network_model` smí vracet pouze geometrii připraveného coverage read-modelu (`readModel=true`). Pokud jsou dostupná jen ČTÚ měření bez coverage buňky, SIM vrací `0` features a warning; nesmí publikovat syntetický polygon z dotazovaného bboxu ani `mobile_network:aggregate:mixed:*` fallback.
+
 ## Doporučená katalogová ID
 
 SIM používá nebo doporučuje tato stabilní COM layer ID:
@@ -200,6 +202,8 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `partner.tak.traffic`
 - `diagnostic.mobile.coverage`
 - `diagnostic.mobile.ctu_measurements`
+
+`public.safety.flood` používá jako primární feature stream `GET /safety-data/api/v1/features?layers=flood&source=chmi_hydro`. Selectable hydrologické body mohou nést `properties.detailUrl`; COP má tento odkaz použít pro detail hlásného profilu s grafem měření a předpovědi, ne rekonstruovat upstream ČHMÚ URL na klientu.
 
 ## Kompatibilní feature streamy v SIM
 

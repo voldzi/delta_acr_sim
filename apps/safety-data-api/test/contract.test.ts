@@ -29,9 +29,13 @@ describe("Safety Data API contract", () => {
       cacheMaxEntries: 128,
       staleAfterSeconds: 900,
       chmiAlertsCapBaseUrl: "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
-      chmiHydroMetadataUrl: "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
+      chmiHydroMetadataUrl: "https://opendata.chmi.cz/hydrology/now/metadata/meta1.json",
       chmiHydroNowBaseUrl: "https://opendata.chmi.cz/hydrology/now/data",
+      chmiHydroRecentBaseUrl: "https://opendata.chmi.cz/hydrology/recent/data",
       chmiHydroMaxStations: 20,
+      chmiHydroDetailDefaultPastHours: 168,
+      chmiHydroDetailForecastHours: 72,
+      chmiHydroDetailBackfillDays: 0,
       nasaFirmsAreaBaseUrl: "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
       nasaFirmsSource: "VIIRS_SNPP_NRT",
       nasaFirmsDayRange: 1,
@@ -103,6 +107,9 @@ describe("Safety Data API contract", () => {
         cacheMaxEntries: 128,
         staleAfterSeconds: 900,
         hydroMaxStations: 20,
+        hydroDetailDefaultPastHours: 168,
+        hydroDetailForecastHours: 72,
+        hydroDetailBackfillDays: 0,
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "chmi_alerts", authConfigured: true }),
@@ -265,24 +272,109 @@ describe("Safety Data API contract", () => {
             severity: "warning",
             status: "active",
             trend: "rising",
+            detailUrl: "/safety-data/api/v1/hydro/stations/0-203-1-good/observations",
+            timelineUrl: "/safety-data/api/v1/hydro/stations/0-203-1-good/observations",
+            forecastAvailable: true,
+            forecastUntil: "2026-05-29T10:00:00.000Z",
             basin: "1-01-01-0000",
             affectedArea: "Vltava - Good station",
             metrics: expect.objectContaining({
               waterLevelCm: 160,
+              waterTemperatureC: 12.4,
               waterLevelDeltaCm: 20,
               waterLevelRateCmPerHour: 20,
               flowM3s: 40,
               flowDeltaM3s: 5,
               flowRateM3sPerHour: 5,
+              forecastAvailable: true,
               catchmentAreaKm2: 123.45,
               spa2Cm: 150,
               spa2FlowM3s: 35
             }),
             tags: expect.objectContaining({
               hydrologicalOrder: "1-01-01-0000",
+              detailUrl: "/safety-data/api/v1/hydro/stations/0-203-1-good/observations",
               trendBasis: "water_level"
             })
           })
+        );
+      }
+    );
+  });
+
+  it("returns CHMI hydro station detail series for COP graph rendering", async () => {
+    await withFixtureServer(
+      {
+        "/meta.json": JSON.stringify(chmiHydroMetadataFixture()),
+        "/now/0-203-1-good.json": JSON.stringify(chmiHydroNowFixture("0-203-1-good"))
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_hydro"],
+          chmiHydroMetadataUrl: `${baseUrl}/meta.json`,
+          chmiHydroNowBaseUrl: `${baseUrl}/now`,
+          chmiHydroRecentBaseUrl: `${baseUrl}/recent`,
+          chmiHydroDetailBackfillDays: 0
+        });
+
+        const response = await request(configured.app)
+          .get(
+            "/api/v1/hydro/stations/0-203-1-good/observations?from=2026-05-28T08:00:00Z&to=2026-05-29T12:00:00Z&series=H,Q,TH,H_F,Q_F"
+          )
+          .expect(200);
+
+        expect(response.body).toEqual(
+          expect.objectContaining({
+            contractVersion: "chmi-hydro-station-detail-v1",
+            providerId: "sim.safety-data",
+            sourceId: "chmi_hydro",
+            station: expect.objectContaining({
+              stationId: "0-203-1-good",
+              stationCode: "GOOD",
+              stationName: "Good station",
+              streamName: "Vltava"
+            }),
+            window: {
+              from: "2026-05-28T08:00:00.000Z",
+              to: "2026-05-29T12:00:00.000Z"
+            },
+            thresholds: {
+              waterLevel: expect.objectContaining({ unit: "cm", dry: 10, spa1: 100, spa2: 150, spa3: 200 }),
+              discharge: expect.objectContaining({ unit: "m3/s", dry: 2, spa1: 20, spa2: 35, spa3: 50 })
+            },
+            chart: expect.objectContaining({
+              title: "Good station - Vltava",
+              panels: expect.arrayContaining([
+                expect.objectContaining({ id: "water_level", seriesIds: ["H", "H_F"], thresholdSet: "waterLevel" }),
+                expect.objectContaining({ id: "discharge", seriesIds: ["Q", "Q_F"], thresholdSet: "discharge" }),
+                expect.objectContaining({ id: "temperature", seriesIds: ["TH"] })
+              ])
+            }),
+            warnings: []
+          })
+        );
+        expect(response.body.series).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              id: "H",
+              unit: "cm",
+              role: "observation",
+              points: expect.arrayContaining([expect.objectContaining({ at: "2026-05-28T10:00:00.000Z", value: 160, source: "live_now" })])
+            }),
+            expect.objectContaining({
+              id: "H_F",
+              unit: "cm",
+              role: "forecast",
+              points: expect.arrayContaining([expect.objectContaining({ at: "2026-05-29T10:00:00.000Z", value: 155 })])
+            }),
+            expect.objectContaining({
+              id: "TH",
+              unit: "°C",
+              role: "observation",
+              points: expect.arrayContaining([expect.objectContaining({ at: "2026-05-28T10:00:00.000Z", value: 12.4 })])
+            })
+          ])
         );
       }
     );
@@ -714,6 +806,30 @@ function chmiHydroNowFixture(stationId: string): unknown {
             tsData: [
               { dt: previous, value: 35 },
               { dt: latest, value: 40 }
+            ]
+          },
+          {
+            tsConID: "TH",
+            unit: "DEG_C",
+            tsData: [
+              { dt: previous, value: 12.1 },
+              { dt: latest, value: 12.4 }
+            ]
+          },
+          {
+            tsConID: "H_F",
+            unit: "CM",
+            tsData: [
+              { dt: "2026-05-28T12:00:00Z", value: 162 },
+              { dt: "2026-05-29T10:00:00Z", value: 155 }
+            ]
+          },
+          {
+            tsConID: "Q_F",
+            unit: "M3_S",
+            tsData: [
+              { dt: "2026-05-28T12:00:00Z", value: 41 },
+              { dt: "2026-05-29T10:00:00Z", value: 38 }
             ]
           }
         ]

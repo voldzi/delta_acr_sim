@@ -78,7 +78,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         providerLayerId: "safety.flood",
         recommendedCatalogLayerId: "public.safety.flood",
         label: "Povodně a voda",
-        description: "Hydrologické stanice, stupně povodňové aktivity a vodní kontext.",
+        description: "Hydrologické stanice, stupně povodňové aktivity, předpověď a vodní kontext.",
         categoryPath: ["safety", "flood"],
         categories: ["flood", "hydrology"],
         role: "overlay",
@@ -97,7 +97,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         notificationPolicy: notificationPolicy("flood"),
         legal: {
           attribution: "Czech Hydrometeorological Institute (CHMI)",
-          notes: ["Stav externích CHMI endpointů může degradovat část odpovědi; sledujte stale/warnings."]
+          notes: ["Stav externích CHMI endpointů může degradovat část odpovědi; sledujte stale/warnings.", "Detail hlásného profilu je dostupný přes properties.detailUrl pro selectable flood features."]
         }
       },
       {
@@ -228,7 +228,7 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         selectableInMap: true,
         feedsLayerIds: ["safety.flood"],
         feedsCatalogLayerIds: ["public.safety.flood"],
-        notes: ["Hydrological station source with water-level/discharge SPA classification, trend and catchment metadata; missing current station data is handled with negative cache."]
+        notes: ["Hydrological station source with water-level/discharge SPA classification, local JSONL timeline history, forecast series, detailUrl and catchment metadata; missing current station data is handled with negative cache."]
       };
     case "nasa_firms":
       return {

@@ -10,6 +10,14 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 600
   },
   {
+    layerId: "weather_webcams",
+    label: "Weather webcams",
+    description: "ČHMÚ weather camera locations with on-demand SIM snapshot preview endpoints.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 300
+  },
+  {
     layerId: "ground",
     label: "Ground reference",
     description: "Reference infrastructure and points of interest relevant to the ground picture.",

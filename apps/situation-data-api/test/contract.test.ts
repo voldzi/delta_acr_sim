@@ -83,6 +83,11 @@ describe("Situation Data API contract", () => {
       chmiWeatherRadarFrameMaxCount: 72,
       chmiWeatherRadarFrameStoreEnabled: false,
       chmiWeatherRadarFrameStoreDir: join(dataDir, "weather-radar-frames"),
+      chmiWeatherRadarCleanCropInsetPixels: 2,
+      chmiWeatherWebcamsMapUrl: "https://data-provider.chmi.cz/api/kamery/data/map",
+      chmiWeatherWebcamsDataBaseUrl: "https://data-provider.chmi.cz",
+      chmiWeatherWebcamsPublicBaseUrl: "https://www.chmi.cz",
+      chmiWeatherWebcamsCacheTtlSeconds: 300,
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
@@ -117,6 +122,7 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({ layerId: "weather_temperature_grid", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_radar_reflectivity", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_thunderstorm_risk", defaultVisible: false }),
+        expect.objectContaining({ layerId: "weather_webcams", defaultVisible: false }),
         expect.objectContaining({ layerId: "air_quality_grid", defaultVisible: false })
       ])
     );
@@ -187,6 +193,10 @@ describe("Situation Data API contract", () => {
           layers: expect.arrayContaining(["weather_radar_reflectivity", "weather_radar_precipitation", "weather_radar_nowcast", "weather_thunderstorm_risk"])
         }),
         expect.objectContaining({
+          sourceId: "chmi_weather_webcams",
+          layers: expect.arrayContaining(["weather_webcams"])
+        }),
+        expect.objectContaining({
           sourceId: "ardos_partner",
           license: expect.objectContaining({ name: "ARDOS partner data under MoU" })
         })
@@ -235,6 +245,123 @@ describe("Situation Data API contract", () => {
         ]
       })
     );
+  });
+
+  it("exposes CHMI weather camera catalog detail and snapshot endpoints", async () => {
+    const dataUrl = "https://data-provider.chmi.cz/api/kamery/data/point?x=14.445358&y=50.00751";
+    const image = "R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === config.chmiWeatherWebcamsMapUrl) {
+        return jsonResponse({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [482791.5, 5540813.3] },
+              properties: { dataUrl, icon: "335" }
+            }
+          ]
+        });
+      }
+      if (url === dataUrl) {
+        return jsonResponse({
+          data: [
+            {
+              name: "Praha-Libuš (VSV)",
+              url: "/namerena-data/webkamera/praha_libus-praha-libus",
+              img: image
+            }
+          ]
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const catalog = await request(app).get("/api/v1/weather-cameras?bbox=14.4,50,14.5,50.1").expect(200);
+    expect(catalog.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-weather-cameras-v1",
+        sourceId: "chmi_weather_webcams",
+        snapshotPolicy: expect.objectContaining({ imagePayloadInFeatureStream: false }),
+        locations: [
+          expect.objectContaining({
+            locationId: "wgs84_14p445358_50p007510",
+            detailUrl: "/api/v1/weather-cameras/wgs84_14p445358_50p007510",
+            snapshotUrl: "/api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot"
+          })
+        ]
+      })
+    );
+
+    const detail = await request(app).get(catalog.body.locations[0].detailUrl).expect(200);
+    expect(detail.body.cameras).toEqual([
+      expect.objectContaining({
+        cameraId: "praha_libus-praha-libus",
+        name: "Praha-Libuš (VSV)",
+        snapshotUrl: "/api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot?cameraId=praha_libus-praha-libus",
+        contentType: "image/gif"
+      })
+    ]);
+    expect(JSON.stringify(detail.body)).not.toContain(image);
+
+    const snapshot = await request(app).get(detail.body.cameras[0].snapshotUrl).expect(200);
+    expect(snapshot.headers["content-type"]).toContain("image/gif");
+    expect(snapshot.headers["x-sim-camera-id"]).toBe("praha_libus-praha-libus");
+    expect(snapshot.body.length).toBeGreaterThan(0);
+  });
+
+  it("projects CHMI weather cameras as clickable COP feature points", async () => {
+    config.enabledSources = ["chmi_weather_webcams"];
+    ({ app } = await createApp(config));
+    const dataUrl = "https://data-provider.chmi.cz/api/kamery/data/point?x=14.445358&y=50.00751";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === config.chmiWeatherWebcamsMapUrl) {
+          return jsonResponse({
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [482791.5, 5540813.3] },
+                properties: { dataUrl, icon: "335" }
+              }
+            ]
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+
+    const response = await request(app)
+      .get("/api/v1/features?layers=weather_webcams&sources=chmi_weather_webcams&bbox=14.4,50,14.5,50.1")
+      .expect(200);
+
+    expect(response.body.features).toEqual([
+      expect.objectContaining({
+        id: "weather_webcam:wgs84_14p445358_50p007510",
+        geometry: { type: "Point", coordinates: [14.445358, 50.00751] },
+        properties: expect.objectContaining({
+          layer: "weather_webcams",
+          category: "weather_webcam",
+          iconHint: "camera",
+          rendering: { mode: "feature", geometryRole: "feature_geometry" },
+          providerProperties: expect.objectContaining({
+            camera: expect.objectContaining({
+              detailUrl: "/api/v1/weather-cameras/wgs84_14p445358_50p007510",
+              snapshotUrl: "/api/v1/weather-cameras/wgs84_14p445358_50p007510/snapshot",
+              imagePayloadInFeatureStream: false
+            }),
+            copPresentation: expect.objectContaining({
+              onClick: "open_custom_camera_preview"
+            })
+          })
+        })
+      })
+    ]);
   });
 
   it("exposes provider map catalog metadata for COM", async () => {
@@ -342,6 +469,21 @@ describe("Situation Data API contract", () => {
           role: "reference",
           audience: "public",
           sourceIds: ["chmi_weather_stations"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.chmi_webcams",
+          recommendedCatalogLayerId: "public.weather.webcams",
+          role: "reference",
+          audience: "public",
+          kind: "vector_features",
+          selectable: true,
+          sourceIds: ["chmi_weather_webcams"],
+          readModel: expect.objectContaining({
+            refreshedBy: "/api/v1/weather-cameras"
+          }),
+          legal: expect.objectContaining({
+            notes: expect.arrayContaining([expect.stringContaining("click")])
+          })
         }),
         expect.objectContaining({
           providerLayerId: "weather.temperature_grid",
@@ -531,6 +673,13 @@ describe("Situation Data API contract", () => {
           ])
         }),
         expect.objectContaining({
+          sourceId: "chmi_weather_webcams",
+          sourceRole: "final",
+          selectableInMap: true,
+          feedsLayerIds: ["weather.chmi_webcams"],
+          feedsCatalogLayerIds: ["public.weather.webcams"]
+        }),
+        expect.objectContaining({
           sourceId: "chmi_air_quality",
           feedsCatalogLayerIds: expect.arrayContaining(["public.safety.air_quality", "public.safety.air_quality_grid"])
         }),
@@ -587,6 +736,7 @@ describe("Situation Data API contract", () => {
           chmiAirQuality: 900,
           chmiWeatherStations: 600,
           chmiWeatherRadar: 300,
+          chmiWeatherWebcams: 300,
           ardosPartner: 15
         },
         providers: expect.arrayContaining([
@@ -605,6 +755,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "chmi_air_quality", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "chmi_weather_stations", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "chmi_weather_radar", authConfigured: true, backend: "chmi-opendata" }),
+          expect.objectContaining({ sourceId: "chmi_weather_webcams", authConfigured: true, backend: "chmi-data-provider" }),
           expect.objectContaining({ sourceId: "ardos_partner", authConfigured: false })
         ])
       })
@@ -1770,7 +1921,8 @@ describe("Situation Data API contract", () => {
                 modelVersion: "coverage-v1",
                 generatedAt: new Date().toISOString(),
                 resolutionM: 500,
-                demSource: "not-used-phase-1"
+                demSource: "not-used-phase-1",
+                readModel: true
               }
             }
           ]
@@ -1843,6 +1995,123 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(result.features[0].properties.raw).toBeUndefined();
+  });
+
+  it("does not synthesize a mobile network bbox polygon when coverage read-model cells are missing", async () => {
+    const source = new MobileNetworkSource({
+      ...config,
+      enabledSources: ["mobile_network_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageResolutionM: 500,
+      mobileCoverageMaxCells: 16
+    });
+    (source as unknown as { coverageSource: SituationDataSource }).coverageSource = {
+      descriptor: {
+        sourceId: "mobile_coverage_model",
+        label: "coverage",
+        enabled: true,
+        mode: "live",
+        priority: 64,
+        layers: ["mobile_coverage"],
+        license: { name: "coverage", attribution: "coverage", commercialUse: "allowed", operationalUse: "allowed", notes: [] }
+      },
+      async fetchFeatures() {
+        return {
+          source: this.descriptor,
+          fetchedAt: new Date().toISOString(),
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "coverage:mobile:5g:runtime",
+              geometry: {
+                type: "Polygon",
+                coordinates: [[
+                  [14.41, 50.07],
+                  [14.43, 50.07],
+                  [14.43, 50.09],
+                  [14.41, 50.09],
+                  [14.41, 50.07]
+                ]]
+              },
+              properties: {
+                featureId: "coverage:mobile:5g:runtime",
+                layer: "mobile_coverage",
+                category: "mobile_coverage",
+                label: "5G runtime coverage estimate",
+                sourceId: "mobile_coverage_model",
+                observedAt: new Date().toISOString(),
+                confidence: 0.42,
+                stale: false,
+                severity: "info",
+                license: { name: "coverage", attribution: "coverage" },
+                operator: "unknown",
+                technology: "5G",
+                quality: "fair",
+                modelVersion: "coverage-v1",
+                readModel: false,
+                dataQuality: "modelled"
+              }
+            }
+          ]
+        };
+      }
+    };
+    (source as unknown as { ctuNettestSource: SituationDataSource }).ctuNettestSource = {
+      descriptor: {
+        sourceId: "ctu_nettest",
+        label: "measurements",
+        enabled: true,
+        mode: "live",
+        priority: 65,
+        layers: ["mobile"],
+        license: { name: "CTU", attribution: "CTU", commercialUse: "allowed", operationalUse: "allowed", notes: [] }
+      },
+      async fetchFeatures() {
+        return {
+          source: this.descriptor,
+          fetchedAt: new Date().toISOString(),
+          warnings: [],
+          features: [
+            {
+              type: "Feature",
+              id: "mobile:ctu_nettest:1",
+              geometry: { type: "Point", coordinates: [14.42, 50.08] },
+              properties: {
+                featureId: "mobile:ctu_nettest:1",
+                layer: "mobile",
+                category: "network_measurement",
+                label: "CTU NetTest LTE",
+                sourceId: "ctu_nettest",
+                observedAt: new Date().toISOString(),
+                confidence: 0.8,
+                stale: false,
+                severity: "warning",
+                license: { name: "CTU", attribution: "CTU" },
+                metrics: { downloadMbps: 3, uploadMbps: 1, latencyMs: 90, lteRsrpDbm: -111 }
+              }
+            }
+          ]
+        };
+      }
+    };
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.41, south: 50.07, east: 14.43, north: 50.09 },
+      layers: ["mobile_network"],
+      sourceIds: ["mobile_network_model"],
+      limit: 5,
+      includeRaw: false,
+      mobileCoverageTechnologies: ["5G"]
+    });
+
+    expect(result.features).toHaveLength(0);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      "mobile_network_model ignored coverage polygons that were not backed by a prepared read-model.",
+      "mobile_network_model has no prepared read-model coverage cells in the requested area; no synthetic bbox polygon was generated.",
+      "CTU measurements are available only as point features in their own sources; mobile_network_model did not convert them to an area polygon."
+    ]));
   });
 
   it("keeps layers represented when a low limit is requested", async () => {
@@ -2080,4 +2349,11 @@ class InMemorySharedResponseCacheStore implements SharedResponseCacheStore {
   isAvailable(): boolean {
     return true;
   }
+}
+
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  });
 }

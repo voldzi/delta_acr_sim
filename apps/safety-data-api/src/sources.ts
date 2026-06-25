@@ -1,10 +1,15 @@
 import { XMLParser } from "fast-xml-parser";
 import { Pool } from "pg";
+import { ChmiHydroHistoryStore, type ChmiHydroHistoryRecord, type ChmiHydroSourceKind } from "./chmi-hydro-history.js";
 import type { SafetyDataConfig } from "./config.js";
 import { HttpRequestError, requestJson, requestText } from "./http.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
+  HydroSeriesId,
+  HydroSeriesRole,
+  HydroStationDetail,
+  HydroStationDetailQuery,
   SafetyCertainty,
   SafetyDataLicense,
   SafetyDataSourceId,
@@ -22,6 +27,7 @@ export interface SafetyDataSource {
   descriptor: SourceDescriptor;
   fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult>;
   cacheStats?(): SourceCacheStats[];
+  getHydroStationDetail?(stationId: string, query: HydroStationDetailQuery): Promise<HydroStationDetail | undefined>;
 }
 
 export interface SourceCacheStats extends ManagedResponseCacheStats {
@@ -381,9 +387,12 @@ class ChmiHydroSource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly metadataCache: ManagedResponseCache<HydroStation[]>;
   private readonly stationDataCache: ManagedResponseCache<HydroNowResponse>;
+  private readonly recentDataCache: ManagedResponseCache<HydroNowResponse | undefined>;
+  private readonly historyStore: ChmiHydroHistoryStore;
   private readonly missingStationDataUntilMs = new Map<string, number>();
 
   constructor(private readonly config: SafetyDataConfig) {
+    this.historyStore = new ChmiHydroHistoryStore(config.dataDir);
     this.metadataCache = new ManagedResponseCache<HydroStation[]>({
       ttlMs: 24 * 60 * 60 * 1000,
       staleIfErrorMs: 7 * 24 * 60 * 60 * 1000,
@@ -393,6 +402,11 @@ class ChmiHydroSource implements SafetyDataSource {
       ttlMs: Math.max(5 * 60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: Math.max(64, config.cacheMaxEntries)
+    });
+    this.recentDataCache = new ManagedResponseCache<HydroNowResponse | undefined>({
+      ttlMs: Math.max(10 * 60_000, config.cacheTtlSeconds * 1000),
+      staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
+      maxEntries: Math.max(64, Math.min(1024, config.cacheMaxEntries * 2))
     });
     this.descriptor = {
       sourceId: "chmi_hydro",
@@ -450,7 +464,29 @@ class ChmiHydroSource implements SafetyDataSource {
   }
 
   cacheStats(): SourceCacheStats[] {
-    return [cacheStatsFor("chmi_hydro", [this.metadataCache, this.stationDataCache])];
+    return [cacheStatsFor("chmi_hydro", [this.metadataCache, this.stationDataCache, this.recentDataCache])];
+  }
+
+  async getHydroStationDetail(stationId: string, query: HydroStationDetailQuery): Promise<HydroStationDetail | undefined> {
+    const generatedAt = new Date().toISOString();
+    const stations = await this.metadataCache.getOrLoad("chmi_hydro_metadata", () => fetchHydroStations(this.config));
+    const station = findHydroStation(stations, stationId);
+    if (!station) {
+      return undefined;
+    }
+
+    const window = hydroDetailWindow(query, this.config, generatedAt);
+    const warnings: string[] = [];
+    await this.backfillRecentStation(station, window.from, window.to, generatedAt, warnings);
+    await this.persistCurrentStationData(station, generatedAt, warnings);
+    const seriesIds = query.seriesIds ?? DEFAULT_HYDRO_DETAIL_SERIES;
+    const records = await this.historyStore.readStationRecords(station.objId, {
+      from: window.from,
+      to: window.to,
+      seriesIds
+    });
+
+    return buildHydroStationDetail(station, records, seriesIds, window, generatedAt, warnings);
   }
 
   private async fetchStationFeature(station: HydroStation, includeRaw: boolean, fetchedAt: string): Promise<HydroStationFetchResult> {
@@ -460,6 +496,7 @@ class ChmiHydroSource implements SafetyDataSource {
     const url = `${trimTrailingSlash(this.config.chmiHydroNowBaseUrl)}/${encodeURIComponent(station.objId)}.json`;
     try {
       const payload = await this.stationDataCache.getOrLoad(url, () => requestJson<HydroNowResponse>(url, this.config.requestTimeoutMs));
+      await this.persistHydroPayload(payload, url, "now", fetchedAt);
       return { feature: mapHydroStation(station, payload, includeRaw, fetchedAt) };
     } catch (error) {
       if (error instanceof HttpRequestError && error.status === 404) {
@@ -467,6 +504,65 @@ class ChmiHydroSource implements SafetyDataSource {
         return { missingCurrentData: true };
       }
       throw error;
+    }
+  }
+
+  private async persistCurrentStationData(station: HydroStation, fetchedAt: string, warnings: string[]): Promise<void> {
+    const url = `${trimTrailingSlash(this.config.chmiHydroNowBaseUrl)}/${encodeURIComponent(station.objId)}.json`;
+    try {
+      const payload = await this.stationDataCache.getOrLoad(url, () => requestJson<HydroNowResponse>(url, this.config.requestTimeoutMs));
+      await this.persistHydroPayload(payload, url, "now", fetchedAt, warnings);
+    } catch (error) {
+      if (error instanceof HttpRequestError && error.status === 404) {
+        this.cacheMissingStationData(station.objId);
+        warnings.push("Current CHMI hydro payload is not available for this station.");
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async backfillRecentStation(station: HydroStation, from: string, to: string, fetchedAt: string, warnings: string[]): Promise<void> {
+    const dates = recentBackfillDates(from, to, this.config.chmiHydroDetailBackfillDays, fetchedAt);
+    if (dates.length === 0) {
+      return;
+    }
+    const settled = await Promise.allSettled(dates.map((date) => this.fetchRecentStationDay(station.objId, date, fetchedAt)));
+    const failedCount = settled.filter((item) => item.status === "rejected").length;
+    if (failedCount > 0) {
+      warnings.push(`Recent CHMI hydro backfill skipped ${failedCount} day(s) because the upstream request failed.`);
+    }
+  }
+
+  private async fetchRecentStationDay(stationId: string, date: string, fetchedAt: string): Promise<void> {
+    const url = `${trimTrailingSlash(this.config.chmiHydroRecentBaseUrl)}/${date}_${encodeURIComponent(stationId)}.json`;
+    const payload = await this.recentDataCache.getOrLoad(url, async () => {
+      try {
+        return await requestJson<HydroNowResponse>(url, this.config.requestTimeoutMs);
+      } catch (error) {
+        if (error instanceof HttpRequestError && error.status === 404) {
+          return undefined;
+        }
+        throw error;
+      }
+    });
+    if (payload) {
+      await this.persistHydroPayload(payload, url, "recent", fetchedAt);
+    }
+  }
+
+  private async persistHydroPayload(
+    payload: HydroNowResponse,
+    url: string,
+    sourceKind: ChmiHydroSourceKind,
+    fetchedAt: string,
+    warnings?: string[]
+  ): Promise<void> {
+    try {
+      await this.historyStore.persistPayload(payload, url, sourceKind, fetchedAt);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      warnings?.push(`Local CHMI hydro history persist failed: ${message}`);
     }
   }
 
@@ -734,8 +830,13 @@ interface FeatureInput {
   stationId?: string;
   waterLevelCm?: number;
   discharge?: number;
+  waterTemperatureC?: number;
   floodStage?: number | string;
   trend?: string;
+  detailUrl?: string;
+  timelineUrl?: string;
+  forecastAvailable?: boolean;
+  forecastUntil?: string;
   basin?: string;
   affectedArea?: string;
   name?: string;
@@ -820,8 +921,13 @@ function makeFeatureProperties(input: Omit<FeatureInput, "lon" | "lat">): Safety
     stationId: input.stationId,
     waterLevelCm: input.waterLevelCm,
     discharge: input.discharge,
+    waterTemperatureC: input.waterTemperatureC,
     floodStage: input.floodStage,
     trend: input.trend,
+    detailUrl: input.detailUrl,
+    timelineUrl: input.timelineUrl,
+    forecastAvailable: input.forecastAvailable,
+    forecastUntil: input.forecastUntil,
     basin: input.basin,
     affectedArea: input.affectedArea,
     name: input.name,
@@ -1300,6 +1406,16 @@ interface HydroTrend {
   windowMinutes: number;
 }
 
+const DEFAULT_HYDRO_DETAIL_SERIES: HydroSeriesId[] = ["H", "Q", "TH", "H_F", "Q_F"];
+
+const HYDRO_SERIES_META: Record<HydroSeriesId, { label: string; unit: string; role: HydroSeriesRole }> = {
+  H: { label: "Vodní stav", unit: "cm", role: "observation" },
+  Q: { label: "Průtok", unit: "m3/s", role: "observation" },
+  TH: { label: "Teplota vody", unit: "°C", role: "observation" },
+  H_F: { label: "Předpověď vodního stavu", unit: "cm", role: "forecast" },
+  Q_F: { label: "Předpověď průtoku", unit: "m3/s", role: "forecast" }
+};
+
 async function fetchHydroStations(config: SafetyDataConfig): Promise<HydroStation[]> {
   const payload = await requestJson<unknown>(config.chmiHydroMetadataUrl, config.requestTimeoutMs);
   const root = asRecord(payload) ?? {};
@@ -1354,8 +1470,12 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
   const object = payload.objList?.find((item) => item.objID === station.objId) ?? payload.objList?.[0];
   const waterLevelSeries = object?.tsList?.find((series) => series.tsConID === "H");
   const flowSeries = object?.tsList?.find((series) => series.tsConID === "Q");
+  const temperatureSeries = object?.tsList?.find((series) => series.tsConID === "TH");
+  const waterLevelForecastSeries = object?.tsList?.find((series) => series.tsConID === "H_F");
+  const flowForecastSeries = object?.tsList?.find((series) => series.tsConID === "Q_F");
   const waterLevel = latestObservation(waterLevelSeries);
   const flow = latestObservation(flowSeries);
+  const waterTemperature = latestObservation(temperatureSeries);
   if (!waterLevel && !flow) {
     return undefined;
   }
@@ -1372,6 +1492,9 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
   const severity = floodSeverity(floodActivityLevel);
   const stream = station.streamName ? ` - ${station.streamName}` : "";
   const status = floodActivityLevel > 0 ? "active" : "monitoring";
+  const forecastUntil = latestForecastTimestamp([waterLevelForecastSeries, flowForecastSeries]);
+  const forecastHorizonHours = forecastUntil ? Math.max(0, (Date.parse(forecastUntil) - Date.parse(fetchedAt)) / (60 * 60 * 1000)) : undefined;
+  const detailUrl = hydroDetailUrl(station.objId);
 
   return makePointFeature({
     id: `flood:chmi_hydro:${stableToken(station.objId)}`,
@@ -1401,8 +1524,13 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     stationId: station.objId,
     waterLevelCm: waterLevel?.value,
     discharge: flow?.value,
+    waterTemperatureC: waterTemperature?.value,
     floodStage: floodActivityLevel,
     trend: selectedTrend?.trend ?? "unknown",
+    detailUrl,
+    timelineUrl: detailUrl,
+    forecastAvailable: Boolean(forecastUntil),
+    forecastUntil,
     basin: station.hydrologicalOrder,
     affectedArea: station.streamName ? `${station.streamName} - ${station.stationName}` : station.stationName,
     iconHint: "flood",
@@ -1410,7 +1538,10 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     metrics: compactMetrics({
       waterLevelCm: waterLevel?.value,
       flowM3s: flow?.value,
+      waterTemperatureC: waterTemperature?.value,
       floodActivityLevel,
+      forecastAvailable: Boolean(forecastUntil),
+      forecastHorizonHours: forecastHorizonHours !== undefined ? round(forecastHorizonHours, 2) : undefined,
       waterLevelDeltaCm: waterTrend?.delta,
       waterLevelRateCmPerHour: waterTrend?.ratePerHour,
       flowDeltaM3s: flowTrend?.delta,
@@ -1434,6 +1565,7 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
       stationCode: station.stationCode,
       stationName: station.stationName,
       streamName: station.streamName,
+      detailUrl,
       spaType: station.spaType,
       hydrologicalOrder: station.hydrologicalOrder,
       trendBasis: selectedTrend ? (waterTrend ? "water_level" : "discharge") : undefined
@@ -1528,6 +1660,203 @@ function hydroObservations(series: HydroSeries | undefined): HydroObservation[] 
     .filter((point): point is { observedAt: string; value: number } => point.observedAt !== undefined && point.value !== undefined)
     .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))
     .map((point) => ({ ...point, unit: series?.unit }));
+}
+
+function latestForecastTimestamp(seriesList: Array<HydroSeries | undefined>): string | undefined {
+  return seriesList
+    .flatMap((series) => hydroObservations(series))
+    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0]?.observedAt;
+}
+
+function findHydroStation(stations: HydroStation[], stationId: string): HydroStation | undefined {
+  const decodedStationId = safeDecodeURIComponent(stationId);
+  return stations.find((station) => station.objId === decodedStationId || station.stationCode === decodedStationId);
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function hydroDetailWindow(
+  query: HydroStationDetailQuery,
+  config: SafetyDataConfig,
+  generatedAt: string
+): { from: string; to: string } {
+  const nowMs = Date.parse(generatedAt);
+  const from = query.from ?? new Date(nowMs - Math.max(1, config.chmiHydroDetailDefaultPastHours) * 60 * 60 * 1000).toISOString();
+  const to = query.to ?? new Date(nowMs + Math.max(0, config.chmiHydroDetailForecastHours) * 60 * 60 * 1000).toISOString();
+  return { from, to };
+}
+
+function recentBackfillDates(from: string, to: string, maxDays: number, generatedAt: string): string[] {
+  const dayLimit = Math.max(0, Math.min(31, Math.trunc(maxDays)));
+  if (dayLimit === 0) {
+    return [];
+  }
+
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  const nowMs = Date.parse(generatedAt);
+  if (![fromMs, toMs, nowMs].every(Number.isFinite)) {
+    return [];
+  }
+
+  const todayStartMs = utcDayStart(nowMs);
+  const latestRecentDayMs = todayStartMs - 24 * 60 * 60 * 1000;
+  const earliestAllowedMs = todayStartMs - dayLimit * 24 * 60 * 60 * 1000;
+  const startMs = utcDayStart(Math.max(fromMs, earliestAllowedMs));
+  const endMs = utcDayStart(Math.min(toMs, latestRecentDayMs));
+  if (startMs > endMs) {
+    return [];
+  }
+
+  const dates: string[] = [];
+  for (let dayMs = startMs; dayMs <= endMs; dayMs += 24 * 60 * 60 * 1000) {
+    dates.push(formatUtcDate(dayMs));
+  }
+  return dates;
+}
+
+function buildHydroStationDetail(
+  station: HydroStation,
+  records: ChmiHydroHistoryRecord[],
+  requestedSeriesIds: HydroSeriesId[],
+  window: { from: string; to: string },
+  generatedAt: string,
+  warnings: string[]
+): HydroStationDetail {
+  const series = requestedSeriesIds.map((seriesId) => {
+    const meta = HYDRO_SERIES_META[seriesId];
+    const points = records
+      .filter((record) => record.seriesId === seriesId)
+      .map((record) => ({
+        at: record.observedAt,
+        value: round(record.value, 3),
+        source: record.sourceKind === "now" ? ("live_now" as const) : ("recent_backfill" as const),
+        ingestedAt: record.ingestedAt
+      }));
+    return {
+      id: seriesId,
+      label: meta.label,
+      unit: points.length > 0 ? normalizeHydroUnit(records.find((record) => record.seriesId === seriesId)?.unit, meta.unit) : meta.unit,
+      role: meta.role,
+      points
+    };
+  });
+
+  const detailWarnings = [...warnings];
+  if (records.length === 0) {
+    detailWarnings.push("No local CHMI hydro observations are available for the requested window yet.");
+  }
+
+  return {
+    contractVersion: "chmi-hydro-station-detail-v1",
+    generatedAt,
+    providerId: "sim.safety-data",
+    sourceId: "chmi_hydro",
+    station: {
+      stationId: station.objId,
+      stationCode: station.stationCode,
+      stationName: station.stationName,
+      streamName: station.streamName,
+      lat: round(station.lat, 6),
+      lon: round(station.lon, 6),
+      spaType: station.spaType,
+      catchmentAreaKm2: station.catchmentAreaKm2,
+      hydrologicalOrder: station.hydrologicalOrder
+    },
+    window,
+    thresholds: {
+      waterLevel: {
+        unit: "cm",
+        dry: station.dryH,
+        spa1: station.spa1H,
+        spa2: station.spa2H,
+        spa3: station.spa3H,
+        spa4: station.spa4H
+      },
+      discharge: {
+        unit: "m3/s",
+        dry: station.dryQ,
+        spa1: station.spa1Q,
+        spa2: station.spa2Q,
+        spa3: station.spa3Q,
+        spa4: station.spa4Q
+      }
+    },
+    series,
+    chart: {
+      title: `${station.stationName}${station.streamName ? ` - ${station.streamName}` : ""}`,
+      currentTime: generatedAt,
+      panels: hydroChartPanels(requestedSeriesIds)
+    },
+    warnings: detailWarnings
+  };
+}
+
+function hydroChartPanels(seriesIds: HydroSeriesId[]): HydroStationDetail["chart"]["panels"] {
+  const requested = new Set(seriesIds);
+  const panels: HydroStationDetail["chart"]["panels"] = [];
+  if (requested.has("H") || requested.has("H_F")) {
+    panels.push({
+      id: "water_level",
+      title: "Vodní stav",
+      yAxis: { label: "vodní stav [cm]", unit: "cm" },
+      seriesIds: ["H", "H_F"].filter((seriesId): seriesId is HydroSeriesId => requested.has(seriesId as HydroSeriesId)),
+      thresholdSet: "waterLevel",
+      forecastSeriesIds: requested.has("H_F") ? ["H_F"] : undefined
+    });
+  }
+  if (requested.has("Q") || requested.has("Q_F")) {
+    panels.push({
+      id: "discharge",
+      title: "Průtok",
+      yAxis: { label: "průtok [m3/s]", unit: "m3/s" },
+      seriesIds: ["Q", "Q_F"].filter((seriesId): seriesId is HydroSeriesId => requested.has(seriesId as HydroSeriesId)),
+      thresholdSet: "discharge",
+      forecastSeriesIds: requested.has("Q_F") ? ["Q_F"] : undefined
+    });
+  }
+  if (requested.has("TH")) {
+    panels.push({
+      id: "temperature",
+      title: "Teplota vody",
+      yAxis: { label: "teplota vody [°C]", unit: "°C" },
+      seriesIds: ["TH"]
+    });
+  }
+  return panels;
+}
+
+function hydroDetailUrl(stationId: string): string {
+  return `/safety-data/api/v1/hydro/stations/${encodeURIComponent(stationId)}/observations`;
+}
+
+function normalizeHydroUnit(unit: string | undefined, fallback: string): string {
+  switch (unit) {
+    case "CM":
+      return "cm";
+    case "M3_S":
+      return "m3/s";
+    case "DEG_C":
+      return "°C";
+    default:
+      return unit ?? fallback;
+  }
+}
+
+function utcDayStart(timestampMs: number): number {
+  const date = new Date(timestampMs);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function formatUtcDate(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 function hydroTrend(series: HydroSeries | undefined, seriesType: "H" | "Q"): HydroTrend | undefined {

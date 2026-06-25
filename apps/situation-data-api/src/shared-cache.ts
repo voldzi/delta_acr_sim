@@ -1,4 +1,4 @@
-import { createClient, type RedisClientType } from "redis";
+import type { RedisClientType } from "redis";
 import type { SituationDataConfig } from "./config.js";
 import type { SharedResponseCacheStore } from "./response-cache.js";
 
@@ -7,6 +7,7 @@ export async function createSharedResponseCacheStore(config: SituationDataConfig
     return undefined;
   }
 
+  const { createClient } = await import("redis");
   const client = createClient({
     url: config.sharedCacheRedisUrl,
     socket: {

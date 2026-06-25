@@ -66,6 +66,10 @@ export interface SituationDataConfig {
   chmiWeatherRadarFrameStoreEnabled: boolean;
   chmiWeatherRadarFrameStoreDir: string;
   chmiWeatherRadarCleanCropInsetPixels: number;
+  chmiWeatherWebcamsMapUrl: string;
+  chmiWeatherWebcamsDataBaseUrl: string;
+  chmiWeatherWebcamsPublicBaseUrl: string;
+  chmiWeatherWebcamsCacheTtlSeconds: number;
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
@@ -160,6 +164,11 @@ export async function loadConfig(): Promise<SituationDataConfig> {
       process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR ?? `${dataDir}/weather-radar-frames`
     ),
     chmiWeatherRadarCleanCropInsetPixels: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS, 2),
+    chmiWeatherWebcamsMapUrl:
+      process.env.CHMI_WEATHER_WEBCAMS_MAP_URL ?? "https://data-provider.chmi.cz/api/kamery/data/map",
+    chmiWeatherWebcamsDataBaseUrl: process.env.CHMI_WEATHER_WEBCAMS_DATA_BASE_URL ?? "https://data-provider.chmi.cz",
+    chmiWeatherWebcamsPublicBaseUrl: process.env.CHMI_WEATHER_WEBCAMS_PUBLIC_BASE_URL ?? "https://www.chmi.cz",
+    chmiWeatherWebcamsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS, 300),
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
@@ -192,6 +201,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "chmi_air_quality",
     "chmi_weather_stations",
     "chmi_weather_radar",
+    "chmi_weather_webcams",
     "ardos_partner"
   ]);
   const parsed = (value ?? "mock")

@@ -59,6 +59,9 @@ export interface SafetyDataPublicConfig {
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   hydroMaxStations: number;
+  hydroDetailDefaultPastHours: number;
+  hydroDetailForecastHours: number;
+  hydroDetailBackfillDays: number;
   providers: Array<{
     sourceId: SafetyDataSourceId;
     baseUrl?: string;
@@ -124,8 +127,13 @@ export interface SafetyFeatureProperties {
   stationId?: string;
   waterLevelCm?: number;
   discharge?: number;
+  waterTemperatureC?: number;
   floodStage?: number | string;
   trend?: string;
+  detailUrl?: string;
+  timelineUrl?: string;
+  forecastAvailable?: boolean;
+  forecastUntil?: string;
   basin?: string;
   affectedArea?: string;
   name?: string;
@@ -155,6 +163,87 @@ export interface SourceFetchResult {
   source: SourceDescriptor;
   fetchedAt: string;
   features: SafetyFeature[];
+  warnings: string[];
+}
+
+export type HydroSeriesId = "H" | "Q" | "TH" | "H_F" | "Q_F";
+export type HydroSeriesRole = "observation" | "forecast";
+
+export interface HydroStationDetailQuery {
+  from?: string;
+  to?: string;
+  seriesIds?: HydroSeriesId[];
+}
+
+export interface HydroStationTimelinePoint {
+  at: string;
+  value: number;
+  source: "local_history" | "live_now" | "recent_backfill";
+  ingestedAt: string;
+}
+
+export interface HydroStationDetailSeries {
+  id: HydroSeriesId;
+  label: string;
+  unit: string;
+  role: HydroSeriesRole;
+  points: HydroStationTimelinePoint[];
+}
+
+export interface HydroStationDetail {
+  contractVersion: "chmi-hydro-station-detail-v1";
+  generatedAt: string;
+  providerId: "sim.safety-data";
+  sourceId: "chmi_hydro";
+  station: {
+    stationId: string;
+    stationCode?: string;
+    stationName: string;
+    streamName?: string;
+    lat: number;
+    lon: number;
+    spaType?: string;
+    catchmentAreaKm2?: number;
+    hydrologicalOrder?: string;
+  };
+  window: {
+    from: string;
+    to: string;
+  };
+  thresholds: {
+    waterLevel: {
+      unit: "cm";
+      dry?: number;
+      spa1?: number;
+      spa2?: number;
+      spa3?: number;
+      spa4?: number;
+    };
+    discharge: {
+      unit: "m3/s";
+      dry?: number;
+      spa1?: number;
+      spa2?: number;
+      spa3?: number;
+      spa4?: number;
+    };
+  };
+  series: HydroStationDetailSeries[];
+  chart: {
+    title: string;
+    currentTime: string;
+    panels: Array<{
+      id: "water_level" | "discharge" | "temperature";
+      title: string;
+      yAxis: {
+        label: string;
+        unit: string;
+      };
+      seriesIds: HydroSeriesId[];
+      thresholdSet?: "waterLevel" | "discharge";
+      forecastSeriesIds?: HydroSeriesId[];
+    }>;
+  };
   warnings: string[];
 }
 

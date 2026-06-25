@@ -2,6 +2,7 @@ import { unzipSync } from "fflate";
 import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
 import { canonicalizeBboxForCache, formatBboxKey, roundPointToGrid } from "./bbox-cache.js";
+import { CHMI_WEBCAMS_LICENSE, CHMI_WEATHER_WEBCAMS_SOURCE_ID, ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import {
   CHMI_RADAR_DATA_BBOX,
   CHMI_RADAR_IMAGE_BBOX,
@@ -47,6 +48,12 @@ export interface SourceCacheStats extends ManagedResponseCacheStats {
 }
 
 const DEFAULT_MOBILE_NETWORK_TECHNOLOGIES: MobileCoverageTechnology[] = ["4G"];
+const CZECHIA_DATA_ENVELOPE: BoundingBox = {
+  west: 11.8,
+  south: 48.5,
+  east: 19.2,
+  north: 51.2
+};
 const CHMI_WEATHER_GRID_LAYERS = [
   "weather_temperature_grid",
   "weather_wind_field",
@@ -239,6 +246,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     chmi_air_quality: new ChmiAirQualitySource(config),
     chmi_weather_stations: new ChmiWeatherStationsSource(config),
     chmi_weather_radar: new ChmiWeatherRadarSource(config),
+    chmi_weather_webcams: new ChmiWeatherWebcamsSource(config),
     ardos_partner: new ArdosPartnerSource(config)
   };
 
@@ -264,6 +272,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new ChmiAirQualitySource(config).descriptor,
     new ChmiWeatherStationsSource(config).descriptor,
     new ChmiWeatherRadarSource(config).descriptor,
+    new ChmiWeatherWebcamsSource(config).descriptor,
     new ArdosPartnerSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
@@ -949,6 +958,74 @@ class ChmiWeatherRadarSource implements SituationDataSource {
   }
 }
 
+class ChmiWeatherWebcamsSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly catalog: ChmiWeatherWebcamCatalog;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.catalog = new ChmiWeatherWebcamCatalog(config);
+    this.descriptor = {
+      sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
+      label: "CHMI weather webcams",
+      enabled: config.enabledSources.includes(CHMI_WEATHER_WEBCAMS_SOURCE_ID),
+      mode: "live",
+      priority: 82,
+      layers: ["weather_webcams"],
+      license: CHMI_WEBCAMS_LICENSE,
+      baseUrl: config.chmiWeatherWebcamsMapUrl,
+      updateCadenceSeconds: config.chmiWeatherWebcamsCacheTtlSeconds
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [
+      aggregateCacheStatsFor(
+        CHMI_WEATHER_WEBCAMS_SOURCE_ID,
+        this.catalog.cacheStats().map((stats) => ({ stats: () => stats }))
+      )
+    ];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    try {
+      const locations = await this.catalog.listLocations();
+      const warnings = locations.length === 0 ? ["chmi_weather_webcams returned no camera locations."] : [];
+      return {
+        sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
+        status: warnings.length === 0 ? "ok" : "degraded",
+        backend: "chmi-data-provider",
+        objectCount: locations.length,
+        lastImportAt: new Date().toISOString(),
+        warnings
+      };
+    } catch (error) {
+      return {
+        sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
+        status: "degraded",
+        backend: "chmi-data-provider",
+        warnings: [error instanceof Error ? error.message : "Unknown chmi_weather_webcams health check failure."]
+      };
+    }
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    if (!query.layers.includes("weather_webcams")) {
+      return { source: this.descriptor, fetchedAt: new Date().toISOString(), features: [], warnings: [] };
+    }
+    const result = await this.catalog.listFeatures({
+      bbox: query.bbox,
+      limit: query.limit,
+      includeRaw: query.includeRaw
+    });
+    return {
+      source: this.descriptor,
+      fetchedAt: result.fetchedAt,
+      features: result.features,
+      warnings: result.warnings
+    };
+  }
+}
+
 class OsmOverpassSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<OverpassResponse>;
@@ -1371,17 +1448,26 @@ export class MobileNetworkSource implements SituationDataSource {
       );
     }
 
-    const selectedCoverage = selectCoverageFeatures(coverageFeatures, technologies);
+    const readModelCoverage = coverageFeatures.filter((feature) =>
+      feature.properties.readModel === true && featureIntersectsBboxByEnvelope(feature, CZECHIA_DATA_ENVELOPE)
+    );
+    const selectedCoverage = selectCoverageFeatures(readModelCoverage, technologies);
     const combinedMeasurements = [...measurements, ...stationaryMeasurements];
-    const features =
-      selectedCoverage.length > 0
-        ? selectedCoverage.map((coverage) =>
-            this.mobileNetworkFeatureFromCoverage(coverage, measurementsInPolygon(combinedMeasurements, coverage), generatedAt)
-          )
-        : [this.mobileNetworkFallbackFeature(bbox, combinedMeasurements, generatedAt)];
+    const features = selectedCoverage.map((coverage) =>
+      this.mobileNetworkFeatureFromCoverage(coverage, measurementsInPolygon(combinedMeasurements, coverage), generatedAt)
+    );
 
     if (combinedMeasurements.length === 0) {
       warnings.push("mobile_network_model has no CTU public measurements in the requested area; assessment is model-only.");
+    }
+    if (coverageFeatures.length > 0 && readModelCoverage.length === 0) {
+      warnings.push("mobile_network_model ignored coverage polygons that were not backed by a prepared read-model.");
+    }
+    if (selectedCoverage.length === 0) {
+      warnings.push("mobile_network_model has no prepared read-model coverage cells in the requested area; no synthetic bbox polygon was generated.");
+      if (combinedMeasurements.length > 0) {
+        warnings.push("CTU measurements are available only as point features in their own sources; mobile_network_model did not convert them to an area polygon.");
+      }
     }
     warnings.push("mobile_network_model does not contain authorized real-time BTS/NOC status; area status is inferred.");
 
@@ -1481,90 +1567,6 @@ export class MobileNetworkSource implements SituationDataSource {
     };
   }
 
-  private mobileNetworkFallbackFeature(bbox: BoundingBox, measurements: SituationFeature[], generatedAt: string): SituationFeature {
-    const stats = summarizeMeasurements(measurements);
-    const quality = stats.quality ?? "unknown";
-    const status = statusForMobileQuality(quality, stats);
-    const confidence = mobileNetworkConfidence(undefined, "unknown", stats, quality);
-    const featureId = `mobile_network:aggregate:mixed:${formatBboxKey(bbox)}`;
-    const dataQuality = mobileNetworkDataQuality(stats.count, "unknown");
-    return {
-      type: "Feature",
-      id: featureId,
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [round(bbox.west, 6), round(bbox.south, 6)],
-            [round(bbox.east, 6), round(bbox.south, 6)],
-            [round(bbox.east, 6), round(bbox.north, 6)],
-            [round(bbox.west, 6), round(bbox.north, 6)],
-            [round(bbox.west, 6), round(bbox.south, 6)]
-          ]
-        ]
-      },
-      properties: {
-        featureId,
-        layer: "mobile_network",
-        category: "mobile_network",
-        label: "Mobile network assessment",
-        sourceId: "mobile_network_model",
-        observedAt: generatedAt,
-        confidence,
-        stale: false,
-        severity: severityForMobileStatus(status, quality, stats),
-        license: {
-          name: MOBILE_NETWORK_LICENSE.name,
-          attribution: MOBILE_NETWORK_LICENSE.attribution
-        },
-        operator: "aggregate",
-        technology: "mixed",
-        quality,
-        status,
-        basis: mobileNetworkFallbackBasis(stats),
-        summary: mobileNetworkSummary(quality, status, stats),
-        dataQuality,
-        btsStatus: "operator_feed_unavailable",
-        btsStatusSource: "none",
-        operatorStatusAvailable: false,
-        notices: [
-          "Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora.",
-          "V oblasti nebyl dostupný model pokrytí, výsledek je založený jen na dostupných měřeních nebo je neznámý."
-        ],
-        modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
-        readModel: false,
-        generatedAt,
-        resolutionM: undefined,
-        demSource: this.config.mobileCoverageDemSource,
-        assumptions: {
-          aggregationModel: "ctu-nettest-fallback-v1",
-          btsRealtimeStatus: false,
-          operatorStatusAvailable: false
-        },
-        disclaimer: "Mobile network quality is an inferred area assessment, not a confirmed BTS or operator outage state.",
-        metrics: compactMixedMetrics({
-          measurementCount: stats.count,
-          ctuNettestMeasurementCount: stats.ctuNettestCount,
-          ctuStationaryMeasurementCount: stats.ctuStationaryCount,
-          medianDownloadMbps: stats.medianDownloadMbps,
-          medianUploadMbps: stats.medianUploadMbps,
-          medianLatencyMs: stats.medianLatencyMs,
-          medianSignalDbm: stats.medianSignalDbm,
-          measurementConfidence: stats.count > 0 ? stats.averageConfidence : undefined,
-          finalConfidence: confidence
-        }),
-        tags: compactTags({
-          status,
-          dataQuality,
-          btsStatus: "operator_feed_unavailable",
-          lastMeasuredAt: stats.lastMeasuredAt
-        }),
-        raw: {
-          measurementStats: stats
-        }
-      }
-    };
-  }
 }
 
 class PidGtfsRtSource implements SituationDataSource {
@@ -2339,17 +2341,6 @@ function mobileNetworkBasis(coverage: SituationFeature, stats: MeasurementStats)
     basis.splice(0, 0, "CTU_STATIONARY_SIGNAL_MEASUREMENT");
   }
   return basis;
-}
-
-function mobileNetworkFallbackBasis(stats: MeasurementStats): string[] {
-  const basis = ["NO_OPERATOR_BTS_STATUS"];
-  if (stats.ctuStationaryCount > 0) {
-    basis.unshift("CTU_STATIONARY_SIGNAL_MEASUREMENT");
-  }
-  if (stats.ctuNettestCount > 0) {
-    basis.unshift("CTU_NETTEST_MEASUREMENT");
-  }
-  return basis.length > 1 ? basis : ["UNKNOWN", "NO_OPERATOR_BTS_STATUS"];
 }
 
 function mobileNetworkDataQuality(measurementCount: number, coverageQuality: MobileCoverageQuality): "observed" | "modelled" | "mixed" | "unknown" {

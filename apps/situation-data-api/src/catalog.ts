@@ -117,6 +117,46 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       }
     },
     {
+      providerLayerId: "weather.chmi_webcams",
+      recommendedCatalogLayerId: "public.weather.webcams",
+      label: "Webkamery ČHMÚ",
+      labelLocalized: { cs: "Webkamery ČHMÚ", en: "CHMI webcams" },
+      description: "Bodová vrstva veřejných webkamer ČHMÚ s náhledem snímku načítaným přes SIM až po kliknutí v COP.",
+      descriptionLocalized: {
+        cs: "Bodová vrstva veřejných webkamer ČHMÚ s náhledem snímku načítaným přes SIM až po kliknutí v COP.",
+        en: "Point layer of CHMI public webcams with on-demand snapshot previews served by SIM."
+      },
+      categoryPath: ["weather", "webcams"],
+      categories: ["weather", "webcam"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: config.chmiWeatherWebcamsCacheTtlSeconds,
+      cacheTtlSeconds: config.chmiWeatherWebcamsCacheTtlSeconds,
+      styleProfile: "weather-webcam-point-v1",
+      sourceIds: ["chmi_weather_webcams"],
+      query: query(["weather_webcams"], ["chmi_weather_webcams"]),
+      legend: { profile: "weather-webcam-point-v1" },
+      delivery: { mode: "features", geometryRole: "feature_geometry" },
+      readModel: {
+        refreshedBy: "/api/v1/weather-cameras",
+        cacheTtlSeconds: config.chmiWeatherWebcamsCacheTtlSeconds
+      },
+      legal: {
+        attribution: "Český hydrometeorologický ústav",
+        notes: [
+          "COP must show ČHMÚ attribution in the camera preview window.",
+          "Feature payloads do not contain image data; COP opens /api/v1/weather-cameras/{locationId} or the supplied snapshot URL on click.",
+          "Webcam imagery is visual weather context only and must not be promoted as an automated warning source."
+        ]
+      }
+    },
+    {
       providerLayerId: "air_quality.chmi_station_observations",
       recommendedCatalogLayerId: "public.safety.air_quality",
       label: "Kvalita ovzduší",
@@ -1221,6 +1261,20 @@ function sourceClassification(sourceId: SituationDataSourceId): {
           "No raw lightning strike feed is published by this source; thunderstorm layer is radar/CAP warning context."
         ]
       };
+    case "chmi_weather_webcams":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["weather.chmi_webcams"],
+        feedsCatalogLayerIds: ["public.weather.webcams"],
+        notes: [
+          "ČHMÚ public webcam locations and on-demand snapshots are fetched server-side by SIM.",
+          "COP should open a custom camera preview window on feature click and must keep CHMI attribution visible.",
+          "Not a warning source; use only as visual weather context."
+        ]
+      };
     case "chmi_air_quality":
       return {
         sourceRole: "final",
@@ -1394,6 +1448,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.chmiWeatherCacheTtlSeconds;
     case "chmi_weather_radar":
       return config.chmiWeatherRadarCacheTtlSeconds;
+    case "chmi_weather_webcams":
+      return config.chmiWeatherWebcamsCacheTtlSeconds;
     case "mobile_network_model":
       return config.mobileNetworkCacheTtlSeconds;
     case "mobile_coverage_model":
@@ -1439,6 +1495,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "chmi_air_quality" || sourceId === "chmi_weather_stations" || sourceId === "chmi_weather_radar") {
     return "chmi-opendata";
+  }
+  if (sourceId === "chmi_weather_webcams") {
+    return "chmi-data-provider";
   }
   return undefined;
 }

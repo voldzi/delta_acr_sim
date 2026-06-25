@@ -9,6 +9,7 @@ Safety Data API je samostatný COM zdroj pro veřejná bezpečnostní data. Kont
 ```text
 GET /safety-data/api/v1/catalog
 GET /safety-data/api/v1/features
+GET /safety-data/api/v1/hydro/stations/{stationId}/observations
 ```
 
 Produkční URL za SIM gateway:
@@ -27,6 +28,11 @@ Podporované query parametry:
 - `source=chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries` nebo `source=mock`.
 - `limit=1..1000`.
 - `includeRaw=1` pouze pro diagnostiku.
+
+Detail hlásného profilu podporuje query parametry:
+
+- `from=ISO-8601` a `to=ISO-8601`; pokud chybí, SIM použije konfigurované okno historie a předpovědi.
+- `series=H,Q,TH,H_F,Q_F`, kde `H` je vodní stav, `Q` průtok, `TH` teplota vody a `_F` jsou předpovědní řady.
 
 ## Kontrakt
 
@@ -76,8 +82,56 @@ Specializovaná pole:
 - Povodně: `riverName`, `stationId`, `waterLevelCm`, `discharge`, `floodStage`, `trend`, `basin`, `affectedArea`.
   - `floodStage` je normalizovaný stupeň `0..4` podle dostupných hladinových nebo průtokových SPA prahů ČHMÚ.
   - `trend` je `rising`, `falling`, `stable` nebo `unknown`, počítaný z posledních dvou hodnot časové řady.
-  - `metrics` obsahují např. `waterLevelRateCmPerHour`, `flowRateM3sPerHour`, `trendWindowMinutes`, `catchmentAreaKm2` a prahy `spa1..spa4`.
+  - `waterTemperatureC` je poslední dostupná teplota vody, pokud ji profil poskytuje.
+  - `detailUrl`/`timelineUrl` ukazuje na detail hlásného profilu pro graf časové řady.
+  - `forecastAvailable=true` a `forecastUntil` znamenají, že ČHMÚ v aktuálním payloadu poskytl předpovědní řady `H_F` nebo `Q_F`.
+  - `metrics` obsahují např. `waterLevelRateCmPerHour`, `flowRateM3sPerHour`, `trendWindowMinutes`, `forecastHorizonHours`, `catchmentAreaKm2` a prahy `spa1..spa4`.
 - Hranice: `adminLevel`, `name`, `code`, `countryCode`, `validFrom`, `source`.
+
+## Detail hlásného profilu pro COP
+
+COP má pro `public.safety.flood` zařadit hlásné profily jako selectable body. Z mapové feature bere stav výstrahy a popisek, detailní graf se dotahuje až při otevření detailu přes `properties.detailUrl`.
+
+Detail endpoint vrací kontrakt:
+
+```json
+{
+  "contractVersion": "chmi-hydro-station-detail-v1",
+  "providerId": "sim.safety-data",
+  "sourceId": "chmi_hydro",
+  "station": {
+    "stationId": "0-203-1-239000",
+    "stationCode": "239000",
+    "stationName": "Benešov nad Ploučnicí",
+    "streamName": "Ploučnice"
+  },
+  "thresholds": {
+    "waterLevel": { "unit": "cm", "dry": 88, "spa1": 140, "spa2": 170, "spa3": 190 },
+    "discharge": { "unit": "m3/s", "dry": 3.21, "spa1": 50.3, "spa2": 87.7, "spa3": 113 }
+  },
+  "series": [],
+  "chart": {
+    "panels": []
+  }
+}
+```
+
+COP výstražně vyhodnocuje pouze mapovou feature:
+
+- `severity=info` pro `floodStage=0`, tedy monitorovací stav bez SPA.
+- `severity=advisory` pro `floodStage=1`, tedy 1. SPA.
+- `severity=warning` pro `floodStage=2`, tedy 2. SPA.
+- `severity=critical` pro `floodStage>=3`, tedy 3. SPA nebo extrémní stupeň.
+- `trend=rising` má v detailu zvýraznit rostoucí stav, ale samo o sobě nemá spouštět kritickou notifikaci bez vztahu k SPA nebo pravidlům COP.
+- Technické `warnings`, `stale=true` a chyby upstreamu patří do provozního dohledu, ne do civilních push notifikací.
+
+Detail grafu má kopírovat sémantiku ČHMÚ profilu:
+
+- horní panel `Vodní stav`: osa Y v centimetrech, měřená řada `H` jako plná modrá čára/plocha, předpověď `H_F` jako modrá přerušovaná čára, suchý stav a SPA prahy jako vodorovné referenční čáry, aktuální čas jako svislá červená tečkovaná čára;
+- dolní panel `Průtok`: osa Y v `m3/s`, měřená řada `Q` a předpověď `Q_F` stejným stylem, průtokové SPA prahy jako vodorovné referenční čáry;
+- volitelný třetí menší panel `Teplota vody` zobrazí `TH`, pokud je dostupná;
+- legenda má rozlišit měření, předpověď, sucho, SPA 1-4 a aktuální čas;
+- prázdná série se v grafu nevykresluje, ale panel může zůstat připravený, pokud jej vrací `chart.panels`.
 
 ## Vztah k uzivatelskym notifikacim
 
@@ -102,7 +156,7 @@ Detailni kontrakt je v
 ## Zdroje v pilotu
 
 - `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`; požární nebezpečí se kromě `public.safety.weather_alerts` projektuje také do `public.safety.fire` jako `fire_weather_risk`.
-- `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`; SIM používá aktuální časové řady i metadata stanic pro trend, SPA klasifikaci, průtokové prahy, plochu povodí a hydrologické pořadí.
+- `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`; SIM používá aktuální časové řady, omezený `recent` backfill a lokální JSONL historii pro trend, SPA klasifikaci, průtokové prahy, teplotu vody, plochu povodí a hydrologické pořadí.
 - `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
 - `admin_boundaries`: referenční administrativní hranice. Produkčně čte lokální/PostGIS read-model `public.osm_admin_boundary`; pokud není DB nebo view k dispozici, vrací jen hrubý seed ČR s warningem.
 - `mock`: syntetická fixture pro offline testy kontraktu.
@@ -130,6 +184,8 @@ API používá řízenou cache:
 - stale-if-error fallback,
 - dlouhá cache hydrologických metadat,
 - per-station cache aktuálních hydrologických dat,
+- lokální append-only historii ČHMÚ hlásných profilů v `${SAFETY_DATA_DIR}/chmi-hydro/history/*.jsonl`; data se deduplikují podle série a času a plní se při dotazech na mapovou feature i detail,
+- omezený `recent` backfill pro detail hlásného profilu podle `CHMI_HYDRO_DETAIL_BACKFILL_DAYS`,
 - negativní cache pro hydrologické stanice, u kterých ČHMÚ vrací `404` pro aktuální data; pokud alespoň část stanic v bbox vrací platná data, jednotlivé `404` se neposílají jako COM warning,
 - limit `CHMI_HYDRO_MAX_STATIONS`.
 - NASA FIRMS zdroj drží vlastní source-level cache alespoň 10 minut a bez `NASA_FIRMS_MAP_KEY` se nedotazuje externího API.

@@ -17,7 +17,11 @@ export interface SafetyDataConfig {
   chmiOrpCodelistUrl: string;
   chmiHydroMetadataUrl: string;
   chmiHydroNowBaseUrl: string;
+  chmiHydroRecentBaseUrl: string;
   chmiHydroMaxStations: number;
+  chmiHydroDetailDefaultPastHours: number;
+  chmiHydroDetailForecastHours: number;
+  chmiHydroDetailBackfillDays: number;
   nasaFirmsMapKey?: string;
   nasaFirmsAreaBaseUrl: string;
   nasaFirmsSource: string;
@@ -52,9 +56,13 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     chmiOrpCodelistUrl:
       process.env.CHMI_ORP_CODELIST_URL ??
       "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
-    chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/historical/metadata/meta1.json",
+    chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/now/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
+    chmiHydroRecentBaseUrl: process.env.CHMI_HYDRO_RECENT_BASE_URL ?? "https://opendata.chmi.cz/hydrology/recent/data",
     chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 80),
+    chmiHydroDetailDefaultPastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_DEFAULT_PAST_HOURS, 168),
+    chmiHydroDetailForecastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_FORECAST_HOURS, 72),
+    chmiHydroDetailBackfillDays: parseInteger(process.env.CHMI_HYDRO_DETAIL_BACKFILL_DAYS, 7),
     nasaFirmsMapKey: process.env.NASA_FIRMS_MAP_KEY,
     nasaFirmsAreaBaseUrl: process.env.NASA_FIRMS_AREA_BASE_URL ?? "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
     nasaFirmsSource: process.env.NASA_FIRMS_SOURCE ?? "VIIRS_SNPP_NRT",

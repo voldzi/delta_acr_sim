@@ -483,6 +483,8 @@ Health `/situation-data/health/ready` u `mobile_coverage_model` vrací `backend`
 
 `mobile_network_model` je preferovaný výstup pro COM. COM má primárně zobrazovat vrstvu `mobile_network`, ne skládat sám závěr z `mobile_coverage`, `ctu_nettest`, `ctu_stationary_mobile` a OSM bodů. `mobile_coverage` zůstává dostupné jako technická/modelová vrstva pro detail a ladění.
 
+`mobile_network_model` publikuje pouze geometrii připraveného coverage read-modelu (`readModel=true`). Pokud pro dotazovaný bbox nejsou dostupné coverage buňky read-modelu, endpoint vrací `0` features a warning. SIM v takové situaci nesmí syntetizovat polygon z dotazovaného bboxu ani vracet `mobile_network:aggregate:mixed:*`. Pokud jsou dostupná pouze měření ČTÚ, zůstávají jako bodové zdroje `ctu_nettest` nebo `ctu_stationary_mobile`; sjednocená veřejná plošná vrstva je z nich sama nevyrábí.
+
 Dotaz:
 
 ```http
@@ -504,6 +506,8 @@ Interpretace:
 - `dataQuality` rozlišuje `modelled`, `observed`, `mixed`, `unknown`,
 - `btsStatus=operator_feed_unavailable` a `operatorStatusAvailable=false` znamená, že nejde o potvrzený stav konkrétní BTS,
 - `summary` a `notices` jsou připravené pro detail objektu v COM.
+
+Konzistence technologie je závazná: dotaz filtrovaný na jednu technologii (`2G`, `4G`, `5G`) vrací jen read-model features této technologie. Hodnota `mixed` se nepoužívá jako skrytý fallback pro filtrovaný dotaz.
 
 Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení.
 

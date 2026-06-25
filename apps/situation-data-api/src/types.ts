@@ -24,6 +24,7 @@ export type SituationLayerId =
   | "weather_radar_precipitation"
   | "weather_radar_nowcast"
   | "weather_thunderstorm_risk"
+  | "weather_webcams"
   | "air_quality_grid";
 export type SituationDataSourceId =
   | "mock"
@@ -42,6 +43,7 @@ export type SituationDataSourceId =
   | "chmi_air_quality"
   | "chmi_weather_stations"
   | "chmi_weather_radar"
+  | "chmi_weather_webcams"
   | "ardos_partner";
 export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
@@ -267,6 +269,7 @@ export interface SituationDataPublicConfig {
     chmiAirQuality: number;
     chmiWeatherStations: number;
     chmiWeatherRadar: number;
+    chmiWeatherWebcams: number;
     ardosPartner: number;
   };
   weatherRadarFrames: {
