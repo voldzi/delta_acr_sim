@@ -304,6 +304,7 @@ docker compose ps
 wait_for_container_healthy csm-sim-web "sim-web container health"
 wait_for_http http://localhost:5020/health/live "sim-web gateway"
 curl -fsS http://localhost:5020/health/live
+curl -fsS http://localhost:5020/api/v1/operations/summary >/dev/null
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/scenarios >/dev/null
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
