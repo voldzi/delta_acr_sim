@@ -35,6 +35,7 @@ const API_TIMEOUT_MS = 5_000;
 const SIM_API_TOKEN_STORAGE_KEY = "csm-sim-api-token";
 const AUTH_CHANGE_EVENT = "csm-sim-auth-change";
 let authorizationTokenProvider: (() => string | undefined) | undefined;
+let manualTokenUsageEnabled = true;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
@@ -91,7 +92,7 @@ export function hasSimApiToken(): boolean {
 }
 
 export function getSimAuthorizationToken(): string {
-  return authorizationTokenProvider?.() ?? getSimApiToken();
+  return authorizationTokenProvider?.() ?? (manualTokenUsageEnabled ? getSimApiToken() : "");
 }
 
 export function hasSimAuthorizationToken(): boolean {
@@ -100,6 +101,14 @@ export function hasSimAuthorizationToken(): boolean {
 
 export function setSimAuthorizationTokenProvider(provider: (() => string | undefined) | undefined): void {
   authorizationTokenProvider = provider;
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
+
+export function setSimManualTokenUsageEnabled(enabled: boolean): void {
+  manualTokenUsageEnabled = enabled;
+  if (!enabled && hasSimApiToken()) {
+    window.sessionStorage.removeItem(SIM_API_TOKEN_STORAGE_KEY);
+  }
   window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
 }
 

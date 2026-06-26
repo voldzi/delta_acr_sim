@@ -4,22 +4,26 @@
 
 ## Goal
 
-SIM is a server-to-server provider for the COP backend. It is not a public browser API and it is not a second public frontend.
+SIM is a server-to-server provider for the COP backend and an optional public
+operator console. The public console is not a provider API: it is a Keycloak
+protected web UI that calls `/api/v1/*` with a browser bearer token and SIM
+roles.
 
 Public internet access to `sim.zeleznalady.cz` is intentionally limited to:
 
-- `GET /health/live`
-- `GET /docs/`
-- static manifest/icon files needed by the provider notice
+- static web UI assets and `/`,
+- `/api/v1/*` through SIM API authentication and RBAC,
+- `GET /health/live`,
+- static manifest/icon files.
 
-Everything else is private provider or operator surface and must be reachable only from trusted internal networks, VPN, or explicitly allowed COP backend hosts.
+Everything else is private provider or diagnostics surface and must be reachable
+only from trusted internal networks, VPN, or explicitly allowed COP backend
+hosts.
 
 ## Docker-side protection
 
 `sim-web` Nginx enforces internal-only access for:
 
-- `/`
-- `/api/*`
 - `/flight-data/api/*`
 - `/flight-data/health/*`
 - `/situation-data/api/*`
@@ -45,6 +49,9 @@ If COP backend is moved to a non-private network, add that exact source range to
 The same Nginx layer also protects the intentionally public paths:
 
 - `GET /health/live` is rate limited to `30r/m` per client IP with a short burst.
+- `/api/*` is rate limited at the gateway and then authorized by the SIM API.
+  Production internet profile must use `SIM_API_PUBLIC_READ=false`, so
+  unauthenticated requests get `401`.
 - Public static/provider-notice paths are rate limited to `240r/m` per client IP.
 - Static hashed frontend assets and icons are cacheable; `index.html` and internal UI/provider responses are `no-store`.
 - Responses include security headers from `apps/simulator-web/nginx/security-headers.conf`: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Cross-Origin-Resource-Policy`, `Permissions-Policy` and a restrictive `Content-Security-Policy`.
@@ -75,16 +82,17 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 
-    location = /docs {
-        return 301 /docs/;
+    location ~ ^/(flight-data|situation-data|safety-data|tak-gateway|health|metrics)(/|$) {
+        return 403;
     }
 
-    location /docs/ {
+    location /api/ {
         proxy_pass http://docker.home.cz:5020;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Authorization $http_authorization;
     }
 
     location = /site.webmanifest {
@@ -95,12 +103,12 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 
-    location ~ ^/(api|flight-data|situation-data|safety-data|tak-gateway|health|metrics)(/|$) {
-        return 403;
-    }
-
     location / {
-        return 403;
+        proxy_pass http://docker.home.cz:5020;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
     }
 }
 ```
@@ -139,17 +147,17 @@ From the public internet:
 
 ```bash
 curl -i https://sim.zeleznalady.cz/health/live
-curl -i https://sim.zeleznalady.cz/docs/
-curl -i https://sim.zeleznalady.cz/situation-data/api/v1/catalog
 curl -i https://sim.zeleznalady.cz/
-curl -I https://sim.zeleznalady.cz/docs/
+curl -i https://sim.zeleznalady.cz/api/v1/operations/summary
+curl -i https://sim.zeleznalady.cz/situation-data/api/v1/catalog
 ```
 
 Expected public result:
 
 - `/health/live`: `200`
-- `/docs/`: `200`
-- provider paths and `/`: `403`
+- `/`: `200` static UI, then Keycloak login gate in the browser
+- `/api/v1/operations/summary` without bearer token: `401`
+- provider paths: `403`
 - response headers include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY`
 
 Rate-limit smoke test from a non-critical host:

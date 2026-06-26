@@ -181,7 +181,8 @@ def check_public_access_control(client: Client, public_ip: str) -> dict[str, int
     headers = {"X-Forwarded-For": public_ip}
     checks = {
         "provider": ("/safety-data/api/v1/taxonomy", 403),
-        "root": ("/", 403),
+        "root": ("/", 200),
+        "api": ("/api/v1/operations/summary", 401),
         "health": ("/health/live", 200),
     }
     statuses: dict[str, int] = {}

@@ -166,7 +166,7 @@ MAIN_COP_BASE_URL=http://sim-api:4000/mock-cop
 MAIN_COP_BEARER_TOKEN=dev-lab-token
 EXTERNAL_AI_ALLOWED=false
 SIM_API_AUTH_REQUIRED=true
-SIM_API_PUBLIC_READ=true
+SIM_API_PUBLIC_READ=false
 SIM_API_AUTH_MODE=hybrid
 SIM_API_ADMIN_TOKEN=${SIM_API_ADMIN_TOKEN_VALUE}
 SIM_API_INTERNAL_TOKEN=
@@ -179,6 +179,8 @@ VITE_SIM_AUTH_MODE=hybrid
 VITE_SIM_OIDC_ISSUER=https://login.zeleznalady.cz/realms/cop
 VITE_SIM_OIDC_CLIENT_ID=csm-sim-web
 VITE_SIM_OIDC_SCOPE=openid profile email
+VITE_SIM_PUBLIC_READ_ENABLED=false
+VITE_SIM_ALLOW_TOKEN_LOGIN=false
 SIM_API_CORS_ORIGINS=
 SIM_API_RATE_LIMIT_WINDOW_MS=60000
 SIM_API_RATE_LIMIT_MAX_REQUESTS=300
@@ -304,7 +306,7 @@ docker compose ps
 wait_for_container_healthy csm-sim-web "sim-web container health"
 wait_for_http http://localhost:5020/health/live "sim-web gateway"
 curl -fsS http://localhost:5020/health/live
-curl -fsS http://localhost:5020/api/v1/operations/summary >/dev/null
+curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/operations/summary >/dev/null
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/scenarios >/dev/null
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready

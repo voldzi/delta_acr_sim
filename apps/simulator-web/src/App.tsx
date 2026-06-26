@@ -51,6 +51,7 @@ import {
   onSimApiAuthChange,
   runtimeAction,
   setSimAuthorizationTokenProvider,
+  setSimManualTokenUsageEnabled,
   setSimApiToken,
   testPublisher,
   ukraineAirDefenseDemoScenario
@@ -62,7 +63,8 @@ import {
   initializeAuth,
   isOidcEnabled,
   readAuthConfig,
-  type AuthSession
+  type AuthSession,
+  type SimRole
 } from "./auth";
 import type {
   AiDraft,
@@ -185,6 +187,13 @@ const ownAffiliations = new Set(["FRIEND", "ASSUMED_FRIEND"]);
 const foreignAffiliations = new Set(["HOSTILE", "SUSPECT"]);
 const operatorTokenRequiredNotice = "Operator token required. Enter the SIM API token in the top bar to start, stop or create scenarios.";
 const invalidOperatorTokenNotice = "Operator token is missing or invalid. Check Keycloak role or SIM fallback token.";
+const simRoleLabels: Record<SimRole, string> = {
+  SIM_ADMIN: "Admin",
+  SIM_OPERATOR: "Operator",
+  SIM_VIEWER: "Viewer",
+  SIM_AI_USER: "AI user",
+  SIM_AI_ADMIN: "AI admin"
+};
 
 const emptyRuntime: RuntimeStatus = {
   state: "STOPPED",
@@ -340,6 +349,7 @@ const emptyOperations: OperationsSummary = {
 export function App() {
   const authConfig = useMemo(() => readAuthConfig(), []);
   const oidcEnabled = isOidcEnabled(authConfig);
+  const manualTokenLoginAllowed = !oidcEnabled || authConfig.allowManualTokenLogin;
   const [authSession, setAuthSession] = useState<AuthSession>(() => createInitialAuthSession(authConfig));
   const [data, setData] = useState<DashboardData>({
     operations: emptyOperations,
@@ -450,8 +460,8 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [lastRefreshAt, setLastRefreshAt] = useState<string>();
-  const [apiTokenConfigured, setApiTokenConfigured] = useState(() => Boolean(authSession.accessToken) || hasSimAuthorizationToken());
-  const [manualTokenConfigured, setManualTokenConfigured] = useState(hasSimApiToken);
+  const [apiTokenConfigured, setApiTokenConfigured] = useState(() => Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
+  const [manualTokenConfigured, setManualTokenConfigured] = useState(() => manualTokenLoginAllowed && hasSimApiToken());
   const [apiTokenInput, setApiTokenInput] = useState("");
   const telemetrySampleRef = useRef<TelemetrySample | undefined>(undefined);
   const [liveTelemetry, setLiveTelemetry] = useState<LiveTelemetry>({
@@ -494,14 +504,25 @@ export function App() {
   const selectedScenarioState = scenarioDisplayState(selectedScenario, data.runtime);
   const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
-  const protectedSectionsUnlocked = oidcEnabled ? authSession.status === "authenticated" : apiTokenConfigured;
+  const tokenAccessReady = manualTokenLoginAllowed && apiTokenConfigured && (!oidcEnabled || authSession.status !== "authenticated");
+  const authenticatedRoles = authSession.status === "authenticated" ? authSession.roles ?? [] : [];
+  const hasViewerRole = roleAllows(authenticatedRoles, "SIM_VIEWER");
+  const hasOperatorRole = roleAllows(authenticatedRoles, "SIM_OPERATOR");
+  const hasAdminRole = roleAllows(authenticatedRoles, "SIM_ADMIN");
+  const hasAiRole = roleAllows(authenticatedRoles, "SIM_AI_USER");
+  const hasAiAdminRole = roleAllows(authenticatedRoles, "SIM_AI_ADMIN");
+  const protectedSectionsUnlocked = oidcEnabled ? hasViewerRole || tokenAccessReady : apiTokenConfigured;
+  const canReadDashboard = authConfig.publicReadEnabled || protectedSectionsUnlocked;
+  const canManageScenarios = tokenAccessReady || hasOperatorRole || hasAdminRole;
+  const canAdministerPublisher = tokenAccessReady || hasAdminRole;
+  const canUseAiAssistant = tokenAccessReady || hasAiRole || hasAiAdminRole || hasAdminRole;
   const visibleSection = protectedSectionsUnlocked ? activeSection : "overview";
   const protectedSectionNotice = oidcEnabled
-    ? "Sign in with Keycloak to access scenario control and source details."
+    ? "Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details."
     : "Enter a valid SIM API token to access scenario control and source details.";
-  const operatorActionDisabled = loading || !protectedSectionsUnlocked || !apiTokenConfigured;
+  const operatorActionDisabled = loading || !canManageScenarios || !apiTokenConfigured;
   const operatorAuthRequiredNotice = oidcEnabled
-    ? "Login with Keycloak using an account with csm-sim-operator or csm-sim-admin role."
+    ? "Login with Keycloak using csm-sim-operator or csm-sim-admin role."
     : operatorTokenRequiredNotice;
   const noticeIsWarning = /required|invalid|failed|degraded|missing|error/i.test(notice);
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
@@ -723,6 +744,14 @@ export function App() {
     }
   ] satisfies Array<{ label: string; value: string; detail: string; load: number; tone: Tone }>;
   const activeSectionMeta = sectionMeta(visibleSection);
+  const authRoleSummary =
+    authSession.status === "authenticated"
+      ? authenticatedRoles.length > 0
+        ? authenticatedRoles.map((role) => simRoleLabels[role]).join(" / ")
+        : "No SIM role"
+      : authConfig.publicReadEnabled
+        ? "Public read"
+        : "Login required";
 
   const readinessItems = [
     {
@@ -797,6 +826,9 @@ export function App() {
   const activeOperationAlert = data.operations.alerts[0];
 
   const refresh = useCallback(async (preferredScenarioId?: string) => {
+    if (!canReadDashboard) {
+      return;
+    }
     const includeDetails = protectedSectionsUnlocked && activeSection !== "overview";
     const next = await loadDashboard({ includeDetails });
     setData(next);
@@ -810,7 +842,7 @@ export function App() {
     } else if (next.scenarios[0]?.scenarioId) {
       setSelectedScenarioId(next.scenarios[0].scenarioId);
     }
-  }, [activeSection, protectedSectionsUnlocked, selectedScenarioId]);
+  }, [activeSection, canReadDashboard, protectedSectionsUnlocked, selectedScenarioId]);
 
   useEffect(() => {
     const now = Date.now();
@@ -893,14 +925,6 @@ export function App() {
   ]);
 
   useEffect(() => {
-    void refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
-    const interval = window.setInterval(() => {
-      void refresh().catch(() => undefined);
-    }, 5000);
-    return () => window.clearInterval(interval);
-  }, [refresh]);
-
-  useEffect(() => {
     let cancelled = false;
     void initializeAuth(authConfig)
       .then((session) => {
@@ -925,11 +949,23 @@ export function App() {
   }, [authConfig]);
 
   useEffect(() => {
+    setSimManualTokenUsageEnabled(manualTokenLoginAllowed);
     setSimAuthorizationTokenProvider(() => authSession.accessToken);
-    setApiTokenConfigured(hasSimAuthorizationToken());
-    setManualTokenConfigured(hasSimApiToken());
+    setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
+    setManualTokenConfigured(manualTokenLoginAllowed && hasSimApiToken());
     return () => setSimAuthorizationTokenProvider(undefined);
-  }, [authSession.accessToken]);
+  }, [authSession.accessToken, manualTokenLoginAllowed]);
+
+  useEffect(() => {
+    if (!canReadDashboard) {
+      return undefined;
+    }
+    void refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
+    const interval = window.setInterval(() => {
+      void refresh().catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [canReadDashboard, refresh]);
 
   useEffect(() => {
     if (authSession.status === "authenticated") {
@@ -940,38 +976,51 @@ export function App() {
   useEffect(() => {
     if (!protectedSectionsUnlocked && activeSection !== "overview") {
       setActiveSection("overview");
+      return;
     }
-  }, [activeSection, protectedSectionsUnlocked]);
+    if (activeSection === "ai" && protectedSectionsUnlocked && !canUseAiAssistant) {
+      setActiveSection("overview");
+      setNotice("AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role.");
+    }
+    if (activeSection === "publisher" && protectedSectionsUnlocked && !canAdministerPublisher) {
+      setActiveSection("overview");
+      setNotice("Publisher administration requires csm-sim-admin role.");
+    }
+  }, [activeSection, canAdministerPublisher, canUseAiAssistant, protectedSectionsUnlocked]);
 
   useEffect(
     () =>
       onSimApiAuthChange(() => {
-        setApiTokenConfigured(hasSimAuthorizationToken());
-        setManualTokenConfigured(hasSimApiToken());
+        setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
+        setManualTokenConfigured(manualTokenLoginAllowed && hasSimApiToken());
       }),
-    []
+    [authSession.accessToken, manualTokenLoginAllowed]
   );
 
   async function saveApiToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!manualTokenLoginAllowed) {
+      setNotice("Fallback SIM token login is disabled for this deployment.");
+      return;
+    }
     setSimApiToken(apiTokenInput);
     setApiTokenInput("");
     setApiTokenConfigured(hasSimAuthorizationToken());
-    setManualTokenConfigured(hasSimApiToken());
+    setManualTokenConfigured(manualTokenLoginAllowed && hasSimApiToken());
     setNotice("SIM fallback token saved.");
     await refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
   }
 
   async function forgetApiToken() {
     clearSimApiToken();
-    setApiTokenConfigured(hasSimAuthorizationToken());
+    setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
     setManualTokenConfigured(false);
-    setNotice("SIM fallback token cleared. Read-only monitoring remains available.");
+    setNotice(authConfig.publicReadEnabled ? "SIM fallback token cleared. Read-only monitoring remains available." : "SIM fallback token cleared.");
     await refresh().catch(() => undefined);
   }
 
   function requireOperatorToken(): boolean {
-    if (protectedSectionsUnlocked && apiTokenConfigured) {
+    if (canManageScenarios && apiTokenConfigured) {
       return true;
     }
     setNotice(protectedSectionsUnlocked ? operatorAuthRequiredNotice : protectedSectionNotice);
@@ -994,6 +1043,16 @@ export function App() {
     if (section !== "overview" && !protectedSectionsUnlocked) {
       setActiveSection("overview");
       setNotice(protectedSectionNotice);
+      return;
+    }
+    if (section === "publisher" && !canAdministerPublisher) {
+      setActiveSection("overview");
+      setNotice("Publisher administration requires csm-sim-admin role.");
+      return;
+    }
+    if (section === "ai" && !canUseAiAssistant) {
+      setActiveSection("overview");
+      setNotice("AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role.");
       return;
     }
     setActiveSection(section);
@@ -1030,16 +1089,16 @@ export function App() {
           <NavButton section="flight-data" activeSection={visibleSection} onSelect={selectSection} icon={<Plane size={17} />} label="Flight data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
           <NavButton section="situation-data" activeSection={visibleSection} onSelect={selectSection} icon={<Layers3 size={17} />} label="Situation data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
           <NavButton section="tak-gateway" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="TAK gateway" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-          <NavButton section="publisher" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="Publisher" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-          <NavButton section="ai" activeSection={visibleSection} onSelect={selectSection} icon={<Bot size={17} />} label="AI Assistant" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
+          <NavButton section="publisher" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="Publisher" locked={!canAdministerPublisher} lockReason="Publisher administration requires csm-sim-admin role." />
+          <NavButton section="ai" activeSection={visibleSection} onSelect={selectSection} icon={<Bot size={17} />} label="AI Assistant" locked={!canUseAiAssistant} lockReason="AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role." />
           <NavButton section="safety" activeSection={visibleSection} onSelect={selectSection} icon={<ShieldAlert size={17} />} label="Safety data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
         </nav>
 
-        <div className="safety-panel">
-          <ShieldCheck size={18} />
+        <div className={`safety-panel ${canReadDashboard ? "ready" : "locked"}`}>
+          {canReadDashboard ? <ShieldCheck size={18} /> : <LockKeyhole size={18} />}
           <div>
-            <strong>Safety gate active</strong>
-            <span>Only synthetic payloads are accepted by the CSM publisher.</span>
+            <strong>{canReadDashboard ? "Safety gate active" : "Keycloak gate"}</strong>
+            <span>{canReadDashboard ? "Only synthetic payloads are accepted by the CSM publisher." : "SIM requires assigned Keycloak roles for internet access."}</span>
           </div>
         </div>
       </aside>
@@ -1054,21 +1113,21 @@ export function App() {
           <div className="topbar-actions">
             {oidcEnabled ? (
               authSession.status === "authenticated" ? (
-                <button type="button" className="token-button" onClick={logoutFromKeycloak}>
+                <button type="button" className="token-button operator-button" onClick={logoutFromKeycloak}>
                   <LogOut size={15} /> {authSession.profile?.username ?? "Keycloak"}
                 </button>
               ) : (
-                <button type="button" className="token-button" disabled={authSession.status === "authenticating"} onClick={() => void loginWithKeycloak()}>
+                <button type="button" className="token-button operator-button primary-auth" disabled={authSession.status === "authenticating"} onClick={() => void loginWithKeycloak()}>
                   <KeyRound size={15} /> {authSession.status === "authenticating" ? "Signing in" : "Keycloak login"}
                 </button>
               )
             ) : null}
-            {(!oidcEnabled || (authConfig.mode === "hybrid" && authSession.status !== "authenticated")) && manualTokenConfigured ? (
+            {manualTokenLoginAllowed && manualTokenConfigured ? (
               <button type="button" className="token-button" onClick={() => void forgetApiToken()}>
                 <LogOut size={15} /> Fallback token
               </button>
             ) : null}
-            {(!oidcEnabled || authConfig.mode === "hybrid") && !manualTokenConfigured && authSession.status !== "authenticated" ? (
+            {manualTokenLoginAllowed && !manualTokenConfigured && authSession.status !== "authenticated" ? (
               <form className="api-auth-form" onSubmit={(event) => void saveApiToken(event)}>
                 <input
                   type="password"
@@ -1086,6 +1145,7 @@ export function App() {
             <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
               COM display <ExternalLink size={15} />
             </a>
+            <StatusPill label={authRoleSummary} tone={canReadDashboard ? "safe" : "warn"} />
             <StatusPill label={data.publisher.mode} tone={publisherTone} />
             <StatusPill label={data.runtime.state} tone={runtimeTone} />
           </div>
@@ -1096,7 +1156,16 @@ export function App() {
           <span>{notice}</span>
         </div>
 
-        {visibleSection === "overview" ? (
+        {!canReadDashboard ? (
+          <LoginGate
+            authSession={authSession}
+            oidcEnabled={oidcEnabled}
+            onLogin={() => void loginWithKeycloak()}
+            onLogout={logoutFromKeycloak}
+          />
+        ) : null}
+
+        {canReadDashboard && visibleSection === "overview" ? (
           <>
             <section id="dashboard" className={`operations-command ${operationsTone}`} aria-label="SIM operations command center">
               <div className="operations-command-main">
@@ -1686,10 +1755,10 @@ export function App() {
             </div>
 
             <div className="button-strip compact">
-              <button type="button" onClick={() => runAction("Publisher connection checked.", testPublisher)} disabled={loading}>
+              <button type="button" onClick={() => runAction("Publisher connection checked.", testPublisher)} disabled={loading || !canAdministerPublisher}>
                 <FlaskConical size={16} /> Test connection
               </button>
-              <button type="button" onClick={() => runAction("Queue cleared.", clearQueue)} disabled={loading || data.queueTotalCount === 0}>
+              <button type="button" onClick={() => runAction("Queue cleared.", clearQueue)} disabled={loading || !canAdministerPublisher || data.queueTotalCount === 0}>
                 <Trash2 size={16} /> Clear queue
               </button>
             </div>
@@ -1715,10 +1784,10 @@ export function App() {
             <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
             <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
             <div className="button-strip compact">
-              <button type="button" disabled={loading} onClick={() => runAction("AI draft generated.", async () => setDraft(await createAiDraft(aiPrompt)))}>
+              <button type="button" disabled={loading || !canUseAiAssistant} onClick={() => runAction("AI draft generated.", async () => setDraft(await createAiDraft(aiPrompt)))}>
                 <Bot size={16} /> Generate draft
               </button>
-              <button type="button" disabled={!draft || !draft.policyCheck.allowed || loading} onClick={() => draft && runAction("AI draft accepted as scenario.", () => acceptAiDraft(draft.draftId))}>
+              <button type="button" disabled={!draft || !draft.policyCheck.allowed || loading || !canUseAiAssistant} onClick={() => draft && runAction("AI draft accepted as scenario.", () => acceptAiDraft(draft.draftId))}>
                 <ShieldCheck size={16} /> Accept draft
               </button>
             </div>
@@ -1913,6 +1982,65 @@ function CacheChannel({ channel }: { channel: { label: string; value: string; de
       </div>
       <ProgressBar value={channel.load} tone={channel.tone} />
     </div>
+  );
+}
+
+function LoginGate({
+  authSession,
+  oidcEnabled,
+  onLogin,
+  onLogout
+}: {
+  authSession: AuthSession;
+  oidcEnabled: boolean;
+  onLogin: () => void;
+  onLogout: () => void;
+}) {
+  const authenticatedWithoutRole = authSession.status === "authenticated";
+  return (
+    <section className="login-gate" aria-label="SIM access gate">
+      <div className="login-gate-dialog">
+        <div className="login-gate-icon">
+          <LockKeyhole />
+        </div>
+        <div className="login-gate-copy">
+          <span>Internet access protected</span>
+          <h2>{authenticatedWithoutRole ? "Keycloak account does not grant SIM console access" : "Sign in to CSM SIM"}</h2>
+          <p>
+            SIM is an operational provider console. Internet access requires Keycloak authentication and an assigned SIM role.
+          </p>
+        </div>
+        <div className="login-benefit-list">
+          <span><ShieldCheck size={15} /> csm-sim-viewer opens operational overview and provider details.</span>
+          <span><Activity size={15} /> csm-sim-operator enables scenario runtime controls.</span>
+          <span><Settings2 size={15} /> csm-sim-admin enables publisher administration.</span>
+        </div>
+        {authenticatedWithoutRole ? (
+          <div className="login-required-note">
+            <AlertTriangle size={15} />
+            <span>Ask the Keycloak administrator to assign a SIM role, then sign in again.</span>
+          </div>
+        ) : null}
+        <div className="login-gate-actions">
+          {oidcEnabled ? (
+            authenticatedWithoutRole ? (
+              <button type="button" onClick={onLogout}>
+                <LogOut size={16} /> Sign out
+              </button>
+            ) : (
+              <button type="button" className="primary-auth" disabled={authSession.status === "authenticating"} onClick={onLogin}>
+                <KeyRound size={16} /> {authSession.status === "authenticating" ? "Signing in" : "Keycloak login"}
+              </button>
+            )
+          ) : (
+            <div className="login-required-note">
+              <AlertTriangle size={15} />
+              <span>OIDC is not configured. Use an internal deployment profile or enable VITE_SIM_AUTH_MODE=oidc.</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2654,6 +2782,18 @@ function sectionMeta(section: AppSection): { kicker: string; title: string; desc
         description: "Compact operational status across runtime, COM publishing and external data gateways."
       };
   }
+}
+
+function roleAllows(roles: SimRole[], required: SimRole): boolean {
+  return roles.some((role) => {
+    if (role === required || role === "SIM_ADMIN") {
+      return true;
+    }
+    if (role === "SIM_OPERATOR" && required === "SIM_VIEWER") {
+      return true;
+    }
+    return role === "SIM_AI_ADMIN" && required === "SIM_AI_USER";
+  });
 }
 
 function formatDuration(value: number): string {

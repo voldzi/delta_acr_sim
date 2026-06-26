@@ -2,9 +2,11 @@ export type AuthMode = "token" | "hybrid" | "oidc";
 export type AuthStatus = "anonymous" | "authenticating" | "authenticated" | "error";
 
 export interface AuthConfig {
+  allowManualTokenLogin: boolean;
   clientId: string;
   issuer: string;
   mode: AuthMode;
+  publicReadEnabled: boolean;
   scope: string;
 }
 
@@ -15,6 +17,8 @@ export interface AuthProfile {
   username: string;
 }
 
+export type SimRole = "SIM_ADMIN" | "SIM_OPERATOR" | "SIM_VIEWER" | "SIM_AI_USER" | "SIM_AI_ADMIN";
+
 export interface AuthSession {
   accessToken?: string;
   error?: string;
@@ -22,6 +26,7 @@ export interface AuthSession {
   idToken?: string;
   profile?: AuthProfile;
   refreshToken?: string;
+  roles?: SimRole[];
   status: AuthStatus;
 }
 
@@ -38,16 +43,20 @@ interface StoredAuthSession {
   idToken?: string;
   profile?: AuthProfile;
   refreshToken?: string;
+  roles?: SimRole[];
 }
 
 const callbackStateKey = "csm-sim.oidc.callback.v1";
 const sessionKey = "csm-sim.oidc.session.v1";
 
 export function readAuthConfig(): AuthConfig {
+  const mode = readAuthMode(import.meta.env.VITE_SIM_AUTH_MODE);
   return {
+    allowManualTokenLogin: readBoolean(import.meta.env.VITE_SIM_ALLOW_TOKEN_LOGIN, mode === "token"),
     clientId: import.meta.env.VITE_SIM_OIDC_CLIENT_ID ?? "csm-sim-web",
     issuer: normalizeIssuer(import.meta.env.VITE_SIM_OIDC_ISSUER ?? ""),
-    mode: readAuthMode(import.meta.env.VITE_SIM_AUTH_MODE),
+    mode,
+    publicReadEnabled: readBoolean(import.meta.env.VITE_SIM_PUBLIC_READ_ENABLED, false),
     scope: import.meta.env.VITE_SIM_OIDC_SCOPE ?? "openid profile email"
   };
 }
@@ -181,7 +190,7 @@ async function exchangeAuthorizationCode(config: AuthConfig, code: string, state
     return { status: "error", error: `OIDC token exchange failed: ${response.status}` };
   }
 
-  return persistTokenResponse((await response.json()) as TokenResponse);
+  return persistTokenResponse(config, (await response.json()) as TokenResponse);
 }
 
 async function refreshSession(config: AuthConfig, refreshToken: string): Promise<AuthSession | null> {
@@ -199,10 +208,10 @@ async function refreshSession(config: AuthConfig, refreshToken: string): Promise
   if (!response.ok) {
     return null;
   }
-  return persistTokenResponse((await response.json()) as TokenResponse);
+  return persistTokenResponse(config, (await response.json()) as TokenResponse);
 }
 
-function persistTokenResponse(tokenResponse: TokenResponse): AuthSession {
+function persistTokenResponse(config: AuthConfig, tokenResponse: TokenResponse): AuthSession {
   const payload = decodeJwtPayload(tokenResponse.access_token);
   const expiresAt = Date.now() + Math.max(30, tokenResponse.expires_in ?? 300) * 1000;
   const stored: StoredAuthSession = {
@@ -210,7 +219,8 @@ function persistTokenResponse(tokenResponse: TokenResponse): AuthSession {
     expiresAt,
     idToken: tokenResponse.id_token,
     profile: profileFromPayload(payload),
-    refreshToken: tokenResponse.refresh_token
+    refreshToken: tokenResponse.refresh_token,
+    roles: rolesFromPayload(payload, config.clientId)
   };
   window.sessionStorage.setItem(sessionKey, JSON.stringify(stored));
   return { ...stored, status: "authenticated" };
@@ -225,6 +235,45 @@ function profileFromPayload(payload: Record<string, unknown>): AuthProfile {
     subjectId: optionalString(payload.sub),
     username: preferredUsername ?? name
   };
+}
+
+function rolesFromPayload(payload: Record<string, unknown>, clientId: string): SimRole[] {
+  const realmRoles = rolesFromUnknown((payload.realm_access as { roles?: unknown } | undefined)?.roles);
+  const resourceAccess = payload.resource_access as Record<string, { roles?: unknown }> | undefined;
+  const clientRoles = rolesFromUnknown(resourceAccess?.[clientId]?.roles);
+  return mapOidcRoles([...realmRoles, ...clientRoles]);
+}
+
+function rolesFromUnknown(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((role): role is string => typeof role === "string") : [];
+}
+
+function mapOidcRoles(roles: string[]): SimRole[] {
+  const mapped = new Set<SimRole>();
+  const normalized = new Set(roles.map((role) => role.trim()).filter(Boolean));
+  if (hasAnyRole(normalized, ["SIM_ADMIN", "sim_admin", "csm-sim-admin", "cop_admin"])) {
+    mapped.add("SIM_ADMIN");
+    mapped.add("SIM_VIEWER");
+  }
+  if (hasAnyRole(normalized, ["SIM_OPERATOR", "sim_operator", "csm-sim-operator", "cop_operator"])) {
+    mapped.add("SIM_OPERATOR");
+    mapped.add("SIM_VIEWER");
+  }
+  if (hasAnyRole(normalized, ["SIM_VIEWER", "sim_viewer", "csm-sim-viewer", "cop_user"])) {
+    mapped.add("SIM_VIEWER");
+  }
+  if (hasAnyRole(normalized, ["SIM_AI_ADMIN", "sim_ai_admin", "csm-sim-ai-admin"])) {
+    mapped.add("SIM_AI_ADMIN");
+    mapped.add("SIM_AI_USER");
+  }
+  if (hasAnyRole(normalized, ["SIM_AI_USER", "sim_ai_user", "csm-sim-ai-user"])) {
+    mapped.add("SIM_AI_USER");
+  }
+  return Array.from(mapped);
+}
+
+function hasAnyRole(actualRoles: Set<string>, acceptedRoles: string[]): boolean {
+  return acceptedRoles.some((role) => actualRoles.has(role));
 }
 
 function readStoredSession(): StoredAuthSession | null {
@@ -414,4 +463,11 @@ function normalizeIssuer(value: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value !== "string" || value.length === 0) {
+    return fallback;
+  }
+  return value === "1" || value === "true" || value === "yes";
 }

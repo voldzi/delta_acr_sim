@@ -46,13 +46,18 @@ for role in csm-sim-viewer csm-sim-operator csm-sim-admin csm-sim-ai-user csm-si
 done
 ```
 
-## SIM env
+## SIM env pro internetový profil
 
-Pro pilot doporucujeme `hybrid`: Keycloak je primarni cesta a staticky `SIM_API_ADMIN_TOKEN` zustava jen jako nouzovy fallback.
+Pro vystavení `https://sim.zeleznalady.cz` musí být anonymní čtení vypnuté.
+V produkčním pilotu používáme `hybrid`: Keycloak je jediná uživatelská cesta ve
+webovém UI a statický `SIM_API_ADMIN_TOKEN` zůstává jen jako server-side
+break-glass token pro smoke testy a lokální správu. Pokud existuje spolehlivý
+způsob získání provozního Keycloak tokenu pro automatizované testy, lze přejít
+na striktní `SIM_API_AUTH_MODE=oidc`.
 
 ```bash
 SIM_API_AUTH_REQUIRED=true
-SIM_API_PUBLIC_READ=true
+SIM_API_PUBLIC_READ=false
 SIM_API_AUTH_MODE=hybrid
 SIM_API_ADMIN_TOKEN=<high-entropy-break-glass-token>
 
@@ -65,12 +70,28 @@ VITE_SIM_AUTH_MODE=hybrid
 VITE_SIM_OIDC_ISSUER=https://login.zeleznalady.cz/realms/cop
 VITE_SIM_OIDC_CLIENT_ID=csm-sim-web
 VITE_SIM_OIDC_SCOPE=openid profile email
+VITE_SIM_PUBLIC_READ_ENABLED=false
+VITE_SIM_ALLOW_TOKEN_LOGIN=false
 ```
 
 `SIM_API_AUTH_MODE=oidc` vypne staticke SIM tokeny a povoli pouze Keycloak JWT. Pouzij ho az po overeni, ze existuje alespon jeden spravce s roli `csm-sim-admin`.
 
 ## Chování v UI
 
-SIM web pouziva Authorization Code + PKCE. Po prihlaseni posila access token jako `Authorization: Bearer <token>` na SIM API. Token neni vkladany do HTML ani do JavaScript bundle jako secret.
+SIM web pouziva Authorization Code + PKCE. Po prihlaseni posila access token jako
+`Authorization: Bearer <token>` na SIM API. Token neni vkladany do HTML ani do
+JavaScript bundle jako secret.
 
-Read-only dashboard endpointy mohou zustat verejne pres `SIM_API_PUBLIC_READ=true`. Operacni akce jako start/stop scenare, fault injection, publisher queue a AI zmeny vyzaduji Keycloak roli nebo fallback token.
+Role v UI:
+
+- `csm-sim-viewer`: operační náhled a detail providerů,
+- `csm-sim-operator`: viewer + řízení scénářů a fault injection,
+- `csm-sim-admin`: viewer + publisher administrace,
+- `csm-sim-ai-user`: AI drafty; pro plný přístup do konzole ji přiděluj společně
+  s `csm-sim-viewer`,
+- `csm-sim-ai-admin`: AI konfigurace; pro plný přístup ji přiděluj společně s
+  `csm-sim-viewer`.
+
+Read-only dashboard endpointy nemají být na internetu anonymní. Pokud je
+`SIM_API_PUBLIC_READ=true` použito v interním/lab režimu, web musí mít
+`VITE_SIM_PUBLIC_READ_ENABLED=true`; pro internetový profil zůstává `false`.
