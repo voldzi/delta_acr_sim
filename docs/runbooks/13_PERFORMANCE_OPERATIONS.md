@@ -86,6 +86,20 @@ from the local frame cache.
 COP: gateway health, internal-only access-control, taxonomy dictionaries,
 lightweight feature summaries, detail links and separate geometry documents.
 
+## Gateway Stale Cache
+
+`sim-web` has a short nginx cache for internal GET provider API routes:
+`/flight-data/api/*`, `/situation-data/api/*` and `/safety-data/api/*`. It keeps
+successful `200` responses valid for 10 seconds and may serve them stale on
+backend errors during deploy. This is intended to protect COP polling loops from
+brief `502` windows while a single backend container is recreated.
+
+Use `?nocache=1` or an `Authorization` header when diagnosing an endpoint and
+the gateway cache must be bypassed. The response header `X-SIM-Gateway-Cache`
+shows nginx cache status such as `MISS`, `HIT`, `STALE` or `UPDATING`.
+Gateway responses on these routes use `Cache-Control: private, max-age=10`
+regardless of longer upstream provider cache headers.
+
 ## Remaining Optimizations
 
 - Add a dedicated background radar prewarmer if COP needs instant playback

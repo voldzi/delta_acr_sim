@@ -20,6 +20,7 @@ FROM nginx:1.29-alpine AS runtime
 RUN mkdir -p /etc/nginx/includes
 COPY apps/simulator-web/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY apps/simulator-web/nginx/internal-provider-access.conf /etc/nginx/includes/internal-provider-access.conf
+COPY apps/simulator-web/nginx/provider-cache.conf /etc/nginx/includes/provider-cache.conf
 COPY apps/simulator-web/nginx/security-headers.conf /etc/nginx/includes/security-headers.conf
 COPY --from=build /app/apps/simulator-web/dist /usr/share/nginx/html
 RUN chmod -R a+rX /usr/share/nginx/html

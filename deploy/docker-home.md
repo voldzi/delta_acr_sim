@@ -193,6 +193,15 @@ adresy. Nginx proto používá Docker DNS resolver `127.0.0.11` a proměnné v
 `situation-data-api` přeresolvoval za běhu. Deploy po recreate backendů nemá
 vyžadovat ruční restart `sim-web`.
 
+Provider GET endpointy pro `/flight-data/api/*`, `/situation-data/api/*` a
+`/safety-data/api/*` mají v gateway krátkou 10s cache. Pokud backend během
+deploye krátce odmítne spojení nebo vrátí `5xx`, nginx může vrátit poslední
+platnou odpověď se záhlavím `X-SIM-Gateway-Cache`, místo aby COP dostal
+transientní `502`. Cache se nepoužívá pro požadavky s `Authorization` hlavičkou
+nebo `?nocache=1`. Gateway pro tyto routy nastavuje
+`Cache-Control: private, max-age=10`, aby se do COP cesty nepřenesly delší
+cache intervaly z dílčích providerů.
+
 Pokud se po deployi objeví `502 Bad Gateway`, ověř nejdříve health backendů a
 gateway:
 

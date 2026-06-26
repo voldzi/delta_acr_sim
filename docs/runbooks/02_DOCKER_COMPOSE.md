@@ -29,6 +29,13 @@ Gateway používá Docker DNS resolver `127.0.0.11` a proměnné v `proxy_pass`,
 aby po recreate backend kontejnerů nepoužívala staré IP adresy. Po běžném
 `docker compose up -d --build` nemá být potřeba ruční restart `simulator-web`.
 
+Gateway zároveň drží krátkou stale cache pro GET provider API
+`/flight-data/api/*`, `/situation-data/api/*` a `/safety-data/api/*`. Během
+krátkého backend recreatu tak může vrátit poslední platnou odpověď místo
+transientního `502`. Cache se obchází hlavičkou `Authorization` nebo query
+parametrem `nocache`. Odpovědi z těchto gateway rout mají normalizované
+`Cache-Control: private, max-age=10`.
+
 ## Flight Data API routing
 
 `simulator-web` proxy předává:
