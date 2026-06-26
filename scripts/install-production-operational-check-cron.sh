@@ -11,7 +11,7 @@ MARKER_END="# CSM SIM operational checks END"
 if [ "${1:-}" = "--uninstall" ]; then
   tmp="$(mktemp)"
   trap 'rm -f "$tmp"' EXIT
-  crontab -l 2>/dev/null | awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
+  (crontab -l 2>/dev/null || true) | awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
     $0 == begin {skip=1; next}
     $0 == end {skip=0; next}
     skip != 1 {print}
@@ -33,7 +33,7 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
 {
-  crontab -l 2>/dev/null | awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
+  (crontab -l 2>/dev/null || true) | awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
     $0 == begin {skip=1; next}
     $0 == end {skip=0; next}
     skip != 1 {print}
