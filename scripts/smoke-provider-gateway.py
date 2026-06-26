@@ -84,7 +84,7 @@ def query_path(path: str, params: dict[str, str | int]) -> str:
     return path + "?" + urlencode(params)
 
 
-def check_health(client: Client) -> dict[str, str]:
+def check_health(client: Client, allow_degraded: set[str]) -> dict[str, str]:
     endpoints = {
         "root": "/health/live",
         "flight": "/flight-data/health/ready",
@@ -96,7 +96,10 @@ def check_health(client: Client) -> dict[str, str]:
     for name, path in endpoints.items():
         payload, _response = client.json(path)
         status = payload.get("status")
-        require(status == "ok", f"{path}: expected status=ok, got {status!r}")
+        allowed_statuses = {"ok"}
+        if name in allow_degraded:
+            allowed_statuses.add("degraded")
+        require(status in allowed_statuses, f"{path}: expected status in {sorted(allowed_statuses)}, got {status!r}")
         statuses[name] = status
     return statuses
 
@@ -193,7 +196,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     client = Client(args.base_url, args.timeout_seconds)
     result: dict[str, Any] = {
         "baseUrl": args.base_url.rstrip("/"),
-        "health": check_health(client),
+        "health": check_health(client, set(args.allow_degraded_health)),
         "safetyTaxonomy": check_taxonomy(
             client,
             "/safety-data/api/v1/taxonomy",
@@ -243,6 +246,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--base-url", default="http://127.0.0.1:5020", help="Gateway base URL. Default: %(default)s")
     parser.add_argument("--timeout-seconds", type=float, default=30.0, help="Per-request timeout. Default: %(default)s")
     parser.add_argument("--public-ip", default="203.0.113.10", help="Synthetic public client IP for access-control checks.")
+    parser.add_argument(
+        "--allow-degraded-health",
+        action="append",
+        choices=["flight", "situation", "safety", "tak"],
+        default=[],
+        help="Allow a selected provider readiness endpoint to report status=degraded while contract checks still run.",
+    )
     parser.add_argument("--skip-public-access-control", action="store_true", help="Skip X-Forwarded-For access-control checks.")
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     parser.add_argument("--quiet", action="store_true", help="Print nothing on success.")

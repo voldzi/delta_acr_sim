@@ -177,12 +177,15 @@ curl -fsS http://localhost:5020/docs/ >/dev/null
 Pro opakovatelný smoke test provider kontraktů používej:
 
 ```bash
-python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020
+python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020 --allow-degraded-health situation --allow-degraded-health tak
 ```
 
 Skript ověřuje health, access-control, ČHMÚ taxonomie, summary bez plné
 geometrie, detail a samostatné geometry dokumenty pro `safety-data` i
-`situation-data`.
+`situation-data`. Pilotní deploy povoluje `situation` readiness `degraded`,
+protože na `docker.home.cz` zatím nejsou zapojené OSM/PostGIS zdroje. Povoluje
+také `tak` readiness `degraded`, protože pilot nemá zapnutý TAK read token ani
+public read. Samotný provider kontrakt se přesto ověřuje.
 
 ## Gateway a Docker DNS
 
