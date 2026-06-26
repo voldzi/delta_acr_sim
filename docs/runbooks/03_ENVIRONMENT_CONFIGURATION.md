@@ -20,6 +20,12 @@
 - `SIM_API_CORS_ORIGINS`
 - `SIM_API_RATE_LIMIT_WINDOW_MS`
 - `SIM_API_RATE_LIMIT_MAX_REQUESTS`
+- `SIM_OPERATIONS_PROVIDER_TIMEOUT_MS`
+- `SIM_OPERATIONS_FLIGHT_DATA_BASE_URL`
+- `SIM_OPERATIONS_SITUATION_DATA_BASE_URL`
+- `SIM_OPERATIONS_SAFETY_DATA_BASE_URL`
+- `SIM_OPERATIONS_TAK_GATEWAY_BASE_URL`
+- `SIM_OPERATIONS_REPORT_FILE`
 - `SIM_SCENARIO_MAX_BLOCKS`
 - `SIM_SCENARIO_MAX_ACTIVE_OBJECTS`
 - `SIM_SCENARIO_MAX_EVENTS_PER_SECOND`
@@ -171,6 +177,28 @@ SITUATION_DATA_CORS_ORIGINS=
 SAFETY_DATA_CORS_ORIGINS=
 TAK_GATEWAY_CORS_ORIGINS=
 ```
+
+## SIM Operations Summary
+
+SIM web Overview používá `GET /api/v1/operations/summary` jako lehký
+server-side souhrn. Výchozí Docker Compose hodnoty míří na interní názvy
+provider kontejnerů:
+
+```bash
+SIM_OPERATIONS_PROVIDER_TIMEOUT_MS=1500
+SIM_OPERATIONS_FLIGHT_DATA_BASE_URL=http://flight-data-api:4010
+SIM_OPERATIONS_SITUATION_DATA_BASE_URL=http://situation-data-api:4020
+SIM_OPERATIONS_SAFETY_DATA_BASE_URL=http://safety-data-api:4030
+SIM_OPERATIONS_TAK_GATEWAY_BASE_URL=http://tak-gateway-api:4040
+SIM_OPERATIONS_REPORT_FILE=/data/operational-checks/latest.json
+```
+
+`SIM_OPERATIONS_REPORT_FILE` je volitelný. Když soubor existuje, Overview
+zobrazí poslední periodický operational check; když neexistuje, endpoint zůstává
+funkční a jen tento signál vynechá. Timeout drž krátký, protože Overview nesmí
+čekat na dlouhé externí upstreamy jednotlivých providerů.
+Lokální `pnpm dev` bez `.env` používá `127.0.0.1:4010-4040`; Docker Compose
+tyto hodnoty explicitně přepisuje na interní DNS názvy kontejnerů.
 
 ## Flight Data API
 

@@ -213,6 +213,8 @@ describe("SIM API contract baseline", () => {
 
   afterEach(async () => {
     context.runtimeRunner.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -513,6 +515,48 @@ describe("SIM API contract baseline", () => {
     const accepted = await request(app).post(`/api/v1/ai/scenario-drafts/${draft.body.draftId}/accept`).send({}).expect(200);
     expect(accepted.body.scenarioId).toBeTruthy();
   });
+
+  it("exposes a lightweight operations summary for the SIM operations center", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        const parsed = new URL(url);
+        if (url.includes("/health/ready")) {
+          return jsonResponse({ status: "ok", timestamp: new Date().toISOString(), enabledSources: ["mock"] });
+        }
+        if (parsed.port === "4020" && parsed.pathname === "/api/v1/observability") {
+          return jsonResponse({
+            serviceId: "situation-data-api",
+            generatedAt: new Date().toISOString(),
+            status: "ok",
+            cache: { entries: 2, errors: 0, hitRate: 0.82, misses: 4, pressure: 0.01, state: "warm", staleHits: 0 },
+            sharedCache: { enabled: true, available: true, errors: 0, hitRate: 0.5, state: "ok" },
+            dataFreshness: { sourceCount: 2, degradedSourceCount: 0, newestImportAgeSeconds: 12, oldestImportAgeSeconds: 60, warningCount: 0 },
+            sourceHealth: [
+              { sourceId: "osm_postgis", status: "ok", objectCount: 38325, warningCount: 0 },
+              { sourceId: "mobile_network_model", status: "ok", objectCount: 3604, warningCount: 0 }
+            ]
+          });
+        }
+        return jsonResponse({
+          serviceId: "provider",
+          generatedAt: new Date().toISOString(),
+          status: "ok",
+          cache: { entries: 1, errors: 0, hitRate: 1, misses: 0, pressure: 0, state: "warm", staleHits: 0 },
+          dataFreshness: { sourceCount: 1, degradedSourceCount: 0, newestImportAgeSeconds: 5, oldestImportAgeSeconds: 5, warningCount: 0 }
+        });
+      })
+    );
+
+    const response = await request(app).get("/api/v1/operations/summary").expect(200);
+
+    expect(response.body.contractVersion).toBe("sim-operations-summary-v1");
+    expect(response.body.status).toBe("ok");
+    expect(response.body.services).toHaveLength(4);
+    expect(response.body.services.find((service: { serviceId: string }) => service.serviceId === "situation-data-api").objectCount).toBe(41929);
+    expect(response.body.alerts).toEqual([]);
+  });
 });
 
 describe("SIM API security controls", () => {
@@ -570,6 +614,7 @@ describe("SIM API security controls", () => {
     await request(app).get("/api/v1/runtime/status").expect(200);
     await request(app).get("/api/v1/runtime/blocks").expect(200);
     await request(app).get("/api/v1/runtime/publisher").expect(200);
+    await request(app).get("/api/v1/operations/summary").expect(200);
     await request(app).get("/api/v1/publisher/queue").expect(401);
     await request(app).post("/api/v1/scenarios").send(scenarioPayload).expect(401);
     await request(app).post("/api/v1/scenarios").set("authorization", "Bearer operator-token").send(scenarioPayload).expect(201);

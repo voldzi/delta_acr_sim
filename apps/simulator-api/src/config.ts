@@ -38,6 +38,12 @@ export interface ApiConfig {
   scenarioMaxBlocks?: number;
   scenarioMaxActiveObjects?: number;
   scenarioMaxEventsPerSecond?: number;
+  operationsProviderTimeoutMs?: number;
+  operationsFlightDataBaseUrl?: string;
+  operationsSituationDataBaseUrl?: string;
+  operationsSafetyDataBaseUrl?: string;
+  operationsTakGatewayBaseUrl?: string;
+  operationsReportFile?: string;
 }
 
 export async function loadConfig(): Promise<ApiConfig> {
@@ -78,7 +84,13 @@ export async function loadConfig(): Promise<ApiConfig> {
     apiRateLimitMaxRequests: parseInteger(process.env.SIM_API_RATE_LIMIT_MAX_REQUESTS, 300),
     scenarioMaxBlocks: parseInteger(process.env.SIM_SCENARIO_MAX_BLOCKS, 24),
     scenarioMaxActiveObjects: parseInteger(process.env.SIM_SCENARIO_MAX_ACTIVE_OBJECTS, 1000),
-    scenarioMaxEventsPerSecond: parseInteger(process.env.SIM_SCENARIO_MAX_EVENTS_PER_SECOND, 1000)
+    scenarioMaxEventsPerSecond: parseInteger(process.env.SIM_SCENARIO_MAX_EVENTS_PER_SECOND, 1000),
+    operationsProviderTimeoutMs: parseInteger(process.env.SIM_OPERATIONS_PROVIDER_TIMEOUT_MS, 1500),
+    operationsFlightDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_FLIGHT_DATA_BASE_URL ?? "http://127.0.0.1:4010"),
+    operationsSituationDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_SITUATION_DATA_BASE_URL ?? "http://127.0.0.1:4020"),
+    operationsSafetyDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030"),
+    operationsTakGatewayBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_TAK_GATEWAY_BASE_URL ?? "http://127.0.0.1:4040"),
+    operationsReportFile: process.env.SIM_OPERATIONS_REPORT_FILE
   };
 }
 
@@ -145,6 +157,10 @@ function parseBoolean(value: string | undefined, fallback = false): boolean {
 }
 
 function normalizeIssuer(value: string): string {
+  return value.replace(/\/+$/u, "");
+}
+
+function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/u, "");
 }
 

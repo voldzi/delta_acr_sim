@@ -35,7 +35,7 @@ import {
   TrendingUp,
   Zap
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   acceptAiDraft,
   addConnectivityFault,
@@ -67,6 +67,8 @@ import {
 import type {
   AiDraft,
   DashboardObservability,
+  OperationsSummary,
+  OperationsSummaryService,
   ServiceObservability,
   CacheObservability,
   FlightDataConfig,
@@ -107,6 +109,7 @@ type AffiliationCategory = "own" | "foreign" | "other";
 type AppSection = "overview" | "scenario" | "flight-data" | "situation-data" | "tak-gateway" | "publisher" | "ai" | "safety";
 
 interface DashboardData {
+  operations: OperationsSummary;
   scenarios: Scenario[];
   runtime: RuntimeStatus;
   publisher: PublisherStatus;
@@ -310,11 +313,36 @@ const emptyObservability: DashboardObservability = {
   takGateway: emptyTimedObservability("tak-gateway-api")
 };
 
+const emptyOperations: OperationsSummary = {
+  alerts: [],
+  contractVersion: "sim-operations-summary-v1",
+  deployment: {
+    adapterVersion: "-",
+    publisherMode: "DRY_RUN",
+    sourceSystemId: "-"
+  },
+  generatedAt: new Date(0).toISOString(),
+  publisher: emptyPublisher,
+  runtime: emptyRuntime,
+  scenarios: {
+    active: 0,
+    draft: 0,
+    paused: 0,
+    ready: 0,
+    running: 0,
+    stopped: 0,
+    total: 0
+  },
+  services: [],
+  status: "unknown"
+};
+
 export function App() {
   const authConfig = useMemo(() => readAuthConfig(), []);
   const oidcEnabled = isOidcEnabled(authConfig);
   const [authSession, setAuthSession] = useState<AuthSession>(() => createInitialAuthSession(authConfig));
   const [data, setData] = useState<DashboardData>({
+    operations: emptyOperations,
     scenarios: [],
     runtime: emptyRuntime,
     publisher: emptyPublisher,
@@ -758,9 +786,19 @@ export function App() {
       detail: `${data.takGateway.health.currentEvents} CoT events, ${data.takGateway.health.staleEvents} stale`
     }
   ];
+  const operationsTone = operationsStatusTone(data.operations.status);
+  const operationsCriticalCount = data.operations.alerts.filter((alert) => alert.severity === "critical").length;
+  const operationsWarningCount = data.operations.alerts.filter((alert) => alert.severity === "warning").length;
+  const operationsHealthyServices = data.operations.services.filter((service) => service.status === "ok").length;
+  const operationsDataObjects = data.operations.services.reduce((sum, service) => sum + (service.objectCount ?? 0), 0);
+  const operationsEnabledSources = data.operations.services.reduce((sum, service) => sum + service.enabledSources.length, 0);
+  const operationsCache = summarizeOperationsCache(data.operations.services);
+  const operationsFreshness = summarizeOperationsFreshness(data.operations.services);
+  const activeOperationAlert = data.operations.alerts[0];
 
   const refresh = useCallback(async (preferredScenarioId?: string) => {
-    const next = await loadDashboard();
+    const includeDetails = protectedSectionsUnlocked && activeSection !== "overview";
+    const next = await loadDashboard({ includeDetails });
     setData(next);
     setLastRefreshAt(new Date().toISOString());
     if (next.warnings.length > 0) {
@@ -772,7 +810,7 @@ export function App() {
     } else if (next.scenarios[0]?.scenarioId) {
       setSelectedScenarioId(next.scenarios[0].scenarioId);
     }
-  }, [selectedScenarioId]);
+  }, [activeSection, protectedSectionsUnlocked, selectedScenarioId]);
 
   useEffect(() => {
     const now = Date.now();
@@ -1060,122 +1098,85 @@ export function App() {
 
         {visibleSection === "overview" ? (
           <>
-            <section id="dashboard" className="overview-hero" aria-label="Live data provider overview">
-              <div className="overview-hero-main">
-                <div className="overview-signal">
-                  <div className={`load-ring ${liveTelemetry.trend}`} style={{ "--load": `${liveTelemetry.loadPercent}%` } as CSSProperties}>
-                    <div>
-                      <span>Live load</span>
-                      <strong>{liveTelemetry.loadPercent}%</strong>
-                    </div>
-                  </div>
-                  <div className="signal-copy">
-                    <span>CSM data fabric</span>
-                    <h2>Provider pulse</h2>
-                    <p>
-                      SIM is serving cached, normalized map data for COM while protecting external sources from repeat queries.
-                    </p>
-                  </div>
+            <section id="dashboard" className={`operations-command ${operationsTone}`} aria-label="SIM operations command center">
+              <div className="operations-command-main">
+                <div>
+                  <span className="ops-kicker">Operations center</span>
+                  <h2>{operationsStatusTitle(data.operations.status)}</h2>
+                  <p>
+                    Read-only management snapshot for COP-facing feeds, provider health, cache posture and scenario runtime.
+                  </p>
                 </div>
-
-                <div className="overview-flow" aria-label="Data flow to COM">
-                  <FlowNode icon={<Plane />} label="Flight" tone={flightDataTone} />
-                  <FlowArrow />
-                  <FlowNode icon={<Layers3 />} label="Situation" tone={situationDataTone} />
-                  <FlowArrow />
-                  <FlowNode icon={<ShieldAlert />} label="Safety" tone={safetyDataTone} />
-                  <FlowArrow />
-                  <FlowNode icon={<RadioTower />} label="COM" tone={publisherTone} />
+                <div className="operations-status-stack">
+                  <StatusPill label={data.operations.status} tone={operationsTone} />
+                  <StatusPill label={`summary ${formatTime(data.operations.generatedAt)}`} tone="neutral" />
+                  <StatusPill label={`refresh ${formatTime(lastRefreshAt)}`} tone="neutral" />
                 </div>
               </div>
 
-              <div className="overview-command-grid">
-                <CommandStat icon={<TrendingUp />} label="Events / min" value={formatRatePerMinute(liveTelemetry.generatedPerMinute)} detail={`${formatRatePerMinute(liveTelemetry.publishedPerMinute)} published`} />
-                <CommandStat icon={<Database />} label="Live data products" value={liveDataProducts.toLocaleString("cs-CZ")} detail={`${enabledSourceCount} enabled feeds`} />
-                <CommandStat icon={<Server />} label="Source health" value={`${healthyProviderCount}/${Math.max(healthyProviderCount, enabledSourceCount || 1)}`} detail={`${warningCount} quality signals`} />
-                <CommandStat icon={<TimerReset />} label="Cache hit-rate" value={formatPercentValue(effectiveCacheHitRate)} detail={`${formatLatencyMs(data.observability.loadDurationMs)} overview latency`} />
+              <div className="operations-metrics">
+                <OperationsMetricCard icon={<ShieldAlert />} label="Active alerts" value={`${operationsCriticalCount}/${operationsWarningCount}`} detail="critical / warning" tone={operationsCriticalCount > 0 ? "danger" : operationsWarningCount > 0 ? "warn" : "safe"} />
+                <OperationsMetricCard icon={<Server />} label="Services OK" value={`${operationsHealthyServices}/${data.operations.services.length || 4}`} detail={`${operationsEnabledSources} enabled feeds`} tone={operationsHealthyServices === data.operations.services.length ? "safe" : operationsHealthyServices > 0 ? "warn" : "danger"} />
+                <OperationsMetricCard icon={<Database />} label="Data objects" value={operationsDataObjects.toLocaleString("cs-CZ")} detail="latest provider inventory" tone="active" />
+                <OperationsMetricCard icon={<TimerReset />} label="Cache hit-rate" value={formatPercentValue(operationsCache.hitRate)} detail={`${operationsCache.errors} cache errors`} tone={operationsCache.errors > 0 ? "warn" : operationsCache.hitRate >= 0.75 ? "safe" : "neutral"} />
+                <OperationsMetricCard icon={<Cpu />} label="Slowest probe" value={formatLatencyMs(Math.max(...data.operations.services.map((service) => service.latencyMs), 0))} detail={`oldest import ${operationsFreshness.value}`} tone={operationsFreshness.tone} />
               </div>
             </section>
 
-            <section id="live-load" className="overview-grid" aria-label="Live source load and cache state">
-              <section className="ops-panel source-load-panel">
-                <PanelTitle icon={<Cpu />} title="Live source load" subtitle={`Polling refresh ${formatTime(lastRefreshAt)} · no additional upstream fan-out`} />
-                <div className="channel-list">
-                  {overviewChannels.map((channel) => (
-                    <LiveChannelRow key={channel.id} channel={channel} />
-                  ))}
-                </div>
+            <section className="operations-layout" aria-label="Operations workbench">
+              <section className="ops-panel alert-inbox">
+                <PanelTitle icon={<AlertTriangle />} title="Alert inbox" subtitle={`${operationsCriticalCount} critical · ${operationsWarningCount} warning`} />
+                {data.operations.alerts.length > 0 ? (
+                  <div className="alert-list">
+                    {data.operations.alerts.slice(0, 6).map((alert) => (
+                      <OperationsAlertRow key={`${alert.code}-${alert.serviceId ?? "sim"}`} alert={alert} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state calm">
+                    <CheckCircle2 size={18} />
+                    <span>No active operational alerts.</span>
+                  </div>
+                )}
               </section>
 
-              <section className="ops-panel cache-panel">
-                <PanelTitle icon={<Database />} title="Cache posture" subtitle="Designed to absorb repeated COM and client queries" />
-                <div className="cache-stack">
-                  {telemetryChannels.map((channel) => (
-                    <CacheChannel key={channel.label} channel={channel} />
+              <section className="ops-panel service-matrix">
+                <PanelTitle icon={<Network />} title="Provider services" subtitle="Health, freshness and cache posture without heavy feature preview payloads." />
+                <div className="service-table" role="table" aria-label="Provider services">
+                  <div className="service-row service-head" role="row">
+                    <span>Service</span>
+                    <span>Status</span>
+                    <span>Latency</span>
+                    <span>Objects</span>
+                    <span>Cache</span>
+                    <span>Freshness</span>
+                  </div>
+                  {data.operations.services.map((service) => (
+                    <OperationsServiceRow key={service.serviceId} service={service} />
                   ))}
-                  {cacheChannels.map((channel) => (
-                    <CacheChannel key={channel.label} channel={channel} />
-                  ))}
-                </div>
-              </section>
-            </section>
-
-            <section id="safety-operations" className="overview-grid safety-ops-grid" aria-label="Safety data cache and freshness">
-              <section className="ops-panel safety-ops-panel">
-                <PanelTitle
-                  icon={<ShieldAlert />}
-                  title="Safety data operations"
-                  subtitle={`Last safety result ${formatImportAge(safetyGeneratedAgeSeconds)} · ${safetyResponseWarningCount} quality signals`}
-                />
-                <div className="publisher-stats safety-ops-stats">
-                  <PublisherStat label="Weather alerts" value={safetyLayerCounts.weather_alerts.toLocaleString("cs-CZ")} tone={safetyLayerCounts.weather_alerts > 0 ? "warn" : "neutral"} />
-                  <PublisherStat label="Fire" value={safetyLayerCounts.fire.toLocaleString("cs-CZ")} tone={safetyLayerCounts.fire > 0 ? "warn" : "neutral"} />
-                  <PublisherStat label="Flood" value={safetyLayerCounts.flood.toLocaleString("cs-CZ")} tone={safetyLayerCounts.flood > 0 ? "warn" : "neutral"} />
-                  <PublisherStat label="Boundaries" value={safetyLayerCounts.boundary_admin.toLocaleString("cs-CZ")} tone={safetyLayerCounts.boundary_admin > 0 ? "safe" : "neutral"} />
-                </div>
-              </section>
-
-              <section className="ops-panel cache-panel">
-                <PanelTitle
-                  icon={<TimerReset />}
-                  title="Safety source cache"
-                  subtitle={`${formatPercentValue(safetySourceCacheSummary.hitRate)} hit-rate · ${safetySourceCacheSummary.requests.toLocaleString("cs-CZ")} source requests`}
-                />
-                <div className="cache-stack">
-                  {safetyCacheChannels.map((channel) => (
-                    <CacheChannel key={channel.label} channel={channel} />
-                  ))}
+                  {data.operations.services.length === 0 ? <div className="empty-state">Operations summary is not available.</div> : null}
                 </div>
               </section>
             </section>
 
-            <section id="readiness" className="overview-grid secondary" aria-label="Operational readiness">
+            <section className="operations-layout secondary" aria-label="Runtime and feed readiness">
               <section className="ops-panel readiness-panel">
-                <PanelTitle icon={<ShieldCheck />} title="Operational readiness" subtitle={`Runtime ${data.runtime.state} · publisher ${data.publisher.mode}`} />
+                <PanelTitle icon={<ShieldCheck />} title="Runtime and publisher" subtitle={`Runtime ${data.operations.runtime.state} · publisher ${data.operations.publisher.mode}`} />
                 <div className="readiness-list compact">
-                  {readinessItems.map((item) => (
-                    <div key={item.label} className={`readiness-item ${item.tone}`}>
-                      <div className="readiness-icon">{item.icon}</div>
-                      <div>
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                        <small>{item.detail}</small>
-                      </div>
-                    </div>
-                  ))}
+                  <ReadinessItem icon={<CirclePlay />} label="Runtime" value={data.operations.runtime.state} detail={`${data.operations.runtime.tick ?? 0} ticks, ${formatDuration(data.operations.runtime.elapsedSeconds ?? 0)} elapsed`} tone={runtimeStateTone(data.operations.runtime.state)} />
+                  <ReadinessItem icon={<RadioTower />} label="Publisher" value={data.operations.publisher.mode} detail={data.operations.publisher.publishingEnabled ? "adapter enabled" : "adapter stopped"} tone={publisherTone} />
+                  <ReadinessItem icon={<Database />} label="Queue" value={`${data.operations.publisher.queueSize} active`} detail={`${data.operations.publisher.deadLetterSize} dead-letter`} tone={queueTone} />
+                  <ReadinessItem icon={<Layers3 />} label="Scenarios" value={`${data.operations.scenarios.total}`} detail={`${data.operations.scenarios.active} active, ${data.operations.scenarios.draft} draft`} tone={data.operations.scenarios.active > 0 ? "active" : "neutral"} />
                 </div>
               </section>
 
-              <section className="ops-panel affiliation-panel">
-                <PanelTitle icon={<Network />} title="Synthetic track mix" subtitle={`${data.runtime.activeObjects ?? totalObjects} active / ${totalObjects} configured`} />
-                <div className="affiliation-grid">
-                  {affiliationSummary.map((item) => (
-                    <div key={item.category} className={`affiliation-card ${item.category}`}>
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                      <small>{item.detail}</small>
-                    </div>
-                  ))}
+              <section className="ops-panel feed-readiness-panel">
+                <PanelTitle icon={<Signal />} title="COP data plane" subtitle={activeOperationAlert ? activeOperationAlert.title : "Provider output is ready for COP server-side consumption."} />
+                <div className="feed-signal-grid">
+                  <FeedSignal label="Flight" service={data.operations.services.find((service) => service.serviceId === "flight-data-api")} icon={<Plane />} />
+                  <FeedSignal label="Situation" service={data.operations.services.find((service) => service.serviceId === "situation-data-api")} icon={<Layers3 />} />
+                  <FeedSignal label="Safety" service={data.operations.services.find((service) => service.serviceId === "safety-data-api")} icon={<ShieldAlert />} />
+                  <FeedSignal label="TAK" service={data.operations.services.find((service) => service.serviceId === "tak-gateway-api")} icon={<RadioTower />} />
                 </div>
               </section>
             </section>
@@ -1915,6 +1916,73 @@ function CacheChannel({ channel }: { channel: { label: string; value: string; de
   );
 }
 
+function OperationsMetricCard({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: Tone }) {
+  return (
+    <div className={`operations-metric ${tone}`}>
+      <div className="operations-metric-icon">{icon}</div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function OperationsAlertRow({ alert }: { alert: OperationsSummary["alerts"][number] }) {
+  const tone: Tone = alert.severity === "critical" ? "danger" : "warn";
+  return (
+    <div className={`alert-row ${tone}`}>
+      <div className="alert-row-icon">{alert.severity === "critical" ? <AlertTriangle /> : <ShieldAlert />}</div>
+      <div>
+        <strong>{alert.title}</strong>
+        <span>{alert.detail}</span>
+      </div>
+      <StatusPill label={alert.serviceId ?? "sim"} tone={tone} />
+    </div>
+  );
+}
+
+function OperationsServiceRow({ service }: { service: OperationsSummaryService }) {
+  const tone = operationsStatusTone(service.status);
+  return (
+    <div className={`service-row ${tone}`} role="row">
+      <div>
+        <strong>{service.label}</strong>
+        <span>{service.serviceId}</span>
+      </div>
+      <StatusPill label={service.status} tone={tone} />
+      <span>{formatLatencyMs(service.latencyMs)}</span>
+      <span>{typeof service.objectCount === "number" ? service.objectCount.toLocaleString("cs-CZ") : "-"}</span>
+      <span>{service.cache ? `${formatPercentValue(service.cache.hitRate ?? 0)} · ${service.cache.state ?? "cache"}` : "-"}</span>
+      <span>{freshnessLabel(service)}</span>
+    </div>
+  );
+}
+
+function ReadinessItem({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: Tone }) {
+  return (
+    <div className={`readiness-item ${tone}`}>
+      <div className="readiness-icon">{icon}</div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{detail}</small>
+      </div>
+    </div>
+  );
+}
+
+function FeedSignal({ icon, label, service }: { icon: ReactNode; label: string; service?: OperationsSummaryService }) {
+  const tone = operationsStatusTone(service?.status ?? "unknown");
+  return (
+    <div className={`feed-signal ${tone}`}>
+      <div>{icon}</div>
+      <span>{label}</span>
+      <strong>{service?.status ?? "unknown"}</strong>
+      <small>{service ? `${service.enabledSources.length} feeds · ${formatLatencyMs(service.latencyMs)}` : "not reported"}</small>
+    </div>
+  );
+}
+
 function ProgressBar({ value, tone }: { value: number; tone: Tone }) {
   return (
     <div className={`progress-bar ${tone}`} aria-label={`${Math.round(value)} percent`}>
@@ -2474,6 +2542,64 @@ function licenseTone(value: string): Tone {
     return "danger";
   }
   return "neutral";
+}
+
+function operationsStatusTone(status: string): Tone {
+  if (status === "ok") {
+    return "safe";
+  }
+  if (status === "critical") {
+    return "danger";
+  }
+  if (status === "degraded") {
+    return "warn";
+  }
+  return "neutral";
+}
+
+function operationsStatusTitle(status: string): string {
+  if (status === "ok") {
+    return "SIM is operational";
+  }
+  if (status === "critical") {
+    return "Action required";
+  }
+  if (status === "degraded") {
+    return "Degraded but serving";
+  }
+  return "Operations summary unavailable";
+}
+
+function summarizeOperationsCache(services: OperationsSummaryService[]): { hitRate: number; errors: number } {
+  const caches = services.map((service) => service.cache).filter((cache): cache is NonNullable<OperationsSummaryService["cache"]> => Boolean(cache));
+  if (caches.length === 0) {
+    return { hitRate: 0, errors: 0 };
+  }
+  const hitRate = caches.reduce((sum, cache) => sum + (cache.hitRate ?? 0), 0) / caches.length;
+  const errors = caches.reduce((sum, cache) => sum + (cache.errors ?? 0), 0);
+  return { hitRate, errors };
+}
+
+function summarizeOperationsFreshness(services: OperationsSummaryService[]): { value: string; tone: Tone } {
+  const ages = services
+    .map((service) => service.dataFreshness?.oldestImportAgeSeconds)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0);
+  if (ages.length === 0) {
+    return { value: "n/a", tone: "neutral" };
+  }
+  const oldest = Math.max(...ages);
+  return {
+    value: formatImportAge(oldest),
+    tone: oldest > 7 * 86_400 ? "warn" : oldest > 24 * 3600 ? "neutral" : "safe"
+  };
+}
+
+function freshnessLabel(service: OperationsSummaryService): string {
+  const oldest = service.dataFreshness?.oldestImportAgeSeconds;
+  if (typeof oldest !== "number") {
+    return "-";
+  }
+  return formatImportAge(oldest);
 }
 
 function sectionMeta(section: AppSection): { kicker: string; title: string; description: string } {

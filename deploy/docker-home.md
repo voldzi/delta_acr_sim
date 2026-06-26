@@ -55,6 +55,12 @@ VITE_SIM_OIDC_SCOPE=openid profile email
 SIM_API_CORS_ORIGINS=
 SIM_API_RATE_LIMIT_WINDOW_MS=60000
 SIM_API_RATE_LIMIT_MAX_REQUESTS=300
+SIM_OPERATIONS_PROVIDER_TIMEOUT_MS=1500
+SIM_OPERATIONS_FLIGHT_DATA_BASE_URL=http://flight-data-api:4010
+SIM_OPERATIONS_SITUATION_DATA_BASE_URL=http://situation-data-api:4020
+SIM_OPERATIONS_SAFETY_DATA_BASE_URL=http://safety-data-api:4030
+SIM_OPERATIONS_TAK_GATEWAY_BASE_URL=http://tak-gateway-api:4040
+SIM_OPERATIONS_REPORT_FILE=/data/operational-checks/latest.json
 SIM_SCENARIO_MAX_BLOCKS=24
 SIM_SCENARIO_MAX_ACTIVE_OBJECTS=1000
 SIM_SCENARIO_MAX_EVENTS_PER_SECOND=1000
@@ -149,6 +155,7 @@ sed -i "s|^SIM_API_ADMIN_TOKEN=.*|SIM_API_ADMIN_TOKEN=${SIM_API_ADMIN_TOKEN}|" .
 docker compose up -d --build
 docker compose ps
 curl -fsS http://localhost:5020/health/live
+curl -fsS http://localhost:5020/api/v1/operations/summary
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN}" http://localhost:5020/api/v1/scenarios
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready

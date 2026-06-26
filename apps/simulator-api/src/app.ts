@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ApiConfig } from "./config.js";
 import { problem } from "./http.js";
+import { buildOperationsSummary } from "./operations-summary.js";
 import { RuntimeRunner } from "./runtime-runner.js";
 import { AuditLogger, createCorsOptions, createSecurityMiddleware } from "./security.js";
 import { JsonStore } from "./store.js";
@@ -58,6 +59,7 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
   registerFaultRoutes(app, context);
   registerPublisherRoutes(app, context);
   registerAiRoutes(app, context);
+  registerOperationsRoutes(app, context);
   registerHealthRoutes(app, context);
   registerMockCopRoutes(app, context);
 
@@ -370,6 +372,12 @@ function registerAiRoutes(app: Express, context: AppContext): void {
     };
     await context.store.save();
     res.json({ saved: true });
+  });
+}
+
+function registerOperationsRoutes(app: Express, context: AppContext): void {
+  app.get("/api/v1/operations/summary", async (_req, res) => {
+    res.json(await buildOperationsSummary(context));
   });
 }
 

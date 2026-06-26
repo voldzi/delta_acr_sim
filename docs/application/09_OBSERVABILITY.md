@@ -15,6 +15,25 @@ Syrové Prometheus endpointy `/metrics` jsou interní. Veřejný SIM web je pře
 
 ## Overview observability API
 
+SIM Overview načítá první obrazovku přes jeden lehký agregovaný endpoint:
+
+- `GET /api/v1/operations/summary`
+
+Endpoint běží v `simulator-api`, paralelně čte sanitizované health a
+observability signály provider služeb a vrací bounded souhrn pro řídicí UI:
+
+- celkový stav `ok` / `degraded` / `critical` / `unknown`,
+- stav runtime, scénářů a publisher queue bez raw eventů,
+- stav provider služeb, latence sondy, počet objektů, zapnuté zdroje,
+- cache hit-rate/errors, shared cache stav a freshness/import age,
+- provozní alerty odvozené z publisheru, providerů, stale importů a posledního
+  periodického operational checku.
+
+Endpoint nevrací raw mapové prvky, TAK XML, partner payloady, tokeny ani
+interní metriky. SIM web ho používá pro Overview, aby první načtení
+nevyvolávalo těžká `features` preview volání. Detailní sekce webu po odemčení
+operátorského přístupu dál používají provider endpointy níže.
+
 SIM Overview používá sanitizované endpointy v jednotlivých provider službách:
 
 - `GET /flight-data/api/v1/observability`

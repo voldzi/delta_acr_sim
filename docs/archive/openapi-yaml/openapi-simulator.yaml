@@ -12,6 +12,7 @@ tags:
   - name: Faults
   - name: Publisher
   - name: AI
+  - name: Operations
   - name: Health
 paths:
   /api/v1/scenarios:
@@ -873,6 +874,26 @@ paths:
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
+  /api/v1/operations/summary:
+    get:
+      tags: [Operations]
+      summary: Lehky sanitizovany provozni souhrn pro SIM Operations Center.
+      operationId: getOperationsSummary
+      responses:
+        '200':
+          description: Uspesna odpoved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsSummary'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
   /health/live:
     get:
       tags: [Health]
@@ -1215,6 +1236,187 @@ components:
       properties:
         saved:
           type: boolean
+    OperationsSummary:
+      type: object
+      required: [alerts, contractVersion, deployment, generatedAt, publisher, runtime, scenarios, services, status]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-operations-summary-v1
+        generatedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ok, degraded, critical, unknown]
+        deployment:
+          type: object
+          required: [adapterVersion, publisherMode, sourceSystemId]
+          properties:
+            adapterVersion:
+              type: string
+            publisherMode:
+              type: string
+              enum: [DRY_RUN, MOCK, LIVE]
+            sourceSystemId:
+              type: string
+        runtime:
+          $ref: '#/components/schemas/RuntimeStatus'
+        publisher:
+          $ref: '#/components/schemas/PublisherStatus'
+        scenarios:
+          type: object
+          required: [active, draft, paused, ready, running, stopped, total]
+          properties:
+            active:
+              type: integer
+              minimum: 0
+            draft:
+              type: integer
+              minimum: 0
+            paused:
+              type: integer
+              minimum: 0
+            ready:
+              type: integer
+              minimum: 0
+            running:
+              type: integer
+              minimum: 0
+            stopped:
+              type: integer
+              minimum: 0
+            total:
+              type: integer
+              minimum: 0
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsServiceSummary'
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsAlert'
+        operationalCheck:
+          type: object
+          properties:
+            finishedAt:
+              type: string
+              format: date-time
+            status:
+              type: string
+            summary:
+              type: string
+    OperationsServiceSummary:
+      type: object
+      required: [enabledSources, label, latencyMs, serviceId, status, warningCount, warnings]
+      properties:
+        serviceId:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+          enum: [ok, degraded, critical, unknown]
+        healthStatus:
+          type: string
+        latencyMs:
+          type: integer
+          minimum: 0
+        objectCount:
+          type: integer
+          minimum: 0
+        enabledSources:
+          type: array
+          items:
+            type: string
+        warningCount:
+          type: integer
+          minimum: 0
+        warnings:
+          type: array
+          items:
+            type: string
+        cache:
+          $ref: '#/components/schemas/OperationsCacheSummary'
+        sharedCache:
+          $ref: '#/components/schemas/OperationsSharedCacheSummary'
+        dataFreshness:
+          $ref: '#/components/schemas/OperationsDataFreshnessSummary'
+    OperationsCacheSummary:
+      type: object
+      properties:
+        entries:
+          type: integer
+          minimum: 0
+        errors:
+          type: integer
+          minimum: 0
+        hitRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        misses:
+          type: integer
+          minimum: 0
+        pressure:
+          type: number
+          minimum: 0
+          maximum: 1
+        state:
+          type: string
+        staleHits:
+          type: integer
+          minimum: 0
+    OperationsSharedCacheSummary:
+      type: object
+      properties:
+        available:
+          type: boolean
+        enabled:
+          type: boolean
+        errors:
+          type: integer
+          minimum: 0
+        hitRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        state:
+          type: string
+    OperationsDataFreshnessSummary:
+      type: object
+      properties:
+        degradedSourceCount:
+          type: integer
+          minimum: 0
+        newestImportAgeSeconds:
+          type: integer
+          minimum: 0
+        oldestImportAgeSeconds:
+          type: integer
+          minimum: 0
+        sourceCount:
+          type: integer
+          minimum: 0
+        warningCount:
+          type: integer
+          minimum: 0
+    OperationsAlert:
+      type: object
+      required: [code, detail, severity, title]
+      properties:
+        code:
+          type: string
+        detail:
+          type: string
+        serviceId:
+          type: string
+        severity:
+          type: string
+          enum: [warning, critical]
+        title:
+          type: string
     HealthResponse:
       type: object
       properties:

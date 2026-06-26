@@ -15,6 +15,9 @@ external storage, not in Git.
 
 ## Primary Hot Paths
 
+- SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
+  probes provider health/observability only and does not request full map
+  feature preview payloads.
 - Situation map queries: protected by canonical bbox cache and source-level
   caches.
 - CHMI weather radar frame lookup: protected by a small index cache.
@@ -73,6 +76,7 @@ After deploy:
 
 ```bash
 curl -fsS http://127.0.0.1:5020/health/live
+curl -fsS http://127.0.0.1:5020/api/v1/operations/summary
 curl -fsS http://127.0.0.1:5020/situation-data/health/ready
 python3 scripts/smoke-provider-gateway.py --base-url http://127.0.0.1:5020
 curl -fsS 'http://127.0.0.1:5020/situation-data/api/v1/weather-radar/frames?product=merge1h&hours=1&limit=1'

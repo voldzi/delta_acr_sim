@@ -759,6 +759,80 @@ export interface DashboardObservability {
   takGateway: TimedServiceObservability;
 }
 
+export type OperationsSummaryStatus = "ok" | "degraded" | "critical" | "unknown";
+
+export interface OperationsSummaryService {
+  cache?: {
+    entries?: number;
+    errors?: number;
+    hitRate?: number;
+    misses?: number;
+    pressure?: number;
+    state?: string;
+    staleHits?: number;
+  };
+  dataFreshness?: {
+    degradedSourceCount?: number;
+    newestImportAgeSeconds?: number;
+    oldestImportAgeSeconds?: number;
+    sourceCount?: number;
+    warningCount?: number;
+  };
+  enabledSources: string[];
+  healthStatus?: string;
+  label: string;
+  latencyMs: number;
+  objectCount?: number;
+  serviceId: string;
+  sharedCache?: {
+    available?: boolean;
+    enabled?: boolean;
+    errors?: number;
+    hitRate?: number;
+    state?: string;
+  };
+  status: OperationsSummaryStatus;
+  warningCount: number;
+  warnings: string[];
+}
+
+export interface OperationsSummaryAlert {
+  code: string;
+  detail: string;
+  serviceId?: string;
+  severity: "warning" | "critical";
+  title: string;
+}
+
+export interface OperationsSummary {
+  alerts: OperationsSummaryAlert[];
+  contractVersion: "sim-operations-summary-v1";
+  deployment: {
+    adapterVersion: string;
+    publisherMode: "DRY_RUN" | "MOCK" | "LIVE";
+    sourceSystemId: string;
+  };
+  generatedAt: string;
+  operationalCheck?: {
+    finishedAt?: string;
+    status?: string;
+    summary?: string;
+  };
+  publisher: PublisherStatus;
+  runtime: RuntimeStatus;
+  scenarios: {
+    active: number;
+    draft: number;
+    paused: number;
+    ready: number;
+    running: number;
+    stopped: number;
+    total: number;
+  };
+  services: OperationsSummaryService[];
+  status: OperationsSummaryStatus;
+}
+
 export interface TakGatewayFeature {
   type: "Feature";
   id: string;

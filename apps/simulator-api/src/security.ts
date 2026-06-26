@@ -152,6 +152,7 @@ const routePolicies: RoutePolicy[] = [
   },
   { methods: ["GET"], pattern: /^\/api\/v1\/runtime\/(?:status|blocks|publisher)$/, roles: ["SIM_VIEWER"], publicRead: true },
   { methods: ["GET"], pattern: /^\/api\/v1\/runtime\/metrics$/, roles: ["SIM_VIEWER"] },
+  { methods: ["GET"], pattern: /^\/api\/v1\/operations\/summary$/, roles: ["SIM_VIEWER"], publicRead: true },
   {
     methods: ["POST", "DELETE"],
     pattern: /^\/api\/v1\/scenarios\/[^/]+\/faults(?:\/[^/]+)?$/,
