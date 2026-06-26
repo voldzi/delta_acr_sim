@@ -350,6 +350,10 @@ SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
+OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
+SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -379,6 +383,11 @@ SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 ```
 
 Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COM provider features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
+
+Produkční deploy skript pro `docker.home.cz` zachovává existující hodnoty
+`OSM_POSTGIS_*` a `SAFETY_DATA_ADMIN_BOUNDARY_*` z `/srv/sim/.env`, pokud nejsou
+při deployi explicitně přepsané proměnnými prostředí. Běžný GitHub deploy tedy
+nesmí vynulovat napojení na produkční OSM/PostGIS.
 
 `mobile_network_model` je hlavní COM vrstva pro občanské zobrazení mobilní sítě. Kombinuje připravené read-model buňky `mobile_coverage_model`, aktuální ČTÚ NetTest měření, oficiální historická stacionární měření ČTÚ `ctu_stationary_mobile` a infrastrukturní indicie do jednoho závěru `mobile_network`. Pokud připravený coverage read-model pro oblast neexistuje, API vrací `0` features + warning; nesmí vytvářet plošný fallback z dotazovaného bboxu.
 

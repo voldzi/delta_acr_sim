@@ -23,7 +23,16 @@ MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
+OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
+SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 ```
+
+The `docker.home.cz` deployment script preserves existing `OSM_POSTGIS_*` and
+`SAFETY_DATA_ADMIN_BOUNDARY_*` values from `/srv/sim/.env` unless the deploy
+environment explicitly overrides them. This prevents a routine redeploy from
+disconnecting SIM from the production OSM/PostGIS database.
 
 Create a separate database and role. Do not store SIM OSM data in the COM/COP application database.
 
