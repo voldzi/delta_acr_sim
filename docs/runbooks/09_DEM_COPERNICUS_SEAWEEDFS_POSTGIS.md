@@ -133,6 +133,11 @@ curl -fsS http://localhost:5020/situation-data/api/v1/dem/metadata
 curl -fsS http://localhost:5020/situation-data/metrics | grep dem_
 ```
 
+`scripts/deploy-docker-home.sh` preserves the DEM and terrain-aware mobile coverage
+settings from an existing `/srv/sim/.env` or from explicit environment variables.
+This prevents a later GitHub-based deploy from accidentally disabling an imported
+DEM dataset or switching mobile coverage back to the non-terrain model.
+
 ## Notes
 
 - DEM files are large. Do not commit them.
