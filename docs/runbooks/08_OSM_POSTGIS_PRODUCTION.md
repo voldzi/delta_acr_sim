@@ -130,8 +130,17 @@ situation_data_source_cache_misses{source="mobile_coverage_model"} <count>
 Production readiness check:
 
 ```bash
+python3 scripts/smoke-production-data-plane.py --base-url http://localhost:5020 --cop-base-url http://localhost:4310
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|mobile_coverage|OSM'
 ```
+
+`scripts/smoke-production-data-plane.py` is the deploy-safe gate for the
+production OSM/PostGIS data plane. It checks SIM readiness, local OSM features,
+OSM administrative boundaries, Safety Data administrative boundaries, mobile
+coverage, and optionally the COP map catalog. Until the prepared mobile coverage
+read-model is populated, it reports `mobile_network_model` absence as a warning;
+use `--require-mobile-coverage-read-model` after the read-model rebuild is in
+regular operation.

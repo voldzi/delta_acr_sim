@@ -42,6 +42,11 @@ docker compose up -d situation-data-api
 
 The command creates or migrates the table, splits the bbox into smaller tiles and writes prepared polygons. For full production, schedule the rebuild after OSM/DEM/model changes and after ingestion of new authoritative BTS/operator status data.
 
+Prepared cells receive `expires_at` from `MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS`
+or the runtime coverage cache TTL, whichever is longer. This keeps the
+read-model stable across normal provider cache expiry while still allowing
+operators to enforce a maximum model age.
+
 ## Runtime Behavior
 
 1. API receives `layers=mobile_coverage` or `mobile_network`.
@@ -65,4 +70,5 @@ When a trusted BTS/NOC feed becomes available, do not expose raw BTS state direc
 psql "$OSM_POSTGIS_DATABASE_URL" -c "select model_version, technology, count(*) from public.mobile_coverage_cells group by 1,2 order by 1,2;"
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.95,50.55,14.08,50.65&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=3' | jq '.features[0].properties | {readModel, modelVersion, sourceRevision, quality, metrics}'
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.95,50.55,14.08,50.65&layers=mobile_network&source=mobile_network_model&technology=4G&limit=3' | jq '.features[0].properties | {quality,status,dataQuality,basis,metrics}'
+python3 scripts/smoke-production-data-plane.py --base-url http://localhost:5020 --require-mobile-coverage-read-model
 ```

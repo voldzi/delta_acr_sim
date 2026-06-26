@@ -238,5 +238,6 @@ curl -fsS 'http://localhost:5020/situation-data/api/v1/features/summary?limit=1'
 curl -fsS 'http://localhost:5020/safety-data/api/v1/features/summary?limit=1' >/dev/null
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20' >/dev/null
 python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020 --allow-degraded-health situation --allow-degraded-health tak --quiet
+python3 scripts/smoke-production-data-plane.py --base-url http://localhost:5020 --quiet
 test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:5020/metrics)" = "404"
 echo "SIM API admin token is stored in /srv/sim/.env as SIM_API_ADMIN_TOKEN."

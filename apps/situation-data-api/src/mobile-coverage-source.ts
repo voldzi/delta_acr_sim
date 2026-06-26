@@ -246,7 +246,10 @@ export class MobileCoverageSource implements SituationDataSource {
   async replaceReadModelFeatures(
     bbox: BoundingBox,
     technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES,
-    expiresAt = addSeconds(new Date().toISOString(), this.config.mobileCoverageCacheTtlSeconds)
+    expiresAt = addSeconds(
+      new Date().toISOString(),
+      Math.max(this.config.mobileCoverageReadModelMaxAgeSeconds, this.config.mobileCoverageCacheTtlSeconds)
+    )
   ): Promise<number> {
     await this.ensureReadModelSchema();
     const payload = await this.buildCoverage(bbox, technologies);
