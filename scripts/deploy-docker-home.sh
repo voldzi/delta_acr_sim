@@ -28,6 +28,24 @@ PY
   fi
 }
 
+wait_for_http() {
+  local url="$1"
+  local label="$2"
+  local attempts="${3:-30}"
+  local delay_seconds="${4:-1}"
+
+  for attempt in $(seq 1 "$attempts"); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "Waiting for ${label} (${attempt}/${attempts})..."
+    sleep "$delay_seconds"
+  done
+
+  echo "Timed out waiting for ${label}: ${url}" >&2
+  curl -fsS "$url" >/dev/null
+}
+
 SIM_API_ADMIN_TOKEN_VALUE="${SIM_API_ADMIN_TOKEN:-$(existing_value SIM_API_ADMIN_TOKEN)}"
 if [ -z "$SIM_API_ADMIN_TOKEN_VALUE" ]; then
   SIM_API_ADMIN_TOKEN_VALUE="$(generate_secret)"
@@ -162,6 +180,7 @@ ENV
 
 docker compose up -d --build
 docker compose ps
+wait_for_http http://localhost:5020/health/live "sim-web gateway"
 curl -fsS http://localhost:5020/health/live
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/scenarios >/dev/null
 curl -fsS http://localhost:5020/flight-data/health/ready
