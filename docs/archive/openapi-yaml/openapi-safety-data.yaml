@@ -299,6 +299,15 @@ components:
               type: string
             hazardType:
               type: string
+            typeCode:
+              type: string
+              description: Canonical SIM provider v2 type code, for example weather.temperature.high, weather.ice.slippery_roads, hydro.flood.warning or air_quality.pm10.smog.
+            sourceCode:
+              type: string
+              description: Authoritative upstream phenomenon code, for CHMI alerts typically the SIVS eventCode such as I.2, VII.1, XI.2 or SMOGSIT.PM10.
+            sourceSystem:
+              type: string
+              description: Upstream code system used for sourceCode, for example CHMI_SIVS.
             headline:
               type: string
             description:
@@ -425,9 +434,16 @@ components:
               type: object
               additionalProperties:
                 type: string
+            localized:
+              type: object
+              additionalProperties:
+                type: object
+                additionalProperties: true
+              description: Localized provider text blocks keyed by language, for example cs and en. SIM uses this to avoid duplicate map features per CAP language.
             providerProperties:
               type: object
               additionalProperties: true
+              description: Provider-native audit metadata. CHMI CAP alerts include schemaVersion=sim.provider.v2, taxonomy, localized, presentation, notification and cap blocks.
     HydroStationDetail:
       type: object
       required: [contractVersion, generatedAt, providerId, sourceId, station, window, thresholds, series, chart, warnings]

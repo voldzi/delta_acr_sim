@@ -74,6 +74,47 @@ Každá feature nese minimálně:
 - `properties.tags` pro strojově čitelné doplňky.
 - `properties.providerProperties` pro provider-native hodnoty a auditní detail.
 
+### ČHMÚ CAP kanonická taxonomie
+
+ČHMÚ CAP výstrahy se v SIM normalizují podle strojových kódů, ne podle textu
+události. SIM slučuje jazykové `info` bloky jedné CAP události do jedné mapové
+feature a texty předává v `properties.localized` a
+`properties.providerProperties.localized`.
+
+Pro ČHMÚ výstrahy jsou navíc vyplněna pole:
+
+- `properties.typeCode`: kanonický SIM typ, například
+  `weather.temperature.high`, `weather.ice.slippery_roads`,
+  `hydro.flood.warning`, `air_quality.pm10.smog`.
+- `properties.sourceCode`: zdrojový ČHMÚ kód, například `I.2`, `VII.1`,
+  `XI.2`, `SMOGSIT.PM10`.
+- `properties.sourceSystem`: typicky `CHMI_SIVS`.
+- `properties.providerProperties.schemaVersion=sim.provider.v2`.
+- `properties.providerProperties.taxonomy`: auditní blok s `sourceCode`,
+  `typeCode`, `domain`, `category`, `hazardType`, `classificationBasis`,
+  `awareness_type`, `awareness_level` a případným `criterion`.
+- `properties.providerProperties.presentation`: doporučený `iconKey`,
+  `styleKey`, `detailTemplate` a primární jazyk.
+- `properties.providerProperties.notification`: doporučení, zda je produkt
+  vhodný jako kandidát pro COP notifikaci. Rozhodnutí o adresátech a doručení
+  zůstává v COP.
+
+Podporované ČHMÚ kódy zahrnují nový SIVS číselník: vysoké/nízké teploty,
+zátěž teplem/chladem, vítr, sníh a sněhové jevy, náledí a kluzké povrchy,
+ledovku/námrazu, bouřky, déšť, povodňové jevy včetně dotoku, požární
+nebezpečí, nezařazené jevy, smogové a regulační situace pro `O3`, `PM10`,
+`SO2`, `NO2`, výhled a sucho.
+
+`classificationBasis=source_code` znamená, že SIM použil explicitní ČHMÚ
+`eventCode`. `classificationBasis=awareness_type` je strojový fallback z CAP
+parametru. `classificationBasis=text_fallback` je poslední fallback pro starší
+nebo neúplné payloady a má být provozně sledován.
+
+Produkty typu „žádná výstraha“, „žádný výhled nebezpečných jevů“ nebo jejich
+anglické varianty SIM nepublikuje jako mapové safety features. Výhled
+nebezpečných jevů s obsahem může být publikován jako `weather.outlook`, ale
+není notifikovatelný bez samostatného pravidla COP.
+
 Specializovaná pole:
 
 - Požáry: `fireStatus`, `detectedAt`, `sourceSatellite`, `sourceIncident`, `confidence`, `intensity`, `frp`.

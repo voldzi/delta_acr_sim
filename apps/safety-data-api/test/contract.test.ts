@@ -404,6 +404,79 @@ describe("Safety Data API contract", () => {
     );
   });
 
+  it("deduplicates localized CHMI CAP info blocks and exposes canonical taxonomy", async () => {
+    await withFixtureServer(
+      {
+        "/cap/": '<html><body><a href="alert.xml">alert.xml</a> 28-May-2026 12:00</body></html>',
+        "/cap/alert.xml": chmiBilingualHeatCapFixture()
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_alerts"],
+          chmiAlertsCapBaseUrl: `${baseUrl}/cap/`
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=weather_alerts&source=chmi_alerts&limit=10")
+          .expect(200);
+
+        expect(response.body.summary.featureCount).toBe(1);
+        expect(response.body.features[0].properties).toEqual(
+          expect.objectContaining({
+            hazardType: "temperature",
+            typeCode: "weather.temperature.high",
+            sourceCode: "I.2",
+            sourceSystem: "CHMI_SIVS",
+            severity: "warning",
+            localized: expect.objectContaining({
+              cs: expect.objectContaining({ headline: "Výstraha před velmi vysokými teplotami" }),
+              en: expect.objectContaining({ headline: "Very high temperature warning" })
+            }),
+            providerProperties: expect.objectContaining({
+              schemaVersion: "sim.provider.v2",
+              typeCode: "weather.temperature.high",
+              localized: expect.objectContaining({
+                cs: expect.objectContaining({ event: "Velmi vysoké teploty" }),
+                en: expect.objectContaining({ event: "Very High Temperatures" })
+              }),
+              taxonomy: expect.objectContaining({
+                sourceCode: "I.2",
+                typeCode: "weather.temperature.high",
+                classificationBasis: "source_code",
+                awarenessLevelCode: "3"
+              }),
+              notification: expect.objectContaining({ eligible: true })
+            })
+          })
+        );
+      }
+    );
+  });
+
+  it("classifies extended CHMI SIVS event codes for ice and air-quality alerts", async () => {
+    await withFixtureServer(
+      {
+        "/cap/": '<html><body><a href="alert.xml">alert.xml</a> 28-May-2026 12:00</body></html>',
+        "/cap/alert.xml": chmiExtendedCodesCapFixture()
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_alerts"],
+          chmiAlertsCapBaseUrl: `${baseUrl}/cap/`
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=weather_alerts&source=chmi_alerts&limit=10")
+          .expect(200);
+
+        const typeCodes = response.body.features.map((feature: { properties: { typeCode: string } }) => feature.properties.typeCode);
+        expect(typeCodes).toEqual(expect.arrayContaining(["weather.ice.slippery_roads", "air_quality.pm10.smog"]));
+      }
+    );
+  });
+
   it("resolves CHMI CAP CISORP geocodes to PostGIS administrative polygons", async () => {
     const querySpy = vi.spyOn(Pool.prototype, "query").mockResolvedValue({
       rows: [
@@ -895,6 +968,92 @@ function chmiActiveCapFixture(): string {
       <geocode><valueName>CISORP</valueName><value>2101</value></geocode>
       <geocode><valueName>EMMA_ID</valueName><value>CZ02101</value></geocode>
     </area>
+  </info>
+</alert>`;
+}
+
+function chmiBilingualHeatCapFixture(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>test-bilingual-heat-warning</identifier>
+  <sender>chmi@chmi.cz</sender>
+  <sent>2026-05-28T12:00:00+02:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>cs</language>
+    <event>Velmi vysoké teploty</event>
+    <eventCode><valueName>SIVS</valueName><value>I.2</value></eventCode>
+    <headline>Výstraha před velmi vysokými teplotami</headline>
+    <urgency>Expected</urgency>
+    <severity>Severe</severity>
+    <certainty>Likely</certainty>
+    <onset>2026-05-28T14:00:00+02:00</onset>
+    <expires>2026-05-28T20:00:00+02:00</expires>
+    <description>Očekávají se velmi vysoké teploty.</description>
+    <instruction>Omezte fyzickou zátěž a dbejte pitného režimu.</instruction>
+    <parameter><valueName>awareness_type</valueName><value>5; high-temperature</value></parameter>
+    <parameter><valueName>awareness_level</valueName><value>3; orange; Severe</value></parameter>
+    <parameter><valueName>criterion</valueName><value>TMAX.GT.31</value></parameter>
+    <area><areaDesc>Hlavní město Praha</areaDesc></area>
+  </info>
+  <info>
+    <language>en-GB</language>
+    <event>Very High Temperatures</event>
+    <eventCode><valueName>SIVS</valueName><value>I.2</value></eventCode>
+    <headline>Very high temperature warning</headline>
+    <urgency>Expected</urgency>
+    <severity>Severe</severity>
+    <certainty>Likely</certainty>
+    <onset>2026-05-28T14:00:00+02:00</onset>
+    <expires>2026-05-28T20:00:00+02:00</expires>
+    <description>Very high temperatures are expected.</description>
+    <instruction>Limit physical activity and stay hydrated.</instruction>
+    <parameter><valueName>awareness_type</valueName><value>5; high-temperature</value></parameter>
+    <parameter><valueName>awareness_level</valueName><value>3; orange; Severe</value></parameter>
+    <parameter><valueName>criterion</valueName><value>TMAX.GT.31</value></parameter>
+    <area><areaDesc>Hlavní město Praha</areaDesc></area>
+  </info>
+</alert>`;
+}
+
+function chmiExtendedCodesCapFixture(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>test-extended-sivs-codes</identifier>
+  <sender>chmi@chmi.cz</sender>
+  <sent>2026-05-28T12:00:00+02:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>cs</language>
+    <event>Kluzké povrchy</event>
+    <eventCode><valueName>SIVS</valueName><value>VII.1</value></eventCode>
+    <headline>Výstraha před kluzkými povrchy</headline>
+    <urgency>Expected</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <onset>2026-05-28T14:00:00+02:00</onset>
+    <expires>2026-05-28T20:00:00+02:00</expires>
+    <description>Očekávají se kluzké povrchy komunikací.</description>
+    <parameter><valueName>awareness_level</valueName><value>2; yellow; Moderate</value></parameter>
+    <area><areaDesc>Hlavní město Praha</areaDesc></area>
+  </info>
+  <info>
+    <language>cs</language>
+    <event>Smogová situace - suspendované částice PM10</event>
+    <eventCode><valueName>SIVS</valueName><value>SMOGSIT.PM10</value></eventCode>
+    <headline>Smogová situace PM10</headline>
+    <urgency>Expected</urgency>
+    <severity>Severe</severity>
+    <certainty>Observed</certainty>
+    <onset>2026-05-28T14:00:00+02:00</onset>
+    <expires>2026-05-28T20:00:00+02:00</expires>
+    <description>Je vyhlášena smogová situace pro PM10.</description>
+    <parameter><valueName>awareness_level</valueName><value>3; orange; Severe</value></parameter>
+    <area><areaDesc>Hlavní město Praha</areaDesc></area>
   </info>
 </alert>`;
 }

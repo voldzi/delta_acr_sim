@@ -94,6 +94,9 @@ export interface SafetyFeatureProperties {
   layer: SafetyLayerId;
   category: string;
   hazardType: string;
+  typeCode?: string;
+  sourceCode?: string;
+  sourceSystem?: string;
   headline: string;
   description?: string;
   recommendedAction?: string;
@@ -148,6 +151,7 @@ export interface SafetyFeatureProperties {
   geocodes?: Array<{ scheme: string; value: string }>;
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
+  localized?: Record<string, Record<string, unknown>>;
   providerProperties?: Record<string, unknown>;
   raw?: unknown;
 }

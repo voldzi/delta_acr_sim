@@ -3857,6 +3857,9 @@ interface SafetyProjectionFeature {
     layer: SafetyProjectionLayer;
     category: string;
     hazardType?: string;
+    typeCode?: string;
+    sourceCode?: string;
+    sourceSystem?: string;
     headline: string;
     description?: string;
     recommendedAction?: string;
@@ -3906,6 +3909,8 @@ interface SafetyProjectionFeature {
     geocodes?: Array<{ scheme: string; value: string }>;
     metrics?: Record<string, number | string | boolean>;
     tags?: Record<string, string>;
+    localized?: Record<string, Record<string, unknown>>;
+    providerProperties?: Record<string, unknown>;
     raw?: unknown;
   };
 }
@@ -4031,6 +4036,10 @@ function mapSafetyProjectionFeature(
     description: feature.properties.description,
     recommendedAction: feature.properties.recommendedAction,
     hazardType: feature.properties.hazardType,
+    typeCode: feature.properties.typeCode,
+    sourceCode: feature.properties.sourceCode,
+    sourceSystem: feature.properties.sourceSystem,
+    localized: feature.properties.localized,
     status: feature.properties.status,
     urgency: feature.properties.urgency,
     certainty: feature.properties.certainty,
@@ -4058,7 +4067,8 @@ function mapSafetyProjectionFeature(
     floodStage: feature.properties.floodStage,
     trend: feature.properties.trend,
     basin: feature.properties.basin,
-    affectedArea: feature.properties.affectedArea
+    affectedArea: feature.properties.affectedArea,
+    ...(feature.properties.providerProperties ?? {})
   });
   return {
     type: "Feature",
@@ -4072,6 +4082,11 @@ function mapSafetyProjectionFeature(
       layer,
       category: feature.properties.category,
       label: feature.properties.headline || feature.properties.name || layer,
+      hazardType: feature.properties.hazardType,
+      typeCode: feature.properties.typeCode,
+      sourceCode: feature.properties.sourceCode,
+      sourceSystem: feature.properties.sourceSystem,
+      localized: feature.properties.localized,
       sourceId: "safety_data",
       observedAt: feature.properties.observedAt,
       validUntil: feature.properties.validUntil ?? feature.properties.expiresAt,

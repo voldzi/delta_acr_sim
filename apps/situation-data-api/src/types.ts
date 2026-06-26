@@ -354,6 +354,11 @@ export interface SituationFeatureProperties {
   label: string;
   labelLocalized?: Record<string, string>;
   summaryLocalized?: Record<string, string>;
+  hazardType?: string;
+  typeCode?: string;
+  sourceCode?: string;
+  sourceSystem?: string;
+  localized?: Record<string, Record<string, unknown>>;
   sourceId: SituationDataSourceId;
   source?: string;
   sourceName?: string;

@@ -1,6 +1,14 @@
 import { XMLParser } from "fast-xml-parser";
 import { Pool } from "pg";
 import { ChmiHydroHistoryStore, type ChmiHydroHistoryRecord, type ChmiHydroSourceKind } from "./chmi-hydro-history.js";
+import {
+  chmiAwarenessLevel,
+  chmiParameterValue,
+  classifyChmiAlert,
+  type ChmiAlertClassification,
+  type ChmiEventCode,
+  type ChmiParameter
+} from "./chmi-taxonomy.js";
 import type { SafetyDataConfig } from "./config.js";
 import { HttpRequestError, requestJson, requestText } from "./http.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
@@ -242,7 +250,7 @@ class ChmiAlertsSource implements SafetyDataSource {
       const parser = new XMLParser({
         ignoreAttributes: false,
         removeNSPrefix: true,
-        isArray: (name) => ["info", "area", "geocode", "parameter"].includes(name)
+        isArray: (name) => ["info", "area", "geocode", "parameter", "eventCode", "responseType"].includes(name)
       });
       return parser.parse(xml) as unknown;
     });
@@ -797,6 +805,9 @@ interface FeatureInput {
   layer: SafetyLayerId;
   category: string;
   hazardType?: string;
+  typeCode?: string;
+  sourceCode?: string;
+  sourceSystem?: string;
   headline: string;
   description?: string;
   recommendedAction?: string;
@@ -846,6 +857,8 @@ interface FeatureInput {
   geocodes?: Array<{ scheme: string; value: string }>;
   metrics?: Record<string, number | string | boolean>;
   tags?: Record<string, string>;
+  localized?: Record<string, Record<string, unknown>>;
+  providerProperties?: Record<string, unknown>;
   raw?: unknown;
 }
 
@@ -888,6 +901,9 @@ function makeFeatureProperties(input: Omit<FeatureInput, "lon" | "lat">): Safety
     layer: input.layer,
     category: input.category,
     hazardType: input.hazardType ?? input.category,
+    typeCode: input.typeCode,
+    sourceCode: input.sourceCode,
+    sourceSystem: input.sourceSystem,
     headline: input.headline,
     description: input.description,
     recommendedAction: input.recommendedAction,
@@ -942,6 +958,8 @@ function makeFeatureProperties(input: Omit<FeatureInput, "lon" | "lat">): Safety
     geocodes: input.geocodes,
     metrics: input.metrics,
     tags: input.tags,
+    localized: input.localized,
+    providerProperties: input.providerProperties,
     raw: input.raw
   };
 }
@@ -1077,6 +1095,49 @@ function mockFeatures(bbox: BoundingBox, observedAt: string): SafetyFeature[] {
   ];
 }
 
+interface CapLocalizedInfo {
+  [key: string]: unknown;
+  language: string;
+  event?: string;
+  headline?: string;
+  description?: string;
+  instruction?: string;
+  web?: string;
+  areaNames: string[];
+}
+
+interface CapInfoProjection {
+  index: number;
+  info: Record<string, unknown>;
+  language: string;
+  event: string;
+  headline: string;
+  description?: string;
+  instruction?: string;
+  web?: string;
+  onset?: string;
+  expires?: string;
+  severityRaw?: string;
+  urgencyRaw?: string;
+  certaintyRaw?: string;
+  classification: ChmiAlertClassification;
+  eventCodes: ChmiEventCode[];
+  parameters: ChmiParameter[];
+  responseTypes: string[];
+  affectedAreas: string[];
+  geocodes: Array<{ scheme: string; value: string }>;
+}
+
+interface CapInfoGroup {
+  key: string;
+  primary: CapInfoProjection;
+  localized: Record<string, CapLocalizedInfo>;
+  rawInfos: Record<string, unknown>[];
+  affectedAreas: string[];
+  geocodes: Array<{ scheme: string; value: string }>;
+  languages: string[];
+}
+
 function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, capUrl: string, layer: Extract<SafetyLayerId, "weather_alerts" | "warnings">): SafetyFeature[] {
   const root = asRecord(payload) ?? {};
   const alert = asRecord(root.alert) ?? root;
@@ -1087,25 +1148,174 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
   const msgType = optionalString(alert.msgType);
   const infos = toArray(alert.info).map(asRecord).filter(Boolean) as Array<Record<string, unknown>>;
   const center = bboxCenter(query.bbox);
+  const groups = new Map<string, CapInfoGroup>();
 
-  return infos.flatMap((info, index) => {
-    const event = optionalString(info.event) ?? "CHMI warning";
-    const onset = normalizeTimestamp(optionalString(info.onset));
-    const expires = normalizeTimestamp(optionalString(info.expires));
-    const description = optionalString(info.description);
-    const instruction = optionalString(info.instruction);
-    if (isInactiveCapInfo(event, description, optionalString(info.severity), optionalString(info.certainty))) {
-      return [];
+  infos.forEach((info, index) => {
+    const projection = projectCapInfo(info, index);
+    if (isInactiveCapInfo(projection.event, projection.description, projection.severityRaw, projection.certaintyRaw, projection.classification)) {
+      return;
     }
 
-    const severity = capSeverity(optionalString(info.severity), event);
-    const areas = toArray(info.area).map(asRecord).filter(Boolean) as Array<Record<string, unknown>>;
-    const affectedAreas = unique(
-      areas
-        .map((area) => optionalString(area.areaDesc))
-        .filter((value): value is string => Boolean(value))
-    );
-    const geocodes = areas.flatMap((area) =>
+    const key = capInfoGroupKey(identifier, projection, sent);
+    const group = groups.get(key);
+    const localized = localizedCapInfo(projection);
+    if (group) {
+      group.localized[projection.language] = localized;
+      group.rawInfos.push(info);
+      group.affectedAreas = unique([...group.affectedAreas, ...projection.affectedAreas]);
+      group.geocodes = uniqueGeocodes([...group.geocodes, ...projection.geocodes]);
+      group.languages = unique([...group.languages, projection.language]);
+      if (projection.language === "cs") {
+        group.primary = projection;
+      }
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      primary: projection,
+      localized: { [projection.language]: localized },
+      rawInfos: [info],
+      affectedAreas: projection.affectedAreas,
+      geocodes: projection.geocodes,
+      languages: [projection.language]
+    });
+  });
+
+  return Array.from(groups.values()).map((group) => {
+    const primary = group.localized.cs ? group.primary : preferredCapProjection(group);
+    const classification = primary.classification;
+    const awarenessLevel = chmiAwarenessLevel(chmiParameterValue(primary.parameters, "awareness_level"));
+    const severity = capSeverity(primary.severityRaw, primary.event, awarenessLevel.code);
+    const primaryArea = group.affectedAreas[0];
+    const category = classification.category;
+    const sourceCode = classification.sourceCode;
+    const typeCode = classification.typeCode;
+    const localized = group.localized;
+    const primaryLanguage = localized.cs ? "cs" : primary.language;
+
+    return makePointFeature({
+      id: `${layer}:chmi_alerts:${stableToken(group.key)}`,
+      lon: center.lon,
+      lat: center.lat,
+      layer,
+      category,
+      hazardType: classification.hazardType,
+      typeCode,
+      sourceCode,
+      sourceSystem: classification.sourceSystem,
+      headline: localized[primaryLanguage]?.headline ?? primary.headline,
+      description: localized[primaryLanguage]?.description ?? primary.description,
+      recommendedAction: localized[primaryLanguage]?.instruction ?? primary.instruction,
+      sourceId: "chmi_alerts",
+      sourceName: "CHMI CAP weather warnings",
+      license: CHMI_OPEN_DATA_LICENSE,
+      observedAt: sent,
+      effectiveAt: primary.onset ?? sent,
+      expiresAt: primary.expires ?? addSeconds(sent, 24 * 60 * 60),
+      confidence: capConfidence(primary.certaintyRaw, severity),
+      severity,
+      status: capStatus(status, msgType),
+      urgency: capUrgency(primary.urgencyRaw),
+      certainty: capCertainty(primary.certaintyRaw),
+      areaName: primaryArea,
+      adminLevel: primaryArea ? "cap_area" : "unknown",
+      iconHint: classification.iconKey,
+      basis: ["chmi_cap", capUrl, classification.classificationBasis],
+      affectedAreas: group.affectedAreas,
+      geocodes: group.geocodes,
+      metrics: compactMetrics({
+        areaCount: group.affectedAreas.length,
+        geocodeCount: group.geocodes.length,
+        languageCount: group.languages.length
+      }),
+      tags: compactTags({
+        sender,
+        status,
+        msgType,
+        language: primary.language,
+        languages: group.languages.join(","),
+        web: localized[primaryLanguage]?.web ?? primary.web,
+        sourceSystem: classification.sourceSystem,
+        sourceCode,
+        sourceCodeName: classification.sourceCodeName,
+        typeCode,
+        domain: classification.domain,
+        canonicalCategory: classification.category,
+        classificationBasis: classification.classificationBasis,
+        awarenessLevelCode: awarenessLevel.code,
+        awarenessLevelColor: awarenessLevel.color,
+        awarenessLevelLabel: awarenessLevel.label,
+        capUrl
+      }),
+      localized,
+      providerProperties: compactUnknownRecord({
+        schemaVersion: "sim.provider.v2",
+        kind: classification.isOutlook ? "official_outlook" : "official_alert",
+        domain: classification.domain,
+        category: classification.category,
+        typeCode,
+        sourceSystem: classification.sourceSystem,
+        sourceCode,
+        sourceCodeName: classification.sourceCodeName,
+        taxonomy: compactUnknownRecord({
+          provider: "CHMI",
+          codeSystem: classification.sourceSystem,
+          sourceCode,
+          typeCode,
+          domain: classification.domain,
+          category: classification.category,
+          hazardType: classification.hazardType,
+          classificationBasis: classification.classificationBasis,
+          awarenessType: chmiParameterValue(primary.parameters, "awareness_type"),
+          awarenessLevel: chmiParameterValue(primary.parameters, "awareness_level"),
+          awarenessLevelCode: awarenessLevel.code,
+          awarenessLevelColor: awarenessLevel.color,
+          criterion: chmiParameterValue(primary.parameters, "criterion")
+        }),
+        localized,
+        presentation: compactUnknownRecord({
+          primaryLanguage,
+          iconKey: classification.iconKey,
+          styleKey: `alert.${severity}`,
+          detailTemplate: classification.domain === "air_quality" ? "official-air-quality-alert" : "official-alert",
+          label: localized[primaryLanguage]?.headline ?? primary.headline
+        }),
+        notification: compactUnknownRecord({
+          eligible: classification.notificationEligible && severity !== "info",
+          reason: classification.notificationEligible ? "official_warning" : "non_notifiable_product"
+        }),
+        cap: compactUnknownRecord({
+          identifier,
+          sender,
+          sent,
+          status,
+          msgType,
+          url: capUrl,
+          eventCodes: primary.eventCodes,
+          parameters: primary.parameters,
+          responseTypes: primary.responseTypes
+        })
+      }),
+      raw: query.includeRaw ? group.rawInfos : undefined
+    });
+  });
+}
+
+function projectCapInfo(info: Record<string, unknown>, index: number): CapInfoProjection {
+  const event = optionalString(info.event) ?? "CHMI warning";
+  const headline = optionalString(info.headline) ?? event;
+  const eventCodes = parseCapEventCodes(info.eventCode);
+  const parameters = parseCapParameters(info.parameter);
+  const classification = classifyChmiAlert({ event, headline, eventCodes, parameters });
+  const areas = toArray(info.area).map(asRecord).filter(Boolean) as Array<Record<string, unknown>>;
+  const affectedAreas = unique(
+    areas
+      .map((area) => optionalString(area.areaDesc))
+      .filter((value): value is string => Boolean(value))
+  );
+  const geocodes = uniqueGeocodes(
+    areas.flatMap((area) =>
       toArray(area.geocode)
         .map(asRecord)
         .filter(Boolean)
@@ -1114,66 +1324,137 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
           value: optionalString(geocode?.value) ?? ""
         }))
         .filter((geocode) => geocode.value.length > 0)
-    );
-    const headline = optionalString(info.headline) ?? event;
-    const category = isNoWarning(event, optionalString(info.description)) ? "no_active_warning" : "weather_warning";
-    const icon = weatherIconHint(event, headline);
-    const primaryArea = affectedAreas[0];
+    )
+  );
 
-    return makePointFeature({
-      id: `${layer}:chmi_alerts:${stableToken(`${identifier}:${event}:${onset ?? sent}:${index}`)}`,
-      lon: center.lon,
-      lat: center.lat,
-      layer,
-      category,
-      hazardType: weatherHazardType(event, headline),
-      headline,
-      description,
-      recommendedAction: instruction,
-      sourceId: "chmi_alerts",
-      sourceName: "CHMI CAP weather warnings",
-      license: CHMI_OPEN_DATA_LICENSE,
-      observedAt: sent,
-      effectiveAt: onset ?? sent,
-      expiresAt: expires ?? addSeconds(sent, 24 * 60 * 60),
-      confidence: capConfidence(optionalString(info.certainty), severity),
-      severity,
-      status: capStatus(status, msgType),
-      urgency: capUrgency(optionalString(info.urgency)),
-      certainty: capCertainty(optionalString(info.certainty)),
-      areaName: primaryArea,
-      adminLevel: primaryArea ? "cap_area" : "unknown",
-      iconHint: icon,
-      basis: ["chmi_cap", capUrl],
-      affectedAreas,
-      geocodes,
-      metrics: compactMetrics({
-        areaCount: affectedAreas.length,
-        geocodeCount: geocodes.length
-      }),
-      tags: compactTags({
-        sender,
-        status,
-        msgType,
-        language: optionalString(info.language),
-        web: optionalString(info.web),
-        capUrl
-      }),
-      raw: query.includeRaw ? info : undefined
-    });
-  });
+  return {
+    index,
+    info,
+    language: normalizeCapLanguage(optionalString(info.language)),
+    event,
+    headline,
+    description: optionalString(info.description),
+    instruction: optionalString(info.instruction),
+    web: optionalString(info.web),
+    onset: normalizeTimestamp(optionalString(info.onset)),
+    expires: normalizeTimestamp(optionalString(info.expires)),
+    severityRaw: optionalString(info.severity),
+    urgencyRaw: optionalString(info.urgency),
+    certaintyRaw: optionalString(info.certainty),
+    classification,
+    eventCodes,
+    parameters,
+    responseTypes: toArray(info.responseType).map(optionalString).filter((value): value is string => Boolean(value)),
+    affectedAreas,
+    geocodes
+  };
+}
+
+function parseCapEventCodes(value: unknown): ChmiEventCode[] {
+  return toArray(value)
+    .map(asRecord)
+    .filter(Boolean)
+    .map((eventCode) => ({
+      valueName: optionalString(eventCode?.valueName),
+      value: optionalString(eventCode?.value)
+    }))
+    .filter((eventCode) => Boolean(eventCode.value));
+}
+
+function parseCapParameters(value: unknown): ChmiParameter[] {
+  return toArray(value)
+    .map(asRecord)
+    .filter(Boolean)
+    .map((parameter) => ({
+      valueName: optionalString(parameter?.valueName),
+      value: optionalString(parameter?.value)
+    }))
+    .filter((parameter) => Boolean(parameter.valueName) || Boolean(parameter.value));
+}
+
+function capInfoGroupKey(identifier: string, projection: CapInfoProjection, sent: string): string {
+  const classification = projection.classification;
+  const classificationKey = classification.sourceCode ?? classification.typeCode;
+  const geocodeKey = projection.geocodes
+    .map((geocode) => `${geocode.scheme}:${geocode.value}`)
+    .sort()
+    .join(",");
+  return [
+    identifier,
+    classificationKey,
+    projection.onset ?? sent,
+    projection.expires ?? "",
+    projection.severityRaw ?? "",
+    projection.urgencyRaw ?? "",
+    projection.certaintyRaw ?? "",
+    geocodeKey || projection.affectedAreas.join(","),
+    projection.responseTypes.join(",")
+  ].join("|");
+}
+
+function localizedCapInfo(projection: CapInfoProjection): CapLocalizedInfo {
+  return {
+    language: projection.language,
+    event: projection.event,
+    headline: projection.headline,
+    description: projection.description,
+    instruction: projection.instruction,
+    web: projection.web,
+    areaNames: projection.affectedAreas
+  };
+}
+
+function preferredCapProjection(group: CapInfoGroup): CapInfoProjection {
+  if (group.primary.language === "cs") {
+    return group.primary;
+  }
+  return group.primary;
+}
+
+function normalizeCapLanguage(value: string | undefined): string {
+  const normalized = (value ?? "und").trim().toLowerCase();
+  if (normalized === "cs" || normalized === "cs-cz" || normalized === "cz") {
+    return "cs";
+  }
+  if (normalized === "en" || normalized === "en-gb" || normalized === "en-us") {
+    return "en";
+  }
+  return normalized || "und";
+}
+
+function uniqueGeocodes(values: Array<{ scheme: string; value: string }>): Array<{ scheme: string; value: string }> {
+  const seen = new Set<string>();
+  const output: Array<{ scheme: string; value: string }> = [];
+  for (const geocode of values) {
+    const key = `${geocode.scheme}:${geocode.value}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(geocode);
+  }
+  return output;
+}
+
+function compactUnknownRecord(input: Record<string, unknown>): Record<string, unknown> | undefined {
+  const output = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+  return Object.keys(output).length > 0 ? output : undefined;
 }
 
 function mapCapFireRiskFeature(feature: SafetyFeature): SafetyFeature | undefined {
-  if (feature.properties.hazardType !== "fire_weather") {
+  if (feature.properties.hazardType !== "fire_weather" && feature.properties.typeCode !== "weather.fire_danger") {
     return undefined;
   }
+  const providerProperties = feature.properties.providerProperties ?? {};
 
   return makeGeometryFeature({
     id: `fire:chmi_alerts:${stableToken(feature.id)}`,
     layer: "fire",
     category: "fire_weather_risk",
     hazardType: "fire_weather",
+    typeCode: feature.properties.typeCode,
+    sourceCode: feature.properties.sourceCode,
+    sourceSystem: feature.properties.sourceSystem,
     headline: feature.properties.headline,
     description: feature.properties.description,
     recommendedAction: feature.properties.recommendedAction,
@@ -1208,6 +1489,19 @@ function mapCapFireRiskFeature(feature: SafetyFeature): SafetyFeature | undefine
       ...(feature.properties.tags ?? {}),
       sourceLayer: feature.properties.layer,
       fireRiskSource: "chmi_cap"
+    }),
+    localized: feature.properties.localized,
+    providerProperties: compactUnknownRecord({
+      ...providerProperties,
+      kind: "official_fire_danger_projection",
+      relatedFeatureId: feature.id,
+      relation: "derived_projection",
+      presentation: compactUnknownRecord({
+        ...(asRecord(providerProperties.presentation) ?? {}),
+        iconKey: "fire",
+        detailTemplate: "official-fire-danger-alert"
+      }),
+      notification: asRecord(providerProperties.notification) ?? { eligible: feature.properties.severity !== "info", reason: "official_warning" }
     }),
     raw: feature.properties.raw
   });
@@ -1974,18 +2268,30 @@ function floodSeverity(level: number): SafetySeverity {
   return "info";
 }
 
-function capSeverity(value: string | undefined, event: string): SafetySeverity {
+function capSeverity(value: string | undefined, event: string, awarenessLevelCode?: string): SafetySeverity {
   if (isNoWarning(event)) {
     return "info";
   }
+  switch (awarenessLevelCode) {
+    case "4":
+      return "critical";
+    case "3":
+      return "warning";
+    case "2":
+      return "advisory";
+    case "1":
+    case "0":
+      return "info";
+  }
   switch ((value ?? "").toLowerCase()) {
     case "extreme":
-    case "severe":
       return "critical";
-    case "moderate":
+    case "severe":
       return "warning";
-    case "minor":
+    case "moderate":
       return "advisory";
+    case "minor":
+      return "info";
     default:
       return "info";
   }
@@ -2164,11 +2470,28 @@ function iconHint(layer: SafetyLayerId, category: string): string {
 
 function isNoWarning(event: string | undefined, description?: string): boolean {
   const text = `${event ?? ""} ${description ?? ""}`.toLowerCase();
-  return text.includes("žádná výstraha") || text.includes("zadna vystraha") || text.includes("no warning");
+  return (
+    text.includes("žádná výstraha") ||
+    text.includes("zadna vystraha") ||
+    text.includes("žádný výhled") ||
+    text.includes("zadny vyhled") ||
+    text.includes("no warning") ||
+    text.includes("no outlook") ||
+    text.includes("no dangerous phenomena")
+  );
 }
 
-function isInactiveCapInfo(event: string | undefined, description: string | undefined, severity: string | undefined, certainty: string | undefined): boolean {
+function isInactiveCapInfo(
+  event: string | undefined,
+  description: string | undefined,
+  severity: string | undefined,
+  certainty: string | undefined,
+  classification?: ChmiAlertClassification
+): boolean {
   if (isNoWarning(event, description)) {
+    return true;
+  }
+  if (classification?.isOutlook && isNoWarning(description, event)) {
     return true;
   }
   const normalizedEvent = (event ?? "").toLowerCase();
