@@ -412,6 +412,31 @@ scripts/import-dem-copernicus-glo30-cz.sh
 
 Podrobný postup je v `docs/runbooks/09_DEM_COPERNICUS_SEAWEEDFS_POSTGIS.md`.
 
+## Operational Alerting
+
+Produkční periodické kontroly běží na hostu proti internímu gateway portu a
+nevyžadují nové veřejné endpointy:
+
+```bash
+SIM_OPERATIONAL_ALERT_WEBHOOK_URL=
+SIM_OPERATIONAL_ALERT_ENVIRONMENT=docker-home
+SIM_OPERATIONAL_BASE_URL=http://127.0.0.1:5020
+SIM_OPERATIONAL_CHECK_BBOX=11.8,48.5,19.2,51.2
+SIM_OPERATIONAL_BOUNDARY_BBOX=12,48,19,51
+SIM_OPERATIONAL_TERRAIN_BBOX=13.95,50.55,14.08,50.65
+SIM_OPERATIONAL_EXPECTED_DEM_SOURCE=copernicus-glo30-cz
+SIM_OPERATIONAL_EXPECTED_MOBILE_MODEL_VERSION=coverage-v2-terrain
+SIM_OPERATIONAL_REQUIRE_DEM=true
+SIM_OPERATIONAL_REQUIRE_TERRAIN_AWARE=true
+SIM_OPERATIONAL_ALERT_ON_RECOVERY=true
+SIM_OPERATIONAL_ALERT_EVERY_FAILURE=false
+```
+
+`SIM_OPERATIONAL_ALERT_WEBHOOK_URL` je volitelný generic JSON webhook. Bez něj
+kontrola stále zapisuje stav do `data/operational-checks/` a posílá failure /
+recovery zprávy do syslogu. Podrobný postup je v
+`docs/runbooks/14_OPERATIONAL_ALERTING.md`.
+
 ## Safety Data API
 
 Výchozí bezpečná konfigurace:

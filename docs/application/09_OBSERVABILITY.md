@@ -86,6 +86,31 @@ HTTP traces. Další fáze ještě nepokrývá detailní span vazby napříč:
 - TAK ingest -> normalized COP feature projection,
 - COP server-side adapter -> SIM provider endpointy.
 
+## Provozní alerting
+
+Produkční pilot na `docker.home.cz` používá host-level periodickou kontrolu:
+
+```bash
+python3 scripts/production-operational-check.py --env-file .env
+```
+
+Kontrola kombinuje provider smoke testy, data-plane smoke testy, DEM health,
+terrain-aware mobile read-model ověření a kontrolu, že veřejné `/metrics`
+zůstává skryté přes nginx. Výsledek zapisuje do
+`data/operational-checks/latest.json`, stav pro deduplikaci alertů do
+`data/operational-checks/state.json` a při změně stavu posílá syslog zprávu.
+Volitelný `SIM_OPERATIONAL_ALERT_WEBHOOK_URL` odešle stejný bounded report jako
+JSON webhook.
+
+Periodické spouštění nastavuje:
+
+```bash
+scripts/install-production-operational-check-cron.sh
+```
+
+Detailní postup je v
+[`docs/runbooks/14_OPERATIONAL_ALERTING.md`](../runbooks/14_OPERATIONAL_ALERTING.md).
+
 ## OpenTelemetry cílový postup
 
 1. Zachovat stávající `/metrics` jako interní Prometheus kompatibilní kanál.

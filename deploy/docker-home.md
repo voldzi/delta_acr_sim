@@ -187,6 +187,18 @@ protože na `docker.home.cz` zatím nejsou zapojené OSM/PostGIS zdroje. Povoluj
 také `tak` readiness `degraded`, protože pilot nemá zapnutý TAK read token ani
 public read. Samotný provider kontrakt se přesto ověřuje.
 
+Po zapojení OSM/PostGIS, DEM a terrain-aware mobile read-modelu nastav
+periodický provozní check:
+
+```bash
+python3 scripts/production-operational-check.py --env-file .env --json
+scripts/install-production-operational-check-cron.sh
+```
+
+Check zapisuje `data/operational-checks/latest.json`, používá syslog pro
+failure/recovery události a volitelně odesílá generic JSON webhook podle
+`SIM_OPERATIONAL_ALERT_WEBHOOK_URL`.
+
 ## Gateway a Docker DNS
 
 `sim-web` je nginx gateway pro statické UI a server-to-server provider API.
