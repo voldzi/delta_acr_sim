@@ -29,7 +29,7 @@ Gateway používá Docker DNS resolver `127.0.0.11` a proměnné v `proxy_pass`,
 aby po recreate backend kontejnerů nepoužívala staré IP adresy. Po běžném
 `docker compose up -d --build` nemá být potřeba ruční restart `simulator-web`.
 `sim-web` má compose healthcheck na `/health/live`; deploy skript před smoke
-kontrolami čeká, až gateway odpovídá.
+kontrolami čeká na Docker health stav `healthy` a funkční HTTP odpověď gateway.
 
 Gateway zároveň drží krátkou stale cache pro GET provider API
 `/flight-data/api/*`, `/situation-data/api/*` a `/safety-data/api/*`. Během

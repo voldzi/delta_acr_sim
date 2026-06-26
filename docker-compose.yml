@@ -352,10 +352,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 5s
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 2s
 
 volumes:
   sim-data:

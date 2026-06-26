@@ -197,8 +197,9 @@ adresy. Nginx proto používá Docker DNS resolver `127.0.0.11` a proměnné v
 vyžadovat ruční restart `sim-web`.
 
 `sim-web` má vlastní compose healthcheck nad `/health/live` a deploy skript před
-smoke kontrolami čeká, až gateway skutečně přijímá spojení. Tím se odděluje
-stav "kontejner nastartoval" od stavu "nginx už obsluhuje requesty".
+smoke kontrolami čeká na Docker health stav `healthy` i funkční HTTP odpověď.
+Tím se odděluje stav "kontejner nastartoval" od stavu "nginx už obsluhuje
+requesty".
 
 Provider GET endpointy pro `/flight-data/api/*`, `/situation-data/api/*` a
 `/safety-data/api/*` mají v gateway krátkou 10s cache. Pokud backend během

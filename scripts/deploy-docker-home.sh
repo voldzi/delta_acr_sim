@@ -46,6 +46,27 @@ wait_for_http() {
   curl -fsS "$url" >/dev/null
 }
 
+wait_for_container_healthy() {
+  local container="$1"
+  local label="$2"
+  local attempts="${3:-60}"
+  local delay_seconds="${4:-1}"
+  local status=""
+
+  for attempt in $(seq 1 "$attempts"); do
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null || true)"
+    if [ "$status" = "healthy" ]; then
+      return 0
+    fi
+    echo "Waiting for ${label} (${attempt}/${attempts}); status=${status:-unknown}..."
+    sleep "$delay_seconds"
+  done
+
+  echo "Timed out waiting for ${label}; status=${status:-unknown}" >&2
+  docker inspect "$container" >/dev/null
+  return 1
+}
+
 SIM_API_ADMIN_TOKEN_VALUE="${SIM_API_ADMIN_TOKEN:-$(existing_value SIM_API_ADMIN_TOKEN)}"
 if [ -z "$SIM_API_ADMIN_TOKEN_VALUE" ]; then
   SIM_API_ADMIN_TOKEN_VALUE="$(generate_secret)"
@@ -180,6 +201,7 @@ ENV
 
 docker compose up -d --build
 docker compose ps
+wait_for_container_healthy csm-sim-web "sim-web container health"
 wait_for_http http://localhost:5020/health/live "sim-web gateway"
 curl -fsS http://localhost:5020/health/live
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/scenarios >/dev/null
