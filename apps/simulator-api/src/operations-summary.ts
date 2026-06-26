@@ -360,7 +360,7 @@ function serviceAlerts(service: ServiceSummary): OperationsAlert[] {
       title: `${service.label} cache reports errors`
     });
   }
-  if ((service.dataFreshness?.oldestImportAgeSeconds ?? 0) > 7 * 24 * 60 * 60) {
+  if ((service.dataFreshness?.degradedSourceCount ?? 0) > 0 && (service.dataFreshness?.oldestImportAgeSeconds ?? 0) > 7 * 24 * 60 * 60) {
     alerts.push({
       code: "import_stale",
       detail: `Oldest import age is ${service.dataFreshness?.oldestImportAgeSeconds} seconds.`,

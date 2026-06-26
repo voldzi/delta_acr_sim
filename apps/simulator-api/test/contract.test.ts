@@ -532,7 +532,7 @@ describe("SIM API contract baseline", () => {
             status: "ok",
             cache: { entries: 2, errors: 0, hitRate: 0.82, misses: 4, pressure: 0.01, state: "warm", staleHits: 0 },
             sharedCache: { enabled: true, available: true, errors: 0, hitRate: 0.5, state: "ok" },
-            dataFreshness: { sourceCount: 2, degradedSourceCount: 0, newestImportAgeSeconds: 12, oldestImportAgeSeconds: 60, warningCount: 0 },
+            dataFreshness: { sourceCount: 2, degradedSourceCount: 0, newestImportAgeSeconds: 12, oldestImportAgeSeconds: 8 * 24 * 60 * 60, warningCount: 0 },
             sourceHealth: [
               { sourceId: "osm_postgis", status: "ok", objectCount: 38325, warningCount: 0 },
               { sourceId: "mobile_network_model", status: "ok", objectCount: 3604, warningCount: 0 }
