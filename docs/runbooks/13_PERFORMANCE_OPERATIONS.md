@@ -74,12 +74,17 @@ After deploy:
 ```bash
 curl -fsS http://127.0.0.1:5020/health/live
 curl -fsS http://127.0.0.1:5020/situation-data/health/ready
+python3 scripts/smoke-provider-gateway.py --base-url http://127.0.0.1:5020
 curl -fsS 'http://127.0.0.1:5020/situation-data/api/v1/weather-radar/frames?product=merge1h&hours=1&limit=1'
 ```
 
 Then request the returned `cleanUrl` once and repeat it. The first request may
 take longer while SIM fetches and crops the PNG; the second should be served
 from the local frame cache.
+
+`scripts/smoke-provider-gateway.py` checks the provider contract consumed by
+COP: gateway health, internal-only access-control, taxonomy dictionaries,
+lightweight feature summaries, detail links and separate geometry documents.
 
 ## Remaining Optimizations
 

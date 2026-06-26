@@ -161,6 +161,7 @@ curl -fsS http://localhost:5020/safety-data/api/v1/taxonomy
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features/summary?limit=1'
 curl -fsS 'http://localhost:5020/safety-data/api/v1/features/summary?limit=1'
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20'
+python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020
 test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:5020/metrics)" = "404"
 ```
 
@@ -172,6 +173,16 @@ test "$(curl -sS -H 'X-Forwarded-For: 203.0.113.10' -o /dev/null -w '%{http_code
 curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/docs/ >/dev/null
 ```
+
+Pro opakovatelný smoke test provider kontraktů používej:
+
+```bash
+python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020
+```
+
+Skript ověřuje health, access-control, ČHMÚ taxonomie, summary bez plné
+geometrie, detail a samostatné geometry dokumenty pro `safety-data` i
+`situation-data`.
 
 ## Gateway a Docker DNS
 

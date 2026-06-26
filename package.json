@@ -21,6 +21,7 @@
     "typecheck": "pnpm -r --filter './packages/**' build && pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:contract": "pnpm --filter @csm-sim/simulator-api test",
+    "smoke:providers": "python3 scripts/smoke-provider-gateway.py",
     "skeleton:validate": "bash scripts/validate-skeleton.sh",
     "openapi:build": "ruby scripts/build-openapi-json.rb",
     "openapi:check": "ruby scripts/build-openapi-json.rb --check",
