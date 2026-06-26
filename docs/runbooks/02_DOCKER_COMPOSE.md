@@ -23,6 +23,12 @@ Budoucí Docker Compose má spustit web, API, store, queue a mock COP endpoint p
 
 Výchozí compose režim má být dry-run/mock a nesmí obsahovat produkční secrets.
 
+## Gateway DNS
+
+Gateway používá Docker DNS resolver `127.0.0.11` a proměnné v `proxy_pass`,
+aby po recreate backend kontejnerů nepoužívala staré IP adresy. Po běžném
+`docker compose up -d --build` nemá být potřeba ruční restart `simulator-web`.
+
 ## Flight Data API routing
 
 `simulator-web` proxy předává:

@@ -152,8 +152,14 @@ curl -fsS http://localhost:5020/health/live
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN}" http://localhost:5020/api/v1/scenarios
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready
+curl -fsS http://localhost:5020/safety-data/health/ready
 curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS http://localhost:5020/situation-data/api/v1/catalog
+curl -fsS http://localhost:5020/safety-data/api/v1/catalog
+curl -fsS http://localhost:5020/situation-data/api/v1/taxonomy
+curl -fsS http://localhost:5020/safety-data/api/v1/taxonomy
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features/summary?limit=1'
+curl -fsS 'http://localhost:5020/safety-data/api/v1/features/summary?limit=1'
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20'
 test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:5020/metrics)" = "404"
 ```
@@ -165,6 +171,26 @@ test "$(curl -sS -H 'X-Forwarded-For: 203.0.113.10' -o /dev/null -w '%{http_code
 test "$(curl -sS -H 'X-Forwarded-For: 203.0.113.10' -o /dev/null -w '%{http_code}' http://localhost:5020/)" = "403"
 curl -fsS http://localhost:5020/health/live
 curl -fsS http://localhost:5020/docs/ >/dev/null
+```
+
+## Gateway a Docker DNS
+
+`sim-web` je nginx gateway pro statické UI a server-to-server provider API.
+Backend kontejnery mohou po `docker compose up -d --build` dostat nové IP
+adresy. Nginx proto používá Docker DNS resolver `127.0.0.11` a proměnné v
+`proxy_pass`, aby služby jako `sim-api`, `safety-data-api` a
+`situation-data-api` přeresolvoval za běhu. Deploy po recreate backendů nemá
+vyžadovat ruční restart `sim-web`.
+
+Pokud se po deployi objeví `502 Bad Gateway`, ověř nejdříve health backendů a
+gateway:
+
+```bash
+docker compose ps
+curl -fsS http://localhost:5020/health/live
+curl -fsS http://localhost:5020/safety-data/health/ready
+curl -fsS http://localhost:5020/situation-data/health/ready
+docker compose logs --tail=100 sim-web
 ```
 
 ## OpenStreetMap/PostGIS import
