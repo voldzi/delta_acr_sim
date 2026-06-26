@@ -36,16 +36,30 @@ MOBILE_COVERAGE_REBUILD_TILE_DEGREES=0.25
 Run from `/srv/sim`:
 
 ```bash
-docker compose run --rm situation-data-api pnpm --filter @csm-sim/situation-data-api rebuild:mobile-coverage
-docker compose up -d situation-data-api
+scripts/rebuild-mobile-coverage-production.sh
 ```
 
-The command creates or migrates the table, splits the bbox into smaller tiles and writes prepared polygons. For full production, schedule the rebuild after OSM/DEM/model changes and after ingestion of new authoritative BTS/operator status data.
+The command creates or migrates the table, splits the bbox into smaller tiles,
+writes prepared polygons, restarts `situation-data-api` and runs the production
+data-plane smoke test with `--require-mobile-coverage-read-model`.
 
 Prepared cells receive `expires_at` from `MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS`
 or the runtime coverage cache TTL, whichever is longer. This keeps the
 read-model stable across normal provider cache expiry while still allowing
 operators to enforce a maximum model age.
+
+For a smaller pilot or recovery rebuild, override the bbox:
+
+```bash
+MOBILE_COVERAGE_REBUILD_BBOX=13.8,49.8,15.4,50.4 scripts/rebuild-mobile-coverage-production.sh
+```
+
+For manual low-level execution without restart or smoke:
+
+```bash
+docker compose run --rm situation-data-api pnpm --filter @csm-sim/situation-data-api rebuild:mobile-coverage
+docker compose up -d --force-recreate situation-data-api
+```
 
 ## Runtime Behavior
 
