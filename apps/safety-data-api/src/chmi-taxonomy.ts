@@ -45,6 +45,22 @@ interface ChmiTaxonomyEntry {
   isOutlook?: boolean;
 }
 
+export interface PublicChmiTaxonomyEntry {
+  codes: readonly string[];
+  typeCode: string;
+  domain: ChmiAlertClassification["domain"];
+  category: string;
+  hazardType: string;
+  iconKey: string;
+  label: {
+    cs: string;
+    en: string;
+  };
+  notificationEligible: boolean;
+  isFireWeather: boolean;
+  isOutlook: boolean;
+}
+
 const CHMI_EVENT_TAXONOMY: readonly ChmiTaxonomyEntry[] = [
   entry(["I.1", "I.2"], "weather.temperature.high", "weather", "temperature_high", "temperature", "temperature-high", "Vysoké teploty", "High temperatures"),
   entry(["II.1", "II.2"], "weather.temperature.low", "weather", "temperature_low", "temperature", "temperature-low", "Nízké teploty", "Low temperatures"),
@@ -125,6 +141,21 @@ export function chmiParameterValue(parameters: ChmiParameter[] | undefined, valu
 
 export function normalizeChmiCode(value: string | undefined): string {
   return (value ?? "").trim().toUpperCase();
+}
+
+export function publicChmiTaxonomyEntries(): PublicChmiTaxonomyEntry[] {
+  return CHMI_EVENT_TAXONOMY.map((item) => ({
+    codes: item.codes,
+    typeCode: item.typeCode,
+    domain: item.domain,
+    category: item.category,
+    hazardType: item.hazardType,
+    iconKey: item.iconKey,
+    label: item.label,
+    notificationEligible: item.notificationEligible ?? true,
+    isFireWeather: item.isFireWeather ?? false,
+    isOutlook: item.isOutlook ?? false
+  }));
 }
 
 function entry(

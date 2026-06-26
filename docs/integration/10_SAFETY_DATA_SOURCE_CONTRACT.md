@@ -115,6 +115,49 @@ anglické varianty SIM nepublikuje jako mapové safety features. Výhled
 nebezpečných jevů s obsahem může být publikován jako `weather.outlook`, ale
 není notifikovatelný bez samostatného pravidla COP.
 
+## Lehký summary/detail kontrakt
+
+Plný `GET /safety-data/api/v1/features` je mapový GeoJSON stream a může nést
+velké administrativní polygony výstrah. COP má pro seznamy, dashboardy,
+počítadla a náhledy používat lehký endpoint:
+
+```http
+GET /safety-data/api/v1/features/summary?bbox=...&layers=weather_alerts,fire,flood&limit=250
+```
+
+Odpověď má `contractVersion=sim-provider-feature-summary-v1` a každá položka
+obsahuje `featureId`, `layerId`, `providerLayerId`, `sourceId`, `label`,
+`severity`, `status`, `stale`, `confidence`, časovou platnost, `typeCode`,
+`sourceCode`, `geometrySummary`, doporučené `styleHint`/`iconHint` a odkazy:
+
+- `links.detail`: detail bez těžké geometrie,
+- `links.geometry`: samostatná geometrie pro daný prvek.
+
+Po kliknutí na feature má COP otevřít:
+
+```http
+GET /safety-data/api/v1/features/{featureId}?bbox=...&layers=...&source=...
+```
+
+Detail vrací `contractVersion=sim-provider-feature-detail-v1`, sanitizované
+`properties`, `localized`, `providerProperties` a odkazy na geometrii nebo
+specializovaný zdrojový detail. Raw upstream payloady se v detailu nevrací.
+Pokud klient potřebuje polygon pro highlight nebo detailní kreslení, dotáhne:
+
+```http
+GET /safety-data/api/v1/features/{featureId}/geometry?bbox=...&layers=...&source=...
+```
+
+Číselníky pro COP jsou dostupné zde:
+
+```http
+GET /safety-data/api/v1/taxonomy
+```
+
+Endpoint obsahuje vrstvy, normalized severity a autoritativní ČHMÚ SIVS/CAP
+slovník. COP má typ jevu odvozovat z `typeCode`/`sourceCode` a tohoto
+číselníku, ne z českého nebo anglického textu výstrahy.
+
 Specializovaná pole:
 
 - Požáry: `fireStatus`, `detectedAt`, `sourceSatellite`, `sourceIncident`, `confidence`, `intensity`, `frp`.

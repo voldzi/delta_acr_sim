@@ -52,6 +52,17 @@ paths:
                     type: array
                     items:
                       type: object
+  /taxonomy:
+    get:
+      summary: Return stable safety taxonomy and CHMI code dictionary
+      description: Lightweight server-side dictionary for COP hazard, severity, layer and icon handling. CHMI entries are the authoritative SIM mapping from upstream SIVS/CAP codes to typeCode values.
+      responses:
+        "200":
+          description: Safety taxonomy document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderTaxonomy"
   /config:
     get:
       summary: Read non-secret runtime configuration
@@ -74,6 +85,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/SafetyFeatureCollection"
         "400":
+          $ref: "#/components/responses/Problem"
+  /features/summary:
+    get:
+      summary: Return lightweight safety feature summaries without geometry
+      description: Uses the same query parameters as /features, but omits GeoJSON coordinates. COP should use this for dashboards, lists and readiness previews.
+      parameters:
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Safety feature summary collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderFeatureSummaryCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+  /features/{featureId}/geometry:
+    get:
+      summary: Return geometry for one safety feature
+      description: Uses the same query window as /features and returns only the selected feature geometry plus geometry metadata.
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Safety feature geometry document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderFeatureGeometry"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+  /features/{featureId}:
+    get:
+      summary: Return detail for one safety feature without heavy geometry
+      description: Uses the same query window as /features and returns provider properties, localized text and links to geometry. Raw upstream payloads are not exposed.
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Safety feature detail document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderFeatureDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
           $ref: "#/components/responses/Problem"
   /cop/features:
     get:
@@ -148,6 +219,13 @@ components:
         type: integer
         default: 250
         maximum: 1000
+    FeatureId:
+      name: featureId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: SIM feature id from /features or /features/summary.
     HydroStationId:
       name: stationId
       in: path
@@ -197,6 +275,18 @@ components:
                   correlationId:
                     type: string
   schemas:
+    BoundingBox:
+      type: object
+      required: [west, south, east, north]
+      properties:
+        west:
+          type: number
+        south:
+          type: number
+        east:
+          type: number
+        north:
+          type: number
     SafetyFeatureCollection:
       type: object
       required: [contractVersion, type, generatedAt, source, query, summary, features, sources, warnings]
@@ -245,6 +335,230 @@ components:
           type: array
           items:
             type: string
+    ProviderFeatureSummaryCollection:
+      type: object
+      required: [contractVersion, generatedAt, providerId, source, query, summary, features, sources, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-provider-feature-summary-v1
+        generatedAt:
+          type: string
+          format: date-time
+        providerId:
+          type: string
+          const: sim.safety-data
+        source:
+          type: object
+          additionalProperties: true
+        query:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderFeatureSummary"
+        sources:
+          type: array
+        warnings:
+          type: array
+          items:
+            type: string
+    ProviderFeatureSummary:
+      type: object
+      required: [featureId, layer, layerId, providerId, providerLayerId, sourceId, sourceName, label, category, hazardType, severity, status, stale, confidence, observedAt, validFrom, updatedAt, geometry, links]
+      properties:
+        featureId:
+          type: string
+        layer:
+          enum: [weather_alerts, warnings, fire, flood, boundary_admin]
+        layerId:
+          type: string
+        providerId:
+          type: string
+          const: sim.safety-data
+        providerLayerId:
+          type: string
+        sourceId:
+          enum: [mock, chmi_alerts, chmi_hydro, nasa_firms, admin_boundaries]
+        sourceName:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        hazardType:
+          type: string
+        typeCode:
+          type: string
+        sourceCode:
+          type: string
+        sourceSystem:
+          type: string
+        severity:
+          enum: [info, advisory, warning, critical]
+        status:
+          type: string
+        stale:
+          type: boolean
+        confidence:
+          type: number
+        observedAt:
+          type: string
+          format: date-time
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        areaName:
+          type: string
+        styleHint:
+          type: string
+        iconHint:
+          type: string
+        metrics:
+          type: object
+          additionalProperties: true
+        presentation:
+          type: object
+          additionalProperties: true
+        taxonomy:
+          type: object
+          additionalProperties: true
+        geometry:
+          $ref: "#/components/schemas/FeatureGeometrySummary"
+        links:
+          type: object
+          required: [detail, geometry]
+          properties:
+            detail:
+              type: string
+            geometry:
+              type: string
+    ProviderFeatureDetail:
+      type: object
+      required: [contractVersion, generatedAt, providerId, source, query, summary, properties, links, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-provider-feature-detail-v1
+        generatedAt:
+          type: string
+          format: date-time
+        providerId:
+          type: string
+          const: sim.safety-data
+        source:
+          type: object
+          additionalProperties: true
+        query:
+          type: object
+          additionalProperties: true
+        summary:
+          $ref: "#/components/schemas/ProviderFeatureSummary"
+        properties:
+          type: object
+          additionalProperties: true
+        localized:
+          type: object
+          additionalProperties: true
+        providerProperties:
+          type: object
+          additionalProperties: true
+        links:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+    ProviderFeatureGeometry:
+      type: object
+      required: [contractVersion, generatedAt, providerId, featureId, layer, layerId, providerLayerId, resolution, geometry, geometrySummary]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-provider-feature-geometry-v1
+        generatedAt:
+          type: string
+          format: date-time
+        providerId:
+          type: string
+          const: sim.safety-data
+        featureId:
+          type: string
+        layer:
+          enum: [weather_alerts, warnings, fire, flood, boundary_admin]
+        layerId:
+          type: string
+        providerLayerId:
+          type: string
+        resolution:
+          type: string
+          enum: [native]
+        geometry:
+          type: object
+          additionalProperties: true
+        geometrySummary:
+          $ref: "#/components/schemas/FeatureGeometrySummary"
+    FeatureGeometrySummary:
+      type: object
+      required: [type, coordinateCount, geometryRole]
+      properties:
+        type:
+          type: string
+          enum: [Point, Polygon, MultiPolygon]
+        bbox:
+          $ref: "#/components/schemas/BoundingBox"
+        centroid:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: number
+        coordinateCount:
+          type: integer
+        geometryRole:
+          type: string
+          enum: [feature_geometry]
+    ProviderTaxonomy:
+      type: object
+      required: [contractVersion, generatedAt, providerId, taxonomies]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-provider-taxonomy-v1
+        generatedAt:
+          type: string
+          format: date-time
+        providerId:
+          type: string
+          const: sim.safety-data
+        taxonomies:
+          type: array
+          items:
+            type: object
+            required: [taxonomyId, label, entries]
+            properties:
+              taxonomyId:
+                type: string
+              label:
+                type: string
+              entries:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
     SafetyFeature:
       type: object
       required: [type, id, geometry, properties]

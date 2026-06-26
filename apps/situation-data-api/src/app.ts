@@ -12,6 +12,13 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
+import {
+  buildSituationFeatureDetail,
+  buildSituationFeatureGeometry,
+  buildSituationFeatureSummaryCollection,
+  buildSituationTaxonomy,
+  findSituationFeature
+} from "./feature-views.js";
 import type {
   BoundingBox,
   MobileCoverageTechnology,
@@ -140,6 +147,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
 
   app.get("/api/v1/catalog", (_req, res) => {
     res.json(buildSituationMapCatalog(context.config));
+  });
+
+  app.get("/api/v1/taxonomy", (_req, res) => {
+    res.json(buildSituationTaxonomy());
   });
 
   app.get("/api/v1/config", (_req, res) => {
@@ -319,6 +330,49 @@ function registerFeatureRoutes(app: Express, context: SituationDataAppContext): 
       return problem(req, res, 400, "VALIDATION_ERROR", query.error);
     }
     res.json(await context.aggregation.getFeatures(query.value));
+  });
+
+  app.get("/api/v1/features/summary", async (req, res) => {
+    const query = parseSituationQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    res.json(buildSituationFeatureSummaryCollection(collection));
+  });
+
+  app.get("/api/v1/features/:featureId/geometry", async (req, res) => {
+    const featureId = req.params.featureId;
+    if (!featureId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "featureId is required.");
+    }
+    const query = parseSituationQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    const feature = findSituationFeature(collection, featureId);
+    if (!feature) {
+      return problem(req, res, 404, "NOT_FOUND", "Situation feature was not found in the requested query window.");
+    }
+    res.json(buildSituationFeatureGeometry(feature));
+  });
+
+  app.get("/api/v1/features/:featureId", async (req, res) => {
+    const featureId = req.params.featureId;
+    if (!featureId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "featureId is required.");
+    }
+    const query = parseSituationQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    const feature = findSituationFeature(collection, featureId);
+    if (!feature) {
+      return problem(req, res, 404, "NOT_FOUND", "Situation feature was not found in the requested query window.");
+    }
+    res.json(buildSituationFeatureDetail(collection, feature));
   });
 }
 

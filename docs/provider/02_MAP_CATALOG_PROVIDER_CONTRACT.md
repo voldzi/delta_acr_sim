@@ -217,3 +217,34 @@ GET /flight-data/api/v1/aircraft/positions
 ```
 
 Historické aliasy `/api/v1/cop/features` a `/api/v1/cop/tracks` jsou zachované kvůli současným adaptérům, ale nejsou doporučený veřejný kontrakt pro nové klienty.
+
+## Lehký feature kontrakt pro seznamy a detail
+
+Provider GeoJSON streamy zůstávají mapovým kontraktem. Pro dashboardy, seznamy,
+detailní panely a preview COP nemá tahat plné polygonové geometrie, pokud je
+nepotřebuje. SIM proto u `situation-data` a `safety-data` poskytuje doplňkový
+kontrakt:
+
+```http
+GET /situation-data/api/v1/features/summary
+GET /situation-data/api/v1/features/{featureId}
+GET /situation-data/api/v1/features/{featureId}/geometry
+GET /situation-data/api/v1/taxonomy
+
+GET /safety-data/api/v1/features/summary
+GET /safety-data/api/v1/features/{featureId}
+GET /safety-data/api/v1/features/{featureId}/geometry
+GET /safety-data/api/v1/taxonomy
+```
+
+Všechny feature endpointy používají stejné query parametry jako `/features`
+(`bbox`, `layers`, `source`, `limit` a případné službové filtry). `summary`
+vrací stabilní identifikátory, stav, typ, severity, časovou platnost, styl,
+klíčové metriky, odkazy a `geometrySummary`, ale ne souřadnice. Detail vrací
+sanitizované properties, lokalizace a provider metadata bez raw upstream
+payloadu. Samostatná `geometry` cesta vrací těžkou geometrii až ve chvíli, kdy
+ji klient skutečně potřebuje.
+
+`taxonomy` je lehký číselníkový endpoint. COP ho používá pro stabilní mapování
+vrstev, severity, rendering rolí a u `safety-data` také pro autoritativní ČHMÚ
+SIVS/CAP mapování `sourceCode -> typeCode`.

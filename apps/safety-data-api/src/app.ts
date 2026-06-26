@@ -4,6 +4,13 @@ import express, { type Express } from "express";
 import { SafetyAggregationService } from "./aggregation.js";
 import { buildSafetyMapCatalog } from "./catalog.js";
 import type { SafetyDataConfig } from "./config.js";
+import {
+  buildSafetyFeatureDetail,
+  buildSafetyFeatureGeometry,
+  buildSafetyFeatureSummaryCollection,
+  buildSafetyTaxonomy,
+  findSafetyFeature
+} from "./feature-views.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
@@ -124,6 +131,10 @@ function registerMetadataRoutes(app: Express, context: SafetyDataAppContext): vo
     res.json(buildSafetyMapCatalog(context.config));
   });
 
+  app.get("/api/v1/taxonomy", (_req, res) => {
+    res.json(buildSafetyTaxonomy());
+  });
+
   app.get("/api/v1/observability", (_req, res) => {
     const cache = context.aggregation.cacheStats();
     const snapshot = context.aggregation.telemetrySnapshot();
@@ -170,6 +181,49 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
       return problem(req, res, 400, "VALIDATION_ERROR", query.error);
     }
     res.json(await context.aggregation.getFeatures(query.value));
+  });
+
+  app.get("/api/v1/features/summary", async (req, res) => {
+    const query = parseSafetyQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    res.json(buildSafetyFeatureSummaryCollection(collection));
+  });
+
+  app.get("/api/v1/features/:featureId/geometry", async (req, res) => {
+    const featureId = req.params.featureId;
+    if (!featureId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "featureId is required.");
+    }
+    const query = parseSafetyQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    const feature = findSafetyFeature(collection, featureId);
+    if (!feature) {
+      return problem(req, res, 404, "NOT_FOUND", "Safety feature was not found in the requested query window.");
+    }
+    res.json(buildSafetyFeatureGeometry(feature));
+  });
+
+  app.get("/api/v1/features/:featureId", async (req, res) => {
+    const featureId = req.params.featureId;
+    if (!featureId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "featureId is required.");
+    }
+    const query = parseSafetyQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    const feature = findSafetyFeature(collection, featureId);
+    if (!feature) {
+      return problem(req, res, 404, "NOT_FOUND", "Safety feature was not found in the requested query window.");
+    }
+    res.json(buildSafetyFeatureDetail(collection, feature));
   });
 }
 

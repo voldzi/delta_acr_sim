@@ -704,6 +704,87 @@ describe("Situation Data API contract", () => {
     }
   });
 
+  it("exposes lightweight summary, detail, geometry and taxonomy endpoints", async () => {
+    const taxonomy = await request(app).get("/api/v1/taxonomy").expect(200);
+    expect(taxonomy.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-taxonomy-v1",
+        providerId: "sim.situation-data",
+        taxonomies: expect.arrayContaining([
+          expect.objectContaining({
+            taxonomyId: "sim.situation.layers",
+            entries: expect.arrayContaining([
+              expect.objectContaining({ layerId: "weather" }),
+              expect.objectContaining({ layerId: "weather_webcams" }),
+              expect.objectContaining({ layerId: "weather_radar_reflectivity" })
+            ])
+          }),
+          expect.objectContaining({
+            taxonomyId: "sim.situation.geometry_roles",
+            entries: expect.arrayContaining([
+              expect.objectContaining({ geometryRole: "feature_geometry" }),
+              expect.objectContaining({ geometryRole: "raster_extent" })
+            ])
+          })
+        ])
+      })
+    );
+
+    const summary = await request(app).get("/api/v1/features/summary?layers=weather&source=mock&limit=1").expect(200);
+    expect(summary.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-summary-v1",
+        providerId: "sim.situation-data",
+        summary: expect.objectContaining({ omittedGeometry: true }),
+        features: [
+          expect.objectContaining({
+            featureId: "weather:mock:prague-west",
+            layerId: "diagnostic.mock.weather",
+            providerLayerId: "mock.weather",
+            label: "Synthetic weather reference",
+            geometry: expect.objectContaining({ type: "Point", coordinateCount: 1, geometryRole: "feature_geometry" }),
+            links: expect.objectContaining({
+              detail: expect.stringContaining("/situation-data/api/v1/features/weather%3Amock%3Aprague-west?"),
+              geometry: expect.stringContaining("/situation-data/api/v1/features/weather%3Amock%3Aprague-west/geometry?")
+            })
+          })
+        ]
+      })
+    );
+    expect(summary.body.features[0].links.detail).toContain("layers=weather");
+    expect(summary.body.features[0].links.detail).toContain("source=mock");
+    expect(summary.body.features[0]).not.toHaveProperty("geometry.coordinates");
+
+    const detail = await request(app).get("/api/v1/features/weather%3Amock%3Aprague-west?layers=weather&source=mock&limit=1").expect(200);
+    expect(detail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-detail-v1",
+        providerId: "sim.situation-data",
+        summary: expect.objectContaining({ featureId: "weather:mock:prague-west" }),
+        properties: expect.objectContaining({
+          label: "Synthetic weather reference",
+          metrics: expect.objectContaining({ temperatureC: 18.2 })
+        }),
+        links: expect.objectContaining({
+          geometry: expect.stringContaining("/situation-data/api/v1/features/weather%3Amock%3Aprague-west/geometry?")
+        })
+      })
+    );
+    expect(detail.body.properties.raw).toBeUndefined();
+
+    const geometry = await request(app).get("/api/v1/features/weather%3Amock%3Aprague-west/geometry?layers=weather&source=mock&limit=1").expect(200);
+    expect(geometry.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-geometry-v1",
+        providerId: "sim.situation-data",
+        featureId: "weather:mock:prague-west",
+        resolution: "native",
+        geometry: expect.objectContaining({ type: "Point", coordinates: expect.any(Array) }),
+        geometrySummary: expect.objectContaining({ type: "Point", coordinateCount: 1, geometryRole: "feature_geometry" })
+      })
+    );
+  });
+
   it("exposes non-secret runtime configuration", async () => {
     const response = await request(app).get("/api/v1/config").expect(200);
 

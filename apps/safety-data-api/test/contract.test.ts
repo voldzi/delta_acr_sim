@@ -209,6 +209,76 @@ describe("Safety Data API contract", () => {
     );
   });
 
+  it("exposes lightweight summary, detail, geometry and taxonomy endpoints", async () => {
+    const taxonomy = await request(app).get("/api/v1/taxonomy").expect(200);
+    expect(taxonomy.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-taxonomy-v1",
+        providerId: "sim.safety-data",
+        taxonomies: expect.arrayContaining([
+          expect.objectContaining({
+            taxonomyId: "chmi.sivs",
+            entries: expect.arrayContaining([
+              expect.objectContaining({ typeCode: "weather.temperature.high", codes: expect.arrayContaining(["I.1", "I.2"]) }),
+              expect.objectContaining({ typeCode: "hydro.flood.warning", codes: expect.arrayContaining(["XI.1", "XI.2", "XI.3", "XI.4"]) })
+            ])
+          }),
+          expect.objectContaining({ taxonomyId: "sim.safety.layers" })
+        ])
+      })
+    );
+
+    const summary = await request(app).get("/api/v1/features/summary?layers=weather_alerts&source=mock&limit=1").expect(200);
+    expect(summary.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-summary-v1",
+        providerId: "sim.safety-data",
+        summary: expect.objectContaining({ omittedGeometry: true }),
+        features: [
+          expect.objectContaining({
+            featureId: "weather_alerts:mock:wind-prague-west",
+            layerId: "public.safety.weather_alerts",
+            providerLayerId: "safety.weather_alerts",
+            geometry: expect.objectContaining({ type: "Point", coordinateCount: 1, geometryRole: "feature_geometry" }),
+            links: expect.objectContaining({
+              detail: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west?"),
+              geometry: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?")
+            })
+          })
+        ]
+      })
+    );
+    expect(summary.body.features[0].links.detail).toContain("layers=weather_alerts");
+    expect(summary.body.features[0].links.detail).toContain("source=mock");
+    expect(summary.body.features[0]).not.toHaveProperty("geometry.coordinates");
+
+    const detail = await request(app).get("/api/v1/features/weather_alerts%3Amock%3Awind-prague-west?layers=weather_alerts&source=mock&limit=1").expect(200);
+    expect(detail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-detail-v1",
+        providerId: "sim.safety-data",
+        summary: expect.objectContaining({ featureId: "weather_alerts:mock:wind-prague-west" }),
+        properties: expect.objectContaining({ headline: "Synthetic wind warning" }),
+        links: expect.objectContaining({
+          geometry: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?")
+        })
+      })
+    );
+    expect(detail.body.properties.raw).toBeUndefined();
+
+    const geometry = await request(app).get("/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?layers=weather_alerts&source=mock&limit=1").expect(200);
+    expect(geometry.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-geometry-v1",
+        providerId: "sim.safety-data",
+        featureId: "weather_alerts:mock:wind-prague-west",
+        resolution: "native",
+        geometry: expect.objectContaining({ type: "Point", coordinates: expect.any(Array) }),
+        geometrySummary: expect.objectContaining({ type: "Point", coordinateCount: 1 })
+      })
+    );
+  });
+
   it("exposes cache metrics", async () => {
     await request(app).get("/api/v1/features?layers=weather_alerts,fire,flood,boundary_admin&source=mock&limit=10").expect(200);
 

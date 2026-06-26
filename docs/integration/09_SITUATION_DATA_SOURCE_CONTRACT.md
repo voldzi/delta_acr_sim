@@ -281,6 +281,45 @@ GET /weather-radar/frames?product=merge1h&hours=6&limit=24
 
 COP nemá volat `opendata.chmi.cz` přímo. Má použít SIM provider catalog a bbox query.
 
+## Lehký summary/detail kontrakt
+
+Plný `GET /situation-data/api/v1/features` je mapový GeoJSON stream. Pro
+seznamy, dashboardy, diagnostiku zdrojů a náhledy má COP používat:
+
+```http
+GET /situation-data/api/v1/features/summary?bbox=...&layers=weather,weather_webcams,air_quality&limit=250
+```
+
+Summary odpověď má `contractVersion=sim-provider-feature-summary-v1` a nevrací
+souřadnice. Každá položka obsahuje `featureId`, `layerId`, `providerLayerId`,
+`sourceId`, `label`, `severity`, `stale`, `confidence`, časovou platnost,
+metriky, `rendering`, `geometrySummary` a odkazy `links.detail` a
+`links.geometry`.
+
+Po kliknutí na objekt má COP dotáhnout detail:
+
+```http
+GET /situation-data/api/v1/features/{featureId}?bbox=...&layers=...&source=...
+```
+
+Detail vrací `contractVersion=sim-provider-feature-detail-v1`, sanitizované
+properties, lokalizace a provider metadata bez raw upstream payloadu. Pokud je
+potřeba zvýraznit nebo vykreslit geometrii samostatně, použije se:
+
+```http
+GET /situation-data/api/v1/features/{featureId}/geometry?bbox=...&layers=...&source=...
+```
+
+Číselníky a rendering role jsou dostupné zde:
+
+```http
+GET /situation-data/api/v1/taxonomy
+```
+
+COP má respektovat `geometrySummary.geometryRole` a `properties.rendering`.
+Zejména `raster_extent` je jen rozsah rastru a nesmí se vykreslovat jako běžný
+vyplněný polygon.
+
 Radarové features jsou polygonové metadata pro raster overlay, ne vektorová buňková analýza. Polygon v `geometry` je pouze rozsah rastru; klient ho nesmí vykreslovat jako běžný vyplněný polygon. Klíčová pole:
 
 ```json
