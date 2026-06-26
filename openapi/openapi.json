@@ -3,7 +3,11 @@
   "info": {
     "title": "CSM SIM Composite API",
     "version": "0.1.0",
-    "description": "JSON-first composite OpenAPI contract for CSM SIM REST API surfaces."
+    "description": "JSON-first composite OpenAPI contract for CSM SIM REST API surfaces.",
+    "license": {
+      "name": "Proprietary - CSM SIM pilot",
+      "identifier": "LicenseRef-CSM-SIM-Pilot"
+    }
   },
   "servers": [
     {
@@ -13,10 +17,13 @@
     {
       "url": "http://docker.home.cz:5020",
       "description": "Pilot reverse proxy"
-    },
+    }
+  ],
+  "security": [
     {
-      "url": "http://localhost:5020",
-      "description": "Local Docker Compose reverse proxy"
+      "bearerAuth": [
+
+      ]
     }
   ],
   "tags": [
@@ -109,7 +116,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "./schemas/scenario.schema.json"
+                "$ref": "../docs/api/schemas/scenario.schema.json"
               }
             }
           }
@@ -165,7 +172,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "./schemas/scenario.schema.json"
+                  "$ref": "../docs/api/schemas/scenario.schema.json"
                 }
               }
             }
@@ -207,7 +214,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "./schemas/scenario.schema.json"
+                "$ref": "../docs/api/schemas/scenario.schema.json"
               }
             }
           }
@@ -218,7 +225,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "./schemas/scenario.schema.json"
+                  "$ref": "../docs/api/schemas/scenario.schema.json"
                 }
               }
             }
@@ -628,7 +635,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "./schemas/fault-injection.schema.json"
+                "$ref": "../docs/api/schemas/fault-injection.schema.json"
               }
             }
           }
@@ -639,7 +646,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "./schemas/fault-injection.schema.json"
+                  "$ref": "../docs/api/schemas/fault-injection.schema.json"
                 }
               }
             }
@@ -894,7 +901,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "./schemas/publisher-config.schema.json"
+                "$ref": "../docs/api/schemas/publisher-config.schema.json"
               }
             }
           }
@@ -937,7 +944,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "./schemas/canonical-event-envelope.schema.json"
+                "$ref": "../docs/api/schemas/canonical-event-envelope.schema.json"
               }
             }
           }
@@ -1176,7 +1183,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "./schemas/ai-scenario-draft.schema.json"
+                  "$ref": "../docs/api/schemas/ai-scenario-draft.schema.json"
                 }
               }
             }
@@ -1221,7 +1228,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "./schemas/ai-scenario-draft.schema.json"
+                  "$ref": "../docs/api/schemas/ai-scenario-draft.schema.json"
                 }
               }
             }
@@ -1700,6 +1707,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "flightData_get_flight_data_api_v1_aircraft_positions"
@@ -1726,6 +1743,16 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1791,6 +1818,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "flightData_get_flight_data_api_v1_catalog"
@@ -1809,6 +1846,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FlightDataFlightDataConfig"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1853,6 +1900,16 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2056,6 +2113,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "flightData_get_flight_data_api_v1_aircraft_types"
@@ -2104,6 +2171,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "flightData_get_flight_data_health_live"
@@ -2118,6 +2195,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "flightData_get_flight_data_health_ready"
@@ -2141,6 +2228,16 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2173,6 +2270,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "situationData_get_situation_data_api_v1_sources",
@@ -2192,6 +2299,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SituationDataProviderMapCatalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2217,6 +2334,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "situationData_get_situation_data_api_v1_taxonomy",
@@ -2235,6 +2362,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SituationDataPublicConfig"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2496,6 +2633,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "situationData_get_situation_data_api_v1_mobile_coverage_metadata",
@@ -2514,6 +2661,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SituationDataDemCatalogStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2582,6 +2739,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SituationDataWeatherRadarFrameCatalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -2873,6 +3040,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "situationData_get_situation_data_api_v1_observability",
@@ -2887,6 +3064,16 @@
         "responses": {
           "200": {
             "description": "Layer registry"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_layers",
@@ -2901,6 +3088,16 @@
         "responses": {
           "200": {
             "description": "Source registry"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_sources",
@@ -2963,6 +3160,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_catalog",
@@ -2985,6 +3192,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_taxonomy",
@@ -2999,6 +3216,16 @@
         "responses": {
           "200": {
             "description": "Public runtime configuration"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_config",
@@ -3314,6 +3541,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "takGateway_get_tak_gateway_api_v1_catalog",
@@ -3584,6 +3821,16 @@
         "responses": {
           "200": {
             "description": "Layer registry"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "takGateway_get_tak_gateway_api_v1_layers",
@@ -3598,6 +3845,16 @@
         "responses": {
           "200": {
             "description": "Source registry"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "takGateway_get_tak_gateway_api_v1_sources",
@@ -3612,6 +3869,16 @@
         "responses": {
           "200": {
             "description": "Runtime configuration"
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "operationId": "takGateway_get_tak_gateway_api_v1_config",
@@ -3689,6 +3956,9 @@
         "tags": [
           "Situation Data: Health"
         ],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -3696,6 +3966,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden by the public gateway boundary when accessed from an external network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3710,6 +3990,9 @@
         "tags": [
           "Situation Data: Health"
         ],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -3717,6 +4000,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden by the public gateway boundary when accessed from an external network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3731,6 +4024,9 @@
         "tags": [
           "Safety Data: Health"
         ],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -3738,6 +4034,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden by the public gateway boundary when accessed from an external network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3752,6 +4058,9 @@
         "tags": [
           "Safety Data: Health"
         ],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -3759,6 +4068,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden by the public gateway boundary when accessed from an external network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3773,6 +4092,9 @@
         "tags": [
           "TAK Gateway: Health"
         ],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -3780,6 +4102,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden by the public gateway boundary when accessed from an external network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3794,6 +4126,9 @@
         "tags": [
           "TAK Gateway: Health"
         ],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -3801,6 +4136,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden by the public gateway boundary when accessed from an external network.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3945,16 +4290,8 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "./schemas/scenario.schema.json"
+              "$ref": "../docs/api/schemas/scenario.schema.json"
             }
-          }
-        }
-      },
-      "SimulatorDeleteResponse": {
-        "type": "object",
-        "properties": {
-          "deleted": {
-            "type": "boolean"
           }
         }
       },
@@ -4027,7 +4364,7 @@
           "blocks": {
             "type": "array",
             "items": {
-              "$ref": "./schemas/scenario-block.schema.json"
+              "$ref": "../docs/api/schemas/scenario-block.schema.json"
             }
           }
         }
@@ -4038,7 +4375,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "./schemas/fault-injection.schema.json"
+              "$ref": "../docs/api/schemas/fault-injection.schema.json"
             }
           }
         }
@@ -6939,68 +7276,6 @@
           }
         }
       },
-      "SituationDataSourceHealthStatus": {
-        "type": "object",
-        "required": [
-          "sourceId",
-          "status",
-          "warnings"
-        ],
-        "properties": {
-          "sourceId": {
-            "$ref": "#/components/schemas/SituationDataSourceId"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "ok",
-              "degraded"
-            ]
-          },
-          "backend": {
-            "type": "string",
-            "enum": [
-              "unconfigured",
-              "local-postgis",
-              "patroni-postgis",
-              "external-postgis"
-            ]
-          },
-          "objectCount": {
-            "type": "integer",
-            "description": "Present for PostGIS-backed providers when public.osm_poi is readable."
-          },
-          "lastImportAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "lastImportAgeSeconds": {
-            "type": "integer"
-          },
-          "boundaryFeatureCount": {
-            "type": "integer"
-          },
-          "boundaryLevels": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "boundaryLastImportAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "boundaryLastImportAgeSeconds": {
-            "type": "integer"
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
       "SituationDataSituationObservability": {
         "type": "object",
         "properties": {
@@ -8867,6 +9142,10 @@
                   "type": "string"
                 }
               },
+              "license": {
+                "type": "object",
+                "additionalProperties": true
+              },
               "fireStatus": {
                 "type": "string"
               },
@@ -9460,11 +9739,7 @@
       }
     },
     "securitySchemes": {
-      "SimulatorbearerAuth": {
-        "type": "http",
-        "scheme": "bearer"
-      },
-      "TakGatewaybearerAuth": {
+      "bearerAuth": {
         "type": "http",
         "scheme": "bearer"
       }
@@ -9757,6 +10032,7 @@
     "notes": [
       "openapi/openapi.json is the binding artifact.",
       "Current runtime error responses may use correlationId; requestId unification is a compatibility-safe follow-up."
-    ]
+    ],
+    "localServer": "http://localhost:5020"
   }
 }

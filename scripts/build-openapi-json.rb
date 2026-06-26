@@ -4,6 +4,7 @@
 require "json"
 require "yaml"
 require "fileutils"
+require "set"
 
 ROOT = File.expand_path("..", __dir__)
 OUTPUT = File.join(ROOT, "openapi", "openapi.json")
@@ -67,9 +68,78 @@ def deep_transform(value, prefix)
 end
 
 def prefix_ref(ref, prefix)
+  return ref.sub(%r{\A\./schemas/}, "../docs/api/schemas/") if ref.start_with?("./schemas/")
+
   ref.sub(%r{\A#/components/([^/]+)/([^/]+)\z}) do
     "#/components/#{$1}/#{prefix}#{$2}"
   end
+end
+
+def transform_security_requirement(value)
+  return value unless value.is_a?(Array)
+
+  value.map do |requirement|
+    next requirement unless requirement.is_a?(Hash)
+
+    requirement.transform_keys { |key| key.to_s }
+  end
+end
+
+def ensure_client_error_response(operation)
+  responses = operation["responses"]
+  return unless responses.is_a?(Hash)
+  return if responses.keys.any? { |status| status.to_s.match?(/\A4\d\d\z/) }
+
+  responses["401"] = {
+    "description" => "Missing, expired or unauthorized bearer token.",
+    "content" => {
+      "application/json" => {
+        "schema" => { "$ref" => "#/components/schemas/ErrorResponse" }
+      }
+    }
+  }
+end
+
+def collect_schema_refs(value, refs)
+  case value
+  when Hash
+    value.each do |key, item|
+      if key == "$ref" && item.is_a?(String)
+        match = item.match(%r{\A#/components/schemas/([^/]+)\z})
+        refs << match[1] if match
+      end
+      collect_schema_refs(item, refs)
+    end
+  when Array
+    value.each { |item| collect_schema_refs(item, refs) }
+  end
+end
+
+def prune_unused_schemas(doc)
+  schemas = doc.dig("components", "schemas")
+  return unless schemas.is_a?(Hash)
+
+  roots = Set.new
+  doc_without_schemas = Marshal.load(Marshal.dump(doc))
+  doc_without_schemas["components"]["schemas"] = {}
+  collect_schema_refs(doc_without_schemas, roots)
+
+  reachable = Set.new
+  queue = roots.to_a
+  until queue.empty?
+    name = queue.shift
+    next if reachable.include?(name)
+
+    schema = schemas[name]
+    next unless schema
+
+    reachable << name
+    nested = Set.new
+    collect_schema_refs(schema, nested)
+    nested.each { |nested_name| queue << nested_name unless reachable.include?(nested_name) }
+  end
+
+  schemas.select! { |name, _schema| reachable.include?(name) }
 end
 
 def prefixed_path(path, prefix)
@@ -102,7 +172,8 @@ def merge_components(target, source, prefix)
 
     target["components"][section] ||= {}
     values.each do |name, schema|
-      target["components"][section]["#{prefix}#{name}"] = deep_transform(schema, prefix)
+      component_name = section == "securitySchemes" ? name : "#{prefix}#{name}"
+      target["components"][section][component_name] = deep_transform(schema, prefix)
     end
   end
 end
@@ -117,6 +188,8 @@ def add_path(target, source_path, path_item, spec)
 
     operation["operationId"] = operation_id(spec[:key], method, path, operation["operationId"])
     operation["tags"] = tag_names(operation, spec[:tag_prefix])
+    operation["security"] = transform_security_requirement(operation["security"]) if operation.key?("security")
+    ensure_client_error_response(operation)
   end
 
   target["paths"][path] = transformed
@@ -130,12 +203,21 @@ def add_health_path(target, path, tag, operation_id_prefix)
       "summary" => path.end_with?("/ready") ? "#{tag} readiness" : "#{tag} liveness",
       "operationId" => "#{operation_id_prefix}_#{path.end_with?("/ready") ? "ready" : "live"}",
       "tags" => ["#{tag}: Health"],
+      "security" => [],
       "responses" => {
         "200" => {
           "description" => "Service health response",
           "content" => {
             "application/json" => {
               "schema" => { "$ref" => "#/components/schemas/HealthResponse" }
+            }
+          }
+        },
+        "403" => {
+          "description" => "Forbidden by the public gateway boundary when accessed from an external network.",
+          "content" => {
+            "application/json" => {
+              "schema" => { "$ref" => "#/components/schemas/ErrorResponse" }
             }
           }
         }
@@ -150,12 +232,18 @@ def build_document
     "info" => {
       "title" => "CSM SIM Composite API",
       "version" => "0.1.0",
-      "description" => "JSON-first composite OpenAPI contract for CSM SIM REST API surfaces."
+      "description" => "JSON-first composite OpenAPI contract for CSM SIM REST API surfaces.",
+      "license" => {
+        "name" => "Proprietary - CSM SIM pilot",
+        "identifier" => "LicenseRef-CSM-SIM-Pilot"
+      }
     },
     "servers" => [
       { "url" => "https://sim.zeleznalady.cz", "description" => "Published SIM reverse proxy" },
-      { "url" => "http://docker.home.cz:5020", "description" => "Pilot reverse proxy" },
-      { "url" => "http://localhost:5020", "description" => "Local Docker Compose reverse proxy" }
+      { "url" => "http://docker.home.cz:5020", "description" => "Pilot reverse proxy" }
+    ],
+    "security" => [
+      { "bearerAuth" => [] }
     ],
     "tags" => [],
     "paths" => {},
@@ -195,7 +283,8 @@ def build_document
       "notes" => [
         "openapi/openapi.json is the binding artifact.",
         "Current runtime error responses may use correlationId; requestId unification is a compatibility-safe follow-up."
-      ]
+      ],
+      "localServer" => "http://localhost:5020"
     }
   }
 
@@ -224,6 +313,7 @@ def build_document
   add_health_path(doc, "/tak-gateway/health/ready", "TAK Gateway", "takGateway_health_ready")
 
   doc["tags"].uniq! { |tag| tag["name"] }
+  prune_unused_schemas(doc)
   doc
 end
 

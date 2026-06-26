@@ -752,6 +752,7 @@ export function App() {
       : authConfig.publicReadEnabled
         ? "Public read"
         : "Login required";
+  const showTopbarOidcAction = oidcEnabled && (authSession.status === "authenticated" || canReadDashboard);
 
   const readinessItems = [
     {
@@ -1111,7 +1112,7 @@ export function App() {
             <p>{activeSectionMeta.description}</p>
           </div>
           <div className="topbar-actions">
-            {oidcEnabled ? (
+            {showTopbarOidcAction ? (
               authSession.status === "authenticated" ? (
                 <button type="button" className="token-button operator-button" onClick={logoutFromKeycloak}>
                   <LogOut size={15} /> {authSession.profile?.username ?? "Keycloak"}
