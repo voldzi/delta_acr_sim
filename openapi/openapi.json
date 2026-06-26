@@ -6926,7 +6926,7 @@
           "stale",
           "confidence",
           "observedAt",
-          "geometry",
+          "geometrySummary",
           "links"
         ],
         "properties": {
@@ -7004,7 +7004,7 @@
             "type": "string",
             "format": "date-time"
           },
-          "geometry": {
+          "geometrySummary": {
             "$ref": "#/components/schemas/SituationDataFeatureGeometrySummary"
           },
           "metrics": {
@@ -7937,7 +7937,7 @@
           "observedAt",
           "validFrom",
           "updatedAt",
-          "geometry",
+          "geometrySummary",
           "links"
         ],
         "properties": {
@@ -8050,7 +8050,7 @@
             "type": "object",
             "additionalProperties": true
           },
-          "geometry": {
+          "geometrySummary": {
             "$ref": "#/components/schemas/SafetyDataFeatureGeometrySummary"
           },
           "links": {

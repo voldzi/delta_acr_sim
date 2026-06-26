@@ -1512,7 +1512,7 @@ components:
             type: string
     ProviderFeatureSummary:
       type: object
-      required: [featureId, layer, layerId, providerId, providerLayerId, sourceId, label, category, severity, stale, confidence, observedAt, geometry, links]
+      required: [featureId, layer, layerId, providerId, providerLayerId, sourceId, label, category, severity, stale, confidence, observedAt, geometrySummary, links]
       properties:
         featureId:
           type: string
@@ -1562,7 +1562,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-        geometry:
+        geometrySummary:
           $ref: "#/components/schemas/FeatureGeometrySummary"
         metrics:
           type: object

@@ -369,7 +369,7 @@ components:
             type: string
     ProviderFeatureSummary:
       type: object
-      required: [featureId, layer, layerId, providerId, providerLayerId, sourceId, sourceName, label, category, hazardType, severity, status, stale, confidence, observedAt, validFrom, updatedAt, geometry, links]
+      required: [featureId, layer, layerId, providerId, providerLayerId, sourceId, sourceName, label, category, hazardType, severity, status, stale, confidence, observedAt, validFrom, updatedAt, geometrySummary, links]
       properties:
         featureId:
           type: string
@@ -435,7 +435,7 @@ components:
         taxonomy:
           type: object
           additionalProperties: true
-        geometry:
+        geometrySummary:
           $ref: "#/components/schemas/FeatureGeometrySummary"
         links:
           type: object

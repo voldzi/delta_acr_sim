@@ -49,7 +49,7 @@ export interface SituationFeatureSummary {
   rendering?: SituationFeatureProperties["rendering"];
   presentation?: Record<string, unknown>;
   taxonomy?: Record<string, unknown>;
-  geometry: FeatureGeometrySummary;
+  geometrySummary: FeatureGeometrySummary;
   links: {
     detail: string;
     geometry: string;
@@ -238,7 +238,7 @@ function summarizeSituationFeature(feature: SituationFeature, query?: SituationF
     rendering: feature.properties.rendering,
     presentation: recordValue(providerProperties?.presentation),
     taxonomy: recordValue(providerProperties?.taxonomy),
-    geometry: summarizeGeometry(feature),
+    geometrySummary: summarizeGeometry(feature),
     links: {
       detail: situationFeatureDetailUrl(feature.id, query),
       geometry: situationFeatureGeometryUrl(feature.id, query)

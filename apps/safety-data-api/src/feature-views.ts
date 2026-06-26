@@ -47,7 +47,7 @@ export interface SafetyFeatureSummary {
   metrics?: Record<string, number | string | boolean>;
   presentation?: Record<string, unknown>;
   taxonomy?: Record<string, unknown>;
-  geometry: FeatureGeometrySummary;
+  geometrySummary: FeatureGeometrySummary;
   links: {
     detail: string;
     geometry: string;
@@ -237,7 +237,7 @@ function summarizeSafetyFeature(feature: SafetyFeature, query?: SafetyFeatureCol
     metrics: feature.properties.metrics,
     presentation: recordValue(providerProperties?.presentation),
     taxonomy: recordValue(providerProperties?.taxonomy),
-    geometry: summarizeGeometry(feature.geometry),
+    geometrySummary: summarizeGeometry(feature.geometry),
     links: {
       detail: safetyFeatureDetailUrl(feature.id, query),
       geometry: safetyFeatureGeometryUrl(feature.id, query)

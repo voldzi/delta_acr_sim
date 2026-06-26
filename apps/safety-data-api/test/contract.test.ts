@@ -239,7 +239,7 @@ describe("Safety Data API contract", () => {
             featureId: "weather_alerts:mock:wind-prague-west",
             layerId: "public.safety.weather_alerts",
             providerLayerId: "safety.weather_alerts",
-            geometry: expect.objectContaining({ type: "Point", coordinateCount: 1, geometryRole: "feature_geometry" }),
+            geometrySummary: expect.objectContaining({ type: "Point", coordinateCount: 1, geometryRole: "feature_geometry" }),
             links: expect.objectContaining({
               detail: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west?"),
               geometry: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?")
@@ -250,7 +250,7 @@ describe("Safety Data API contract", () => {
     );
     expect(summary.body.features[0].links.detail).toContain("layers=weather_alerts");
     expect(summary.body.features[0].links.detail).toContain("source=mock");
-    expect(summary.body.features[0]).not.toHaveProperty("geometry.coordinates");
+    expect(summary.body.features[0]).not.toHaveProperty("geometry");
 
     const detail = await request(app).get("/api/v1/features/weather_alerts%3Amock%3Awind-prague-west?layers=weather_alerts&source=mock&limit=1").expect(200);
     expect(detail.body).toEqual(
