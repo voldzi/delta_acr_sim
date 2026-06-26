@@ -460,7 +460,7 @@ CHMI_ORP_CODELIST_URL=https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=
 CHMI_HYDRO_METADATA_URL=https://opendata.chmi.cz/hydrology/now/metadata/meta1.json
 CHMI_HYDRO_NOW_BASE_URL=https://opendata.chmi.cz/hydrology/now/data
 CHMI_HYDRO_RECENT_BASE_URL=https://opendata.chmi.cz/hydrology/recent/data
-CHMI_HYDRO_MAX_STATIONS=80
+CHMI_HYDRO_MAX_STATIONS=600
 CHMI_HYDRO_DETAIL_DEFAULT_PAST_HOURS=168
 CHMI_HYDRO_DETAIL_FORECAST_HOURS=72
 CHMI_HYDRO_DETAIL_BACKFILL_DAYS=7

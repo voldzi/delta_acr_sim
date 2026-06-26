@@ -59,7 +59,7 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/now/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
     chmiHydroRecentBaseUrl: process.env.CHMI_HYDRO_RECENT_BASE_URL ?? "https://opendata.chmi.cz/hydrology/recent/data",
-    chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 80),
+    chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 600),
     chmiHydroDetailDefaultPastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_DEFAULT_PAST_HOURS, 168),
     chmiHydroDetailForecastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_FORECAST_HOURS, 72),
     chmiHydroDetailBackfillDays: parseInteger(process.env.CHMI_HYDRO_DETAIL_BACKFILL_DAYS, 7),
