@@ -72,6 +72,10 @@ def query_path(path: str, params: dict[str, str | int]) -> str:
     return path + "?" + urlencode(params)
 
 
+def no_cache(params: dict[str, str | int]) -> dict[str, str | int]:
+    return {"nocache": 1, **params}
+
+
 def source_health(payload: dict[str, Any], source_id: str) -> dict[str, Any]:
     sources = payload.get("sourceHealth")
     require(isinstance(sources, list), "situation health: missing sourceHealth")
@@ -172,7 +176,7 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
         "osm infrastructure",
         query_path(
             "/situation-data/api/v1/features",
-            {"bbox": args.bbox, "layers": "ground,mobile", "source": "osm_postgis", "limit": 5},
+            no_cache({"bbox": args.bbox, "layers": "ground,mobile", "source": "osm_postgis", "limit": 5}),
         ),
         expected_source_id="osm_postgis",
         expected_layer_id_prefix="reference.infrastructure.",
@@ -182,12 +186,12 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
         "osm boundaries",
         query_path(
             "/situation-data/api/v1/features",
-            {
+            no_cache({
                 "bbox": args.boundary_bbox,
                 "layers": "boundary_region,boundary_district,boundary_orp,place_settlements",
                 "source": "osm_postgis",
                 "limit": 5,
-            },
+            }),
         ),
         expected_source_id="osm_postgis",
     )
@@ -196,7 +200,7 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
         "mobile coverage",
         query_path(
             "/situation-data/api/v1/features",
-            {"bbox": args.bbox, "layers": "mobile_coverage", "source": "mobile_coverage_model", "technology": "4G", "limit": 5},
+            no_cache({"bbox": args.bbox, "layers": "mobile_coverage", "source": "mobile_coverage_model", "technology": "4G", "limit": 5}),
         ),
         expected_source_id="mobile_coverage_model",
         expected_layer_id_prefix="diagnostic.mobile.coverage",
@@ -206,12 +210,12 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
         "mobile network",
         query_path(
             "/situation-data/api/v1/features",
-            {"bbox": args.bbox, "layers": "mobile_network", "source": "mobile_network_model", "technology": "4G", "limit": 5},
+            no_cache({"bbox": args.bbox, "layers": "mobile_network", "source": "mobile_network_model", "technology": "4G", "limit": 5}),
         ),
         "mobile_network_model has no features until prepared mobile coverage read-model cells exist for the requested area",
     )
 
-    coverage_payload, metadata_response = client.json("/situation-data/api/v1/mobile-coverage/metadata")
+    coverage_payload, metadata_response = client.json("/situation-data/api/v1/mobile-coverage/metadata?nocache=1")
     coverage_text = json.dumps(coverage_payload, ensure_ascii=False)
     require("mobile_coverage" in coverage_text, "mobile coverage metadata: missing mobile_coverage marker")
 
@@ -260,7 +264,7 @@ def check_safety_data(client: Client, args: argparse.Namespace) -> dict[str, Any
         "safety admin boundaries",
         query_path(
             "/safety-data/api/v1/features",
-            {"bbox": args.boundary_bbox, "layers": "boundary_admin", "source": "admin_boundaries", "limit": 5},
+            no_cache({"bbox": args.boundary_bbox, "layers": "boundary_admin", "source": "admin_boundaries", "limit": 5}),
         ),
         expected_source_id="admin_boundaries",
     )
