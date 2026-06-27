@@ -185,7 +185,7 @@ server-side souhrn. Výchozí Docker Compose hodnoty míří na interní názvy
 provider kontejnerů:
 
 ```bash
-SIM_OPERATIONS_PROVIDER_TIMEOUT_MS=1500
+SIM_OPERATIONS_PROVIDER_TIMEOUT_MS=5000
 SIM_OPERATIONS_FLIGHT_DATA_BASE_URL=http://flight-data-api:4010
 SIM_OPERATIONS_SITUATION_DATA_BASE_URL=http://situation-data-api:4020
 SIM_OPERATIONS_SAFETY_DATA_BASE_URL=http://safety-data-api:4030
