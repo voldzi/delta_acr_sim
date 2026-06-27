@@ -651,10 +651,11 @@ function emptySafetyDataFeatureResponse(): SafetyDataFeatureResponse {
   };
 }
 
-export async function loadDashboard(options: { includeDetails?: boolean } = {}): Promise<DashboardLoadResult> {
+export async function loadDashboard(options: { includeDetails?: boolean; includeObservabilityDetails?: boolean } = {}): Promise<DashboardLoadResult> {
   const dashboardStartedAt = performance.now();
   const operatorTokenConfigured = hasSimAuthorizationToken();
   const includeDetails = options.includeDetails ?? true;
+  const includeObservabilityDetails = options.includeObservabilityDetails ?? includeDetails;
   let operationsSummaryWarning: string | undefined;
   const operationsSummary = await api<OperationsSummary>("/api/v1/operations/summary").catch((error: unknown) => {
     operationsSummaryWarning = error instanceof Error ? error.message : "unknown error";
@@ -686,10 +687,10 @@ export async function loadDashboard(options: { includeDetails?: boolean } = {}):
     includeDetails ? api<{ items: TakGatewaySource[] }>("/tak-gateway/api/v1/sources") : Promise.resolve({ items: [] }),
     includeDetails ? api<TakGatewayConfig>("/tak-gateway/api/v1/config") : Promise.resolve(emptyTakGatewayConfig()),
     includeDetails && operatorTokenConfigured ? api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12") : Promise.resolve(emptyTakFeatureResponse),
-    includeDetails ? timedApi<ServiceObservability>("/flight-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "flight-data-api")),
-    includeDetails ? timedApi<ServiceObservability>("/situation-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "situation-data-api")),
-    includeDetails ? timedApi<ServiceObservability>("/safety-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "safety-data-api")),
-    includeDetails ? timedApi<ServiceObservability>("/tak-gateway/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "tak-gateway-api"))
+    includeObservabilityDetails ? timedApi<ServiceObservability>("/flight-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "flight-data-api")),
+    includeObservabilityDetails ? timedApi<ServiceObservability>("/situation-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "situation-data-api")),
+    includeObservabilityDetails ? timedApi<ServiceObservability>("/safety-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "safety-data-api")),
+    includeObservabilityDetails ? timedApi<ServiceObservability>("/tak-gateway/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "tak-gateway-api"))
   ]);
 
   const warnings: string[] = operationsSummaryWarning ? [`operations summary: ${operationsSummaryWarning}`] : [];

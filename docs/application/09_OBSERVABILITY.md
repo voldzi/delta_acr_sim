@@ -41,6 +41,12 @@ SIM Overview používá sanitizované endpointy v jednotlivých provider služb�
 - `GET /safety-data/api/v1/observability`
 - `GET /tak-gateway/api/v1/observability`
 
+Overview zůstává lehký: pro první operační obrazovku načítá `operations/summary`
+a provider `observability` endpointy, ale nenačítá těžké feature preview payloady.
+Operátor tak v přehledu vidí detail cache/source cache, `lastSuccessAt`,
+`lastErrorAt`, pressure a datová upozornění bez zbytečného zatížení mapových
+providerů.
+
 Tyto endpointy vrací pouze provozně bezpečný souhrn:
 
 - aggregate cache: počet entries, hits, misses, hit-rate, stale hits, refreshes, errors, evictions, pressure, `lastSuccessAt` a `lastErrorAt`,

@@ -194,6 +194,24 @@ interface OverviewChannel {
   tone: Tone;
 }
 
+interface CacheDisplay {
+  coalescedHits?: number;
+  entries?: number;
+  errors?: number;
+  evictions?: number;
+  hitRate?: number;
+  hits?: number;
+  inflight?: number;
+  lastErrorAt?: string;
+  lastSuccessAt?: string;
+  maxEntries?: number;
+  misses?: number;
+  pressure?: number;
+  refreshes?: number;
+  staleHits?: number;
+  state?: string;
+}
+
 const copDisplayUrl = import.meta.env.VITE_COP_DISPLAY_URL ?? "https://cop.zeleznalady.cz";
 const ownAffiliations = new Set(["FRIEND", "ASSUMED_FRIEND"]);
 const foreignAffiliations = new Set(["HOSTILE", "SUSPECT"]);
@@ -892,6 +910,12 @@ export function App() {
   const operationsEnabledSources = data.operations.services.reduce((sum, service) => sum + service.enabledSources.length, 0);
   const operationsCache = summarizeOperationsCache(data.operations.services);
   const operationsFreshness = summarizeOperationsFreshness(data.operations.services);
+  const operationsObservabilityByService: Record<string, ServiceObservability> = {
+    "flight-data-api": data.observability.flightData.payload,
+    "situation-data-api": data.observability.situationData.payload,
+    "safety-data-api": data.observability.safetyData.payload,
+    "tak-gateway-api": data.observability.takGateway.payload
+  };
   const activeOperationAlert = data.operations.alerts.find((alert) => alert.severity !== "info") ?? data.operations.alerts[0];
   const activeOperationAlertTitle = activeOperationAlert
     ? localizedOperatorText(uiLanguage, activeOperationAlert.title, activeOperationAlert.localized?.title)
@@ -902,7 +926,7 @@ export function App() {
       return;
     }
     const includeDetails = protectedSectionsUnlocked && activeSection !== "overview";
-    const next = await loadDashboard({ includeDetails });
+    const next = await loadDashboard({ includeDetails, includeObservabilityDetails: true });
     setData(next);
     setLastRefreshAt(new Date().toISOString());
     if (next.warnings.length > 0) {
@@ -1305,9 +1329,10 @@ export function App() {
                     <span>{tr("Objects")}</span>
                     <span>{tr("Cache")}</span>
                     <span>{tr("Freshness")}</span>
+                    <span>{tr("Detail")}</span>
                   </div>
                   {data.operations.services.map((service) => (
-                    <OperationsServiceRow key={service.serviceId} service={service} />
+                    <OperationsServiceRow key={service.serviceId} service={service} observability={operationsObservabilityByService[service.serviceId]} />
                   ))}
                   {data.operations.services.length === 0 ? <div className="empty-state">{tr("Operations summary is not available.")}</div> : null}
                 </div>
@@ -2184,24 +2209,154 @@ function OperationsAlertRow({ alert }: { alert: OperationsSummary["alerts"][numb
   );
 }
 
-function OperationsServiceRow({ service }: { service: OperationsSummaryService }) {
+function OperationsServiceRow({ service, observability }: { service: OperationsSummaryService; observability?: ServiceObservability }) {
   const tr = useUiText();
+  const language = useUiLanguage();
   const tone = service.status === "ok" && service.qualityWarningCount > 0 ? "warn" : operationsStatusTone(service.status);
   const numberLocale = useNumberLocale();
+  const cache = observability?.cache ?? service.cache;
+  const sourceCaches = [
+    ...(observability?.sourceCaches ?? []).map((item) => ({ ...item, kind: "Source cache" })),
+    ...(observability?.referenceCaches ?? []).map((item) => ({ ...item, kind: "Reference cache" }))
+  ];
+  const cacheTone = cacheDisplayTone(cache);
+  const openByDefault = service.status !== "ok" || service.warningCount > 0 || service.qualityWarningCount > 0;
   return (
-    <div className={`service-row ${tone}`} role="row">
-      <div>
-        <strong>{service.label}</strong>
-        <span>
-          {service.serviceId}
-          {service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : ""}
+    <details className={`service-detail ${tone}`} open={openByDefault}>
+      <summary className={`service-row ${tone}`} role="row">
+        <div>
+          <strong>{service.label}</strong>
+          <span>
+            {service.serviceId}
+            {service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : ""}
+          </span>
+        </div>
+        <StatusPill label={service.status} tone={operationsStatusTone(service.status)} />
+        <span>{formatLatencyMs(service.latencyMs)}</span>
+        <span>{typeof service.objectCount === "number" ? service.objectCount.toLocaleString(numberLocale) : "-"}</span>
+        <span className={`service-cache-summary ${cacheTone}`}>{cache ? `${formatPercentValue(cache.hitRate ?? 0)} · ${tr(cache.state ?? "cache")}` : "-"}</span>
+        <span>{freshnessLabel(service)}</span>
+        <span className="service-detail-trigger">
+          <Info size={14} /> {tr("Detail")}
         </span>
+      </summary>
+
+      <div className="service-detail-body">
+        <div className="service-detail-grid" aria-label={tr("Provider diagnostics")}>
+          <ServiceDiagnosticItem
+            icon={<Database />}
+            label="Aggregate state"
+            value={cache ? tr(cache.state ?? "unknown") : "-"}
+            detail={cacheStateExplanation(cache, tr)}
+            tone={cacheTone}
+          />
+          <ServiceDiagnosticItem
+            icon={<CheckCircle2 />}
+            label="Last success"
+            value={formatTime(cache?.lastSuccessAt)}
+            detail={cache?.lastSuccessAt ? formatImportAge(secondsSinceIso(cache.lastSuccessAt)) : tr("No successful refresh reported.")}
+            tone={cache?.lastSuccessAt ? "safe" : "neutral"}
+          />
+          <ServiceDiagnosticItem
+            icon={<AlertTriangle />}
+            label="Last error"
+            value={formatTime(cache?.lastErrorAt)}
+            detail={cache?.lastErrorAt ? formatImportAge(secondsSinceIso(cache.lastErrorAt)) : tr("No cache error reported.")}
+            tone={isCacheCurrentlyFailing(cache) ? "danger" : "neutral"}
+          />
+          <ServiceDiagnosticItem
+            icon={<Gauge />}
+            label="Pressure"
+            value={formatPercentValue(cache?.pressure ?? 0)}
+            detail={cacheCapacityLabel(cache, numberLocale, tr)}
+            tone={cache?.state === "pressure" ? "warn" : "neutral"}
+          />
+        </div>
+
+        {service.warnings.length > 0 ? (
+          <ServiceMessageList title="Technical messages" tone="warn" messages={service.warnings.map((message) => localizedServiceWarning(message, language))} />
+        ) : null}
+
+        {service.qualityWarnings.length > 0 ? (
+          <div className="service-message-list neutral">
+            <strong>{tr("Quality notices")}</strong>
+            {service.qualityWarnings.map((warning) => {
+              const title = localizedOperatorText(language, warning.title, warning.localized?.title);
+              const detail = localizedOperatorText(language, warning.detail, warning.localized?.detail);
+              const impact = localizedOperatorText(language, warning.impact, warning.localized?.impact);
+              const action = localizedOperatorText(language, warning.action, warning.localized?.action);
+              return (
+                <div className="service-message-row" key={warning.code}>
+                  <span>{title}</span>
+                  <small>{detail}</small>
+                  {impact ? <small>{`${tr("Impact")}: ${impact}`}</small> : null}
+                  {action ? <small>{`${tr("Recommended action")}: ${action}`}</small> : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="source-cache-section">
+          <div className="service-detail-caption">
+            <strong>{tr("Source caches")}</strong>
+            <span>{sourceCaches.length > 0 ? `${sourceCaches.length} ${tr("channels")}` : tr("No source-level cache is reported.")}</span>
+          </div>
+          {sourceCaches.length > 0 ? (
+            <div className="source-cache-grid">
+              {sourceCaches.map((item) => (
+                <SourceCacheRow key={`${item.kind}-${item.sourceId}`} sourceId={item.sourceId} kind={item.kind} cache={item.cache} />
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
-      <StatusPill label={service.status} tone={operationsStatusTone(service.status)} />
-      <span>{formatLatencyMs(service.latencyMs)}</span>
-      <span>{typeof service.objectCount === "number" ? service.objectCount.toLocaleString(numberLocale) : "-"}</span>
-      <span>{service.cache ? `${formatPercentValue(service.cache.hitRate ?? 0)} · ${service.cache.state ?? "cache"}` : "-"}</span>
-      <span>{freshnessLabel(service)}</span>
+    </details>
+  );
+}
+
+function ServiceDiagnosticItem({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: Tone }) {
+  const tr = useUiText();
+  return (
+    <div className={`service-diagnostic-item ${tone}`}>
+      <div className="service-diagnostic-icon">{icon}</div>
+      <div>
+        <span>{tr(label)}</span>
+        <strong>{value}</strong>
+        <small>{detail}</small>
+      </div>
+    </div>
+  );
+}
+
+function ServiceMessageList({ title, tone, messages }: { title: string; tone: Tone; messages: string[] }) {
+  const tr = useUiText();
+  return (
+    <div className={`service-message-list ${tone}`}>
+      <strong>{tr(title)}</strong>
+      {messages.map((message) => (
+        <div className="service-message-row" key={message}>
+          <span>{message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SourceCacheRow({ sourceId, kind, cache }: { sourceId: string; kind: string; cache: CacheObservability }) {
+  const tr = useUiText();
+  const numberLocale = useNumberLocale();
+  const tone = cacheDisplayTone(cache);
+  return (
+    <div className={`source-cache-row ${tone}`}>
+      <div>
+        <strong>{sourceId}</strong>
+        <span>{tr(kind)}</span>
+      </div>
+      <StatusPill label={tr(cache.state)} tone={tone} />
+      <span>{formatPercentValue(cache.hitRate)}</span>
+      <span>{`${cache.errors.toLocaleString(numberLocale)} ${tr("errors")}`}</span>
+      <span>{cacheLastEventLabel(cache)}</span>
     </div>
   );
 }
@@ -2221,6 +2376,57 @@ function operationAlertCategoryLabel(category: OperationsSummary["alerts"][numbe
     case "technical":
     default:
       return "technical";
+  }
+}
+
+function localizedServiceWarning(message: string, language: UiLanguage): string {
+  if (language !== "cs") {
+    return message;
+  }
+  if (message === "The operation was aborted due to timeout") {
+    return "operace byla ukončena kvůli timeoutu";
+  }
+  const healthStatus = message.match(/^health status (.+)$/);
+  if (healthStatus?.[1]) {
+    return `health stav ${localizedStatusCs(healthStatus[1])}`;
+  }
+  const observabilityStatus = message.match(/^observability status (.+)$/);
+  if (observabilityStatus?.[1]) {
+    return `observability stav ${localizedStatusCs(observabilityStatus[1])}`;
+  }
+  const sourceStatus = message.match(/^(.+) status (.+)$/);
+  if (sourceStatus?.[1] && sourceStatus[2]) {
+    return `${sourceStatus[1]} stav ${localizedStatusCs(sourceStatus[2])}`;
+  }
+  const cacheState = message.match(/^(.+) cache state (.+)$/);
+  if (cacheState?.[1] && cacheState[2]) {
+    return `${cacheState[1]} cache stav ${localizedStatusCs(cacheState[2])}`;
+  }
+  const cacheErrors = message.match(/^(.+) cache has ([0-9]+) errors?$/);
+  if (cacheErrors) {
+    return `${cacheErrors[1]} cache hlásí ${cacheErrors[2]} chyb`;
+  }
+  return message;
+}
+
+function localizedStatusCs(status: string): string {
+  switch (status) {
+    case "critical":
+      return "kritický";
+    case "cold":
+      return "studený";
+    case "degraded":
+      return "degradovaný";
+    case "failed":
+      return "selhal";
+    case "ok":
+      return "v pořádku";
+    case "pressure":
+      return "pod tlakem";
+    case "warm":
+      return "zahřátý";
+    default:
+      return status;
   }
 }
 
@@ -2841,6 +3047,64 @@ function operationsStatusTone(status: string): Tone {
     return "warn";
   }
   return "neutral";
+}
+
+function isCacheCurrentlyFailing(cache: CacheDisplay | undefined): boolean {
+  if (!cache) {
+    return false;
+  }
+  return cache.state === "degraded" || isAfter(cache.lastErrorAt, cache.lastSuccessAt);
+}
+
+function cacheDisplayTone(cache: CacheDisplay | undefined): Tone {
+  if (!cache) {
+    return "neutral";
+  }
+  if (isCacheCurrentlyFailing(cache)) {
+    return "danger";
+  }
+  if (cache.state === "pressure") {
+    return "warn";
+  }
+  if (cache.state === "warm" || cache.state === "ok") {
+    return "safe";
+  }
+  return "neutral";
+}
+
+function cacheStateExplanation(cache: CacheDisplay | undefined, tr: (source: string) => string): string {
+  if (!cache) {
+    return tr("No cache telemetry reported.");
+  }
+  if (isCacheCurrentlyFailing(cache)) {
+    return tr("Current failure: last error is newer than last successful refresh.");
+  }
+  if (cache.state === "pressure" || (cache.pressure ?? 0) >= 0.95) {
+    return tr("Capacity pressure only; service remains available.");
+  }
+  if (cache.state === "cold") {
+    return tr("Cold cache; it warms after the next request.");
+  }
+  return tr("Cache serving normally.");
+}
+
+function cacheCapacityLabel(cache: CacheDisplay | undefined, numberLocale: string, tr: (source: string) => string): string {
+  if (!cache) {
+    return "-";
+  }
+  const entries = cache.entries ?? 0;
+  const maxEntries = cache.maxEntries;
+  if (typeof maxEntries === "number" && maxEntries > 0) {
+    return `${entries.toLocaleString(numberLocale)} / ${maxEntries.toLocaleString(numberLocale)} ${tr("entries")}`;
+  }
+  return `${entries.toLocaleString(numberLocale)} ${tr("entries")}`;
+}
+
+function cacheLastEventLabel(cache: CacheDisplay): string {
+  if (isCacheCurrentlyFailing(cache) && cache.lastErrorAt) {
+    return formatTime(cache.lastErrorAt);
+  }
+  return cache.lastSuccessAt ? formatTime(cache.lastSuccessAt) : "-";
 }
 
 function operationsStatusTitle(status: string): string {
