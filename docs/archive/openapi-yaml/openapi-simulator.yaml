@@ -894,6 +894,39 @@ paths:
           $ref: '#/components/responses/Problem'
         '500':
           $ref: '#/components/responses/Problem'
+  /api/v1/operations/provider-details:
+    get:
+      tags: [Operations]
+      summary: Chraneny server-side snapshot detailu provideru pro SIM Operations Center.
+      operationId: getOperationsProviderDetails
+      parameters:
+        - name: includeDetails
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: includeObservability
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Uspesna odpoved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsProviderDetails'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
   /health/live:
     get:
       tags: [Health]
@@ -1307,6 +1340,61 @@ components:
               type: string
             summary:
               type: string
+    OperationsProviderDetails:
+      type: object
+      required: [contractVersion, flightData, generatedAt, safetyData, situationData, takGateway, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-operations-provider-details-v1
+        generatedAt:
+          type: string
+          format: date-time
+        flightData:
+          $ref: '#/components/schemas/OperationsProviderSection'
+        situationData:
+          $ref: '#/components/schemas/OperationsProviderSection'
+        safetyData:
+          $ref: '#/components/schemas/OperationsProviderSection'
+        takGateway:
+          $ref: '#/components/schemas/OperationsProviderSection'
+        warnings:
+          type: array
+          items:
+            type: string
+    OperationsProviderSection:
+      type: object
+      description: Server-side provider payloads used by the authenticated SIM operator UI.
+      additionalProperties: false
+      properties:
+        health:
+          type: object
+          additionalProperties: true
+        layers:
+          type: object
+          additionalProperties: true
+        sources:
+          type: object
+          additionalProperties: true
+        config:
+          type: object
+          additionalProperties: true
+        tracks:
+          type: object
+          additionalProperties: true
+        features:
+          type: object
+          additionalProperties: true
+        observability:
+          type: object
+          required: [latencyMs, payload]
+          properties:
+            latencyMs:
+              type: integer
+              minimum: 0
+            payload:
+              type: object
+              additionalProperties: true
     OperationsServiceSummary:
       type: object
       required: [enabledSources, label, latencyMs, lifecycle, productionReadiness, serviceId, status, qualityWarningCount, qualityWarnings, warningCount, warnings]

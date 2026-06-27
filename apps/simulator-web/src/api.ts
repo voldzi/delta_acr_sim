@@ -333,6 +333,43 @@ export interface DashboardLoadResult {
   warnings: string[];
 }
 
+interface ProviderDashboardDetails {
+  contractVersion: "sim-operations-provider-details-v1";
+  flightData?: {
+    config?: FlightDataConfig;
+    health?: FlightDataHealth;
+    observability?: { latencyMs: number; payload: ServiceObservability };
+    sources?: { items: FlightDataSource[] };
+    tracks?: FlightDataTrackPayload;
+  };
+  generatedAt: string;
+  safetyData?: {
+    config?: SafetyDataConfig;
+    features?: SafetyDataFeatureResponse;
+    health?: SafetyDataHealth;
+    layers?: { items: SafetyDataLayer[] };
+    observability?: { latencyMs: number; payload: ServiceObservability };
+    sources?: { items: SafetyDataSource[] };
+  };
+  situationData?: {
+    config?: SituationDataConfig;
+    features?: SituationDataFeatureResponse;
+    health?: SituationDataHealth;
+    layers?: { items: SituationDataLayer[] };
+    observability?: { latencyMs: number; payload: ServiceObservability };
+    sources?: { items: SituationDataSource[] };
+  };
+  takGateway?: {
+    config?: TakGatewayConfig;
+    features?: TakGatewayFeatureResponse;
+    health?: TakGatewayHealth;
+    layers?: { items: TakGatewayLayer[] };
+    observability?: { latencyMs: number; payload: ServiceObservability };
+    sources?: { items: TakGatewaySource[] };
+  };
+  warnings?: string[];
+}
+
 const emptyTakFeatureResponse: TakGatewayFeatureResponse = {
   contractVersion: "cop-tak-source-v1",
   type: "FeatureCollection",
@@ -398,6 +435,8 @@ function operationsService(summary: OperationsSummary, serviceId: string) {
   return summary.services.find((service) => service.serviceId === serviceId);
 }
 
+const flightDataSourceIds: FlightDataConfig["enabledSources"] = ["mock", "adsb_lol", "opensky", "local_adsb"];
+
 const situationDataSourceIds: SituationDataSourceId[] = [
   "mock",
   "open_meteo",
@@ -414,6 +453,8 @@ const situationDataSourceIds: SituationDataSourceId[] = [
   "aviation_weather",
   "chmi_air_quality",
   "chmi_weather_stations",
+  "chmi_weather_radar",
+  "chmi_weather_webcams",
   "ardos_partner"
 ];
 
@@ -428,7 +469,7 @@ function flightHealthFromOperations(summary: OperationsSummary): FlightDataHealt
   const service = operationsService(summary, "flight-data-api");
   return {
     status: service?.healthStatus ?? service?.status ?? "unavailable",
-    enabledSources: service?.enabledSources ?? []
+    enabledSources: filterKnownSourceIds(service?.enabledSources ?? [], flightDataSourceIds)
   };
 }
 
@@ -517,9 +558,9 @@ function fullCacheObservability(cache: NonNullable<OperationsSummary["services"]
   };
 }
 
-function emptyFlightDataConfig(): FlightDataConfig {
+function emptyFlightDataConfig(enabledSources: FlightDataConfig["enabledSources"] = []): FlightDataConfig {
   return {
-    enabledSources: [],
+    enabledSources,
     defaultArea: { lat: 0, lon: 0, radiusNm: 0 },
     cacheTtlSeconds: 0,
     staleIfErrorSeconds: 0,
@@ -530,9 +571,9 @@ function emptyFlightDataConfig(): FlightDataConfig {
   };
 }
 
-function emptySituationDataConfig(): SituationDataConfig {
+function emptySituationDataConfig(enabledSources: SituationDataSourceId[] = []): SituationDataConfig {
   return {
-    enabledSources: [],
+    enabledSources,
     defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
     cacheTtlSeconds: 0,
     staleIfErrorSeconds: 0,
@@ -560,9 +601,9 @@ function emptySituationDataConfig(): SituationDataConfig {
   };
 }
 
-function emptySafetyDataConfig(): SafetyDataConfig {
+function emptySafetyDataConfig(enabledSources: SafetyDataSourceId[] = []): SafetyDataConfig {
   return {
-    enabledSources: [],
+    enabledSources,
     defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
     cacheTtlSeconds: 0,
     staleIfErrorSeconds: 0,
@@ -651,6 +692,18 @@ function emptySafetyDataFeatureResponse(): SafetyDataFeatureResponse {
   };
 }
 
+function emptyProviderDashboardDetails(): ProviderDashboardDetails {
+  return {
+    contractVersion: "sim-operations-provider-details-v1",
+    flightData: {},
+    generatedAt: new Date(0).toISOString(),
+    safetyData: {},
+    situationData: {},
+    takGateway: {},
+    warnings: []
+  };
+}
+
 export async function loadDashboard(options: { includeDetails?: boolean; includeObservabilityDetails?: boolean } = {}): Promise<DashboardLoadResult> {
   const dashboardStartedAt = performance.now();
   const operatorTokenConfigured = hasSimAuthorizationToken();
@@ -661,6 +714,10 @@ export async function loadDashboard(options: { includeDetails?: boolean; include
     operationsSummaryWarning = error instanceof Error ? error.message : "unknown error";
     return emptyOperationsSummary;
   });
+  const providerDetailsQuery = new URLSearchParams({
+    includeDetails: String(includeDetails),
+    includeObservability: String(includeObservabilityDetails)
+  });
   const results = await Promise.allSettled([
     includeDetails ? api<{ items: Scenario[] }>("/api/v1/scenarios") : Promise.resolve({ items: [] }),
     includeDetails ? api<RuntimeStatus>("/api/v1/runtime/status") : Promise.resolve(operationsSummary.runtime),
@@ -668,29 +725,9 @@ export async function loadDashboard(options: { includeDetails?: boolean; include
     includeDetails && operatorTokenConfigured ? api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20") : Promise.resolve({ items: [], totalCount: 0 }),
     includeDetails ? api<{ blocks: ScenarioBlock[] }>("/api/v1/runtime/blocks") : Promise.resolve({ blocks: [] }),
     includeDetails ? api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers") : Promise.resolve({ providers: [] }),
-    includeDetails ? api<FlightDataHealth>("/flight-data/health/ready") : Promise.resolve(flightHealthFromOperations(operationsSummary)),
-    includeDetails ? api<{ items: FlightDataSource[] }>("/flight-data/api/v1/sources") : Promise.resolve({ items: [] }),
-    includeDetails ? api<FlightDataConfig>("/flight-data/api/v1/config") : Promise.resolve(emptyFlightDataConfig()),
-    includeDetails ? api<FlightDataTrackPayload>("/flight-data/api/v1/aircraft/positions?limit=8") : Promise.resolve(emptyFlightTrackPayload()),
-    includeDetails ? api<SituationDataHealth>("/situation-data/health/ready") : Promise.resolve(situationHealthFromOperations(operationsSummary)),
-    includeDetails ? api<{ items: SituationDataLayer[] }>("/situation-data/api/v1/layers") : Promise.resolve({ items: [] }),
-    includeDetails ? api<{ items: SituationDataSource[] }>("/situation-data/api/v1/sources") : Promise.resolve({ items: [] }),
-    includeDetails ? api<SituationDataConfig>("/situation-data/api/v1/config") : Promise.resolve(emptySituationDataConfig()),
-    includeDetails ? api<SituationDataFeatureResponse>("/situation-data/api/v1/features?limit=12") : Promise.resolve(emptySituationDataFeatureResponse()),
-    includeDetails ? api<SafetyDataHealth>("/safety-data/health/ready") : Promise.resolve(safetyHealthFromOperations(operationsSummary)),
-    includeDetails ? api<{ items: SafetyDataLayer[] }>("/safety-data/api/v1/layers") : Promise.resolve({ items: [] }),
-    includeDetails ? api<{ items: SafetyDataSource[] }>("/safety-data/api/v1/sources") : Promise.resolve({ items: [] }),
-    includeDetails ? api<SafetyDataConfig>("/safety-data/api/v1/config") : Promise.resolve(emptySafetyDataConfig()),
-    includeDetails ? api<SafetyDataFeatureResponse>("/safety-data/api/v1/features?limit=12") : Promise.resolve(emptySafetyDataFeatureResponse()),
-    includeDetails ? api<TakGatewayHealth>("/tak-gateway/health/ready") : Promise.resolve(takGatewayHealthFromOperations(operationsSummary)),
-    includeDetails ? api<{ items: TakGatewayLayer[] }>("/tak-gateway/api/v1/layers") : Promise.resolve({ items: [] }),
-    includeDetails ? api<{ items: TakGatewaySource[] }>("/tak-gateway/api/v1/sources") : Promise.resolve({ items: [] }),
-    includeDetails ? api<TakGatewayConfig>("/tak-gateway/api/v1/config") : Promise.resolve(emptyTakGatewayConfig()),
-    includeDetails && operatorTokenConfigured ? api<TakGatewayFeatureResponse>("/tak-gateway/api/v1/features?limit=12") : Promise.resolve(emptyTakFeatureResponse),
-    includeObservabilityDetails ? timedApi<ServiceObservability>("/flight-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "flight-data-api")),
-    includeObservabilityDetails ? timedApi<ServiceObservability>("/situation-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "situation-data-api")),
-    includeObservabilityDetails ? timedApi<ServiceObservability>("/safety-data/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "safety-data-api")),
-    includeObservabilityDetails ? timedApi<ServiceObservability>("/tak-gateway/api/v1/observability") : Promise.resolve(timedObservabilityFromOperations(operationsSummary, "tak-gateway-api"))
+    includeDetails || includeObservabilityDetails
+      ? api<ProviderDashboardDetails>(`/api/v1/operations/provider-details?${providerDetailsQuery.toString()}`)
+      : Promise.resolve(emptyProviderDashboardDetails())
   ]);
 
   const warnings: string[] = operationsSummaryWarning ? [`operations summary: ${operationsSummaryWarning}`] : [];
@@ -710,186 +747,37 @@ export async function loadDashboard(options: { includeDetails?: boolean; include
   const queue = unwrapDashboardResult(results[3], { items: [], totalCount: 0 }, "publisher queue", warnings);
   const blocks = unwrapDashboardResult(results[4], { blocks: [] }, "runtime blocks", warnings);
   const providers = unwrapDashboardResult(results[5], { providers: [] }, "AI providers", warnings);
-  const flightHealth = unwrapDashboardResult(results[6], { status: "unavailable", enabledSources: [] }, "flight data health", warnings);
-  const flightSources = unwrapDashboardResult(results[7], { items: [] }, "flight data sources", warnings);
-  const flightConfig = unwrapDashboardResult(
-    results[8],
-    {
-      enabledSources: [],
-      defaultArea: { lat: 0, lon: 0, radiusNm: 0 },
-      cacheTtlSeconds: 0,
-      staleIfErrorSeconds: 0,
-      cacheMaxEntries: 0,
-      staleAfterSeconds: 0,
-      requestTimeoutMs: 0,
-      providers: []
-    },
-    "flight data config",
-    warnings
-  );
-  const flightTrackPayload = unwrapDashboardResult(
-    results[9],
-    {
-      generatedAt: new Date(0).toISOString(),
-      summary: { rawObservationCount: 0, deduplicatedTrackCount: 0, droppedWithoutPositionCount: 0, staleTrackCount: 0 },
-      tracks: [],
-      sources: [],
-      warnings: []
-    },
-    "flight data tracks",
-    warnings
-  );
+  const providerDetails = unwrapDashboardResult(results[6], emptyProviderDashboardDetails(), "provider details", warnings);
+  warnings.push(...(providerDetails.warnings ?? []));
+  const flightHealthFallback = flightHealthFromOperations(operationsSummary);
+  const situationHealthFallback = situationHealthFromOperations(operationsSummary);
+  const safetyHealthFallback = safetyHealthFromOperations(operationsSummary);
+  const takGatewayHealthFallback = takGatewayHealthFromOperations(operationsSummary);
+  const flightHealth = providerDetails.flightData?.health ?? flightHealthFallback;
+  const flightSources = providerDetails.flightData?.sources ?? { items: [] };
+  const flightConfig = providerDetails.flightData?.config ?? emptyFlightDataConfig(filterKnownSourceIds(flightHealth.enabledSources, flightDataSourceIds));
+  const flightTrackPayload = providerDetails.flightData?.tracks ?? emptyFlightTrackPayload();
   const flightTracks = normalizeFlightTrackPayload(flightTrackPayload);
-  const situationHealth = unwrapDashboardResult(results[10], { status: "unavailable", enabledSources: [], sourceHealth: [] }, "situation data health", warnings);
-  const situationLayers = unwrapDashboardResult(results[11], { items: [] }, "situation data layers", warnings);
-  const situationSources = unwrapDashboardResult(results[12], { items: [] }, "situation data sources", warnings);
-  const situationConfig = unwrapDashboardResult(
-    results[13],
-    {
-      enabledSources: [],
-      defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
-      cacheTtlSeconds: 0,
-      staleIfErrorSeconds: 0,
-      cacheMaxEntries: 0,
-      sharedCache: { enabled: false, backend: "memory", keyPrefix: "-", connectTimeoutMs: 0 },
-      bboxCachePaddingDegrees: 0,
-      staleAfterSeconds: 0,
-      requestTimeoutMs: 0,
-      sourceCacheTtlSeconds: {
-        openMeteo: 0,
-        mobileNetwork: 0,
-        mobileCoverage: 0,
-        osmPostgis: 0,
-        osmOverpass: 0,
-        ctuStationaryMobile: 0,
-        idsjmkVehiclePositions: 0,
-        roadSrtiLod: 0,
-        safetyData: 0,
-        aviationWeather: 0,
-        chmiAirQuality: 0,
-        chmiWeatherStations: 0,
-        ardosPartner: 0
-      },
-      providers: []
-    },
-    "situation data config",
-    warnings
-  );
-  const situationFeatures = unwrapDashboardResult(
-    results[14],
-    {
-      contractVersion: "cop-situation-source-v1",
-      type: "FeatureCollection",
-      generatedAt: new Date(0).toISOString(),
-      source: {
-        sourceId: "situation-data-api",
-        sourceType: "PUBLIC_SITUATION_AGGREGATE",
-        generatedAt: new Date(0).toISOString()
-      },
-      query: {
-        bbox: { west: 0, south: 0, east: 0, north: 0 },
-        layers: [],
-        limit: 0,
-        sources: []
-      },
-      summary: { featureCount: 0, sourceCount: 0, staleFeatureCount: 0, warningCount: 0 },
-      features: [],
-      sources: [],
-      warnings: []
-    },
-    "situation data features",
-    warnings
-  );
-  const safetyHealth = unwrapDashboardResult(results[15], { status: "unavailable", enabledSources: [] }, "safety data health", warnings);
-  const safetyLayers = unwrapDashboardResult(results[16], { items: [] }, "safety data layers", warnings);
-  const safetySources = unwrapDashboardResult(results[17], { items: [] }, "safety data sources", warnings);
-  const safetyConfig = unwrapDashboardResult(
-    results[18],
-    {
-      enabledSources: [],
-      defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
-      cacheTtlSeconds: 0,
-      staleIfErrorSeconds: 0,
-      cacheMaxEntries: 0,
-      staleAfterSeconds: 0,
-      requestTimeoutMs: 0,
-      hydroMaxStations: 0,
-      providers: []
-    },
-    "safety data config",
-    warnings
-  );
-  const safetyFeatures = unwrapDashboardResult(
-    results[19],
-    {
-      contractVersion: "cop-safety-source-v1",
-      type: "FeatureCollection",
-      generatedAt: new Date(0).toISOString(),
-      source: {
-        sourceId: "safety-data-api",
-        sourceType: "PUBLIC_SAFETY_AGGREGATE",
-        generatedAt: new Date(0).toISOString()
-      },
-      query: {
-        bbox: { west: 0, south: 0, east: 0, north: 0 },
-        layers: [],
-        limit: 0,
-        sources: []
-      },
-      summary: {
-        featureCount: 0,
-        sourceCount: 0,
-        staleFeatureCount: 0,
-        advisoryCount: 0,
-        warningCount: 0,
-        criticalCount: 0
-      },
-      features: [],
-      sources: [],
-      warnings: []
-    },
-    "safety data features",
-    warnings
-  );
-  const takHealth = unwrapDashboardResult(
-    results[20],
-    { status: "unavailable", ingestAuthConfigured: false, readAuthConfigured: false, publicRead: false, currentEvents: 0, staleEvents: 0 },
-    "TAK gateway health",
-    warnings
-  );
-  const takLayers = unwrapDashboardResult(results[21], { items: [] }, "TAK gateway layers", warnings);
-  const takSources = unwrapDashboardResult(results[22], { items: [] }, "TAK gateway sources", warnings);
-  const takConfig = unwrapDashboardResult(
-    results[23],
-    {
-      defaultBbox: { west: 0, south: 0, east: 0, north: 0 },
-      staleAfterSeconds: 0,
-      retentionSeconds: 0,
-      maxEvents: 0,
-      exposeRaw: false,
-      ingestAuthConfigured: false,
-      readAuthConfigured: false,
-      publicRead: false,
-      sourceLabel: ""
-    },
-    "TAK gateway config",
-    warnings
-  );
-  const takFeatures = unwrapDashboardResult(
-    results[24],
-    emptyTakFeatureResponse,
-    "TAK gateway features",
-    warnings
-  );
-  const flightDataObservability = unwrapDashboardResult(results[25], emptyTimedServiceObservability("flight-data-api"), "flight data observability", warnings);
-  const situationDataObservability = unwrapDashboardResult(
-    results[26],
-    emptyTimedServiceObservability("situation-data-api"),
-    "situation data observability",
-    warnings
-  );
-  const safetyDataObservability = unwrapDashboardResult(results[27], emptyTimedServiceObservability("safety-data-api"), "safety data observability", warnings);
-  const takGatewayObservability = unwrapDashboardResult(results[28], emptyTimedServiceObservability("tak-gateway-api"), "TAK gateway observability", warnings);
+  const situationHealth = providerDetails.situationData?.health ?? situationHealthFallback;
+  const situationLayers = providerDetails.situationData?.layers ?? { items: [] };
+  const situationSources = providerDetails.situationData?.sources ?? { items: [] };
+  const situationConfig = providerDetails.situationData?.config ?? emptySituationDataConfig(situationHealth.enabledSources);
+  const situationFeatures = providerDetails.situationData?.features ?? emptySituationDataFeatureResponse();
+  const safetyHealth = providerDetails.safetyData?.health ?? safetyHealthFallback;
+  const safetyLayers = providerDetails.safetyData?.layers ?? { items: [] };
+  const safetySources = providerDetails.safetyData?.sources ?? { items: [] };
+  const safetyConfig = providerDetails.safetyData?.config ?? emptySafetyDataConfig(safetyHealth.enabledSources);
+  const safetyFeatures = providerDetails.safetyData?.features ?? emptySafetyDataFeatureResponse();
+  const takHealth = providerDetails.takGateway?.health ?? takGatewayHealthFallback;
+  const takLayers = providerDetails.takGateway?.layers ?? { items: [] };
+  const takSources = providerDetails.takGateway?.sources ?? { items: [] };
+  const takConfig = providerDetails.takGateway?.config ?? emptyTakGatewayConfig();
+  const takFeatures = providerDetails.takGateway?.features ?? emptyTakFeatureResponse;
+  const flightDataObservability = providerDetails.flightData?.observability ?? timedObservabilityFromOperations(operationsSummary, "flight-data-api");
+  const situationDataObservability =
+    providerDetails.situationData?.observability ?? timedObservabilityFromOperations(operationsSummary, "situation-data-api");
+  const safetyDataObservability = providerDetails.safetyData?.observability ?? timedObservabilityFromOperations(operationsSummary, "safety-data-api");
+  const takGatewayObservability = providerDetails.takGateway?.observability ?? timedObservabilityFromOperations(operationsSummary, "tak-gateway-api");
 
   return {
     operations: operationsSummary,

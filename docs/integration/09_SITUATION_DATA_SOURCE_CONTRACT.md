@@ -29,6 +29,11 @@ GET /features?bbox=west,south,east,north&layers=weather,ground,mobile_network,tr
 GET /cop/features?bbox=west,south,east,north&layers=weather,ground,mobile_network,traffic&limit=250
 GET /observability
 GET /mobile-coverage/metadata
+GET /radio/profiles
+POST /radio/profiles
+POST /radio/link-check
+POST /radio/coverage
+POST /radio/site-search
 GET /dem/metadata
 ```
 
@@ -464,13 +469,13 @@ Vrací sekce:
 
 `mobile_coverage_model` vrací modelované coverage polygony jako samostatnou vrstvu `mobile_coverage`. Je to technický/modelový vstup pro `mobile_network`, ne běžná občanská vrstva. COM ho má zobrazovat pouze v diagnostice nebo při ladění modelu.
 
-Vrstva je ve fázi 1 orientační:
+Vrstva je modelový odhad:
 
 - vstup: `public.osm_poi` z `osm_postgis`, kategorie `communications_tower`,
-- výpočet: grid nad bbox, nejbližší věž, jednoduchý distance/path-loss odhad,
+- výpočet: grid nad bbox, nejbližší věž, distance/path-loss odhad a pri `MOBILE_COVERAGE_TERRAIN_AWARE=true` DEM line-of-sight penalizace,
 - technologie: `2G`, `4G`, `5G`,
 - operator: `unknown`,
-- DEM: Copernicus GLO-30 katalog může být dostupný, ale `coverage-v1` zatím neaplikuje line-of-sight; ve výstupu je proto `terrainApplied=false`.
+- DEM: Copernicus GLO-30 `copernicus-glo30-cz`; pokud je dostupný pro oblast, výstup nese `terrainApplied=true` a metriky `terrainPenaltyDb`, `terrainMaxObstructionM`, `terrainSamples`, `towerElevationM`, `targetElevationM`.
 
 Dotaz:
 
@@ -489,6 +494,23 @@ Metadata:
 ```http
 GET /mobile-coverage/metadata
 ```
+
+Interaktivni per-BTS viewshed pro detail po kliknuti na BTS:
+
+```http
+GET /mobile-coverage/towers/node:13743393126/viewshed?technology=4G&radiusM=12000&azimuthStepDeg=10&distanceStepM=500
+```
+
+Odpoved je GeoJSON `FeatureCollection` s `contractVersion=sim-mobile-coverage-tower-viewshed-v1`. `features[]` jsou radialni sektorove polygony v layeru `mobile_coverage`, kategorii `mobile_coverage_viewshed`. COM je muze vykreslit jako docasnou detailni prekryvnou vrstvu nad mapou:
+
+- barva podle `properties.quality`: `good`, `fair`, `weak`, `none`, `unknown`,
+- volitelna popiska/detail podle `properties.estimatedSignalDbm`,
+- technicky detail podle `properties.metrics.terrainPenaltyDb`, `terrainMaxObstructionM`, `lineOfSightClear`, `distanceM`, `bearingDeg`,
+- zdroj a omezeni podle `summary.disclaimer`, `tower.btsStatus`, `tower.operatorStatusAvailable`, `properties.assumptions`.
+
+Viewshed endpoint je on-demand vypocet pro jednu vez. COM ho nema volat pro vsechny BTS naraz ani pouzivat jako beznou mapovou vrstvu. Pro normalni mapu zustava autoritativni vrstva `mobile_network`.
+
+Viewshed je odhad terennem ovlivneneho radioveho dosahu. Neni to potvrzeny operacni stav BTS, operatorovy RF plan ani vypocet se sektorem anteny. SIM aktualne nema operatorovy live/NOC feed, sektorovy azimut, downtilt, EIRP ani frekvencni pasmo konkretni BTS. Pokud tyto vstupy pozdeji pribudou, SIM muze stejnou odpoved zpresnit bez toho, aby COP menil workflow.
 
 Příklad metadat:
 
@@ -551,6 +573,60 @@ Konzistence technologie je závazná: dotaz filtrovaný na jednu technologii (`2
 Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení. SIM web v operačním centru zobrazuje tento stav v dialogu `BTS live status` a publikuje stažitelný návrh budoucího kontraktu pro operátorský/NOC feed jako `/docs/sim-bts-live-openapi.json`.
 
 Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. `ctu_nettest` a `ctu_stationary_mobile` mají vlastní health položky s počtem měření a časem posledního měření. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`, `situation_data_ctu_nettest_measurements`, `situation_data_ctu_stationary_mobile_measurements` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
+
+## Radio Planning
+
+SIM poskytuje ad-hoc radio LoS sluzby pro COP nastroj `Radio LoS`. Nejsou to
+trvale mapove vrstvy; COP je vola az po akci operatora.
+
+Endpointy:
+
+```http
+GET /radio/profiles
+POST /radio/profiles
+POST /radio/link-check
+POST /radio/coverage
+POST /radio/site-search
+```
+
+`GET /radio/profiles` vraci vestavene profily pro PMR446, CB, radioamaterska
+pasma, business VHF/UHF, TETRA generic, marine/aviation generic, LoRa/Wi-Fi
+data linky a neklasifikovane genericke vojenske sablony. Vojenske profily
+maji `sensitiveUse=true`, ale nesmi obsahovat klasifikovane nebo operacne
+citlive parametry.
+
+COP muze ulozit vlastni profil:
+
+```json
+{
+  "profileId": "custom_team_radio",
+  "name": "Tymove radio",
+  "category": "business",
+  "frequencyMhz": 170,
+  "txPowerW": 10,
+  "antennaHeightM": 4,
+  "receiverHeightM": 1.5,
+  "maxRadiusM": 12000
+}
+```
+
+Rezimy:
+
+- `POST /radio/coverage`: operator je v jednom bode a chce docasny GeoJSON
+  prekryv pokryti,
+- `POST /radio/link-check`: operator overuje spojeni mezi dvema body a COP muze
+  vykreslit vyskovy profil z `profileSamples[]`,
+- `POST /radio/site-search`: operator zada bbox a cilove body; SIM vrati
+  serazene kandidatni body se `score`, `rank`, `visibleTargetCount`,
+  `coveredTargetPct`, `meanLinkMarginDb` a `minFresnelClearanceM`.
+
+COP musi u kazdeho vysledku zobrazit upozorneni, ze jde o modelovy odhad podle
+DEM a zadanych parametru radia. Vystup nezahrnuje budovy, vegetaci, ruseni,
+vytizeni pasma/site, sifrovani, realne operatorovy RF planovani ani
+klasifikovane parametry.
+
+Podrobny kontrakt a priklady jsou v
+[`../situation-data/05_RADIO_PLANNING_MODEL.md`](../situation-data/05_RADIO_PLANNING_MODEL.md).
 
 ## DEM Catalog
 

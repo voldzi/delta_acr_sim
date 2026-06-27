@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type { ApiConfig } from "./config.js";
 import { problem } from "./http.js";
 import { buildOperationsSummary } from "./operations-summary.js";
+import { buildProviderDashboardDetails } from "./provider-dashboard.js";
 import { RuntimeRunner } from "./runtime-runner.js";
 import { AuditLogger, createCorsOptions, createSecurityMiddleware } from "./security.js";
 import { JsonStore } from "./store.js";
@@ -379,6 +380,25 @@ function registerOperationsRoutes(app: Express, context: AppContext): void {
   app.get("/api/v1/operations/summary", async (_req, res) => {
     res.json(await buildOperationsSummary(context));
   });
+
+  app.get("/api/v1/operations/provider-details", async (req, res) => {
+    res.json(
+      await buildProviderDashboardDetails(context.config, {
+        includeDetails: queryFlag(req.query.includeDetails, true),
+        includeObservability: queryFlag(req.query.includeObservability, true)
+      })
+    );
+  });
+}
+
+function queryFlag(value: unknown, fallback: boolean): boolean {
+  if (Array.isArray(value)) {
+    return queryFlag(value[0], fallback);
+  }
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  return value === "1" || value === "true" || value === "yes";
 }
 
 function registerHealthRoutes(app: Express, context: AppContext): void {

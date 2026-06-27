@@ -200,6 +200,12 @@ funkční a jen tento signál vynechá. Timeout drž krátký, protože Overview
 Lokální `pnpm dev` bez `.env` používá `127.0.0.1:4010-4040`; Docker Compose
 tyto hodnoty explicitně přepisuje na interní DNS názvy kontejnerů.
 
+Detailní provider karty v SIM Operations Center používají chráněný
+`GET /api/v1/operations/provider-details`. Prohlížeč operátora proto nevolá
+interní `/flight-data`, `/situation-data`, `/safety-data` ani `/tak-gateway`
+endpointy přímo; ty zůstávají server-to-server rozhraním pro COP a interní
+reverse proxy.
+
 TAK Gateway je v produkčním rollupu aktuálně vedená jako future modul. Její
 diagnostika zůstává viditelná, ale `operations/summary` ji vrací s
 `productionReadiness=false`, takže nedegraduje celkovou readiness SIM.
@@ -312,7 +318,7 @@ SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
 SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
 SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS=300
 SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900
-SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=16
+SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=160
 CHMI_WEATHER_METADATA_BASE_URL=https://opendata.chmi.cz/meteorology/climate/now/metadata/
 CHMI_WEATHER_DATA_BASE_URL=https://opendata.chmi.cz/meteorology/climate/now/data/
 CHMI_WEATHER_RADAR_BASE_URL=https://opendata.chmi.cz/meteorology/weather/radar/composite/

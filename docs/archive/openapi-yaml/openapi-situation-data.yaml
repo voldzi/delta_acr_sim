@@ -185,6 +185,164 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MobileCoverageMetadata"
+  /mobile-coverage/towers/{towerId}/viewshed:
+    get:
+      summary: Return a modelled per-tower mobile coverage viewshed
+      description: Builds an on-demand radial GeoJSON overlay for one OSM communications_tower reference. The output is an estimated terrain-aware radio reach, not confirmed operator BTS/NOC state or an RF-planning product.
+      parameters:
+        - $ref: "#/components/parameters/TowerId"
+        - name: technology
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/MobileCoverageTechnology"
+          description: Technology for the modelled reach. Defaults to 4G.
+        - name: radiusM
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 500
+            maximum: 30000
+          description: Requested radius in metres. SIM clamps unsafe values.
+        - name: azimuthStepDeg
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 2
+            maximum: 90
+            default: 10
+          description: Angular sector width in degrees.
+        - name: distanceStepM
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 100
+            maximum: 2500
+            default: 500
+          description: Radial band width in metres.
+        - name: includeRaw
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include debug-only model internals. COP should not request this for normal operator display.
+      responses:
+        "200":
+          description: Modelled per-tower viewshed GeoJSON FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MobileCoverageTowerViewshedCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /radio/profiles:
+    get:
+      summary: Return built-in and custom radio planning profiles
+      description: Lists non-sensitive civil, amateur, business, public-safety and generic military radio profiles for DEM line-of-sight planning.
+      responses:
+        "200":
+          description: Radio profile catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioProfileCatalog"
+    post:
+      summary: Save or update a custom radio planning profile
+      description: Stores an operator-defined non-secret radio profile in SIM data storage for reuse by COP. Do not submit classified frequencies, COMSEC material, callsigns or tactical notes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioProfileInput"
+      responses:
+        "201":
+          description: Saved radio profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioProfile"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+  /radio/link-check:
+    post:
+      summary: Check modelled line-of-sight and link budget between two points
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioLinkCheckRequest"
+      responses:
+        "200":
+          description: Radio link check result with optional terrain profile samples
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioLinkCheckResponse"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /radio/coverage:
+    post:
+      summary: Build a modelled radio coverage overlay from one station point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioCoverageRequest"
+      responses:
+        "200":
+          description: Radio coverage GeoJSON FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioFeatureCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /radio/site-search:
+    post:
+      summary: Find candidate radio station sites inside an area
+      description: Scores candidate points in a bbox against target points. The output is a planning aid, not a tactical recommendation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioSiteSearchRequest"
+      responses:
+        "200":
+          description: Ranked radio site candidate GeoJSON FeatureCollection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RadioFeatureCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /dem/metadata:
     get:
       summary: Return DEM catalog metadata
@@ -463,6 +621,15 @@ components:
       schema:
         type: string
       description: SIM feature id from /features or /features/summary.
+    TowerId:
+      name: towerId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^(node|way|relation):-?\\d+$"
+        example: node:13743393126
+      description: OSM communications_tower identifier as exposed in mobile coverage tags, e.g. node:13743393126.
   responses:
     Problem:
       description: Problem response
@@ -1896,6 +2063,8 @@ components:
               type: integer
             modelVersion:
               type: string
+            sourceRevision:
+              type: string
             generatedAt:
               type: string
               format: date-time
@@ -1948,6 +2117,486 @@ components:
         assumptions:
           type: object
           additionalProperties: true
+    MobileCoverageTowerViewshedCollection:
+      type: object
+      required: [contractVersion, type, generatedAt, source, tower, query, summary, features, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-mobile-coverage-tower-viewshed-v1
+        type:
+          type: string
+          const: FeatureCollection
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          type: object
+          required: [sourceId, sourceType, generatedAt]
+          properties:
+            sourceId:
+              type: string
+              const: mobile_coverage_model
+            sourceType:
+              type: string
+              const: MODELLED_BTS_VIEWSHED
+            generatedAt:
+              type: string
+              format: date-time
+        tower:
+          type: object
+          required: [towerId, lon, lat, btsStatus, btsStatusSource, operatorStatusAvailable]
+          properties:
+            towerId:
+              type: string
+              example: node:13743393126
+            lon:
+              type: number
+            lat:
+              type: number
+            name:
+              type: string
+            operator:
+              type: string
+            technologyHint:
+              type: string
+            btsStatus:
+              type: string
+              enum: [operator_feed_unavailable, unverified, reported_outage, unknown]
+            btsStatusSource:
+              type: string
+              const: none
+            operatorStatusAvailable:
+              type: boolean
+              const: false
+        query:
+          type: object
+          required: [technology, radiusM, azimuthStepDeg, distanceStepM, antennaHeightM, receiverHeightM]
+          properties:
+            technology:
+              $ref: "#/components/schemas/MobileCoverageTechnology"
+            radiusM:
+              type: integer
+            azimuthStepDeg:
+              type: integer
+            distanceStepM:
+              type: integer
+            antennaHeightM:
+              type: number
+            receiverHeightM:
+              type: number
+        summary:
+          type: object
+          required: [featureCount, qualityCounts, terrainAware, terrainApplied, demSource, warningCount, disclaimer]
+          properties:
+            featureCount:
+              type: integer
+            qualityCounts:
+              type: object
+              required: [good, fair, weak, none, unknown]
+              properties:
+                good:
+                  type: integer
+                fair:
+                  type: integer
+                weak:
+                  type: integer
+                none:
+                  type: integer
+                unknown:
+                  type: integer
+            terrainAware:
+              type: boolean
+            terrainApplied:
+              type: boolean
+            demSource:
+              type: string
+            warningCount:
+              type: integer
+            disclaimer:
+              type: string
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/SituationFeature"
+        warnings:
+          type: array
+          items:
+            type: string
+    RadioProfileCategory:
+      type: string
+      enum: [civil, amateur, business, public_safety, military_generic, iot, data_link]
+    RadioProfile:
+      type: object
+      required:
+        - profileId
+        - name
+        - category
+        - source
+        - frequencyMhz
+        - txPowerW
+        - antennaHeightM
+        - receiverHeightM
+        - antennaGainDbi
+        - receiverAntennaGainDbi
+        - systemLossDb
+        - receiverSensitivityDbm
+        - requiredFresnelClearancePct
+        - maxRadiusM
+        - defaultAzimuthStepDeg
+        - defaultDistanceStepM
+        - modelApplicability
+        - sensitiveUse
+        - notes
+      properties:
+        profileId:
+          type: string
+          example: pmr446_handheld
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/RadioProfileCategory"
+        source:
+          type: string
+          enum: [builtin, custom]
+        frequencyMhz:
+          type: number
+        txPowerW:
+          type: number
+        antennaHeightM:
+          type: number
+        receiverHeightM:
+          type: number
+        antennaGainDbi:
+          type: number
+        receiverAntennaGainDbi:
+          type: number
+        systemLossDb:
+          type: number
+        receiverSensitivityDbm:
+          type: number
+        requiredFresnelClearancePct:
+          type: number
+        maxRadiusM:
+          type: integer
+        defaultAzimuthStepDeg:
+          type: integer
+        defaultDistanceStepM:
+          type: integer
+        modelApplicability:
+          type: string
+          enum: [terrain_los, limited_for_beyond_line_of_sight]
+        sensitiveUse:
+          type: boolean
+          description: True for generic military templates. The profile still must not contain classified or operationally sensitive parameters.
+        notes:
+          type: array
+          items:
+            type: string
+    RadioProfileInput:
+      type: object
+      required: [name, frequencyMhz, antennaHeightM, receiverHeightM, maxRadiusM]
+      properties:
+        profileId:
+          type: string
+          pattern: "^[a-zA-Z0-9:_-]{3,80}$"
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/RadioProfileCategory"
+        frequencyMhz:
+          type: number
+          minimum: 0.1
+          maximum: 100000
+        txPowerW:
+          type: number
+          minimum: 0.001
+          maximum: 1000
+        antennaHeightM:
+          type: number
+          minimum: 0.1
+          maximum: 200
+        receiverHeightM:
+          type: number
+          minimum: 0.1
+          maximum: 200
+        antennaGainDbi:
+          type: number
+        receiverAntennaGainDbi:
+          type: number
+        systemLossDb:
+          type: number
+        receiverSensitivityDbm:
+          type: number
+        requiredFresnelClearancePct:
+          type: number
+          minimum: 0
+          maximum: 100
+        maxRadiusM:
+          type: integer
+          minimum: 250
+          maximum: 100000
+        defaultAzimuthStepDeg:
+          type: integer
+          minimum: 2
+          maximum: 90
+        defaultDistanceStepM:
+          type: integer
+          minimum: 100
+          maximum: 5000
+        modelApplicability:
+          type: string
+          enum: [terrain_los, limited_for_beyond_line_of_sight]
+        notes:
+          type: array
+          items:
+            type: string
+    RadioProfileCatalog:
+      type: object
+      required: [contractVersion, generatedAt, profiles, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-radio-profile-catalog-v1
+        generatedAt:
+          type: string
+          format: date-time
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/RadioProfile"
+        warnings:
+          type: array
+          items:
+            type: string
+    RadioStationInput:
+      type: object
+      required: [lon, lat]
+      properties:
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        antennaHeightM:
+          type: number
+          minimum: 0.1
+          maximum: 200
+        receiverHeightM:
+          type: number
+          minimum: 0.1
+          maximum: 200
+        label:
+          type: string
+    RadioLinkCheckRequest:
+      type: object
+      required: [from, to]
+      properties:
+        profileId:
+          type: string
+        profile:
+          $ref: "#/components/schemas/RadioProfileInput"
+        radioName:
+          type: string
+        from:
+          $ref: "#/components/schemas/RadioStationInput"
+        to:
+          $ref: "#/components/schemas/RadioStationInput"
+        sampleStepM:
+          type: number
+          minimum: 50
+          maximum: 2000
+    RadioCoverageRequest:
+      type: object
+      required: [station]
+      properties:
+        profileId:
+          type: string
+        profile:
+          $ref: "#/components/schemas/RadioProfileInput"
+        radioName:
+          type: string
+        station:
+          $ref: "#/components/schemas/RadioStationInput"
+        radiusM:
+          type: number
+          minimum: 250
+          maximum: 100000
+        azimuthStepDeg:
+          type: number
+          minimum: 2
+          maximum: 90
+        distanceStepM:
+          type: number
+          minimum: 100
+          maximum: 5000
+    RadioSiteSearchRequest:
+      type: object
+      required: [searchArea, targets]
+      properties:
+        profileId:
+          type: string
+        profile:
+          $ref: "#/components/schemas/RadioProfileInput"
+        radioName:
+          type: string
+        searchArea:
+          type: object
+          required: [bbox]
+          properties:
+            bbox:
+              type: array
+              minItems: 4
+              maxItems: 4
+              items:
+                type: number
+              example: [14.1, 49.9, 14.6, 50.2]
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/RadioStationInput"
+        stationAntennaHeightM:
+          type: number
+        gridStepM:
+          type: number
+          minimum: 100
+          maximum: 5000
+        maxCandidates:
+          type: integer
+          minimum: 1
+          maximum: 100
+    RadioLinkCheckResponse:
+      type: object
+      required: [contractVersion, generatedAt, source, profile, query, result, profileSamples, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-radio-link-check-v1
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          $ref: "#/components/schemas/RadioAnalysisSource"
+        profile:
+          $ref: "#/components/schemas/RadioProfile"
+        query:
+          type: object
+          additionalProperties: true
+        result:
+          type: object
+          required: [linkStatus, quality, distanceM, azimuthDeg, reverseAzimuthDeg, freeSpacePathLossDb, terrainApplied]
+          properties:
+            linkStatus:
+              type: string
+              enum: [clear, marginal, obstructed, unknown]
+            quality:
+              type: string
+              enum: [good, fair, weak, none, unknown]
+            lineOfSightClear:
+              type: boolean
+            distanceM:
+              type: integer
+            azimuthDeg:
+              type: number
+            reverseAzimuthDeg:
+              type: number
+            estimatedRxPowerDbm:
+              type: integer
+            linkMarginDb:
+              type: integer
+            freeSpacePathLossDb:
+              type: integer
+            terrainPenaltyDb:
+              type: integer
+            maxObstructionM:
+              type: integer
+            minFresnelClearanceM:
+              type: number
+            minTerrainClearanceM:
+              type: number
+            requiredExtraAntennaHeightM:
+              type: integer
+            fresnelClearancePct:
+              type: integer
+            terrainApplied:
+              type: boolean
+        profileSamples:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+    RadioAnalysisSource:
+      type: object
+      required: [sourceId, sourceType, generatedAt]
+      properties:
+        sourceId:
+          type: string
+          const: radio_planning_model
+        sourceType:
+          type: string
+          const: MODELLED_RADIO_ANALYSIS
+        generatedAt:
+          type: string
+          format: date-time
+    RadioFeature:
+      type: object
+      required: [type, id, geometry, properties]
+      properties:
+        type:
+          type: string
+          const: Feature
+        id:
+          type: string
+        geometry:
+          type: object
+          required: [type, coordinates]
+          properties:
+            type:
+              type: string
+              enum: [Point, LineString, Polygon]
+            coordinates: {}
+        properties:
+          type: object
+          additionalProperties: true
+    RadioFeatureCollection:
+      type: object
+      required: [contractVersion, type, generatedAt, source, profile, query, summary, features, warnings]
+      properties:
+        contractVersion:
+          type: string
+          enum: [sim-radio-coverage-v1, sim-radio-site-search-v1]
+        type:
+          type: string
+          const: FeatureCollection
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          $ref: "#/components/schemas/RadioAnalysisSource"
+        profile:
+          $ref: "#/components/schemas/RadioProfile"
+        query:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/RadioFeature"
+        warnings:
+          type: array
+          items:
+            type: string
     DemCatalogStatus:
       type: object
       required: [enabled, status, datasetId, warnings]

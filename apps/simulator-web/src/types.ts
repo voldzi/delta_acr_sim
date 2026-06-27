@@ -257,6 +257,8 @@ export type SituationDataSourceId =
   | "aviation_weather"
   | "chmi_air_quality"
   | "chmi_weather_stations"
+  | "chmi_weather_radar"
+  | "chmi_weather_webcams"
   | "ardos_partner";
 
 export interface SituationDataSourceHealth {

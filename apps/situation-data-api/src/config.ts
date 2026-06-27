@@ -153,7 +153,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     chmiWeatherDataBaseUrl:
       process.env.CHMI_WEATHER_DATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/data/",
     chmiWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS, 600),
-    chmiWeatherMaxStations: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS, 16),
+    chmiWeatherMaxStations: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS, 160),
     chmiWeatherRadarBaseUrl:
       process.env.CHMI_WEATHER_RADAR_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/radar/composite/",
     chmiWeatherRadarCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS, 300),

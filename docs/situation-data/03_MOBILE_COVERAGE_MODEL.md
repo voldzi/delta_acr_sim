@@ -40,6 +40,12 @@ Metadata:
 GET /situation-data/api/v1/mobile-coverage/metadata
 ```
 
+Per-tower viewshed for an operator detail overlay:
+
+```http
+GET /situation-data/api/v1/mobile-coverage/towers/node:13743393126/viewshed?technology=4G&radiusM=12000&azimuthStepDeg=10&distanceStepM=500
+```
+
 DEM catalog metadata:
 
 ```http
@@ -84,6 +90,40 @@ Feature properties include:
 }
 ```
 
+## Per-Tower Viewshed
+
+The per-tower viewshed endpoint builds an on-demand GeoJSON overlay for a single
+OSM `communications_tower` reference. It is intended for the COP detail workflow:
+an operator clicks a BTS/tower point, COP requests one viewshed, then renders the
+returned sectors as a temporary analysis overlay.
+
+Response contract:
+
+- `contractVersion=sim-mobile-coverage-tower-viewshed-v1`,
+- `tower.towerId` is the OSM id in `node:<id>`, `way:<id>` or `relation:<id>` form,
+- `query` echoes the normalized technology, radius, angular step and radial step,
+- `summary.qualityCounts` counts rendered sectors by `good`, `fair`, `weak`, `none`, `unknown`,
+- each feature has `layer=mobile_coverage` and `category=mobile_coverage_viewshed`,
+- each feature geometry is a radial sector polygon,
+- each feature carries `quality`, `estimatedSignalDbm`, `confidence`, `metrics.distanceM`, `metrics.bearingDeg`,
+  `metrics.terrainPenaltyDb`, `metrics.terrainMaxObstructionM` and `metrics.lineOfSightClear` when DEM terrain sampling is available.
+
+Default parameters:
+
+- `technology=4G`,
+- radius by technology: `2G=25000 m`, `4G=12000 m`, `5G=5000 m`,
+- `azimuthStepDeg=10`,
+- `distanceStepM=500`.
+
+SIM clamps unsafe parameters to keep the response bounded. The maximum returned
+sector count is capped; if the cap is reached the response includes a warning.
+
+The viewshed model is intentionally labelled as modelled data. It does not
+represent confirmed BTS live status, an operator RF plan or a sector-aware
+antenna model. Current assumptions are exposed in `properties.assumptions`:
+`sectorAware=false`, `buildingAware=false`, `vegetationAware=false`,
+`operatorRfPlanAvailable=false`, `btsRealtimeStatus=false`.
+
 ## Configuration
 
 ```env
@@ -115,6 +155,7 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - Health reports `mobile_coverage_model` as degraded when PostGIS is not configured or no tower references exist.
 - Health warns when the read-model table is unavailable or empty, but keeps the source usable through the on-demand fallback.
 - If `MOBILE_COVERAGE_TERRAIN_AWARE=true`, the source samples Copernicus DEM GLO-30 from the local cache and applies a line-of-sight terrain obstruction penalty. If DEM tiles are unavailable for a requested area, the response warns and falls back to the distance model for that area.
+- The per-tower viewshed endpoint is on-demand and should be requested only after a concrete BTS/tower click. It is not a replacement for the prepared `mobile_network` map layer.
 - Metrics include `situation_data_mobile_coverage_towers` and per-source cache counters for `mobile_coverage_model`.
 
 ## Model Phases
@@ -160,6 +201,7 @@ Phase 4:
 ```bash
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/mobile-coverage/towers/node:13743393126/viewshed?technology=4G&radiusM=12000&azimuthStepDeg=10&distanceStepM=500'
 curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'mobile_coverage|mobile_coverage_model'
 

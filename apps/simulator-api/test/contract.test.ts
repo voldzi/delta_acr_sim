@@ -618,6 +618,63 @@ describe("SIM API contract baseline", () => {
     );
   });
 
+  it("proxies provider dashboard details server-side for the operator UI", async () => {
+    const requestedUrls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        requestedUrls.push(url);
+        const parsed = new URL(url);
+        if (parsed.pathname === "/health/ready") {
+          return jsonResponse({ status: "ok", timestamp: new Date().toISOString(), enabledSources: ["mock"] });
+        }
+        if (parsed.pathname === "/api/v1/observability") {
+          return jsonResponse({ serviceId: "provider", generatedAt: new Date().toISOString(), status: "ok" });
+        }
+        if (parsed.pathname === "/api/v1/sources") {
+          return jsonResponse({ items: [{ sourceId: "mock", enabled: true }] });
+        }
+        if (parsed.pathname === "/api/v1/layers") {
+          return jsonResponse({ items: [{ layerId: "weather", defaultVisible: true }] });
+        }
+        if (parsed.pathname === "/api/v1/config") {
+          return jsonResponse({ enabledSources: ["mock"] });
+        }
+        if (parsed.pathname === "/api/v1/aircraft/positions") {
+          return jsonResponse({
+            generatedAt: new Date().toISOString(),
+            summary: { rawObservationCount: 1, deduplicatedTrackCount: 1, droppedWithoutPositionCount: 0, staleTrackCount: 0 },
+            tracks: [{ trackId: "flight:mock:1" }],
+            sources: [],
+            warnings: []
+          });
+        }
+        if (parsed.pathname === "/api/v1/features") {
+          return jsonResponse({
+            summary: { featureCount: 2, sourceCount: 1, staleFeatureCount: 0, warningCount: 0 },
+            features: [],
+            sources: [],
+            warnings: []
+          });
+        }
+        return jsonResponse({});
+      })
+    );
+
+    const response = await request(app).get("/api/v1/operations/provider-details?includeDetails=true&includeObservability=true").expect(200);
+
+    expect(response.body.contractVersion).toBe("sim-operations-provider-details-v1");
+    expect(response.body.flightData.health.status).toBe("ok");
+    expect(response.body.flightData.sources.items[0].sourceId).toBe("mock");
+    expect(response.body.flightData.tracks.summary.deduplicatedTrackCount).toBe(1);
+    expect(response.body.situationData.features.summary.featureCount).toBe(2);
+    expect(response.body.flightData.observability.latencyMs).toEqual(expect.any(Number));
+    expect(response.body.warnings).toEqual([]);
+    expect(requestedUrls).toContain("http://127.0.0.1:4010/api/v1/aircraft/positions?limit=8");
+    expect(requestedUrls).toContain("http://127.0.0.1:4020/api/v1/features?limit=12");
+  });
+
   it("keeps source data quality notices separate from technical service degradation", async () => {
     vi.stubGlobal(
       "fetch",

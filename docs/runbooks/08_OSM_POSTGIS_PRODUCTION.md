@@ -134,6 +134,7 @@ python3 scripts/smoke-production-data-plane.py --base-url http://localhost:5020 
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
+curl -fsS 'http://localhost:5020/situation-data/api/v1/mobile-coverage/towers/node:13743393126/viewshed?technology=4G&radiusM=12000&azimuthStepDeg=10&distanceStepM=500'
 curl -fsS http://localhost:5020/situation-data/metrics | grep -E 'osm_postgis|mobile_coverage|OSM'
 ```
 

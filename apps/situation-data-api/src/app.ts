@@ -10,6 +10,7 @@ import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
+import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
 import {
@@ -33,6 +34,8 @@ export interface SituationDataAppContext {
   config: SituationDataConfig;
   aggregation: SituationAggregationService;
   demCatalog: DemCatalog;
+  mobileCoverage: MobileCoverageSource;
+  radioPlanning: RadioPlanningService;
   radarFrames: ChmiWeatherRadarFrameCatalog;
   weatherWebcams: ChmiWeatherWebcamCatalog;
 }
@@ -42,9 +45,11 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const sharedCache = await createSharedResponseCacheStore(config);
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
   const demCatalog = new DemCatalog(config);
+  const mobileCoverage = new MobileCoverageSource(config);
+  const radioPlanning = new RadioPlanningService(config);
   const radarFrames = new ChmiWeatherRadarFrameCatalog(config);
   const weatherWebcams = new ChmiWeatherWebcamCatalog(config);
-  const context: SituationDataAppContext = { config, aggregation, demCatalog, radarFrames, weatherWebcams };
+  const context: SituationDataAppContext = { config, aggregation, demCatalog, mobileCoverage, radioPlanning, radarFrames, weatherWebcams };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-situation-data-api"));
@@ -53,6 +58,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
 
   registerHealthRoutes(app, context);
   registerMetadataRoutes(app, context);
+  registerRadioRoutes(app, context);
   registerFeatureRoutes(app, context);
 
   app.use((req, res) => {
@@ -201,7 +207,39 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
   });
 
   app.get("/api/v1/mobile-coverage/metadata", (_req, res) => {
-    res.json(new MobileCoverageSource(context.config).metadata());
+    res.json(context.mobileCoverage.metadata());
+  });
+
+  app.get("/api/v1/mobile-coverage/towers/:towerId/viewshed", async (req, res) => {
+    const towerId = req.params.towerId;
+    if (!towerId || !isValidTowerId(towerId)) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "towerId must use OSM form node:<id>, way:<id> or relation:<id>.");
+    }
+    if (!context.config.osmPostgisConnectionString) {
+      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "OSM_POSTGIS_DATABASE_URL is required for tower viewshed.");
+    }
+    const request = parseMobileCoverageViewshedQuery(req.query);
+    if (!request.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", request.error);
+    }
+    try {
+      const payload = await context.mobileCoverage.buildTowerViewshed({
+        towerId,
+        ...request.value
+      });
+      if (!payload) {
+        return problem(req, res, 404, "NOT_FOUND", "Mobile coverage tower was not found.");
+      }
+      res.json(payload);
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `Mobile coverage tower viewshed failed: ${error.message}` : "Mobile coverage tower viewshed failed."
+      );
+    }
   });
 
   app.get("/api/v1/dem/metadata", async (_req, res) => {
@@ -312,6 +350,52 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
       );
     }
   });
+}
+
+function registerRadioRoutes(app: Express, context: SituationDataAppContext): void {
+  app.get("/api/v1/radio/profiles", async (_req, res) => {
+    res.json(await context.radioPlanning.listProfiles());
+  });
+
+  app.post("/api/v1/radio/profiles", async (req, res) => {
+    try {
+      const profile = await context.radioPlanning.saveCustomProfile(req.body);
+      res.status(201).json(profile);
+    } catch (error) {
+      return radioProblem(req, res, error, "Radio profile save failed.");
+    }
+  });
+
+  app.post("/api/v1/radio/link-check", async (req, res) => {
+    try {
+      res.json(await context.radioPlanning.linkCheck(req.body));
+    } catch (error) {
+      return radioProblem(req, res, error, "Radio link check failed.");
+    }
+  });
+
+  app.post("/api/v1/radio/coverage", async (req, res) => {
+    try {
+      res.json(await context.radioPlanning.coverage(req.body));
+    } catch (error) {
+      return radioProblem(req, res, error, "Radio coverage failed.");
+    }
+  });
+
+  app.post("/api/v1/radio/site-search", async (req, res) => {
+    try {
+      res.json(await context.radioPlanning.siteSearch(req.body));
+    } catch (error) {
+      return radioProblem(req, res, error, "Radio site search failed.");
+    }
+  });
+}
+
+function radioProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {
+  if (error instanceof RadioPlanningError) {
+    return problem(req, res, error.status, error.code, error.message);
+  }
+  return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
 }
 
 function registerFeatureRoutes(app: Express, context: SituationDataAppContext): void {
@@ -541,6 +625,37 @@ function parseTechnologies(value: unknown): MobileCoverageTechnology[] | undefin
   return parsed.length > 0 ? parsed : undefined;
 }
 
+function parseMobileCoverageViewshedQuery(
+  raw: Record<string, unknown>
+): { ok: true; value: { technology?: MobileCoverageTechnology; radiusM?: number; azimuthStepDeg?: number; distanceStepM?: number; includeRaw?: boolean } } | { ok: false; error: string } {
+  const technologies = parseTechnologies(raw.technology);
+  if (asString(raw.technology) && !technologies?.[0]) {
+    return { ok: false, error: "technology must be one of 2G, 4G or 5G." };
+  }
+  const radiusM = parsePositiveOptionalNumber(raw.radiusM);
+  if (!radiusM.ok) {
+    return { ok: false, error: "radiusM must be a positive number." };
+  }
+  const azimuthStepDeg = parsePositiveOptionalNumber(raw.azimuthStepDeg);
+  if (!azimuthStepDeg.ok) {
+    return { ok: false, error: "azimuthStepDeg must be a positive number." };
+  }
+  const distanceStepM = parsePositiveOptionalNumber(raw.distanceStepM);
+  if (!distanceStepM.ok) {
+    return { ok: false, error: "distanceStepM must be a positive number." };
+  }
+  return {
+    ok: true,
+    value: {
+      technology: technologies?.[0],
+      radiusM: radiusM.value,
+      azimuthStepDeg: azimuthStepDeg.value,
+      distanceStepM: distanceStepM.value,
+      includeRaw: parseBoolean(raw.includeRaw)
+    }
+  };
+}
+
 function parseOperators(value: unknown): string[] | undefined {
   const raw = asString(value);
   if (!raw) {
@@ -576,6 +691,18 @@ function parseOptionalNumber(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parsePositiveOptionalNumber(value: unknown): { ok: true; value?: number } | { ok: false } {
+  const raw = asString(value);
+  if (!raw) {
+    return { ok: true };
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false };
+  }
+  return { ok: true, value: parsed };
+}
+
 function parseStringList(value: unknown): string[] | undefined {
   const raw = asString(value);
   if (!raw) {
@@ -593,6 +720,10 @@ function asString(value: unknown): string | undefined {
     return asString(value[0]);
   }
   return typeof value === "string" ? value : undefined;
+}
+
+function isValidTowerId(value: string): boolean {
+  return /^(node|way|relation):-?\d+$/.test(value);
 }
 
 function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {

@@ -1834,6 +1834,136 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("exposes radio planning profiles and persists custom profiles", async () => {
+    const catalog = await request(app).get("/api/v1/radio/profiles").expect(200);
+    expect(catalog.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-radio-profile-catalog-v1",
+        profiles: expect.arrayContaining([
+          expect.objectContaining({ profileId: "pmr446_handheld", category: "civil" }),
+          expect.objectContaining({ profileId: "ham_145_handheld", category: "amateur" }),
+          expect.objectContaining({ profileId: "tetra_handheld", category: "public_safety" }),
+          expect.objectContaining({ profileId: "mil_vhf_manpack", category: "military_generic", sensitiveUse: true })
+        ]),
+        warnings: expect.arrayContaining([expect.stringContaining("Military profiles")])
+      })
+    );
+
+    const created = await request(app)
+      .post("/api/v1/radio/profiles")
+      .send({
+        profileId: "custom_test_radio",
+        name: "Custom test radio",
+        category: "business",
+        frequencyMhz: 170,
+        txPowerW: 10,
+        antennaHeightM: 4,
+        receiverHeightM: 1.5,
+        maxRadiusM: 12000
+      })
+      .expect(201);
+    expect(created.body).toEqual(
+      expect.objectContaining({
+        profileId: "custom_test_radio",
+        source: "custom",
+        frequencyMhz: 170,
+        maxRadiusM: 12000
+      })
+    );
+
+    const updatedCatalog = await request(app).get("/api/v1/radio/profiles").expect(200);
+    expect(updatedCatalog.body.profiles).toEqual(expect.arrayContaining([expect.objectContaining({ profileId: "custom_test_radio" })]));
+  });
+
+  it("runs radio link-check, coverage and site-search without DEM", async () => {
+    const link = await request(app)
+      .post("/api/v1/radio/link-check")
+      .send({
+        profileId: "pmr446_handheld",
+        radioName: "PMR tým A",
+        from: { lon: 14.42, lat: 50.08, antennaHeightM: 1.5 },
+        to: { lon: 14.425, lat: 50.085, receiverHeightM: 1.5 }
+      })
+      .expect(200);
+    expect(link.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-radio-link-check-v1",
+        profile: expect.objectContaining({ profileId: "pmr446_handheld" }),
+        result: expect.objectContaining({
+          linkStatus: expect.stringMatching(/marginal|unknown|clear|obstructed/),
+          quality: expect.stringMatching(/good|fair|weak|none|unknown/),
+          terrainApplied: false,
+          distanceM: expect.any(Number),
+          azimuthDeg: expect.any(Number)
+        }),
+        warnings: expect.arrayContaining([expect.stringContaining("DEM is not enabled")])
+      })
+    );
+
+    const coverage = await request(app)
+      .post("/api/v1/radio/coverage")
+      .send({
+        profileId: "pmr446_handheld",
+        station: { lon: 14.42, lat: 50.08, antennaHeightM: 1.5 },
+        radiusM: 500,
+        azimuthStepDeg: 90,
+        distanceStepM: 250
+      })
+      .expect(200);
+    expect(coverage.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-radio-coverage-v1",
+        type: "FeatureCollection",
+        profile: expect.objectContaining({ profileId: "pmr446_handheld" }),
+        summary: expect.objectContaining({ featureCount: 8, terrainApplied: false }),
+        features: expect.arrayContaining([
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "Polygon" }),
+            properties: expect.objectContaining({
+              analysisLayer: "radio_coverage",
+              category: "radio_coverage_sector",
+              profileId: "pmr446_handheld",
+              quality: expect.stringMatching(/good|fair|weak|none|unknown/)
+            })
+          })
+        ])
+      })
+    );
+
+    const siteSearch = await request(app)
+      .post("/api/v1/radio/site-search")
+      .send({
+        profileId: "pmr446_handheld",
+        searchArea: { bbox: [14.418, 50.078, 14.424, 50.084] },
+        targets: [{ lon: 14.425, lat: 50.085, receiverHeightM: 1.5 }],
+        gridStepM: 500,
+        maxCandidates: 3
+      })
+      .expect(200);
+    expect(siteSearch.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-radio-site-search-v1",
+        type: "FeatureCollection",
+        profile: expect.objectContaining({ profileId: "pmr446_handheld" }),
+        summary: expect.objectContaining({
+          returnedCandidateCount: expect.any(Number),
+          terrainApplied: false
+        }),
+        features: expect.arrayContaining([
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "Point" }),
+            properties: expect.objectContaining({
+              analysisLayer: "radio_site_search",
+              category: "radio_site_candidate",
+              rank: expect.any(Number),
+              score: expect.any(Number)
+            })
+          })
+        ])
+      })
+    );
+  });
+
   it("builds mobile coverage polygons from tower references", async () => {
     const source = new MobileCoverageSource({
       ...config,
@@ -1875,6 +2005,136 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(result.features[0].properties.raw).toBeUndefined();
+  });
+
+  it("builds per-tower mobile coverage viewshed sectors", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageModelVersion: "coverage-v2-terrain"
+    });
+    (source as unknown as { fetchTowerById: () => Promise<{ id: string; name: string; lon: number; lat: number; operator: string }> }).fetchTowerById =
+      async () => ({ id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08, operator: "unknown" });
+
+    const result = await source.buildTowerViewshed({
+      towerId: "node:1",
+      technology: "4G",
+      radiusM: 1000,
+      azimuthStepDeg: 90,
+      distanceStepM: 500
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-mobile-coverage-tower-viewshed-v1",
+        type: "FeatureCollection",
+        tower: expect.objectContaining({
+          towerId: "node:1",
+          btsStatus: "operator_feed_unavailable",
+          operatorStatusAvailable: false
+        }),
+        query: expect.objectContaining({
+          technology: "4G",
+          radiusM: 1000,
+          azimuthStepDeg: 90,
+          distanceStepM: 500
+        }),
+        summary: expect.objectContaining({
+          featureCount: 8,
+          terrainApplied: false,
+          disclaimer: expect.stringContaining("estimate")
+        })
+      })
+    );
+    expect(result?.features).toHaveLength(8);
+    expect(result?.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Polygon" }),
+        properties: expect.objectContaining({
+          layer: "mobile_coverage",
+          category: "mobile_coverage_viewshed",
+          sourceId: "mobile_coverage_model",
+          technology: "4G",
+          quality: expect.stringMatching(/good|fair|weak|none/),
+          modelVersion: "coverage-v2-terrain+tower-viewshed-v1",
+          sourceRevision: expect.stringContaining("viewshed=tower-radial-v1"),
+          dataQuality: "modelled",
+          btsStatus: "operator_feed_unavailable",
+          operatorStatusAvailable: false,
+          disclaimer: expect.stringContaining("estimate")
+        })
+      })
+    );
+  });
+
+  it("exposes a per-tower mobile coverage viewshed endpoint for COP detail overlays", async () => {
+    const coverageApp = await createApp({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    vi.spyOn(coverageApp.context.mobileCoverage, "buildTowerViewshed").mockResolvedValue({
+      contractVersion: "sim-mobile-coverage-tower-viewshed-v1",
+      type: "FeatureCollection",
+      generatedAt: "2026-06-27T00:00:00.000Z",
+      source: {
+        sourceId: "mobile_coverage_model",
+        sourceType: "MODELLED_BTS_VIEWSHED",
+        generatedAt: "2026-06-27T00:00:00.000Z"
+      },
+      tower: {
+        towerId: "node:1",
+        lon: 14.42,
+        lat: 50.08,
+        btsStatus: "operator_feed_unavailable",
+        btsStatusSource: "none",
+        operatorStatusAvailable: false
+      },
+      query: {
+        technology: "4G",
+        radiusM: 1000,
+        azimuthStepDeg: 90,
+        distanceStepM: 500,
+        antennaHeightM: 30,
+        receiverHeightM: 1.5
+      },
+      summary: {
+        featureCount: 1,
+        qualityCounts: { good: 1, fair: 0, weak: 0, none: 0, unknown: 0 },
+        terrainAware: false,
+        terrainApplied: false,
+        demSource: "not-used-phase-1",
+        warningCount: 0,
+        disclaimer: "Coverage is an estimate, not guaranteed service availability."
+      },
+      features: [],
+      warnings: []
+    });
+
+    const response = await request(coverageApp.app)
+      .get("/api/v1/mobile-coverage/towers/node:1/viewshed?technology=4G&radiusM=1000&azimuthStepDeg=90&distanceStepM=500")
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-mobile-coverage-tower-viewshed-v1",
+        source: expect.objectContaining({ sourceId: "mobile_coverage_model" }),
+        tower: expect.objectContaining({ towerId: "node:1" }),
+        query: expect.objectContaining({ technology: "4G", radiusM: 1000 })
+      })
+    );
+    expect(coverageApp.context.mobileCoverage.buildTowerViewshed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        towerId: "node:1",
+        technology: "4G",
+        radiusM: 1000,
+        azimuthStepDeg: 90,
+        distanceStepM: 500
+      })
+    );
   });
 
   it("prefers prepared mobile coverage read-model polygons over runtime calculation", async () => {

@@ -35,6 +35,9 @@ const QUALITY_LEVELS: MobileCoverageQuality[] = ["good", "fair", "weak", "none",
 const DISCLAIMER = "Coverage is an estimate, not guaranteed service availability.";
 const RESOLUTION_STEPS_M = [250, 500, 1000, 2000, 5000, 10_000, 25_000, 50_000] as const;
 const RECEIVER_HEIGHT_M = 1.5;
+const DEFAULT_VIEWSHED_AZIMUTH_STEP_DEG = 10;
+const DEFAULT_VIEWSHED_DISTANCE_STEP_M = 500;
+const MAX_VIEWSHED_FEATURES = 2500;
 
 interface TowerRow {
   osm_id: string;
@@ -95,6 +98,56 @@ export interface MobileCoverageMetadata {
   cacheTtlSeconds: number;
   disclaimer: string;
   assumptions: Record<string, string | number | boolean>;
+}
+
+export interface MobileCoverageViewshedOptions {
+  towerId: string;
+  technology?: MobileCoverageTechnology;
+  radiusM?: number;
+  azimuthStepDeg?: number;
+  distanceStepM?: number;
+  includeRaw?: boolean;
+}
+
+export interface MobileCoverageViewshedPayload {
+  contractVersion: "sim-mobile-coverage-tower-viewshed-v1";
+  type: "FeatureCollection";
+  generatedAt: string;
+  source: {
+    sourceId: "mobile_coverage_model";
+    sourceType: "MODELLED_BTS_VIEWSHED";
+    generatedAt: string;
+  };
+  tower: {
+    towerId: string;
+    lon: number;
+    lat: number;
+    name?: string;
+    operator?: string;
+    technologyHint?: string;
+    btsStatus: MobileBtsStatus;
+    btsStatusSource: "none";
+    operatorStatusAvailable: false;
+  };
+  query: {
+    technology: MobileCoverageTechnology;
+    radiusM: number;
+    azimuthStepDeg: number;
+    distanceStepM: number;
+    antennaHeightM: number;
+    receiverHeightM: number;
+  };
+  summary: {
+    featureCount: number;
+    qualityCounts: Record<MobileCoverageQuality, number>;
+    terrainAware: boolean;
+    terrainApplied: boolean;
+    demSource: string;
+    warningCount: number;
+    disclaimer: string;
+  };
+  features: SituationFeature[];
+  warnings: string[];
 }
 
 export class MobileCoverageSource implements SituationDataSource {
@@ -197,6 +250,182 @@ export class MobileCoverageSource implements SituationDataSource {
 
   async buildCoverageForBbox(bbox: BoundingBox, technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES): Promise<CoveragePayload> {
     return this.buildCoverage(bbox, technologies);
+  }
+
+  async buildTowerViewshed(options: MobileCoverageViewshedOptions): Promise<MobileCoverageViewshedPayload | undefined> {
+    if (!this.config.osmPostgisConnectionString) {
+      throw new Error("mobile_coverage_model requires OSM_POSTGIS_DATABASE_URL for tower viewshed.");
+    }
+    const tower = await this.fetchTowerById(options.towerId);
+    if (!tower) {
+      return undefined;
+    }
+
+    const generatedAt = new Date().toISOString();
+    const technology = options.technology ?? "4G";
+    const radiusM = normalizeViewshedRadius(options.radiusM, technology);
+    const azimuthStepDeg = normalizeViewshedAzimuthStep(options.azimuthStepDeg);
+    const distanceStepM = normalizeViewshedDistanceStep(options.distanceStepM, radiusM, azimuthStepDeg);
+    const terrainSampler = this.createTerrainSampler();
+    const demTiles = terrainSampler ? await terrainSampler.tilesForBbox(bboxAroundPoint(tower.lon, tower.lat, radiusM)) : [];
+    const terrainApplied = Boolean(terrainSampler && demTiles.length > 0);
+    const warnings =
+      this.config.mobileCoverageTerrainAware && !terrainApplied
+        ? ["mobile_coverage_model terrain-aware mode is enabled but DEM tiles are not available for the requested tower viewshed."]
+        : [];
+    const qualityCounts: Record<MobileCoverageQuality, number> = {
+      good: 0,
+      fair: 0,
+      weak: 0,
+      none: 0,
+      unknown: 0
+    };
+    const features: SituationFeature[] = [];
+
+    for (let bearingDeg = 0; bearingDeg < 360 && features.length < MAX_VIEWSHED_FEATURES; bearingDeg += azimuthStepDeg) {
+      const endBearingDeg = Math.min(360, bearingDeg + azimuthStepDeg);
+      for (let innerRadiusM = 0; innerRadiusM < radiusM && features.length < MAX_VIEWSHED_FEATURES; innerRadiusM += distanceStepM) {
+        const outerRadiusM = Math.min(radiusM, innerRadiusM + distanceStepM);
+        const sampleDistanceM = (innerRadiusM + outerRadiusM) / 2;
+        const samplePoint = destinationPoint(tower.lon, tower.lat, bearingDeg + (endBearingDeg - bearingDeg) / 2, sampleDistanceM);
+        const nearest: NearestTower = {
+          tower,
+          distanceM: sampleDistanceM
+        };
+        const terrain =
+          terrainSampler && demTiles.length > 0
+            ? await terrainAssessment(terrainSampler, demTiles, nearest, samplePoint, this.config.mobileCoverageAntennaHeightM)
+            : undefined;
+        const estimate = estimateSignal(sampleDistanceM, technology, terrain?.penaltyDb);
+        const quality = qualityForSignal(estimate.signalDbm);
+        qualityCounts[quality] += 1;
+        const confidence = confidenceForEstimate(sampleDistanceM, technology, terrain);
+        const featureId = [
+          "viewshed",
+          "mobile",
+          technology.toLowerCase(),
+          sanitizeFeatureId(tower.id),
+          `a${Math.round(bearingDeg)}`,
+          `r${Math.round(outerRadiusM)}`
+        ].join(":");
+
+        features.push({
+          type: "Feature",
+          id: featureId,
+          geometry: {
+            type: "Polygon",
+            coordinates: [sectorPolygon(tower.lon, tower.lat, bearingDeg, endBearingDeg, innerRadiusM, outerRadiusM)]
+          },
+          properties: {
+            featureId,
+            layer: "mobile_coverage",
+            category: "mobile_coverage_viewshed",
+            label: `${technology} estimated BTS radio reach`,
+            sourceId: "mobile_coverage_model",
+            observedAt: generatedAt,
+            confidence,
+            stale: false,
+            severity: severityForQuality(quality),
+            license: {
+              name: MOBILE_COVERAGE_LICENSE.name,
+              attribution: MOBILE_COVERAGE_LICENSE.attribution
+            },
+            metrics: compactMetrics({
+              bearingDeg: round(bearingDeg + (endBearingDeg - bearingDeg) / 2, 2),
+              startBearingDeg: round(bearingDeg, 2),
+              endBearingDeg: round(endBearingDeg, 2),
+              innerRadiusM: Math.round(innerRadiusM),
+              outerRadiusM: Math.round(outerRadiusM),
+              distanceM: Math.round(sampleDistanceM),
+              baseSignalDbm: estimate.baseSignalDbm,
+              terrainPenaltyDb: terrain?.penaltyDb,
+              terrainMaxObstructionM: terrain?.maxObstructionM,
+              terrainSamples: terrain?.sampleCount,
+              lineOfSightClear: terrain?.lineOfSightClear,
+              towerElevationM: terrain?.towerElevationM,
+              targetElevationM: terrain?.targetElevationM,
+              targetLon: round(samplePoint.lon, 6),
+              targetLat: round(samplePoint.lat, 6)
+            }),
+            tags: compactTags({
+              towerId: tower.id,
+              towerName: tower.name,
+              towerOperator: tower.operator,
+              towerTechnologyHint: tower.technologyHint,
+              btsStatus: "operator_feed_unavailable"
+            }),
+            operator: tower.operator ?? "unknown",
+            technology,
+            quality,
+            estimatedSignalDbm: estimate.signalDbm,
+            modelVersion: `${this.config.mobileCoverageModelVersion}+tower-viewshed-v1`,
+            sourceRevision: this.viewshedSourceRevision(terrainApplied),
+            readModel: false,
+            generatedAt,
+            resolutionM: distanceStepM,
+            demSource: this.effectiveDemSource(Boolean(terrain)),
+            assumptions: this.viewshedAssumptions(Boolean(terrain), radiusM, azimuthStepDeg, distanceStepM),
+            dataQuality: "modelled",
+            btsStatus: "operator_feed_unavailable",
+            btsStatusSource: "none",
+            operatorStatusAvailable: false,
+            disclaimer: DISCLAIMER,
+            raw: options.includeRaw
+              ? {
+                  tower,
+                  terrain,
+                  phase: terrain ? "tower-viewshed-terrain-aware-distance-model" : "tower-viewshed-distance-model"
+                }
+              : undefined
+          }
+        });
+      }
+    }
+
+    if (features.length >= MAX_VIEWSHED_FEATURES) {
+      warnings.push("mobile_coverage_model tower viewshed reached the feature cap; increase step sizes or reduce radius for complete output.");
+    }
+
+    return {
+      contractVersion: "sim-mobile-coverage-tower-viewshed-v1",
+      type: "FeatureCollection",
+      generatedAt,
+      source: {
+        sourceId: "mobile_coverage_model",
+        sourceType: "MODELLED_BTS_VIEWSHED",
+        generatedAt
+      },
+      tower: {
+        towerId: tower.id,
+        lon: tower.lon,
+        lat: tower.lat,
+        ...(tower.name ? { name: tower.name } : {}),
+        ...(tower.operator ? { operator: tower.operator } : {}),
+        ...(tower.technologyHint ? { technologyHint: tower.technologyHint } : {}),
+        btsStatus: "operator_feed_unavailable",
+        btsStatusSource: "none",
+        operatorStatusAvailable: false
+      },
+      query: {
+        technology,
+        radiusM,
+        azimuthStepDeg,
+        distanceStepM,
+        antennaHeightM: this.config.mobileCoverageAntennaHeightM,
+        receiverHeightM: RECEIVER_HEIGHT_M
+      },
+      summary: {
+        featureCount: features.length,
+        qualityCounts,
+        terrainAware: this.config.mobileCoverageTerrainAware,
+        terrainApplied,
+        demSource: this.effectiveDemSource(terrainApplied),
+        warningCount: warnings.length,
+        disclaimer: DISCLAIMER
+      },
+      features,
+      warnings
+    };
   }
 
   async ensureReadModelSchema(): Promise<void> {
@@ -691,6 +920,29 @@ export class MobileCoverageSource implements SituationDataSource {
     ].join("|");
   }
 
+  private viewshedSourceRevision(terrainApplied: boolean): string {
+    return `${this.sourceRevision(terrainApplied)}|viewshed=tower-radial-v1`;
+  }
+
+  private viewshedAssumptions(
+    terrainApplied: boolean,
+    radiusM: number,
+    azimuthStepDeg: number,
+    distanceStepM: number
+  ): Record<string, string | number | boolean> {
+    return {
+      ...this.assumptions(terrainApplied),
+      viewshedModel: "tower-radial-v1",
+      radiusM,
+      azimuthStepDeg,
+      distanceStepM,
+      sectorAware: false,
+      buildingAware: false,
+      vegetationAware: false,
+      operatorRfPlanAvailable: false
+    };
+  }
+
   private effectiveDemSource(terrainApplied = false): string {
     if (terrainApplied) {
       return this.config.mobileCoverageDemSource === "not-used-phase-1" ? this.config.demDatasetId : this.config.mobileCoverageDemSource;
@@ -717,6 +969,49 @@ export class MobileCoverageSource implements SituationDataSource {
       `select count(*)::bigint as count from ${table} where layer = 'mobile' and category = 'communications_tower'`
     );
     return Number(result.rows[0]?.count ?? 0);
+  }
+
+  private async fetchTowerById(towerId: string): Promise<Tower | undefined> {
+    const parsed = parseTowerId(towerId);
+    if (!parsed) {
+      return undefined;
+    }
+    const table = quoteQualifiedIdentifier(this.config.osmPostgisTable);
+    const result = await this.getPool().query<TowerRow>(
+      `
+        select
+          osm_id::text,
+          osm_type,
+          name,
+          lon,
+          lat,
+          tags
+        from ${table}
+        where osm_type = $1
+          and osm_id::text = $2
+          and layer = 'mobile'
+          and category = 'communications_tower'
+        limit 1
+      `,
+      [parsed.osmType, parsed.osmId]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return undefined;
+    }
+    const lon = optionalNumber(row.lon);
+    const lat = optionalNumber(row.lat);
+    if (lon === undefined || lat === undefined) {
+      return undefined;
+    }
+    return {
+      id: `${row.osm_type}:${row.osm_id}`,
+      name: cleanString(row.name),
+      lon,
+      lat,
+      operator: towerOperator(row.tags),
+      technologyHint: towerTechnologyHint(row.tags)
+    };
   }
 
   private async fetchReadModelCount(): Promise<number> {
@@ -1000,6 +1295,10 @@ function expandBboxByMeters(bbox: BoundingBox, meters: number): BoundingBox {
   };
 }
 
+function bboxAroundPoint(lon: number, lat: number, radiusM: number): BoundingBox {
+  return expandBboxByMeters({ west: lon, south: lat, east: lon, north: lat }, radiusM);
+}
+
 function featureIntersectsBbox(feature: SituationFeature, bbox: BoundingBox): boolean {
   if (feature.geometry.type !== "Polygon") {
     return false;
@@ -1029,6 +1328,93 @@ function distanceMeters(lonA: number, latA: number, lonB: number, latB: number):
 
 function metersPerDegreeLon(lat: number): number {
   return Math.max(1, 111_320 * Math.cos((lat * Math.PI) / 180));
+}
+
+function defaultViewshedRadiusM(technology: MobileCoverageTechnology): number {
+  if (technology === "2G") {
+    return 25_000;
+  }
+  if (technology === "5G") {
+    return 5000;
+  }
+  return 12_000;
+}
+
+function normalizeViewshedRadius(value: number | undefined, technology: MobileCoverageTechnology): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return defaultViewshedRadiusM(technology);
+  }
+  return Math.max(500, Math.min(30_000, Math.trunc(value)));
+}
+
+function normalizeViewshedAzimuthStep(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return DEFAULT_VIEWSHED_AZIMUTH_STEP_DEG;
+  }
+  return Math.max(2, Math.min(90, Math.trunc(value)));
+}
+
+function normalizeViewshedDistanceStep(value: number | undefined, radiusM: number, azimuthStepDeg: number): number {
+  const raw = value === undefined || !Number.isFinite(value) ? DEFAULT_VIEWSHED_DISTANCE_STEP_M : Math.trunc(value);
+  const normalized = Math.max(100, Math.min(2500, raw));
+  const azimuthBands = Math.ceil(360 / azimuthStepDeg);
+  const distanceBands = Math.ceil(radiusM / normalized);
+  if (azimuthBands * distanceBands <= MAX_VIEWSHED_FEATURES) {
+    return normalized;
+  }
+  return Math.ceil(radiusM / Math.max(1, Math.floor(MAX_VIEWSHED_FEATURES / azimuthBands)));
+}
+
+function destinationPoint(lon: number, lat: number, bearingDeg: number, distanceM: number): { lon: number; lat: number } {
+  const bearingRad = (bearingDeg * Math.PI) / 180;
+  const dy = Math.cos(bearingRad) * distanceM;
+  const dx = Math.sin(bearingRad) * distanceM;
+  return {
+    lon: Math.max(-180, Math.min(180, lon + dx / metersPerDegreeLon(lat))),
+    lat: Math.max(-90, Math.min(90, lat + dy / 111_320))
+  };
+}
+
+function sectorPolygon(
+  lon: number,
+  lat: number,
+  startBearingDeg: number,
+  endBearingDeg: number,
+  innerRadiusM: number,
+  outerRadiusM: number
+): Array<[number, number]> {
+  const arcSegments = Math.max(1, Math.ceil((endBearingDeg - startBearingDeg) / 5));
+  const outerArc: Array<[number, number]> = [];
+  for (let index = 0; index <= arcSegments; index += 1) {
+    const bearing = startBearingDeg + ((endBearingDeg - startBearingDeg) * index) / arcSegments;
+    const point = destinationPoint(lon, lat, bearing, outerRadiusM);
+    outerArc.push([round(point.lon, 6), round(point.lat, 6)]);
+  }
+
+  if (innerRadiusM <= 0) {
+    return [[round(lon, 6), round(lat, 6)], ...outerArc, [round(lon, 6), round(lat, 6)]];
+  }
+
+  const innerArc: Array<[number, number]> = [];
+  for (let index = arcSegments; index >= 0; index -= 1) {
+    const bearing = startBearingDeg + ((endBearingDeg - startBearingDeg) * index) / arcSegments;
+    const point = destinationPoint(lon, lat, bearing, innerRadiusM);
+    innerArc.push([round(point.lon, 6), round(point.lat, 6)]);
+  }
+
+  return [...outerArc, ...innerArc, outerArc[0] ?? [round(lon, 6), round(lat, 6)]];
+}
+
+function parseTowerId(value: string): { osmType: string; osmId: string } | undefined {
+  const [osmType, osmId, ...rest] = value.split(":");
+  if (rest.length > 0 || !osmType || !osmId || !/^(node|way|relation)$/.test(osmType) || !/^-?\d+$/.test(osmId)) {
+    return undefined;
+  }
+  return { osmType, osmId };
+}
+
+function sanitizeFeatureId(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]+/g, "-");
 }
 
 function quoteQualifiedIdentifier(value: string): string {

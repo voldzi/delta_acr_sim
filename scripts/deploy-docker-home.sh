@@ -166,6 +166,8 @@ SIM_OPERATIONS_TAK_GATEWAY_BASE_URL_VALUE="${SIM_OPERATIONS_TAK_GATEWAY_BASE_URL
 SIM_OPERATIONS_TAK_GATEWAY_BASE_URL_VALUE="${SIM_OPERATIONS_TAK_GATEWAY_BASE_URL_VALUE:-http://tak-gateway-api:4040}"
 SIM_OPERATIONS_REPORT_FILE_VALUE="${SIM_OPERATIONS_REPORT_FILE:-$(existing_value SIM_OPERATIONS_REPORT_FILE)}"
 SIM_OPERATIONS_REPORT_FILE_VALUE="${SIM_OPERATIONS_REPORT_FILE_VALUE:-/data/operational-checks/latest.json}"
+SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS_VALUE="${SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS:-$(existing_value SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS)}"
+SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS_VALUE="${SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS_VALUE:-160}"
 
 umask 077
 cat > .env <<ENV
@@ -232,6 +234,7 @@ SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
+SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=${SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS_VALUE}
 IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json
 SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
 ROAD_SRTI_LOD_SPARQL_URL=https://lod.tamtamresearch.com/sparql/
@@ -327,6 +330,7 @@ wait_for_container_healthy csm-sim-web "sim-web container health"
 wait_for_http http://localhost:5020/health/live "sim-web gateway"
 curl -fsS http://localhost:5020/health/live
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/operations/summary >/dev/null
+curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" 'http://localhost:5020/api/v1/operations/provider-details?includeDetails=true&includeObservability=true' >/dev/null
 curl -fsS -H "Authorization: Bearer ${SIM_API_ADMIN_TOKEN_VALUE}" http://localhost:5020/api/v1/scenarios >/dev/null
 curl -fsS http://localhost:5020/flight-data/health/ready
 curl -fsS http://localhost:5020/situation-data/health/ready

@@ -830,10 +830,12 @@ class ChmiWeatherStationsSource implements SituationDataSource {
     const metadata = await this.metadataCache.getOrLoad(metadataUrl, () => requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs));
     const stationFiles = chmiWeatherStationFileMap(dataIndex);
     const center = bboxCenter(query.bbox);
+    const stationLimit = Math.max(1, Math.min(query.limit, this.config.chmiWeatherMaxStations));
     const stations = chmiWeatherStationsFromMetadata(metadata)
       .filter((station) => isPointInBbox(station.lon, station.lat, query.bbox))
+      .filter((station) => stationFiles.has(station.stationId))
       .sort((a, b) => distanceSquared(a.lon, a.lat, center.lon, center.lat) - distanceSquared(b.lon, b.lat, center.lon, center.lat))
-      .slice(0, Math.max(1, this.config.chmiWeatherMaxStations));
+      .slice(0, stationLimit);
 
     const warnings: string[] = [];
     const selected = stations.flatMap((station) => {
@@ -843,9 +845,6 @@ class ChmiWeatherStationsSource implements SituationDataSource {
       }
       return [{ station, file }];
     });
-    if (selected.length < stations.length) {
-      warnings.push(`chmi_weather_stations skipped ${stations.length - selected.length} station(s) without a current 10m data file.`);
-    }
 
     const settled = await Promise.allSettled(
       selected.map(async ({ station, file }) => {
