@@ -132,8 +132,8 @@ export function onSimApiAuthChange(handler: () => void): () => void {
 }
 
 export const demoScenario: Scenario = {
-  name: "Moving COM Tracks Demo",
-  description: "Synthetic moving aircraft, UAV and missile-track events for COM display validation.",
+  name: "Moving COP Tracks Demo",
+  description: "Synthetic moving aircraft, UAV and missile-track events for COP display validation.",
   area: {
     type: "BBOX",
     bbox: [14.0, 49.8, 15.0, 50.3]
@@ -170,8 +170,8 @@ export const demoScenario: Scenario = {
 };
 
 export const denseDemoScenario: Scenario = {
-  name: "High Density COM Tracks Demo",
-  description: "Synthetic high-density moving air picture with hundreds of COM-compatible tracks.",
+  name: "High Density COP Tracks Demo",
+  description: "Synthetic high-density moving air picture with hundreds of COP-compatible tracks.",
   area: {
     type: "BBOX",
     bbox: [13.85, 49.65, 15.35, 50.45]
