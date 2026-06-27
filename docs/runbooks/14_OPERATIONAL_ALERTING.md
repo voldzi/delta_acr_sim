@@ -52,6 +52,10 @@ Alert delivery is state-change based by default:
 - changed failure fingerprint sends another alert,
 - recovery from failure sends an informational recovery alert.
 
+The SLO probe ignores only the previous `operational_check_failed` alert from
+`operations/summary`, so a recovered system can clear an older failed report.
+Other `critical` or `warning` alerts remain blocking.
+
 Without a webhook, failures and recoveries are still written to syslog through
 `logger -t csm-sim-operational-check` and to the JSON report/state files.
 

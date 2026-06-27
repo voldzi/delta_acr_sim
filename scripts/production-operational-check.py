@@ -220,10 +220,18 @@ def check_operations_slo(client: Client, args: argparse.Namespace) -> dict[str, 
         f"/api/v1/operations/summary latency {summary_response.elapsed_ms}ms exceeds SLO {args.slo_max_summary_latency_ms}ms",
     )
     status = str(summary.get("status") or "unknown")
+    alerts = summary.get("alerts") if isinstance(summary.get("alerts"), list) else []
+    blocking_alerts = [
+        alert
+        for alert in alerts
+        if isinstance(alert, dict)
+        and alert.get("severity") in {"critical", "warning"}
+        and alert.get("code") != "operational_check_failed"
+    ]
     if args.slo_require_operations_ok:
-        require(status == "ok", f"operations summary status is {status!r}, expected 'ok'")
+        require(status == "ok" or not blocking_alerts, f"operations summary status is {status!r}, expected 'ok'")
     else:
-        require(status != "critical", "operations summary status is 'critical'")
+        require(status != "critical" or not blocking_alerts, "operations summary status is 'critical'")
 
     services = summary.get("services") if isinstance(summary.get("services"), list) else []
     readiness_services = [service for service in services if isinstance(service, dict) and service.get("productionReadiness") is not False]
@@ -234,14 +242,17 @@ def check_operations_slo(client: Client, args: argparse.Namespace) -> dict[str, 
     ]
     require(not non_ok_services, "production readiness services not ok: " + ", ".join(non_ok_services))
 
-    alerts = summary.get("alerts") if isinstance(summary.get("alerts"), list) else []
     alert_counts = {
         "critical": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("severity") == "critical"),
         "warning": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("severity") == "warning"),
         "info": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("severity") == "info"),
     }
-    require(alert_counts["critical"] == 0, f"operations summary reports {alert_counts['critical']} critical alert(s)")
-    require(alert_counts["warning"] == 0, f"operations summary reports {alert_counts['warning']} warning alert(s)")
+    blocking_alert_counts = {
+        "critical": sum(1 for alert in blocking_alerts if alert.get("severity") == "critical"),
+        "warning": sum(1 for alert in blocking_alerts if alert.get("severity") == "warning"),
+    }
+    require(blocking_alert_counts["critical"] == 0, f"operations summary reports {blocking_alert_counts['critical']} blocking critical alert(s)")
+    require(blocking_alert_counts["warning"] == 0, f"operations summary reports {blocking_alert_counts['warning']} blocking warning alert(s)")
 
     future_services = [service for service in services if isinstance(service, dict) and service.get("productionReadiness") is False]
     return {
@@ -251,6 +262,8 @@ def check_operations_slo(client: Client, args: argparse.Namespace) -> dict[str, 
         "productionReadinessServices": len(readiness_services),
         "futureServicesExcluded": len(future_services),
         "alertCounts": alert_counts,
+        "blockingAlertCounts": blocking_alert_counts,
+        "ignoredAlertCodes": ["operational_check_failed"],
         "thresholds": {
             "maxLiveLatencyMs": args.slo_max_live_latency_ms,
             "maxSummaryLatencyMs": args.slo_max_summary_latency_ms,
