@@ -19,5 +19,8 @@
   },
   "dependencies": {
     "@csm-sim/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.2"
   }
 }

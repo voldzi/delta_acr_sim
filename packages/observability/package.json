@@ -11,7 +11,7 @@
     "test": "node -e \"console.log('observability: covered by api integration tests')\""
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
-    "typescript": "^5.9.3"
+    "@types/node": "^24.13.2",
+    "typescript": "^6.0.3"
   }
 }
