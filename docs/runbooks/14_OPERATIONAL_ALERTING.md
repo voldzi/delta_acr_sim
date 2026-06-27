@@ -114,6 +114,7 @@ Cron output is appended to:
 SIM_OPERATIONAL_ALERT_WEBHOOK_URL=
 SIM_OPERATIONAL_ALERT_ENVIRONMENT=docker-home
 SIM_OPERATIONAL_BASE_URL=http://127.0.0.1:5020
+SIM_OPERATIONAL_API_TOKEN=
 SIM_OPERATIONAL_CHECK_BBOX=11.8,48.5,19.2,51.2
 SIM_OPERATIONAL_BOUNDARY_BBOX=12,48,19,51
 SIM_OPERATIONAL_TERRAIN_BBOX=13.95,50.55,14.08,50.65
@@ -133,6 +134,10 @@ SIM_OPERATIONAL_SLO_REQUIRE_OPERATIONS_OK=true
 
 The check reads `.env` as a plain key/value file. It does not shell-source it,
 so values such as `VITE_SIM_OIDC_SCOPE=openid profile email` are safe.
+`SIM_OPERATIONAL_API_TOKEN` is optional; when it is empty, the check falls back
+to `SIM_API_INTERNAL_TOKEN` and then `SIM_API_ADMIN_TOKEN` so protected SIM API
+probes can run on authenticated production deployments. The token itself is not
+written to the JSON report.
 
 ## Expected Passing Signals
 
@@ -162,6 +167,7 @@ Important report fields:
       "status": "ok",
       "liveLatencyMs": 12,
       "summaryLatencyMs": 240,
+      "authenticated": true,
       "productionReadinessServices": 3,
       "futureServicesExcluded": 1
     }

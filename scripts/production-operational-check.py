@@ -63,8 +63,11 @@ class Client:
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return Response(url=url, status=status, body=body, elapsed_ms=elapsed_ms)
 
-    def json(self, path_or_url: str) -> tuple[dict[str, Any], Response]:
-        response = self.request(path_or_url, {"Accept": "application/json"})
+    def json(self, path_or_url: str, headers: dict[str, str] | None = None) -> tuple[dict[str, Any], Response]:
+        request_headers = {"Accept": "application/json"}
+        if headers:
+            request_headers.update(headers)
+        response = self.request(path_or_url, request_headers)
         require(response.status == 200, f"{response.url}: expected HTTP 200, got {response.status}")
         try:
             payload = json.loads(response.body.decode("utf-8"))
@@ -127,6 +130,13 @@ def env_value(env_file_values: dict[str, str], key: str, default: str = "") -> s
     if value is not None:
         return value
     return env_file_values.get(key, default)
+
+
+def unquote_env_value(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
 
 
 def query_path(path: str, params: dict[str, str | int]) -> str:
@@ -214,7 +224,8 @@ def check_operations_slo(client: Client, args: argparse.Namespace) -> dict[str, 
         f"/health/live latency {live_response.elapsed_ms}ms exceeds SLO {args.slo_max_live_latency_ms}ms",
     )
 
-    summary, summary_response = client.json("/api/v1/operations/summary")
+    summary_headers = {"Authorization": f"Bearer {args.api_token}"} if args.api_token else {}
+    summary, summary_response = client.json("/api/v1/operations/summary", summary_headers)
     require(
         summary_response.elapsed_ms <= args.slo_max_summary_latency_ms,
         f"/api/v1/operations/summary latency {summary_response.elapsed_ms}ms exceeds SLO {args.slo_max_summary_latency_ms}ms",
@@ -259,6 +270,7 @@ def check_operations_slo(client: Client, args: argparse.Namespace) -> dict[str, 
         "status": status,
         "liveLatencyMs": live_response.elapsed_ms,
         "summaryLatencyMs": summary_response.elapsed_ms,
+        "authenticated": bool(args.api_token),
         "productionReadinessServices": len(readiness_services),
         "futureServicesExcluded": len(future_services),
         "alertCounts": alert_counts,
@@ -580,6 +592,14 @@ def resolve_args(args: argparse.Namespace, env_file_values: dict[str, str]) -> a
         "coverage-v2-terrain",
     )
     args.webhook_url = args.webhook_url or env_value(env_file_values, "SIM_OPERATIONAL_ALERT_WEBHOOK_URL", "")
+    if args.api_token is None:
+        args.api_token = (
+            unquote_env_value(env_value(env_file_values, "SIM_OPERATIONAL_API_TOKEN", ""))
+            or unquote_env_value(env_value(env_file_values, "SIM_API_INTERNAL_TOKEN", ""))
+            or unquote_env_value(env_value(env_file_values, "SIM_API_ADMIN_TOKEN", ""))
+        )
+    else:
+        args.api_token = unquote_env_value(args.api_token)
     if args.state_file is None:
         args.state_file = Path(env_value(env_file_values, "SIM_OPERATIONAL_STATE_FILE", "data/operational-checks/state.json"))
     if args.report_file is None:
@@ -623,6 +643,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--command-timeout-seconds", type=float, default=180.0, help="Subprocess smoke timeout. Default: %(default)s")
     parser.add_argument("--webhook-url", default=None, help="Optional generic JSON webhook for state-change alerts.")
     parser.add_argument("--webhook-timeout-seconds", type=float, default=10.0, help="Alert webhook timeout. Default: %(default)s")
+    parser.add_argument("--api-token", default=None, help="Bearer token for protected SIM API checks. Defaults to SIM_OPERATIONAL_API_TOKEN, SIM_API_INTERNAL_TOKEN or SIM_API_ADMIN_TOKEN from the env file.")
     parser.add_argument("--state-file", type=Path, default=None, help="State file for failure/recovery deduplication.")
     parser.add_argument("--report-file", type=Path, default=None, help="Latest JSON report output path.")
     parser.add_argument("--allow-degraded-health", action="append", choices=["flight", "situation", "safety", "tak"], default=["tak"])

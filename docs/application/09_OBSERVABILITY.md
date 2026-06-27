@@ -153,7 +153,7 @@ JSON webhook.
 Součástí kontroly je SLO check nad veřejnou bránou:
 
 - `/health/live` musí vrátit HTTP 200 do `SIM_OPERATIONAL_SLO_MAX_LIVE_LATENCY_MS`,
-- `/api/v1/operations/summary` musí vrátit HTTP 200 do
+- `/api/v1/operations/summary` musí přes autentizovaný probe vrátit HTTP 200 do
   `SIM_OPERATIONAL_SLO_MAX_SUMMARY_LATENCY_MS`,
 - produkční rollup musí být `ok`, pokud
   `SIM_OPERATIONAL_SLO_REQUIRE_OPERATIONS_OK=true`,
