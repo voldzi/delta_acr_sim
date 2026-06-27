@@ -2864,7 +2864,7 @@ function chmiWeatherStationsFromMetadata(payload: ChmiDataCollectionPayload): Ch
     .filter((station): station is ChmiWeatherStation => Boolean(station));
 }
 
-interface ChmiWeatherPresentationInput {
+export interface ChmiWeatherPresentationInput {
   stationName: string;
   temperatureC?: number;
   windSpeedMps?: number;
@@ -2879,9 +2879,9 @@ interface ChmiWeatherPresentationInput {
   visibilityCode?: number;
 }
 
-type ChmiWeatherConditionMode = "observed" | "measured" | "estimated" | "unclassified";
+export type ChmiWeatherConditionMode = "observed" | "measured" | "estimated" | "unclassified";
 
-interface ChmiWeatherPresentation {
+export interface ChmiWeatherPresentation {
   symbolKey: "sun" | "partly_cloudy" | "cloud" | "fog" | "rain" | "snow" | "storm" | "wind" | "measurement";
   conditionLabel: string;
   conditionLabelEn: string;
@@ -2898,7 +2898,7 @@ interface ChmiWeatherPresentation {
   note?: string;
 }
 
-function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeatherPresentation {
+export function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeatherPresentation {
   const strongestWindMps = Math.max(input.windSpeedMps ?? 0, input.windGustMps ?? 0);
   const hasMeasuredPrecipitation = input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05;
   const hasHourlyPrecipitation = input.precipitation1hMm !== undefined && input.precipitation1hMm >= 0.1;
@@ -3090,6 +3090,53 @@ function sunshineSourceInputs(input: ChmiWeatherPresentationInput): string[] {
   ].filter((value): value is string => Boolean(value));
 }
 
+function chmiWeatherDisplay(station: ChmiWeatherStation, presentation: ChmiWeatherPresentation, severity: SituationSeverity): Record<string, unknown> {
+  const detailUrl = `/api/v1/weather-stations/${encodeURIComponent(station.stationId)}/detail`;
+  return compactProviderProperties({
+    contractVersion: "sim-cop-weather-display-v1",
+    renderer: "weather_station_marker_v1",
+    iconKey: presentation.symbolKey,
+    iconSet: "weather-symbol-v1",
+    title: station.name,
+    label: presentation.mapLabel,
+    subtitle: presentation.detailSummary,
+    badgeLabel: presentation.conditionLabel,
+    badgeLabelEn: presentation.conditionLabelEn,
+    badgeTone: chmiWeatherDisplayTone(presentation.symbolKey, presentation.conditionMode, severity),
+    primaryValue: presentation.primaryValue,
+    secondaryValue: presentation.secondaryValue,
+    tertiaryValue: presentation.tertiaryValue,
+    conditionMode: presentation.conditionMode,
+    confidence: presentation.confidence,
+    confidencePercent: Math.round(presentation.confidence * 100),
+    authoritativeCondition: presentation.authoritativeCondition,
+    sourceInputs: presentation.sourceInputs,
+    detailUrl,
+    chartUrl: detailUrl,
+    interaction: "open_detail"
+  }) ?? {};
+}
+
+function chmiWeatherDisplayTone(
+  symbolKey: ChmiWeatherPresentation["symbolKey"],
+  conditionMode: ChmiWeatherConditionMode,
+  severity: SituationSeverity
+): string {
+  if (severity === "critical" || symbolKey === "storm") {
+    return "critical";
+  }
+  if (severity === "warning" || symbolKey === "rain" || symbolKey === "snow" || symbolKey === "fog" || symbolKey === "wind") {
+    return "warning";
+  }
+  if (conditionMode === "estimated") {
+    return "advisory";
+  }
+  if (conditionMode === "unclassified") {
+    return "neutral";
+  }
+  return "ok";
+}
+
 function weatherSecondaryValue(input: ChmiWeatherPresentationInput): string | undefined {
   if (input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05) {
     return `${formatCompactNumber(input.precipitation10mMm, 1)} mm/10 min`;
@@ -3150,7 +3197,7 @@ function presentWeatherCodePresentation(rawCode: number | undefined):
   return undefined;
 }
 
-function normalizeChmiPresentWeatherCode(rawCode: number | undefined): number | undefined {
+export function normalizeChmiPresentWeatherCode(rawCode: number | undefined): number | undefined {
   if (rawCode === undefined || !Number.isFinite(rawCode)) {
     return undefined;
   }
@@ -3300,7 +3347,8 @@ function mapChmiWeatherStationFeature(
         tertiaryValue: weatherPresentation.tertiaryValue,
         mapLabel: weatherPresentation.mapLabel,
         detailSummary: weatherPresentation.detailSummary
-      })
+      }),
+      display: chmiWeatherDisplay(station, weatherPresentation, severity)
     }),
     raw: query.includeRaw
       ? {

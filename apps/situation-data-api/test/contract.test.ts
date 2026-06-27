@@ -1529,6 +1529,142 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("returns CHMI weather station detail with display, history and forecast charts", async () => {
+    const nowMs = Date.now();
+    const observedAt1 = new Date(nowMs - 20 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const observedAt2 = new Date(nowMs - 10 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const forecastAt1 = new Date(Math.ceil(nowMs / (60 * 60 * 1000)) * 60 * 60 * 1000).toISOString().slice(0, 16);
+    const forecastAt2 = new Date(Math.ceil(nowMs / (60 * 60 * 1000)) * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString().slice(0, 16);
+    const dateToken = observedAt2.slice(0, 10).replace(/-/g, "");
+    const testConfig = {
+      ...config,
+      chmiWeatherMetadataBaseUrl: "https://example.test/chmi/detail/metadata/",
+      chmiWeatherDataBaseUrl: "https://example.test/chmi/detail/data/",
+      openMeteoBaseUrl: "https://example.test/open-meteo"
+    };
+    const stationId = "0-20000-0-11520";
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      if (url === testConfig.chmiWeatherMetadataBaseUrl) {
+        return new Response(`<a href="meta1-${dateToken}.json">meta1-${dateToken}.json</a>`, {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      }
+      if (url === testConfig.chmiWeatherDataBaseUrl) {
+        return new Response(
+          [
+            `<a href="10m-${stationId}-${dateToken}.json">10m-${stationId}-${dateToken}.json</a>`,
+            `<a href="1h-${stationId}-${dateToken}.json">1h-${stationId}-${dateToken}.json</a>`
+          ].join("\n"),
+          { status: 200, headers: { "content-type": "text/html" } }
+        );
+      }
+      if (url.endsWith(`/meta1-${dateToken}.json`)) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "WSI,GH_ID,FULL_NAME,GEOGR1,GEOGR2,ELEVATION,BEGIN_DATE",
+                values: [[stationId, "ZIS11520", "Detail station", 14.5, 50.1, 250, "1900-01-01T00:00:00Z"]]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.endsWith(`/10m-${stationId}-${dateToken}.json`)) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+                values: [
+                  [stationId, "T", observedAt1, 19.5, "", 5],
+                  [stationId, "T", observedAt2, 20.2, "", 5],
+                  [stationId, "H", observedAt2, 65, "", 5],
+                  [stationId, "F", observedAt2, 2.4, "", 5],
+                  [stationId, "Fmax", observedAt2, 4.1, "", 5],
+                  [stationId, "SRA10M", observedAt2, 0.2, "", 5],
+                  [stationId, "SSV10M", observedAt2, 0, "", 5]
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.endsWith(`/1h-${stationId}-${dateToken}.json`)) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+                values: [
+                  [stationId, "N", observedAt2, 8, "", 5],
+                  [stationId, "SRA1H", observedAt2, 1.4, "", 5],
+                  [stationId, "VV", observedAt2, 40, "", 5]
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.startsWith(`${testConfig.openMeteoBaseUrl}/v1/forecast`)) {
+        return new Response(
+          JSON.stringify({
+            hourly: {
+              time: [forecastAt1, forecastAt2],
+              temperature_2m: [21.1, 20.4],
+              relative_humidity_2m: [62, 70],
+              precipitation: [0.1, 0.4],
+              precipitation_probability: [20, 40],
+              weather_code: [3, 61],
+              cloud_cover: [70, 90],
+              wind_speed_10m: [3.1, 3.5],
+              wind_direction_10m: [270, 280],
+              wind_gusts_10m: [5.1, 6.2]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const chmiApp = await createApp({ ...testConfig, enabledSources: ["chmi_weather_stations"] });
+
+    const response = await request(chmiApp.app)
+      .get(`/api/v1/weather-stations/${stationId}/detail?historyHours=72&forecastHours=2`)
+      .expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-weather-station-detail-v1",
+        station: expect.objectContaining({ stationId, name: "Detail station" }),
+        current: expect.objectContaining({
+          display: expect.objectContaining({
+            contractVersion: "sim-cop-weather-display-v1",
+            renderer: "weather_station_detail_v1",
+            iconKey: "rain",
+            conditionMode: "measured"
+          })
+        }),
+        history: expect.objectContaining({ pointCount: expect.any(Number), source: "chmi_meteorology_climate_now" }),
+        forecast: expect.objectContaining({ pointCount: 2, source: "open_meteo" }),
+        copInstructions: expect.objectContaining({ renderOnly: true })
+      })
+    );
+    expect(response.body.charts.map((chart: { chartId: string }) => chart.chartId)).toEqual([
+      "temperature",
+      "precipitation",
+      "wind",
+      "humidity_cloud"
+    ]);
+    expect(response.body.charts[0].series.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("exposes CHMI radar overlay and thunderstorm context metadata", async () => {
     const radarIndex = (names: string[]) => `<html><body><pre>${names.map((name) => `<a href="${name}">${name}</a>`).join("\n")}</pre></body></html>`;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

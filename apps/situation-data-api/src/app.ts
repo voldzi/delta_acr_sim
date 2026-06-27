@@ -3,6 +3,7 @@ import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
 import { SituationAggregationService } from "./aggregation.js";
 import { buildSituationMapCatalog } from "./catalog.js";
+import { ChmiWeatherStationDetailService } from "./chmi-weather-station-detail.js";
 import { ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
@@ -37,6 +38,7 @@ export interface SituationDataAppContext {
   mobileCoverage: MobileCoverageSource;
   radioPlanning: RadioPlanningService;
   radarFrames: ChmiWeatherRadarFrameCatalog;
+  weatherStationDetails: ChmiWeatherStationDetailService;
   weatherWebcams: ChmiWeatherWebcamCatalog;
 }
 
@@ -48,8 +50,18 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const mobileCoverage = new MobileCoverageSource(config);
   const radioPlanning = new RadioPlanningService(config);
   const radarFrames = new ChmiWeatherRadarFrameCatalog(config);
+  const weatherStationDetails = new ChmiWeatherStationDetailService(config);
   const weatherWebcams = new ChmiWeatherWebcamCatalog(config);
-  const context: SituationDataAppContext = { config, aggregation, demCatalog, mobileCoverage, radioPlanning, radarFrames, weatherWebcams };
+  const context: SituationDataAppContext = {
+    config,
+    aggregation,
+    demCatalog,
+    mobileCoverage,
+    radioPlanning,
+    radarFrames,
+    weatherStationDetails,
+    weatherWebcams
+  };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-situation-data-api"));
@@ -283,6 +295,27 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         502,
         "UPSTREAM_ERROR",
         error instanceof Error ? `Clean weather radar frame generation failed: ${error.message}` : "Clean weather radar frame generation failed."
+      );
+    }
+  });
+
+  app.get("/api/v1/weather-stations/:stationId/detail", async (req, res) => {
+    try {
+      const detail = await context.weatherStationDetails.getDetail(req.params.stationId, {
+        historyHours: parseOptionalNumber(req.query.historyHours),
+        forecastHours: parseOptionalNumber(req.query.forecastHours)
+      });
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "CHMI weather station was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `CHMI weather station detail failed: ${error.message}` : "CHMI weather station detail failed."
       );
     }
   });

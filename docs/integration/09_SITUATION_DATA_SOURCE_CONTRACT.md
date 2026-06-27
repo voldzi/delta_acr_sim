@@ -34,6 +34,7 @@ POST /radio/profiles
 POST /radio/link-check
 POST /radio/coverage
 POST /radio/site-search
+GET /weather-stations/{stationId}/detail
 GET /dem/metadata
 ```
 
@@ -256,8 +257,10 @@ SIM publikuje bodové aktuální počasí a cacheované ČHMÚ vrstvy:
 - `public.weather.current` / provider layer `weather.open_meteo`: bodový souhrn pro střed bbox z Open-Meteo. Není to plošná vrstva. Pro plošné počasové overlaye používej `public.weather.temperature_grid`, `public.weather.wind_field`, `public.weather.precipitation_grid`, `public.weather.humidity_grid` a `public.weather.pressure_grid`.
 - `public.weather.observations` / provider layer `weather.chmi_station_observations`: bodové features meteorologických stanic s metrikami `temperatureC`, `relativeHumidityPercent`, `pressureHpa`, `windSpeedMps`, `windGustMps`, `windDirectionDeg`, `precipitation10mMm`, `sunshineDurationSeconds`, `elevationM`.
 - ČHMÚ 10min station feed neposkytuje pro každou feature autoritativní stav oblohy typu `jasno/polojasno/oblačno`. SIM proto u `weather.chmi_station_observations` posílá explicitní prezentační hint `providerProperties.weather.symbolKey`, `providerProperties.weather.conditionLabel`, `providerProperties.weather.conditionMode`, `providerProperties.weather.authoritativeCondition`, `providerProperties.weather.confidence`, `providerProperties.weather.sourceInputs` a `providerProperties.presentation.mapLabel`. COP má tyto hodnoty použít před vlastní inferencí a nesmí při chybějící oblačnosti automaticky zobrazit `polojasno`.
+- Pro mapové zobrazení má COP primárně používat `providerProperties.display`. Tento objekt je připravený k vykreslení: `iconKey`, `iconSet`, `label`, `subtitle`, `badgeLabel`, `badgeTone`, `primaryValue`, `secondaryValue`, `tertiaryValue`, `conditionMode`, `confidencePercent`, `detailUrl` a `chartUrl`. COP z něj nemá znovu dopočítávat stav počasí.
 - SIM k 10min hodnotám doplňuje dostupné hodinové ČHMÚ `1h-*` prvky `ww`, `N`, `VV`, `SRA1H`, `SSV1H` a vybrané ceilometrové prvky. V metrikách se objevují například `presentWeatherCode`, `normalizedPresentWeatherCode`, `cloudCoverOctas`, `cloudCoverPercent`, `visibilityCode`, `precipitation1hMm`, `sunshineDuration1hTenths` a `sunshineDuration1hSeconds`.
 - Konzervativní mapování SIM: hodinový `ww` má přednost pro déšť, sníh, bouřku, mlhu nebo zhoršenou dohlednost větrem (`conditionMode=observed`); naměřené srážky dávají `rain` nebo při nízké teplotě `snow` (`conditionMode=measured`); nízká dohlednost s vlhkostí nebo velmi vysoká vlhkost se slabým větrem dávají nízkodůvěrové `fog` (`conditionMode=estimated`); silný naměřený vítr dává `wind` (`conditionMode=measured`); hodinové `N` dává `sun`, `partly_cloudy` nebo `cloud` (`conditionMode=observed`); měřený sluneční svit bez hodinové oblačnosti dává `sun` nebo `partly_cloudy` jako odhad (`conditionMode=estimated`). Jinak je symbol `measurement`, label `měřené počasí` a `conditionMode=unclassified`.
+- Detail stanice je provider-side endpoint `GET /weather-stations/{stationId}/detail?historyHours=48&forecastHours=24`. Vrací `contractVersion=sim-weather-station-detail-v1`, `current.display`, `history.points`, `forecast.points` a hotové `charts[]` pro teplotu, srážky, vítr a vlhkost/oblačnost. Historie vychází z ČHMÚ `10m-*` a `1h-*` souborů, předpověď z modelového Open-Meteo zdroje pro souřadnice stanice. COP má grafy pouze vykreslit podle `charts[].series[].points`.
 - `public.safety.air_quality` / provider layer `air_quality.chmi_station_observations`: bodové features imisních stanic s metrikami `airQualityIndex`, `pm10UgM3`, `pm25UgM3`, `no2UgM3`, `noxUgM3`, `o3UgM3`, `so2UgM3`, `coUgM3`.
 - Environment grid/field vrstvy jsou dostupné přes stejné bbox query jako station-backed read model. Každá feature nese `readModel=true`, `sourceRevision`, `resolutionM`, `basis` a `providerProperties.upstreamStationId`.
 - `public.weather.radar_reflectivity` / provider layer `weather.radar_reflectivity`: georeferencované raster overlay metadata pro ČHMÚ MAX_Z PNG + doprovodný HDF5 odkaz.
@@ -269,6 +272,7 @@ Dotazy:
 
 ```http
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=50
+GET /weather-stations/0-20000-0-11518/detail?historyHours=48&forecastHours=24
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality&source=chmi_air_quality&limit=50
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=weather_temperature_grid,weather_wind_field,weather_precipitation_grid,weather_humidity_grid,weather_pressure_grid&source=chmi_weather_stations&limit=250
 GET /features?bbox=14.0,49.8,14.8,50.3&layers=air_quality_grid&source=chmi_air_quality&limit=250
