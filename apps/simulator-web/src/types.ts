@@ -659,6 +659,8 @@ export interface CacheObservability {
   refreshes: number;
   errors: number;
   evictions: number;
+  lastSuccessAt?: string;
+  lastErrorAt?: string;
   state: "cold" | "warm" | "pressure" | "degraded" | string;
 }
 
@@ -799,6 +801,8 @@ export interface OperationsSummaryService {
     entries?: number;
     errors?: number;
     hitRate?: number;
+    lastErrorAt?: string;
+    lastSuccessAt?: string;
     misses?: number;
     pressure?: number;
     state?: string;

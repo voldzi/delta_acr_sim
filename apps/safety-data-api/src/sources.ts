@@ -129,6 +129,7 @@ function cacheStatsFor(sourceId: SafetyDataSourceId, caches: Array<{ stats(): Ma
       const stats = cache.stats();
       summary.entries += stats.entries;
       summary.inflight += stats.inflight;
+      summary.maxEntries += stats.maxEntries;
       summary.hits += stats.hits;
       summary.misses += stats.misses;
       summary.coalescedHits += stats.coalescedHits;
@@ -136,12 +137,21 @@ function cacheStatsFor(sourceId: SafetyDataSourceId, caches: Array<{ stats(): Ma
       summary.refreshes += stats.refreshes;
       summary.errors += stats.errors;
       summary.evictions += stats.evictions;
+      const lastSuccessAt = newestIsoTimestamp(summary.lastSuccessAt, stats.lastSuccessAt);
+      const lastErrorAt = newestIsoTimestamp(summary.lastErrorAt, stats.lastErrorAt);
+      if (lastSuccessAt) {
+        summary.lastSuccessAt = lastSuccessAt;
+      }
+      if (lastErrorAt) {
+        summary.lastErrorAt = lastErrorAt;
+      }
       return summary;
     },
     {
       sourceId,
       entries: 0,
       inflight: 0,
+      maxEntries: 0,
       hits: 0,
       misses: 0,
       coalescedHits: 0,
@@ -151,6 +161,24 @@ function cacheStatsFor(sourceId: SafetyDataSourceId, caches: Array<{ stats(): Ma
       evictions: 0
     }
   );
+}
+
+function newestIsoTimestamp(left: string | undefined, right: string | undefined): string | undefined {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (!Number.isFinite(leftTime)) {
+    return right;
+  }
+  if (!Number.isFinite(rightTime)) {
+    return left;
+  }
+  return rightTime > leftTime ? right : left;
 }
 
 class MockSafetyDataSource implements SafetyDataSource {

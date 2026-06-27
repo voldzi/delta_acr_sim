@@ -43,8 +43,8 @@ SIM Overview používá sanitizované endpointy v jednotlivých provider služb�
 
 Tyto endpointy vrací pouze provozně bezpečný souhrn:
 
-- aggregate cache: počet entries, hits, misses, hit-rate, stale hits, refreshes, errors, evictions a pressure,
-- source/reference cache: per-source cache hit-rate a stav,
+- aggregate cache: počet entries, hits, misses, hit-rate, stale hits, refreshes, errors, evictions, pressure, `lastSuccessAt` a `lastErrorAt`,
+- source/reference cache: per-source cache hit-rate a stav; `degraded` znamená aktuální selhání, kdy poslední chyba nastala po posledním úspěšném refresh,
 - shared cache: dostupnost sdílené cache, hit-rate, stale hits, writes a errors,
 - latency: měřená latence načtení jednotlivých observability endpointů v SIM webu,
 - import age / freshness: nejnovější a nejstarší dostupný import age, počet degradovaných zdrojů a quality warningů,

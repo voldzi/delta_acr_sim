@@ -289,6 +289,7 @@ function aggregateCacheStatsFor(sourceId: SituationDataSourceId, caches: Array<{
     sourceId,
     entries: 0,
     inflight: 0,
+    maxEntries: 0,
     hits: 0,
     misses: 0,
     coalescedHits: 0,
@@ -306,10 +307,11 @@ function aggregateCacheStatsFor(sourceId: SituationDataSourceId, caches: Array<{
   };
   return caches.reduce<SourceCacheStats>((summary, cache) => {
     const stats = cache.stats();
-    return {
+    const next: SourceCacheStats = {
       sourceId,
       entries: summary.entries + stats.entries,
       inflight: summary.inflight + stats.inflight,
+      maxEntries: summary.maxEntries + stats.maxEntries,
       hits: summary.hits + stats.hits,
       misses: summary.misses + stats.misses,
       coalescedHits: summary.coalescedHits + stats.coalescedHits,
@@ -325,7 +327,34 @@ function aggregateCacheStatsFor(sourceId: SituationDataSourceId, caches: Array<{
       sharedWrites: summary.sharedWrites + stats.sharedWrites,
       sharedErrors: summary.sharedErrors + stats.sharedErrors
     };
+    const lastSuccessAt = newestIsoTimestamp(summary.lastSuccessAt, stats.lastSuccessAt);
+    const lastErrorAt = newestIsoTimestamp(summary.lastErrorAt, stats.lastErrorAt);
+    if (lastSuccessAt) {
+      next.lastSuccessAt = lastSuccessAt;
+    }
+    if (lastErrorAt) {
+      next.lastErrorAt = lastErrorAt;
+    }
+    return next;
   }, initial);
+}
+
+function newestIsoTimestamp(left: string | undefined, right: string | undefined): string | undefined {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (!Number.isFinite(leftTime)) {
+    return right;
+  }
+  if (!Number.isFinite(rightTime)) {
+    return left;
+  }
+  return rightTime > leftTime ? right : left;
 }
 
 const ctuNettestRecordsCaches = new Map<string, ManagedResponseCache<Array<Record<string, string>>>>();

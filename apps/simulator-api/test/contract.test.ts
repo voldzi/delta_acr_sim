@@ -660,11 +660,21 @@ describe("SIM API contract baseline", () => {
             sourceCaches: [
               {
                 sourceId: "chmi_alerts",
-                cache: { entries: 27, errors: 2, hitRate: 0.59, misses: 155, pressure: 0.05, state: "degraded", staleHits: 2 }
+                cache: {
+                  entries: 27,
+                  errors: 2,
+                  hitRate: 0.59,
+                  lastErrorAt: "2026-06-27T10:05:00.000Z",
+                  lastSuccessAt: "2026-06-27T09:55:00.000Z",
+                  misses: 155,
+                  pressure: 0.05,
+                  state: "degraded",
+                  staleHits: 2
+                }
               },
               {
                 sourceId: "chmi_hydro",
-                cache: { entries: 548, errors: 0, hitRate: 0.22, misses: 6740, pressure: 1.07, state: "degraded", staleHits: 0 }
+                cache: { entries: 548, errors: 0, hitRate: 0.22, misses: 6740, pressure: 1.07, state: "pressure", staleHits: 0 }
               }
             ],
             dataFreshness: { sourceCount: 3, degradedSourceCount: 0, newestImportAgeSeconds: 128, oldestImportAgeSeconds: 128, warningCount: 0 }
@@ -690,10 +700,10 @@ describe("SIM API contract baseline", () => {
       expect.arrayContaining([
         "observability status degraded",
         "chmi_alerts cache state degraded",
-        "chmi_alerts cache has 2 errors",
-        "chmi_hydro cache pressure 1.07"
+        "chmi_alerts cache has 2 errors"
       ])
     );
+    expect(safetyService.warnings).not.toContain("chmi_hydro cache pressure 1.07");
     expect(safetyAlert).toEqual(
       expect.objectContaining({
         category: "technical",
@@ -706,6 +716,62 @@ describe("SIM API contract baseline", () => {
         })
       })
     );
+  });
+
+  it("does not degrade a provider from recovered cumulative cache errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        const parsed = new URL(url);
+        if (url.includes("/health/ready")) {
+          return jsonResponse({ status: "ok", timestamp: new Date().toISOString(), enabledSources: ["mock"] });
+        }
+        if (parsed.port === "4030" && parsed.pathname === "/api/v1/observability") {
+          return jsonResponse({
+            serviceId: "safety-data-api",
+            generatedAt: new Date().toISOString(),
+            status: "ok",
+            cache: { entries: 40, errors: 0, hitRate: 0.6, misses: 188, pressure: 0.08, state: "warm", staleHits: 0 },
+            sourceCaches: [
+              {
+                sourceId: "chmi_alerts",
+                cache: {
+                  entries: 27,
+                  errors: 2,
+                  hitRate: 0.59,
+                  lastErrorAt: "2026-06-27T09:55:00.000Z",
+                  lastSuccessAt: "2026-06-27T10:05:00.000Z",
+                  misses: 155,
+                  pressure: 0.05,
+                  state: "warm",
+                  staleHits: 2
+                }
+              },
+              {
+                sourceId: "chmi_hydro",
+                cache: { entries: 548, errors: 0, hitRate: 0.22, misses: 6740, pressure: 1.07, state: "pressure", staleHits: 0 }
+              }
+            ],
+            dataFreshness: { sourceCount: 3, degradedSourceCount: 0, newestImportAgeSeconds: 128, oldestImportAgeSeconds: 128, warningCount: 0 }
+          });
+        }
+        return jsonResponse({
+          serviceId: "provider",
+          generatedAt: new Date().toISOString(),
+          status: "ok",
+          cache: { entries: 1, errors: 0, hitRate: 1, misses: 0, pressure: 0, state: "warm", staleHits: 0 },
+          dataFreshness: { sourceCount: 1, degradedSourceCount: 0, newestImportAgeSeconds: 5, oldestImportAgeSeconds: 5, warningCount: 0 }
+        });
+      })
+    );
+
+    const response = await request(app).get("/api/v1/operations/summary").expect(200);
+    const safetyService = response.body.services.find((service: { serviceId: string }) => service.serviceId === "safety-data-api");
+
+    expect(response.body.status).toBe("ok");
+    expect(safetyService.status).toBe("ok");
+    expect(safetyService.warnings).toEqual([]);
   });
 });
 

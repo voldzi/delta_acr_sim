@@ -358,27 +358,40 @@ function numberFromPg(value: string | number | null | undefined): number {
 
 function mergeCacheStats(stats: ManagedResponseCacheStats[]): ManagedResponseCacheStats {
   return stats.reduce<ManagedResponseCacheStats>(
-    (summary, item) => ({
-      entries: summary.entries + item.entries,
-      inflight: summary.inflight + item.inflight,
-      hits: summary.hits + item.hits,
-      misses: summary.misses + item.misses,
-      coalescedHits: summary.coalescedHits + item.coalescedHits,
-      staleHits: summary.staleHits + item.staleHits,
-      refreshes: summary.refreshes + item.refreshes,
-      errors: summary.errors + item.errors,
-      evictions: summary.evictions + item.evictions,
-      sharedEnabled: summary.sharedEnabled || item.sharedEnabled,
-      sharedAvailable: summary.sharedAvailable || item.sharedAvailable,
-      sharedHits: summary.sharedHits + item.sharedHits,
-      sharedMisses: summary.sharedMisses + item.sharedMisses,
-      sharedStaleHits: summary.sharedStaleHits + item.sharedStaleHits,
-      sharedWrites: summary.sharedWrites + item.sharedWrites,
-      sharedErrors: summary.sharedErrors + item.sharedErrors
-    }),
+    (summary, item) => {
+      const next: ManagedResponseCacheStats = {
+        entries: summary.entries + item.entries,
+        inflight: summary.inflight + item.inflight,
+        maxEntries: summary.maxEntries + item.maxEntries,
+        hits: summary.hits + item.hits,
+        misses: summary.misses + item.misses,
+        coalescedHits: summary.coalescedHits + item.coalescedHits,
+        staleHits: summary.staleHits + item.staleHits,
+        refreshes: summary.refreshes + item.refreshes,
+        errors: summary.errors + item.errors,
+        evictions: summary.evictions + item.evictions,
+        sharedEnabled: summary.sharedEnabled || item.sharedEnabled,
+        sharedAvailable: summary.sharedAvailable || item.sharedAvailable,
+        sharedHits: summary.sharedHits + item.sharedHits,
+        sharedMisses: summary.sharedMisses + item.sharedMisses,
+        sharedStaleHits: summary.sharedStaleHits + item.sharedStaleHits,
+        sharedWrites: summary.sharedWrites + item.sharedWrites,
+        sharedErrors: summary.sharedErrors + item.sharedErrors
+      };
+      const lastSuccessAt = newestIsoTimestamp(summary.lastSuccessAt, item.lastSuccessAt);
+      const lastErrorAt = newestIsoTimestamp(summary.lastErrorAt, item.lastErrorAt);
+      if (lastSuccessAt) {
+        next.lastSuccessAt = lastSuccessAt;
+      }
+      if (lastErrorAt) {
+        next.lastErrorAt = lastErrorAt;
+      }
+      return next;
+    },
     {
       entries: 0,
       inflight: 0,
+      maxEntries: 0,
       hits: 0,
       misses: 0,
       coalescedHits: 0,
@@ -395,6 +408,24 @@ function mergeCacheStats(stats: ManagedResponseCacheStats[]): ManagedResponseCac
       sharedErrors: 0
     }
   );
+}
+
+function newestIsoTimestamp(left: string | undefined, right: string | undefined): string | undefined {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (!Number.isFinite(leftTime)) {
+    return right;
+  }
+  if (!Number.isFinite(rightTime)) {
+    return left;
+  }
+  return rightTime > leftTime ? right : left;
 }
 
 function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): SituationFeature | undefined {

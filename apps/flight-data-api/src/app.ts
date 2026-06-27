@@ -464,6 +464,7 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
 interface CacheStatsLike {
   entries: number;
   inflight: number;
+  maxEntries?: number;
   hits: number;
   misses: number;
   coalescedHits: number;
@@ -471,15 +472,18 @@ interface CacheStatsLike {
   refreshes: number;
   errors: number;
   evictions: number;
+  lastSuccessAt?: string;
+  lastErrorAt?: string;
 }
 
 function cacheTelemetry(stats: CacheStatsLike, maxEntries: number): Record<string, number | string> {
   const requestCount = stats.hits + stats.misses;
-  const pressure = ratio(stats.entries, Math.max(1, maxEntries));
-  return {
+  const effectiveMaxEntries = Math.max(1, stats.maxEntries ?? maxEntries);
+  const pressure = ratio(stats.entries, effectiveMaxEntries);
+  const telemetry: Record<string, number | string> = {
     entries: stats.entries,
     inflight: stats.inflight,
-    maxEntries,
+    maxEntries: effectiveMaxEntries,
     pressure,
     hits: stats.hits,
     misses: stats.misses,
@@ -489,10 +493,32 @@ function cacheTelemetry(stats: CacheStatsLike, maxEntries: number): Record<strin
     refreshes: stats.refreshes,
     errors: stats.errors,
     evictions: stats.evictions,
-    state: stats.errors > 0 || stats.evictions > 0 ? "degraded" : pressure > 0.85 ? "pressure" : requestCount > 0 ? "warm" : "cold"
+    state: isAfterIso(stats.lastErrorAt, stats.lastSuccessAt) ? "degraded" : pressure > 0.95 ? "pressure" : requestCount > 0 ? "warm" : "cold"
   };
+  if (stats.lastSuccessAt) {
+    telemetry.lastSuccessAt = stats.lastSuccessAt;
+  }
+  if (stats.lastErrorAt) {
+    telemetry.lastErrorAt = stats.lastErrorAt;
+  }
+  return telemetry;
 }
 
 function ratio(value: number, total: number): number {
   return total > 0 ? Number((value / total).toFixed(4)) : 0;
+}
+
+function isAfterIso(left: string | undefined, right: string | undefined): boolean {
+  if (!left) {
+    return false;
+  }
+  const leftTime = Date.parse(left);
+  if (!Number.isFinite(leftTime)) {
+    return false;
+  }
+  if (!right) {
+    return true;
+  }
+  const rightTime = Date.parse(right);
+  return !Number.isFinite(rightTime) || leftTime > rightTime;
 }

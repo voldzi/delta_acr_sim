@@ -301,7 +301,7 @@ Interní `/metrics` obsahuje aggregate cache metriky i per-source cache metriky:
 - `safety_data_last_layer_features{layer="weather_alerts|fire|flood|boundary_admin"}`,
 - `safety_data_last_generated_age_seconds`.
 
-`/api/v1/observability` je JSON endpoint pro SIM Overview. Vrací aggregate cache, `sourceCaches`, `dataFreshness` a `lastResult`, aby bylo vidět stáří poslední odpovědi, počet features, varování a cache hit-rate bez dotazování externích zdrojů.
+`/api/v1/observability` je JSON endpoint pro SIM Overview. Vrací aggregate cache, `sourceCaches`, `dataFreshness` a `lastResult`, aby bylo vidět stáří poslední odpovědi, počet features, varování, cache hit-rate a časy `lastSuccessAt`/`lastErrorAt` bez dotazování externích zdrojů. Historický čítač `errors` sám o sobě neznamená degradaci; degradace cache se odvozuje z toho, že poslední chyba je novější než poslední úspěšný refresh.
 
 `/config` nesmí vracet secrets. V pilotu nejsou pro ČHMÚ zdroje potřeba žádné bearer tokeny.
 `NASA_FIRMS_MAP_KEY` se v `/config` nevrací; endpoint ukáže jen `authConfigured=true/false`.

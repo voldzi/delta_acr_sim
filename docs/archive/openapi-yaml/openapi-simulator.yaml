@@ -1363,13 +1363,18 @@ components:
           type: number
           minimum: 0
           maximum: 1
+        lastErrorAt:
+          type: string
+          format: date-time
+        lastSuccessAt:
+          type: string
+          format: date-time
         misses:
           type: integer
           minimum: 0
         pressure:
           type: number
           minimum: 0
-          maximum: 1
         state:
           type: string
         staleHits:

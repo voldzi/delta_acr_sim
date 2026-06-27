@@ -51,6 +51,8 @@ interface CacheSummary {
   entries?: number;
   errors?: number;
   hitRate?: number;
+  lastErrorAt?: string;
+  lastSuccessAt?: string;
   misses?: number;
   pressure?: number;
   state?: string;
@@ -287,16 +289,15 @@ function sourceCacheWarnings(observability: Record<string, unknown> | undefined)
     const cache = recordValue(source.cache);
     const state = stringValue(cache?.state);
     const errors = numberValue(cache?.errors) ?? 0;
-    const pressure = numberValue(cache?.pressure) ?? 0;
+    const lastSuccessAt = stringValue(cache?.lastSuccessAt);
+    const lastErrorAt = stringValue(cache?.lastErrorAt);
+    const currentFailure = state === "degraded" || isAfter(lastErrorAt, lastSuccessAt);
     const warnings: string[] = [];
-    if (state && state !== "ok" && state !== "warm" && state !== "cold") {
-      warnings.push(`${sourceId} cache state ${state}`);
+    if (currentFailure) {
+      warnings.push(`${sourceId} cache state ${state && state !== "ok" && state !== "warm" && state !== "cold" ? state : "degraded"}`);
     }
-    if (errors > 0) {
+    if (currentFailure && errors > 0) {
       warnings.push(`${sourceId} cache has ${errors} error${errors === 1 ? "" : "s"}`);
-    }
-    if (pressure > 1) {
-      warnings.push(`${sourceId} cache pressure ${pressure.toFixed(2)}`);
     }
     return warnings;
   });
@@ -419,6 +420,8 @@ function cacheSummary(value: Record<string, unknown> | undefined): CacheSummary 
     entries: numberValue(value.entries),
     errors: numberValue(value.errors),
     hitRate: numberValue(value.hitRate),
+    lastErrorAt: stringValue(value.lastErrorAt),
+    lastSuccessAt: stringValue(value.lastSuccessAt),
     misses: numberValue(value.misses),
     pressure: numberValue(value.pressure),
     state: stringValue(value.state),
@@ -847,8 +850,13 @@ function isAfter(left: string | undefined, right: string | undefined): boolean {
   if (!left) {
     return false;
   }
+  const leftTime = Date.parse(left);
+  if (!Number.isFinite(leftTime)) {
+    return false;
+  }
   if (!right) {
     return true;
   }
-  return Date.parse(left) > Date.parse(right);
+  const rightTime = Date.parse(right);
+  return !Number.isFinite(rightTime) || leftTime > rightTime;
 }

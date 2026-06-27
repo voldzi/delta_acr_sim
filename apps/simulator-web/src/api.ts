@@ -511,6 +511,8 @@ function fullCacheObservability(cache: NonNullable<OperationsSummary["services"]
     refreshes: 0,
     errors: cache.errors ?? 0,
     evictions: 0,
+    lastErrorAt: cache.lastErrorAt,
+    lastSuccessAt: cache.lastSuccessAt,
     state: cache.state ?? "unknown"
   };
 }

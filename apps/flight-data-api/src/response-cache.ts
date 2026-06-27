@@ -7,6 +7,7 @@ export interface ManagedResponseCacheOptions {
 export interface ManagedResponseCacheStats {
   entries: number;
   inflight: number;
+  maxEntries: number;
   hits: number;
   misses: number;
   coalescedHits: number;
@@ -14,6 +15,8 @@ export interface ManagedResponseCacheStats {
   refreshes: number;
   errors: number;
   evictions: number;
+  lastSuccessAt?: string;
+  lastErrorAt?: string;
 }
 
 interface CacheEntry<T> {
@@ -35,6 +38,8 @@ export class ManagedResponseCache<T> {
     errors: 0,
     evictions: 0
   };
+  private lastSuccessAtMs: number | undefined;
+  private lastErrorAtMs: number | undefined;
 
   constructor(private readonly options: ManagedResponseCacheOptions) {}
 
@@ -57,11 +62,13 @@ export class ManagedResponseCache<T> {
     const refresh = loader()
       .then((value) => {
         this.counters.refreshes += 1;
+        this.lastSuccessAtMs = Date.now();
         this.store(key, value);
         return value;
       })
       .catch((error) => {
         this.counters.errors += 1;
+        this.lastErrorAtMs = Date.now();
         const staleEntry = this.entries.get(key);
         if (staleEntry && staleEntry.staleUntilMs > Date.now()) {
           this.counters.staleHits += 1;
@@ -79,11 +86,19 @@ export class ManagedResponseCache<T> {
   }
 
   stats(): ManagedResponseCacheStats {
-    return {
+    const stats: ManagedResponseCacheStats = {
       entries: this.entries.size,
       inflight: this.inflight.size,
+      maxEntries: Math.max(1, this.options.maxEntries),
       ...this.counters
     };
+    if (this.lastSuccessAtMs) {
+      stats.lastSuccessAt = new Date(this.lastSuccessAtMs).toISOString();
+    }
+    if (this.lastErrorAtMs) {
+      stats.lastErrorAt = new Date(this.lastErrorAtMs).toISOString();
+    }
+    return stats;
   }
 
   private store(key: string, value: T): void {
