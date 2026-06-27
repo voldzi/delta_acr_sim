@@ -1366,7 +1366,9 @@ describe("Situation Data API contract", () => {
               symbolKey: "rain",
               conditionLabel: "déšť",
               authoritativeCondition: true,
+              conditionMode: "observed",
               basis: "chmi_1h_present_weather",
+              sourceInputs: ["chmi_1h:ww"],
               presentWeatherCode: 61,
               normalizedPresentWeatherCode: 61,
               cloudCoverOctas: 8,
@@ -1444,6 +1446,86 @@ describe("Situation Data API contract", () => {
           })
         })
       ])
+    );
+  });
+
+  it("estimates CHMI station weather presentation from measured sunshine when hourly state is unavailable", async () => {
+    const testConfig = {
+      ...config,
+      chmiWeatherMetadataBaseUrl: "https://example.test/chmi/weather/metadata/",
+      chmiWeatherDataBaseUrl: "https://example.test/chmi/weather/data/"
+    };
+    const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+      const url = String(input);
+      if (url === testConfig.chmiWeatherMetadataBaseUrl) {
+        return new Response('<a href="meta1-20260528.json">meta1-20260528.json</a>', {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      }
+      if (url === testConfig.chmiWeatherDataBaseUrl) {
+        return new Response('<a href="10m-0-20000-0-11519-20260528.json">10m-0-20000-0-11519-20260528.json</a>', {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      }
+      if (url.endsWith("/meta1-20260528.json")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "WSI,GH_ID,FULL_NAME,GEOGR1,GEOGR2,ELEVATION,BEGIN_DATE",
+                values: [["0-20000-0-11519", "ZIS11519", "Test sunshine", 14.5, 50.1, 250, "1900-01-01T00:00:00Z"]]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.endsWith("/10m-0-20000-0-11519-20260528.json")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+                values: [
+                  ["0-20000-0-11519", "T", "2026-05-28T08:00:00Z", 20.1, "", 5],
+                  ["0-20000-0-11519", "H", "2026-05-28T08:00:00Z", 55, "", 5],
+                  ["0-20000-0-11519", "F", "2026-05-28T08:00:00Z", 2.1, "", 5],
+                  ["0-20000-0-11519", "SRA10M", "2026-05-28T08:00:00Z", 0, "", 5],
+                  ["0-20000-0-11519", "SSV10M", "2026-05-28T08:00:00Z", 300, "", 5]
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const chmiApp = await createApp({ ...testConfig, enabledSources: ["chmi_weather_stations"] });
+
+    const response = await request(chmiApp.app)
+      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=20")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(response.body.features).toHaveLength(1);
+    expect(response.body.features[0].properties.providerProperties).toEqual(
+      expect.objectContaining({
+        weatherSymbolKey: "partly_cloudy",
+        weatherConditionLabel: "sluneční svit / proměnlivá oblačnost",
+        weatherConditionMode: "estimated",
+        weather: expect.objectContaining({
+          symbolKey: "partly_cloudy",
+          basis: "measured_sunshine_duration_partial",
+          conditionMode: "estimated",
+          authoritativeCondition: false,
+          confidence: 0.6,
+          sourceInputs: ["chmi_10m:SSV10M"]
+        })
+      })
     );
   });
 

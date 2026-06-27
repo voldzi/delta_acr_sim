@@ -2879,13 +2879,17 @@ interface ChmiWeatherPresentationInput {
   visibilityCode?: number;
 }
 
+type ChmiWeatherConditionMode = "observed" | "measured" | "estimated" | "unclassified";
+
 interface ChmiWeatherPresentation {
   symbolKey: "sun" | "partly_cloudy" | "cloud" | "fog" | "rain" | "snow" | "storm" | "wind" | "measurement";
   conditionLabel: string;
   conditionLabelEn: string;
   basis: string;
+  conditionMode: ChmiWeatherConditionMode;
   confidence: number;
   authoritativeCondition: boolean;
+  sourceInputs: string[];
   primaryValue?: string;
   secondaryValue?: string;
   tertiaryValue?: string;
@@ -2901,6 +2905,12 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
   const hasStrongSunshine =
     (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 540)
     || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 8);
+  const hasModerateSunshine =
+    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 180)
+    || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 3);
+  const hasWeakSunshine =
+    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds > 0)
+    || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths > 0);
   const presentWeather = presentWeatherCodePresentation(input.presentWeatherCode);
   const hasLikelyFog =
     !hasMeasuredPrecipitation
@@ -2909,14 +2919,22 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
     && input.relativeHumidityPercent >= 98
     && (input.windSpeedMps === undefined || input.windSpeedMps < 1.5)
     && (input.sunshineDurationSeconds === undefined || input.sunshineDurationSeconds === 0);
+  const hasLowVisibilityFog =
+    !hasMeasuredPrecipitation
+    && !hasHourlyPrecipitation
+    && input.visibilityCode !== undefined
+    && input.visibilityCode <= 20
+    && (input.relativeHumidityPercent === undefined || input.relativeHumidityPercent >= 90);
   const hasStrongWind = strongestWindMps >= 10;
 
   let symbolKey: ChmiWeatherPresentation["symbolKey"] = "measurement";
   let conditionLabel = "měřené počasí";
   let conditionLabelEn = "measured weather";
   let basis = "chmi_10m_station_measurement";
+  let conditionMode: ChmiWeatherConditionMode = "unclassified";
   let confidence = 0.55;
   let authoritativeCondition = false;
+  let sourceInputs = measuredWeatherSourceInputs(input);
   let note = "ČHMÚ 10m station feed does not provide cloud cover or WMO weather condition for this feature.";
 
   if (presentWeather) {
@@ -2924,8 +2942,10 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
     conditionLabel = presentWeather.conditionLabel;
     conditionLabelEn = presentWeather.conditionLabelEn;
     basis = "chmi_1h_present_weather";
+    conditionMode = "observed";
     confidence = presentWeather.confidence;
     authoritativeCondition = true;
+    sourceInputs = ["chmi_1h:ww"];
     note = `Weather state is based on CHMI hourly present-weather code ${formatCompactNumber(presentWeather.code, 0)}.`;
   } else if (hasMeasuredPrecipitation || hasHourlyPrecipitation) {
     const snowLikely = input.temperatureC !== undefined && input.temperatureC <= 1.5;
@@ -2933,26 +2953,37 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
     conditionLabel = snowLikely ? "srážky / sníh" : "srážky / déšť";
     conditionLabelEn = snowLikely ? "precipitation / snow" : "precipitation / rain";
     basis = hasMeasuredPrecipitation ? "measured_precipitation_10m" : "measured_precipitation_1h";
+    conditionMode = "measured";
     confidence = snowLikely ? 0.74 : 0.8;
     authoritativeCondition = false;
+    sourceInputs = [
+      hasMeasuredPrecipitation ? "chmi_10m:SRA10M" : "chmi_1h:SRA1H",
+      input.temperatureC !== undefined ? "chmi_10m:T" : undefined
+    ].filter((value): value is string => Boolean(value));
     note = snowLikely
       ? "Precipitation is measured; snow/rain phase is inferred from air temperature."
       : "Precipitation is measured by the CHMI station feed.";
-  } else if (hasLikelyFog) {
+  } else if (hasLowVisibilityFog || hasLikelyFog) {
     symbolKey = "fog";
-    conditionLabel = "pravděpodobná mlha";
-    conditionLabelEn = "probable fog";
-    basis = "humidity_wind_fog_heuristic";
-    confidence = 0.48;
+    conditionLabel = hasLowVisibilityFog ? "pravděpodobná mlha / nízká dohlednost" : "pravděpodobná mlha";
+    conditionLabelEn = hasLowVisibilityFog ? "probable fog / low visibility" : "probable fog";
+    basis = hasLowVisibilityFog ? "visibility_humidity_fog_estimate" : "humidity_wind_fog_heuristic";
+    conditionMode = "estimated";
+    confidence = hasLowVisibilityFog ? 0.62 : 0.48;
     authoritativeCondition = false;
-    note = "Fog is inferred from very high humidity, weak wind and no sunshine; it is not an observed WMO condition.";
+    sourceInputs = hasLowVisibilityFog ? ["chmi_1h:VV", "chmi_10m:H"] : ["chmi_10m:H", "chmi_10m:F", "chmi_10m:SSV10M"];
+    note = hasLowVisibilityFog
+      ? "Fog or low visibility is inferred from CHMI visibility and humidity metrics; it is not an observed WMO present-weather condition."
+      : "Fog is inferred from very high humidity, weak wind and no sunshine; it is not an observed WMO condition.";
   } else if (hasStrongWind) {
     symbolKey = "wind";
     conditionLabel = "silný vítr";
     conditionLabelEn = "strong wind";
     basis = "measured_wind";
+    conditionMode = "measured";
     confidence = 0.86;
     authoritativeCondition = true;
+    sourceInputs = ["chmi_10m:F", "chmi_10m:Fmax"];
     note = "Wind condition is based on measured wind speed or gust.";
   } else {
     const cloudPresentation = cloudCoverPresentation(input.cloudCoverOctas);
@@ -2961,17 +2992,31 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
       conditionLabel = cloudPresentation.conditionLabel;
       conditionLabelEn = cloudPresentation.conditionLabelEn;
       basis = "chmi_1h_cloud_cover";
+      conditionMode = "observed";
       confidence = 0.76;
       authoritativeCondition = true;
+      sourceInputs = ["chmi_1h:N"];
       note = `Cloud state is based on CHMI hourly total cloud cover ${formatCompactNumber(input.cloudCoverOctas ?? 0, 0)}/8.`;
     } else if (hasStrongSunshine) {
       symbolKey = "sun";
       conditionLabel = "slunečno";
       conditionLabelEn = "sunshine observed";
       basis = "measured_sunshine_duration";
+      conditionMode = "estimated";
       confidence = 0.68;
       authoritativeCondition = false;
+      sourceInputs = sunshineSourceInputs(input);
       note = "Sunshine duration is measured; cloud-cover category is not available for this station/time.";
+    } else if (hasModerateSunshine || hasWeakSunshine) {
+      symbolKey = "partly_cloudy";
+      conditionLabel = hasModerateSunshine ? "sluneční svit / proměnlivá oblačnost" : "krátký sluneční svit";
+      conditionLabelEn = hasModerateSunshine ? "sunshine observed / variable cloud" : "brief sunshine observed";
+      basis = hasModerateSunshine ? "measured_sunshine_duration_partial" : "measured_sunshine_duration_weak";
+      conditionMode = "estimated";
+      confidence = hasModerateSunshine ? 0.6 : 0.5;
+      authoritativeCondition = false;
+      sourceInputs = sunshineSourceInputs(input);
+      note = "A partly-cloudy icon is inferred from measured sunshine duration; exact cloud-cover category is not available.";
     }
   }
 
@@ -2987,8 +3032,10 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
     conditionLabel,
     conditionLabelEn,
     basis,
+    conditionMode,
     confidence,
     authoritativeCondition,
+    sourceInputs,
     primaryValue,
     secondaryValue,
     tertiaryValue,
@@ -2996,6 +3043,51 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
     detailSummary,
     note
   };
+}
+
+function measuredWeatherSourceInputs(input: ChmiWeatherPresentationInput): string[] {
+  const inputs: string[] = [];
+  if (input.temperatureC !== undefined) {
+    inputs.push("chmi_10m:T");
+  }
+  if (input.windSpeedMps !== undefined) {
+    inputs.push("chmi_10m:F");
+  }
+  if (input.windGustMps !== undefined) {
+    inputs.push("chmi_10m:Fmax");
+  }
+  if (input.relativeHumidityPercent !== undefined) {
+    inputs.push("chmi_10m:H");
+  }
+  if (input.precipitation10mMm !== undefined) {
+    inputs.push("chmi_10m:SRA10M");
+  }
+  if (input.sunshineDurationSeconds !== undefined) {
+    inputs.push("chmi_10m:SSV10M");
+  }
+  if (input.presentWeatherCode !== undefined) {
+    inputs.push("chmi_1h:ww");
+  }
+  if (input.cloudCoverOctas !== undefined) {
+    inputs.push("chmi_1h:N");
+  }
+  if (input.visibilityCode !== undefined) {
+    inputs.push("chmi_1h:VV");
+  }
+  if (input.precipitation1hMm !== undefined) {
+    inputs.push("chmi_1h:SRA1H");
+  }
+  if (input.sunshineDuration1hTenths !== undefined) {
+    inputs.push("chmi_1h:SSV1H");
+  }
+  return inputs;
+}
+
+function sunshineSourceInputs(input: ChmiWeatherPresentationInput): string[] {
+  return [
+    input.sunshineDurationSeconds !== undefined ? "chmi_10m:SSV10M" : undefined,
+    input.sunshineDuration1hTenths !== undefined ? "chmi_1h:SSV1H" : undefined
+  ].filter((value): value is string => Boolean(value));
 }
 
 function weatherSecondaryValue(input: ChmiWeatherPresentationInput): string | undefined {
@@ -3184,14 +3276,17 @@ function mapChmiWeatherStationFeature(
       weatherSymbolKey: weatherPresentation.symbolKey,
       weatherConditionLabel: weatherPresentation.conditionLabel,
       weatherConditionLabelEn: weatherPresentation.conditionLabelEn,
+      weatherConditionMode: weatherPresentation.conditionMode,
       weather: compactProviderProperties({
         symbolKey: weatherPresentation.symbolKey,
         weatherSymbolKey: weatherPresentation.symbolKey,
         conditionLabel: weatherPresentation.conditionLabel,
         conditionLabelEn: weatherPresentation.conditionLabelEn,
         basis: weatherPresentation.basis,
+        conditionMode: weatherPresentation.conditionMode,
         confidence: weatherPresentation.confidence,
         authoritativeCondition: weatherPresentation.authoritativeCondition,
+        sourceInputs: weatherPresentation.sourceInputs,
         presentWeatherCode,
         normalizedPresentWeatherCode,
         cloudCoverOctas,
