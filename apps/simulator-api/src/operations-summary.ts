@@ -289,7 +289,7 @@ function sourceCacheWarnings(observability: Record<string, unknown> | undefined)
     const errors = numberValue(cache?.errors) ?? 0;
     const pressure = numberValue(cache?.pressure) ?? 0;
     const warnings: string[] = [];
-    if (state && state !== "ok" && state !== "warm") {
+    if (state && state !== "ok" && state !== "warm" && state !== "cold") {
       warnings.push(`${sourceId} cache state ${state}`);
     }
     if (errors > 0) {
