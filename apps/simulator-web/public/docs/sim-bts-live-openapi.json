@@ -1,0 +1,279 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CSM SIM BTS Live Status Feed Proposal",
+    "version": "0.1.0-proposal",
+    "description": "Proposed operator/NOC feed contract for authoritative BTS and cell live status. This contract is not implemented in SIM yet; current SIM mobile layers remain modelled estimates."
+  },
+  "servers": [
+    {
+      "url": "https://sim.zeleznalady.cz/situation-data/api/v1",
+      "description": "Future SIM Situation Data API surface"
+    }
+  ],
+  "paths": {
+    "/bts/status": {
+      "get": {
+        "summary": "List live BTS/cell statuses for a map area",
+        "description": "Returns authoritative operator/NOC status observations. When this feed is connected, COP can display real BTS availability instead of SIM model estimates.",
+        "parameters": [
+          {
+            "name": "bbox",
+            "in": "query",
+            "required": true,
+            "description": "WGS84 bbox west,south,east,north.",
+            "schema": {
+              "type": "string",
+              "example": "13.85,49.65,15.35,50.45"
+            }
+          },
+          {
+            "name": "operator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "example": "operator-a"
+            }
+          },
+          {
+            "name": "technology",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "2G",
+                "3G",
+                "4G",
+                "5G",
+                "mixed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GeoJSON FeatureCollection with live BTS/cell status observations.",
+            "content": {
+              "application/geo+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BtsStatusFeatureCollection"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BtsStatusFeatureCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "403": {
+            "description": "Caller is not authorized for BTS live status."
+          }
+        }
+      }
+    },
+    "/bts/status/{siteId}": {
+      "get": {
+        "summary": "Get latest authoritative status for a BTS site or cell",
+        "parameters": [
+          {
+            "name": "siteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest live status for one site/cell.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BtsStatusFeature"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Site/cell status not found."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BtsStatusFeatureCollection": {
+        "type": "object",
+        "required": [
+          "type",
+          "features",
+          "metadata"
+        ],
+        "properties": {
+          "type": {
+            "const": "FeatureCollection"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BtsStatusFeature"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "required": [
+              "generatedAt",
+              "statusAuthority",
+              "contractStatus"
+            ],
+            "properties": {
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "statusAuthority": {
+                "type": "string",
+                "example": "operator-noc"
+              },
+              "contractStatus": {
+                "type": "string",
+                "const": "proposal"
+              }
+            }
+          }
+        }
+      },
+      "BtsStatusFeature": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "const": "Feature"
+          },
+          "id": {
+            "type": "string"
+          },
+          "geometry": {
+            "type": "object",
+            "required": [
+              "type",
+              "coordinates"
+            ],
+            "properties": {
+              "type": {
+                "const": "Point"
+              },
+              "coordinates": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "description": "Longitude"
+                  },
+                  {
+                    "type": "number",
+                    "description": "Latitude"
+                  }
+                ],
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "siteId",
+              "operator",
+              "technology",
+              "observedAt",
+              "status",
+              "confidence"
+            ],
+            "properties": {
+              "siteId": {
+                "type": "string"
+              },
+              "cellId": {
+                "type": "string"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "technology": {
+                "type": "string",
+                "enum": [
+                  "2G",
+                  "3G",
+                  "4G",
+                  "5G",
+                  "mixed"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "operational",
+                  "degraded",
+                  "down",
+                  "planned_outage",
+                  "unknown"
+                ]
+              },
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "reason": {
+                "type": "string",
+                "description": "Bounded operator/NOC reason such as power, backhaul, maintenance or weather."
+              },
+              "lineOfSight": {
+                "type": "object",
+                "description": "Optional SIM-derived terrain context retained for COP display alongside the live status.",
+                "properties": {
+                  "terrainAware": {
+                    "type": "boolean"
+                  },
+                  "demSource": {
+                    "type": "string"
+                  },
+                  "terrainPenaltyDb": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-csm-sim": {
+    "contractStatus": "proposal",
+    "currentSimState": "SIM currently provides modelled mobile coverage/network estimates only. Live BTS/NOC status is not connected.",
+    "copDisplayGuidance": "COP must mark modelled estimates visibly until an authoritative live operator feed is connected."
+  }
+}

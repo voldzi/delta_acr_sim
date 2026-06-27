@@ -819,7 +819,9 @@ export interface OperationsSummaryService {
   healthStatus?: string;
   label: string;
   latencyMs: number;
+  lifecycle: "production" | "future";
   objectCount?: number;
+  productionReadiness: boolean;
   serviceId: string;
   sharedCache?: {
     available?: boolean;

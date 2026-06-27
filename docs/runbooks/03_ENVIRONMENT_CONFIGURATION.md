@@ -200,6 +200,33 @@ funkční a jen tento signál vynechá. Timeout drž krátký, protože Overview
 Lokální `pnpm dev` bez `.env` používá `127.0.0.1:4010-4040`; Docker Compose
 tyto hodnoty explicitně přepisuje na interní DNS názvy kontejnerů.
 
+TAK Gateway je v produkčním rollupu aktuálně vedená jako future modul. Její
+diagnostika zůstává viditelná, ale `operations/summary` ji vrací s
+`productionReadiness=false`, takže nedegraduje celkovou readiness SIM.
+
+## SIM Operational SLO Checks
+
+Periodický syntetický test `scripts/production-operational-check.py` čte tyto
+hodnoty z `.env`:
+
+```bash
+SIM_OPERATIONAL_ALERT_WEBHOOK_URL=
+SIM_OPERATIONAL_ALERT_ENVIRONMENT=docker-home
+SIM_OPERATIONAL_BASE_URL=http://127.0.0.1:5020
+SIM_OPERATIONAL_CHECK_INTERVAL_SECONDS=300
+SIM_OPERATIONAL_SLO_AVAILABILITY_TARGET=0.995
+SIM_OPERATIONAL_SLO_MAX_LIVE_LATENCY_MS=1000
+SIM_OPERATIONAL_SLO_MAX_SUMMARY_LATENCY_MS=3000
+SIM_OPERATIONAL_SLO_MAX_TOTAL_DURATION_MS=180000
+SIM_OPERATIONAL_SLO_REQUIRE_OPERATIONS_OK=true
+```
+
+SLO kontrola selže, pokud veřejný `/health/live`, `operations/summary`,
+produkční readiness služby nebo celková délka syntetického testu překročí
+nastavené limity. Selhání se zapíše do
+`data/operational-checks/latest.json` a Overview ho zobrazí jako provozní
+alert.
+
 ## Flight Data API
 
 Výchozí bezpečná konfigurace:

@@ -8,6 +8,8 @@ does not expose new public endpoints.
 
 It verifies:
 
+- SLO for `GET /health/live` and `GET /api/v1/operations/summary`,
+- production readiness rollup from `operations/summary`,
 - nginx gateway live state and provider access-control behavior,
 - provider contract smoke checks for `flight-data`, `situation-data`,
   `safety-data` and `tak-gateway`,
@@ -18,9 +20,11 @@ It verifies:
 - `mobile_network` output backed by the prepared read-model,
 - that public `/metrics` remains hidden by the web gateway.
 
-`tak-gateway` may stay `degraded` in the current pilot because its read token and
-public read mode are intentionally not enabled yet. The contract smoke still
-checks the gateway routes.
+`tak-gateway` is a future module in the current pilot. SIM still shows its
+diagnostic state, but `operations/summary` marks it with
+`productionReadiness=false`, so it does not degrade the production readiness
+rollup or SLO. The contract smoke still checks the gateway routes and allows
+the TAK health endpoint to be degraded.
 
 ## One-Shot Check
 
@@ -115,6 +119,12 @@ SIM_OPERATIONAL_REQUIRE_DEM=true
 SIM_OPERATIONAL_REQUIRE_TERRAIN_AWARE=true
 SIM_OPERATIONAL_ALERT_ON_RECOVERY=true
 SIM_OPERATIONAL_ALERT_EVERY_FAILURE=false
+SIM_OPERATIONAL_SLO_AVAILABILITY_TARGET=0.995
+SIM_OPERATIONAL_CHECK_INTERVAL_SECONDS=300
+SIM_OPERATIONAL_SLO_MAX_LIVE_LATENCY_MS=1000
+SIM_OPERATIONAL_SLO_MAX_SUMMARY_LATENCY_MS=3000
+SIM_OPERATIONAL_SLO_MAX_TOTAL_DURATION_MS=180000
+SIM_OPERATIONAL_SLO_REQUIRE_OPERATIONS_OK=true
 ```
 
 The check reads `.env` as a plain key/value file. It does not shell-source it,
@@ -143,6 +153,13 @@ Important report fields:
         "terrainDataAvailable": true,
         "terrainApplied": true
       }
+    },
+    "operationsSlo": {
+      "status": "ok",
+      "liveLatencyMs": 12,
+      "summaryLatencyMs": 240,
+      "productionReadinessServices": 3,
+      "futureServicesExcluded": 1
     }
   }
 }

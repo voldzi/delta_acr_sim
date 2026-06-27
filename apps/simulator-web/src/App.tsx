@@ -9,6 +9,7 @@ import {
   CloudSun,
   Cpu,
   Database,
+  Download,
   ExternalLink,
   FlaskConical,
   Gauge,
@@ -34,6 +35,7 @@ import {
   TimerReset,
   Trash2,
   TrendingUp,
+  X,
   Zap
 } from "lucide-react";
 import {
@@ -543,6 +545,7 @@ export function App() {
   const [apiTokenConfigured, setApiTokenConfigured] = useState(() => Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
   const [manualTokenConfigured, setManualTokenConfigured] = useState(() => manualTokenLoginAllowed && hasSimApiToken());
   const [apiTokenInput, setApiTokenInput] = useState("");
+  const [mobileNetworkInfoOpen, setMobileNetworkInfoOpen] = useState(false);
   const telemetrySampleRef = useRef<TelemetrySample | undefined>(undefined);
   const [liveTelemetry, setLiveTelemetry] = useState<LiveTelemetry>({
     generatedPerMinute: 0,
@@ -904,11 +907,24 @@ export function App() {
   const operationsCriticalCount = data.operations.alerts.filter((alert) => alert.severity === "critical").length;
   const operationsWarningCount = data.operations.alerts.filter((alert) => alert.severity === "warning").length;
   const operationsNoticeCount = data.operations.alerts.filter((alert) => alert.severity === "info" || alert.category === "data_quality").length;
-  const operationsHealthyServices = data.operations.services.filter((service) => service.status === "ok").length;
-  const operationsDataObjects = data.operations.services.reduce((sum, service) => sum + (service.objectCount ?? 0), 0);
-  const operationsEnabledSources = data.operations.services.reduce((sum, service) => sum + service.enabledSources.length, 0);
-  const operationsCache = summarizeOperationsCache(data.operations.services);
-  const operationsFreshness = summarizeOperationsFreshness(data.operations.services);
+  const productionReadinessServices = data.operations.services.filter((service) => service.productionReadiness !== false);
+  const operationsRollupServices = productionReadinessServices.length > 0 ? productionReadinessServices : data.operations.services;
+  const operationsHealthyServices = operationsRollupServices.filter((service) => service.status === "ok").length;
+  const operationsReadinessServiceCount = operationsRollupServices.length || 3;
+  const operationsFutureServiceCount = data.operations.services.filter((service) => service.productionReadiness === false).length;
+  const operationsDataObjects = operationsRollupServices.reduce((sum, service) => sum + (service.objectCount ?? 0), 0);
+  const operationsEnabledSources = operationsRollupServices.reduce((sum, service) => sum + service.enabledSources.length, 0);
+  const operationsCache = summarizeOperationsCache(operationsRollupServices);
+  const operationsFreshness = summarizeOperationsFreshness(operationsRollupServices);
+  const operationsServicesOkDetail =
+    operationsFutureServiceCount > 0
+      ? `${operationsEnabledSources} ${tr("enabled feeds")} · ${operationsFutureServiceCount} ${tr("future modules excluded")}`
+      : `${operationsEnabledSources} ${tr("enabled feeds")}`;
+  const operationalCheckStatus = data.operations.operationalCheck?.status ?? "not reported";
+  const operationalCheckTone: Tone = operationalCheckStatus === "ok" ? "safe" : operationalCheckStatus === "failed" ? "danger" : "neutral";
+  const operationalCheckDetail = data.operations.operationalCheck?.finishedAt
+    ? `${tr("last check")} ${formatTime(data.operations.operationalCheck.finishedAt)}`
+    : tr("No external check report.");
   const operationsObservabilityByService: Record<string, ServiceObservability> = {
     "flight-data-api": data.observability.flightData.payload,
     "situation-data-api": data.observability.situationData.payload,
@@ -1294,10 +1310,10 @@ export function App() {
 
               <div className="operations-metrics">
                 <OperationsMetricCard icon={<ShieldAlert />} label="Active alerts" value={`${operationsCriticalCount}/${operationsWarningCount}/${operationsNoticeCount}`} detail="critical / warning / notice" tone={operationsCriticalCount > 0 ? "danger" : operationsWarningCount > 0 ? "warn" : operationsNoticeCount > 0 ? "neutral" : "safe"} />
-                <OperationsMetricCard icon={<Server />} label="Services OK" value={`${operationsHealthyServices}/${data.operations.services.length || 4}`} detail={`${operationsEnabledSources} ${tr("enabled feeds")}`} tone={operationsHealthyServices === data.operations.services.length ? "safe" : operationsHealthyServices > 0 ? "warn" : "danger"} />
+                <OperationsMetricCard icon={<Server />} label="Services OK" value={`${operationsHealthyServices}/${operationsReadinessServiceCount}`} detail={operationsServicesOkDetail} tone={operationsHealthyServices === operationsReadinessServiceCount ? "safe" : operationsHealthyServices > 0 ? "warn" : "danger"} />
                 <OperationsMetricCard icon={<Database />} label="Data objects" value={operationsDataObjects.toLocaleString(numberLocale)} detail="latest provider inventory" tone="active" />
                 <OperationsMetricCard icon={<TimerReset />} label="Cache hit-rate" value={formatPercentValue(operationsCache.hitRate)} detail={`${operationsCache.errors} ${tr("cache errors")}`} tone={operationsCache.errors > 0 ? "warn" : operationsCache.hitRate >= 0.75 ? "safe" : "neutral"} />
-                <OperationsMetricCard icon={<Cpu />} label="Slowest probe" value={formatLatencyMs(Math.max(...data.operations.services.map((service) => service.latencyMs), 0))} detail={`${tr("oldest import")} ${operationsFreshness.value}`} tone={operationsFreshness.tone} />
+                <OperationsMetricCard icon={<Cpu />} label="Slowest probe" value={formatLatencyMs(Math.max(...operationsRollupServices.map((service) => service.latencyMs), 0))} detail={`${tr("oldest import")} ${operationsFreshness.value}`} tone={operationsFreshness.tone} />
               </div>
             </section>
 
@@ -1346,6 +1362,7 @@ export function App() {
                   <ReadinessItem icon={<RadioTower />} label="Publisher" value={data.operations.publisher.mode} detail={data.operations.publisher.publishingEnabled ? "adapter enabled" : "adapter stopped"} tone={publisherTone} />
                   <ReadinessItem icon={<Database />} label="Queue" value={`${data.operations.publisher.queueSize} ${tr("active")}`} detail={formatDeadLetterCount(data.operations.publisher.deadLetterSize, numberLocale, tr)} tone={queueTone} />
                   <ReadinessItem icon={<Layers3 />} label="Scenarios" value={`${data.operations.scenarios.total}`} detail={`${data.operations.scenarios.active} ${tr("active")}, ${data.operations.scenarios.draft} ${tr("draft")}`} tone={data.operations.scenarios.active > 0 ? "active" : "neutral"} />
+                  <ReadinessItem icon={<ShieldCheck />} label="Operational check" value={operationalCheckStatus} detail={operationalCheckDetail} tone={operationalCheckTone} />
                 </div>
               </section>
 
@@ -1357,6 +1374,7 @@ export function App() {
                   <FeedSignal label="Safety" service={data.operations.services.find((service) => service.serviceId === "safety-data-api")} icon={<ShieldAlert />} />
                   <FeedSignal label="TAK" service={data.operations.services.find((service) => service.serviceId === "tak-gateway-api")} icon={<RadioTower />} />
                 </div>
+                <MobileNetworkStatusPanel onOpen={() => setMobileNetworkInfoOpen(true)} />
               </section>
             </section>
           </>
@@ -2003,6 +2021,7 @@ export function App() {
           ) : null}
         </section>
       </section>
+      {mobileNetworkInfoOpen ? <MobileNetworkInfoDialog onClose={() => setMobileNetworkInfoOpen(false)} /> : null}
     </main>
       </NumberLocaleContext.Provider>
     </UiLanguageContext.Provider>
@@ -2208,6 +2227,78 @@ function OperationsAlertRow({ alert }: { alert: OperationsSummary["alerts"][numb
   );
 }
 
+function MobileNetworkStatusPanel({ onOpen }: { onOpen: () => void }) {
+  const tr = useUiText();
+  return (
+    <div className="bts-status-panel">
+      <div className="bts-status-icon">
+        <Signal />
+      </div>
+      <div className="bts-status-copy">
+        <strong>{tr("BTS live status")}</strong>
+        <span>{tr("SIM currently provides terrain-aware mobile signal estimates. Authorized live BTS/NOC status is not connected.")}</span>
+        <div className="bts-status-tags">
+          <StatusPill label="estimated" tone="warn" />
+          <StatusPill label="terrain-aware" tone="active" />
+          <StatusPill label="future live feed" tone="neutral" />
+        </div>
+      </div>
+      <div className="bts-status-actions">
+        <button type="button" onClick={onOpen}>
+          <Info size={15} /> {tr("Open status detail")}
+        </button>
+        <a className="external-link" href="/docs/sim-bts-live-openapi.json" download>
+          <Download size={15} /> {tr("Download OpenAPI")}
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function MobileNetworkInfoDialog({ onClose }: { onClose: () => void }) {
+  const tr = useUiText();
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="modal-window bts-info-dialog" role="dialog" aria-modal="true" aria-labelledby="bts-info-title">
+        <div className="modal-head">
+          <div>
+            <span className="ops-kicker">{tr("Mobile network source status")}</span>
+            <h2 id="bts-info-title">{tr("BTS live status")}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label={tr("Close")}>
+            <X size={15} /> {tr("Close")}
+          </button>
+        </div>
+
+        <div className="bts-info-grid">
+          <div className="bts-info-card warn">
+            <span>{tr("Current state")}</span>
+            <strong>{tr("Modelled estimate")}</strong>
+            <p>{tr("SIM does not receive an authorized live BTS/NOC operator status feed. Current mobile layers are estimates from public measurements, DEM, line-of-sight and infrastructure hints.")}</p>
+          </div>
+          <div className="bts-info-card active">
+            <span>{tr("COP can display now")}</span>
+            <strong>{tr("Coverage and line-of-sight estimate")}</strong>
+            <p>{tr("COP may show signal quality, technology, estimated coverage, terrain assumptions and a visible data-quality notice. It must not present this as confirmed BTS outage or operator state.")}</p>
+          </div>
+          <div className="bts-info-card neutral">
+            <span>{tr("Future live feed")}</span>
+            <strong>{tr("Operator/NOC OpenAPI contract")}</strong>
+            <p>{tr("The proposed contract accepts site/cell id, operator, technology, observed status, confidence, outage reason and validity time. When connected, SIM can replace estimates with authoritative live status.")}</p>
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <a className="external-link" href="/docs/sim-bts-live-openapi.json" download>
+            <Download size={15} /> {tr("Download OpenAPI")}
+          </a>
+          <button type="button" onClick={onClose}>{tr("Close")}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function OperationsServiceRow({ service, observability }: { service: OperationsSummaryService; observability?: ServiceObservability }) {
   const tr = useUiText();
   const language = useUiLanguage();
@@ -2219,7 +2310,8 @@ function OperationsServiceRow({ service, observability }: { service: OperationsS
     ...(observability?.referenceCaches ?? []).map((item) => ({ ...item, kind: "Reference cache" }))
   ];
   const cacheTone = cacheDisplayTone(cache);
-  const openByDefault = service.status !== "ok" || service.warningCount > 0 || service.qualityWarningCount > 0;
+  const openByDefault = (service.productionReadiness !== false && (service.status !== "ok" || service.warningCount > 0)) || service.qualityWarningCount > 0;
+  const lifecycleLabel = service.productionReadiness === false ? ` · ${tr("future module")}` : "";
   return (
     <details className={`service-detail ${tone}`} open={openByDefault}>
       <summary className={`service-row ${tone}`} role="row">
@@ -2227,6 +2319,7 @@ function OperationsServiceRow({ service, observability }: { service: OperationsS
           <strong>{service.label}</strong>
           <span>
             {service.serviceId}
+            {lifecycleLabel}
             {service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : ""}
           </span>
         </div>
@@ -2444,15 +2537,18 @@ function ReadinessItem({ icon, label, value, detail, tone }: { icon: ReactNode; 
 }
 
 function FeedSignal({ icon, label, service }: { icon: ReactNode; label: string; service?: OperationsSummaryService }) {
-  const tone = service?.status === "ok" && (service.qualityWarningCount ?? 0) > 0 ? "warn" : operationsStatusTone(service?.status ?? "unknown");
+  const isFuture = service?.productionReadiness === false;
+  const tone = isFuture ? "neutral" : service?.status === "ok" && (service.qualityWarningCount ?? 0) > 0 ? "warn" : operationsStatusTone(service?.status ?? "unknown");
   const tr = useUiText();
   const qualityDetail = service && service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : "";
+  const statusLabel = isFuture ? "future" : service?.status ?? "unknown";
+  const diagnosticDetail = isFuture && service ? ` · ${tr("diagnostic")} ${tr(service.status)}` : "";
   return (
     <div className={`feed-signal ${tone}`}>
       <div>{icon}</div>
       <span>{tr(label)}</span>
-      <strong>{tr(service?.status ?? "unknown")}</strong>
-      <small>{service ? `${service.enabledSources.length} ${tr("feeds")} · ${formatLatencyMs(service.latencyMs)}${qualityDetail}` : tr("not reported")}</small>
+      <strong>{tr(statusLabel)}</strong>
+      <small>{service ? `${service.enabledSources.length} ${tr("feeds")} · ${formatLatencyMs(service.latencyMs)}${qualityDetail}${diagnosticDetail}` : tr("not reported")}</small>
     </div>
   );
 }

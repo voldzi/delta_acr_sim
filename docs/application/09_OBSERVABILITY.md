@@ -64,6 +64,12 @@ odhadovaný stav mobilní sítě bez live BTS/NOC feedu, jsou vrácena jako
 `category=data_quality` a `severity=info`. Tato upozornění zůstávají viditelná
 operátorovi, ale sama o sobě nesnižují technický status služby.
 
+Provider služby v `services[]` nesou `productionReadiness` a `lifecycle`.
+Služby s `productionReadiness=false` jsou viditelné v diagnostice, ale
+nevstupují do produkčního readiness/SLO rollupu ani negenerují technické alerty.
+Aktuálně je takto vedená `tak-gateway-api`, protože jde o future modul bez
+zapnutého reálného partnerského TAK/ARDOS feedu.
+
 Všechny operační alerty nesou anglický text v `title/detail/impact/action` a
 lokalizované texty v `localized.{title,detail,impact,action}.{cs,en}`. SIM web
 zobrazuje text podle zvoleného jazyka operátora.
@@ -143,6 +149,17 @@ zůstává skryté přes nginx. Výsledek zapisuje do
 `data/operational-checks/state.json` a při změně stavu posílá syslog zprávu.
 Volitelný `SIM_OPERATIONAL_ALERT_WEBHOOK_URL` odešle stejný bounded report jako
 JSON webhook.
+
+Součástí kontroly je SLO check nad veřejnou bránou:
+
+- `/health/live` musí vrátit HTTP 200 do `SIM_OPERATIONAL_SLO_MAX_LIVE_LATENCY_MS`,
+- `/api/v1/operations/summary` musí vrátit HTTP 200 do
+  `SIM_OPERATIONAL_SLO_MAX_SUMMARY_LATENCY_MS`,
+- produkční rollup musí být `ok`, pokud
+  `SIM_OPERATIONAL_SLO_REQUIRE_OPERATIONS_OK=true`,
+- všechny služby s `productionReadiness=true` musí mít `status=ok`,
+- celý syntetický test se musí vejít do
+  `SIM_OPERATIONAL_SLO_MAX_TOTAL_DURATION_MS`.
 
 Periodické spouštění nastavuje:
 

@@ -74,7 +74,9 @@ interface ServiceSummary {
   healthStatus?: string;
   label: string;
   latencyMs: number;
+  lifecycle: "production" | "future";
   objectCount?: number;
+  productionReadiness: boolean;
   serviceId: string;
   sharedCache?: {
     available?: boolean;
@@ -117,6 +119,8 @@ interface ServiceQualityWarning {
 interface ProviderEndpoint {
   baseUrl: string;
   label: string;
+  lifecycle: "production" | "future";
+  productionReadiness: boolean;
   serviceId: string;
 }
 
@@ -198,10 +202,10 @@ export async function buildOperationsSummary(context: OperationsSummaryContext):
 
 function providerEndpoints(config: ApiConfig): ProviderEndpoint[] {
   return [
-    { baseUrl: config.operationsFlightDataBaseUrl ?? "http://127.0.0.1:4010", label: "Flight Data", serviceId: "flight-data-api" },
-    { baseUrl: config.operationsSituationDataBaseUrl ?? "http://127.0.0.1:4020", label: "Situation Data", serviceId: "situation-data-api" },
-    { baseUrl: config.operationsSafetyDataBaseUrl ?? "http://127.0.0.1:4030", label: "Safety Data", serviceId: "safety-data-api" },
-    { baseUrl: config.operationsTakGatewayBaseUrl ?? "http://127.0.0.1:4040", label: "TAK Gateway", serviceId: "tak-gateway-api" }
+    { baseUrl: config.operationsFlightDataBaseUrl ?? "http://127.0.0.1:4010", label: "Flight Data", lifecycle: "production", productionReadiness: true, serviceId: "flight-data-api" },
+    { baseUrl: config.operationsSituationDataBaseUrl ?? "http://127.0.0.1:4020", label: "Situation Data", lifecycle: "production", productionReadiness: true, serviceId: "situation-data-api" },
+    { baseUrl: config.operationsSafetyDataBaseUrl ?? "http://127.0.0.1:4030", label: "Safety Data", lifecycle: "production", productionReadiness: true, serviceId: "safety-data-api" },
+    { baseUrl: config.operationsTakGatewayBaseUrl ?? "http://127.0.0.1:4040", label: "TAK Gateway", lifecycle: "future", productionReadiness: false, serviceId: "tak-gateway-api" }
   ];
 }
 
@@ -272,7 +276,9 @@ function serviceSummaryFromProviderResult(result: ProviderFetchResult): ServiceS
     healthStatus,
     label: result.endpoint.label,
     latencyMs: result.latencyMs,
+    lifecycle: result.endpoint.lifecycle,
     objectCount: objectCountFromHealth(health, observability),
+    productionReadiness: result.endpoint.productionReadiness,
     serviceId: result.endpoint.serviceId,
     sharedCache: sharedCacheSummary(recordValue(observability?.sharedCache)),
     status,
@@ -536,6 +542,19 @@ function publisherAlerts(publisher: PublisherSnapshot): OperationsAlert[] {
 
 function serviceAlerts(service: ServiceSummary): OperationsAlert[] {
   const alerts: OperationsAlert[] = [];
+  if (!service.productionReadiness) {
+    return service.qualityWarnings.map((warning) => ({
+      action: warning.action,
+      category: "data_quality",
+      code: warning.code,
+      detail: warning.detail,
+      impact: warning.impact,
+      localized: warning.localized,
+      serviceId: service.serviceId,
+      severity: "info",
+      title: warning.title
+    }));
+  }
   if (service.status === "critical") {
     alerts.push({
       ...alertMessage({
@@ -686,10 +705,11 @@ async function readOperationalCheckSummary(config: ApiConfig): Promise<Operation
 }
 
 function rollupStatus(alerts: OperationsAlert[], services: ServiceSummary[]): OperationsStatus {
-  if (alerts.some((alert) => alert.severity === "critical") || services.some((service) => service.status === "critical")) {
+  const readinessServices = services.filter((service) => service.productionReadiness);
+  if (alerts.some((alert) => alert.severity === "critical") || readinessServices.some((service) => service.status === "critical")) {
     return "critical";
   }
-  if (alerts.some((alert) => alert.severity === "warning") || services.some((service) => service.status === "degraded")) {
+  if (alerts.some((alert) => alert.severity === "warning") || readinessServices.some((service) => service.status === "degraded")) {
     return "degraded";
   }
   return "ok";

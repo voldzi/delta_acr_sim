@@ -548,7 +548,7 @@ Interpretace:
 
 Konzistence technologie je závazná: dotaz filtrovaný na jednu technologii (`2G`, `4G`, `5G`) vrací jen read-model features této technologie. Hodnota `mixed` se nepoužívá jako skrytý fallback pro filtrovaný dotaz.
 
-Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení.
+Bez autorizovaného operátorského/NOC feedu SIM nepublikuje potvrzený stav konkrétní BTS. Současný výstup je validovaný situační odhad pro občanské bezpečnostní zobrazení. SIM web v operačním centru zobrazuje tento stav v dialogu `BTS live status` a publikuje stažitelný návrh budoucího kontraktu pro operátorský/NOC feed jako `/docs/sim-bts-live-openapi.json`.
 
 Health `/situation-data/health/ready` u `mobile_network_model` vrací `backend`, `objectCount` a závislé zdroje. `ctu_nettest` a `ctu_stationary_mobile` mají vlastní health položky s počtem měření a časem posledního měření. Metrics obsahují `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`, `situation_data_ctu_nettest_measurements`, `situation_data_ctu_stationary_mobile_measurements` a cache metriky `situation_data_source_cache_hits/misses{source="mobile_network_model"}`.
 

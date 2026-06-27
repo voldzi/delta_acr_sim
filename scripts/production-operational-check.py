@@ -90,6 +90,26 @@ def env_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def env_int(value: str | None, default: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+def env_float(value: str | None, default: float) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
 def parse_env_file(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
@@ -184,6 +204,59 @@ def check_metrics_are_internal(client: Client) -> dict[str, Any]:
     response = client.request("/metrics")
     require(response.status == 404, f"/metrics: expected HTTP 404 through sim-web, got {response.status}")
     return {"url": response.url, "status": response.status, "elapsedMs": response.elapsed_ms}
+
+
+def check_operations_slo(client: Client, args: argparse.Namespace) -> dict[str, Any]:
+    live_response = client.request("/health/live", {"Accept": "application/json"})
+    require(live_response.status == 200, f"/health/live: expected HTTP 200, got {live_response.status}")
+    require(
+        live_response.elapsed_ms <= args.slo_max_live_latency_ms,
+        f"/health/live latency {live_response.elapsed_ms}ms exceeds SLO {args.slo_max_live_latency_ms}ms",
+    )
+
+    summary, summary_response = client.json("/api/v1/operations/summary")
+    require(
+        summary_response.elapsed_ms <= args.slo_max_summary_latency_ms,
+        f"/api/v1/operations/summary latency {summary_response.elapsed_ms}ms exceeds SLO {args.slo_max_summary_latency_ms}ms",
+    )
+    status = str(summary.get("status") or "unknown")
+    if args.slo_require_operations_ok:
+        require(status == "ok", f"operations summary status is {status!r}, expected 'ok'")
+    else:
+        require(status != "critical", "operations summary status is 'critical'")
+
+    services = summary.get("services") if isinstance(summary.get("services"), list) else []
+    readiness_services = [service for service in services if isinstance(service, dict) and service.get("productionReadiness") is not False]
+    non_ok_services = [
+        f"{service.get('serviceId') or service.get('label') or 'service'}={service.get('status') or 'unknown'}"
+        for service in readiness_services
+        if service.get("status") != "ok"
+    ]
+    require(not non_ok_services, "production readiness services not ok: " + ", ".join(non_ok_services))
+
+    alerts = summary.get("alerts") if isinstance(summary.get("alerts"), list) else []
+    alert_counts = {
+        "critical": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("severity") == "critical"),
+        "warning": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("severity") == "warning"),
+        "info": sum(1 for alert in alerts if isinstance(alert, dict) and alert.get("severity") == "info"),
+    }
+    require(alert_counts["critical"] == 0, f"operations summary reports {alert_counts['critical']} critical alert(s)")
+    require(alert_counts["warning"] == 0, f"operations summary reports {alert_counts['warning']} warning alert(s)")
+
+    future_services = [service for service in services if isinstance(service, dict) and service.get("productionReadiness") is False]
+    return {
+        "status": status,
+        "liveLatencyMs": live_response.elapsed_ms,
+        "summaryLatencyMs": summary_response.elapsed_ms,
+        "productionReadinessServices": len(readiness_services),
+        "futureServicesExcluded": len(future_services),
+        "alertCounts": alert_counts,
+        "thresholds": {
+            "maxLiveLatencyMs": args.slo_max_live_latency_ms,
+            "maxSummaryLatencyMs": args.slo_max_summary_latency_ms,
+            "requireOperationsOk": args.slo_require_operations_ok,
+        },
+    }
 
 
 def check_dem_health(client: Client, args: argparse.Namespace) -> dict[str, Any]:
@@ -429,6 +502,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     checks: dict[str, dict[str, Any]] = {}
 
     checks["metricsInternal"] = run_named_check("metricsInternal", lambda: check_metrics_are_internal(client))
+    checks["operationsSlo"] = run_named_check("operationsSlo", lambda: check_operations_slo(client, args))
     if not args.skip_provider_gateway_smoke:
         checks["providerGatewaySmoke"] = run_named_check("providerGatewaySmoke", lambda: check_provider_gateway_smoke(args))
     if not args.skip_data_plane_smoke:
@@ -445,6 +519,13 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             lambda: check_mobile_network_read_model(client, args),
         )
 
+    duration_ms = int((time.monotonic() - started) * 1000)
+    checks["totalDurationSlo"] = {
+        "status": "ok" if duration_ms <= args.slo_max_total_duration_ms else "failed",
+        "elapsedMs": duration_ms,
+        "thresholdMs": args.slo_max_total_duration_ms,
+        **({} if duration_ms <= args.slo_max_total_duration_ms else {"error": f"operational check duration {duration_ms}ms exceeds SLO {args.slo_max_total_duration_ms}ms"}),
+    }
     failures = [{"check": name, "error": check["error"]} for name, check in checks.items() if check.get("status") != "ok"]
     status = "failed" if failures else "ok"
     summary = "all operational checks passed" if status == "ok" else "; ".join(f"{item['check']}: {item['error']}" for item in failures)
@@ -454,12 +535,20 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "summary": summary,
         "startedAt": started_at,
         "finishedAt": utc_now(),
-        "durationMs": int((time.monotonic() - started) * 1000),
+        "durationMs": duration_ms,
         "host": socket.gethostname(),
         "environment": args.environment,
         "baseUrl": args.base_url,
         "bbox": args.bbox,
         "terrainBbox": args.terrain_bbox,
+        "slo": {
+            "availabilityTarget": args.slo_availability_target,
+            "checkIntervalSeconds": args.check_interval_seconds,
+            "maxLiveLatencyMs": args.slo_max_live_latency_ms,
+            "maxSummaryLatencyMs": args.slo_max_summary_latency_ms,
+            "maxTotalDurationMs": args.slo_max_total_duration_ms,
+            "requireOperationsOk": args.slo_require_operations_ok,
+        },
         "checks": checks,
         "failures": failures,
     }
@@ -494,6 +583,16 @@ def resolve_args(args: argparse.Namespace, env_file_values: dict[str, str]) -> a
     )
     args.alert_on_recovery = env_bool(env_value(env_file_values, "SIM_OPERATIONAL_ALERT_ON_RECOVERY", "true"), True) if args.alert_on_recovery is None else args.alert_on_recovery
     args.alert_every_failure = env_bool(env_value(env_file_values, "SIM_OPERATIONAL_ALERT_EVERY_FAILURE", "false"), False) if args.alert_every_failure is None else args.alert_every_failure
+    args.slo_availability_target = env_float(env_value(env_file_values, "SIM_OPERATIONAL_SLO_AVAILABILITY_TARGET", "0.995"), 0.995) if args.slo_availability_target is None else args.slo_availability_target
+    args.check_interval_seconds = env_int(env_value(env_file_values, "SIM_OPERATIONAL_CHECK_INTERVAL_SECONDS", "300"), 300) if args.check_interval_seconds is None else args.check_interval_seconds
+    args.slo_max_live_latency_ms = env_int(env_value(env_file_values, "SIM_OPERATIONAL_SLO_MAX_LIVE_LATENCY_MS", "1000"), 1000) if args.slo_max_live_latency_ms is None else args.slo_max_live_latency_ms
+    args.slo_max_summary_latency_ms = env_int(env_value(env_file_values, "SIM_OPERATIONAL_SLO_MAX_SUMMARY_LATENCY_MS", "3000"), 3000) if args.slo_max_summary_latency_ms is None else args.slo_max_summary_latency_ms
+    args.slo_max_total_duration_ms = env_int(env_value(env_file_values, "SIM_OPERATIONAL_SLO_MAX_TOTAL_DURATION_MS", "180000"), 180000) if args.slo_max_total_duration_ms is None else args.slo_max_total_duration_ms
+    args.slo_require_operations_ok = (
+        env_bool(env_value(env_file_values, "SIM_OPERATIONAL_SLO_REQUIRE_OPERATIONS_OK", "true"), True)
+        if args.slo_require_operations_ok is None
+        else args.slo_require_operations_ok
+    )
     return args
 
 
@@ -527,6 +626,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--no-alert-on-recovery", dest="alert_on_recovery", action="store_false")
     parser.add_argument("--alert-every-failure", dest="alert_every_failure", action="store_true", default=None)
     parser.add_argument("--no-alert-every-failure", dest="alert_every_failure", action="store_false")
+    parser.add_argument("--slo-availability-target", type=float, default=None)
+    parser.add_argument("--check-interval-seconds", type=int, default=None)
+    parser.add_argument("--slo-max-live-latency-ms", type=int, default=None)
+    parser.add_argument("--slo-max-summary-latency-ms", type=int, default=None)
+    parser.add_argument("--slo-max-total-duration-ms", type=int, default=None)
+    parser.add_argument("--slo-require-operations-ok", dest="slo_require_operations_ok", action="store_true", default=None)
+    parser.add_argument("--no-slo-require-operations-ok", dest="slo_require_operations_ok", action="store_false")
     parser.add_argument("--no-syslog", action="store_true", help="Disable syslog messages on alert events.")
     parser.add_argument("--json", action="store_true", help="Print the full JSON report.")
     parser.add_argument("--quiet", action="store_true", help="Print only failures unless --json is used.")

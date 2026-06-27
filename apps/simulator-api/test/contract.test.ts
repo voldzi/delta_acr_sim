@@ -554,8 +554,68 @@ describe("SIM API contract baseline", () => {
     expect(response.body.contractVersion).toBe("sim-operations-summary-v1");
     expect(response.body.status).toBe("ok");
     expect(response.body.services).toHaveLength(4);
+    expect(response.body.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ lifecycle: "production", productionReadiness: true, serviceId: "flight-data-api" }),
+        expect.objectContaining({ lifecycle: "production", productionReadiness: true, serviceId: "situation-data-api" }),
+        expect.objectContaining({ lifecycle: "production", productionReadiness: true, serviceId: "safety-data-api" }),
+        expect.objectContaining({ lifecycle: "future", productionReadiness: false, serviceId: "tak-gateway-api" })
+      ])
+    );
     expect(response.body.services.find((service: { serviceId: string }) => service.serviceId === "situation-data-api").objectCount).toBe(41929);
     expect(response.body.alerts).toEqual([]);
+  });
+
+  it("keeps TAK Gateway visible but outside production readiness rollup", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        const parsed = new URL(url);
+        if (parsed.port === "4040" && parsed.pathname === "/health/ready") {
+          return jsonResponse({ status: "degraded", timestamp: new Date().toISOString(), enabledSources: ["cot"] });
+        }
+        if (parsed.port === "4040" && parsed.pathname === "/api/v1/observability") {
+          return jsonResponse({
+            serviceId: "tak-gateway-api",
+            generatedAt: new Date().toISOString(),
+            status: "degraded",
+            cache: { entries: 0, errors: 0, hitRate: 0, misses: 0, pressure: 0, state: "cold", staleHits: 0 },
+            dataFreshness: { sourceCount: 0, degradedSourceCount: 0, newestImportAgeSeconds: 0, oldestImportAgeSeconds: 0, warningCount: 0 }
+          });
+        }
+        if (url.includes("/health/ready")) {
+          return jsonResponse({ status: "ok", timestamp: new Date().toISOString(), enabledSources: ["mock"] });
+        }
+        return jsonResponse({
+          serviceId: "provider",
+          generatedAt: new Date().toISOString(),
+          status: "ok",
+          cache: { entries: 1, errors: 0, hitRate: 1, misses: 0, pressure: 0, state: "warm", staleHits: 0 },
+          dataFreshness: { sourceCount: 1, degradedSourceCount: 0, newestImportAgeSeconds: 5, oldestImportAgeSeconds: 5, warningCount: 0 }
+        });
+      })
+    );
+
+    const response = await request(app).get("/api/v1/operations/summary").expect(200);
+    const takService = response.body.services.find((service: { serviceId: string }) => service.serviceId === "tak-gateway-api");
+
+    expect(response.body.status).toBe("ok");
+    expect(takService).toEqual(
+      expect.objectContaining({
+        lifecycle: "future",
+        productionReadiness: false,
+        status: "degraded"
+      })
+    );
+    expect(response.body.alerts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "technical",
+          serviceId: "tak-gateway-api"
+        })
+      ])
+    );
   });
 
   it("keeps source data quality notices separate from technical service degradation", async () => {

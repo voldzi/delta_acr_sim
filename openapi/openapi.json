@@ -4791,6 +4791,8 @@
           "enabledSources",
           "label",
           "latencyMs",
+          "lifecycle",
+          "productionReadiness",
           "serviceId",
           "status",
           "qualityWarningCount",
@@ -4804,6 +4806,18 @@
           },
           "label": {
             "type": "string"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "production",
+              "future"
+            ],
+            "description": "Production services are included in SIM readiness and SLO rollup; future services are diagnostic only."
+          },
+          "productionReadiness": {
+            "type": "boolean",
+            "description": "True when service health contributes to the production readiness rollup."
           },
           "status": {
             "type": "string",

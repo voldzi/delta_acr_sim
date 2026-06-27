@@ -27,6 +27,7 @@ const csTranslations: Record<string, string> = {
   "available": "dostupná",
   "BBox padding": "Rozšíření bbox",
   "Block": "Blok",
+  "BTS live status": "Live stav BTS",
   "Aggregate state": "Agregovaný stav",
   "Cache": "Cache",
   "Cache capacity": "Kapacita cache",
@@ -37,6 +38,7 @@ const csTranslations: Record<string, string> = {
   "Capacity pressure only; service remains available.": "Pouze kapacitní tlak; služba zůstává dostupná.",
   "channels": "kanálů",
   "Clear queue": "Vyčistit frontu",
+  "Close": "Zavřít",
   "cold": "studená",
   "Cold cache; it warms after the next request.": "Studená cache; zahřeje se po dalším dotazu.",
   "COP integration": "Integrace COP",
@@ -47,7 +49,10 @@ const csTranslations: Record<string, string> = {
   "configured": "nastaveno",
   "continues serving cached data during upstream outage": "při výpadku upstreamu dál obsluhuje cacheovaná data",
   "COP data plane": "Datová rovina COP",
+  "COP can display now": "COP může zobrazit nyní",
   "COP display": "Zobrazení COP",
+  "COP may show signal quality, technology, estimated coverage, terrain assumptions and a visible data-quality notice. It must not present this as confirmed BTS outage or operator state.":
+    "COP může zobrazit kvalitu signálu, technologii, odhad pokrytí, terénní předpoklady a viditelné upozornění na kvalitu dat. Nesmí to prezentovat jako potvrzený výpadek BTS nebo stav operátora.",
   "COP can ingest these layers through /safety-data or projected situation-data.":
     "COP může tyto vrstvy načítat přes /safety-data nebo projekci situation-data.",
   "COP can render TAK Gateway layers independently from public open-data sources.":
@@ -66,6 +71,7 @@ const csTranslations: Record<string, string> = {
   "Current failure: last error is newer than last successful refresh.":
     "Aktuální selhání: poslední chyba je novější než poslední úspěšná obnova.",
   "Current settings": "Aktuální nastavení",
+  "Current state": "Aktuální stav",
   "current": "aktuální",
   "Cursor-on-Target ingest and normalized COP feature projection for ARDOS/TAK partner data.":
     "Příjem Cursor-on-Target a normalizovaná COP projekce partnerských dat ARDOS/TAK.",
@@ -78,13 +84,17 @@ const csTranslations: Record<string, string> = {
   "Delivery state and recent canonical events.": "Stav doručování a poslední kanonické události.",
   "Demo scenario created.": "Demo scénář byl vytvořen.",
   "Deterministic moving tracks for COP display validation.": "Deterministické pohyblivé stopy pro ověření zobrazení v COP.",
+  "diagnostic": "diagnostika",
   "disabled": "vypnuto",
+  "Download OpenAPI": "Stáhnout OpenAPI",
   "Dropped positions": "Zahozené pozice",
   "Duration": "Doba trvání",
   "enabled": "zapnuto",
   "Enabled sources": "Zapnuté zdroje",
   "Enter a valid SIM API token to access scenario control and source details.":
     "Pro ovládání scénářů a detail zdrojů zadejte platný SIM API token.",
+  "estimated": "odhad",
+  "failed": "selhalo",
   "Fallback SIM token": "Záložní SIM token",
   "Fallback SIM token login is disabled for this deployment.": "Přihlášení záložním SIM tokenem je v tomto nasazení vypnuté.",
   "Fallback token": "Záložní token",
@@ -97,6 +107,11 @@ const csTranslations: Record<string, string> = {
   "Flight track preview": "Náhled letových stop",
   "Foreign": "Cizí",
   "Freshness": "Aktuálnost",
+  "future": "budoucí",
+  "future live feed": "budoucí live feed",
+  "Future live feed": "Budoucí live feed",
+  "future module": "budoucí modul",
+  "future modules excluded": "budoucích modulů mimo readiness",
   "Generate a draft to validate the AI guardrail path.": "Vygenerujte návrh pro ověření cesty přes AI guardrails.",
   "Generate draft": "Vygenerovat návrh",
   "GeoJSON features returned by /safety-data/api/v1/features.": "GeoJSON prvky vrácené z /safety-data/api/v1/features.",
@@ -121,6 +136,7 @@ const csTranslations: Record<string, string> = {
   "Last ingest": "Poslední příjem",
   "Last result age": "Stáří posledního výsledku",
   "Last tick": "Poslední krok",
+  "last check": "poslední kontrola",
   "Latency": "Latence",
   "Layer registry": "Registr vrstev",
   "Layers": "Vrstvy",
@@ -136,6 +152,7 @@ const csTranslations: Record<string, string> = {
   "local only": "pouze lokálně",
   "Max events": "Maximum událostí",
   "Mock provider, structured draft and human accept flow.": "Mock provider, strukturovaný návrh a ruční schválení.",
+  "Modelled estimate": "Modelovaný odhad",
   "Monitor collected flight observations, deduplication, provider licenses and runtime settings.":
     "Sleduje sesbíraná letová pozorování, deduplikaci, licence providerů a runtime nastavení.",
   "Monitor Cursor-on-Target ingest, retention, stale state and COP projection readiness.":
@@ -145,7 +162,9 @@ const csTranslations: Record<string, string> = {
   "Monitor weather, ground, mobile and traffic context prepared for COP map layers.":
     "Sleduje meteorologický, pozemní, mobilní a dopravní kontext připravený pro mapové vrstvy COP.",
   "Movement": "Pohyb",
+  "Mobile network source status": "Stav zdroje mobilní sítě",
   "No active operational alerts.": "Žádná aktivní provozní upozornění.",
+  "No external check report.": "Externí kontrola zatím nemá report.",
   "No flight tracks are available from the configured sources.": "Z nastavených zdrojů nejsou dostupné žádné letové stopy.",
   "No queued events yet.": "Ve frontě zatím nejsou žádné události.",
   "No safety features are available from the configured sources.": "Z nastavených zdrojů nejsou dostupné žádné bezpečnostní prvky.",
@@ -166,6 +185,8 @@ const csTranslations: Record<string, string> = {
     "CSM publisher přijímá pouze syntetické payloady.",
   "Operation failed.": "Operace selhala.",
   "operational check": "provozní kontrola",
+  "Operational check": "Provozní kontrola",
+  "Open status detail": "Otevřít detail stavu",
   "Operations center": "Operační centrum",
   "Operations summary is not available.": "Provozní souhrn není dostupný.",
   "Operations summary unavailable": "Provozní souhrn není dostupný",
@@ -177,6 +198,7 @@ const csTranslations: Record<string, string> = {
   "Operator token required. Enter the SIM API token in the top bar to start, stop or create scenarios.":
     "Je vyžadován operátorský token. Pro spuštění, zastavení nebo vytvoření scénáře zadejte SIM API token v horní liště.",
   "Other": "Ostatní",
+  "Operator/NOC OpenAPI contract": "OpenAPI kontrakt pro operátora/NOC",
   "Overview": "Přehled",
   "Overview latency": "Latence přehledu",
   "Partner source": "Partnerský zdroj",
@@ -218,6 +240,14 @@ const csTranslations: Record<string, string> = {
   "Ready to start": "Připraveno ke spuštění",
   "Recommended action": "Doporučená akce",
   "Recent event flow": "Poslední tok událostí",
+  "SIM currently provides terrain-aware mobile signal estimates. Authorized live BTS/NOC status is not connected.":
+    "SIM nyní poskytuje terénně korigované odhady mobilního signálu. Autorizovaný live stav BTS/NOC není připojen.",
+  "SIM does not receive an authorized live BTS/NOC operator status feed. Current mobile layers are estimates from public measurements, DEM, line-of-sight and infrastructure hints.":
+    "SIM nepřijímá autorizovaný live stav BTS/NOC od operátora. Aktuální mobilní vrstvy jsou odhady z veřejných měření, DEM, line-of-sight a infrastrukturních indicií.",
+  "The proposed contract accepts site/cell id, operator, technology, observed status, confidence, outage reason and validity time. When connected, SIM can replace estimates with authoritative live status.":
+    "Navržený kontrakt přijímá ID stanice/buňky, operátora, technologii, pozorovaný stav, věrohodnost, důvod výpadku a platnost. Po napojení může SIM nahradit odhady autoritativním live stavem.",
+  "Coverage and line-of-sight estimate": "Odhad pokrytí a line-of-sight",
+  "terrain-aware": "terénně korigováno",
   "rejected": "odmítnuto",
   "Resume": "Pokračovat",
   "Resume active scenario": "Pokračovat v aktivním scénáři",
