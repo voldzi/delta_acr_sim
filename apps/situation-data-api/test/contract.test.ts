@@ -1289,7 +1289,8 @@ describe("Situation Data API contract", () => {
                   ["0-20000-0-11518", "D", "2026-05-28T08:00:00Z", 270, "", 5],
                   ["0-20000-0-11518", "F", "2026-05-28T08:00:00Z", 4.2, "", 5],
                   ["0-20000-0-11518", "Fmax", "2026-05-28T08:00:00Z", 7.8, "", 5],
-                  ["0-20000-0-11518", "SRA10M", "2026-05-28T08:00:00Z", 0.4, "", 5]
+                  ["0-20000-0-11518", "SRA10M", "2026-05-28T08:00:00Z", 0, "", 5],
+                  ["0-20000-0-11518", "SSV10M", "2026-05-28T08:00:00Z", 0, "", 5]
                 ]
               }
             }
@@ -1325,10 +1326,23 @@ describe("Situation Data API contract", () => {
             temperatureC: 17.2,
             relativeHumidityPercent: 63,
             windSpeedMps: 4.2,
-            precipitation10mMm: 0.4
+            precipitation10mMm: 0
           }),
           tags: expect.objectContaining({ stationId: "0-20000-0-11518", ghId: "ZIS11518" }),
           providerProperties: expect.objectContaining({
+            weatherSymbolKey: "measurement",
+            weatherConditionLabel: "měřené počasí",
+            weather: expect.objectContaining({
+              symbolKey: "measurement",
+              conditionLabel: "měřené počasí",
+              authoritativeCondition: false,
+              basis: "chmi_10m_station_measurement"
+            }),
+            presentation: expect.objectContaining({
+              primaryValue: "17.2 °C",
+              secondaryValue: "vítr 4.2 m/s",
+              mapLabel: "Praha-Karlov 17.2 °C · vítr 4.2 m/s"
+            }),
             raw: expect.objectContaining({ station: expect.any(Object) })
           })
         })
@@ -1382,7 +1396,7 @@ describe("Situation Data API contract", () => {
             layer: "weather_precipitation_grid",
             layerId: "public.weather.precipitation_grid",
             providerLayerId: "weather.precipitation_grid",
-            metrics: expect.objectContaining({ precipitation10mMm: 0.4, value: 0.4, unit: "mm/10min" }),
+            metrics: expect.objectContaining({ precipitation10mMm: 0, value: 0, unit: "mm/10min" }),
             rendering: expect.objectContaining({ mode: "grid_field", geometryRole: "grid_cell", valueMetric: "precipitation10mMm", unit: "mm/10min" })
           })
         }),

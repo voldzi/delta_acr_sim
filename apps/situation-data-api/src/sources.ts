@@ -1966,6 +1966,7 @@ interface FeatureInput {
   speedMps?: number;
   operator?: string;
   preserveCoordinatePrecision?: boolean;
+  providerProperties?: Record<string, unknown>;
   raw?: unknown;
 }
 
@@ -2013,6 +2014,7 @@ function makePointFeature(input: FeatureInput): SituationFeature {
       headingDeg: input.headingDeg,
       speedMps: input.speedMps,
       operator: input.operator,
+      providerProperties: input.providerProperties,
       raw: input.raw
     }
   };
@@ -2857,6 +2859,134 @@ function chmiWeatherStationsFromMetadata(payload: ChmiDataCollectionPayload): Ch
     .filter((station): station is ChmiWeatherStation => Boolean(station));
 }
 
+interface ChmiWeatherPresentationInput {
+  stationName: string;
+  temperatureC?: number;
+  windSpeedMps?: number;
+  windGustMps?: number;
+  precipitation10mMm?: number;
+  relativeHumidityPercent?: number;
+  sunshineDurationSeconds?: number;
+}
+
+interface ChmiWeatherPresentation {
+  symbolKey: "sun" | "fog" | "rain" | "snow" | "wind" | "measurement";
+  conditionLabel: string;
+  conditionLabelEn: string;
+  basis: string;
+  confidence: number;
+  authoritativeCondition: boolean;
+  primaryValue?: string;
+  secondaryValue?: string;
+  tertiaryValue?: string;
+  mapLabel: string;
+  detailSummary: string;
+  note?: string;
+}
+
+function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeatherPresentation {
+  const strongestWindMps = Math.max(input.windSpeedMps ?? 0, input.windGustMps ?? 0);
+  const hasMeasuredPrecipitation = input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05;
+  const hasStrongSunshine = input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 540;
+  const hasLikelyFog =
+    !hasMeasuredPrecipitation
+    && input.relativeHumidityPercent !== undefined
+    && input.relativeHumidityPercent >= 98
+    && (input.windSpeedMps === undefined || input.windSpeedMps < 1.5)
+    && (input.sunshineDurationSeconds === undefined || input.sunshineDurationSeconds === 0);
+  const hasStrongWind = strongestWindMps >= 10;
+
+  let symbolKey: ChmiWeatherPresentation["symbolKey"] = "measurement";
+  let conditionLabel = "měřené počasí";
+  let conditionLabelEn = "measured weather";
+  let basis = "chmi_10m_station_measurement";
+  let confidence = 0.55;
+  let authoritativeCondition = false;
+  let note = "ČHMÚ 10m station feed does not provide cloud cover or WMO weather condition for this feature.";
+
+  if (hasMeasuredPrecipitation) {
+    const snowLikely = input.temperatureC !== undefined && input.temperatureC <= 1.5;
+    symbolKey = snowLikely ? "snow" : "rain";
+    conditionLabel = snowLikely ? "srážky / sníh" : "srážky / déšť";
+    conditionLabelEn = snowLikely ? "precipitation / snow" : "precipitation / rain";
+    basis = "measured_precipitation_10m";
+    confidence = snowLikely ? 0.74 : 0.82;
+    authoritativeCondition = false;
+    note = snowLikely
+      ? "Precipitation is measured; snow/rain phase is inferred from air temperature."
+      : "Precipitation is measured by the CHMI 10m station feed.";
+  } else if (hasLikelyFog) {
+    symbolKey = "fog";
+    conditionLabel = "pravděpodobná mlha";
+    conditionLabelEn = "probable fog";
+    basis = "humidity_wind_fog_heuristic";
+    confidence = 0.48;
+    authoritativeCondition = false;
+    note = "Fog is inferred from very high humidity, weak wind and no sunshine; it is not an observed WMO condition.";
+  } else if (hasStrongWind) {
+    symbolKey = "wind";
+    conditionLabel = "silný vítr";
+    conditionLabelEn = "strong wind";
+    basis = "measured_wind";
+    confidence = 0.86;
+    authoritativeCondition = true;
+    note = "Wind condition is based on measured wind speed or gust.";
+  } else if (hasStrongSunshine) {
+    symbolKey = "sun";
+    conditionLabel = "slunečno";
+    conditionLabelEn = "sunshine observed";
+    basis = "measured_sunshine_duration_10m";
+    confidence = 0.68;
+    authoritativeCondition = false;
+    note = "Sunshine duration is measured; cloud-cover category is not available in the 10m feed.";
+  }
+
+  const primaryValue = input.temperatureC !== undefined ? `${formatCompactNumber(input.temperatureC, 1)} °C` : undefined;
+  const secondaryValue = weatherSecondaryValue(input);
+  const tertiaryValue = weatherTertiaryValue(input);
+  const valueParts = [primaryValue, secondaryValue].filter((value): value is string => Boolean(value));
+  const mapLabel = valueParts.length > 0 ? `${input.stationName} ${valueParts.join(" · ")}` : input.stationName;
+  const detailSummary = [conditionLabel, primaryValue, secondaryValue, tertiaryValue].filter((value): value is string => Boolean(value)).join(" · ");
+
+  return {
+    symbolKey,
+    conditionLabel,
+    conditionLabelEn,
+    basis,
+    confidence,
+    authoritativeCondition,
+    primaryValue,
+    secondaryValue,
+    tertiaryValue,
+    mapLabel,
+    detailSummary,
+    note
+  };
+}
+
+function weatherSecondaryValue(input: ChmiWeatherPresentationInput): string | undefined {
+  if (input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05) {
+    return `${formatCompactNumber(input.precipitation10mMm, 1)} mm/10 min`;
+  }
+  if (input.windSpeedMps !== undefined) {
+    return `vítr ${formatCompactNumber(input.windSpeedMps, 1)} m/s`;
+  }
+  if (input.relativeHumidityPercent !== undefined) {
+    return `vlhkost ${Math.round(input.relativeHumidityPercent)} %`;
+  }
+  return undefined;
+}
+
+function weatherTertiaryValue(input: ChmiWeatherPresentationInput): string | undefined {
+  if (input.windGustMps !== undefined && input.windSpeedMps !== undefined && input.windGustMps > input.windSpeedMps) {
+    return `náraz ${formatCompactNumber(input.windGustMps, 1)} m/s`;
+  }
+  if (input.relativeHumidityPercent !== undefined) {
+    return `vlhkost ${Math.round(input.relativeHumidityPercent)} %`;
+  }
+  return undefined;
+}
+
 function mapChmiWeatherStationFeature(
   station: ChmiWeatherStation,
   payload: ChmiDataCollectionPayload,
@@ -2871,9 +3001,21 @@ function mapChmiWeatherStationFeature(
   const windSpeedMps = observations.get("F")?.value;
   const windGustMps = observations.get("Fmax")?.value;
   const precipitation10mMm = observations.get("SRA10M")?.value;
+  const temperatureC = observations.get("T")?.value;
+  const relativeHumidityPercent = observations.get("H")?.value;
+  const sunshineDurationSeconds = observations.get("SSV10M")?.value;
   const severity = weatherSeverity(windGustMps ?? windSpeedMps, precipitation10mMm, undefined);
   const qualityValues = Array.from(observations.values()).map((observation) => observation.quality).filter(isFiniteNumber);
   const qualityCode = qualityValues.length > 0 ? Math.max(...qualityValues) : undefined;
+  const weatherPresentation = chmiWeatherPresentation({
+    stationName: station.name,
+    temperatureC,
+    windSpeedMps,
+    windGustMps,
+    precipitation10mMm,
+    relativeHumidityPercent,
+    sunshineDurationSeconds
+  });
 
   return makePointFeature({
     id: `weather:chmi_weather_stations:${stableToken(station.stationId)}`,
@@ -2890,17 +3032,17 @@ function mapChmiWeatherStationFeature(
     severity,
     preserveCoordinatePrecision: true,
     metrics: compactMixedMetrics({
-      temperatureC: observations.get("T")?.value,
+      temperatureC,
       temperatureMaxC: observations.get("TMA")?.value,
       temperatureMinC: observations.get("TMI")?.value,
       grassTemperatureC: observations.get("TPM")?.value,
-      relativeHumidityPercent: observations.get("H")?.value,
+      relativeHumidityPercent,
       pressureHpa: observations.get("P")?.value,
       windDirectionDeg: observations.get("D")?.value,
       windSpeedMps,
       windGustMps,
       precipitation10mMm,
-      sunshineDurationSeconds: observations.get("SSV10M")?.value,
+      sunshineDurationSeconds,
       elevationM: station.elevationM,
       qualityCode
     }),
@@ -2910,6 +3052,28 @@ function mapChmiWeatherStationFeature(
       sourceSystem: "chmi_meteorology_climate_now",
       hasWind: windSpeedMps !== undefined ? "true" : undefined,
       hasPrecipitation: precipitation10mMm !== undefined ? "true" : undefined
+    }),
+    providerProperties: compactProviderProperties({
+      weatherSymbolKey: weatherPresentation.symbolKey,
+      weatherConditionLabel: weatherPresentation.conditionLabel,
+      weatherConditionLabelEn: weatherPresentation.conditionLabelEn,
+      weather: compactProviderProperties({
+        symbolKey: weatherPresentation.symbolKey,
+        weatherSymbolKey: weatherPresentation.symbolKey,
+        conditionLabel: weatherPresentation.conditionLabel,
+        conditionLabelEn: weatherPresentation.conditionLabelEn,
+        basis: weatherPresentation.basis,
+        confidence: weatherPresentation.confidence,
+        authoritativeCondition: weatherPresentation.authoritativeCondition,
+        note: weatherPresentation.note
+      }),
+      presentation: compactProviderProperties({
+        primaryValue: weatherPresentation.primaryValue,
+        secondaryValue: weatherPresentation.secondaryValue,
+        tertiaryValue: weatherPresentation.tertiaryValue,
+        mapLabel: weatherPresentation.mapLabel,
+        detailSummary: weatherPresentation.detailSummary
+      })
     }),
     raw: query.includeRaw
       ? {
@@ -5360,6 +5524,10 @@ function compactProviderProperties(values: Record<string, unknown>): Record<stri
     return true;
   });
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function formatCompactNumber(value: number, precision: number): string {
+  return round(value, precision).toFixed(precision).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
 
 function round(value: number, precision: number): number {
