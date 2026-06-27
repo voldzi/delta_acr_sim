@@ -828,7 +828,8 @@ class ChmiWeatherStationsSource implements SituationDataSource {
     }
     const metadataUrl = joinUrl(this.config.chmiWeatherMetadataBaseUrl, metadataHref);
     const metadata = await this.metadataCache.getOrLoad(metadataUrl, () => requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs));
-    const stationFiles = chmiWeatherStationFileMap(dataIndex);
+    const stationFiles = chmiWeatherStationFileMap(dataIndex, "10m");
+    const hourlyStationFiles = chmiWeatherStationFileMap(dataIndex, "1h");
     const stationLimit = Math.max(1, Math.min(query.limit, this.config.chmiWeatherMaxStations));
     const stations = chmiWeatherStationsFromMetadata(metadata)
       .filter((station) => isPointInBbox(station.lon, station.lat, query.bbox))
@@ -842,14 +843,18 @@ class ChmiWeatherStationsSource implements SituationDataSource {
       if (!file) {
         return [];
       }
-      return [{ station, file }];
+      return [{ station, file, hourlyFile: hourlyStationFiles.get(station.stationId) }];
     });
 
     const settled = await Promise.allSettled(
-      selected.map(async ({ station, file }) => {
+      selected.map(async ({ station, file, hourlyFile }) => {
         const url = joinUrl(this.config.chmiWeatherDataBaseUrl, file.href);
         const payload = await this.stationFileCache.getOrLoad(url, () => requestJson<ChmiDataCollectionPayload>(url, this.config.requestTimeoutMs));
-        const pointFeature = mapChmiWeatherStationFeature(station, payload, query, fetchedAt);
+        const hourlyUrl = hourlyFile ? joinUrl(this.config.chmiWeatherDataBaseUrl, hourlyFile.href) : undefined;
+        const hourlyPayload = hourlyUrl
+          ? await this.stationFileCache.getOrLoad(hourlyUrl, () => requestJson<ChmiDataCollectionPayload>(hourlyUrl, this.config.requestTimeoutMs)).catch(() => undefined)
+          : undefined;
+        const pointFeature = mapChmiWeatherStationFeature(station, payload, hourlyPayload, query, fetchedAt);
         const gridFeatures = pointFeature
           ? requestedWeatherGridLayers.flatMap((layer) => mapChmiWeatherGridFeature(layer, station, pointFeature, this.config.openMeteoGridDegrees))
           : [];
@@ -2865,12 +2870,17 @@ interface ChmiWeatherPresentationInput {
   windSpeedMps?: number;
   windGustMps?: number;
   precipitation10mMm?: number;
+  precipitation1hMm?: number;
   relativeHumidityPercent?: number;
   sunshineDurationSeconds?: number;
+  sunshineDuration1hTenths?: number;
+  presentWeatherCode?: number;
+  cloudCoverOctas?: number;
+  visibilityCode?: number;
 }
 
 interface ChmiWeatherPresentation {
-  symbolKey: "sun" | "fog" | "rain" | "snow" | "wind" | "measurement";
+  symbolKey: "sun" | "partly_cloudy" | "cloud" | "fog" | "rain" | "snow" | "storm" | "wind" | "measurement";
   conditionLabel: string;
   conditionLabelEn: string;
   basis: string;
@@ -2887,9 +2897,14 @@ interface ChmiWeatherPresentation {
 function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeatherPresentation {
   const strongestWindMps = Math.max(input.windSpeedMps ?? 0, input.windGustMps ?? 0);
   const hasMeasuredPrecipitation = input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05;
-  const hasStrongSunshine = input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 540;
+  const hasHourlyPrecipitation = input.precipitation1hMm !== undefined && input.precipitation1hMm >= 0.1;
+  const hasStrongSunshine =
+    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 540)
+    || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 8);
+  const presentWeather = presentWeatherCodePresentation(input.presentWeatherCode);
   const hasLikelyFog =
     !hasMeasuredPrecipitation
+    && !hasHourlyPrecipitation
     && input.relativeHumidityPercent !== undefined
     && input.relativeHumidityPercent >= 98
     && (input.windSpeedMps === undefined || input.windSpeedMps < 1.5)
@@ -2904,17 +2919,25 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
   let authoritativeCondition = false;
   let note = "ČHMÚ 10m station feed does not provide cloud cover or WMO weather condition for this feature.";
 
-  if (hasMeasuredPrecipitation) {
+  if (presentWeather) {
+    symbolKey = presentWeather.symbolKey;
+    conditionLabel = presentWeather.conditionLabel;
+    conditionLabelEn = presentWeather.conditionLabelEn;
+    basis = "chmi_1h_present_weather";
+    confidence = presentWeather.confidence;
+    authoritativeCondition = true;
+    note = `Weather state is based on CHMI hourly present-weather code ${formatCompactNumber(presentWeather.code, 0)}.`;
+  } else if (hasMeasuredPrecipitation || hasHourlyPrecipitation) {
     const snowLikely = input.temperatureC !== undefined && input.temperatureC <= 1.5;
     symbolKey = snowLikely ? "snow" : "rain";
     conditionLabel = snowLikely ? "srážky / sníh" : "srážky / déšť";
     conditionLabelEn = snowLikely ? "precipitation / snow" : "precipitation / rain";
-    basis = "measured_precipitation_10m";
-    confidence = snowLikely ? 0.74 : 0.82;
+    basis = hasMeasuredPrecipitation ? "measured_precipitation_10m" : "measured_precipitation_1h";
+    confidence = snowLikely ? 0.74 : 0.8;
     authoritativeCondition = false;
     note = snowLikely
       ? "Precipitation is measured; snow/rain phase is inferred from air temperature."
-      : "Precipitation is measured by the CHMI 10m station feed.";
+      : "Precipitation is measured by the CHMI station feed.";
   } else if (hasLikelyFog) {
     symbolKey = "fog";
     conditionLabel = "pravděpodobná mlha";
@@ -2931,14 +2954,25 @@ function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): ChmiWeath
     confidence = 0.86;
     authoritativeCondition = true;
     note = "Wind condition is based on measured wind speed or gust.";
-  } else if (hasStrongSunshine) {
-    symbolKey = "sun";
-    conditionLabel = "slunečno";
-    conditionLabelEn = "sunshine observed";
-    basis = "measured_sunshine_duration_10m";
-    confidence = 0.68;
-    authoritativeCondition = false;
-    note = "Sunshine duration is measured; cloud-cover category is not available in the 10m feed.";
+  } else {
+    const cloudPresentation = cloudCoverPresentation(input.cloudCoverOctas);
+    if (cloudPresentation) {
+      symbolKey = cloudPresentation.symbolKey;
+      conditionLabel = cloudPresentation.conditionLabel;
+      conditionLabelEn = cloudPresentation.conditionLabelEn;
+      basis = "chmi_1h_cloud_cover";
+      confidence = 0.76;
+      authoritativeCondition = true;
+      note = `Cloud state is based on CHMI hourly total cloud cover ${formatCompactNumber(input.cloudCoverOctas ?? 0, 0)}/8.`;
+    } else if (hasStrongSunshine) {
+      symbolKey = "sun";
+      conditionLabel = "slunečno";
+      conditionLabelEn = "sunshine observed";
+      basis = "measured_sunshine_duration";
+      confidence = 0.68;
+      authoritativeCondition = false;
+      note = "Sunshine duration is measured; cloud-cover category is not available for this station/time.";
+    }
   }
 
   const primaryValue = input.temperatureC !== undefined ? `${formatCompactNumber(input.temperatureC, 1)} °C` : undefined;
@@ -2968,6 +3002,9 @@ function weatherSecondaryValue(input: ChmiWeatherPresentationInput): string | un
   if (input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05) {
     return `${formatCompactNumber(input.precipitation10mMm, 1)} mm/10 min`;
   }
+  if (input.precipitation1hMm !== undefined && input.precipitation1hMm >= 0.1) {
+    return `${formatCompactNumber(input.precipitation1hMm, 1)} mm/h`;
+  }
   if (input.windSpeedMps !== undefined) {
     return `vítr ${formatCompactNumber(input.windSpeedMps, 1)} m/s`;
   }
@@ -2981,15 +3018,84 @@ function weatherTertiaryValue(input: ChmiWeatherPresentationInput): string | und
   if (input.windGustMps !== undefined && input.windSpeedMps !== undefined && input.windGustMps > input.windSpeedMps) {
     return `náraz ${formatCompactNumber(input.windGustMps, 1)} m/s`;
   }
+  if (input.cloudCoverOctas !== undefined) {
+    return `oblačnost ${formatCompactNumber(input.cloudCoverOctas, 0)}/8`;
+  }
   if (input.relativeHumidityPercent !== undefined) {
     return `vlhkost ${Math.round(input.relativeHumidityPercent)} %`;
   }
   return undefined;
 }
 
+function presentWeatherCodePresentation(rawCode: number | undefined):
+  | {
+      code: number;
+      symbolKey: ChmiWeatherPresentation["symbolKey"];
+      conditionLabel: string;
+      conditionLabelEn: string;
+      confidence: number;
+    }
+  | undefined {
+  const code = normalizeChmiPresentWeatherCode(rawCode);
+  if (code === undefined) {
+    return undefined;
+  }
+  if (code >= 95 && code <= 99) {
+    return { code, symbolKey: "storm", conditionLabel: "bouřka", conditionLabelEn: "thunderstorm", confidence: 0.88 };
+  }
+  if ((code >= 80 && code <= 84) || (code >= 50 && code <= 69)) {
+    return { code, symbolKey: "rain", conditionLabel: "déšť", conditionLabelEn: "rain", confidence: 0.86 };
+  }
+  if ((code >= 85 && code <= 86) || (code >= 70 && code <= 79)) {
+    return { code, symbolKey: "snow", conditionLabel: "sníh", conditionLabelEn: "snow", confidence: 0.86 };
+  }
+  if ((code >= 40 && code <= 49) || code === 10 || code === 11 || code === 12) {
+    return { code, symbolKey: "fog", conditionLabel: "mlha / kouřmo", conditionLabelEn: "fog or mist", confidence: 0.8 };
+  }
+  if (code >= 30 && code <= 39) {
+    return { code, symbolKey: "wind", conditionLabel: "zhoršená dohlednost větrem", conditionLabelEn: "wind-reduced visibility", confidence: 0.72 };
+  }
+  return undefined;
+}
+
+function normalizeChmiPresentWeatherCode(rawCode: number | undefined): number | undefined {
+  if (rawCode === undefined || !Number.isFinite(rawCode)) {
+    return undefined;
+  }
+  const rounded = Math.round(rawCode);
+  if (rounded === 100) {
+    return undefined;
+  }
+  if (rounded >= 0 && rounded <= 99) {
+    return rounded;
+  }
+  const lastTwoDigits = Math.abs(rounded) % 100;
+  return lastTwoDigits >= 0 && lastTwoDigits <= 99 ? lastTwoDigits : undefined;
+}
+
+function cloudCoverPresentation(octas: number | undefined):
+  | {
+      symbolKey: ChmiWeatherPresentation["symbolKey"];
+      conditionLabel: string;
+      conditionLabelEn: string;
+    }
+  | undefined {
+  if (octas === undefined || !Number.isFinite(octas) || octas < 0 || octas > 8) {
+    return undefined;
+  }
+  if (octas >= 7) {
+    return { symbolKey: "cloud", conditionLabel: "zataženo", conditionLabelEn: "overcast" };
+  }
+  if (octas >= 3) {
+    return { symbolKey: "partly_cloudy", conditionLabel: "polojasno až oblačno", conditionLabelEn: "partly cloudy" };
+  }
+  return { symbolKey: "sun", conditionLabel: "malá oblačnost", conditionLabelEn: "few clouds" };
+}
+
 function mapChmiWeatherStationFeature(
   station: ChmiWeatherStation,
   payload: ChmiDataCollectionPayload,
+  hourlyPayload: ChmiDataCollectionPayload | undefined,
   query: SituationQuery,
   fetchedAt: string
 ): SituationFeature | undefined {
@@ -3004,6 +3110,14 @@ function mapChmiWeatherStationFeature(
   const temperatureC = observations.get("T")?.value;
   const relativeHumidityPercent = observations.get("H")?.value;
   const sunshineDurationSeconds = observations.get("SSV10M")?.value;
+  const hourlyObservations = hourlyPayload ? chmiWeatherHourlyObservations(hourlyPayload) : new Map<string, ChmiStationObservation>();
+  const presentWeatherCode = hourlyObservations.get("ww")?.value;
+  const normalizedPresentWeatherCode = normalizeChmiPresentWeatherCode(presentWeatherCode);
+  const cloudCoverOctas = hourlyObservations.get("N")?.value;
+  const cloudCoverPercent = cloudCoverOctas !== undefined && cloudCoverOctas >= 0 && cloudCoverOctas <= 8 ? Math.round((cloudCoverOctas / 8) * 100) : undefined;
+  const visibilityCode = hourlyObservations.get("VV")?.value;
+  const precipitation1hMm = hourlyObservations.get("SRA1H")?.value;
+  const sunshineDuration1hTenths = hourlyObservations.get("SSV1H")?.value;
   const severity = weatherSeverity(windGustMps ?? windSpeedMps, precipitation10mMm, undefined);
   const qualityValues = Array.from(observations.values()).map((observation) => observation.quality).filter(isFiniteNumber);
   const qualityCode = qualityValues.length > 0 ? Math.max(...qualityValues) : undefined;
@@ -3013,8 +3127,13 @@ function mapChmiWeatherStationFeature(
     windSpeedMps,
     windGustMps,
     precipitation10mMm,
+    precipitation1hMm,
     relativeHumidityPercent,
-    sunshineDurationSeconds
+    sunshineDurationSeconds,
+    sunshineDuration1hTenths,
+    presentWeatherCode,
+    cloudCoverOctas,
+    visibilityCode
   });
 
   return makePointFeature({
@@ -3042,7 +3161,15 @@ function mapChmiWeatherStationFeature(
       windSpeedMps,
       windGustMps,
       precipitation10mMm,
+      precipitation1hMm,
       sunshineDurationSeconds,
+      sunshineDuration1hTenths,
+      sunshineDuration1hSeconds: sunshineDuration1hTenths !== undefined ? Math.round(sunshineDuration1hTenths * 360) : undefined,
+      presentWeatherCode,
+      normalizedPresentWeatherCode,
+      cloudCoverOctas,
+      cloudCoverPercent,
+      visibilityCode,
       elevationM: station.elevationM,
       qualityCode
     }),
@@ -3065,6 +3192,11 @@ function mapChmiWeatherStationFeature(
         basis: weatherPresentation.basis,
         confidence: weatherPresentation.confidence,
         authoritativeCondition: weatherPresentation.authoritativeCondition,
+        presentWeatherCode,
+        normalizedPresentWeatherCode,
+        cloudCoverOctas,
+        cloudCoverPercent,
+        visibilityCode,
         note: weatherPresentation.note
       }),
       presentation: compactProviderProperties({
@@ -3078,7 +3210,8 @@ function mapChmiWeatherStationFeature(
     raw: query.includeRaw
       ? {
           station,
-          observations: Object.fromEntries(observations)
+          observations: Object.fromEntries(observations),
+          hourlyObservations: Object.fromEntries(hourlyObservations)
         }
       : undefined
   });
@@ -3452,7 +3585,18 @@ function makeStationBackedGridFeature(input: StationBackedGridFeatureInput): Sit
   };
 }
 
+const CHMI_WEATHER_10M_ELEMENTS = new Set(["T", "TMA", "TMI", "TPM", "H", "P", "D", "F", "Fmax", "SRA10M", "SSV10M"]);
+const CHMI_WEATHER_1H_ELEMENTS = new Set(["ww", "N", "VV", "W1", "W2", "SRA1H", "SSV1H", "C-C1Av", "C-C2Av", "C-C3Av"]);
+
 function chmiWeatherObservations(payload: ChmiDataCollectionPayload): Map<string, ChmiStationObservation> {
+  return chmiStationObservations(payload, CHMI_WEATHER_10M_ELEMENTS);
+}
+
+function chmiWeatherHourlyObservations(payload: ChmiDataCollectionPayload): Map<string, ChmiStationObservation> {
+  return chmiStationObservations(payload, CHMI_WEATHER_1H_ELEMENTS);
+}
+
+function chmiStationObservations(payload: ChmiDataCollectionPayload, selectedElements: Set<string>): Map<string, ChmiStationObservation> {
   const collection = chmiCollectionData(payload);
   const values = collection?.values ?? [];
   const headers = splitDataCollectionHeader(collection?.header);
@@ -3460,7 +3604,6 @@ function chmiWeatherObservations(payload: ChmiDataCollectionPayload): Map<string
   const dtIndex = headers.indexOf("DT");
   const valueIndex = headers.indexOf("VAL");
   const qualityIndex = headers.indexOf("QUALITY");
-  const selectedElements = new Set(["T", "TMA", "TMI", "TPM", "H", "P", "D", "F", "Fmax", "SRA10M", "SSV10M"]);
   const observations = new Map<string, ChmiStationObservation>();
 
   for (const row of values) {
@@ -3486,11 +3629,12 @@ function chmiWeatherObservations(payload: ChmiDataCollectionPayload): Map<string
   return observations;
 }
 
-function chmiWeatherStationFileMap(indexHtml: string): Map<string, ChmiWeatherFileRef> {
+function chmiWeatherStationFileMap(indexHtml: string, cadence: "10m" | "1h" = "10m"): Map<string, ChmiWeatherFileRef> {
   const files = new Map<string, ChmiWeatherFileRef>();
+  const pattern = new RegExp(`^${cadence}-(.+)-(\\d{8})\\.json$`);
   for (const href of hrefsFromHtmlIndex(indexHtml)) {
     const fileName = href.split("/").pop() ?? href;
-    const match = /^10m-(.+)-(\d{8})\.json$/.exec(fileName);
+    const match = pattern.exec(fileName);
     const stationId = match?.[1];
     const dateToken = match?.[2];
     if (!stationId || !dateToken) {

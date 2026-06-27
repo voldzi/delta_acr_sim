@@ -1259,10 +1259,16 @@ describe("Situation Data API contract", () => {
         });
       }
       if (url === config.chmiWeatherDataBaseUrl) {
-        return new Response('<a href="10m-0-20000-0-11518-20260528.json">10m-0-20000-0-11518-20260528.json</a>', {
-          status: 200,
-          headers: { "content-type": "text/html" }
-        });
+        return new Response(
+          [
+            '<a href="10m-0-20000-0-11518-20260528.json">10m-0-20000-0-11518-20260528.json</a>',
+            '<a href="1h-0-20000-0-11518-20260528.json">1h-0-20000-0-11518-20260528.json</a>'
+          ].join("\n"),
+          {
+            status: 200,
+            headers: { "content-type": "text/html" }
+          }
+        );
       }
       if (url.endsWith("/meta1-20260528.json")) {
         return new Response(
@@ -1298,6 +1304,25 @@ describe("Situation Data API contract", () => {
           { status: 200, headers: { "content-type": "application/json" } }
         );
       }
+      if (url.endsWith("/1h-0-20000-0-11518-20260528.json")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              data: {
+                header: "STATION,ELEMENT,DT,VAL,FLAG,QUALITY",
+                values: [
+                  ["0-20000-0-11518", "ww", "2026-05-28T08:00:00Z", 61, "", 5],
+                  ["0-20000-0-11518", "N", "2026-05-28T08:00:00Z", 8, "", 5],
+                  ["0-20000-0-11518", "VV", "2026-05-28T08:00:00Z", 30, "", 5],
+                  ["0-20000-0-11518", "SRA1H", "2026-05-28T08:00:00Z", 1.2, "", 5],
+                  ["0-20000-0-11518", "SSV1H", "2026-05-28T08:00:00Z", 0, "", 5]
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
       return new Response("not found", { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -1310,7 +1335,7 @@ describe("Situation Data API contract", () => {
       .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=21")
       .expect(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(first.body.features).toHaveLength(1);
     expect(second.body.features).toHaveLength(1);
     expect(first.body.features[0].geometry).toEqual({ type: "Point", coordinates: [14.4201234, 50.0805678] });
@@ -1326,24 +1351,33 @@ describe("Situation Data API contract", () => {
             temperatureC: 17.2,
             relativeHumidityPercent: 63,
             windSpeedMps: 4.2,
-            precipitation10mMm: 0
+            precipitation10mMm: 0,
+            precipitation1hMm: 1.2,
+            presentWeatherCode: 61,
+            normalizedPresentWeatherCode: 61,
+            cloudCoverOctas: 8,
+            cloudCoverPercent: 100
           }),
           tags: expect.objectContaining({ stationId: "0-20000-0-11518", ghId: "ZIS11518" }),
           providerProperties: expect.objectContaining({
-            weatherSymbolKey: "measurement",
-            weatherConditionLabel: "měřené počasí",
+            weatherSymbolKey: "rain",
+            weatherConditionLabel: "déšť",
             weather: expect.objectContaining({
-              symbolKey: "measurement",
-              conditionLabel: "měřené počasí",
-              authoritativeCondition: false,
-              basis: "chmi_10m_station_measurement"
+              symbolKey: "rain",
+              conditionLabel: "déšť",
+              authoritativeCondition: true,
+              basis: "chmi_1h_present_weather",
+              presentWeatherCode: 61,
+              normalizedPresentWeatherCode: 61,
+              cloudCoverOctas: 8,
+              cloudCoverPercent: 100
             }),
             presentation: expect.objectContaining({
               primaryValue: "17.2 °C",
-              secondaryValue: "vítr 4.2 m/s",
-              mapLabel: "Praha-Karlov 17.2 °C · vítr 4.2 m/s"
+              secondaryValue: "1.2 mm/h",
+              mapLabel: "Praha-Karlov 17.2 °C · 1.2 mm/h"
             }),
-            raw: expect.objectContaining({ station: expect.any(Object) })
+            raw: expect.objectContaining({ station: expect.any(Object), hourlyObservations: expect.any(Object) })
           })
         })
       })
@@ -1355,7 +1389,7 @@ describe("Situation Data API contract", () => {
       )
       .expect(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(grid.body.features).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
