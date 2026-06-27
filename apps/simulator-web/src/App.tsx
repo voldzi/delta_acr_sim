@@ -706,6 +706,7 @@ export function App() {
   const sharedCache = data.observability.situationData.payload.sharedCache;
   const sharedCacheTone: Tone =
     sharedCache?.enabled && sharedCache.available && sharedCache.errors === 0 ? "safe" : sharedCache?.enabled ? "warn" : "neutral";
+  const sharedCacheValue = sharedCache?.enabled ? (sharedCache.available ? tr("available") : tr("degraded")) : tr("local only");
   const observabilityLatencies = [
     data.observability.flightData.latencyMs,
     data.observability.situationData.latencyMs,
@@ -743,7 +744,7 @@ export function App() {
     },
     {
       label: "Shared cache",
-      value: sharedCache?.enabled ? (sharedCache.available ? "available" : "degraded") : "local only",
+      value: sharedCacheValue,
       detail: sharedCache ? `${formatPercentValue(sharedCache.hitRate)} ${tr("hit-rate")}, ${sharedCache.writes.toLocaleString(numberLocale)} ${tr("writes")}` : tr("no shared cache configured"),
       load: sharedCache?.enabled ? (sharedCache.available ? 92 : 45) : 28,
       tone: sharedCacheTone
@@ -791,7 +792,7 @@ export function App() {
       icon: <Signal />,
       label: "COP publisher",
       value: `${data.publisher.queueSize.toLocaleString(numberLocale)} ${tr("queued")}`,
-      detail: `${deliveryRate} ${tr("delivery")}, ${data.publisher.deadLetterSize} dead-letter`,
+      detail: `${deliveryRate} ${tr("delivery")}, ${formatDeadLetterCount(data.publisher.deadLetterSize, numberLocale, tr)}`,
       load: Math.max(boundedPercent(data.publisher.queueSize, 80), data.publisher.deadLetterSize > 0 ? 82 : 0),
       tone: queueTone
     }
@@ -857,7 +858,7 @@ export function App() {
       label: "Delivery queue",
       value: `${data.publisher.queueSize} ${tr("active")}`,
       tone: queueTone,
-      detail: `${data.publisher.deadLetterSize} dead-letter, ${data.queueTotalCount} ${tr("retained")}`
+      detail: `${formatDeadLetterCount(data.publisher.deadLetterSize, numberLocale, tr)}, ${data.queueTotalCount} ${tr("retained")}`
     },
     {
       icon: activePublishFailure ? <AlertTriangle /> : <CheckCircle2 />,
@@ -928,7 +929,8 @@ export function App() {
     setData(next);
     setLastRefreshAt(new Date().toISOString());
     if (next.warnings.length > 0) {
-      setNotice(createNotice("Dashboard degraded: {warning}", { warning: next.warnings[0] ?? "unknown warning" }));
+      const warning = next.warnings[0];
+      setNotice(warning ? createNotice("Dashboard degraded: {warning}", { warning }) : createNotice("Dashboard degraded."));
     }
     const nextSelection = preferredScenarioId || selectedScenarioId || next.runtime.scenarioId;
     if (nextSelection && next.scenarios.some((scenario) => scenario.scenarioId === nextSelection)) {
@@ -1342,7 +1344,7 @@ export function App() {
                 <div className="readiness-list compact">
                   <ReadinessItem icon={<CirclePlay />} label="Runtime" value={data.operations.runtime.state} detail={`${data.operations.runtime.tick ?? 0} ${tr("ticks")}, ${formatDuration(data.operations.runtime.elapsedSeconds ?? 0)} ${tr("elapsed")}`} tone={runtimeStateTone(data.operations.runtime.state)} />
                   <ReadinessItem icon={<RadioTower />} label="Publisher" value={data.operations.publisher.mode} detail={data.operations.publisher.publishingEnabled ? "adapter enabled" : "adapter stopped"} tone={publisherTone} />
-                  <ReadinessItem icon={<Database />} label="Queue" value={`${data.operations.publisher.queueSize} ${tr("active")}`} detail={`${data.operations.publisher.deadLetterSize} dead-letter`} tone={queueTone} />
+                  <ReadinessItem icon={<Database />} label="Queue" value={`${data.operations.publisher.queueSize} ${tr("active")}`} detail={formatDeadLetterCount(data.operations.publisher.deadLetterSize, numberLocale, tr)} tone={queueTone} />
                   <ReadinessItem icon={<Layers3 />} label="Scenarios" value={`${data.operations.scenarios.total}`} detail={`${data.operations.scenarios.active} ${tr("active")}, ${data.operations.scenarios.draft} ${tr("draft")}`} tone={data.operations.scenarios.active > 0 ? "active" : "neutral"} />
                 </div>
               </section>
@@ -1465,8 +1467,8 @@ export function App() {
             {selectedScenario ? (
               <div className="runtime-command-bar">
                 <div>
-                  <strong>{runtimeCommandTitle(selectedScenario, data.runtime)}</strong>
-                  <span>{runtimeCommandDetail(selectedScenario, data.runtime)}</span>
+                  <strong>{tr(runtimeCommandTitle(selectedScenario, data.runtime))}</strong>
+                  <span>{tr(runtimeCommandDetail(selectedScenario, data.runtime))}</span>
                 </div>
                 <div className="button-strip runtime-actions">
                   {!apiTokenConfigured ? <span className="command-note">{tr("Operator token required for runtime control.")}</span> : null}
@@ -1713,7 +1715,7 @@ export function App() {
                   <SummaryItem label="Cache entries" value={`${data.situationData.config.cacheMaxEntries}`} />
                   <SummaryItem
                     label="Shared cache"
-                    value={`${data.situationData.config.sharedCache.backend}${data.situationData.config.sharedCache.enabled ? " enabled" : " local only"}`}
+                    value={`${data.situationData.config.sharedCache.backend} ${data.situationData.config.sharedCache.enabled ? tr("enabled") : tr("local only")}`}
                   />
                   <SummaryItem label="BBox padding" value={`${data.situationData.config.bboxCachePaddingDegrees} deg`} />
                   <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
@@ -1853,7 +1855,7 @@ export function App() {
             <PanelTitle icon={<RadioTower />} title="COP publisher" subtitle="Delivery state and recent canonical events." />
             <div className="publisher-status">
               <StatusPill label={data.publisher.publishingEnabled ? "publishing enabled" : "publishing stopped"} tone={data.publisher.publishingEnabled ? "safe" : "danger"} />
-              <StatusPill label={`${data.publisher.deadLetterSize} dead-letter`} tone={data.publisher.deadLetterSize > 0 ? "danger" : "neutral"} />
+              <StatusPill label={formatDeadLetterCount(data.publisher.deadLetterSize, numberLocale, tr)} tone={data.publisher.deadLetterSize > 0 ? "danger" : "neutral"} />
             </div>
 
             <div className="publisher-stats">
@@ -3102,6 +3104,10 @@ function cacheLastEventLabel(cache: CacheDisplay): string {
     return formatTime(cache.lastErrorAt);
   }
   return cache.lastSuccessAt ? formatTime(cache.lastSuccessAt) : "-";
+}
+
+function formatDeadLetterCount(count: number, numberLocale: string, tr: (source: string) => string): string {
+  return `${count.toLocaleString(numberLocale)} ${tr("dead-letter events")}`;
 }
 
 function operationsStatusTitle(status: string): string {

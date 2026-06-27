@@ -19,6 +19,7 @@ const csTranslations: Record<string, string> = {
   "Alert inbox": "Přehled upozornění",
   "allowed": "povoleno",
   "Analyzed provider inventory": "Analyzovaný inventář providerů",
+  "Another scenario is active": "Je aktivní jiný scénář",
   "Ask the Keycloak administrator to assign a SIM role, then sign in again.":
     "Požádejte správce Keycloak o přiřazení role SIM a poté se znovu přihlaste.",
   "Auth": "Ověřit",
@@ -132,6 +133,7 @@ const csTranslations: Record<string, string> = {
   "Login required": "Vyžadováno přihlášení",
   "Login with Keycloak using csm-sim-operator or csm-sim-admin role.":
     "Přihlaste se přes Keycloak s rolí csm-sim-operator nebo csm-sim-admin.",
+  "local only": "pouze lokálně",
   "Max events": "Maximum událostí",
   "Mock provider, structured draft and human accept flow.": "Mock provider, strukturovaný návrh a ruční schválení.",
   "Monitor collected flight observations, deduplication, provider licenses and runtime settings.":
@@ -219,6 +221,8 @@ const csTranslations: Record<string, string> = {
   "rejected": "odmítnuto",
   "Resume": "Pokračovat",
   "Resume active scenario": "Pokračovat v aktivním scénáři",
+  "Resume live publishing, stop the runtime, or use deterministic step in advanced controls.":
+    "Obnovte živé publikování, zastavte runtime nebo použijte deterministický krok v pokročilém ovládání.",
   "Retained": "Uchováno",
   "Retention": "Retence",
   "Runtime": "Runtime",
@@ -332,8 +336,10 @@ const csTranslations: Record<string, string> = {
   "csm-sim-operator enables scenario runtime controls.": "csm-sim-operator zpřístupní ovládání běhu scénářů.",
   "csm-sim-viewer opens operational overview and provider details.": "csm-sim-viewer otevře provozní přehled a detaily providerů.",
   "Dashboard degraded": "Dashboard je degradovaný",
+  "Dashboard degraded.": "Dashboard je degradovaný.",
   "Dashboard degraded: {warning}": "Dashboard je degradovaný: {warning}",
   "Dashboard load failed.": "Načtení dashboardu selhalo.",
+  "dead-letter events": "dead-letter událostí",
   "dedup tracks": "deduplikovaných stop",
   "delivery": "doručení",
   "Delivery queue": "Doručovací fronta",
@@ -379,6 +385,8 @@ const csTranslations: Record<string, string> = {
   "Partner CoT ingest": "Partnerský CoT příjem",
   "Pause": "Pozastavit",
   "Pause active scenario": "Pozastavit aktivní scénář",
+  "Pause or stop the active feed, or inject a test connectivity fault.":
+    "Pozastavte nebo zastavte aktivní feed, případně vložte testovací poruchu konektivity.",
   "prepared scenarios": "připravených scénářů",
   "Pressure": "Tlak",
   "pressure": "tlak",
