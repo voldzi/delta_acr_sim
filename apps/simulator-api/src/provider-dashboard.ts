@@ -126,8 +126,7 @@ function providerSpecs(endpointKey: ProviderEndpoint["key"], options: ProviderDa
       specs.push(
         assignSpec("layers", "/api/v1/layers"),
         assignSpec("sources", "/api/v1/sources"),
-        assignSpec("config", "/api/v1/config"),
-        assignSpec("features", "/api/v1/features?limit=12")
+        assignSpec("config", "/api/v1/config")
       );
       break;
   }
