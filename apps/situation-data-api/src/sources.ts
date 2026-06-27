@@ -830,13 +830,11 @@ class ChmiWeatherStationsSource implements SituationDataSource {
     const metadata = await this.metadataCache.getOrLoad(metadataUrl, () => requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs));
     const stationFiles = chmiWeatherStationFileMap(dataIndex);
     const stationLimit = Math.max(1, Math.min(query.limit, this.config.chmiWeatherMaxStations));
-    const stations = selectSpatiallyBalancedChmiStations(
-      chmiWeatherStationsFromMetadata(metadata)
-        .filter((station) => isPointInBbox(station.lon, station.lat, query.bbox))
-        .filter((station) => stationFiles.has(station.stationId)),
-      query.bbox,
-      stationLimit
-    );
+    const stations = chmiWeatherStationsFromMetadata(metadata)
+      .filter((station) => isPointInBbox(station.lon, station.lat, query.bbox))
+      .filter((station) => stationFiles.has(station.stationId))
+      .sort(compareChmiWeatherStations)
+      .slice(0, stationLimit);
 
     const warnings: string[] = [];
     const selected = stations.flatMap((station) => {
@@ -3711,50 +3709,6 @@ function addSecondsIso(value: string, seconds: number): string | undefined {
 
 function distanceSquared(lonA: number, latA: number, lonB: number, latB: number): number {
   return (lonA - lonB) ** 2 + (latA - latB) ** 2;
-}
-
-function selectSpatiallyBalancedChmiStations(stations: ChmiWeatherStation[], bbox: BoundingBox, limit: number): ChmiWeatherStation[] {
-  if (stations.length <= limit) {
-    return [...stations].sort(compareChmiWeatherStations);
-  }
-  const center = bboxCenter(bbox);
-  const remaining = [...stations].sort(compareChmiWeatherStations);
-  const selected: ChmiWeatherStation[] = [];
-  const firstIndex = nearestStationIndex(remaining, center.lon, center.lat);
-  selected.push(...remaining.splice(firstIndex, 1));
-
-  while (selected.length < limit && remaining.length > 0) {
-    let bestIndex = 0;
-    let bestDistance = -1;
-    for (let index = 0; index < remaining.length; index += 1) {
-      const station = remaining[index]!;
-      const minDistance = selected.reduce(
-        (nearest, selectedStation) => Math.min(nearest, distanceSquared(station.lon, station.lat, selectedStation.lon, selectedStation.lat)),
-        Number.POSITIVE_INFINITY
-      );
-      if (minDistance > bestDistance) {
-        bestDistance = minDistance;
-        bestIndex = index;
-      }
-    }
-    selected.push(...remaining.splice(bestIndex, 1));
-  }
-
-  return selected.sort(compareChmiWeatherStations);
-}
-
-function nearestStationIndex(stations: ChmiWeatherStation[], lon: number, lat: number): number {
-  let bestIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let index = 0; index < stations.length; index += 1) {
-    const station = stations[index]!;
-    const distance = distanceSquared(station.lon, station.lat, lon, lat);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestIndex = index;
-    }
-  }
-  return bestIndex;
 }
 
 function compareChmiWeatherStations(a: ChmiWeatherStation, b: ChmiWeatherStation): number {
