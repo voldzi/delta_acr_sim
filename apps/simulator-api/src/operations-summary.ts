@@ -235,21 +235,24 @@ function serviceSummaryFromProviderResult(result: ProviderFetchResult): ServiceS
   const health = result.payloads.health;
   const observability = result.payloads.observability;
   const sourceHealth = mergedSourceHealth(health, observability);
-  const warnings = [
+  const healthStatus = stringValue(health?.status);
+  const observabilityStatus = stringValue(observability?.status);
+  const warnings = uniqueStrings([
     ...(result.error ? [result.error] : []),
+    ...(healthStatus && healthStatus !== "ok" ? [`health status ${healthStatus}`] : []),
+    ...(observabilityStatus && observabilityStatus !== "ok" ? [`observability status ${observabilityStatus}`] : []),
     ...sourceHealth.flatMap((source) => {
       const items: string[] = [];
       if (source.status && source.status !== "ok") {
         items.push(`${source.sourceId} status ${source.status}`);
       }
       return items;
-    })
-  ];
+    }),
+    ...sourceCacheWarnings(observability)
+  ]);
   const qualityWarnings = sourceHealth
     .filter((source) => source.warningCount > 0)
     .map((source) => sourceQualityWarning(source.sourceId, source.warningCount, source.warnings));
-  const healthStatus = stringValue(health?.status);
-  const observabilityStatus = stringValue(observability?.status);
   const status = result.error
     ? "critical"
     : healthStatus && healthStatus !== "ok"
@@ -276,6 +279,27 @@ function serviceSummaryFromProviderResult(result: ProviderFetchResult): ServiceS
     warningCount: warnings.length,
     warnings
   };
+}
+
+function sourceCacheWarnings(observability: Record<string, unknown> | undefined): string[] {
+  return arrayOfRecords(observability?.sourceCaches).flatMap((source) => {
+    const sourceId = stringValue(source.sourceId) ?? "source";
+    const cache = recordValue(source.cache);
+    const state = stringValue(cache?.state);
+    const errors = numberValue(cache?.errors) ?? 0;
+    const pressure = numberValue(cache?.pressure) ?? 0;
+    const warnings: string[] = [];
+    if (state && state !== "ok" && state !== "warm") {
+      warnings.push(`${sourceId} cache state ${state}`);
+    }
+    if (errors > 0) {
+      warnings.push(`${sourceId} cache has ${errors} error${errors === 1 ? "" : "s"}`);
+    }
+    if (pressure > 1) {
+      warnings.push(`${sourceId} cache pressure ${pressure.toFixed(2)}`);
+    }
+    return warnings;
+  });
 }
 
 interface MergedSourceHealth {
@@ -514,8 +538,8 @@ function serviceAlerts(service: ServiceSummary): OperationsAlert[] {
       ...alertMessage({
         actionCs: `Zkontrolujte health endpoint, logy služby ${service.label} a dostupnost jejích upstreamů.`,
         actionEn: `Check the health endpoint, ${service.label} logs and upstream availability.`,
-        detailCs: service.warnings.join("; ") || `${serviceLabelCs(service)} health není v pořádku.`,
-        detailEn: service.warnings.join("; ") || `${service.label} health is not ok.`,
+        detailCs: serviceWarningsDetail(service, "cs") || `${serviceLabelCs(service)} health není v pořádku.`,
+        detailEn: serviceWarningsDetail(service, "en") || `${service.label} health is not ok.`,
         impactCs: `${serviceLabelCs(service)} nemusí poskytovat data pro COP.`,
         impactEn: `${service.label} may not provide data to COP.`,
         titleCs: `${serviceLabelCs(service)} je nedostupná`,
@@ -531,8 +555,8 @@ function serviceAlerts(service: ServiceSummary): OperationsAlert[] {
       ...alertMessage({
         actionCs: `Zkontrolujte observability služby ${service.label}; pokud jde o plánovaně omezený zdroj, ponechte technický stav oddělený od datového upozornění.`,
         actionEn: `Check ${service.label} observability; if this is an intentionally limited source, keep technical state separate from data-quality notices.`,
-        detailCs: service.warnings.join("; ") || `${serviceLabelCs(service)} hlásí zhoršenou observability.`,
-        detailEn: service.warnings.join("; ") || `${service.label} reports degraded observability.`,
+        detailCs: serviceWarningsDetail(service, "cs") || `${serviceLabelCs(service)} hlásí zhoršenou observability.`,
+        detailEn: serviceWarningsDetail(service, "en") || `${service.label} reports degraded observability.`,
         impactCs: `${serviceLabelCs(service)} obsluhuje provoz, ale část provider cesty není plně zdravá.`,
         impactEn: `${service.label} is serving, but part of the provider path is not fully healthy.`,
         titleCs: `${serviceLabelCs(service)} je degradovaná`,
@@ -729,6 +753,61 @@ function serviceLabelCs(service: ServiceSummary): string {
       return "TAK Gateway";
     default:
       return service.label;
+  }
+}
+
+function serviceWarningsDetail(service: ServiceSummary, language: "cs" | "en"): string {
+  if (service.warnings.length === 0) {
+    return "";
+  }
+  return service.warnings.map((warning) => (language === "cs" ? localizeTechnicalWarningCs(warning) : warning)).join("; ");
+}
+
+function localizeTechnicalWarningCs(warning: string): string {
+  if (warning === "The operation was aborted due to timeout") {
+    return "operace byla ukončena kvůli timeoutu";
+  }
+  const healthStatus = warning.match(/^health status (.+)$/);
+  if (healthStatus?.[1]) {
+    return `health stav ${localizeStatusCs(healthStatus[1])}`;
+  }
+  const observabilityStatus = warning.match(/^observability status (.+)$/);
+  if (observabilityStatus?.[1]) {
+    return `observability stav ${localizeStatusCs(observabilityStatus[1])}`;
+  }
+  const sourceStatus = warning.match(/^(.+) status (.+)$/);
+  if (sourceStatus?.[1] && sourceStatus[2]) {
+    return `${sourceStatus[1]} stav ${localizeStatusCs(sourceStatus[2])}`;
+  }
+  const cacheState = warning.match(/^(.+) cache state (.+)$/);
+  if (cacheState?.[1] && cacheState[2]) {
+    return `${cacheState[1]} cache stav ${localizeStatusCs(cacheState[2])}`;
+  }
+  const cacheErrors = warning.match(/^(.+) cache has ([0-9]+) errors?$/);
+  if (cacheErrors) {
+    return `${cacheErrors[1]} cache hlásí ${cacheErrors[2]} chyb`;
+  }
+  const cachePressure = warning.match(/^(.+) cache pressure ([0-9.]+)$/);
+  if (cachePressure) {
+    return `${cachePressure[1]} cache tlak ${cachePressure[2]}`;
+  }
+  return warning;
+}
+
+function localizeStatusCs(status: string): string {
+  switch (status) {
+    case "critical":
+      return "kritický";
+    case "degraded":
+      return "degradovaný";
+    case "failed":
+      return "selhal";
+    case "ok":
+      return "v pořádku";
+    case "warm":
+      return "zahřátý";
+    default:
+      return status;
   }
 }
 
