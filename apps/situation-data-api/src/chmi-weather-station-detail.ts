@@ -166,7 +166,14 @@ export class ChmiWeatherStationDetailService {
       historyHours
     );
     const forecast = await this.loadForecast(station, forecastHours).catch(() => []);
-    const current = history.at(-1);
+    const currentObserved = [...history].reverse().find(
+      (point) =>
+        point.temperatureC !== undefined
+        || point.windSpeedMps !== undefined
+        || point.windGustMps !== undefined
+        || point.relativeHumidityPercent !== undefined
+        || point.precipitation10mMm !== undefined
+    );
     const hourlyCurrent = [...history].reverse().find(
       (point) =>
         point.presentWeatherCode !== undefined
@@ -175,6 +182,11 @@ export class ChmiWeatherStationDetailService {
         || point.precipitation1hMm !== undefined
         || point.sunshineDuration1hTenths !== undefined
     );
+    const current = compactObject({
+      ...(hourlyCurrent ?? {}),
+      ...(currentObserved ?? {}),
+      time: currentObserved?.time ?? hourlyCurrent?.time
+    }) as unknown as WeatherHistoryPoint;
 
     const presentation = chmiWeatherPresentation({
       stationName: station.name,
@@ -205,8 +217,8 @@ export class ChmiWeatherStationDetailService {
         elevationM: station.elevationM
       },
       current: {
-        observedAt: current?.time,
-        validUntil: current?.time ? addSeconds(current.time, 2 * 60 * 60) : undefined,
+        observedAt: current.time,
+        validUntil: current.time ? addSeconds(current.time, 2 * 60 * 60) : undefined,
         severity,
         metrics: current,
         display: weatherDisplay(station, presentation, severity)
