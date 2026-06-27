@@ -1965,16 +1965,21 @@ interface FeatureInput {
   headingDeg?: number;
   speedMps?: number;
   operator?: string;
+  preserveCoordinatePrecision?: boolean;
   raw?: unknown;
 }
 
 function makePointFeature(input: FeatureInput): SituationFeature {
+  const coordinates: [number, number] = input.preserveCoordinatePrecision
+    ? [input.lon, input.lat]
+    : [round(input.lon, 6), round(input.lat, 6)];
+
   return {
     type: "Feature",
     id: input.id,
     geometry: {
       type: "Point",
-      coordinates: [round(input.lon, 6), round(input.lat, 6)]
+      coordinates
     },
     properties: {
       featureId: input.id,
@@ -2883,6 +2888,7 @@ function mapChmiWeatherStationFeature(
     validUntil: addSeconds(observedAt, 2 * 60 * 60),
     confidence: chmiWeatherConfidence(observedAt, qualityCode),
     severity,
+    preserveCoordinatePrecision: true,
     metrics: compactMixedMetrics({
       temperatureC: observations.get("T")?.value,
       temperatureMaxC: observations.get("TMA")?.value,

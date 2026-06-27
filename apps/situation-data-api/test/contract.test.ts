@@ -1270,7 +1270,7 @@ describe("Situation Data API contract", () => {
             data: {
               data: {
                 header: "WSI,GH_ID,FULL_NAME,GEOGR1,GEOGR2,ELEVATION,BEGIN_DATE",
-                values: [["0-20000-0-11518", "ZIS11518", "Praha-Karlov", 14.42, 50.08, 260, "1900-01-01T00:00:00Z"]]
+                values: [["0-20000-0-11518", "ZIS11518", "Praha-Karlov", 14.4201234, 50.0805678, 260, "1900-01-01T00:00:00Z"]]
               }
             }
           }),
@@ -1312,6 +1312,7 @@ describe("Situation Data API contract", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(first.body.features).toHaveLength(1);
     expect(second.body.features).toHaveLength(1);
+    expect(first.body.features[0].geometry).toEqual({ type: "Point", coordinates: [14.4201234, 50.0805678] });
     expect(first.body.features[0]).toEqual(
       expect.objectContaining({
         id: "weather:chmi_weather_stations:0-20000-0-11518",
