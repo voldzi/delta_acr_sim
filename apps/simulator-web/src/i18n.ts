@@ -54,12 +54,14 @@ const csTranslations: Record<string, string> = {
   "Create Ukraine demo scenario": "Vytvořit ukrajinský demo scénář",
   "critical": "kritické",
   "critical / warning": "kritické / varování",
+  "critical / warning / notice": "kritické / varování / upozornění",
   "Current events": "Aktuální události",
   "Current settings": "Aktuální nastavení",
   "current": "aktuální",
   "Cursor-on-Target ingest and normalized COP feature projection for ARDOS/TAK partner data.":
     "Příjem Cursor-on-Target a normalizovaná COP projekce partnerských dat ARDOS/TAK.",
   "Data objects": "Datové objekty",
+  "data quality": "kvalita dat",
   "Data provider pilot": "Pilot datového poskytovatele",
   "Deduplicated tracks": "Deduplicitní stopy",
   "Default area": "Výchozí oblast",
@@ -95,6 +97,7 @@ const csTranslations: Record<string, string> = {
   "High-density demo scenario created.": "Zátěžový demo scénář byl vytvořen.",
   "Hydro station cap": "Limit hydro stanic",
   "Import freshness": "Aktuálnost importů",
+  "Impact": "Dopad",
   "ingest open": "příjem otevřený",
   "ingest protected": "příjem chráněný",
   "Ingest auth": "Auth příjmu",
@@ -139,6 +142,7 @@ const csTranslations: Record<string, string> = {
   "no auth": "bez auth",
   "no shared cache configured": "sdílená cache není nastavena",
   "not reported": "nehlášeno",
+  "notice": "upozornění",
   "Objects": "Objekty",
   "Official public warnings and hydrological observations prepared for COP map layers.":
     "Oficiální veřejné výstrahy a hydrologická pozorování připravená pro mapové vrstvy COP.",
@@ -148,6 +152,7 @@ const csTranslations: Record<string, string> = {
   "Only synthetic payloads are accepted by the CSM publisher.":
     "CSM publisher přijímá pouze syntetické payloady.",
   "Operation failed.": "Operace selhala.",
+  "operational check": "provozní kontrola",
   "Operations center": "Operační centrum",
   "Operations summary is not available.": "Provozní souhrn není dostupný.",
   "Operations summary unavailable": "Provozní souhrn není dostupný",
@@ -197,6 +202,7 @@ const csTranslations: Record<string, string> = {
   "Read-only runtime settings for CoT retention and COP projection.": "Read-only runtime nastavení retence CoT a projekce do COP.",
   "Ready for continuous synthetic movement.": "Připraveno na kontinuální syntetický pohyb.",
   "Ready to start": "Připraveno ke spuštění",
+  "Recommended action": "Doporučená akce",
   "Recent event flow": "Poslední tok událostí",
   "rejected": "odmítnuto",
   "Resume": "Pokračovat",
@@ -241,6 +247,7 @@ const csTranslations: Record<string, string> = {
   "SIM is an operational provider console. Internet access requires Keycloak authentication and an assigned SIM role.":
     "SIM je operační konzole providera. Internetový přístup vyžaduje autentizaci Keycloak a přiřazenou roli SIM.",
   "SIM is operational": "SIM je provozuschopný",
+  "simulation": "simulace",
   "SIM requires assigned Keycloak roles for internet access.":
     "SIM pro internetový přístup vyžaduje přiřazené role Keycloak.",
   "Simulator overview": "Přehled simulátoru",
@@ -278,6 +285,7 @@ const csTranslations: Record<string, string> = {
   "TAK Gateway source metadata is not available.": "Metadata zdroje TAK Gateway nejsou dostupná.",
   "TAK/ARDOS data is partner-provided and requires COP-side authorization.":
     "Data TAK/ARDOS poskytuje partner a vyžadují autorizaci na straně COP.",
+  "technical": "technické",
   "Test connection": "Otestovat spojení",
   "The selected scenario is not the one currently controlled by the runtime.":
     "Vybraný scénář není scénář aktuálně ovládaný runtime.",

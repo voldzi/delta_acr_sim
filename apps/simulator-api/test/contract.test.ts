@@ -557,6 +557,90 @@ describe("SIM API contract baseline", () => {
     expect(response.body.services.find((service: { serviceId: string }) => service.serviceId === "situation-data-api").objectCount).toBe(41929);
     expect(response.body.alerts).toEqual([]);
   });
+
+  it("keeps source data quality notices separate from technical service degradation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        const parsed = new URL(url);
+        if (parsed.port === "4020" && parsed.pathname === "/health/ready") {
+          return jsonResponse({
+            status: "ok",
+            timestamp: new Date().toISOString(),
+            enabledSources: ["mobile_network_model", "ctu_stationary_mobile"],
+            sourceHealth: [
+              {
+                sourceId: "mobile_network_model",
+                status: "ok",
+                objectCount: 3604,
+                warnings: [
+                  "ctu_stationary_mobile contains official historical measurements, not current BTS/NOC state.",
+                  "mobile_network_model has no authorized real-time BTS/NOC status feed."
+                ]
+              },
+              {
+                sourceId: "ctu_stationary_mobile",
+                status: "ok",
+                objectCount: 26939,
+                warnings: ["ctu_stationary_mobile contains official historical measurements, not current BTS/NOC state."]
+              }
+            ]
+          });
+        }
+        if (url.includes("/health/ready")) {
+          return jsonResponse({ status: "ok", timestamp: new Date().toISOString(), enabledSources: ["mock"] });
+        }
+        if (parsed.port === "4020" && parsed.pathname === "/api/v1/observability") {
+          return jsonResponse({
+            serviceId: "situation-data-api",
+            generatedAt: new Date().toISOString(),
+            status: "ok",
+            cache: { entries: 2, errors: 0, hitRate: 0.82, misses: 4, pressure: 0.01, state: "warm", staleHits: 0 },
+            dataFreshness: { sourceCount: 2, degradedSourceCount: 0, newestImportAgeSeconds: 12, oldestImportAgeSeconds: 8 * 24 * 60 * 60, warningCount: 3 },
+            sourceHealth: [
+              { sourceId: "mobile_network_model", status: "ok", objectCount: 3604, warningCount: 2 },
+              { sourceId: "ctu_stationary_mobile", status: "ok", objectCount: 26939, warningCount: 1 }
+            ]
+          });
+        }
+        return jsonResponse({
+          serviceId: "provider",
+          generatedAt: new Date().toISOString(),
+          status: "ok",
+          cache: { entries: 1, errors: 0, hitRate: 1, misses: 0, pressure: 0, state: "warm", staleHits: 0 },
+          dataFreshness: { sourceCount: 1, degradedSourceCount: 0, newestImportAgeSeconds: 5, oldestImportAgeSeconds: 5, warningCount: 0 }
+        });
+      })
+    );
+
+    const response = await request(app).get("/api/v1/operations/summary").expect(200);
+    const situationService = response.body.services.find((service: { serviceId: string }) => service.serviceId === "situation-data-api");
+
+    expect(response.body.status).toBe("ok");
+    expect(situationService.status).toBe("ok");
+    expect(situationService.warningCount).toBe(0);
+    expect(situationService.qualityWarningCount).toBe(3);
+    expect(situationService.qualityWarnings).toHaveLength(2);
+    expect(response.body.alerts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "data_quality",
+          code: "source_quality_mobile_network_inferred",
+          localized: expect.objectContaining({
+            title: { cs: "Vyhodnocení mobilní sítě je odhad", en: "Mobile network assessment is inferred" }
+          }),
+          severity: "info"
+        }),
+        expect.objectContaining({
+          category: "data_quality",
+          code: "source_quality_ctu_stationary_historical",
+          severity: "info"
+        })
+      ])
+    );
+    expect(response.body.alerts.filter((alert: { severity: string }) => alert.severity !== "info")).toEqual([]);
+  });
 });
 
 describe("SIM API security controls", () => {

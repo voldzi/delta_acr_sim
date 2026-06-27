@@ -12,6 +12,7 @@ import {
   ExternalLink,
   FlaskConical,
   Gauge,
+  Info,
   KeyRound,
   Layers3,
   LockKeyhole,
@@ -243,6 +244,10 @@ const NumberLocaleContext = createContext<string>("cs-CZ");
 function useUiText(): (source: string) => string {
   const language = useContext(UiLanguageContext);
   return useCallback((source: string) => translateUi(language, source), [language]);
+}
+
+function useUiLanguage(): UiLanguage {
+  return useContext(UiLanguageContext);
 }
 
 function useNumberLocale(): string {
@@ -881,12 +886,16 @@ export function App() {
   const operationsTone = operationsStatusTone(data.operations.status);
   const operationsCriticalCount = data.operations.alerts.filter((alert) => alert.severity === "critical").length;
   const operationsWarningCount = data.operations.alerts.filter((alert) => alert.severity === "warning").length;
+  const operationsNoticeCount = data.operations.alerts.filter((alert) => alert.severity === "info" || alert.category === "data_quality").length;
   const operationsHealthyServices = data.operations.services.filter((service) => service.status === "ok").length;
   const operationsDataObjects = data.operations.services.reduce((sum, service) => sum + (service.objectCount ?? 0), 0);
   const operationsEnabledSources = data.operations.services.reduce((sum, service) => sum + service.enabledSources.length, 0);
   const operationsCache = summarizeOperationsCache(data.operations.services);
   const operationsFreshness = summarizeOperationsFreshness(data.operations.services);
-  const activeOperationAlert = data.operations.alerts[0];
+  const activeOperationAlert = data.operations.alerts.find((alert) => alert.severity !== "info") ?? data.operations.alerts[0];
+  const activeOperationAlertTitle = activeOperationAlert
+    ? localizedOperatorText(uiLanguage, activeOperationAlert.title, activeOperationAlert.localized?.title)
+    : tr("Provider output is ready for COP server-side consumption.");
 
   const refresh = useCallback(async (preferredScenarioId?: string) => {
     if (!canReadDashboard) {
@@ -1261,7 +1270,7 @@ export function App() {
               </div>
 
               <div className="operations-metrics">
-                <OperationsMetricCard icon={<ShieldAlert />} label="Active alerts" value={`${operationsCriticalCount}/${operationsWarningCount}`} detail="critical / warning" tone={operationsCriticalCount > 0 ? "danger" : operationsWarningCount > 0 ? "warn" : "safe"} />
+                <OperationsMetricCard icon={<ShieldAlert />} label="Active alerts" value={`${operationsCriticalCount}/${operationsWarningCount}/${operationsNoticeCount}`} detail="critical / warning / notice" tone={operationsCriticalCount > 0 ? "danger" : operationsWarningCount > 0 ? "warn" : operationsNoticeCount > 0 ? "neutral" : "safe"} />
                 <OperationsMetricCard icon={<Server />} label="Services OK" value={`${operationsHealthyServices}/${data.operations.services.length || 4}`} detail={`${operationsEnabledSources} ${tr("enabled feeds")}`} tone={operationsHealthyServices === data.operations.services.length ? "safe" : operationsHealthyServices > 0 ? "warn" : "danger"} />
                 <OperationsMetricCard icon={<Database />} label="Data objects" value={operationsDataObjects.toLocaleString(numberLocale)} detail="latest provider inventory" tone="active" />
                 <OperationsMetricCard icon={<TimerReset />} label="Cache hit-rate" value={formatPercentValue(operationsCache.hitRate)} detail={`${operationsCache.errors} ${tr("cache errors")}`} tone={operationsCache.errors > 0 ? "warn" : operationsCache.hitRate >= 0.75 ? "safe" : "neutral"} />
@@ -1271,7 +1280,7 @@ export function App() {
 
             <section className="operations-layout" aria-label={tr("Operations workbench")}>
               <section className="ops-panel alert-inbox">
-                <PanelTitle icon={<AlertTriangle />} title="Alert inbox" subtitle={`${operationsCriticalCount} ${tr("critical")} · ${operationsWarningCount} ${tr("warning")}`} />
+                <PanelTitle icon={<AlertTriangle />} title="Alert inbox" subtitle={`${operationsCriticalCount} ${tr("critical")} · ${operationsWarningCount} ${tr("warning")} · ${operationsNoticeCount} ${tr("notice")}`} />
                 {data.operations.alerts.length > 0 ? (
                   <div className="alert-list">
                     {data.operations.alerts.slice(0, 6).map((alert) => (
@@ -1317,7 +1326,7 @@ export function App() {
               </section>
 
               <section className="ops-panel feed-readiness-panel">
-                <PanelTitle icon={<Signal />} title="COP data plane" subtitle={activeOperationAlert ? activeOperationAlert.title : "Provider output is ready for COP server-side consumption."} />
+                <PanelTitle icon={<Signal />} title="COP data plane" subtitle={activeOperationAlertTitle} />
                 <div className="feed-signal-grid">
                   <FeedSignal label="Flight" service={data.operations.services.find((service) => service.serviceId === "flight-data-api")} icon={<Plane />} />
                   <FeedSignal label="Situation" service={data.operations.services.find((service) => service.serviceId === "situation-data-api")} icon={<Layers3 />} />
@@ -2143,35 +2152,76 @@ function OperationsMetricCard({ icon, label, value, detail, tone }: { icon: Reac
 }
 
 function OperationsAlertRow({ alert }: { alert: OperationsSummary["alerts"][number] }) {
-  const tone: Tone = alert.severity === "critical" ? "danger" : "warn";
+  const language = useUiLanguage();
+  const tr = useUiText();
+  const tone: Tone = alert.severity === "critical" ? "danger" : alert.severity === "warning" ? "warn" : "neutral";
+  const title = localizedOperatorText(language, alert.title, alert.localized?.title);
+  const detail = localizedOperatorText(language, alert.detail, alert.localized?.detail);
+  const impact = localizedOperatorText(language, alert.impact ?? "", alert.localized?.impact);
+  const action = localizedOperatorText(language, alert.action ?? "", alert.localized?.action);
   return (
     <div className={`alert-row ${tone}`}>
-      <div className="alert-row-icon">{alert.severity === "critical" ? <AlertTriangle /> : <ShieldAlert />}</div>
+      <div className="alert-row-icon">{alert.severity === "critical" ? <AlertTriangle /> : alert.severity === "warning" ? <ShieldAlert /> : <Info />}</div>
       <div>
-        <strong>{alert.title}</strong>
-        <span>{alert.detail}</span>
+        <strong>{title}</strong>
+        <span>{detail}</span>
+        {impact ? (
+          <small>
+            <b>{tr("Impact")}:</b> {impact}
+          </small>
+        ) : null}
+        {action ? (
+          <small>
+            <b>{tr("Recommended action")}:</b> {action}
+          </small>
+        ) : null}
       </div>
-      <StatusPill label={alert.serviceId ?? "sim"} tone={tone} />
+      <div className="alert-row-tags">
+        <StatusPill label={operationAlertCategoryLabel(alert.category)} tone={tone} />
+        <StatusPill label={alert.serviceId ?? "sim"} tone={tone} />
+      </div>
     </div>
   );
 }
 
 function OperationsServiceRow({ service }: { service: OperationsSummaryService }) {
-  const tone = operationsStatusTone(service.status);
+  const tr = useUiText();
+  const tone = service.status === "ok" && service.qualityWarningCount > 0 ? "warn" : operationsStatusTone(service.status);
   const numberLocale = useNumberLocale();
   return (
     <div className={`service-row ${tone}`} role="row">
       <div>
         <strong>{service.label}</strong>
-        <span>{service.serviceId}</span>
+        <span>
+          {service.serviceId}
+          {service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : ""}
+        </span>
       </div>
-      <StatusPill label={service.status} tone={tone} />
+      <StatusPill label={service.status} tone={operationsStatusTone(service.status)} />
       <span>{formatLatencyMs(service.latencyMs)}</span>
       <span>{typeof service.objectCount === "number" ? service.objectCount.toLocaleString(numberLocale) : "-"}</span>
       <span>{service.cache ? `${formatPercentValue(service.cache.hitRate ?? 0)} · ${service.cache.state ?? "cache"}` : "-"}</span>
       <span>{freshnessLabel(service)}</span>
     </div>
   );
+}
+
+function localizedOperatorText(language: UiLanguage, fallback: string, localized?: { cs: string; en: string }): string {
+  return localized?.[language] ?? fallback;
+}
+
+function operationAlertCategoryLabel(category: OperationsSummary["alerts"][number]["category"]): string {
+  switch (category) {
+    case "data_quality":
+      return "data quality";
+    case "operational_check":
+      return "operational check";
+    case "simulation":
+      return "simulation";
+    case "technical":
+    default:
+      return "technical";
+  }
 }
 
 function ReadinessItem({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: Tone }) {
@@ -2189,14 +2239,15 @@ function ReadinessItem({ icon, label, value, detail, tone }: { icon: ReactNode; 
 }
 
 function FeedSignal({ icon, label, service }: { icon: ReactNode; label: string; service?: OperationsSummaryService }) {
-  const tone = operationsStatusTone(service?.status ?? "unknown");
+  const tone = service?.status === "ok" && (service.qualityWarningCount ?? 0) > 0 ? "warn" : operationsStatusTone(service?.status ?? "unknown");
   const tr = useUiText();
+  const qualityDetail = service && service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : "";
   return (
     <div className={`feed-signal ${tone}`}>
       <div>{icon}</div>
       <span>{tr(label)}</span>
       <strong>{tr(service?.status ?? "unknown")}</strong>
-      <small>{service ? `${service.enabledSources.length} ${tr("feeds")} · ${formatLatencyMs(service.latencyMs)}` : tr("not reported")}</small>
+      <small>{service ? `${service.enabledSources.length} ${tr("feeds")} · ${formatLatencyMs(service.latencyMs)}${qualityDetail}` : tr("not reported")}</small>
     </div>
   );
 }

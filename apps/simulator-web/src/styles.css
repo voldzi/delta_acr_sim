@@ -588,8 +588,19 @@ button svg {
   color: var(--danger);
 }
 
+.alert-row.neutral {
+  border-color: rgba(59, 91, 126, 0.18);
+  background: #fbfdff;
+}
+
+.alert-row.neutral .alert-row-icon {
+  background: rgba(59, 91, 126, 0.09);
+  color: var(--active);
+}
+
 .alert-row strong,
-.alert-row span {
+.alert-row span,
+.alert-row small {
   display: block;
 }
 
@@ -598,6 +609,25 @@ button svg {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.35;
+}
+
+.alert-row small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.alert-row small b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.alert-row-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .empty-state.calm {
@@ -2333,6 +2363,11 @@ button svg {
   .alert-row .status-pill {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .alert-row-tags {
+    grid-column: 2;
+    justify-content: flex-start;
   }
 
   .service-row {

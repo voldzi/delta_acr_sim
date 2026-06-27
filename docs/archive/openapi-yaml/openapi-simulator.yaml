@@ -1309,7 +1309,7 @@ components:
               type: string
     OperationsServiceSummary:
       type: object
-      required: [enabledSources, label, latencyMs, serviceId, status, warningCount, warnings]
+      required: [enabledSources, label, latencyMs, serviceId, status, qualityWarningCount, qualityWarnings, warningCount, warnings]
       properties:
         serviceId:
           type: string
@@ -1337,6 +1337,13 @@ components:
           type: array
           items:
             type: string
+        qualityWarningCount:
+          type: integer
+          minimum: 0
+        qualityWarnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationsQualityWarning'
         cache:
           $ref: '#/components/schemas/OperationsCacheSummary'
         sharedCache:
@@ -1404,19 +1411,73 @@ components:
           minimum: 0
     OperationsAlert:
       type: object
-      required: [code, detail, severity, title]
+      required: [category, code, detail, localized, severity, title]
       properties:
+        action:
+          type: string
+        category:
+          type: string
+          enum: [technical, data_quality, simulation, operational_check]
         code:
           type: string
         detail:
           type: string
+        impact:
+          type: string
+        localized:
+          $ref: '#/components/schemas/LocalizedOperatorMessage'
         serviceId:
           type: string
         severity:
           type: string
-          enum: [warning, critical]
+          enum: [info, warning, critical]
         title:
           type: string
+    OperationsQualityWarning:
+      type: object
+      required: [action, code, detail, impact, localized, messages, sourceId, title, warningCount]
+      properties:
+        action:
+          type: string
+        code:
+          type: string
+        detail:
+          type: string
+        impact:
+          type: string
+        localized:
+          $ref: '#/components/schemas/LocalizedOperatorMessage'
+        messages:
+          type: array
+          items:
+            type: string
+        sourceId:
+          type: string
+        title:
+          type: string
+        warningCount:
+          type: integer
+          minimum: 0
+    LocalizedText:
+      type: object
+      required: [cs, en]
+      properties:
+        cs:
+          type: string
+        en:
+          type: string
+    LocalizedOperatorMessage:
+      type: object
+      required: [detail, title]
+      properties:
+        action:
+          $ref: '#/components/schemas/LocalizedText'
+        detail:
+          $ref: '#/components/schemas/LocalizedText'
+        impact:
+          $ref: '#/components/schemas/LocalizedText'
+        title:
+          $ref: '#/components/schemas/LocalizedText'
     HealthResponse:
       type: object
       properties:

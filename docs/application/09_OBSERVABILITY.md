@@ -50,6 +50,18 @@ Tyto endpointy vrací pouze provozně bezpečný souhrn:
 - import age / freshness: nejnovější a nejstarší dostupný import age, počet degradovaných zdrojů a quality warningů,
 - TAK store: počty current/stale/invalid/dropped/auth failures/parse errors bez raw payloadů.
 
+`GET /api/v1/operations/summary` odděluje technický stav služby od
+interpretační kvality dat. Technické problémy mají `category=technical` a
+`severity=warning|critical`; ty ovlivňují souhrnný status `degraded` nebo
+`critical`. Datová omezení zdrojů, například historická měření ČTÚ nebo
+odhadovaný stav mobilní sítě bez live BTS/NOC feedu, jsou vrácena jako
+`category=data_quality` a `severity=info`. Tato upozornění zůstávají viditelná
+operátorovi, ale sama o sobě nesnižují technický status služby.
+
+Všechny operační alerty nesou anglický text v `title/detail/impact/action` a
+lokalizované texty v `localized.{title,detail,impact,action}.{cs,en}`. SIM web
+zobrazuje text podle zvoleného jazyka operátora.
+
 ## Metriky
 
 - generated events/s

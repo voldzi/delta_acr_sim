@@ -4793,6 +4793,8 @@
           "latencyMs",
           "serviceId",
           "status",
+          "qualityWarningCount",
+          "qualityWarnings",
           "warningCount",
           "warnings"
         ],
@@ -4837,6 +4839,16 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          },
+          "qualityWarningCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "qualityWarnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SimulatorOperationsQualityWarning"
             }
           },
           "cache": {
@@ -4935,17 +4947,37 @@
       "SimulatorOperationsAlert": {
         "type": "object",
         "required": [
+          "category",
           "code",
           "detail",
+          "localized",
           "severity",
           "title"
         ],
         "properties": {
+          "action": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "technical",
+              "data_quality",
+              "simulation",
+              "operational_check"
+            ]
+          },
           "code": {
             "type": "string"
           },
           "detail": {
             "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "localized": {
+            "$ref": "#/components/schemas/SimulatorLocalizedOperatorMessage"
           },
           "serviceId": {
             "type": "string"
@@ -4953,12 +4985,96 @@
           "severity": {
             "type": "string",
             "enum": [
+              "info",
               "warning",
               "critical"
             ]
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "SimulatorOperationsQualityWarning": {
+        "type": "object",
+        "required": [
+          "action",
+          "code",
+          "detail",
+          "impact",
+          "localized",
+          "messages",
+          "sourceId",
+          "title",
+          "warningCount"
+        ],
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "localized": {
+            "$ref": "#/components/schemas/SimulatorLocalizedOperatorMessage"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "warningCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SimulatorLocalizedText": {
+        "type": "object",
+        "required": [
+          "cs",
+          "en"
+        ],
+        "properties": {
+          "cs": {
+            "type": "string"
+          },
+          "en": {
+            "type": "string"
+          }
+        }
+      },
+      "SimulatorLocalizedOperatorMessage": {
+        "type": "object",
+        "required": [
+          "detail",
+          "title"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/SimulatorLocalizedText"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/SimulatorLocalizedText"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/SimulatorLocalizedText"
+          },
+          "title": {
+            "$ref": "#/components/schemas/SimulatorLocalizedText"
           }
         }
       },

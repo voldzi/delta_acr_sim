@@ -760,6 +760,39 @@ export interface DashboardObservability {
 }
 
 export type OperationsSummaryStatus = "ok" | "degraded" | "critical" | "unknown";
+export type OperationsAlertSeverity = "info" | "warning" | "critical";
+export type OperationsAlertCategory = "technical" | "data_quality" | "simulation" | "operational_check";
+
+export interface LocalizedOperatorMessage {
+  action?: {
+    cs: string;
+    en: string;
+  };
+  detail: {
+    cs: string;
+    en: string;
+  };
+  impact?: {
+    cs: string;
+    en: string;
+  };
+  title: {
+    cs: string;
+    en: string;
+  };
+}
+
+export interface OperationsQualityWarning {
+  action: string;
+  code: string;
+  detail: string;
+  impact: string;
+  localized: LocalizedOperatorMessage;
+  messages: string[];
+  sourceId: string;
+  title: string;
+  warningCount: number;
+}
 
 export interface OperationsSummaryService {
   cache?: {
@@ -792,15 +825,21 @@ export interface OperationsSummaryService {
     state?: string;
   };
   status: OperationsSummaryStatus;
+  qualityWarningCount: number;
+  qualityWarnings: OperationsQualityWarning[];
   warningCount: number;
   warnings: string[];
 }
 
 export interface OperationsSummaryAlert {
+  action?: string;
+  category: OperationsAlertCategory;
   code: string;
   detail: string;
+  impact?: string;
+  localized: LocalizedOperatorMessage;
   serviceId?: string;
-  severity: "warning" | "critical";
+  severity: OperationsAlertSeverity;
   title: string;
 }
 
