@@ -68,6 +68,11 @@ Všechny operační alerty nesou anglický text v `title/detail/impact/action` a
 lokalizované texty v `localized.{title,detail,impact,action}.{cs,en}`. SIM web
 zobrazuje text podle zvoleného jazyka operátora.
 
+Globální hlášení SIM webu jsou interně uložená jako překladový zdroj a
+parametry, ne jako jednorázově přeložený řetězec. Při přepnutí jazyka se proto
+aktuální notice, role warningy a výsledky operátorských akcí vykreslí znovu v
+češtině nebo angličtině bez ztráty kontextu.
+
 ## Metriky
 
 - generated events/s

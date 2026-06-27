@@ -212,6 +212,11 @@ interface CacheDisplay {
   state?: string;
 }
 
+interface NoticeState {
+  params?: Record<string, string>;
+  source: string;
+}
+
 const copDisplayUrl = import.meta.env.VITE_COP_DISPLAY_URL ?? "https://cop.zeleznalady.cz";
 const ownAffiliations = new Set(["FRIEND", "ASSUMED_FRIEND"]);
 const foreignAffiliations = new Set(["HOSTILE", "SUSPECT"]);
@@ -225,35 +230,26 @@ const simRoleLabels: Record<SimRole, string> = {
   SIM_AI_ADMIN: "AI admin"
 };
 
-const translatableNoticeSources = [
-  "Ready for continuous synthetic movement.",
-  "Demo scenario created.",
-  "High-density demo scenario created.",
-  "Ukraine air-defense demo scenario created.",
-  "Scenario started. Moving tracks are published every second.",
-  "Scenario paused.",
-  "Scenario stopped.",
-  "Scenario resumed.",
-  "Connectivity fault added.",
-  "One deterministic movement step generated.",
-  "Publisher connection checked.",
-  "Queue cleared.",
-  "AI draft generated.",
-  "AI draft accepted as scenario.",
-  operatorTokenRequiredNotice,
-  invalidOperatorTokenNotice,
-  "Publisher administration requires csm-sim-admin role.",
-  "AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role.",
-  "Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details.",
-  "Enter a valid SIM API token to access scenario control and source details.",
-  "Login with Keycloak using csm-sim-operator or csm-sim-admin role."
-] as const;
+function createNotice(source: string, params?: Record<string, string>): NoticeState {
+  return { source, params };
+}
 
-function translateKnownNotice(currentNotice: string, language: UiLanguage): string {
-  const source = translatableNoticeSources.find(
-    (candidate) => currentNotice === translateUi("cs", candidate) || currentNotice === translateUi("en", candidate)
-  );
-  return source ? translateUi(language, source) : currentNotice;
+function renderNotice(notice: NoticeState, tr: (source: string) => string): string {
+  let message = tr(notice.source);
+  for (const [key, value] of Object.entries(notice.params ?? {})) {
+    message = message.replaceAll(`{${key}}`, value);
+  }
+  return message;
+}
+
+function noticeFromError(error: unknown, fallbackSource = "Operation failed."): NoticeState {
+  if (!(error instanceof Error)) {
+    return createNotice(fallbackSource);
+  }
+  if (error.message.includes("Missing or invalid bearer token")) {
+    return createNotice(invalidOperatorTokenNotice);
+  }
+  return createNotice(error.message || fallbackSource);
 }
 
 const UiLanguageContext = createContext<UiLanguage>("cs");
@@ -536,11 +532,10 @@ export function App() {
   const [activeSection, setActiveSection] = useState<AppSection>("overview");
   const [aiPrompt, setAiPrompt] = useState("Create a 15 minute synthetic air situation latency test with aircraft, UAV and missile tracks.");
   const [draft, setDraft] = useState<AiDraft | null>(null);
-  const [notice, setNotice] = useState<string>(() => tr("Ready for continuous synthetic movement."));
+  const [notice, setNotice] = useState<NoticeState>(() => createNotice("Ready for continuous synthetic movement."));
   const changeUiLanguage = useCallback((language: UiLanguage) => {
     setUiLanguage(language);
     storeUiLanguage(language);
-    setNotice((currentNotice) => translateKnownNotice(currentNotice, language));
   }, []);
   const [loading, setLoading] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
@@ -602,14 +597,16 @@ export function App() {
   const canAdministerPublisher = tokenAccessReady || hasAdminRole;
   const canUseAiAssistant = tokenAccessReady || hasAiRole || hasAiAdminRole || hasAdminRole;
   const visibleSection = protectedSectionsUnlocked ? activeSection : "overview";
-  const protectedSectionNotice = oidcEnabled
-    ? tr("Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details.")
-    : tr("Enter a valid SIM API token to access scenario control and source details.");
-  const operatorActionDisabled = loading || !canManageScenarios || !apiTokenConfigured;
-  const operatorAuthRequiredNotice = oidcEnabled
-    ? tr("Login with Keycloak using csm-sim-operator or csm-sim-admin role.")
-    : tr(operatorTokenRequiredNotice);
-  const noticeIsWarning = /required|invalid|failed|degraded|missing|error|vyžad|neplat|selhal|zhorš|chyb|varov/i.test(notice);
+  const protectedSectionNoticeSource = oidcEnabled
+    ? "Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details."
+    : "Enter a valid SIM API token to access scenario control and source details.";
+  const operatorAuthRequiredNoticeSource = oidcEnabled
+    ? "Login with Keycloak using csm-sim-operator or csm-sim-admin role."
+    : operatorTokenRequiredNotice;
+  const protectedSectionNotice = tr(protectedSectionNoticeSource);
+  const operatorAuthRequiredNotice = tr(operatorAuthRequiredNoticeSource);
+  const renderedNotice = renderNotice(notice, tr);
+  const noticeIsWarning = /required|invalid|failed|degraded|missing|error|vyžad|neplat|selhal|zhorš|chyb|varov/i.test(renderedNotice);
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
   const situationDataTone: Tone =
@@ -623,6 +620,7 @@ export function App() {
         ? "warn"
         : "safe"
       : "danger";
+  const operatorActionDisabled = loading || !canManageScenarios || !apiTokenConfigured;
   const elevatedSafetyCount =
     data.safetyData.features.summary.advisoryCount +
     data.safetyData.features.summary.warningCount +
@@ -930,7 +928,7 @@ export function App() {
     setData(next);
     setLastRefreshAt(new Date().toISOString());
     if (next.warnings.length > 0) {
-      setNotice(`${tr("Dashboard degraded")}: ${next.warnings[0]}`);
+      setNotice(createNotice("Dashboard degraded: {warning}", { warning: next.warnings[0] ?? "unknown warning" }));
     }
     const nextSelection = preferredScenarioId || selectedScenarioId || next.runtime.scenarioId;
     if (nextSelection && next.scenarios.some((scenario) => scenario.scenarioId === nextSelection)) {
@@ -1033,14 +1031,14 @@ export function App() {
         }
         setAuthSession(session);
         if (session.status === "authenticated") {
-          setNotice(`Signed in as ${session.profile?.username ?? "Keycloak user"}.`);
+          setNotice(createNotice("Signed in as {username}.", { username: session.profile?.username ?? "Keycloak user" }));
         } else if (session.status === "error") {
-          setNotice(session.error ?? "Keycloak sign-in failed.");
+          setNotice(createNotice(session.error ?? "Keycloak sign-in failed."));
         }
       })
       .catch((error) => {
         if (!cancelled) {
-          setNotice(error instanceof Error ? error.message : "Keycloak initialization failed.");
+          setNotice(noticeFromError(error, "Keycloak initialization failed."));
         }
       });
     return () => {
@@ -1060,7 +1058,7 @@ export function App() {
     if (!canReadDashboard) {
       return undefined;
     }
-    void refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
+    void refresh().catch((error) => setNotice(noticeFromError(error, "Dashboard load failed.")));
     const interval = window.setInterval(() => {
       void refresh().catch(() => undefined);
     }, 5000);
@@ -1069,7 +1067,7 @@ export function App() {
 
   useEffect(() => {
     if (authSession.status === "authenticated") {
-      void refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
+      void refresh().catch((error) => setNotice(noticeFromError(error, "Dashboard load failed.")));
     }
   }, [authSession.status, authSession.accessToken, refresh]);
 
@@ -1080,11 +1078,11 @@ export function App() {
     }
     if (activeSection === "ai" && protectedSectionsUnlocked && !canUseAiAssistant) {
       setActiveSection("overview");
-      setNotice("AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role.");
+      setNotice(createNotice("AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role."));
     }
     if (activeSection === "publisher" && protectedSectionsUnlocked && !canAdministerPublisher) {
       setActiveSection("overview");
-      setNotice("Publisher administration requires csm-sim-admin role.");
+      setNotice(createNotice("Publisher administration requires csm-sim-admin role."));
     }
   }, [activeSection, canAdministerPublisher, canUseAiAssistant, protectedSectionsUnlocked]);
 
@@ -1100,22 +1098,22 @@ export function App() {
   async function saveApiToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!manualTokenLoginAllowed) {
-      setNotice("Fallback SIM token login is disabled for this deployment.");
+      setNotice(createNotice("Fallback SIM token login is disabled for this deployment."));
       return;
     }
     setSimApiToken(apiTokenInput);
     setApiTokenInput("");
     setApiTokenConfigured(hasSimAuthorizationToken());
     setManualTokenConfigured(manualTokenLoginAllowed && hasSimApiToken());
-    setNotice("SIM fallback token saved.");
-    await refresh().catch((error) => setNotice(error instanceof Error ? error.message : "Dashboard load failed."));
+    setNotice(createNotice("SIM fallback token saved."));
+    await refresh().catch((error) => setNotice(noticeFromError(error, "Dashboard load failed.")));
   }
 
   async function forgetApiToken() {
     clearSimApiToken();
     setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
     setManualTokenConfigured(false);
-    setNotice(authConfig.publicReadEnabled ? "SIM fallback token cleared. Read-only monitoring remains available." : "SIM fallback token cleared.");
+    setNotice(createNotice(authConfig.publicReadEnabled ? "SIM fallback token cleared. Read-only monitoring remains available." : "SIM fallback token cleared."));
     await refresh().catch(() => undefined);
   }
 
@@ -1123,7 +1121,7 @@ export function App() {
     if (canManageScenarios && apiTokenConfigured) {
       return true;
     }
-    setNotice(protectedSectionsUnlocked ? operatorAuthRequiredNotice : protectedSectionNotice);
+    setNotice(createNotice(protectedSectionsUnlocked ? operatorAuthRequiredNoticeSource : protectedSectionNoticeSource));
     return false;
   }
 
@@ -1142,31 +1140,30 @@ export function App() {
   function selectSection(section: AppSection): void {
     if (section !== "overview" && !protectedSectionsUnlocked) {
       setActiveSection("overview");
-      setNotice(protectedSectionNotice);
+      setNotice(createNotice(protectedSectionNoticeSource));
       return;
     }
     if (section === "publisher" && !canAdministerPublisher) {
       setActiveSection("overview");
-      setNotice(tr("Publisher administration requires csm-sim-admin role."));
+      setNotice(createNotice("Publisher administration requires csm-sim-admin role."));
       return;
     }
     if (section === "ai" && !canUseAiAssistant) {
       setActiveSection("overview");
-      setNotice(tr("AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role."));
+      setNotice(createNotice("AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role."));
       return;
     }
     setActiveSection(section);
   }
 
-  async function runAction<T>(message: string, action: () => Promise<T>) {
+  async function runAction<T>(messageSource: string, action: () => Promise<T>) {
     setLoading(true);
     try {
       const result = await action();
-      setNotice(message);
+      setNotice(createNotice(messageSource));
       await refresh(typeof result === "string" ? result : undefined);
     } catch (error) {
-      const message = error instanceof Error ? error.message : tr("Operation failed.");
-      setNotice(message.includes("Missing or invalid bearer token") ? tr(invalidOperatorTokenNotice) : message);
+      setNotice(noticeFromError(error));
     } finally {
       setLoading(false);
     }
@@ -1263,7 +1260,7 @@ export function App() {
 
         <div className={`notice notice-global ${noticeIsWarning ? "warn" : ""}`} role="status">
           {noticeIsWarning ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{notice}</span>
+          <span>{renderedNotice}</span>
         </div>
 
         {!canReadDashboard ? (
@@ -1377,7 +1374,7 @@ export function App() {
                 type="button"
                 onClick={() =>
                   requireOperatorToken() &&
-                  runAction(tr("Demo scenario created."), async () => {
+                  runAction("Demo scenario created.", async () => {
                     const created = await createScenario(demoScenario);
                     setSelectedScenarioId(created.scenarioId);
                     return created.scenarioId;
@@ -1392,7 +1389,7 @@ export function App() {
                 type="button"
                 onClick={() =>
                   requireOperatorToken() &&
-                  runAction(tr("High-density demo scenario created."), async () => {
+                  runAction("High-density demo scenario created.", async () => {
                     const created = await createScenario(denseDemoScenario);
                     setSelectedScenarioId(created.scenarioId);
                     return created.scenarioId;
@@ -1407,7 +1404,7 @@ export function App() {
                 type="button"
                 onClick={() =>
                   requireOperatorToken() &&
-                  runAction(tr("Ukraine air-defense demo scenario created."), async () => {
+                  runAction("Ukraine air-defense demo scenario created.", async () => {
                     const created = await createScenario(ukraineAirDefenseDemoScenario);
                     setSelectedScenarioId(created.scenarioId);
                     return created.scenarioId;
@@ -1483,7 +1480,7 @@ export function App() {
                       onClick={() =>
                         selectedScenario.scenarioId &&
                         requireOperatorToken() &&
-                        runAction(tr("Scenario started. Moving tracks are published every second."), () =>
+                        runAction("Scenario started. Moving tracks are published every second.", () =>
                           runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
                         )
                       }
@@ -1499,7 +1496,7 @@ export function App() {
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
-                          runAction(tr("Scenario paused."), () => runtimeAction(selectedScenario.scenarioId!, "pause"))
+                          runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))
                         }
                       />
                       <ActionButton
@@ -1510,7 +1507,7 @@ export function App() {
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
-                          runAction(tr("Scenario stopped."), () => runtimeAction(selectedScenario.scenarioId!, "stop"))
+                          runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
                         }
                       />
                       <ActionButton
@@ -1521,7 +1518,7 @@ export function App() {
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
-                          runAction(tr("Connectivity fault added."), () => addConnectivityFault(selectedScenario.scenarioId!))
+                          runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
                         }
                       />
                     </>
@@ -1536,7 +1533,7 @@ export function App() {
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
-                          runAction(tr("Scenario resumed."), () => runtimeAction(selectedScenario.scenarioId!, "resume"))
+                          runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))
                         }
                       />
                       <ActionButton
@@ -1547,7 +1544,7 @@ export function App() {
                         onClick={() =>
                           selectedScenario.scenarioId &&
                           requireOperatorToken() &&
-                          runAction(tr("Scenario stopped."), () => runtimeAction(selectedScenario.scenarioId!, "stop"))
+                          runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
                         }
                       />
                     </>
@@ -1568,7 +1565,7 @@ export function App() {
                     onClick={() =>
                       selectedScenario.scenarioId &&
                       requireOperatorToken() &&
-                      runAction(tr("One deterministic movement step generated."), () => runtimeAction(selectedScenario.scenarioId!, "step"))
+                      runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))
                     }
                   />
                   <ActionButton
@@ -1579,7 +1576,7 @@ export function App() {
                     onClick={() =>
                       selectedScenario.scenarioId &&
                       requireOperatorToken() &&
-                      runAction(tr("Connectivity fault added."), () => addConnectivityFault(selectedScenario.scenarioId!))
+                      runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
                     }
                   />
                 </div>
@@ -1866,10 +1863,10 @@ export function App() {
             </div>
 
             <div className="button-strip compact">
-              <button type="button" onClick={() => runAction(tr("Publisher connection checked."), testPublisher)} disabled={loading || !canAdministerPublisher}>
+              <button type="button" onClick={() => runAction("Publisher connection checked.", testPublisher)} disabled={loading || !canAdministerPublisher}>
                 <FlaskConical size={16} /> {tr("Test connection")}
               </button>
-              <button type="button" onClick={() => runAction(tr("Queue cleared."), clearQueue)} disabled={loading || !canAdministerPublisher || data.queueTotalCount === 0}>
+              <button type="button" onClick={() => runAction("Queue cleared.", clearQueue)} disabled={loading || !canAdministerPublisher || data.queueTotalCount === 0}>
                 <Trash2 size={16} /> {tr("Clear queue")}
               </button>
             </div>
@@ -1895,10 +1892,10 @@ export function App() {
             <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
             <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
             <div className="button-strip compact">
-              <button type="button" disabled={loading || !canUseAiAssistant} onClick={() => runAction(tr("AI draft generated."), async () => setDraft(await createAiDraft(aiPrompt)))}>
+              <button type="button" disabled={loading || !canUseAiAssistant} onClick={() => runAction("AI draft generated.", async () => setDraft(await createAiDraft(aiPrompt)))}>
                 <Bot size={16} /> {tr("Generate draft")}
               </button>
-              <button type="button" disabled={!draft || !draft.policyCheck.allowed || loading || !canUseAiAssistant} onClick={() => draft && runAction(tr("AI draft accepted as scenario."), () => acceptAiDraft(draft.draftId))}>
+              <button type="button" disabled={!draft || !draft.policyCheck.allowed || loading || !canUseAiAssistant} onClick={() => draft && runAction("AI draft accepted as scenario.", () => acceptAiDraft(draft.draftId))}>
                 <ShieldCheck size={16} /> {tr("Accept draft")}
               </button>
             </div>
@@ -1998,7 +1995,7 @@ export function App() {
 
             <div className="notice">
               <CirclePause size={16} />
-              <span>{notice}</span>
+              <span>{renderedNotice}</span>
             </div>
           </section>
           ) : null}

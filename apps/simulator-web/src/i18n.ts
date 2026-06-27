@@ -85,6 +85,7 @@ const csTranslations: Record<string, string> = {
   "Enter a valid SIM API token to access scenario control and source details.":
     "Pro ovládání scénářů a detail zdrojů zadejte platný SIM API token.",
   "Fallback SIM token": "Záložní SIM token",
+  "Fallback SIM token login is disabled for this deployment.": "Přihlášení záložním SIM tokenem je v tomto nasazení vypnuté.",
   "Fallback token": "Záložní token",
   "Features": "Prvky",
   "Flight": "Letectví",
@@ -112,7 +113,9 @@ const csTranslations: Record<string, string> = {
   "Internet access protected": "Internetový přístup je chráněný",
   "Keycloak account does not grant SIM console access": "Účet Keycloak nemá přístup do konzole SIM",
   "Keycloak gate": "Brána Keycloak",
+  "Keycloak initialization failed.": "Inicializace Keycloak selhala.",
   "Keycloak login": "Přihlášení Keycloak",
+  "Keycloak sign-in failed.": "Přihlášení přes Keycloak selhalo.",
   "Language": "Jazyk",
   "Last ingest": "Poslední příjem",
   "Last result age": "Stáří posledního výsledku",
@@ -250,9 +253,14 @@ const csTranslations: Record<string, string> = {
   "Sign in to CSM SIM": "Přihlášení do CSM SIM",
   "Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details.":
     "Pro přístup k chráněným detailům se přihlaste přes Keycloak rolí SIM viewer, operator nebo admin.",
+  "Signed in as {username}.": "Přihlášen jako {username}.",
   "Sign out": "Odhlásit",
   "Signing in": "Přihlašování",
   "SIM API token": "SIM API token",
+  "SIM fallback token cleared.": "Záložní SIM token byl odstraněn.",
+  "SIM fallback token cleared. Read-only monitoring remains available.":
+    "Záložní SIM token byl odstraněn. Read-only monitoring zůstává dostupný.",
+  "SIM fallback token saved.": "Záložní SIM token byl uložen.",
   "SIM is an operational provider console. Internet access requires Keycloak authentication and an assigned SIM role.":
     "SIM je operační konzole providera. Internetový přístup vyžaduje autentizaci Keycloak a přiřazenou roli SIM.",
   "SIM is operational": "SIM je provozuschopný",
@@ -296,6 +304,8 @@ const csTranslations: Record<string, string> = {
     "Data TAK/ARDOS poskytuje partner a vyžadují autorizaci na straně COP.",
   "technical": "technické",
   "Test connection": "Otestovat spojení",
+  "The operation was aborted due to timeout": "Operace byla ukončena kvůli timeoutu",
+  "The operation was aborted due to timeout.": "Operace byla ukončena kvůli timeoutu.",
   "The selected scenario is not the one currently controlled by the runtime.":
     "Vybraný scénář není scénář aktuálně ovládaný runtime.",
   "Timeout": "Timeout",
@@ -322,6 +332,8 @@ const csTranslations: Record<string, string> = {
   "csm-sim-operator enables scenario runtime controls.": "csm-sim-operator zpřístupní ovládání běhu scénářů.",
   "csm-sim-viewer opens operational overview and provider details.": "csm-sim-viewer otevře provozní přehled a detaily providerů.",
   "Dashboard degraded": "Dashboard je degradovaný",
+  "Dashboard degraded: {warning}": "Dashboard je degradovaný: {warning}",
+  "Dashboard load failed.": "Načtení dashboardu selhalo.",
   "dedup tracks": "deduplikovaných stop",
   "delivery": "doručení",
   "Delivery queue": "Doručovací fronta",
