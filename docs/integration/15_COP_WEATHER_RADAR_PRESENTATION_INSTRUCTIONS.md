@@ -37,6 +37,14 @@ SIM publishes ČHMÚ weather cameras as the catalog layer
 `public.weather.webcams` backed by provider layer `weather.chmi_webcams` and
 feature layer `weather_webcams`.
 
+Each webcam feature must be treated as its own layer, not as a weather-station
+observation:
+
+- `properties.layer = "weather_webcams"`
+- `properties.layerId = "public.weather.webcams"`
+- `properties.providerLayerId = "weather.chmi_webcams"`
+- `properties.sourceId = "chmi_weather_webcams"`
+
 COP should render webcam features as selectable point icons. The feature stream
 does not contain image payloads. On click, COP should open its own camera
 preview window and use one of these SIM-provided URLs:

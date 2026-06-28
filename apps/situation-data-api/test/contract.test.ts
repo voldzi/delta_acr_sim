@@ -350,6 +350,8 @@ describe("Situation Data API contract", () => {
         geometry: { type: "Point", coordinates: [14.445358, 50.00751] },
         properties: expect.objectContaining({
           layer: "weather_webcams",
+          layerId: "public.weather.webcams",
+          providerLayerId: "weather.chmi_webcams",
           category: "weather_webcam",
           iconHint: "camera",
           rendering: { mode: "feature", geometryRole: "feature_geometry" },

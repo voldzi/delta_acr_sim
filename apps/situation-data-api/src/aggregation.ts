@@ -152,6 +152,9 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
     }
     return "air_quality.chmi_station_observations";
   }
+  if (sourceId === "chmi_weather_webcams") {
+    return "weather.chmi_webcams";
+  }
   if (sourceId === "chmi_weather_radar") {
     if (layer === "weather_radar_reflectivity") {
       return "weather.radar_reflectivity";
@@ -240,6 +243,8 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.weather.aviation";
     case "weather.chmi_station_observations":
       return "public.weather.observations";
+    case "weather.chmi_webcams":
+      return "public.weather.webcams";
     case "weather.temperature_grid":
       return "public.weather.temperature_grid";
     case "weather.wind_field":
