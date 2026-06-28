@@ -25,7 +25,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         label: "Krizové výstrahy",
         description: "Obecné veřejné krizové výstrahy z normalizovaných veřejných zdrojů.",
         categoryPath: ["safety", "warnings"],
-        categories: ["safety_warning", "disaster_alert", "public_warning"],
+        categories: ["safety_warning", "disaster_alert", "public_warning", "road_incident"],
         role: "overlay",
         audience: "public",
         kind: "vector_features",
@@ -37,14 +37,16 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 300,
         cacheTtlSeconds: config.cacheTtlSeconds,
         styleProfile: "safety-warning-v1",
-        sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents"],
-        query: query(["warnings"], ["chmi_alerts", "gdacs_alerts", "hzs_incidents"]),
+        sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents", "road_srti_lod"],
+        query: query(["warnings"], ["chmi_alerts", "gdacs_alerts", "hzs_incidents", "road_srti_lod"]),
         notificationPolicy: notificationPolicy("warning"),
         legal: {
-          attribution: "Czech Hydrometeorological Institute (CHMI), Global Disaster Alert and Coordination System (GDACS), Hasičský záchranný sbor České republiky",
+          attribution:
+            "Czech Hydrometeorological Institute (CHMI), Global Disaster Alert and Coordination System (GDACS), Hasičský záchranný sbor České republiky, Ředitelství silnic a dálnic / NDIC",
           notes: [
             "Vrstva obsahuje jen reálné veřejné výstrahy, katastrofické alerty a veřejné probíhající HZS výjezdy; technická varování zdrojů patří do provozního dohledu.",
             "HZS public feed může vynechávat přesnou GPS polohu; COP má v detailu zobrazit locationPrecision/locationConfidence.",
+            "Silniční SRTI/NDIC události jsou do této vrstvy promítnuté jen jako dopravně-bezpečnostní warningy; plná dopravní vrstva zůstává v situation-data.",
             "GDACS je strategický krizový kontext; lokální opatření je nutné ověřovat přes IZS a příslušné orgány."
           ]
         }
@@ -291,6 +293,15 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         feedsLayerIds: ["safety.warnings", "safety.fire"],
         feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"],
         notes: ["Public HZS active dispatch source for ongoing incidents; SIM exposes type, subtype, status, unit, locality and explicit location precision."]
+      };
+    case "road_srti_lod":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        feedsLayerIds: ["safety.warnings"],
+        feedsCatalogLayerIds: ["public.safety.warnings"],
+        notes: ["Public NDIC/RSD SRTI road-safety event source projected into warnings with normalized Czech and English operator text."]
       };
     case "admin_boundaries":
       return {

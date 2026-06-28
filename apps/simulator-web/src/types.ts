@@ -427,7 +427,15 @@ export interface SituationDataFeatureResponse {
 }
 
 export type SafetyLayerId = "weather_alerts" | "warnings" | "fire" | "flood" | "boundary_admin";
-export type SafetyDataSourceId = "mock" | "chmi_alerts" | "chmi_hydro" | "nasa_firms" | "admin_boundaries";
+export type SafetyDataSourceId =
+  | "mock"
+  | "chmi_alerts"
+  | "chmi_hydro"
+  | "nasa_firms"
+  | "gdacs_alerts"
+  | "hzs_incidents"
+  | "road_srti_lod"
+  | "admin_boundaries";
 
 export interface SafetyDataHealth {
   status: string;

@@ -273,6 +273,7 @@ IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json
 SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
 ROAD_SRTI_LOD_SPARQL_URL=https://lod.tamtamresearch.com/sparql/
 SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=300
+SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=300
 ROAD_SRTI_LOD_MAX_RECORDS=1500
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
@@ -337,7 +338,7 @@ OVERPASS_MAX_BBOX_DEGREES=1.6
 CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
 PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
-SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,admin_boundaries
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries
 CHMI_ORP_CODELIST_URL=https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1
 CHMI_HYDRO_MAX_STATIONS=${CHMI_HYDRO_MAX_STATIONS_VALUE}
 CHMI_HYDRO_STATION_CACHE_MAX_ENTRIES=${CHMI_HYDRO_STATION_CACHE_MAX_ENTRIES_VALUE}

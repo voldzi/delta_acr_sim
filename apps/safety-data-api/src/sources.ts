@@ -102,6 +102,19 @@ const HZS_INCIDENTS_LICENSE: SafetyDataLicense = {
   ]
 };
 
+const ROAD_SRTI_LOD_LICENSE: SafetyDataLicense = {
+  name: "NDIC/ŘSD SRTI Linked Open Data",
+  url: "https://lod.tamtamresearch.com/docs/",
+  attribution: "Ředitelství silnic a dálnic / NDIC; LOD conversion by TamTam Research",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Safety-related road traffic information from NDIC/ŘSD transformed from DATEX II to Linked Open Data.",
+    "SIM caches the SPARQL source server-side and exposes only normalized warning features to COP.",
+    "Use as public traffic-safety context; operational decisions must rely on police, IZS and road authority channels."
+  ]
+};
+
 const ADMIN_BOUNDARY_SEED_LICENSE: SafetyDataLicense = {
   name: "SIM seed administrative boundary reference",
   attribution: "CSM SIM",
@@ -134,6 +147,7 @@ export function createSafetyDataSources(config: SafetyDataConfig): SafetyDataSou
     nasa_firms: new NasaFirmsSource(config),
     gdacs_alerts: new GdacsAlertsSource(config),
     hzs_incidents: new HzsIncidentsSource(config),
+    road_srti_lod: new RoadSrtiLodWarningsSource(config),
     admin_boundaries: new AdminBoundarySource(config)
   };
 
@@ -149,6 +163,7 @@ export function allSourceDescriptors(config: SafetyDataConfig): SourceDescriptor
     new NasaFirmsSource(config).descriptor,
     new GdacsAlertsSource(config).descriptor,
     new HzsIncidentsSource(config).descriptor,
+    new RoadSrtiLodWarningsSource(config).descriptor,
     new AdminBoundarySource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
@@ -983,6 +998,50 @@ class HzsIncidentsSource implements SafetyDataSource {
   }
 }
 
+class RoadSrtiLodWarningsSource implements SafetyDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly responseCache: ManagedResponseCache<RoadSrtiLodEvent[]>;
+
+  constructor(private readonly config: SafetyDataConfig) {
+    this.responseCache = new ManagedResponseCache<RoadSrtiLodEvent[]>({
+      ttlMs: Math.max(60, config.roadSrtiLodCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(600, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
+    this.descriptor = {
+      sourceId: "road_srti_lod",
+      label: "NDIC/ŘSD traffic safety events",
+      enabled: config.enabledSources.includes("road_srti_lod"),
+      mode: "live",
+      priority: 58,
+      layers: ["warnings"],
+      license: ROAD_SRTI_LOD_LICENSE,
+      baseUrl: config.roadSrtiLodSparqlUrl,
+      updateCadenceSeconds: config.roadSrtiLodCacheTtlSeconds
+    };
+  }
+
+  async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("warnings")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const events = await this.responseCache.getOrLoad("road_srti_lod_recent", () => fetchRoadSrtiLodEvents(this.config));
+    const features = events
+      .map((event) => mapRoadSrtiLodWarning(event, query, fetchedAt))
+      .filter((feature): feature is SafetyFeature => Boolean(feature))
+      .slice(0, query.limit)
+      .map((feature) => stripRawIfNeeded(feature, query.includeRaw));
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("road_srti_lod", [this.responseCache])];
+  }
+}
+
 class AdminBoundarySource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<AdminBoundaryRow[]>;
@@ -1157,6 +1216,27 @@ interface HzsBoundaryPointRow {
   country_code: string | null;
   lon: number;
   lat: number;
+}
+
+interface RoadSrtiLodEvent {
+  iri: string;
+  typeUri: string;
+  typeLabel: string;
+  observedAt: string;
+  lon: number;
+  lat: number;
+  wkt: string;
+  raw: Record<string, unknown>;
+}
+
+interface SparqlResults {
+  results?: {
+    bindings?: Array<Record<string, SparqlBindingValue>>;
+  };
+}
+
+interface SparqlBindingValue {
+  value?: string;
 }
 
 interface ChmiOrpCodelistEntry {
@@ -2503,6 +2583,121 @@ function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, ge
   );
 }
 
+function mapRoadSrtiLodWarning(event: RoadSrtiLodEvent, query: SafetyQuery, fetchedAt: string): SafetyFeature | undefined {
+  if (!isPointInBbox(event.lon, event.lat, query.bbox)) {
+    return undefined;
+  }
+  const classification = classifyRoadSrtiEvent(event.typeLabel);
+  if (!classification) {
+    return undefined;
+  }
+  const ageSeconds = Math.max(0, Math.round((Date.parse(fetchedAt) - Date.parse(event.observedAt)) / 1000));
+  const validUntil = addSeconds(event.observedAt, 2 * 60 * 60);
+  const descriptionCs = `${classification.descriptionCs} Poloha je reprezentativní bod z geometrie SRTI/DATEX II.`;
+  const descriptionEn = `${classification.descriptionEn} Location is a representative point derived from SRTI/DATEX II geometry.`;
+
+  return makePointFeature({
+    id: `warnings:road_srti_lod:${stableToken(event.iri)}`,
+    lon: event.lon,
+    lat: event.lat,
+    layer: "warnings",
+    category: classification.category,
+    hazardType: "road_incident",
+    typeCode: classification.typeCode,
+    sourceCode: classification.sourceCode,
+    sourceSystem: "NDIC_SRTI_LOD",
+    headline: classification.headlineCs,
+    description: descriptionCs,
+    recommendedAction: classification.recommendedActionCs,
+    sourceId: "road_srti_lod",
+    sourceName: "NDIC/ŘSD traffic safety events",
+    license: ROAD_SRTI_LOD_LICENSE,
+    observedAt: event.observedAt,
+    effectiveAt: event.observedAt,
+    expiresAt: validUntil,
+    validFrom: event.observedAt,
+    validUntil,
+    updatedAt: fetchedAt,
+    confidence: classification.confidence,
+    severity: classification.severity,
+    status: "active",
+    urgency: classification.severity === "warning" || classification.severity === "critical" ? "immediate" : "expected",
+    certainty: "observed",
+    areaName: "silniční síť",
+    affectedArea: "silniční síť",
+    iconHint: "road-warning",
+    basis: ["ndic_srti_lod", classification.typeCode],
+    metrics: compactMetrics({
+      ageSeconds
+    }),
+    tags: compactTags({
+      srtiType: event.typeLabel,
+      srtiTypeUri: event.typeUri,
+      locationPrecision: "source_geometry_representative_point",
+      sourceSystem: "ndic_srti_lod"
+    }),
+    localized: {
+      cs: {
+        headline: classification.headlineCs,
+        description: descriptionCs,
+        recommendedAction: classification.recommendedActionCs
+      },
+      en: {
+        headline: classification.headlineEn,
+        description: descriptionEn,
+        recommendedAction: classification.recommendedActionEn
+      }
+    },
+    providerProperties: {
+      roadSrti: {
+        situationRecord: event.iri,
+        type: event.typeLabel,
+        typeUri: event.typeUri,
+        geometryWkt: event.wkt
+      }
+    },
+    raw: query.includeRaw ? event.raw : undefined
+  });
+}
+
+async function fetchRoadSrtiLodEvents(config: SafetyDataConfig): Promise<RoadSrtiLodEvent[]> {
+  const limit = Math.max(100, Math.min(config.roadSrtiLodMaxRecords, 5000));
+  const query = `
+PREFIX dtx_srti: <http://cef.uv.es/lodroadtran18/def/transporte/dtx_srti#>
+PREFIX geosparql: <http://www.opengis.net/ont/geosparql#>
+SELECT DISTINCT ?SituationRecord ?Type ?VersionTime ?GeometryWKT WHERE {
+  ?SituationRecord a ?Type ;
+    dtx_srti:situationRecordVersionTime ?VersionTime ;
+    geosparql:hasGeometry / geosparql:asWKT ?GeometryWKT .
+}
+ORDER BY DESC(?VersionTime)
+LIMIT ${limit}
+`;
+  const results = await requestSparqlJson(config.roadSrtiLodSparqlUrl, query, config.requestTimeoutMs);
+  return (results.results?.bindings ?? [])
+    .map((binding): RoadSrtiLodEvent | undefined => {
+      const iri = sparqlValue(binding, "SituationRecord");
+      const typeUri = sparqlValue(binding, "Type");
+      const observedAt = normalizeSparqlTimestamp(sparqlValue(binding, "VersionTime"));
+      const wkt = sparqlValue(binding, "GeometryWKT");
+      const point = wkt ? representativePointFromWkt(wkt) : undefined;
+      if (!iri || !typeUri || !observedAt || !wkt || !point) {
+        return undefined;
+      }
+      return {
+        iri,
+        typeUri,
+        typeLabel: roadSrtiLabel(typeUri),
+        observedAt,
+        wkt,
+        lon: point.lon,
+        lat: point.lat,
+        raw: binding
+      };
+    })
+    .filter((event): event is RoadSrtiLodEvent => Boolean(event));
+}
+
 function classifyHzsIncident(type: string, subtype: string | undefined, description: string | undefined): {
   primaryLayer: SafetyLayerId;
   category: string;
@@ -2532,6 +2727,118 @@ function classifyHzsIncident(type: string, subtype: string | undefined, descript
     return { primaryLayer: "warnings", category: "false_alarm", hazardType: "false_alarm", typeCode: "HZS_FALSE_ALARM", severity: "info", confidence: 0.84, iconHint: "info" };
   }
   return { primaryLayer: "warnings", category: "emergency_incident", hazardType: "emergency_incident", typeCode: "HZS_INCIDENT", severity: "advisory", confidence: 0.78, iconHint: "warning" };
+}
+
+function classifyRoadSrtiEvent(typeLabel: string):
+  | {
+      category: string;
+      typeCode: string;
+      sourceCode: string;
+      headlineCs: string;
+      headlineEn: string;
+      descriptionCs: string;
+      descriptionEn: string;
+      recommendedActionCs: string;
+      recommendedActionEn: string;
+      severity: SafetySeverity;
+      confidence: number;
+    }
+  | undefined {
+  const normalized = typeLabel.toLowerCase().replace(/\s+/g, "");
+  const actionCs = "Ověřte průjezdnost v oficiálních dopravních kanálech a zvažte objízdnou trasu.";
+  const actionEn = "Verify passability through official traffic channels and consider an alternate route.";
+
+  if (normalized.includes("accident")) {
+    return {
+      category: "road_accident",
+      typeCode: "road.accident",
+      sourceCode: "SRTI_ACCIDENT",
+      headlineCs: "Dopravní nehoda",
+      headlineEn: "Road traffic accident",
+      descriptionCs: "NDIC/ŘSD eviduje dopravní nehodu nebo incident s dopadem na provoz.",
+      descriptionEn: "NDIC/RSD reports a road accident or incident affecting traffic.",
+      recommendedActionCs: actionCs,
+      recommendedActionEn: actionEn,
+      severity: "warning",
+      confidence: 0.86
+    };
+  }
+  if (normalized.includes("closure") || normalized.includes("blocked")) {
+    return {
+      category: "road_closure",
+      typeCode: "road.closure",
+      sourceCode: "SRTI_ROAD_CLOSURE",
+      headlineCs: "Uzavírka nebo blokace silnice",
+      headlineEn: "Road closure or blockage",
+      descriptionCs: "NDIC/ŘSD eviduje uzavírku, blokaci nebo omezení průjezdu.",
+      descriptionEn: "NDIC/RSD reports a closure, blockage or passability restriction.",
+      recommendedActionCs: actionCs,
+      recommendedActionEn: actionEn,
+      severity: "warning",
+      confidence: 0.84
+    };
+  }
+  if (normalized.includes("obstruction")) {
+    return {
+      category: "road_obstruction",
+      typeCode: "road.obstruction",
+      sourceCode: "SRTI_ROAD_OBSTRUCTION",
+      headlineCs: "Překážka na silnici",
+      headlineEn: "Road obstruction",
+      descriptionCs: "NDIC/ŘSD eviduje překážku nebo nebezpečí v silničním provozu.",
+      descriptionEn: "NDIC/RSD reports an obstruction or road traffic hazard.",
+      recommendedActionCs: actionCs,
+      recommendedActionEn: actionEn,
+      severity: "advisory",
+      confidence: 0.82
+    };
+  }
+  if (normalized.includes("weather") || normalized.includes("condition")) {
+    return {
+      category: "road_weather",
+      typeCode: "road.weather_condition",
+      sourceCode: "SRTI_ROAD_WEATHER",
+      headlineCs: "Nebezpečné podmínky na vozovce",
+      headlineEn: "Hazardous road conditions",
+      descriptionCs: "NDIC/ŘSD eviduje počasím nebo stavem vozovky ovlivněnou dopravní událost.",
+      descriptionEn: "NDIC/RSD reports a weather-related or road-surface traffic safety event.",
+      recommendedActionCs: "Přizpůsobte jízdu stavu vozovky a sledujte oficiální dopravní informace.",
+      recommendedActionEn: "Adapt driving to road conditions and monitor official traffic information.",
+      severity: "advisory",
+      confidence: 0.8
+    };
+  }
+  if (normalized.includes("abnormaltraffic") || normalized.includes("traffic")) {
+    return {
+      category: "road_traffic_abnormal",
+      typeCode: "road.abnormal_traffic",
+      sourceCode: "SRTI_ABNORMAL_TRAFFIC",
+      headlineCs: "Mimořádná dopravní situace",
+      headlineEn: "Abnormal traffic situation",
+      descriptionCs: "NDIC/ŘSD eviduje mimořádnou dopravní situaci s možným dopadem na průjezdnost.",
+      descriptionEn: "NDIC/RSD reports an abnormal traffic situation with potential passability impact.",
+      recommendedActionCs: actionCs,
+      recommendedActionEn: actionEn,
+      severity: "advisory",
+      confidence: 0.76
+    };
+  }
+  if (normalized.includes("roadwork") || normalized.includes("maintenance") || normalized.includes("construction")) {
+    return {
+      category: "roadworks",
+      typeCode: "road.roadworks",
+      sourceCode: "SRTI_ROADWORKS",
+      headlineCs: "Práce na silnici",
+      headlineEn: "Roadworks",
+      descriptionCs: "NDIC/ŘSD eviduje práce na silnici nebo údržbu s možným dopadem na provoz.",
+      descriptionEn: "NDIC/RSD reports roadworks or maintenance with possible traffic impact.",
+      recommendedActionCs: actionCs,
+      recommendedActionEn: actionEn,
+      severity: "info",
+      confidence: 0.74
+    };
+  }
+  return undefined;
 }
 
 function hzsRequestedLayers(primaryLayer: SafetyLayerId, requestedLayers: SafetyLayerId[]): SafetyLayerId[] {
@@ -3068,6 +3375,65 @@ function parseGdacsBbox(value: string | undefined): BoundingBox | undefined {
     return undefined;
   }
   return { west, south, east, north };
+}
+
+async function requestSparqlJson(baseUrl: string, query: string, timeoutMs: number): Promise<SparqlResults> {
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      accept: "application/sparql-results+json,application/json",
+      "content-type": "application/x-www-form-urlencoded",
+      "user-agent": "CSM-SIM/0.1 safety-data-api"
+    },
+    body: new URLSearchParams({ query, format: "application/sparql-results+json" }),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new HttpRequestError(`POST ${baseUrl} failed with ${response.status}`, baseUrl, response.status);
+  }
+  return (await response.json()) as SparqlResults;
+}
+
+function sparqlValue(binding: Record<string, SparqlBindingValue>, key: string): string | undefined {
+  return optionalString(binding[key]?.value);
+}
+
+function representativePointFromWkt(wkt: string): { lon: number; lat: number } | undefined {
+  const coordinatePairs = Array.from(wkt.matchAll(/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)(?:\s+-?\d+(?:\.\d+)?)?/g))
+    .map((match) => ({ lon: Number(match[1]), lat: Number(match[2]) }))
+    .filter((point) => Number.isFinite(point.lon) && Number.isFinite(point.lat));
+  if (coordinatePairs.length === 0) {
+    return undefined;
+  }
+  const sum = coordinatePairs.reduce(
+    (acc, point) => ({
+      lon: acc.lon + point.lon,
+      lat: acc.lat + point.lat
+    }),
+    { lon: 0, lat: 0 }
+  );
+  return {
+    lon: sum.lon / coordinatePairs.length,
+    lat: sum.lat / coordinatePairs.length
+  };
+}
+
+function roadSrtiLabel(value: string): string {
+  const localName = decodeURIComponent(value.split(/[\/#]/).filter(Boolean).pop() ?? value);
+  return localName
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+}
+
+function normalizeSparqlTimestamp(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+  const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 function intersectBbox(a: BoundingBox, b: BoundingBox): BoundingBox {

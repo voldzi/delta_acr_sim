@@ -57,6 +57,9 @@ describe("Safety Data API contract", () => {
       hzsIncidentsCacheTtlSeconds: 180,
       hzsIncidentsDetailCacheTtlSeconds: 1800,
       hzsIncidentsMaxActiveDetails: 50,
+      roadSrtiLodSparqlUrl: "https://lod.tamtamresearch.com/sparql/",
+      roadSrtiLodCacheTtlSeconds: 300,
+      roadSrtiLodMaxRecords: 1500,
       chmiOrpCodelistUrl:
         "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
       adminBoundaryTable: "public.osm_admin_boundary",
@@ -67,6 +70,7 @@ describe("Safety Data API contract", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     await rm(dataDir, { recursive: true, force: true });
   });
 
@@ -114,6 +118,10 @@ describe("Safety Data API contract", () => {
           layers: expect.arrayContaining(["warnings", "fire"])
         }),
         expect.objectContaining({
+          sourceId: "road_srti_lod",
+          layers: expect.arrayContaining(["warnings"])
+        }),
+        expect.objectContaining({
           sourceId: "admin_boundaries",
           layers: expect.arrayContaining(["boundary_admin"])
         })
@@ -145,6 +153,7 @@ describe("Safety Data API contract", () => {
           expect.objectContaining({ sourceId: "nasa_firms", authConfigured: false }),
           expect.objectContaining({ sourceId: "gdacs_alerts", authConfigured: true }),
           expect.objectContaining({ sourceId: "hzs_incidents", authConfigured: true }),
+          expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
           expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: false })
         ])
       })
@@ -172,9 +181,9 @@ describe("Safety Data API contract", () => {
         expect.objectContaining({
           providerLayerId: "safety.warnings",
           recommendedCatalogLayerId: "public.safety.warnings",
-          categories: expect.arrayContaining(["disaster_alert"]),
+          categories: expect.arrayContaining(["disaster_alert", "road_incident"]),
           role: "overlay",
-          sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents"]
+          sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents", "road_srti_lod"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.weather_alerts",
@@ -247,6 +256,12 @@ describe("Safety Data API contract", () => {
           sourceRole: "final",
           feedsLayerIds: ["safety.warnings", "safety.fire"],
           feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"]
+        }),
+        expect.objectContaining({
+          sourceId: "road_srti_lod",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.warnings"],
+          feedsCatalogLayerIds: ["public.safety.warnings"]
         }),
         expect.objectContaining({
           sourceId: "admin_boundaries",
@@ -339,7 +354,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("exposes observability with per-source cache state", async () => {
-    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "admin_boundaries"] });
+    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "road_srti_lod", "admin_boundaries"] });
     await request(configured.app).get("/api/v1/observability").expect(200).expect((response) => {
       expect(response.body).toEqual(
         expect.objectContaining({
@@ -351,6 +366,7 @@ describe("Safety Data API contract", () => {
             expect.objectContaining({ sourceId: "nasa_firms", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "gdacs_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "hzs_incidents", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+            expect.objectContaining({ sourceId: "road_srti_lod", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "admin_boundaries", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) })
           ]),
           lastResult: expect.objectContaining({
@@ -934,6 +950,82 @@ describe("Safety Data API contract", () => {
         );
       }
     );
+  });
+
+  it("projects NDIC/RSD SRTI road events into normalized safety warnings", async () => {
+    const fetchMock = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          head: { vars: ["SituationRecord", "Type", "VersionTime", "GeometryWKT"] },
+          results: {
+            bindings: [
+              {
+                SituationRecord: { type: "uri", value: "https://lod.tamtamresearch.com/resource/situation/road-1" },
+                Type: { type: "uri", value: "http://cef.uv.es/lodroadtran18/def/transporte/dtx_srti#Accident" },
+                VersionTime: { type: "literal", value: "2026-06-28T08:30:00.000Z" },
+                GeometryWKT: { type: "literal", value: "POINT(14.42 50.08)" }
+              },
+              {
+                SituationRecord: { type: "uri", value: "https://lod.tamtamresearch.com/resource/situation/road-2" },
+                Type: { type: "uri", value: "http://cef.uv.es/lodroadtran18/def/transporte/dtx_srti#Roadworks" },
+                VersionTime: { type: "literal", value: "2026-06-28T08:31:00.000Z" },
+                GeometryWKT: { type: "literal", value: "POINT(14.52 50.18)" }
+              }
+            ]
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/sparql-results+json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const configured = await createApp({
+      ...config,
+      enabledSources: ["road_srti_lod"]
+    });
+
+    const response = await request(configured.app)
+      .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=warnings&source=road_srti_lod&limit=10")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.body.summary.featureCount).toBe(2);
+    expect(response.body.features).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.stringMatching(/^warnings:road_srti_lod:/),
+          properties: expect.objectContaining({
+            layerId: "public.safety.warnings",
+            providerLayerId: "safety.warnings",
+            layer: "warnings",
+            category: "road_accident",
+            hazardType: "road_incident",
+            typeCode: "road.accident",
+            sourceId: "road_srti_lod",
+            sourceName: "NDIC/ŘSD traffic safety events",
+            headline: "Dopravní nehoda",
+            severity: "warning",
+            urgency: "immediate",
+            iconHint: "road-warning",
+            localized: expect.objectContaining({
+              cs: expect.objectContaining({ headline: "Dopravní nehoda" }),
+              en: expect.objectContaining({ headline: "Road traffic accident" })
+            }),
+            tags: expect.objectContaining({
+              srtiType: "Accident",
+              sourceSystem: "ndic_srti_lod"
+            })
+          })
+        }),
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            category: "roadworks",
+            severity: "info",
+            headline: "Práce na silnici"
+          })
+        })
+      ])
+    );
+    expect(response.body.features[0].properties.raw).toBeUndefined();
   });
 
   it("projects CHMI fire danger warnings into the fire layer", async () => {

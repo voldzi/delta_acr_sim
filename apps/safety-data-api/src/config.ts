@@ -44,6 +44,9 @@ export interface SafetyDataConfig {
   hzsIncidentsCacheTtlSeconds: number;
   hzsIncidentsDetailCacheTtlSeconds: number;
   hzsIncidentsMaxActiveDetails: number;
+  roadSrtiLodSparqlUrl: string;
+  roadSrtiLodCacheTtlSeconds: number;
+  roadSrtiLodMaxRecords: number;
   adminBoundaryConnectionString?: string;
   adminBoundaryTable: string;
   adminBoundaryCacheTtlSeconds: number;
@@ -102,6 +105,9 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     hzsIncidentsCacheTtlSeconds: parseInteger(process.env.HZS_INCIDENTS_CACHE_TTL_SECONDS, 180),
     hzsIncidentsDetailCacheTtlSeconds: parseInteger(process.env.HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS, 1800),
     hzsIncidentsMaxActiveDetails: parseInteger(process.env.HZS_INCIDENTS_MAX_ACTIVE_DETAILS, 50),
+    roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
+    roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
+    roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
     adminBoundaryConnectionString: emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     adminBoundaryTable: process.env.SAFETY_DATA_ADMIN_BOUNDARY_TABLE ?? "public.osm_admin_boundary",
     adminBoundaryCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS, 86_400),
@@ -110,7 +116,16 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
 }
 
 function parseSourceList(value: string | undefined): SafetyDataSourceId[] {
-  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "admin_boundaries"]);
+  const allowed = new Set<SafetyDataSourceId>([
+    "mock",
+    "chmi_alerts",
+    "chmi_hydro",
+    "nasa_firms",
+    "gdacs_alerts",
+    "hzs_incidents",
+    "road_srti_lod",
+    "admin_boundaries"
+  ]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())

@@ -24,8 +24,8 @@ Podporované query parametry:
 
 - `bbox=west,south,east,north` ve WGS84.
 - `layers=warnings,weather_alerts,fire,flood,boundary_admin`.
-- `layers=warnings` je obecná krizová vrstva pro veřejné výstrahy, katastrofické alerty a probíhající HZS/IZS incidenty; `weather_alerts` zůstává specializovaná meteorologická vrstva.
-- `source=chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,admin_boundaries` nebo `source=mock`.
+- `layers=warnings` je obecná krizová vrstva pro veřejné výstrahy, katastrofické alerty, probíhající HZS/IZS incidenty a normalizované dopravně-bezpečnostní SRTI události; `weather_alerts` zůstává specializovaná meteorologická vrstva.
+- `source=chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries` nebo `source=mock`.
 - `limit=1..1000`.
 - `includeRaw=1` pouze pro diagnostiku.
 
@@ -244,6 +244,7 @@ Detailni kontrakt je v
 - `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
 - `gdacs_alerts`: GDACS veřejné RSS/GeoRSS katastrofické alerty z `https://www.gdacs.org/xml/rss.xml`; bez klíče. `FL` se promítá do `flood`, `WF` do `fire`, ostatní typy jako `EQ`, `TC`, `VO`, `DR` do `warnings`. Pokud COP požádá o `warnings`, SIM vrací i obecnou kopii GDACS požáru/povodně jako krizový alert.
 - `hzs_incidents`: veřejné probíhající výjezdy HZS/IZS. Výchozí pilotní feed je HZS Pardubického kraje vložený z oficiální stránky HZS ČR; SIM bere pouze sekci `Probíhající výjezdy`, detail události používá pro typ, podtyp, stav, obec, část obce, ulici a jednotky. Požáry se projektují do `fire` i do obecné `warnings`, ostatní typy do `warnings` s jasným `hazardType` (`traffic_accident`, `hazmat`, `rescue`, `technical_assistance`, `false_alarm`, `emergency_incident`). Pokud detail neobsahuje přesnou GPS, SIM geokóduje přes lokální `public.osm_admin_boundary` a v `properties.tags.locationPrecision`/`properties.metrics.locationConfidence` označí, zda jde o centroid obce/správního území nebo fallback kraje.
+- `road_srti_lod`: veřejné NDIC/ŘSD SRTI dopravní události z TamTam Research Linked Open Data SPARQL. SIM je v `safety-data` promítá pouze do `warnings` jako normalizované dopravně-bezpečnostní prvky s `hazardType=road_incident`, kanonickým `typeCode` (`road.accident`, `road.closure`, `road.obstruction`, `road.weather_condition`, `road.abnormal_traffic`, `road.roadworks`), českým/anglickým `properties.localized` a hotovým `headline`/`description`/`recommendedAction`. Plná dopravní kontextová vrstva zůstává v `situation-data` jako `public.traffic.road_events`.
 - `admin_boundaries`: referenční administrativní hranice. Produkčně čte lokální/PostGIS read-model `public.osm_admin_boundary`; pokud není DB nebo view k dispozici, vrací jen hrubý seed ČR s warningem.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
@@ -300,7 +301,7 @@ Interní Prometheus endpoint `GET /metrics` běží na službě `safety-data-api
 Interní `/metrics` obsahuje aggregate cache metriky i per-source cache metriky:
 
 - `safety_data_cache_hits/misses/stale_hits/errors`,
-- `safety_data_source_cache_hits/misses/stale_hits/errors{source="chmi_alerts|chmi_hydro|nasa_firms|gdacs_alerts|hzs_incidents|admin_boundaries"}`,
+- `safety_data_source_cache_hits/misses/stale_hits/errors{source="chmi_alerts|chmi_hydro|nasa_firms|gdacs_alerts|hzs_incidents|road_srti_lod|admin_boundaries"}`,
 - `safety_data_last_feature_count`,
 - `safety_data_last_layer_features{layer="weather_alerts|fire|flood|boundary_admin"}`,
 - `safety_data_last_generated_age_seconds`.

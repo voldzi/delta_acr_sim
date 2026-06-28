@@ -458,7 +458,16 @@ const situationDataSourceIds: SituationDataSourceId[] = [
   "ardos_partner"
 ];
 
-const safetyDataSourceIds: SafetyDataSourceId[] = ["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"];
+const safetyDataSourceIds: SafetyDataSourceId[] = [
+  "mock",
+  "chmi_alerts",
+  "chmi_hydro",
+  "nasa_firms",
+  "gdacs_alerts",
+  "hzs_incidents",
+  "road_srti_lod",
+  "admin_boundaries"
+];
 
 function filterKnownSourceIds<T extends string>(sourceIds: string[], allowed: readonly T[]): T[] {
   const allowedSet = new Set<string>(allowed);
