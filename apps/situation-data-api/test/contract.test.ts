@@ -38,6 +38,9 @@ describe("Situation Data API contract", () => {
       openMeteoBaseUrl: "https://api.open-meteo.com",
       openMeteoCacheTtlSeconds: 600,
       openMeteoGridDegrees: 0.05,
+      metNorwayBaseUrl: "https://api.met.no",
+      metNorwayCacheTtlSeconds: 600,
+      metNorwayUserAgent: "csm-sim-test/0.1 contact:test@example.invalid",
       mobileCoverageCacheTtlSeconds: 21600,
       mobileNetworkCacheTtlSeconds: 3600,
       mobileCoverageResolutionM: 1000,
@@ -141,7 +144,7 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "open_meteo",
-          license: expect.objectContaining({ name: "CC BY 4.0 / Open-Meteo Terms" })
+          license: expect.objectContaining({ name: "Open-Meteo + MET Norway / CC BY 4.0" })
         }),
         expect.objectContaining({
           sourceId: "mobile_coverage_model",
@@ -844,6 +847,7 @@ describe("Situation Data API contract", () => {
         staleAfterSeconds: 900,
         sourceCacheTtlSeconds: {
           openMeteo: 600,
+          metNorway: 600,
           mobileNetwork: 3600,
           mobileCoverage: 21600,
           osmPostgis: 21600,
@@ -862,7 +866,7 @@ describe("Situation Data API contract", () => {
         },
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
-          expect.objectContaining({ sourceId: "open_meteo", authConfigured: true }),
+          expect.objectContaining({ sourceId: "open_meteo", authConfigured: true, backend: "open-meteo+met-norway" }),
           expect.objectContaining({ sourceId: "mobile_coverage_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "mobile_network_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
@@ -882,6 +886,164 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(JSON.stringify(response.body)).not.toContain("secret");
+  });
+
+  it("corroborates current weather with MET Norway without changing the COP-facing Open-Meteo contract", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://api.open-meteo.com/v1/forecast")) {
+        return jsonResponse({
+          current: {
+            time: "2026-06-28T12:00",
+            temperature_2m: 25.4,
+            relative_humidity_2m: 48,
+            precipitation: 0,
+            weather_code: 2,
+            cloud_cover: 34,
+            wind_speed_10m: 3.2,
+            wind_direction_10m: 270,
+            wind_gusts_10m: 7.1
+          },
+          current_units: { temperature_2m: "°C" }
+        });
+      }
+      if (url.startsWith("https://api.met.no/weatherapi/locationforecast/2.0/compact")) {
+        return jsonResponse({
+          properties: {
+            timeseries: [
+              {
+                time: "2026-06-28T12:00:00Z",
+                data: {
+                  instant: {
+                    details: {
+                      air_temperature: 24.9,
+                      relative_humidity: 50,
+                      cloud_area_fraction: 38,
+                      wind_speed: 3.5,
+                      wind_from_direction: 265
+                    }
+                  },
+                  next_1_hours: {
+                    summary: { symbol_code: "partlycloudy_day" },
+                    details: { precipitation_amount: 0 }
+                  }
+                }
+              }
+            ]
+          }
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const weatherApp = await createApp({ ...config, enabledSources: ["open_meteo"] });
+
+    const response = await request(weatherApp.app)
+      .get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather&source=open_meteo&limit=5")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(1);
+    expect(response.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "weather:open_meteo:50.1000:14.1000",
+        properties: expect.objectContaining({
+          layer: "weather",
+          layerId: "public.weather.current",
+          providerLayerId: "weather.open_meteo",
+          sourceId: "open_meteo",
+          metrics: expect.objectContaining({ temperatureC: 25.4, windSpeedMps: 3.2, weatherCode: 2 }),
+          tags: expect.objectContaining({
+            primaryWeatherProvider: "open_meteo",
+            corroboratingWeatherProvider: "met_norway"
+          }),
+          providerProperties: expect.objectContaining({
+            weather: expect.objectContaining({
+              primaryProvider: "open_meteo",
+              sourceInputs: ["open_meteo_current", "met_norway_locationforecast"],
+              contractStableForCop: true
+            }),
+            weatherCorroboration: expect.objectContaining({
+              fallbackUsed: false,
+              providers: ["open_meteo_current", "met_norway_locationforecast"],
+              metNorway: expect.objectContaining({
+                symbolCode: "partlycloudy_day",
+                temperatureC: 24.9
+              })
+            })
+          })
+        })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("api.met.no/weatherapi/locationforecast/2.0/compact"), expect.objectContaining({
+      headers: expect.objectContaining({ "user-agent": "csm-sim-test/0.1 contact:test@example.invalid" })
+    }));
+  });
+
+  it("uses MET Norway as current weather fallback while preserving the Open-Meteo source id for COP", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("https://api.open-meteo.com/v1/forecast")) {
+          return new Response("unavailable", { status: 503 });
+        }
+        if (url.startsWith("https://api.met.no/weatherapi/locationforecast/2.0/compact")) {
+          return jsonResponse({
+            properties: {
+              timeseries: [
+                {
+                  time: "2026-06-28T12:00:00Z",
+                  data: {
+                    instant: {
+                      details: {
+                        air_temperature: 18.5,
+                        relative_humidity: 82,
+                        cloud_area_fraction: 100,
+                        wind_speed: 4.2,
+                        wind_from_direction: 180
+                      }
+                    },
+                    next_1_hours: {
+                      summary: { symbol_code: "rain" },
+                      details: { precipitation_amount: 1.4 }
+                    }
+                  }
+                }
+              ]
+            }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+    const weatherApp = await createApp({ ...config, enabledSources: ["open_meteo"] });
+
+    const response = await request(weatherApp.app)
+      .get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather&source=open_meteo&limit=5")
+      .expect(200);
+
+    expect(response.body.warnings).toEqual([expect.stringContaining("open_meteo primary provider failed")]);
+    expect(response.body.features).toHaveLength(1);
+    expect(response.body.features[0].properties).toEqual(
+      expect.objectContaining({
+        layer: "weather",
+        layerId: "public.weather.current",
+        providerLayerId: "weather.open_meteo",
+        sourceId: "open_meteo",
+        metrics: expect.objectContaining({
+          temperatureC: 18.5,
+          precipitationMm: 1.4,
+          weatherCode: 61
+        }),
+        tags: expect.objectContaining({
+          primaryWeatherProvider: "met_norway"
+        }),
+        providerProperties: expect.objectContaining({
+          weather: expect.objectContaining({ primaryProvider: "met_norway" }),
+          weatherCorroboration: expect.objectContaining({ fallbackUsed: true })
+        })
+      })
+    );
   });
 
   it("exposes cache metrics", async () => {

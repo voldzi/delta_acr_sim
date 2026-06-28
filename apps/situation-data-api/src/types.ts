@@ -257,6 +257,7 @@ export interface SituationDataPublicConfig {
   requestTimeoutMs: number;
   sourceCacheTtlSeconds: {
     openMeteo: number;
+    metNorway: number;
     mobileNetwork: number;
     mobileCoverage: number;
     osmPostgis: number;
@@ -283,6 +284,7 @@ export interface SituationDataPublicConfig {
   providers: Array<{
     sourceId: SituationDataSourceId;
     baseUrl?: string;
+    fallbackBaseUrl?: string;
     authConfigured: boolean;
     backend?: string;
   }>;

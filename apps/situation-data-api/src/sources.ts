@@ -87,6 +87,32 @@ const OPEN_METEO_LICENSE: SituationDataLicense = {
   ]
 };
 
+const MET_NORWAY_LICENSE: SituationDataLicense = {
+  name: "Norwegian Meteorological Institute Data / CC BY 4.0",
+  url: "https://api.met.no/license_data.html",
+  attribution: "Norwegian Meteorological Institute",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Attribution and a descriptive User-Agent are required.",
+    "Locationforecast is used by SIM as a server-side corroborating forecast/fallback for current weather context.",
+    "COP continues to consume the normalized SIM weather contract and must not call MET Norway directly."
+  ]
+};
+
+const CURRENT_WEATHER_LICENSE: SituationDataLicense = {
+  name: "Open-Meteo + MET Norway / CC BY 4.0",
+  url: "https://open-meteo.com/en/terms",
+  attribution: "Weather data by Open-Meteo.com and Norwegian Meteorological Institute",
+  commercialUse: "requires_license",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Open-Meteo is the primary normalized source for public.weather.current.",
+    "MET Norway Locationforecast is used server-side as a corroborating/fallback model and requires attribution plus a descriptive User-Agent.",
+    "COP consumes only the SIM-normalized public.weather.current contract."
+  ]
+};
+
 const CHMI_OPEN_DATA_LICENSE: SituationDataLicense = {
   name: "ČHMÚ Open Data / CC BY 4.0",
   url: "https://opendata.chmi.cz/",
@@ -519,6 +545,7 @@ class MockSituationDataSource implements SituationDataSource {
 class OpenMeteoSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<OpenMeteoResponse>;
+  private readonly metNorwayCache: ManagedResponseCache<MetNorwayLocationForecastResponse>;
 
   constructor(private readonly config: SituationDataConfig) {
     this.payloadCache = new ManagedResponseCache<OpenMeteoResponse>({
@@ -526,21 +553,28 @@ class OpenMeteoSource implements SituationDataSource {
       staleIfErrorMs: Math.max(60, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(64, config.cacheMaxEntries)
     });
+    this.metNorwayCache = new ManagedResponseCache<MetNorwayLocationForecastResponse>({
+      ttlMs: Math.max(1, config.metNorwayCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(60, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, Math.floor(config.cacheMaxEntries / 2))
+    });
     this.descriptor = {
       sourceId: "open_meteo",
-      label: "Open-Meteo current weather",
+      label: "Open-Meteo current weather with MET Norway fallback",
       enabled: config.enabledSources.includes("open_meteo"),
       mode: "live",
       priority: 70,
       layers: ["weather"],
-      license: OPEN_METEO_LICENSE,
+      license: CURRENT_WEATHER_LICENSE,
       baseUrl: config.openMeteoBaseUrl,
       updateCadenceSeconds: config.openMeteoCacheTtlSeconds
     };
   }
 
   cacheStats(): SourceCacheStats[] {
-    return [cacheStatsFor("open_meteo", this.payloadCache)];
+    return [
+      aggregateCacheStatsFor("open_meteo", [this.payloadCache, this.metNorwayCache])
+    ];
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -551,10 +585,10 @@ class OpenMeteoSource implements SituationDataSource {
 
     const center = bboxCenter(query.bbox);
     const weatherPoint = roundPointToGrid(center.lon, center.lat, this.config.openMeteoGridDegrees);
-    const url = new URL(`${this.config.openMeteoBaseUrl}/v1/forecast`);
-    url.searchParams.set("latitude", weatherPoint.lat.toFixed(5));
-    url.searchParams.set("longitude", weatherPoint.lon.toFixed(5));
-    url.searchParams.set(
+    const openMeteoUrl = new URL(`${this.config.openMeteoBaseUrl}/v1/forecast`);
+    openMeteoUrl.searchParams.set("latitude", weatherPoint.lat.toFixed(5));
+    openMeteoUrl.searchParams.set("longitude", weatherPoint.lon.toFixed(5));
+    openMeteoUrl.searchParams.set(
       "current",
       [
         "temperature_2m",
@@ -567,18 +601,50 @@ class OpenMeteoSource implements SituationDataSource {
         "wind_gusts_10m"
       ].join(",")
     );
-    url.searchParams.set("wind_speed_unit", "ms");
-    url.searchParams.set("timezone", "UTC");
+    openMeteoUrl.searchParams.set("wind_speed_unit", "ms");
+    openMeteoUrl.searchParams.set("timezone", "UTC");
 
-    const payload = await this.payloadCache.getOrLoad(`open_meteo:${weatherPoint.lat}:${weatherPoint.lon}`, () =>
-      requestJson<OpenMeteoResponse>(url.toString(), this.config.requestTimeoutMs)
-    );
-    const current = payload.current ?? {};
-    const observedAt = normalizeOpenMeteoTime(current.time) ?? fetchedAt;
-    const windSpeedMps = optionalNumber(current.wind_speed_10m);
-    const precipitationMm = optionalNumber(current.precipitation);
-    const weatherCode = optionalNumber(current.weather_code);
+    const metNorwayUrl = new URL(`${this.config.metNorwayBaseUrl}/weatherapi/locationforecast/2.0/compact`);
+    metNorwayUrl.searchParams.set("lat", weatherPoint.lat.toFixed(5));
+    metNorwayUrl.searchParams.set("lon", weatherPoint.lon.toFixed(5));
+
+    const [openMeteoResult, metNorwayResult] = await Promise.allSettled([
+      this.payloadCache.getOrLoad(`open_meteo:${weatherPoint.lat}:${weatherPoint.lon}`, () =>
+        requestJson<OpenMeteoResponse>(openMeteoUrl.toString(), this.config.requestTimeoutMs)
+      ),
+      this.metNorwayCache.getOrLoad(`met_norway:${weatherPoint.lat}:${weatherPoint.lon}`, () =>
+        requestJsonWithHeaders<MetNorwayLocationForecastResponse>(metNorwayUrl.toString(), this.config.requestTimeoutMs, {
+          accept: "application/json",
+          "user-agent": this.config.metNorwayUserAgent
+        })
+      )
+    ]);
+
+    const openMeteoPayload = openMeteoResult.status === "fulfilled" ? openMeteoResult.value : undefined;
+    const metNorwayPayload = metNorwayResult.status === "fulfilled" ? metNorwayResult.value : undefined;
+    const openMeteoCurrent = openMeteoPayload?.current ?? {};
+    const metNorwayCurrent = normalizeMetNorwayCurrent(metNorwayPayload);
+    const primary = normalizeOpenMeteoCurrent(openMeteoCurrent) ?? metNorwayCurrent;
+    if (!primary) {
+      const failures = [
+        openMeteoResult.status === "rejected" ? `Open-Meteo: ${errorMessage(openMeteoResult.reason)}` : undefined,
+        metNorwayResult.status === "rejected" ? `MET Norway: ${errorMessage(metNorwayResult.reason)}` : undefined
+      ].filter(Boolean).join("; ");
+      throw new Error(`No current weather provider returned usable data${failures ? ` (${failures})` : ""}.`);
+    }
+    const observedAt = primary.observedAt ?? fetchedAt;
+    const windSpeedMps = primary.windSpeedMps;
+    const precipitationMm = primary.precipitationMm;
+    const weatherCode = primary.weatherCode;
     const severity = weatherSeverity(windSpeedMps, precipitationMm, weatherCode);
+    const warnings = [
+      openMeteoResult.status === "rejected" ? `open_meteo primary provider failed; using MET Norway fallback when available: ${errorMessage(openMeteoResult.reason)}` : undefined,
+      metNorwayResult.status === "rejected" ? `MET Norway corroborating forecast unavailable: ${errorMessage(metNorwayResult.reason)}` : undefined
+    ].filter((warning): warning is string => Boolean(warning));
+    const sourceInputs = [
+      openMeteoPayload ? "open_meteo_current" : undefined,
+      metNorwayCurrent ? "met_norway_locationforecast" : undefined
+    ].filter((value): value is string => Boolean(value));
 
     const feature = makePointFeature({
       id: `weather:open_meteo:${weatherPoint.lat.toFixed(4)}:${weatherPoint.lon.toFixed(4)}`,
@@ -591,30 +657,58 @@ class OpenMeteoSource implements SituationDataSource {
       category: "weather_observation",
       label: "Weather near map center",
       sourceId: "open_meteo",
-      license: OPEN_METEO_LICENSE,
+      license: CURRENT_WEATHER_LICENSE,
       observedAt,
       confidence: 0.86,
       severity,
       metrics: compactMetrics({
-        temperatureC: optionalNumber(current.temperature_2m),
-        relativeHumidityPercent: optionalNumber(current.relative_humidity_2m),
+        temperatureC: primary.temperatureC,
+        relativeHumidityPercent: primary.relativeHumidityPercent,
         precipitationMm,
-        cloudCoverPercent: optionalNumber(current.cloud_cover),
+        cloudCoverPercent: primary.cloudCoverPercent,
         windSpeedMps,
-        windDirectionDeg: optionalNumber(current.wind_direction_10m),
-        windGustMps: optionalNumber(current.wind_gusts_10m),
+        windDirectionDeg: primary.windDirectionDeg,
+        windGustMps: primary.windGustMps,
         weatherCode
       }),
       tags: compactTags({
         sourceSystem: "open_meteo",
         renderRole: "current_weather_center_point",
         recommendedCatalogLayerId: "public.weather.current",
-        mapDisplayHint: "weather_observation_point"
+        mapDisplayHint: "weather_observation_point",
+        primaryWeatherProvider: primary.provider,
+        corroboratingWeatherProvider: metNorwayCurrent && primary.provider !== "met_norway" ? "met_norway" : undefined
       }),
-      raw: query.includeRaw ? { current, current_units: payload.current_units } : undefined
+      providerProperties: compactProviderProperties({
+        weather: {
+          primaryProvider: primary.provider,
+          sourceInputs,
+          contractStableForCop: true
+        },
+        weatherCorroboration: compactProviderProperties({
+          providers: sourceInputs,
+          metNorway: metNorwayCurrent ? {
+            observedAt: metNorwayCurrent.observedAt,
+            temperatureC: metNorwayCurrent.temperatureC,
+            precipitationMm: metNorwayCurrent.precipitationMm,
+            windSpeedMps: metNorwayCurrent.windSpeedMps,
+            symbolCode: metNorwayCurrent.symbolCode
+          } : undefined,
+          fallbackUsed: primary.provider === "met_norway"
+        }),
+        licenses: {
+          primary: OPEN_METEO_LICENSE,
+          corroborating: MET_NORWAY_LICENSE
+        },
+        notices: [
+          "COP contract is unchanged: sourceId remains open_meteo and layerId remains public.weather.current.",
+          "MET Norway Locationforecast is used server-side by SIM as corroboration/fallback for Czech-area current weather context."
+        ]
+      }),
+      raw: query.includeRaw ? { openMeteo: openMeteoPayload, metNorway: metNorwayPayload } : undefined
     });
 
-    return { source: this.descriptor, fetchedAt, features: [feature], warnings: [] };
+    return { source: this.descriptor, fetchedAt, features: [feature], warnings };
   }
 }
 
@@ -4565,6 +4659,39 @@ interface OpenMeteoResponse {
   current_units?: Record<string, string>;
 }
 
+interface MetNorwayLocationForecastResponse {
+  properties?: {
+    timeseries?: Array<{
+      time?: string;
+      data?: {
+        instant?: {
+          details?: Record<string, unknown>;
+        };
+        next_1_hours?: {
+          summary?: {
+            symbol_code?: string;
+          };
+          details?: Record<string, unknown>;
+        };
+      };
+    }>;
+  };
+}
+
+interface NormalizedCurrentWeather {
+  provider: "open_meteo" | "met_norway";
+  observedAt?: string;
+  temperatureC?: number;
+  relativeHumidityPercent?: number;
+  precipitationMm?: number;
+  cloudCoverPercent?: number;
+  windSpeedMps?: number;
+  windDirectionDeg?: number;
+  windGustMps?: number;
+  weatherCode?: number;
+  symbolCode?: string;
+}
+
 interface IdsjmkVehicleFeed extends Record<string, unknown> {
   LastUpdate?: unknown;
   lastUpdate?: unknown;
@@ -5562,6 +5689,95 @@ function weatherSeverity(windSpeedMps: number | undefined, precipitationMm: numb
 const warningWeatherCodes = new Set([51, 53, 55, 61, 63, 65, 71, 73, 75, 80, 81, 82]);
 const severeWeatherCodes = new Set([95, 96, 99]);
 
+function normalizeOpenMeteoCurrent(current: Record<string, unknown>): NormalizedCurrentWeather | undefined {
+  const values: NormalizedCurrentWeather = {
+    provider: "open_meteo",
+    observedAt: normalizeOpenMeteoTime(current.time),
+    temperatureC: optionalNumber(current.temperature_2m),
+    relativeHumidityPercent: optionalNumber(current.relative_humidity_2m),
+    precipitationMm: optionalNumber(current.precipitation),
+    cloudCoverPercent: optionalNumber(current.cloud_cover),
+    windSpeedMps: optionalNumber(current.wind_speed_10m),
+    windDirectionDeg: optionalNumber(current.wind_direction_10m),
+    windGustMps: optionalNumber(current.wind_gusts_10m),
+    weatherCode: optionalNumber(current.weather_code)
+  };
+  return hasUsableWeatherMetrics(values) ? values : undefined;
+}
+
+function normalizeMetNorwayCurrent(payload: MetNorwayLocationForecastResponse | undefined): NormalizedCurrentWeather | undefined {
+  const point = payload?.properties?.timeseries?.[0];
+  const details = point?.data?.instant?.details ?? {};
+  const precipitationMm = optionalNumber(point?.data?.next_1_hours?.details?.precipitation_amount);
+  const symbolCode = optionalString(point?.data?.next_1_hours?.summary?.symbol_code);
+  const values: NormalizedCurrentWeather = {
+    provider: "met_norway",
+    observedAt: parseTimestamp(point?.time),
+    temperatureC: optionalNumber(details.air_temperature),
+    relativeHumidityPercent: optionalNumber(details.relative_humidity),
+    precipitationMm,
+    cloudCoverPercent: optionalNumber(details.cloud_area_fraction),
+    windSpeedMps: optionalNumber(details.wind_speed),
+    windDirectionDeg: optionalNumber(details.wind_from_direction),
+    weatherCode: weatherCodeFromMetNorwaySymbol(symbolCode, precipitationMm),
+    symbolCode
+  };
+  return hasUsableWeatherMetrics(values) ? values : undefined;
+}
+
+function hasUsableWeatherMetrics(values: NormalizedCurrentWeather): boolean {
+  return [
+    values.temperatureC,
+    values.relativeHumidityPercent,
+    values.precipitationMm,
+    values.cloudCoverPercent,
+    values.windSpeedMps,
+    values.windDirectionDeg,
+    values.windGustMps,
+    values.weatherCode
+  ].some((value) => typeof value === "number");
+}
+
+function weatherCodeFromMetNorwaySymbol(symbolCode: string | undefined, precipitationMm: number | undefined): number | undefined {
+  if (!symbolCode) {
+    return undefined;
+  }
+  if (symbolCode.includes("thunder")) {
+    return 95;
+  }
+  if (symbolCode.includes("heavyrain")) {
+    return 65;
+  }
+  if (symbolCode.includes("rainshowers")) {
+    return 80;
+  }
+  if (symbolCode.includes("rain")) {
+    return 61;
+  }
+  if (symbolCode.includes("heavysnow")) {
+    return 75;
+  }
+  if (symbolCode.includes("snow")) {
+    return 71;
+  }
+  if (symbolCode.includes("sleet")) {
+    return 69;
+  }
+  if (symbolCode.includes("fog")) {
+    return 45;
+  }
+  if (symbolCode.includes("cloudy")) {
+    return symbolCode.includes("partly") ? 2 : 3;
+  }
+  if (symbolCode.includes("fair")) {
+    return 1;
+  }
+  if (symbolCode.includes("clearsky")) {
+    return 0;
+  }
+  return (precipitationMm ?? 0) > 0 ? 61 : undefined;
+}
+
 function normalizeOpenMeteoTime(value: unknown): string | undefined {
   if (typeof value !== "string" || value.trim() === "") {
     return undefined;
@@ -5619,6 +5835,10 @@ function parseTimestamp(value: unknown): string | undefined {
   const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
   const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

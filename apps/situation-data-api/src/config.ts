@@ -20,6 +20,9 @@ export interface SituationDataConfig {
   openMeteoBaseUrl: string;
   openMeteoCacheTtlSeconds: number;
   openMeteoGridDegrees: number;
+  metNorwayBaseUrl: string;
+  metNorwayCacheTtlSeconds: number;
+  metNorwayUserAgent: string;
   mobileCoverageCacheTtlSeconds: number;
   mobileNetworkCacheTtlSeconds: number;
   mobileCoverageResolutionM: number;
@@ -112,6 +115,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     openMeteoBaseUrl: process.env.OPEN_METEO_BASE_URL ?? "https://api.open-meteo.com",
     openMeteoCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS, 600),
     openMeteoGridDegrees: parseFloatOr(process.env.SITUATION_DATA_OPEN_METEO_GRID_DEGREES, 0.05),
+    metNorwayBaseUrl: process.env.MET_NORWAY_BASE_URL ?? "https://api.met.no",
+    metNorwayCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_MET_NORWAY_CACHE_TTL_SECONDS, 600),
+    metNorwayUserAgent: process.env.MET_NORWAY_USER_AGENT ?? "csm-sim/0.1 situation-data contact:ops@zeleznalady.cz",
     mobileCoverageCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS, 21600),
     mobileNetworkCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS, 3600),
     mobileCoverageResolutionM: parseInteger(process.env.MOBILE_COVERAGE_RESOLUTION_M, 1000),

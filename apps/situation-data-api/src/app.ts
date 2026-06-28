@@ -881,6 +881,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     requestTimeoutMs: config.requestTimeoutMs,
     sourceCacheTtlSeconds: {
       openMeteo: config.openMeteoCacheTtlSeconds,
+      metNorway: config.metNorwayCacheTtlSeconds,
       mobileNetwork: config.mobileNetworkCacheTtlSeconds,
       mobileCoverage: config.mobileCoverageCacheTtlSeconds,
       osmPostgis: config.osmPostgisCacheTtlSeconds,
@@ -906,7 +907,13 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
     },
     providers: [
       { sourceId: "mock", authConfigured: true },
-      { sourceId: "open_meteo", baseUrl: config.openMeteoBaseUrl, authConfigured: true },
+      {
+        sourceId: "open_meteo",
+        baseUrl: config.openMeteoBaseUrl,
+        authConfigured: true,
+        backend: "open-meteo+met-norway",
+        fallbackBaseUrl: config.metNorwayBaseUrl
+      },
       {
         sourceId: "mobile_coverage_model",
         baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),

@@ -369,11 +369,20 @@ DEM_SEAWEEDFS_SECRET_ACCESS_KEY=
 SITUATION_DATA_STALE_AFTER_SECONDS=900
 SITUATION_DATA_REQUEST_TIMEOUT_MS=8000
 OPEN_METEO_BASE_URL=https://api.open-meteo.com
+MET_NORWAY_BASE_URL=https://api.met.no
+SITUATION_DATA_MET_NORWAY_CACHE_TTL_SECONDS=600
+MET_NORWAY_USER_AGENT=csm-sim/0.1 situation-data contact:ops@zeleznalady.cz
 CTU_NETTEST_URL=https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip
 PID_GTFS_RT_VEHICLE_POSITIONS_URL=https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ```
+
+`public.weather.current` zustava pro COP stejnou vrstvou
+`layers=weather&source=open_meteo`. SIM ji server-side obohacuje zdrojem
+MET Norway Locationforecast jako druhym modelem a fallbackem pri nedostupnosti
+Open-Meteo. `MET_NORWAY_USER_AGENT` musi byt popisny a kontaktovatelny, protoze
+MET Norway vyzaduje identifikujici User-Agent.
 
 `docker-compose.yml` spouští pro pilot lokální neveřejný Valkey cache kontejner `situation-data-cache`. V HA produkci lze
 `SITUATION_DATA_SHARED_CACHE_REDIS_URL` přepsat na externí Redis/KeyDB/Valkey endpoint; pokud není nastavená, `situation-data-api`

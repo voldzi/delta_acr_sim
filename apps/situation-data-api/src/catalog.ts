@@ -57,10 +57,11 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       query: query(["weather"], ["open_meteo"]),
       legend: { profile: "current-weather-v1" },
       legal: {
-        attribution: "Weather data by Open-Meteo.com",
+        attribution: "Weather data by Open-Meteo.com and Norwegian Meteorological Institute",
         notes: [
-          "Free API conditions and commercial use restrictions are described in source metadata.",
-          "This layer is a point summary for the bbox center; use the CHMI grid layers for area overlays."
+          "Free API conditions, commercial use restrictions and MET Norway attribution/User-Agent obligations are described in source metadata.",
+          "This layer is a point summary for the bbox center; use the CHMI grid layers for area overlays.",
+          "COP contract remains source=open_meteo; MET Norway is an internal SIM fallback/corroborating model."
         ]
       }
     },

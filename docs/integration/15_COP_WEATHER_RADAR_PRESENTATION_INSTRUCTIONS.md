@@ -11,6 +11,9 @@ decision layer.
 
 `public.weather.current` is a point summary for the center of the requested bbox.
 It is not an area overlay and it is not expected to paint the whole map extent.
+The COP-facing contract remains `sourceId=open_meteo`; SIM may internally use
+MET Norway Locationforecast as a corroborating/fallback model and expose that
+only under `properties.providerProperties.weatherCorroboration`.
 
 COP should render the feature when any of these identifiers is present:
 
