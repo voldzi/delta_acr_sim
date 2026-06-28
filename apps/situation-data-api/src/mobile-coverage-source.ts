@@ -69,6 +69,9 @@ interface CoverageCellRow {
   bts_status_source: string | null;
   operator_status_available: boolean | null;
   source_revision: string | null;
+  grid_resolution_m: number | string | null;
+  grid_row: number | string | null;
+  grid_column: number | string | null;
   geometry: unknown;
 }
 
@@ -175,6 +178,8 @@ export class MobileCoverageSource implements SituationDataSource {
   private readonly payloadCache: ManagedResponseCache<CoveragePayload>;
   private readonly viewshedCache: ManagedResponseCache<MobileCoverageViewshedPayload | null>;
   private readonly towerCountCache: ManagedResponseCache<number>;
+  private readonly readModelCountCache: ManagedResponseCache<number>;
+  private readonly schemaCache: ManagedResponseCache<boolean>;
   private pool?: Pool;
 
   constructor(private readonly config: SituationDataConfig) {
@@ -193,6 +198,16 @@ export class MobileCoverageSource implements SituationDataSource {
       staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
       maxEntries: 2
     });
+    this.readModelCountCache = new ManagedResponseCache<number>({
+      ttlMs: 300_000,
+      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 2
+    });
+    this.schemaCache = new ManagedResponseCache<boolean>({
+      ttlMs: 3_600_000,
+      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
     this.descriptor = {
       sourceId: "mobile_coverage_model",
       label: "Mobile coverage estimate model",
@@ -207,7 +222,13 @@ export class MobileCoverageSource implements SituationDataSource {
   }
 
   cacheStats(): SourceCacheStats[] {
-    const stats = mergeCacheStats([this.payloadCache.stats(), this.viewshedCache.stats()]);
+    const stats = mergeCacheStats([
+      this.payloadCache.stats(),
+      this.viewshedCache.stats(),
+      this.towerCountCache.stats(),
+      this.readModelCountCache.stats(),
+      this.schemaCache.stats()
+    ]);
     return [
       {
         sourceId: "mobile_coverage_model",
@@ -235,7 +256,7 @@ export class MobileCoverageSource implements SituationDataSource {
         warnings.push("DEM catalog is available but coverage-v1 does not apply terrain line-of-sight yet.");
       }
       if (this.config.mobileCoverageReadModelEnabled) {
-        const readModelCount = await this.fetchReadModelCount().catch(() => undefined);
+        const readModelCount = await this.readModelCountCache.getOrLoad("read-model-count", () => this.fetchReadModelCount()).catch(() => undefined);
         if (readModelCount === 0) {
           warnings.push("mobile_coverage_model read-model table is empty; runtime queries fall back to on-demand coverage calculation.");
         } else if (readModelCount === undefined) {
@@ -531,6 +552,9 @@ export class MobileCoverageSource implements SituationDataSource {
         bts_status_source text not null default 'none',
         operator_status_available boolean not null default false,
         source_revision text,
+        grid_resolution_m integer,
+        grid_row integer,
+        grid_column integer,
         geom geometry(Polygon, 4326) not null,
         feature_id text primary key
       );
@@ -542,12 +566,31 @@ export class MobileCoverageSource implements SituationDataSource {
       alter table ${table} add column if not exists bts_status_source text not null default 'none';
       alter table ${table} add column if not exists operator_status_available boolean not null default false;
       alter table ${table} add column if not exists source_revision text;
+      alter table ${table} add column if not exists grid_resolution_m integer;
+      alter table ${table} add column if not exists grid_row integer;
+      alter table ${table} add column if not exists grid_column integer;
+
+      update ${table}
+      set
+        grid_resolution_m = nullif(substring(feature_id from 'm([0-9]+)-r'), '')::integer,
+        grid_row = nullif(substring(feature_id from '-r(-?[0-9]+)-c'), '')::integer,
+        grid_column = nullif(substring(feature_id from '-c(-?[0-9]+)$'), '')::integer
+      where (grid_resolution_m is null or grid_row is null or grid_column is null)
+        and feature_id ~ 'm[0-9]+-r-?[0-9]+-c-?[0-9]+$';
 
       create index if not exists mobile_coverage_cells_geom_gix on ${table} using gist (geom);
       create index if not exists mobile_coverage_cells_model_idx on ${table}(model_version, technology, operator);
       create index if not exists mobile_coverage_cells_expires_idx on ${table}(expires_at);
       create index if not exists mobile_coverage_cells_generated_idx on ${table}(generated_at);
+      create index if not exists mobile_coverage_cells_grid_idx on ${table}(model_version, technology, operator, grid_resolution_m, grid_row, grid_column);
     `);
+  }
+
+  private async ensureReadModelSchemaCached(): Promise<void> {
+    await this.schemaCache.getOrLoad("read-model-schema", async () => {
+      await this.ensureReadModelSchema();
+      return true;
+    });
   }
 
   async replaceReadModelFeatures(
@@ -558,7 +601,7 @@ export class MobileCoverageSource implements SituationDataSource {
       Math.max(this.config.mobileCoverageReadModelMaxAgeSeconds, this.config.mobileCoverageCacheTtlSeconds)
     )
   ): Promise<number> {
-    await this.ensureReadModelSchema();
+    await this.ensureReadModelSchemaCached();
     const payload = await this.buildCoverage(bbox, technologies);
     const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
     await this.getPool().query(
@@ -574,6 +617,7 @@ export class MobileCoverageSource implements SituationDataSource {
     );
 
     for (const feature of payload.features) {
+      const gridCell = parseCoverageGridFeatureId(String(feature.properties.featureId ?? feature.id ?? ""));
       await this.getPool().query(
         `
           insert into ${table} (
@@ -596,13 +640,17 @@ export class MobileCoverageSource implements SituationDataSource {
             bts_status_source,
             operator_status_available,
             source_revision,
+            grid_resolution_m,
+            grid_row,
+            grid_column,
             geom,
             feature_id
           ) values (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11::timestamptz,
             $12::jsonb, $13::jsonb, $14::jsonb, $15, $16, $17, $18, $19,
-            st_setsrid(st_geomfromgeojson($20), 4326),
-            $21
+            $20, $21, $22,
+            st_setsrid(st_geomfromgeojson($23), 4326),
+            $24
           )
           on conflict (feature_id) do update set
             dataset_id = excluded.dataset_id,
@@ -624,6 +672,9 @@ export class MobileCoverageSource implements SituationDataSource {
             bts_status_source = excluded.bts_status_source,
             operator_status_available = excluded.operator_status_available,
             source_revision = excluded.source_revision,
+            grid_resolution_m = excluded.grid_resolution_m,
+            grid_row = excluded.grid_row,
+            grid_column = excluded.grid_column,
             geom = excluded.geom
         `,
         [
@@ -646,6 +697,9 @@ export class MobileCoverageSource implements SituationDataSource {
           feature.properties.btsStatusSource ?? "none",
           feature.properties.operatorStatusAvailable ?? false,
           feature.properties.sourceRevision ?? this.sourceRevision(Boolean(feature.properties.assumptions?.terrainApplied)),
+          gridCell?.resolutionM ?? feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
+          gridCell?.row ?? null,
+          gridCell?.column ?? null,
           JSON.stringify(feature.geometry),
           feature.properties.featureId
         ]
@@ -740,6 +794,7 @@ export class MobileCoverageSource implements SituationDataSource {
     const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
     const normalizedOperators = operators.includes("aggregate") ? ["unknown"] : operators;
     try {
+      await this.ensureReadModelSchemaCached();
       const result = await this.getPool().query<CoverageCellRow>(
         `
           with bounds as (
@@ -771,50 +826,73 @@ export class MobileCoverageSource implements SituationDataSource {
               bts_status_source,
               operator_status_available,
               source_revision,
-              st_asgeojson(geom)::json as geometry,
-              st_x(st_centroid(geom)) as center_lon,
-              st_y(st_centroid(geom)) as center_lat
+              grid_resolution_m,
+              grid_row,
+              grid_column,
+              geom
             from ${table}, bounds
             where model_version = $1
               and technology = any($2::text[])
               and operator = any($3::text[])
               and expires_at > now()
               and ($4::int <= 0 or generated_at >= now() - make_interval(secs => $4::int))
+              and grid_resolution_m is not null
+              and grid_row is not null
+              and grid_column is not null
               and geom && st_makeenvelope(bounds.west, bounds.south, bounds.east, bounds.north, 4326)
-              and st_intersects(geom, st_makeenvelope(bounds.west, bounds.south, bounds.east, bounds.north, 4326))
+          ),
+          extents as (
+            select
+              min(grid_column) as min_column,
+              max(grid_column) as max_column,
+              min(grid_row) as min_row,
+              max(grid_row) as max_row
+            from candidates
           ),
           bucketed as (
             select
               candidates.*,
               least(
                 bounds.bucket_count - 1,
-                greatest(0, floor(((center_lon - bounds.west) / nullif(bounds.east - bounds.west, 0)) * bounds.bucket_count)::int)
+                greatest(
+                  0,
+                  floor(
+                    ((grid_column - extents.min_column)::double precision / nullif(extents.max_column - extents.min_column + 1, 0))
+                    * bounds.bucket_count
+                  )::int
+                )
               ) as bucket_x,
               least(
                 bounds.bucket_count - 1,
-                greatest(0, floor(((center_lat - bounds.south) / nullif(bounds.north - bounds.south, 0)) * bounds.bucket_count)::int)
+                greatest(
+                  0,
+                  floor(
+                    ((grid_row - extents.min_row)::double precision / nullif(extents.max_row - extents.min_row + 1, 0))
+                    * bounds.bucket_count
+                  )::int
+                )
               ) as bucket_y
-            from candidates, bounds
+            from candidates, bounds, extents
           ),
           ranked as (
             select
-              *,
-              row_number() over (
-                partition by bucket_x, bucket_y
-                order by
-                  case quality
-                    when 'good' then 5
-                    when 'fair' then 4
-                    when 'weak' then 3
-                    when 'unknown' then 2
-                    when 'none' then 1
-                    else 0
-                  end desc,
-                  confidence desc,
-                  generated_at desc,
-                  feature_id asc
-              ) as bucket_rank
+              distinct on (bucket_y, bucket_x)
+              *
             from bucketed
+            order by
+              bucket_y,
+              bucket_x,
+              case quality
+                when 'good' then 5
+                when 'fair' then 4
+                when 'weak' then 3
+                when 'unknown' then 2
+                when 'none' then 1
+                else 0
+              end desc,
+              confidence desc,
+              generated_at desc,
+              feature_id asc
           )
           select
             feature_id,
@@ -836,9 +914,12 @@ export class MobileCoverageSource implements SituationDataSource {
             bts_status_source,
             operator_status_available,
             source_revision,
-            geometry
+            grid_resolution_m,
+            grid_row,
+            grid_column,
+            st_asgeojson(geom)::json as geometry
           from ranked
-          order by bucket_rank asc, bucket_y asc, bucket_x asc, feature_id asc
+          order by bucket_y asc, bucket_x asc, feature_id asc
           limit $9
         `,
         [
@@ -1225,6 +1306,7 @@ export class MobileCoverageSource implements SituationDataSource {
   }
 
   private async fetchReadModelCount(): Promise<number> {
+    await this.ensureReadModelSchemaCached();
     const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
     const result = await this.getPool().query<{ count: string }>(
       `
@@ -1375,6 +1457,20 @@ function buildGrid(bbox: BoundingBox, requestedResolutionM: number, maxCells: nu
     }
   }
   return { resolutionM, cells };
+}
+
+function parseCoverageGridFeatureId(featureId: string): { resolutionM: number; row: number; column: number } | undefined {
+  const match = featureId.match(/m([0-9]+)-r(-?[0-9]+)-c(-?[0-9]+)$/);
+  if (!match) {
+    return undefined;
+  }
+  const resolutionM = Number(match[1]);
+  const row = Number(match[2]);
+  const column = Number(match[3]);
+  if (!Number.isFinite(resolutionM) || !Number.isFinite(row) || !Number.isFinite(column)) {
+    return undefined;
+  }
+  return { resolutionM, row, column };
 }
 
 function nearestResolutionStep(minimumResolutionM: number): number {

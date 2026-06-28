@@ -169,12 +169,13 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - Aggregated responses use the standard `situation-data` cache and bbox canonicalization.
 - The preferred production path is a prepared PostGIS read-model in `public.mobile_coverage_cells`. Runtime API first tries this table by bbox, technology, operator, model version and freshness.
 - Read-model polygon responses are spatially distributed when the requested bbox contains more cells than the requested `limit`. SIM must not return the first N cells by internal id, because that produces misleading edge rectangles at low zoom. COP should treat limited grid responses as a viewport sample and request a tighter bbox or higher limit for detailed inspection.
+- The read-model keeps parsed grid metadata (`grid_resolution_m`, `grid_row`, `grid_column`) beside the polygon geometry. Runtime sampling uses these integer columns and `mobile_coverage_cells_grid_idx` before serializing only the final limited set to GeoJSON; this avoids ranking or converting the full national grid on every low-zoom request.
 - If the read-model misses, the coverage source falls back to source-level cached on-demand calculation keyed by canonical bbox, technology filter, operator filter, resolution and model version.
 - When no technology filter is supplied, the provider defaults to `4G`, matching the public catalog default. Clients must explicitly request `2G` or `5G` when they want those diagnostics.
 - Coverage cells are aligned to a deterministic resolution ladder (`250`, `500`, `1000`, `2000`, `5000`, `10000`, `25000`, `50000` m) instead of being generated from the current viewport origin.
 - Default coverage TTL is 21600 seconds.
 - Health reports `mobile_coverage_model` as degraded when PostGIS is not configured or no tower references exist.
-- Health warns when the read-model table is unavailable or empty, but keeps the source usable through the on-demand fallback.
+- Health warns when the read-model table is unavailable or empty, but keeps the source usable through the on-demand fallback. Read-model and tower counts are cached for readiness polling so health checks do not repeatedly scan PostGIS.
 - If `MOBILE_COVERAGE_TERRAIN_AWARE=true`, the source samples Copernicus DEM GLO-30 from the local cache and applies a line-of-sight terrain obstruction penalty. If DEM tiles are unavailable for a requested area, the response warns and falls back to the distance model for that area.
 - The per-tower viewshed endpoint is on-demand and should be requested only after a concrete BTS/tower click. It is not a replacement for the prepared `mobile_network` map layer.
 - Metrics include `situation_data_mobile_coverage_towers` and per-source cache counters for `mobile_coverage_model`.

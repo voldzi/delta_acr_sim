@@ -145,3 +145,10 @@ coverage, and optionally the COP map catalog. Until the prepared mobile coverage
 read-model is populated, it reports `mobile_network_model` absence as a warning;
 use `--require-mobile-coverage-read-model` after the read-model rebuild is in
 regular operation.
+
+The mobile coverage read-model table includes compatibility columns parsed from
+feature ids: `grid_resolution_m`, `grid_row` and `grid_column`. SIM maintains
+them automatically through `ensureReadModelSchema()` and uses
+`mobile_coverage_cells_grid_idx` for low-zoom spatial sampling. If an older
+table is already populated, the first schema ensure backfills these columns from
+ids like `coverage:mobile:4g:m1000-r5399-c975`; no full OSM reimport is required.
