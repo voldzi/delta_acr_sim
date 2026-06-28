@@ -102,9 +102,15 @@ Response contract:
 - `contractVersion=sim-mobile-coverage-tower-viewshed-v1`,
 - `tower.towerId` is the OSM id in `node:<id>`, `way:<id>` or `relation:<id>` form,
 - `query` echoes the normalized technology, radius, angular step and radial step,
-- `summary.qualityCounts` counts rendered sectors by `good`, `fair`, `weak`, `none`, `unknown`,
+- `query.includeNoSignal=false` by default; normal COP display receives only sectors with estimated reach (`good`, `fair`, `weak`),
+- `includeNoSignal=true` returns the full diagnostic radial grid including `quality=none`,
+- `summary.qualityCounts` counts returned sectors by `good`, `fair`, `weak`, `none`, `unknown`,
+- `summary.computedQualityCounts`, `summary.computedSectorCount` and `summary.omittedNoSignalSectorCount`
+  describe the complete calculation before default display filtering,
 - each feature has `layer=mobile_coverage` and `category=mobile_coverage_viewshed`,
 - each feature geometry is a radial sector polygon,
+- each returned sector carries `providerProperties.display` with COP-ready style, opacity, label,
+  line-of-sight status and render instructions,
 - each feature carries `quality`, `estimatedSignalDbm`, `confidence`, `metrics.distanceM`, `metrics.bearingDeg`,
   `metrics.terrainPenaltyDb`, `metrics.terrainMaxObstructionM` and `metrics.lineOfSightClear` when DEM terrain sampling is available.
 
@@ -113,7 +119,14 @@ Default parameters:
 - `technology=4G`,
 - radius by technology: `2G=25000 m`, `4G=12000 m`, `5G=5000 m`,
 - `azimuthStepDeg=10`,
-- `distanceStepM=500`.
+- `distanceStepM=500`,
+- `includeNoSignal=false`.
+
+COP should render the returned sectors only. It must not draw omitted no-signal
+sectors in normal operator mode; that would turn terrain-blocked viewsheds into
+misleading circular targets. Diagnostic mode may call the same endpoint with
+`includeNoSignal=true` and render `quality=none` using the low-opacity red style
+from `providerProperties.display.style`.
 
 SIM clamps unsafe parameters to keep the response bounded. The maximum returned
 sector count is capped; if the cap is reached the response includes a warning.

@@ -660,7 +660,19 @@ function parseTechnologies(value: unknown): MobileCoverageTechnology[] | undefin
 
 function parseMobileCoverageViewshedQuery(
   raw: Record<string, unknown>
-): { ok: true; value: { technology?: MobileCoverageTechnology; radiusM?: number; azimuthStepDeg?: number; distanceStepM?: number; includeRaw?: boolean } } | { ok: false; error: string } {
+):
+  | {
+      ok: true;
+      value: {
+        technology?: MobileCoverageTechnology;
+        radiusM?: number;
+        azimuthStepDeg?: number;
+        distanceStepM?: number;
+        includeNoSignal?: boolean;
+        includeRaw?: boolean;
+      };
+    }
+  | { ok: false; error: string } {
   const technologies = parseTechnologies(raw.technology);
   if (asString(raw.technology) && !technologies?.[0]) {
     return { ok: false, error: "technology must be one of 2G, 4G or 5G." };
@@ -684,6 +696,7 @@ function parseMobileCoverageViewshedQuery(
       radiusM: radiusM.value,
       azimuthStepDeg: azimuthStepDeg.value,
       distanceStepM: distanceStepM.value,
+      includeNoSignal: parseBoolean(raw.includeNoSignal),
       includeRaw: parseBoolean(raw.includeRaw)
     }
   };

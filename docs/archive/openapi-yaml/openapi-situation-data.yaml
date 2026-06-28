@@ -223,6 +223,13 @@ paths:
             maximum: 2500
             default: 500
           description: Radial band width in metres.
+        - name: includeNoSignal
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include sectors with quality=none. Defaults to false so COP renders only estimated reach; use true only for diagnostic radial-grid display.
         - name: includeRaw
           in: query
           required: false
@@ -2171,7 +2178,7 @@ components:
               const: false
         query:
           type: object
-          required: [technology, radiusM, azimuthStepDeg, distanceStepM, antennaHeightM, receiverHeightM]
+          required: [technology, radiusM, azimuthStepDeg, distanceStepM, antennaHeightM, receiverHeightM, includeNoSignal]
           properties:
             technology:
               $ref: "#/components/schemas/MobileCoverageTechnology"
@@ -2185,9 +2192,25 @@ components:
               type: number
             receiverHeightM:
               type: number
+            includeNoSignal:
+              type: boolean
         summary:
           type: object
-          required: [featureCount, qualityCounts, terrainAware, terrainApplied, demSource, warningCount, disclaimer]
+          required:
+            - featureCount
+            - qualityCounts
+            - computedSectorCount
+            - computedQualityCounts
+            - omittedNoSignalSectorCount
+            - lineOfSightClearSectorCount
+            - lineOfSightBlockedSectorCount
+            - lineOfSightUnknownSectorCount
+            - renderPolicy
+            - terrainAware
+            - terrainApplied
+            - demSource
+            - warningCount
+            - disclaimer
           properties:
             featureCount:
               type: integer
@@ -2205,6 +2228,33 @@ components:
                   type: integer
                 unknown:
                   type: integer
+            computedSectorCount:
+              type: integer
+            computedQualityCounts:
+              type: object
+              required: [good, fair, weak, none, unknown]
+              properties:
+                good:
+                  type: integer
+                fair:
+                  type: integer
+                weak:
+                  type: integer
+                none:
+                  type: integer
+                unknown:
+                  type: integer
+            omittedNoSignalSectorCount:
+              type: integer
+            lineOfSightClearSectorCount:
+              type: integer
+            lineOfSightBlockedSectorCount:
+              type: integer
+            lineOfSightUnknownSectorCount:
+              type: integer
+            renderPolicy:
+              type: string
+              enum: [coverage_only, diagnostic_all_sectors]
             terrainAware:
               type: boolean
             terrainApplied:

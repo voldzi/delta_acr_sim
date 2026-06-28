@@ -508,12 +508,14 @@ Interaktivni per-BTS viewshed pro detail po kliknuti na BTS:
 GET /mobile-coverage/towers/node:13743393126/viewshed?technology=4G&radiusM=12000&azimuthStepDeg=10&distanceStepM=500
 ```
 
-Odpoved je GeoJSON `FeatureCollection` s `contractVersion=sim-mobile-coverage-tower-viewshed-v1`. `features[]` jsou radialni sektorove polygony v layeru `mobile_coverage`, kategorii `mobile_coverage_viewshed`. COM je muze vykreslit jako docasnou detailni prekryvnou vrstvu nad mapou:
+Odpoved je GeoJSON `FeatureCollection` s `contractVersion=sim-mobile-coverage-tower-viewshed-v1`. `features[]` jsou radialni sektorove polygony v layeru `mobile_coverage`, kategorii `mobile_coverage_viewshed`. Vychozi odpoved ma `query.includeNoSignal=false` a vraci pouze sektory, kde SIM odhaduje dosah (`quality=good|fair|weak`). Sektory `quality=none` nejsou v beznem operatorovem overlayi vraceny, aby COP nevykresloval zavadejici kruhovy terc. Pro diagnostiku muze COP explicitne volat `includeNoSignal=true` a zobrazit plnou radialni mrizku.
 
-- barva podle `properties.quality`: `good`, `fair`, `weak`, `none`, `unknown`,
+- COP ma primarne kreslit `properties.providerProperties.display.style` a nevymyslet vlastni barvy,
+- barva podle `properties.quality`: `good`, `fair`, `weak`; `none` jen pri `includeNoSignal=true`,
 - volitelna popiska/detail podle `properties.estimatedSignalDbm`,
 - technicky detail podle `properties.metrics.terrainPenaltyDb`, `terrainMaxObstructionM`, `lineOfSightClear`, `distanceM`, `bearingDeg`,
-- zdroj a omezeni podle `summary.disclaimer`, `tower.btsStatus`, `tower.operatorStatusAvailable`, `properties.assumptions`.
+- zdroj a omezeni podle `summary.disclaimer`, `tower.btsStatus`, `tower.operatorStatusAvailable`, `properties.assumptions`,
+- souhrn stineni podle `summary.computedSectorCount`, `summary.omittedNoSignalSectorCount`, `summary.lineOfSightBlockedSectorCount`.
 
 Viewshed endpoint je on-demand vypocet pro jednu vez. COM ho nema volat pro vsechny BTS naraz ani pouzivat jako beznou mapovou vrstvu. Pro normalni mapu zustava autoritativni vrstva `mobile_network`.
 

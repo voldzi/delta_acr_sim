@@ -2336,6 +2336,65 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("omits no-signal tower viewshed sectors by default while keeping diagnostic counts", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    (source as unknown as { fetchTowerById: () => Promise<{ id: string; name: string; lon: number; lat: number; operator: string }> }).fetchTowerById =
+      async () => ({ id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08, operator: "unknown" });
+
+    const defaultResult = await source.buildTowerViewshed({
+      towerId: "node:1",
+      technology: "4G",
+      radiusM: 5000,
+      azimuthStepDeg: 180,
+      distanceStepM: 1000
+    });
+    const diagnosticResult = await source.buildTowerViewshed({
+      towerId: "node:1",
+      technology: "4G",
+      radiusM: 5000,
+      azimuthStepDeg: 180,
+      distanceStepM: 1000,
+      includeNoSignal: true
+    });
+
+    expect(defaultResult?.query.includeNoSignal).toBe(false);
+    expect(defaultResult?.summary).toEqual(
+      expect.objectContaining({
+        featureCount: 12,
+        computedSectorCount: 20,
+        omittedNoSignalSectorCount: 8,
+        renderPolicy: "coverage_only"
+      })
+    );
+    expect(defaultResult?.summary.qualityCounts.none).toBe(0);
+    expect(defaultResult?.summary.computedQualityCounts.none).toBe(8);
+    expect(defaultResult?.features.every((feature) => feature.properties.quality !== "none")).toBe(true);
+    expect(defaultResult?.features[0].properties.providerProperties?.display).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-mobile-coverage-viewshed-display-v1",
+        renderOnly: true,
+        renderPolicy: "coverage_only",
+        style: expect.objectContaining({ fillColor: expect.any(String), fillOpacity: expect.any(Number) })
+      })
+    );
+
+    expect(diagnosticResult?.query.includeNoSignal).toBe(true);
+    expect(diagnosticResult?.summary).toEqual(
+      expect.objectContaining({
+        featureCount: 20,
+        computedSectorCount: 20,
+        omittedNoSignalSectorCount: 0,
+        renderPolicy: "diagnostic_all_sectors"
+      })
+    );
+    expect(diagnosticResult?.summary.qualityCounts.none).toBe(8);
+  });
+
   it("exposes a per-tower mobile coverage viewshed endpoint for COP detail overlays", async () => {
     const coverageApp = await createApp({
       ...config,
@@ -2366,11 +2425,19 @@ describe("Situation Data API contract", () => {
         azimuthStepDeg: 90,
         distanceStepM: 500,
         antennaHeightM: 30,
-        receiverHeightM: 1.5
+        receiverHeightM: 1.5,
+        includeNoSignal: false
       },
       summary: {
         featureCount: 1,
         qualityCounts: { good: 1, fair: 0, weak: 0, none: 0, unknown: 0 },
+        computedSectorCount: 1,
+        computedQualityCounts: { good: 1, fair: 0, weak: 0, none: 0, unknown: 0 },
+        omittedNoSignalSectorCount: 0,
+        lineOfSightClearSectorCount: 0,
+        lineOfSightBlockedSectorCount: 0,
+        lineOfSightUnknownSectorCount: 1,
+        renderPolicy: "coverage_only",
         terrainAware: false,
         terrainApplied: false,
         demSource: "not-used-phase-1",

@@ -2757,6 +2757,16 @@
             "description": "Radial band width in metres."
           },
           {
+            "name": "includeNoSignal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Include sectors with quality=none. Defaults to false so COP renders only estimated reach; use true only for diagnostic radial-grid display."
+          },
+          {
             "name": "includeRaw",
             "in": "query",
             "required": false,
@@ -3198,67 +3208,6 @@
           }
         },
         "operationId": "situationData_get_situation_data_api_v1_weather_radar_clean_productId_fileName",
-        "tags": [
-          "Situation Data: Situation Data"
-        ]
-      }
-    },
-    "/situation-data/api/v1/weather-stations/{stationId}/detail": {
-      "get": {
-        "summary": "Return display-ready CHMI weather station detail",
-        "description": "Returns SIM-computed current display state, CHMI station history and model forecast chart series for COP detail windows. COP renders the supplied display and charts without re-inferencing weather condition.",
-        "parameters": [
-          {
-            "name": "stationId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "example": "0-20000-0-11518"
-            }
-          },
-          {
-            "name": "historyHours",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 48,
-              "minimum": 1,
-              "maximum": 72
-            }
-          },
-          {
-            "name": "forecastHours",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 24,
-              "minimum": 1,
-              "maximum": 72
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Weather station detail with display and chart series",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SituationDataWeatherStationDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "$ref": "#/components/responses/SituationDataProblem"
-          },
-          "502": {
-            "$ref": "#/components/responses/SituationDataProblem"
-          }
-        },
-        "operationId": "situationData_get_situation_data_api_v1_weather_stations_stationId_detail",
         "tags": [
           "Situation Data: Situation Data"
         ]
@@ -7410,189 +7359,6 @@
           }
         }
       },
-      "SituationDataWeatherStationDetail": {
-        "type": "object",
-        "required": [
-          "contractVersion",
-          "generatedAt",
-          "station",
-          "current",
-          "history",
-          "forecast",
-          "charts",
-          "copInstructions"
-        ],
-        "properties": {
-          "contractVersion": {
-            "type": "string",
-            "const": "sim-weather-station-detail-v1"
-          },
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "station": {
-            "type": "object",
-            "required": [
-              "stationId",
-              "featureId",
-              "name",
-              "lon",
-              "lat"
-            ],
-            "properties": {
-              "stationId": {
-                "type": "string",
-                "example": "0-20000-0-11518"
-              },
-              "featureId": {
-                "type": "string",
-                "example": "weather:chmi_weather_stations:0-20000-0-11518"
-              },
-              "ghId": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string",
-                "example": "Praha-Karlov"
-              },
-              "lon": {
-                "type": "number",
-                "format": "double"
-              },
-              "lat": {
-                "type": "number",
-                "format": "double"
-              },
-              "elevationM": {
-                "type": "number"
-              }
-            },
-            "additionalProperties": true
-          },
-          "current": {
-            "type": "object",
-            "description": "Current measured state with display-ready presentation object for COP.",
-            "additionalProperties": true
-          },
-          "history": {
-            "type": "object",
-            "description": "CHMI observed 10m and 1h station history points.",
-            "additionalProperties": true
-          },
-          "forecast": {
-            "type": "object",
-            "description": "Model forecast points for the station coordinates.",
-            "additionalProperties": true
-          },
-          "charts": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "chartId",
-                "title",
-                "preferredType",
-                "series"
-              ],
-              "properties": {
-                "chartId": {
-                  "type": "string",
-                  "example": "temperature"
-                },
-                "title": {
-                  "type": "string"
-                },
-                "titleEn": {
-                  "type": "string"
-                },
-                "preferredType": {
-                  "type": "string",
-                  "enum": [
-                    "line",
-                    "bar",
-                    "combined"
-                  ]
-                },
-                "xField": {
-                  "type": "string",
-                  "const": "time"
-                },
-                "yUnit": {
-                  "type": "string"
-                },
-                "series": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": [
-                      "seriesId",
-                      "label",
-                      "source",
-                      "unit",
-                      "style",
-                      "points"
-                    ],
-                    "properties": {
-                      "seriesId": {
-                        "type": "string"
-                      },
-                      "label": {
-                        "type": "string"
-                      },
-                      "source": {
-                        "type": "string",
-                        "enum": [
-                          "chmi",
-                          "open_meteo"
-                        ]
-                      },
-                      "unit": {
-                        "type": "string"
-                      },
-                      "style": {
-                        "type": "string",
-                        "enum": [
-                          "solid",
-                          "dashed",
-                          "bar"
-                        ]
-                      },
-                      "points": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "required": [
-                            "time",
-                            "value"
-                          ],
-                          "properties": {
-                            "time": {
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "value": {
-                              "type": "number"
-                            }
-                          },
-                          "additionalProperties": false
-                        }
-                      }
-                    },
-                    "additionalProperties": true
-                  }
-                }
-              },
-              "additionalProperties": true
-            }
-          },
-          "copInstructions": {
-            "type": "object",
-            "additionalProperties": true
-          }
-        },
-        "additionalProperties": true
-      },
       "SituationDataWeatherCameraLocation": {
         "type": "object",
         "required": [
@@ -9213,7 +8979,8 @@
               "azimuthStepDeg",
               "distanceStepM",
               "antennaHeightM",
-              "receiverHeightM"
+              "receiverHeightM",
+              "includeNoSignal"
             ],
             "properties": {
               "technology": {
@@ -9233,6 +9000,9 @@
               },
               "receiverHeightM": {
                 "type": "number"
+              },
+              "includeNoSignal": {
+                "type": "boolean"
               }
             }
           },
@@ -9241,6 +9011,13 @@
             "required": [
               "featureCount",
               "qualityCounts",
+              "computedSectorCount",
+              "computedQualityCounts",
+              "omittedNoSignalSectorCount",
+              "lineOfSightClearSectorCount",
+              "lineOfSightBlockedSectorCount",
+              "lineOfSightUnknownSectorCount",
+              "renderPolicy",
               "terrainAware",
               "terrainApplied",
               "demSource",
@@ -9277,6 +9054,55 @@
                     "type": "integer"
                   }
                 }
+              },
+              "computedSectorCount": {
+                "type": "integer"
+              },
+              "computedQualityCounts": {
+                "type": "object",
+                "required": [
+                  "good",
+                  "fair",
+                  "weak",
+                  "none",
+                  "unknown"
+                ],
+                "properties": {
+                  "good": {
+                    "type": "integer"
+                  },
+                  "fair": {
+                    "type": "integer"
+                  },
+                  "weak": {
+                    "type": "integer"
+                  },
+                  "none": {
+                    "type": "integer"
+                  },
+                  "unknown": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "omittedNoSignalSectorCount": {
+                "type": "integer"
+              },
+              "lineOfSightClearSectorCount": {
+                "type": "integer"
+              },
+              "lineOfSightBlockedSectorCount": {
+                "type": "integer"
+              },
+              "lineOfSightUnknownSectorCount": {
+                "type": "integer"
+              },
+              "renderPolicy": {
+                "type": "string",
+                "enum": [
+                  "coverage_only",
+                  "diagnostic_all_sectors"
+                ]
               },
               "terrainAware": {
                 "type": "boolean"

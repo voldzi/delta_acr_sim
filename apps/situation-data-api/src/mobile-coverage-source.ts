@@ -106,6 +106,7 @@ export interface MobileCoverageViewshedOptions {
   radiusM?: number;
   azimuthStepDeg?: number;
   distanceStepM?: number;
+  includeNoSignal?: boolean;
   includeRaw?: boolean;
 }
 
@@ -136,10 +137,18 @@ export interface MobileCoverageViewshedPayload {
     distanceStepM: number;
     antennaHeightM: number;
     receiverHeightM: number;
+    includeNoSignal: boolean;
   };
   summary: {
     featureCount: number;
     qualityCounts: Record<MobileCoverageQuality, number>;
+    computedSectorCount: number;
+    computedQualityCounts: Record<MobileCoverageQuality, number>;
+    omittedNoSignalSectorCount: number;
+    lineOfSightClearSectorCount: number;
+    lineOfSightBlockedSectorCount: number;
+    lineOfSightUnknownSectorCount: number;
+    renderPolicy: ViewshedRenderPolicy;
     terrainAware: boolean;
     terrainApplied: boolean;
     demSource: string;
@@ -266,6 +275,9 @@ export class MobileCoverageSource implements SituationDataSource {
     const radiusM = normalizeViewshedRadius(options.radiusM, technology);
     const azimuthStepDeg = normalizeViewshedAzimuthStep(options.azimuthStepDeg);
     const distanceStepM = normalizeViewshedDistanceStep(options.distanceStepM, radiusM, azimuthStepDeg);
+    const includeNoSignal = options.includeNoSignal === true;
+    const renderPolicy = includeNoSignal ? "diagnostic_all_sectors" : "coverage_only";
+    const requestedSectorCount = Math.ceil(360 / azimuthStepDeg) * Math.ceil(radiusM / distanceStepM);
     const terrainSampler = this.createTerrainSampler();
     const demTiles = terrainSampler ? await terrainSampler.tilesForBbox(bboxAroundPoint(tower.lon, tower.lat, radiusM)) : [];
     const terrainApplied = Boolean(terrainSampler && demTiles.length > 0);
@@ -273,21 +285,23 @@ export class MobileCoverageSource implements SituationDataSource {
       this.config.mobileCoverageTerrainAware && !terrainApplied
         ? ["mobile_coverage_model terrain-aware mode is enabled but DEM tiles are not available for the requested tower viewshed."]
         : [];
-    const qualityCounts: Record<MobileCoverageQuality, number> = {
-      good: 0,
-      fair: 0,
-      weak: 0,
-      none: 0,
-      unknown: 0
-    };
+    const qualityCounts = emptyQualityCounts();
+    const computedQualityCounts = emptyQualityCounts();
+    let computedSectorCount = 0;
+    let omittedNoSignalSectorCount = 0;
+    let lineOfSightClearSectorCount = 0;
+    let lineOfSightBlockedSectorCount = 0;
+    let lineOfSightUnknownSectorCount = 0;
     const features: SituationFeature[] = [];
 
-    for (let bearingDeg = 0; bearingDeg < 360 && features.length < MAX_VIEWSHED_FEATURES; bearingDeg += azimuthStepDeg) {
+    for (let bearingDeg = 0; bearingDeg < 360 && computedSectorCount < MAX_VIEWSHED_FEATURES; bearingDeg += azimuthStepDeg) {
       const endBearingDeg = Math.min(360, bearingDeg + azimuthStepDeg);
-      for (let innerRadiusM = 0; innerRadiusM < radiusM && features.length < MAX_VIEWSHED_FEATURES; innerRadiusM += distanceStepM) {
+      for (let innerRadiusM = 0; innerRadiusM < radiusM && computedSectorCount < MAX_VIEWSHED_FEATURES; innerRadiusM += distanceStepM) {
+        computedSectorCount += 1;
         const outerRadiusM = Math.min(radiusM, innerRadiusM + distanceStepM);
         const sampleDistanceM = (innerRadiusM + outerRadiusM) / 2;
-        const samplePoint = destinationPoint(tower.lon, tower.lat, bearingDeg + (endBearingDeg - bearingDeg) / 2, sampleDistanceM);
+        const bearingCenterDeg = bearingDeg + (endBearingDeg - bearingDeg) / 2;
+        const samplePoint = destinationPoint(tower.lon, tower.lat, bearingCenterDeg, sampleDistanceM);
         const nearest: NearestTower = {
           tower,
           distanceM: sampleDistanceM
@@ -298,6 +312,20 @@ export class MobileCoverageSource implements SituationDataSource {
             : undefined;
         const estimate = estimateSignal(sampleDistanceM, technology, terrain?.penaltyDb);
         const quality = qualityForSignal(estimate.signalDbm);
+        computedQualityCounts[quality] += 1;
+        if (terrain?.lineOfSightClear === true) {
+          lineOfSightClearSectorCount += 1;
+        } else if (terrain?.lineOfSightClear === false) {
+          lineOfSightBlockedSectorCount += 1;
+        } else {
+          lineOfSightUnknownSectorCount += 1;
+        }
+
+        if (!includeNoSignal && quality === "none") {
+          omittedNoSignalSectorCount += 1;
+          continue;
+        }
+
         qualityCounts[quality] += 1;
         const confidence = confidenceForEstimate(sampleDistanceM, technology, terrain);
         const featureId = [
@@ -308,6 +336,16 @@ export class MobileCoverageSource implements SituationDataSource {
           `a${Math.round(bearingDeg)}`,
           `r${Math.round(outerRadiusM)}`
         ].join(":");
+        const display = viewshedDisplayProperties({
+          technology,
+          quality,
+          signalDbm: estimate.signalDbm,
+          terrain,
+          innerRadiusM,
+          outerRadiusM,
+          renderPolicy,
+          includeNoSignal
+        });
 
         features.push({
           type: "Feature",
@@ -331,7 +369,7 @@ export class MobileCoverageSource implements SituationDataSource {
               attribution: MOBILE_COVERAGE_LICENSE.attribution
             },
             metrics: compactMetrics({
-              bearingDeg: round(bearingDeg + (endBearingDeg - bearingDeg) / 2, 2),
+              bearingDeg: round(bearingCenterDeg, 2),
               startBearingDeg: round(bearingDeg, 2),
               endBearingDeg: round(endBearingDeg, 2),
               innerRadiusM: Math.round(innerRadiusM),
@@ -352,8 +390,20 @@ export class MobileCoverageSource implements SituationDataSource {
               towerName: tower.name,
               towerOperator: tower.operator,
               towerTechnologyHint: tower.technologyHint,
-              btsStatus: "operator_feed_unavailable"
+              btsStatus: "operator_feed_unavailable",
+              renderAs: "coverage_sector",
+              renderPolicy,
+              coverageVisible: quality === "none" ? "false" : "true",
+              lineOfSight: terrain ? (terrain.lineOfSightClear ? "clear" : "blocked") : "not_evaluated"
             }),
+            rendering: {
+              mode: "feature",
+              geometryRole: "feature_geometry",
+              opacity: display.style.fillOpacity
+            },
+            providerProperties: {
+              display
+            },
             operator: tower.operator ?? "unknown",
             technology,
             quality,
@@ -382,8 +432,8 @@ export class MobileCoverageSource implements SituationDataSource {
       }
     }
 
-    if (features.length >= MAX_VIEWSHED_FEATURES) {
-      warnings.push("mobile_coverage_model tower viewshed reached the feature cap; increase step sizes or reduce radius for complete output.");
+    if (computedSectorCount < requestedSectorCount) {
+      warnings.push("mobile_coverage_model tower viewshed reached the sector calculation cap; increase step sizes or reduce radius for complete output.");
     }
 
     return {
@@ -412,11 +462,19 @@ export class MobileCoverageSource implements SituationDataSource {
         azimuthStepDeg,
         distanceStepM,
         antennaHeightM: this.config.mobileCoverageAntennaHeightM,
-        receiverHeightM: RECEIVER_HEIGHT_M
+        receiverHeightM: RECEIVER_HEIGHT_M,
+        includeNoSignal
       },
       summary: {
         featureCount: features.length,
         qualityCounts,
+        computedSectorCount,
+        computedQualityCounts,
+        omittedNoSignalSectorCount,
+        lineOfSightClearSectorCount,
+        lineOfSightBlockedSectorCount,
+        lineOfSightUnknownSectorCount,
+        renderPolicy,
         terrainAware: this.config.mobileCoverageTerrainAware,
         terrainApplied,
         demSource: this.effectiveDemSource(terrainApplied),
@@ -1104,6 +1162,21 @@ interface TerrainAssessment {
   targetTileId: string;
 }
 
+type ViewshedRenderPolicy = "coverage_only" | "diagnostic_all_sectors";
+
+interface ViewshedStyle {
+  fillColor: string;
+  strokeColor: string;
+  fillOpacity: number;
+  strokeOpacity: number;
+  strokeWidth: number;
+  lineDash: number[];
+}
+
+interface ViewshedDisplayProperties extends Record<string, unknown> {
+  style: ViewshedStyle;
+}
+
 interface CoverageCell {
   id: string;
   center: { lon: number; lat: number };
@@ -1281,6 +1354,99 @@ function severityForQuality(quality: MobileCoverageQuality): "info" | "advisory"
     return "advisory";
   }
   return "info";
+}
+
+function emptyQualityCounts(): Record<MobileCoverageQuality, number> {
+  return {
+    good: 0,
+    fair: 0,
+    weak: 0,
+    none: 0,
+    unknown: 0
+  };
+}
+
+function viewshedDisplayProperties(options: {
+  technology: MobileCoverageTechnology;
+  quality: MobileCoverageQuality;
+  signalDbm: number;
+  terrain: TerrainAssessment | undefined;
+  innerRadiusM: number;
+  outerRadiusM: number;
+  renderPolicy: ViewshedRenderPolicy;
+  includeNoSignal: boolean;
+}): ViewshedDisplayProperties {
+  const style = viewshedStyle(options.quality, options.includeNoSignal);
+  const lineOfSightStatus = options.terrain ? (options.terrain.lineOfSightClear ? "clear" : "blocked") : "not_evaluated";
+  return {
+    contractVersion: "sim-mobile-coverage-viewshed-display-v1",
+    renderer: "mobile_coverage_viewshed_sector_v1",
+    renderOnly: true,
+    renderPolicy: options.renderPolicy,
+    visible: options.quality !== "none" || options.includeNoSignal,
+    label: `${options.technology} ${viewshedQualityLabel(options.quality)}`,
+    subtitle: viewshedSubtitle(options.terrain, options.signalDbm),
+    primaryValue: `${options.signalDbm} dBm`,
+    secondaryValue: options.terrain ? `${options.terrain.penaltyDb} dB terrain loss` : "terrain not evaluated",
+    quality: options.quality,
+    lineOfSightStatus,
+    terrainObstructionM: options.terrain?.maxObstructionM,
+    innerRadiusM: Math.round(options.innerRadiusM),
+    outerRadiusM: Math.round(options.outerRadiusM),
+    style,
+    legend: [
+      { quality: "good", label: "Good estimate", color: "#22c55e" },
+      { quality: "fair", label: "Usable estimate", color: "#eab308" },
+      { quality: "weak", label: "Weak estimate", color: "#f97316" },
+      { quality: "none", label: "No estimated reach / hidden by default", color: "#ef4444" }
+    ],
+    copInstructions: {
+      defaultLayerBehavior: "Render returned features only. Do not draw omitted no-signal sectors.",
+      diagnosticLayerBehavior: "Request includeNoSignal=true only when the operator explicitly wants the full diagnostic radial grid.",
+      colorField: "providerProperties.display.style.fillColor",
+      opacityField: "providerProperties.display.style.fillOpacity"
+    }
+  };
+}
+
+function viewshedStyle(quality: MobileCoverageQuality, includeNoSignal: boolean): ViewshedStyle {
+  const palette: Record<MobileCoverageQuality, { fillColor: string; strokeColor: string; fillOpacity: number; strokeOpacity: number }> = {
+    good: { fillColor: "#22c55e", strokeColor: "#15803d", fillOpacity: 0.42, strokeOpacity: 0.85 },
+    fair: { fillColor: "#eab308", strokeColor: "#a16207", fillOpacity: 0.34, strokeOpacity: 0.78 },
+    weak: { fillColor: "#f97316", strokeColor: "#c2410c", fillOpacity: 0.28, strokeOpacity: 0.72 },
+    none: { fillColor: "#ef4444", strokeColor: "#b91c1c", fillOpacity: includeNoSignal ? 0.1 : 0, strokeOpacity: includeNoSignal ? 0.35 : 0 },
+    unknown: { fillColor: "#94a3b8", strokeColor: "#475569", fillOpacity: 0.18, strokeOpacity: 0.45 }
+  };
+  return {
+    ...palette[quality],
+    strokeWidth: quality === "none" ? 0.5 : 1,
+    lineDash: quality === "none" ? [4, 4] : []
+  };
+}
+
+function viewshedQualityLabel(quality: MobileCoverageQuality): string {
+  switch (quality) {
+    case "good":
+      return "good estimated reach";
+    case "fair":
+      return "usable estimated reach";
+    case "weak":
+      return "weak estimated reach";
+    case "none":
+      return "no estimated reach";
+    default:
+      return "unknown estimated reach";
+  }
+}
+
+function viewshedSubtitle(terrain: TerrainAssessment | undefined, signalDbm: number): string {
+  if (!terrain) {
+    return `Estimated signal ${signalDbm} dBm; terrain not evaluated.`;
+  }
+  if (terrain.lineOfSightClear) {
+    return `Estimated signal ${signalDbm} dBm; terrain line of sight clear.`;
+  }
+  return `Estimated signal ${signalDbm} dBm; terrain obstruction ${terrain.maxObstructionM} m.`;
 }
 
 function expandBboxByMeters(bbox: BoundingBox, meters: number): BoundingBox {
