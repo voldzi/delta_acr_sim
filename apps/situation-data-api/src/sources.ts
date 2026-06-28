@@ -1396,8 +1396,12 @@ export class MobileNetworkSource implements SituationDataSource {
       modelVersion: this.config.mobileCoverageModelVersion
     });
     const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildMobileNetwork(cacheBbox, technologies));
-    const features = spatiallyLimitFeatures(
+    const aggregatedFeatures = aggregateMobileNetworkFeatures(
       payload.features.filter((feature) => featureIntersectsBboxByEnvelope(feature, query.bbox)),
+      payload.generatedAt
+    );
+    const features = spatiallyLimitFeatures(
+      aggregatedFeatures.filter((feature) => featureIntersectsBboxByEnvelope(feature, query.bbox)),
       query.limit,
       query.bbox
     ).map((feature) => ({
@@ -1419,7 +1423,7 @@ export class MobileNetworkSource implements SituationDataSource {
   private async buildMobileNetwork(bbox: BoundingBox, technologies: MobileCoverageTechnology[] | undefined): Promise<MobileNetworkPayload> {
     const generatedAt = new Date().toISOString();
     const warnings: string[] = [];
-    const coverageLimit = Math.min(1000, Math.max(this.config.mobileCoverageMaxCells, 1));
+    const coverageLimit = Math.min(5000, Math.max(this.config.mobileCoverageMaxCells, 1000));
     const coverageQuery: SituationQuery = {
       bbox,
       layers: ["mobile_coverage"],
@@ -2487,6 +2491,164 @@ function mobileNetworkSummary(quality: MobileCoverageQuality, status: MobileNetw
   return `Mobilní síť je v oblasti hodnocena jako ${qualityText[quality]} (${statusText[status]}).${measurementText}`;
 }
 
+function aggregateMobileNetworkFeatures(features: SituationFeature[], generatedAt: string): SituationFeature[] {
+  const groups = new Map<string, SituationFeature[]>();
+  for (const feature of features) {
+    const key = [
+      feature.properties.technology ?? "unknown",
+      feature.properties.status ?? "unknown",
+      feature.properties.quality ?? "unknown",
+      feature.properties.dataQuality ?? "unknown"
+    ].join(":");
+    const group = groups.get(key);
+    if (group) {
+      group.push(feature);
+    } else {
+      groups.set(key, [feature]);
+    }
+  }
+
+  return Array.from(groups.values()).flatMap((group) => {
+    const polygons = group.flatMap((feature) => polygonCoordinatesForMultiPolygon(feature));
+    if (polygons.length === 0) {
+      return [];
+    }
+
+    const representative =
+      [...group].sort(
+        (a, b) =>
+          qualityRank(b.properties.quality) - qualityRank(a.properties.quality) ||
+          (b.properties.confidence ?? 0) - (a.properties.confidence ?? 0)
+      )[0] ?? group[0];
+    if (!representative) {
+      return [];
+    }
+
+    const technology = networkTechnology(representative.properties.technology);
+    const quality = representative.properties.quality ?? "unknown";
+    const status = representative.properties.status ?? statusForMobileQuality(quality, { count: 0, ctuNettestCount: 0, ctuStationaryCount: 0, averageConfidence: 0, severity: "info" });
+    const dataQuality = aggregateMobileNetworkDataQuality(group);
+    const confidence = round(average(group.map((feature) => feature.properties.confidence).filter(isFiniteNumber)) ?? representative.properties.confidence ?? 0.25, 2);
+    const signalDbm = average(group.map((feature) => feature.properties.estimatedSignalDbm).filter(isFiniteNumber));
+    const measurementCount = sumNumericMetrics(group, "measurementCount");
+    const cellCount = group.length;
+    const summary = mobileNetworkAggregateSummary(technology, quality, status, cellCount, measurementCount);
+    const display = mobileNetworkDisplay({
+      technology,
+      quality,
+      status,
+      confidence,
+      summary,
+      measurementCount,
+      estimatedSignalDbm: typeof signalDbm === "number" ? Math.round(signalDbm) : undefined
+    });
+    const featureId = `mobile_network:aggregate:${String(technology).toLowerCase()}:${status}:${quality}`;
+
+    return [
+      {
+        type: "Feature",
+        id: featureId,
+        geometry: {
+          type: "MultiPolygon",
+          coordinates: polygons
+        },
+        properties: {
+          ...representative.properties,
+          featureId,
+          label: `${technology} mobile network ${mobileNetworkStatusLabel(status, quality)}`,
+          observedAt: generatedAt,
+          confidence,
+          severity: severityForMobileStatus(status, quality, {
+            count: measurementCount,
+            ctuNettestCount: 0,
+            ctuStationaryCount: 0,
+            averageConfidence: confidence,
+            severity: "info"
+          }),
+          rendering: {
+            mode: "feature",
+            geometryRole: "feature_geometry",
+            opacity: display.style.fillOpacity
+          },
+          operator: "aggregate",
+          technology,
+          quality,
+          status,
+          summary,
+          dataQuality,
+          estimatedSignalDbm: display.signalDbm,
+          generatedAt,
+          metrics: compactMixedMetrics({
+            ...(representative.properties.metrics ?? {}),
+            cellCount,
+            polygonPartCount: polygons.length,
+            measurementCount,
+            finalConfidence: confidence,
+            estimatedSignalDbm: display.signalDbm
+          }),
+          tags: compactTags({
+            ...(representative.properties.tags ?? {}),
+            status,
+            dataQuality,
+            renderAs: "mobile_network_area",
+            renderPolicy: "status_fill",
+            aggregatedCells: String(cellCount)
+          }),
+          providerProperties: {
+            ...(representative.properties.providerProperties ?? {}),
+            display
+          },
+          raw: {
+            aggregatedCellCount: cellCount,
+            sourceFeatureIds: group.slice(0, 250).map((feature) => feature.properties.featureId)
+          }
+        }
+      } satisfies SituationFeature
+    ];
+  });
+}
+
+function polygonCoordinatesForMultiPolygon(feature: SituationFeature): Array<Array<Array<[number, number]>>> {
+  if (feature.geometry.type === "Polygon") {
+    return [feature.geometry.coordinates];
+  }
+  if (feature.geometry.type === "MultiPolygon") {
+    return feature.geometry.coordinates;
+  }
+  return [];
+}
+
+function aggregateMobileNetworkDataQuality(features: SituationFeature[]): "observed" | "modelled" | "mixed" | "unknown" {
+  const values = new Set(features.map((feature) => feature.properties.dataQuality));
+  if (values.has("mixed")) {
+    return "mixed";
+  }
+  if (values.has("observed") && values.has("modelled")) {
+    return "mixed";
+  }
+  if (values.has("observed")) {
+    return "observed";
+  }
+  if (values.has("modelled")) {
+    return "modelled";
+  }
+  return "unknown";
+}
+
+function mobileNetworkAggregateSummary(
+  technology: MobileNetworkTechnology,
+  quality: MobileCoverageQuality,
+  status: MobileNetworkStatus,
+  cellCount: number,
+  measurementCount: number
+): string {
+  const measurementText =
+    measurementCount > 0
+      ? `Zahrnuje ${measurementCount} veřejných měření ČTÚ.`
+      : "V dané agregované ploše nejsou dostupná veřejná měření ČTÚ.";
+  return `${technology} mobilní síť: ${mobileNetworkStatusLabel(status, quality)}; agregováno z ${cellCount} modelových buněk. ${measurementText}`;
+}
+
 function mobileNetworkDisplay(options: {
   technology: MobileNetworkTechnology;
   quality: MobileCoverageQuality;
@@ -2499,7 +2661,7 @@ function mobileNetworkDisplay(options: {
   const style = mobileNetworkStyle(options.status, options.quality);
   return {
     contractVersion: "sim-mobile-network-display-v1",
-    renderer: "mobile_network_grid_cell_v1",
+    renderer: "mobile_network_area_v1",
     renderOnly: true,
     renderPolicy: "status_fill",
     visible: true,
@@ -2522,7 +2684,7 @@ function mobileNetworkDisplay(options: {
       { status: "unknown", label: "Unknown", color: "#94a3b8" }
     ],
     copInstructions: {
-      defaultLayerBehavior: "Render polygon cells using providerProperties.display.style. Do not infer BTS live status from this layer.",
+      defaultLayerBehavior: "Render mobile-network coverage areas using providerProperties.display.style. Do not infer BTS live status from this layer.",
       colorField: "providerProperties.display.style.fillColor",
       opacityField: "providerProperties.display.style.fillOpacity",
       labelField: "providerProperties.display.label",
@@ -2631,6 +2793,17 @@ function median(values: number[]): number | undefined {
   const middle = Math.floor(sorted.length / 2);
   const value = sorted.length % 2 === 0 ? (sorted[middle - 1] ?? 0) / 2 + (sorted[middle] ?? 0) / 2 : (sorted[middle] ?? 0);
   return round(value, 2);
+}
+
+function average(values: number[]): number | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function sumNumericMetrics(features: SituationFeature[], metric: string): number {
+  return features.reduce((sum, feature) => sum + (numericMetric(feature, metric) ?? 0), 0);
 }
 
 function qualityRank(value: MobileCoverageQuality | undefined): number {

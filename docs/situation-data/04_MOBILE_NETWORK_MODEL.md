@@ -2,7 +2,7 @@
 
 ## Purpose
 
-SIM publishes `mobile_network` as the single preferred mobile-network layer for COM. COM should use this layer for citizen-facing map display and alerts instead of independently combining `mobile_coverage`, ČTÚ NetTest points and OSM infrastructure.
+SIM publishes `mobile_network` as the single preferred mobile-network layer for COP. COP should use this layer for citizen-facing map display and alerts instead of independently combining `mobile_coverage`, ČTÚ NetTest points and OSM infrastructure.
 
 The layer is an inferred area assessment. It is not a confirmed real-time BTS outage feed and it must not be presented as guaranteed operator service availability.
 
@@ -10,7 +10,7 @@ The layer is an inferred area assessment. It is not a confirmed real-time BTS ou
 
 - source: `mobile_network_model`
 - layer: `mobile_network`
-- geometry: `Polygon`
+- geometry: `Polygon` or `MultiPolygon`; normal map responses are aggregated `MultiPolygon` areas
 - category: `mobile_network`
 - operators: `aggregate`, `unknown`
 - technologies: `2G`, `4G`, `5G`, `mixed`, `unknown`
@@ -28,12 +28,12 @@ The current implementation combines:
 - OSM infrastructure hints through the coverage model,
 - model metadata and disclaimers.
 
-Future inputs can be added without changing the COM layer name:
+Future inputs can be added without changing the COP layer name:
 
 - official ČTÚ coverage polygons, if ingested as a licensed/public dataset,
 - OpenCellID after token/license validation,
 - partner/operator status feed,
-- anonymized aggregate measurements from COM/iOS clients,
+- anonymized aggregate measurements from COP/iOS clients,
 - terrain-aware DEM and line-of-sight scoring.
 - authorized BTS/NOC status feed. When available, SIM should update or regenerate affected read-model cells and set `btsStatus`, `btsStatusSource`, `operatorStatusAvailable` and adjusted `quality/status`.
 
@@ -51,9 +51,9 @@ Provider map catalog:
 GET /situation-data/api/v1/catalog
 ```
 
-COM should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mobile` and OSM communication towers are marked as diagnostic/reference inputs.
+COP should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mobile` and OSM communication towers are marked as diagnostic/reference inputs.
 
-The `reference.infrastructure.communications` layer contains OSM communication towers only as reference infrastructure. Features from that layer carry `btsStatus: "unknown"` and `operatorStatusAvailable: false`; COM must not color them as confirmed healthy BTS sites.
+The `reference.infrastructure.communications` layer contains OSM communication towers only as reference infrastructure. Features from that layer carry `btsStatus: "unknown"` and `operatorStatusAvailable: false`; COP must not color them as confirmed healthy BTS sites.
 
 Features:
 
@@ -65,7 +65,7 @@ Optional filters:
 
 - `technology` or `technologies`: `2G`, `4G`, `5G`, comma-separated,
 - `operator` or `operators`: currently `aggregate` and `unknown`,
-- `limit`: default COM should use 250 for normal map views.
+- `limit`: default COP should use 250 for normal map views. The limit applies to aggregated area features, not to individual model grid cells.
 
 If no technology filter is supplied, SIM defaults the final `mobile_network` layer to `4G`. This prevents the public layer from silently selecting the best-looking `2G` estimate when `2G`, `4G` and `5G` are all available as technical inputs.
 
@@ -73,7 +73,7 @@ Feature properties include:
 
 ```json
 {
-  "featureId": "network:mobile:4g:coverage-cell-id",
+  "featureId": "mobile_network:aggregate:4g:ok:fair",
   "layer": "mobile_network",
   "category": "mobile_network",
   "label": "4G mobile network assessment",
@@ -81,7 +81,7 @@ Feature properties include:
   "styleHint": "mobile-network-assessment-v1",
   "rendering": {
     "mode": "feature",
-    "geometryRole": "grid_cell",
+    "geometryRole": "feature_geometry",
     "opacity": 0.22
   },
   "operator": "aggregate",
@@ -113,7 +113,7 @@ Feature properties include:
   "providerProperties": {
     "display": {
       "contractVersion": "sim-mobile-network-display-v1",
-      "renderer": "mobile_network_grid_cell_v1",
+      "renderer": "mobile_network_area_v1",
       "renderPolicy": "status_fill",
       "visible": true,
       "label": "4G usable",
@@ -126,7 +126,7 @@ Feature properties include:
         "lineDash": []
       },
       "copInstructions": {
-        "defaultLayerBehavior": "Render polygon cells using providerProperties.display.style. Do not infer BTS live status from this layer.",
+        "defaultLayerBehavior": "Render mobile-network coverage areas using providerProperties.display.style. Do not infer BTS live status from this layer.",
         "colorField": "providerProperties.display.style.fillColor",
         "opacityField": "providerProperties.display.style.fillOpacity",
         "labelField": "providerProperties.display.label",
@@ -168,18 +168,19 @@ OSM_POSTGIS_TABLE=public.osm_poi
 - The underlying coverage grid uses a deterministic resolution ladder so nearby zoom levels do not shift cell origins unnecessarily.
 - If prepared `mobile_coverage_cells` exist for the requested area, `mobile_network_model` builds on those polygons instead of triggering on-demand DEM/path-loss calculation.
 - Default source TTL is 3600 seconds.
-- External inputs are not queried per COM user when a cached area assessment exists.
+- External inputs are not queried per COP user when a cached area assessment exists.
 - Health reports `mobile_network_model` as degraded when dependent model/input sources cannot produce an assessment.
 - Health also reports `ctu_nettest` and `ctu_stationary_mobile` freshness and measurement counts when those sources are enabled.
 - Metrics include `situation_data_mobile_network_towers`, `situation_data_mobile_network_backend_info`,
   `situation_data_ctu_nettest_measurements`, `situation_data_ctu_stationary_mobile_measurements`
   and per-source cache counters for `mobile_network_model`.
 
-## COM Interpretation
+## COP Interpretation
 
-COM should use:
+COP should use:
 
-- `quality` for the map color,
+- `providerProperties.display.style` for the map color and opacity,
+- `quality` only as a semantic fallback when style is missing,
 - `status` for warnings and user-facing risk states,
 - `confidence` for opacity/detail priority,
 - `basis` and `notices` to explain why the assessment is limited,
@@ -187,7 +188,7 @@ COM should use:
 - `dataQuality` to distinguish `modelled`, `observed`, `mixed` and `unknown` conclusions.
 - `btsStatus` and `operatorStatusAvailable` to avoid presenting inferred signal quality as confirmed BTS state.
 
-COM should not infer BTS outages from `weak` or `none`. `outage_reported` should only be treated as confirmed after SIM receives an authorized operator/partner status feed.
+COP should not infer BTS outages from `weak` or `none`. `outage_reported` should only be treated as confirmed after SIM receives an authorized operator/partner status feed.
 
 ## Acceptance Checks
 

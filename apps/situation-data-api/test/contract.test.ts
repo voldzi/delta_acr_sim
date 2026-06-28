@@ -2794,17 +2794,17 @@ describe("Situation Data API contract", () => {
     expect(coverageTechnologies).toEqual(["4G"]);
     expect(result.features[0]).toEqual(
       expect.objectContaining({
-        geometry: expect.objectContaining({ type: "Polygon" }),
+        geometry: expect.objectContaining({ type: "MultiPolygon" }),
         properties: expect.objectContaining({
           sourceId: "mobile_network_model",
           layer: "mobile_network",
           quality: "fair",
           status: expect.stringMatching(/ok|weak_signal|degraded_possible|unknown/),
           styleHint: "mobile-network-assessment-v1",
-          rendering: expect.objectContaining({ mode: "feature", geometryRole: "grid_cell" }),
+          rendering: expect.objectContaining({ mode: "feature", geometryRole: "feature_geometry" }),
           providerProperties: expect.objectContaining({
             display: expect.objectContaining({
-              renderer: "mobile_network_grid_cell_v1",
+              renderer: "mobile_network_area_v1",
               renderPolicy: "status_fill",
               style: expect.objectContaining({
                 fillColor: expect.any(String),
@@ -2816,7 +2816,8 @@ describe("Situation Data API contract", () => {
           btsStatus: "operator_feed_unavailable",
           operatorStatusAvailable: false,
           basis: expect.arrayContaining(["CTU_NETTEST_MEASUREMENT", "NO_OPERATOR_BTS_STATUS"]),
-          summary: expect.stringContaining("Mobilní síť"),
+          metrics: expect.objectContaining({ cellCount: 1, polygonPartCount: 1 }),
+          summary: expect.stringContaining("mobilní síť"),
           disclaimer: expect.stringContaining("not a confirmed BTS")
         })
       })

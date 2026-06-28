@@ -36,7 +36,7 @@ export const LAYERS: LayerDescriptor[] = [
   {
     layerId: "mobile_coverage",
     label: "Mobile coverage estimate",
-    description: "Terrain-optional estimated mobile network coverage prepared by SIM for COM display.",
+    description: "Terrain-optional estimated mobile network coverage prepared by SIM for COP display.",
     defaultVisible: false,
     geometryTypes: ["Polygon"],
     expectedCadenceSeconds: 21600
@@ -46,7 +46,7 @@ export const LAYERS: LayerDescriptor[] = [
     label: "Mobile network assessment",
     description: "Unified SIM assessment of mobile network quality from coverage estimates, public measurements and confidence scoring.",
     defaultVisible: false,
-    geometryTypes: ["Polygon"],
+    geometryTypes: ["Polygon", "MultiPolygon"],
     expectedCadenceSeconds: 3600
   },
   {

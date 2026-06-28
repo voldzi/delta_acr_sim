@@ -196,7 +196,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       kind: "vector_features",
       defaultVisible: false,
       selectable: true,
-      geometryTypes: ["Polygon"],
+      geometryTypes: ["Polygon", "MultiPolygon"],
       minZoom: 6,
       maxZoom: 18,
       refreshSeconds: 300,
