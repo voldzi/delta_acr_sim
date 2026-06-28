@@ -2510,6 +2510,29 @@ describe("Situation Data API contract", () => {
     expect(diagnostic?.query.includeNoSignal).toBe(true);
   });
 
+  it("exposes per-tower mobile coverage viewshed cache metrics", async () => {
+    const coverageApp = await createApp({
+      ...config,
+      enabledSources: [],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageTerrainAware: false,
+      demEnabled: false
+    });
+    (coverageApp.context.mobileCoverage as unknown as {
+      fetchTowerById: () => Promise<{ id: string; name: string; lon: number; lat: number; operator: string }>;
+    }).fetchTowerById = async () => ({ id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08, operator: "unknown" });
+
+    const endpoint = "/api/v1/mobile-coverage/towers/node:1/viewshed?technology=4G&radiusM=1000&azimuthStepDeg=90&distanceStepM=500";
+    await request(coverageApp.app).get(endpoint).expect(200);
+    await request(coverageApp.app).get(endpoint).expect(200);
+
+    const metrics = await request(coverageApp.app).get("/metrics").expect(200);
+    expect(metrics.text).toContain('situation_data_source_cache_entries{source="mobile_coverage_model"} 1');
+    expect(metrics.text).toContain('situation_data_source_cache_hits{source="mobile_coverage_model"} 1');
+    expect(metrics.text).toContain('situation_data_source_cache_misses{source="mobile_coverage_model"} 1');
+  });
+
   it("exposes a per-tower mobile coverage viewshed endpoint for COP detail overlays", async () => {
     const coverageApp = await createApp({
       ...config,

@@ -13,7 +13,7 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
-import { allSourceDescriptors, createSituationDataSources } from "./sources.js";
+import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import {
   buildSituationFeatureDetail,
   buildSituationFeatureGeometry,
@@ -80,6 +80,42 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   return { app, context };
 }
 
+function sourceCacheStats(context: SituationDataAppContext): SourceCacheStats[] {
+  const statsBySource = new Map<string, SourceCacheStats>();
+  for (const stats of [...context.aggregation.sourceCacheStats(), ...context.mobileCoverage.cacheStats()]) {
+    const existing = statsBySource.get(stats.sourceId);
+    if (!existing) {
+      statsBySource.set(stats.sourceId, { ...stats });
+      continue;
+    }
+    statsBySource.set(stats.sourceId, mergeSourceCacheStats(existing, stats));
+  }
+  return Array.from(statsBySource.values());
+}
+
+function mergeSourceCacheStats(left: SourceCacheStats, right: SourceCacheStats): SourceCacheStats {
+  return {
+    sourceId: left.sourceId,
+    entries: left.entries + right.entries,
+    maxEntries: Math.max(left.maxEntries, right.maxEntries),
+    inflight: left.inflight + right.inflight,
+    hits: left.hits + right.hits,
+    misses: left.misses + right.misses,
+    coalescedHits: left.coalescedHits + right.coalescedHits,
+    staleHits: left.staleHits + right.staleHits,
+    refreshes: left.refreshes + right.refreshes,
+    errors: left.errors + right.errors,
+    evictions: left.evictions + right.evictions,
+    sharedHits: left.sharedHits + right.sharedHits,
+    sharedMisses: left.sharedMisses + right.sharedMisses,
+    sharedStaleHits: left.sharedStaleHits + right.sharedStaleHits,
+    sharedWrites: left.sharedWrites + right.sharedWrites,
+    sharedErrors: left.sharedErrors + right.sharedErrors,
+    sharedEnabled: left.sharedEnabled || right.sharedEnabled,
+    sharedAvailable: left.sharedAvailable || right.sharedAvailable
+  };
+}
+
 function createCorsOptions(origins: string[] = []): CorsOptions {
   if (origins.length > 0) {
     return {
@@ -113,7 +149,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
     const cache = context.aggregation.cacheStats();
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const dem = await context.demCatalog.status();
-    const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
+    const sourceCacheLines = sourceCacheStats(context).flatMap((sourceCache) => [
       `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
       `situation_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
@@ -195,7 +231,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         errors: cache.sharedErrors,
         state: cache.sharedEnabled ? (cache.sharedAvailable && cache.sharedErrors === 0 ? "ok" : "degraded") : "disabled"
       },
-      sourceCaches: context.aggregation.sourceCacheStats().map((sourceCache) => ({
+      sourceCaches: sourceCacheStats(context).map((sourceCache) => ({
         sourceId: sourceCache.sourceId,
         cache: cacheTelemetry(sourceCache, context.config.cacheMaxEntries)
       })),
