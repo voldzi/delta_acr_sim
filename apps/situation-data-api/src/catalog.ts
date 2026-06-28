@@ -238,7 +238,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       audience: "diagnostic",
       kind: "vector_features",
       defaultVisible: false,
-      selectable: false,
+      selectable: true,
       geometryTypes: ["Polygon"],
       minZoom: 6,
       maxZoom: 18,
@@ -267,8 +267,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       legal: {
         attribution: "OpenStreetMap contributors where tower hints are used",
         notes: ["Technický vstup pro model, ne běžná uživatelská vrstva."]
-      },
-      replacedBy: "public.mobile.network"
+      }
     },
     {
       providerLayerId: "mobile.ctu_nettest",
@@ -1301,14 +1300,13 @@ function sourceClassification(sourceId: SituationDataSourceId): {
       return {
         sourceRole: "input",
         audience: "diagnostic",
-        selectableInMap: false,
+        selectableInMap: true,
         visibleInDiagnostics: true,
         feedsLayerIds: ["mobile_coverage"],
         feedsCatalogLayerIds: ["diagnostic.mobile.coverage"],
         usedByLayerIds: ["mobile_network"],
         usedByCatalogLayerIds: ["public.mobile.network"],
-        replacedBy: "mobile_network_model",
-        notes: ["Technical model input; do not show as a normal public mobile layer."]
+        notes: ["Technical model input; show only as an explicit diagnostic map layer, not as the normal public mobile layer."]
       };
     case "ctu_nettest":
       return {

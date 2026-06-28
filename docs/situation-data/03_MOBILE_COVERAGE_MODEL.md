@@ -6,6 +6,13 @@ SIM publishes `mobile_coverage` as a prepared diagnostic map layer for COM. COM 
 
 The current implementation is phase 2+3 foundation: a terrain-aware estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`, local Copernicus DEM GLO-30 tiles and a line-of-sight obstruction penalty. Runtime API can also read prepared coverage cells from the PostGIS read-model table `public.mobile_coverage_cells`; if the table is not available or not populated for the requested area, SIM falls back to on-demand calculation.
 
+`mobile_coverage` is a diagnostic layer, not the normal public mobile-network
+assessment. It is nevertheless explicitly selectable for diagnostic COP views.
+Every returned coverage cell carries `rendering.mode=feature`,
+`rendering.geometryRole=grid_cell`, `styleHint=mobile-coverage-diagnostic-v1`,
+`tags.renderAs=coverage_grid_cell` and `providerProperties.display.style` so COP
+can render it without deriving colors or opacity from raw metrics.
+
 For production COM display, prefer the unified `mobile_network` layer from `mobile_network_model`. This document describes the lower-level coverage model that feeds that assessment and remains useful for diagnostics.
 
 ## Source And Layer

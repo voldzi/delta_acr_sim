@@ -403,8 +403,7 @@ describe("Situation Data API contract", () => {
           recommendedCatalogLayerId: "diagnostic.mobile.coverage",
           role: "diagnostic",
           audience: "diagnostic",
-          selectable: false,
-          replacedBy: "public.mobile.network"
+          selectable: true
         }),
         expect.objectContaining({
           providerLayerId: "mobile.ctu_nettest",
@@ -604,12 +603,11 @@ describe("Situation Data API contract", () => {
           sourceId: "mobile_coverage_model",
           sourceRole: "input",
           audience: "diagnostic",
-          selectableInMap: false,
+          selectableInMap: true,
           visibleInDiagnostics: true,
           feedsLayerIds: ["mobile_coverage"],
           usedByLayerIds: ["mobile_network"],
-          usedByCatalogLayerIds: ["public.mobile.network"],
-          replacedBy: "mobile_network_model"
+          usedByCatalogLayerIds: ["public.mobile.network"]
         }),
         expect.objectContaining({
           sourceId: "ctu_nettest",
@@ -2267,11 +2265,86 @@ describe("Situation Data API contract", () => {
           operatorStatusAvailable: false,
           modelVersion: "coverage-v1",
           resolutionM: expect.any(Number),
-          disclaimer: expect.stringContaining("estimate")
+          disclaimer: expect.stringContaining("estimate"),
+          rendering: expect.objectContaining({ mode: "feature", geometryRole: "grid_cell" }),
+          styleHint: "mobile-coverage-diagnostic-v1",
+          tags: expect.objectContaining({ renderAs: "coverage_grid_cell", renderPolicy: "quality_fill" }),
+          providerProperties: expect.objectContaining({
+            display: expect.objectContaining({
+              contractVersion: "sim-mobile-coverage-display-v1",
+              renderer: "mobile_coverage_grid_cell_v1",
+              renderOnly: true,
+              style: expect.objectContaining({ fillColor: expect.any(String), fillOpacity: expect.any(Number) })
+            })
+          })
         })
       })
     );
     expect(result.features[0].properties.raw).toBeUndefined();
+  });
+
+  it("maps prepared mobile coverage read-model cells with display-ready styling", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+
+    const feature = (
+      source as unknown as {
+        readModelFeature: (row: Record<string, unknown>) => { properties: Record<string, unknown> } | undefined;
+      }
+    ).readModelFeature({
+      feature_id: "coverage:mobile:4g:prepared",
+      model_version: "coverage-v2-terrain",
+      technology: "4G",
+      operator: "unknown",
+      quality: "fair",
+      estimated_signal_dbm: -96,
+      confidence: 0.7,
+      resolution_m: 1000,
+      dem_dataset_id: "copernicus-glo30-cz",
+      generated_at: "2026-06-27T00:00:00.000Z",
+      expires_at: "2026-07-04T00:00:00.000Z",
+      assumptions: { terrainApplied: true },
+      metrics: { terrainPenaltyDb: 4, terrainMaxObstructionM: 2, distanceToNearestTowerM: 1200 },
+      tags: { nearestTowerId: "node:1" },
+      data_quality: "modelled",
+      bts_status: "operator_feed_unavailable",
+      bts_status_source: "none",
+      operator_status_available: false,
+      source_revision: "model=coverage-v2-terrain",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [14.41, 50.07],
+          [14.43, 50.07],
+          [14.43, 50.09],
+          [14.41, 50.09],
+          [14.41, 50.07]
+        ]]
+      }
+    });
+
+    expect(feature?.properties).toEqual(
+      expect.objectContaining({
+        layer: "mobile_coverage",
+        quality: "fair",
+        estimatedSignalDbm: -96,
+        rendering: expect.objectContaining({ mode: "feature", geometryRole: "grid_cell" }),
+        styleHint: "mobile-coverage-diagnostic-v1",
+        tags: expect.objectContaining({ nearestTowerId: "node:1", renderAs: "coverage_grid_cell" }),
+        providerProperties: expect.objectContaining({
+          display: expect.objectContaining({
+            contractVersion: "sim-mobile-coverage-display-v1",
+            primaryValue: "-96 dBm",
+            secondaryValue: "4 dB terrain loss",
+            style: expect.objectContaining({ fillColor: "#eab308" })
+          })
+        })
+      })
+    );
   });
 
   it("builds per-tower mobile coverage viewshed sectors", async () => {
@@ -2393,6 +2466,48 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(diagnosticResult?.summary.qualityCounts.none).toBe(8);
+  });
+
+  it("caches per-tower mobile coverage viewshed responses by normalized query", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    let fetchCount = 0;
+    (source as unknown as { fetchTowerById: () => Promise<{ id: string; name: string; lon: number; lat: number; operator: string }> }).fetchTowerById =
+      async () => {
+        fetchCount += 1;
+        return { id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08, operator: "unknown" };
+      };
+
+    const first = await source.buildTowerViewshed({
+      towerId: "node:1",
+      technology: "4G",
+      radiusM: 1000,
+      azimuthStepDeg: 90,
+      distanceStepM: 500
+    });
+    const second = await source.buildTowerViewshed({
+      towerId: "node:1",
+      technology: "4G",
+      radiusM: 1000,
+      azimuthStepDeg: 90,
+      distanceStepM: 500
+    });
+    const diagnostic = await source.buildTowerViewshed({
+      towerId: "node:1",
+      technology: "4G",
+      radiusM: 1000,
+      azimuthStepDeg: 90,
+      distanceStepM: 500,
+      includeNoSignal: true
+    });
+
+    expect(fetchCount).toBe(2);
+    expect(second?.generatedAt).toBe(first?.generatedAt);
+    expect(diagnostic?.query.includeNoSignal).toBe(true);
   });
 
   it("exposes a per-tower mobile coverage viewshed endpoint for COP detail overlays", async () => {

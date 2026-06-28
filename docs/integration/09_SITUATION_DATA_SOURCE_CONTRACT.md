@@ -64,7 +64,7 @@ COM má používat provider katalog pro rozhodnutí, co je běžná mapová vrst
 Klíčová pravidla katalogu:
 
 - `public.mobile.network` je finální veřejná vrstva `mobile_network` ze zdroje `mobile_network_model`,
-- `diagnostic.mobile.coverage` je diagnostická vrstva `mobile_coverage` ze zdroje `mobile_coverage_model`, `selectable=false`,
+- `diagnostic.mobile.coverage` je diagnostická vrstva `mobile_coverage` ze zdroje `mobile_coverage_model`, `selectable=true`, ale `defaultVisible=false` a `audience=diagnostic`,
 - `diagnostic.mobile.ctu_measurements` jsou diagnostická ČTÚ měření, `selectable=false`,
 - `reference.infrastructure.communications` jsou referenční OSM věže, `defaultVisible=false` a `selectable=false`,
 - `public.boundary.country`, `public.boundary.region`, `public.boundary.district`, `public.boundary.orp` jsou referenční boundary read-model vrstvy z lokálního OSM/PostGIS, ne z veřejného Overpassu,
@@ -178,6 +178,15 @@ Coverage features ve vrstvě `mobile_coverage` navíc nesou:
 | `demSource` | string | použitý DEM zdroj nebo `not-used-phase-1` |
 | `assumptions` | object | použitý výškový/path-loss/terrain režim |
 | `disclaimer` | string | upozornění, že nejde o garantované pokrytí operátora |
+
+Pro vykreslení `mobile_coverage` má COP použít `properties.providerProperties.display`:
+`renderer=mobile_coverage_grid_cell_v1`, `style.fillColor`, `style.fillOpacity`,
+`label`, `primaryValue`, `secondaryValue` a `legend`. Feature zároveň nese
+`rendering.mode=feature`, `rendering.geometryRole=grid_cell`,
+`styleHint=mobile-coverage-diagnostic-v1` a `tags.renderAs=coverage_grid_cell`.
+COP nemá pro tuto vrstvu ignorovat geometrii jen proto, že `role=diagnostic`;
+má ji skrýt v běžném veřejném zobrazení a zobrazit pouze po explicitním zapnutí
+diagnostiky/ladění.
 
 Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 

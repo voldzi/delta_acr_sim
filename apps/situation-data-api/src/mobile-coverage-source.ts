@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { canonicalizeBboxForCache, formatBboxKey } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemElevationSampler, type DemTileRef, type ElevationSample } from "./dem-elevation-sampler.js";
-import { ManagedResponseCache } from "./response-cache.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { SituationDataSource, SourceCacheStats } from "./sources.js";
 import type {
   BoundingBox,
@@ -159,9 +159,20 @@ export interface MobileCoverageViewshedPayload {
   warnings: string[];
 }
 
+interface NormalizedMobileCoverageViewshedOptions {
+  towerId: string;
+  technology: MobileCoverageTechnology;
+  radiusM: number;
+  azimuthStepDeg: number;
+  distanceStepM: number;
+  includeNoSignal: boolean;
+  includeRaw: boolean;
+}
+
 export class MobileCoverageSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<CoveragePayload>;
+  private readonly viewshedCache: ManagedResponseCache<MobileCoverageViewshedPayload | null>;
   private readonly towerCountCache: ManagedResponseCache<number>;
   private pool?: Pool;
 
@@ -170,6 +181,11 @@ export class MobileCoverageSource implements SituationDataSource {
       ttlMs: Math.max(60, config.mobileCoverageCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.mobileCoverageCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 4096))
+    });
+    this.viewshedCache = new ManagedResponseCache<MobileCoverageViewshedPayload | null>({
+      ttlMs: Math.max(60, config.mobileCoverageCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.mobileCoverageCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(128, Math.min(config.cacheMaxEntries, 4096))
     });
     this.towerCountCache = new ManagedResponseCache<number>({
       ttlMs: 300_000,
@@ -190,10 +206,11 @@ export class MobileCoverageSource implements SituationDataSource {
   }
 
   cacheStats(): SourceCacheStats[] {
+    const stats = mergeCacheStats([this.payloadCache.stats(), this.viewshedCache.stats()]);
     return [
       {
         sourceId: "mobile_coverage_model",
-        ...this.payloadCache.stats()
+        ...stats
       }
     ];
   }
@@ -265,17 +282,19 @@ export class MobileCoverageSource implements SituationDataSource {
     if (!this.config.osmPostgisConnectionString) {
       throw new Error("mobile_coverage_model requires OSM_POSTGIS_DATABASE_URL for tower viewshed.");
     }
+    const normalized = normalizeViewshedOptions(options);
+    const payload = await this.viewshedCache.getOrLoad(this.viewshedCacheKey(normalized), () => this.buildTowerViewshedUncached(normalized));
+    return payload ?? undefined;
+  }
+
+  private async buildTowerViewshedUncached(options: NormalizedMobileCoverageViewshedOptions): Promise<MobileCoverageViewshedPayload | null> {
     const tower = await this.fetchTowerById(options.towerId);
     if (!tower) {
-      return undefined;
+      return null;
     }
 
     const generatedAt = new Date().toISOString();
-    const technology = options.technology ?? "4G";
-    const radiusM = normalizeViewshedRadius(options.radiusM, technology);
-    const azimuthStepDeg = normalizeViewshedAzimuthStep(options.azimuthStepDeg);
-    const distanceStepM = normalizeViewshedDistanceStep(options.distanceStepM, radiusM, azimuthStepDeg);
-    const includeNoSignal = options.includeNoSignal === true;
+    const { technology, radiusM, azimuthStepDeg, distanceStepM, includeNoSignal } = options;
     const renderPolicy = includeNoSignal ? "diagnostic_all_sectors" : "coverage_only";
     const requestedSectorCount = Math.ceil(360 / azimuthStepDeg) * Math.ceil(radiusM / distanceStepM);
     const terrainSampler = this.createTerrainSampler();
@@ -797,6 +816,18 @@ export class MobileCoverageSource implements SituationDataSource {
     }
     const generatedAt = toIsoTimestamp(row.generated_at);
     const validUntil = toIsoTimestamp(row.expires_at);
+    const metrics = compactMixedMetrics(row.metrics);
+    const sourceTags = compactStringTags(row.tags) ?? {};
+    const signalDbm = optionalNumber(row.estimated_signal_dbm);
+    const resolutionM = optionalNumber(row.resolution_m);
+    const display = coverageDisplayProperties({
+      technology,
+      quality,
+      signalDbm,
+      metrics,
+      readModel: true,
+      resolutionM
+    });
     return {
       type: "Feature",
       id: row.feature_id,
@@ -816,17 +847,30 @@ export class MobileCoverageSource implements SituationDataSource {
           name: MOBILE_COVERAGE_LICENSE.name,
           attribution: MOBILE_COVERAGE_LICENSE.attribution
         },
-        metrics: compactMixedMetrics(row.metrics),
-        tags: compactStringTags(row.tags),
+        metrics,
+        tags: compactTags({
+          ...sourceTags,
+          renderAs: "coverage_grid_cell",
+          renderPolicy: "quality_fill"
+        }),
+        rendering: {
+          mode: "feature",
+          geometryRole: "grid_cell",
+          opacity: display.style.fillOpacity
+        },
+        styleHint: "mobile-coverage-diagnostic-v1",
+        providerProperties: {
+          display
+        },
         operator: row.operator,
         technology,
         quality,
-        estimatedSignalDbm: optionalNumber(row.estimated_signal_dbm),
+        estimatedSignalDbm: signalDbm,
         modelVersion: row.model_version,
         sourceRevision: cleanString(row.source_revision),
         readModel: true,
         generatedAt,
-        resolutionM: optionalNumber(row.resolution_m),
+        resolutionM,
         demSource: cleanString(row.dem_dataset_id) ?? this.effectiveDemSource(true),
         assumptions: compactAssumptions(row.assumptions),
         dataQuality: row.data_quality === "observed" || row.data_quality === "mixed" || row.data_quality === "unknown" ? row.data_quality : "modelled",
@@ -890,6 +934,25 @@ export class MobileCoverageSource implements SituationDataSource {
     const quality = estimate ? qualityForSignal(estimate.signalDbm) : "unknown";
     const confidence = estimate && nearest ? confidenceForEstimate(nearest.distanceM, technology, terrain) : 0.2;
     const featureId = `coverage:mobile:${technology.toLowerCase()}:${cell.id}`;
+    const metrics = compactMetrics({
+      distanceToNearestTowerM: nearest ? Math.round(nearest.distanceM) : undefined,
+      nearestTowerLon: nearest?.tower.lon,
+      nearestTowerLat: nearest?.tower.lat,
+      baseSignalDbm: estimate?.baseSignalDbm,
+      terrainPenaltyDb: terrain?.penaltyDb,
+      terrainMaxObstructionM: terrain?.maxObstructionM,
+      terrainSamples: terrain?.sampleCount,
+      towerElevationM: terrain?.towerElevationM,
+      targetElevationM: terrain?.targetElevationM
+    });
+    const display = coverageDisplayProperties({
+      technology,
+      quality,
+      signalDbm: estimate?.signalDbm,
+      metrics,
+      readModel: false,
+      resolutionM
+    });
     return {
       type: "Feature",
       id: featureId,
@@ -911,23 +974,24 @@ export class MobileCoverageSource implements SituationDataSource {
           name: MOBILE_COVERAGE_LICENSE.name,
           attribution: MOBILE_COVERAGE_LICENSE.attribution
         },
-        metrics: compactMetrics({
-          distanceToNearestTowerM: nearest ? Math.round(nearest.distanceM) : undefined,
-          nearestTowerLon: nearest?.tower.lon,
-          nearestTowerLat: nearest?.tower.lat,
-          baseSignalDbm: estimate?.baseSignalDbm,
-          terrainPenaltyDb: terrain?.penaltyDb,
-          terrainMaxObstructionM: terrain?.maxObstructionM,
-          terrainSamples: terrain?.sampleCount,
-          towerElevationM: terrain?.towerElevationM,
-          targetElevationM: terrain?.targetElevationM
-        }),
+        metrics,
         tags: compactTags({
           nearestTowerId: nearest?.tower.id,
           nearestTowerName: nearest?.tower.name,
           nearestTowerOperator: nearest?.tower.operator,
-          nearestTowerTechnologyHint: nearest?.tower.technologyHint
+          nearestTowerTechnologyHint: nearest?.tower.technologyHint,
+          renderAs: "coverage_grid_cell",
+          renderPolicy: "quality_fill"
         }),
+        rendering: {
+          mode: "feature",
+          geometryRole: "grid_cell",
+          opacity: display.style.fillOpacity
+        },
+        styleHint: "mobile-coverage-diagnostic-v1",
+        providerProperties: {
+          display
+        },
         operator: "unknown",
         technology,
         quality,
@@ -1019,6 +1083,25 @@ export class MobileCoverageSource implements SituationDataSource {
       return undefined;
     }
     return new DemElevationSampler(this.config);
+  }
+
+  private viewshedCacheKey(options: NormalizedMobileCoverageViewshedOptions): string {
+    return JSON.stringify({
+      towerId: options.towerId,
+      technology: options.technology,
+      radiusM: options.radiusM,
+      azimuthStepDeg: options.azimuthStepDeg,
+      distanceStepM: options.distanceStepM,
+      includeNoSignal: options.includeNoSignal,
+      includeRaw: options.includeRaw,
+      modelVersion: this.config.mobileCoverageModelVersion,
+      osmTable: this.config.osmPostgisTable,
+      terrainAware: this.config.mobileCoverageTerrainAware,
+      demEnabled: this.config.demEnabled,
+      demDatasetId: this.config.demDatasetId,
+      antennaHeightM: this.config.mobileCoverageAntennaHeightM,
+      receiverHeightM: RECEIVER_HEIGHT_M
+    });
   }
 
   private async fetchTowerCount(): Promise<number> {
@@ -1364,6 +1447,133 @@ function emptyQualityCounts(): Record<MobileCoverageQuality, number> {
     none: 0,
     unknown: 0
   };
+}
+
+function normalizeViewshedOptions(options: MobileCoverageViewshedOptions): NormalizedMobileCoverageViewshedOptions {
+  const technology = options.technology ?? "4G";
+  const radiusM = normalizeViewshedRadius(options.radiusM, technology);
+  const azimuthStepDeg = normalizeViewshedAzimuthStep(options.azimuthStepDeg);
+  const distanceStepM = normalizeViewshedDistanceStep(options.distanceStepM, radiusM, azimuthStepDeg);
+  return {
+    towerId: options.towerId,
+    technology,
+    radiusM,
+    azimuthStepDeg,
+    distanceStepM,
+    includeNoSignal: options.includeNoSignal === true,
+    includeRaw: options.includeRaw === true
+  };
+}
+
+function mergeCacheStats(stats: ManagedResponseCacheStats[]): ManagedResponseCacheStats {
+  const latestSuccessAt = latestIsoTimestamp(stats.flatMap((item) => (item.lastSuccessAt ? [item.lastSuccessAt] : [])));
+  const latestErrorAt = latestIsoTimestamp(stats.flatMap((item) => (item.lastErrorAt ? [item.lastErrorAt] : [])));
+  return {
+    entries: sumStats(stats, "entries"),
+    inflight: sumStats(stats, "inflight"),
+    maxEntries: sumStats(stats, "maxEntries"),
+    hits: sumStats(stats, "hits"),
+    misses: sumStats(stats, "misses"),
+    coalescedHits: sumStats(stats, "coalescedHits"),
+    staleHits: sumStats(stats, "staleHits"),
+    refreshes: sumStats(stats, "refreshes"),
+    errors: sumStats(stats, "errors"),
+    evictions: sumStats(stats, "evictions"),
+    sharedEnabled: stats.some((item) => item.sharedEnabled),
+    sharedAvailable: stats.some((item) => item.sharedAvailable),
+    sharedHits: sumStats(stats, "sharedHits"),
+    sharedMisses: sumStats(stats, "sharedMisses"),
+    sharedStaleHits: sumStats(stats, "sharedStaleHits"),
+    sharedWrites: sumStats(stats, "sharedWrites"),
+    sharedErrors: sumStats(stats, "sharedErrors"),
+    ...(latestSuccessAt ? { lastSuccessAt: latestSuccessAt } : {}),
+    ...(latestErrorAt ? { lastErrorAt: latestErrorAt } : {})
+  };
+}
+
+function sumStats(stats: ManagedResponseCacheStats[], key: keyof Pick<ManagedResponseCacheStats, "entries" | "inflight" | "maxEntries" | "hits" | "misses" | "coalescedHits" | "staleHits" | "refreshes" | "errors" | "evictions" | "sharedHits" | "sharedMisses" | "sharedStaleHits" | "sharedWrites" | "sharedErrors">): number {
+  return stats.reduce((sum, item) => sum + item[key], 0);
+}
+
+function latestIsoTimestamp(values: string[]): string | undefined {
+  return values.sort().at(-1);
+}
+
+function coverageDisplayProperties(options: {
+  technology: MobileCoverageTechnology;
+  quality: MobileCoverageQuality;
+  signalDbm: number | undefined;
+  metrics: Record<string, number | string | boolean> | undefined;
+  readModel: boolean;
+  resolutionM: number | undefined;
+}): ViewshedDisplayProperties {
+  const style = coverageStyle(options.quality);
+  const terrainPenaltyDb = metricNumber(options.metrics, "terrainPenaltyDb");
+  const obstructionM = metricNumber(options.metrics, "terrainMaxObstructionM");
+  const distanceM = metricNumber(options.metrics, "distanceToNearestTowerM");
+  return {
+    contractVersion: "sim-mobile-coverage-display-v1",
+    renderer: "mobile_coverage_grid_cell_v1",
+    renderOnly: true,
+    renderPolicy: "quality_fill",
+    visible: true,
+    label: `${options.technology} ${viewshedQualityLabel(options.quality)}`,
+    subtitle: coverageSubtitle(options.signalDbm, terrainPenaltyDb, obstructionM),
+    primaryValue: options.signalDbm === undefined ? viewshedQualityLabel(options.quality) : `${options.signalDbm} dBm`,
+    secondaryValue: terrainPenaltyDb === undefined ? "terrain not evaluated" : `${terrainPenaltyDb} dB terrain loss`,
+    tertiaryValue: distanceM === undefined ? undefined : `${Math.round(distanceM)} m to nearest tower`,
+    quality: options.quality,
+    signalDbm: options.signalDbm,
+    terrainPenaltyDb,
+    terrainObstructionM: obstructionM,
+    resolutionM: options.resolutionM,
+    readModel: options.readModel,
+    style,
+    legend: [
+      { quality: "good", label: "Good estimated coverage", color: "#22c55e" },
+      { quality: "fair", label: "Usable estimated coverage", color: "#eab308" },
+      { quality: "weak", label: "Weak estimated coverage", color: "#f97316" },
+      { quality: "none", label: "No estimated coverage", color: "#ef4444" },
+      { quality: "unknown", label: "Unknown coverage", color: "#94a3b8" }
+    ],
+    copInstructions: {
+      defaultLayerBehavior: "Render polygon cells using providerProperties.display.style.",
+      colorField: "providerProperties.display.style.fillColor",
+      opacityField: "providerProperties.display.style.fillOpacity",
+      labelField: "providerProperties.display.label"
+    }
+  };
+}
+
+function coverageStyle(quality: MobileCoverageQuality): ViewshedStyle {
+  const palette: Record<MobileCoverageQuality, { fillColor: string; strokeColor: string; fillOpacity: number; strokeOpacity: number }> = {
+    good: { fillColor: "#22c55e", strokeColor: "#15803d", fillOpacity: 0.34, strokeOpacity: 0.72 },
+    fair: { fillColor: "#eab308", strokeColor: "#a16207", fillOpacity: 0.28, strokeOpacity: 0.66 },
+    weak: { fillColor: "#f97316", strokeColor: "#c2410c", fillOpacity: 0.24, strokeOpacity: 0.62 },
+    none: { fillColor: "#ef4444", strokeColor: "#b91c1c", fillOpacity: 0.12, strokeOpacity: 0.42 },
+    unknown: { fillColor: "#94a3b8", strokeColor: "#475569", fillOpacity: 0.16, strokeOpacity: 0.45 }
+  };
+  return {
+    ...palette[quality],
+    strokeWidth: 0.6,
+    lineDash: quality === "unknown" ? [4, 4] : []
+  };
+}
+
+function coverageSubtitle(signalDbm: number | undefined, terrainPenaltyDb: number | undefined, obstructionM: number | undefined): string {
+  const signal = signalDbm === undefined ? "signal unknown" : `estimated signal ${signalDbm} dBm`;
+  if (terrainPenaltyDb === undefined) {
+    return `${signal}; terrain not evaluated.`;
+  }
+  if ((obstructionM ?? 0) > 0) {
+    return `${signal}; terrain obstruction ${obstructionM} m.`;
+  }
+  return `${signal}; terrain line of sight clear.`;
+}
+
+function metricNumber(metrics: Record<string, number | string | boolean> | undefined, key: string): number | undefined {
+  const value = metrics?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function viewshedDisplayProperties(options: {
