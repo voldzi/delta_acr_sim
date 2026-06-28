@@ -1304,6 +1304,15 @@ interface MeasurementStats {
   severity: SituationSeverity;
 }
 
+interface MobileNetworkDisplayStyle {
+  fillColor: string;
+  strokeColor: string;
+  fillOpacity: number;
+  strokeOpacity: number;
+  strokeWidth: number;
+  lineDash: number[];
+}
+
 export class MobileNetworkSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<MobileNetworkPayload>;
@@ -1525,6 +1534,15 @@ export class MobileNetworkSource implements SituationDataSource {
     const featureId = coverage.id.replace(/^coverage:mobile:/, "mobile_network:aggregate:");
     const summary = mobileNetworkSummary(quality, status, stats);
     const dataQuality = mobileNetworkDataQuality(stats.count, coverageQuality);
+    const display = mobileNetworkDisplay({
+      technology,
+      quality,
+      status,
+      confidence,
+      summary,
+      measurementCount: stats.count,
+      estimatedSignalDbm: estimateSignalFromCoverageAndMeasurements(coverage, stats)
+    });
 
     return {
       type: "Feature",
@@ -1540,6 +1558,12 @@ export class MobileNetworkSource implements SituationDataSource {
         confidence,
         stale: false,
         severity: severityForMobileStatus(status, quality, stats),
+        rendering: {
+          mode: "feature",
+          geometryRole: "grid_cell",
+          opacity: display.style.fillOpacity
+        },
+        styleHint: "mobile-network-assessment-v1",
         license: {
           name: MOBILE_NETWORK_LICENSE.name,
           attribution: MOBILE_NETWORK_LICENSE.attribution
@@ -1555,7 +1579,7 @@ export class MobileNetworkSource implements SituationDataSource {
         btsStatusSource: "none",
         operatorStatusAvailable: false,
         notices: ["Aktuální stav konkrétní BTS není veřejně ověřen bez autorizovaného zdroje operátora."],
-        estimatedSignalDbm: estimateSignalFromCoverageAndMeasurements(coverage, stats),
+        estimatedSignalDbm: display.signalDbm,
         modelVersion: `${this.config.mobileCoverageModelVersion}+mobile-network-v1`,
         sourceRevision: coverage.properties.sourceRevision,
         readModel: coverage.properties.readModel === true,
@@ -1589,10 +1613,15 @@ export class MobileNetworkSource implements SituationDataSource {
           status,
           dataQuality,
           btsStatus: "operator_feed_unavailable",
+          renderAs: "mobile_network_grid_cell",
+          renderPolicy: "status_fill",
           coverageReadModel: coverage.properties.readModel === true ? "true" : undefined,
           lastMeasuredAt: stats.lastMeasuredAt,
           sourceCoverageFeatureId: coverage.properties.featureId
         }),
+        providerProperties: {
+          display
+        },
         raw: {
           coverage: coverage.properties,
           measurementStats: stats
@@ -2456,6 +2485,100 @@ function mobileNetworkSummary(quality: MobileCoverageQuality, status: MobileNetw
         }.`
       : " V oblasti nejsou v cache dostupná veřejná měření ČTÚ.";
   return `Mobilní síť je v oblasti hodnocena jako ${qualityText[quality]} (${statusText[status]}).${measurementText}`;
+}
+
+function mobileNetworkDisplay(options: {
+  technology: MobileNetworkTechnology;
+  quality: MobileCoverageQuality;
+  status: MobileNetworkStatus;
+  confidence: number;
+  summary: string;
+  measurementCount: number;
+  estimatedSignalDbm?: number;
+}): Record<string, unknown> & { style: MobileNetworkDisplayStyle; signalDbm?: number } {
+  const style = mobileNetworkStyle(options.status, options.quality);
+  return {
+    contractVersion: "sim-mobile-network-display-v1",
+    renderer: "mobile_network_grid_cell_v1",
+    renderOnly: true,
+    renderPolicy: "status_fill",
+    visible: true,
+    label: `${options.technology} ${mobileNetworkStatusLabel(options.status, options.quality)}`,
+    subtitle: options.summary,
+    primaryValue:
+      typeof options.estimatedSignalDbm === "number" ? `${options.estimatedSignalDbm} dBm` : mobileNetworkQualityLabel(options.quality),
+    secondaryValue: `${Math.round(options.confidence * 100)} % confidence`,
+    tertiaryValue: `${options.measurementCount} CTU measurements`,
+    status: options.status,
+    quality: options.quality,
+    signalDbm: options.estimatedSignalDbm,
+    confidence: options.confidence,
+    measurementCount: options.measurementCount,
+    style,
+    legend: [
+      { status: "ok", label: "OK / usable", color: "#22c55e" },
+      { status: "weak_signal", label: "Weak signal", color: "#f59e0b" },
+      { status: "degraded_possible", label: "Possible degradation", color: "#ef4444" },
+      { status: "unknown", label: "Unknown", color: "#94a3b8" }
+    ],
+    copInstructions: {
+      defaultLayerBehavior: "Render polygon cells using providerProperties.display.style. Do not infer BTS live status from this layer.",
+      colorField: "providerProperties.display.style.fillColor",
+      opacityField: "providerProperties.display.style.fillOpacity",
+      labelField: "providerProperties.display.label",
+      statusField: "providerProperties.display.status"
+    }
+  };
+}
+
+function mobileNetworkStyle(status: MobileNetworkStatus, quality: MobileCoverageQuality): MobileNetworkDisplayStyle {
+  if (status === "outage_reported") {
+    return { fillColor: "#991b1b", strokeColor: "#7f1d1d", fillOpacity: 0.42, strokeOpacity: 0.88, strokeWidth: 0.8, lineDash: [] };
+  }
+  if (status === "degraded_possible" || quality === "none") {
+    return { fillColor: "#ef4444", strokeColor: "#b91c1c", fillOpacity: 0.3, strokeOpacity: 0.76, strokeWidth: 0.7, lineDash: [] };
+  }
+  if (status === "weak_signal" || quality === "weak") {
+    return { fillColor: "#f59e0b", strokeColor: "#b45309", fillOpacity: 0.28, strokeOpacity: 0.72, strokeWidth: 0.7, lineDash: [] };
+  }
+  if (status === "ok" && quality === "fair") {
+    return { fillColor: "#84cc16", strokeColor: "#4d7c0f", fillOpacity: 0.22, strokeOpacity: 0.65, strokeWidth: 0.6, lineDash: [] };
+  }
+  if (status === "ok") {
+    return { fillColor: "#22c55e", strokeColor: "#15803d", fillOpacity: 0.2, strokeOpacity: 0.62, strokeWidth: 0.6, lineDash: [] };
+  }
+  return { fillColor: "#94a3b8", strokeColor: "#475569", fillOpacity: 0.18, strokeOpacity: 0.48, strokeWidth: 0.6, lineDash: [4, 4] };
+}
+
+function mobileNetworkStatusLabel(status: MobileNetworkStatus, quality: MobileCoverageQuality): string {
+  if (status === "ok") {
+    return quality === "fair" ? "usable" : "ok";
+  }
+  if (status === "weak_signal") {
+    return "weak signal";
+  }
+  if (status === "degraded_possible") {
+    return quality === "none" ? "no estimated service" : "possible degradation";
+  }
+  if (status === "outage_reported") {
+    return "reported outage";
+  }
+  return "unknown";
+}
+
+function mobileNetworkQualityLabel(quality: MobileCoverageQuality): string {
+  switch (quality) {
+    case "good":
+      return "good";
+    case "fair":
+      return "usable";
+    case "weak":
+      return "weak";
+    case "none":
+      return "no estimated service";
+    default:
+      return "unknown";
+  }
 }
 
 function featureIntersectsBboxByEnvelope(feature: SituationFeature, bbox: BoundingBox): boolean {

@@ -78,6 +78,12 @@ Feature properties include:
   "category": "mobile_network",
   "label": "4G mobile network assessment",
   "sourceId": "mobile_network_model",
+  "styleHint": "mobile-network-assessment-v1",
+  "rendering": {
+    "mode": "feature",
+    "geometryRole": "grid_cell",
+    "opacity": 0.22
+  },
   "operator": "aggregate",
   "technology": "4G",
   "quality": "fair",
@@ -104,6 +110,30 @@ Feature properties include:
   "generatedAt": "2026-05-21T00:00:00.000Z",
   "resolutionM": 1000,
   "demSource": "copernicus-glo30-cz available; not applied by coverage-v1",
+  "providerProperties": {
+    "display": {
+      "contractVersion": "sim-mobile-network-display-v1",
+      "renderer": "mobile_network_grid_cell_v1",
+      "renderPolicy": "status_fill",
+      "visible": true,
+      "label": "4G usable",
+      "style": {
+        "fillColor": "#84cc16",
+        "strokeColor": "#4d7c0f",
+        "fillOpacity": 0.22,
+        "strokeOpacity": 0.65,
+        "strokeWidth": 0.6,
+        "lineDash": []
+      },
+      "copInstructions": {
+        "defaultLayerBehavior": "Render polygon cells using providerProperties.display.style. Do not infer BTS live status from this layer.",
+        "colorField": "providerProperties.display.style.fillColor",
+        "opacityField": "providerProperties.display.style.fillOpacity",
+        "labelField": "providerProperties.display.label",
+        "statusField": "providerProperties.display.status"
+      }
+    }
+  },
   "stale": false,
   "disclaimer": "Mobile network assessment is inferred from public/modelled data; it is not a confirmed BTS outage or guaranteed service availability."
 }

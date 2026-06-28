@@ -2800,6 +2800,18 @@ describe("Situation Data API contract", () => {
           layer: "mobile_network",
           quality: "fair",
           status: expect.stringMatching(/ok|weak_signal|degraded_possible|unknown/),
+          styleHint: "mobile-network-assessment-v1",
+          rendering: expect.objectContaining({ mode: "feature", geometryRole: "grid_cell" }),
+          providerProperties: expect.objectContaining({
+            display: expect.objectContaining({
+              renderer: "mobile_network_grid_cell_v1",
+              renderPolicy: "status_fill",
+              style: expect.objectContaining({
+                fillColor: expect.any(String),
+                fillOpacity: expect.any(Number)
+              })
+            })
+          }),
           dataQuality: "mixed",
           btsStatus: "operator_feed_unavailable",
           operatorStatusAvailable: false,
