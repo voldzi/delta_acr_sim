@@ -153,6 +153,35 @@ def optional_features(client: Client, label: str, path: str, reason: str) -> dic
     }
 
 
+def require_density(client: Client, label: str, path: str) -> dict[str, Any]:
+    payload, response = client.json(path)
+    require(payload.get("contractVersion") == "sim-provider-feature-density-v1", f"{label}: unexpected density contractVersion")
+    require(payload.get("type") == "FeatureCollection", f"{label}: expected FeatureCollection")
+    density = payload.get("density")
+    require(isinstance(density, dict), f"{label}: missing density metadata")
+    require(density.get("omittedOriginalGeometry") is True, f"{label}: density response must omit original geometry")
+    require(int(density.get("inputFeatureCount") or 0) > 0, f"{label}: expected positive inputFeatureCount")
+    require(int(density.get("cellCount") or 0) > 0, f"{label}: expected positive cellCount")
+    features = payload.get("features")
+    require(isinstance(features, list) and features, f"{label}: missing density cells")
+    first_cell = features[0]
+    require(isinstance(first_cell, dict), f"{label}: first density cell is not an object")
+    geometry = first_cell.get("geometry")
+    require(isinstance(geometry, dict) and geometry.get("type") == "Polygon", f"{label}: first density cell is not a polygon")
+    properties = first_cell.get("properties")
+    require(isinstance(properties, dict), f"{label}: first density cell missing properties")
+    require(properties.get("category") == "density_cell", f"{label}: unexpected first density category")
+    require("raw" not in properties, f"{label}: density cell exposes raw payload")
+    return {
+        "url": response.url,
+        "elapsedMs": response.elapsed_ms,
+        "cellCount": density.get("cellCount"),
+        "inputFeatureCount": density.get("inputFeatureCount"),
+        "firstCellId": first_cell.get("id"),
+        "firstCellFeatureCount": properties.get("featureCount"),
+    }
+
+
 def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, Any]:
     health, health_response = client.json("/situation-data/health/ready")
     require(health.get("status") == "ok", f"situation health: expected ok, got {health.get('status')!r}")
@@ -214,6 +243,14 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
         ),
         "mobile_network_model has no features until prepared mobile coverage read-model cells exist for the requested area",
     )
+    density = require_density(
+        client,
+        "situation density",
+        query_path(
+            "/situation-data/api/v1/features/density",
+            no_cache({"bbox": args.bbox, "limit": 50, "cellSizeDegrees": "0.5", "sampleSize": 2}),
+        ),
+    )
 
     coverage_payload, metadata_response = client.json("/situation-data/api/v1/mobile-coverage/metadata?nocache=1")
     coverage_text = json.dumps(coverage_payload, ensure_ascii=False)
@@ -251,6 +288,7 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
             "osmBoundaries": osm_boundaries,
             "mobileCoverage": mobile_coverage,
             "mobileNetwork": mobile_network,
+            "density": density,
             "mobileCoverageMetadata": {"url": metadata_response.url, "elapsedMs": metadata_response.elapsed_ms},
         },
     }

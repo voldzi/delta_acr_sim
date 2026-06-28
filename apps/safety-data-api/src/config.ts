@@ -19,6 +19,8 @@ export interface SafetyDataConfig {
   chmiHydroNowBaseUrl: string;
   chmiHydroRecentBaseUrl: string;
   chmiHydroMaxStations: number;
+  chmiHydroStationCacheMaxEntries: number;
+  chmiHydroCurrentSnapshotCacheTtlSeconds: number;
   chmiHydroDetailDefaultPastHours: number;
   chmiHydroDetailForecastHours: number;
   chmiHydroDetailBackfillDays: number;
@@ -36,6 +38,9 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
   const dataDir = resolve(process.env.SAFETY_DATA_DIR ?? `${projectRoot}/data/safety-data`);
   await mkdir(dataDir, { recursive: true });
+  const cacheTtlSeconds = parseInteger(process.env.SAFETY_DATA_CACHE_TTL_SECONDS, 300);
+  const cacheMaxEntries = parseInteger(process.env.SAFETY_DATA_CACHE_MAX_ENTRIES, 512);
+  const chmiHydroMaxStations = parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 600);
 
   return {
     port: parseInteger(process.env.SAFETY_DATA_API_PORT, 4030),
@@ -48,9 +53,9 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
       north: 51.2
     },
     requestTimeoutMs: parseInteger(process.env.SAFETY_DATA_REQUEST_TIMEOUT_MS, 8000),
-    cacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_CACHE_TTL_SECONDS, 300),
+    cacheTtlSeconds,
     staleIfErrorSeconds: parseInteger(process.env.SAFETY_DATA_STALE_IF_ERROR_SECONDS, 3600),
-    cacheMaxEntries: parseInteger(process.env.SAFETY_DATA_CACHE_MAX_ENTRIES, 512),
+    cacheMaxEntries,
     staleAfterSeconds: parseInteger(process.env.SAFETY_DATA_STALE_AFTER_SECONDS, 3600),
     chmiAlertsCapBaseUrl: process.env.CHMI_ALERTS_CAP_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
     chmiOrpCodelistUrl:
@@ -59,7 +64,15 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/now/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
     chmiHydroRecentBaseUrl: process.env.CHMI_HYDRO_RECENT_BASE_URL ?? "https://opendata.chmi.cz/hydrology/recent/data",
-    chmiHydroMaxStations: parseInteger(process.env.CHMI_HYDRO_MAX_STATIONS, 600),
+    chmiHydroMaxStations,
+    chmiHydroStationCacheMaxEntries: parseInteger(
+      process.env.CHMI_HYDRO_STATION_CACHE_MAX_ENTRIES,
+      Math.max(cacheMaxEntries, chmiHydroMaxStations + 128)
+    ),
+    chmiHydroCurrentSnapshotCacheTtlSeconds: parseInteger(
+      process.env.CHMI_HYDRO_CURRENT_SNAPSHOT_CACHE_TTL_SECONDS,
+      Math.max(300, cacheTtlSeconds)
+    ),
     chmiHydroDetailDefaultPastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_DEFAULT_PAST_HOURS, 168),
     chmiHydroDetailForecastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_FORECAST_HOURS, 72),
     chmiHydroDetailBackfillDays: parseInteger(process.env.CHMI_HYDRO_DETAIL_BACKFILL_DAYS, 7),

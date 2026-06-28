@@ -271,6 +271,7 @@ export interface SituationDataPublicConfig {
     chmiWeatherRadar: number;
     chmiWeatherWebcams: number;
     ardosPartner: number;
+    radioPlanning: number;
   };
   weatherRadarFrames: {
     historyHours: number;

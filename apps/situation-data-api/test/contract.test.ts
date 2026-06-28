@@ -93,6 +93,8 @@ describe("Situation Data API contract", () => {
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
+      radioPlanningCacheTtlSeconds: 900,
+      radioPlanningCacheMaxEntries: 512,
       demEnabled: false,
       demDatasetId: "copernicus-glo30-cz",
       demPostgisConnectionString: undefined,
@@ -755,6 +757,41 @@ describe("Situation Data API contract", () => {
     expect(summary.body.features[0].links.detail).toContain("source=mock");
     expect(summary.body.features[0]).not.toHaveProperty("geometry");
 
+    const density = await request(app)
+      .get("/api/v1/features/density?layers=weather,ground,mobile,traffic&source=mock&limit=20&cellSizeDegrees=1&sampleSize=3")
+      .expect(200);
+    expect(density.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-provider-feature-density-v1",
+        type: "FeatureCollection",
+        providerId: "sim.situation-data",
+        density: expect.objectContaining({
+          cellSizeDegrees: 1,
+          cellCount: 1,
+          inputFeatureCount: 6,
+          omittedOriginalGeometry: true,
+          truncated: false
+        }),
+        summary: expect.objectContaining({ cellCount: 1, inputFeatureCount: 6, omittedGeometry: true }),
+        features: [
+          expect.objectContaining({
+            type: "Feature",
+            geometry: expect.objectContaining({ type: "Polygon" }),
+            properties: expect.objectContaining({
+              category: "density_cell",
+              featureCount: 6,
+              topSeverity: "warning",
+              layerCounts: expect.objectContaining({ weather: 1, ground: 2, mobile: 2, traffic: 1 }),
+              sourceCounts: expect.objectContaining({ mock: 6 }),
+              sampleFeatureIds: expect.arrayContaining(["weather:mock:prague-west"])
+            })
+          })
+        ]
+      })
+    );
+    expect(density.body.features[0].properties.sampleFeatureIds).toHaveLength(3);
+    expect(density.body.features[0].properties).not.toHaveProperty("raw");
+
     const detail = await request(app).get("/api/v1/features/weather%3Amock%3Aprague-west?layers=weather&source=mock&limit=1").expect(200);
     expect(detail.body).toEqual(
       expect.objectContaining({
@@ -818,7 +855,8 @@ describe("Situation Data API contract", () => {
           chmiWeatherStations: 600,
           chmiWeatherRadar: 300,
           chmiWeatherWebcams: 300,
-          ardosPartner: 15
+          ardosPartner: 15,
+          radioPlanning: 900
         },
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -2229,6 +2267,54 @@ describe("Situation Data API contract", () => {
         ])
       })
     );
+  });
+
+  it("caches repeated radio planning responses and exposes cache telemetry", async () => {
+    const linkPayload = {
+      profileId: "pmr446_handheld",
+      radioName: "PMR tym A",
+      from: { lon: 14.42, lat: 50.08, antennaHeightM: 1.5 },
+      to: { lon: 14.425, lat: 50.085, receiverHeightM: 1.5 }
+    };
+    const coveragePayload = {
+      profileId: "pmr446_handheld",
+      station: { lon: 14.42, lat: 50.08, antennaHeightM: 1.5 },
+      radiusM: 500,
+      azimuthStepDeg: 90,
+      distanceStepM: 250
+    };
+    const siteSearchPayload = {
+      profileId: "pmr446_handheld",
+      searchArea: { bbox: [14.418, 50.078, 14.424, 50.084] },
+      targets: [{ lon: 14.425, lat: 50.085, receiverHeightM: 1.5 }],
+      gridStepM: 500,
+      maxCandidates: 3
+    };
+
+    const firstLink = await request(app).post("/api/v1/radio/link-check").send(linkPayload).expect(200);
+    const secondLink = await request(app).post("/api/v1/radio/link-check").send(linkPayload).expect(200);
+    const firstCoverage = await request(app).post("/api/v1/radio/coverage").send(coveragePayload).expect(200);
+    const secondCoverage = await request(app).post("/api/v1/radio/coverage").send(coveragePayload).expect(200);
+    const firstSiteSearch = await request(app).post("/api/v1/radio/site-search").send(siteSearchPayload).expect(200);
+    const secondSiteSearch = await request(app).post("/api/v1/radio/site-search").send(siteSearchPayload).expect(200);
+
+    expect(secondLink.body.generatedAt).toBe(firstLink.body.generatedAt);
+    expect(secondCoverage.body.generatedAt).toBe(firstCoverage.body.generatedAt);
+    expect(secondSiteSearch.body.generatedAt).toBe(firstSiteSearch.body.generatedAt);
+
+    const observability = await request(app).get("/api/v1/observability").expect(200);
+    expect(observability.body.radioPlanningCaches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ operation: "link_check", cache: expect.objectContaining({ hits: 1, misses: 1 }) }),
+        expect.objectContaining({ operation: "coverage", cache: expect.objectContaining({ hits: 1, misses: 1 }) }),
+        expect.objectContaining({ operation: "site_search", cache: expect.objectContaining({ hits: 1, misses: 1 }) })
+      ])
+    );
+
+    const metrics = await request(app).get("/metrics").expect(200);
+    expect(metrics.text).toContain('situation_data_radio_planning_cache_hits{operation="link_check"} 1');
+    expect(metrics.text).toContain('situation_data_radio_planning_cache_hits{operation="coverage"} 1');
+    expect(metrics.text).toContain('situation_data_radio_planning_cache_hits{operation="site_search"} 1');
   });
 
   it("builds mobile coverage polygons from tower references", async () => {

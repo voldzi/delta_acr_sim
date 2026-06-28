@@ -57,6 +57,13 @@ COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a li
 | `limit` | `500` | Maximum vrácených deduplikovaných tracků. Max 1000. |
 | `includeStale` | `true` | Vrátí i stale tracky. Default `false`. |
 
+SIM interně kanonizuje `bbox` pro cache. Výchozí produkční nastavení
+zarovnává letecký bbox na mřížku `FLIGHT_DATA_BBOX_CACHE_GRID_DEGREES=0.1`
+a přidává okraj `FLIGHT_DATA_BBOX_CACHE_PADDING_DEGREES=0.08`. Odpověď pro COM
+ale vždy vrací `query.bbox` z původního požadavku a pole `tracks` znovu filtruje
+na tento původní bbox a požadovaný `limit`. COM proto nemusí dělat žádné
+speciální ořezávání kvůli této cache optimalizaci.
+
 ## Odpověď pro COM
 
 ```json

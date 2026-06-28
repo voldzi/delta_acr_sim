@@ -14,6 +14,8 @@ import type {
   SourceFetchResult
 } from "./types.js";
 
+const FLIGHT_CACHE_FETCH_LIMIT = 1000;
+
 export class FlightAggregationService {
   private readonly cache: ManagedResponseCache<FlightTrackResponse>;
 
@@ -37,7 +39,9 @@ export class FlightAggregationService {
   }
 
   async getTracks(query: FlightQuery): Promise<FlightTrackResponse> {
-    return this.cache.getOrLoad(cacheKeyForFlightQuery(query), () => this.fetchTracks(query));
+    const cacheQuery = cacheQueryForFlightQuery(query, this.config);
+    const cached = await this.cache.getOrLoad(cacheKeyForFlightQuery(cacheQuery), () => this.fetchTracks(cacheQuery));
+    return projectFlightResponse(cached, query);
   }
 
   private async fetchTracks(query: FlightQuery): Promise<FlightTrackResponse> {
@@ -81,6 +85,36 @@ export class FlightAggregationService {
   }
 }
 
+function cacheQueryForFlightQuery(query: FlightQuery, config: FlightDataConfig): FlightQuery {
+  return {
+    ...query,
+    bbox: query.bbox ? canonicalizeBboxForCache(query.bbox, config) : undefined,
+    limit: Math.max(query.limit, FLIGHT_CACHE_FETCH_LIMIT)
+  };
+}
+
+function projectFlightResponse(response: FlightTrackResponse, query: FlightQuery): FlightTrackResponse {
+  const tracks = response.tracks
+    .filter((track) => !query.bbox || isTrackInBbox(track, query.bbox))
+    .slice(0, query.limit);
+
+  return {
+    ...response,
+    query: {
+      bbox: query.bbox,
+      limit: query.limit,
+      includeStale: query.includeStale,
+      sources: query.sourceIds
+    },
+    summary: {
+      ...response.summary,
+      deduplicatedTrackCount: tracks.length,
+      staleTrackCount: tracks.filter((track) => track.quality.stale).length
+    },
+    tracks
+  };
+}
+
 function cacheKeyForFlightQuery(query: FlightQuery): string {
   return JSON.stringify({
     bbox: query.bbox ? roundBbox(query.bbox) : null,
@@ -90,6 +124,26 @@ function cacheKeyForFlightQuery(query: FlightQuery): string {
   });
 }
 
+function canonicalizeBboxForCache(bbox: NonNullable<FlightQuery["bbox"]>, config: FlightDataConfig): BoundingBox {
+  const gridDegrees = Math.max(0, config.bboxCacheGridDegrees);
+  const paddingDegrees = Math.max(0, config.bboxCachePaddingDegrees);
+  if (gridDegrees === 0 && paddingDegrees === 0) {
+    return roundBbox(bbox);
+  }
+
+  const west = bbox.west - paddingDegrees;
+  const south = bbox.south - paddingDegrees;
+  const east = bbox.east + paddingDegrees;
+  const north = bbox.north + paddingDegrees;
+
+  return {
+    west: clampLongitude(gridDegrees > 0 ? floorToGrid(west, gridDegrees) : west),
+    south: clampLatitude(gridDegrees > 0 ? floorToGrid(south, gridDegrees) : south),
+    east: clampLongitude(gridDegrees > 0 ? ceilToGrid(east, gridDegrees) : east),
+    north: clampLatitude(gridDegrees > 0 ? ceilToGrid(north, gridDegrees) : north)
+  };
+}
+
 function roundBbox(bbox: NonNullable<FlightQuery["bbox"]>): BoundingBox {
   return {
     west: round(bbox.west, 5),
@@ -97,6 +151,26 @@ function roundBbox(bbox: NonNullable<FlightQuery["bbox"]>): BoundingBox {
     east: round(bbox.east, 5),
     north: round(bbox.north, 5)
   };
+}
+
+function isTrackInBbox(track: AggregatedFlightTrack, bbox: BoundingBox): boolean {
+  return track.lon >= bbox.west && track.lon <= bbox.east && track.lat >= bbox.south && track.lat <= bbox.north;
+}
+
+function floorToGrid(value: number, grid: number): number {
+  return round(Math.floor(value / grid) * grid, 6);
+}
+
+function ceilToGrid(value: number, grid: number): number {
+  return round(Math.ceil(value / grid) * grid, 6);
+}
+
+function clampLongitude(value: number): number {
+  return round(Math.min(180, Math.max(-180, value)), 6);
+}
+
+function clampLatitude(value: number): number {
+  return round(Math.min(90, Math.max(-90, value)), 6);
 }
 
 function deduplicateObservations(

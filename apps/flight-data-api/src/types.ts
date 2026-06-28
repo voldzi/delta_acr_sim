@@ -41,6 +41,8 @@ export interface FlightDataPublicConfig {
     radiusNm: number;
   };
   cacheTtlSeconds: number;
+  bboxCacheGridDegrees: number;
+  bboxCachePaddingDegrees: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
   staleAfterSeconds: number;

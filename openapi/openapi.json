@@ -2525,6 +2525,87 @@
         ]
       }
     },
+    "/situation-data/api/v1/features/density": {
+      "get": {
+        "summary": "Return density grid cells for low-zoom situation rendering",
+        "description": "Uses the same query parameters as /features, but groups returned features into stable WGS84 grid cells and omits original geometries. COP should use this for dense low-zoom layers before requesting detail or original geometry on drill-down.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SituationDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataLayers"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataSources"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataTechnologies"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataOperators"
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataLimit"
+          },
+          {
+            "name": "cellSizeDegrees",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "minimum": 0.001,
+              "maximum": 2,
+              "example": 0.1
+            },
+            "description": "Stable WGS84 grid cell size in degrees. Aliases `gridDegrees` and `grid` are also accepted. When omitted, SIM derives a safe size from the query bbox span."
+          },
+          {
+            "name": "maxCells",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 512
+            },
+            "description": "Maximum density cells returned after sorting by count and severity."
+          },
+          {
+            "name": "sampleSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20,
+              "default": 5
+            },
+            "description": "Maximum sample feature ids included in each grid cell for COP drill-down."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Situation feature density grid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataProviderFeatureDensityCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_features_density",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
     "/situation-data/api/v1/features/{featureId}/geometry": {
       "get": {
         "summary": "Return geometry for one situation feature",
@@ -5870,6 +5951,12 @@
           "cacheTtlSeconds": {
             "type": "integer"
           },
+          "bboxCacheGridDegrees": {
+            "type": "number"
+          },
+          "bboxCachePaddingDegrees": {
+            "type": "number"
+          },
           "staleIfErrorSeconds": {
             "type": "integer"
           },
@@ -7251,7 +7338,8 @@
               "chmiWeatherStations",
               "chmiWeatherRadar",
               "chmiWeatherWebcams",
-              "ardosPartner"
+              "ardosPartner",
+              "radioPlanning"
             ],
             "properties": {
               "openMeteo": {
@@ -7297,6 +7385,9 @@
                 "type": "integer"
               },
               "ardosPartner": {
+                "type": "integer"
+              },
+              "radioPlanning": {
                 "type": "integer"
               }
             }
@@ -8098,6 +8189,287 @@
             "type": "array",
             "items": {
               "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataProviderFeatureDensityCollection": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "type",
+          "generatedAt",
+          "providerId",
+          "source",
+          "query",
+          "density",
+          "summary",
+          "features",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-provider-feature-density-v1"
+          },
+          "type": {
+            "type": "string",
+            "const": "FeatureCollection"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.situation-data"
+          },
+          "source": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "density": {
+            "type": "object",
+            "required": [
+              "cellSizeDegrees",
+              "cellCount",
+              "maxCells",
+              "sampleSize",
+              "inputFeatureCount",
+              "omittedFeatureCount",
+              "truncated",
+              "omittedOriginalGeometry"
+            ],
+            "properties": {
+              "cellSizeDegrees": {
+                "type": "number"
+              },
+              "cellCount": {
+                "type": "integer"
+              },
+              "maxCells": {
+                "type": "integer"
+              },
+              "sampleSize": {
+                "type": "integer"
+              },
+              "inputFeatureCount": {
+                "type": "integer"
+              },
+              "omittedFeatureCount": {
+                "type": "integer"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "omittedOriginalGeometry": {
+                "type": "boolean",
+                "const": true
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataProviderFeatureDensityCell"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataSourceDescriptor"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataProviderFeatureDensityCell": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "Feature"
+          },
+          "id": {
+            "type": "string"
+          },
+          "geometry": {
+            "type": "object",
+            "required": [
+              "type",
+              "coordinates"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "Polygon"
+              },
+              "coordinates": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "properties": {
+            "type": "object",
+            "required": [
+              "featureId",
+              "providerId",
+              "layerId",
+              "providerLayerId",
+              "layer",
+              "category",
+              "featureCount",
+              "topSeverity",
+              "layerCounts",
+              "sourceCounts",
+              "severityCounts",
+              "sampleFeatureIds",
+              "bbox",
+              "centroid",
+              "rendering"
+            ],
+            "properties": {
+              "featureId": {
+                "type": "string"
+              },
+              "providerId": {
+                "type": "string",
+                "const": "sim.situation-data"
+              },
+              "layerId": {
+                "type": "string"
+              },
+              "providerLayerId": {
+                "type": "string"
+              },
+              "layer": {
+                "$ref": "#/components/schemas/SituationDataLayerId"
+              },
+              "category": {
+                "type": "string",
+                "const": "density_cell"
+              },
+              "label": {
+                "type": "string"
+              },
+              "featureCount": {
+                "type": "integer"
+              },
+              "staleFeatureCount": {
+                "type": "integer"
+              },
+              "topSeverity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "advisory",
+                  "warning",
+                  "critical"
+                ]
+              },
+              "layerCounts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "sourceCounts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "severityCounts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              },
+              "sampleFeatureIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "bbox": {
+                "type": "object",
+                "required": [
+                  "west",
+                  "south",
+                  "east",
+                  "north"
+                ],
+                "properties": {
+                  "west": {
+                    "type": "number"
+                  },
+                  "south": {
+                    "type": "number"
+                  },
+                  "east": {
+                    "type": "number"
+                  },
+                  "north": {
+                    "type": "number"
+                  }
+                }
+              },
+              "centroid": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "number"
+                }
+              },
+              "rendering": {
+                "type": "object",
+                "required": [
+                  "mode",
+                  "geometryRole"
+                ],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "grid"
+                  },
+                  "geometryRole": {
+                    "type": "string",
+                    "const": "grid_cell"
+                  }
+                }
+              }
             }
           }
         }

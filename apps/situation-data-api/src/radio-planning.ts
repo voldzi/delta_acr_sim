@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DemElevationSampler, type DemTileRef } from "./dem-elevation-sampler.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry } from "./types.js";
 import type { SituationDataConfig } from "./config.js";
 
@@ -15,6 +16,7 @@ export type RadioProfileCategory =
 export type RadioProfileSource = "builtin" | "custom";
 export type RadioQuality = "good" | "fair" | "weak" | "none" | "unknown";
 export type RadioLinkStatus = "clear" | "marginal" | "obstructed" | "unknown";
+export type RadioPlanningCacheOperation = "link_check" | "coverage" | "site_search";
 
 export interface RadioProfile {
   profileId: string;
@@ -83,6 +85,10 @@ export interface RadioLinkCheckResponse {
   warnings: string[];
 }
 
+export interface RadioPlanningCacheStats extends ManagedResponseCacheStats {
+  operation: RadioPlanningCacheOperation;
+}
+
 export class RadioPlanningError extends Error {
   constructor(
     readonly status: number,
@@ -136,6 +142,33 @@ interface TerrainContext {
   demTiles: DemTileRef[];
   terrainAvailable: boolean;
   warnings: string[];
+}
+
+interface NormalizedRadioLinkCheckRequest {
+  profile: RadioProfile;
+  radioName?: string;
+  from: RadioStation;
+  to: RadioStation;
+  sampleStepM?: number;
+}
+
+interface NormalizedRadioCoverageRequest {
+  profile: RadioProfile;
+  radioName?: string;
+  station: RadioStation;
+  radiusM?: number;
+  azimuthStepDeg?: number;
+  distanceStepM?: number;
+}
+
+interface NormalizedRadioSiteSearchRequest {
+  profile: RadioProfile;
+  radioName?: string;
+  searchArea: BoundingBox;
+  targets: RadioStation[];
+  stationAntennaHeightM?: number;
+  gridStepM?: number;
+  maxCandidates: number;
 }
 
 const RADIO_DISCLAIMER =
@@ -264,9 +297,38 @@ const BUILTIN_RADIO_PROFILES: RadioProfile[] = [
 
 export class RadioPlanningService {
   private readonly customProfilePath: string;
+  private readonly linkCheckCache: ManagedResponseCache<RadioLinkCheckResponse>;
+  private readonly coverageCache: ManagedResponseCache<RadioFeatureCollection>;
+  private readonly siteSearchCache: ManagedResponseCache<RadioFeatureCollection>;
 
   constructor(private readonly config: SituationDataConfig) {
     this.customProfilePath = join(config.dataDir, "radio-profiles.json");
+    const ttlMs = Math.max(30, config.radioPlanningCacheTtlSeconds) * 1000;
+    const staleIfErrorMs = Math.max(config.radioPlanningCacheTtlSeconds, config.staleIfErrorSeconds) * 1000;
+    const maxEntries = Math.max(32, Math.min(config.radioPlanningCacheMaxEntries, 4096));
+    this.linkCheckCache = new ManagedResponseCache<RadioLinkCheckResponse>({
+      ttlMs,
+      staleIfErrorMs,
+      maxEntries
+    });
+    this.coverageCache = new ManagedResponseCache<RadioFeatureCollection>({
+      ttlMs,
+      staleIfErrorMs,
+      maxEntries
+    });
+    this.siteSearchCache = new ManagedResponseCache<RadioFeatureCollection>({
+      ttlMs,
+      staleIfErrorMs,
+      maxEntries
+    });
+  }
+
+  cacheStats(): RadioPlanningCacheStats[] {
+    return [
+      { operation: "link_check", ...this.linkCheckCache.stats() },
+      { operation: "coverage", ...this.coverageCache.stats() },
+      { operation: "site_search", ...this.siteSearchCache.stats() }
+    ];
   }
 
   async listProfiles(): Promise<RadioProfileCatalog> {
@@ -297,6 +359,10 @@ export class RadioPlanningService {
 
   async linkCheck(raw: unknown): Promise<RadioLinkCheckResponse> {
     const request = await this.parseLinkCheckRequest(raw);
+    return this.linkCheckCache.getOrLoad(this.cacheKey("link_check", request), () => this.buildLinkCheck(request));
+  }
+
+  private async buildLinkCheck(request: NormalizedRadioLinkCheckRequest): Promise<RadioLinkCheckResponse> {
     const generatedAt = new Date().toISOString();
     const bbox = expandBboxByMeters(bboxForPoints([request.from, request.to]), 2000);
     const terrain = await this.createTerrainContext(bbox, "radio link-check");
@@ -324,6 +390,10 @@ export class RadioPlanningService {
 
   async coverage(raw: unknown): Promise<RadioFeatureCollection> {
     const request = await this.parseCoverageRequest(raw);
+    return this.coverageCache.getOrLoad(this.cacheKey("coverage", request), () => this.buildCoverage(request));
+  }
+
+  private async buildCoverage(request: NormalizedRadioCoverageRequest): Promise<RadioFeatureCollection> {
     const generatedAt = new Date().toISOString();
     const radiusM = clamp(request.radiusM ?? request.profile.maxRadiusM, 250, Math.min(100_000, request.profile.maxRadiusM));
     const azimuthStepDeg = clamp(request.azimuthStepDeg ?? request.profile.defaultAzimuthStepDeg, 2, 90);
@@ -416,6 +486,10 @@ export class RadioPlanningService {
 
   async siteSearch(raw: unknown): Promise<RadioFeatureCollection> {
     const request = await this.parseSiteSearchRequest(raw);
+    return this.siteSearchCache.getOrLoad(this.cacheKey("site_search", request), () => this.buildSiteSearch(request));
+  }
+
+  private async buildSiteSearch(request: NormalizedRadioSiteSearchRequest): Promise<RadioFeatureCollection> {
     const generatedAt = new Date().toISOString();
     const gridStepM = normalizeGridStep(request.gridStepM, request.searchArea);
     const candidates = candidateGrid(request.searchArea, gridStepM).slice(0, MAX_SITE_EVALUATION_POINTS);
@@ -531,13 +605,7 @@ export class RadioPlanningService {
     return profile;
   }
 
-  private async parseLinkCheckRequest(raw: unknown): Promise<{
-    profile: RadioProfile;
-    radioName?: string;
-    from: RadioStation;
-    to: RadioStation;
-    sampleStepM?: number;
-  }> {
+  private async parseLinkCheckRequest(raw: unknown): Promise<NormalizedRadioLinkCheckRequest> {
     if (!isRecord(raw)) {
       throw new RadioPlanningError(400, "VALIDATION_ERROR", "Request body must be a JSON object.");
     }
@@ -551,14 +619,7 @@ export class RadioPlanningService {
     };
   }
 
-  private async parseCoverageRequest(raw: unknown): Promise<{
-    profile: RadioProfile;
-    radioName?: string;
-    station: RadioStation;
-    radiusM?: number;
-    azimuthStepDeg?: number;
-    distanceStepM?: number;
-  }> {
+  private async parseCoverageRequest(raw: unknown): Promise<NormalizedRadioCoverageRequest> {
     if (!isRecord(raw)) {
       throw new RadioPlanningError(400, "VALIDATION_ERROR", "Request body must be a JSON object.");
     }
@@ -573,15 +634,7 @@ export class RadioPlanningService {
     };
   }
 
-  private async parseSiteSearchRequest(raw: unknown): Promise<{
-    profile: RadioProfile;
-    radioName?: string;
-    searchArea: BoundingBox;
-    targets: RadioStation[];
-    stationAntennaHeightM?: number;
-    gridStepM?: number;
-    maxCandidates: number;
-  }> {
+  private async parseSiteSearchRequest(raw: unknown): Promise<NormalizedRadioSiteSearchRequest> {
     if (!isRecord(raw)) {
       throw new RadioPlanningError(400, "VALIDATION_ERROR", "Request body must be a JSON object.");
     }
@@ -648,6 +701,23 @@ export class RadioPlanningService {
     };
   }
 
+  private cacheKey(
+    operation: RadioPlanningCacheOperation,
+    request: NormalizedRadioLinkCheckRequest | NormalizedRadioCoverageRequest | NormalizedRadioSiteSearchRequest
+  ): string {
+    return stableJson({
+      operation,
+      request,
+      modelVersion: RADIO_MODEL_VERSION,
+      terrain: {
+        demEnabled: this.config.demEnabled,
+        demConfigured: Boolean(this.config.demPostgisConnectionString),
+        demDatasetId: this.config.demDatasetId,
+        demLocalCacheDir: this.config.demLocalCacheDir
+      }
+    });
+  }
+
   private async createTerrainContext(bbox: BoundingBox, purpose: string): Promise<TerrainContext> {
     if (!this.config.demEnabled || !this.config.demPostgisConnectionString) {
       return {
@@ -696,6 +766,28 @@ export class RadioPlanningService {
     await writeFile(tmp, `${JSON.stringify(profiles, null, 2)}\n`, "utf8");
     await rename(tmp, this.customProfilePath);
   }
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(stableValue(value));
+}
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stableValue(item));
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort()
+        .flatMap((key) => {
+          const next = record[key];
+          return next === undefined ? [] : [[key, stableValue(next)]];
+        })
+    );
+  }
+  return value;
 }
 
 async function sampleTerrainProfile(

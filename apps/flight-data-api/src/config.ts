@@ -12,6 +12,8 @@ export interface FlightDataConfig {
   defaultRadiusNm: number;
   requestTimeoutMs: number;
   cacheTtlSeconds: number;
+  bboxCacheGridDegrees: number;
+  bboxCachePaddingDegrees: number;
   staleIfErrorSeconds: number;
   cacheMaxEntries: number;
   staleAfterSeconds: number;
@@ -53,6 +55,8 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     defaultRadiusNm: parseInteger(process.env.FLIGHT_DATA_DEFAULT_RADIUS_NM, 120),
     requestTimeoutMs: parseInteger(process.env.FLIGHT_DATA_REQUEST_TIMEOUT_MS, 6000),
     cacheTtlSeconds: parseInteger(process.env.FLIGHT_DATA_CACHE_TTL_SECONDS, 15),
+    bboxCacheGridDegrees: parseFloatOr(process.env.FLIGHT_DATA_BBOX_CACHE_GRID_DEGREES, 0.1),
+    bboxCachePaddingDegrees: parseFloatOr(process.env.FLIGHT_DATA_BBOX_CACHE_PADDING_DEGREES, 0.08),
     staleIfErrorSeconds: parseInteger(process.env.FLIGHT_DATA_STALE_IF_ERROR_SECONDS, 60),
     cacheMaxEntries: parseInteger(process.env.FLIGHT_DATA_CACHE_MAX_ENTRIES, 512),
     staleAfterSeconds: parseInteger(process.env.FLIGHT_DATA_STALE_AFTER_SECONDS, 120),

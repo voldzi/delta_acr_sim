@@ -73,6 +73,8 @@ export interface SituationDataConfig {
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
+  radioPlanningCacheTtlSeconds: number;
+  radioPlanningCacheMaxEntries: number;
   demEnabled: boolean;
   demDatasetId: string;
   demPostgisConnectionString?: string;
@@ -172,6 +174,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
+    radioPlanningCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS, 900),
+    radioPlanningCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES, 512),
     demEnabled: parseBoolean(process.env.DEM_ENABLED, false),
     demDatasetId: process.env.DEM_DATASET_ID ?? "copernicus-glo30-cz",
     demPostgisConnectionString: emptyToUndefined(process.env.DEM_POSTGIS_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),

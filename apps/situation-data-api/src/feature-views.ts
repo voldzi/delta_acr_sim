@@ -99,6 +99,70 @@ export interface SituationFeatureGeometryDocument {
   geometrySummary: FeatureGeometrySummary;
 }
 
+export interface SituationFeatureDensityOptions {
+  cellSizeDegrees?: number;
+  maxCells?: number;
+  sampleSize?: number;
+}
+
+export interface SituationFeatureDensityCollection {
+  contractVersion: "sim-provider-feature-density-v1";
+  type: "FeatureCollection";
+  generatedAt: string;
+  providerId: "sim.situation-data";
+  source: SituationFeatureCollection["source"];
+  query: SituationFeatureCollection["query"];
+  density: {
+    cellSizeDegrees: number;
+    cellCount: number;
+    maxCells: number;
+    sampleSize: number;
+    inputFeatureCount: number;
+    omittedFeatureCount: number;
+    truncated: boolean;
+    omittedOriginalGeometry: true;
+  };
+  summary: SituationFeatureCollection["summary"] & {
+    cellCount: number;
+    inputFeatureCount: number;
+    omittedGeometry: true;
+  };
+  features: SituationFeatureDensityCell[];
+  sources: SituationFeatureCollection["sources"];
+  warnings: string[];
+}
+
+export interface SituationFeatureDensityCell {
+  type: "Feature";
+  id: string;
+  geometry: {
+    type: "Polygon";
+    coordinates: Array<Array<[number, number]>>;
+  };
+  properties: {
+    featureId: string;
+    providerId: "sim.situation-data";
+    layerId: string;
+    providerLayerId: string;
+    layer: SituationLayerId;
+    category: "density_cell";
+    label: string;
+    featureCount: number;
+    staleFeatureCount: number;
+    topSeverity: SituationFeatureProperties["severity"];
+    layerCounts: Partial<Record<SituationLayerId, number>>;
+    sourceCounts: Partial<Record<SituationDataSourceId, number>>;
+    severityCounts: Partial<Record<SituationFeatureProperties["severity"], number>>;
+    sampleFeatureIds: string[];
+    bbox: BoundingBox;
+    centroid: [number, number];
+    rendering: {
+      mode: "grid";
+      geometryRole: "grid_cell";
+    };
+  };
+}
+
 export interface SituationTaxonomyDocument {
   contractVersion: "sim-provider-taxonomy-v1";
   generatedAt: string;
@@ -161,6 +225,60 @@ export function buildSituationFeatureGeometry(feature: SituationFeature): Situat
   };
 }
 
+export function buildSituationFeatureDensityCollection(
+  collection: SituationFeatureCollection,
+  options: SituationFeatureDensityOptions = {}
+): SituationFeatureDensityCollection {
+  const cellSizeDegrees = normalizeCellSizeDegrees(options.cellSizeDegrees ?? autoCellSizeDegrees(collection.query.bbox));
+  const maxCells = Math.max(1, Math.min(5000, Math.trunc(options.maxCells ?? 512)));
+  const sampleSize = Math.max(0, Math.min(20, Math.trunc(options.sampleSize ?? 5)));
+  const cells = new Map<string, DensityAccumulator>();
+
+  for (const feature of collection.features) {
+    const point = densityPoint(feature);
+    if (!point) {
+      continue;
+    }
+    const cellIndex = densityCellIndex(point, cellSizeDegrees);
+    const cellKey = `${cellIndex.x}:${cellIndex.y}`;
+    const existing = cells.get(cellKey) ?? createDensityAccumulator(cellIndex, cellSizeDegrees);
+    addFeatureToDensityAccumulator(existing, feature, sampleSize);
+    cells.set(cellKey, existing);
+  }
+
+  const allCells = Array.from(cells.values()).sort(compareDensityAccumulators);
+  const selectedCells = allCells.slice(0, maxCells).map((cell) => densityAccumulatorFeature(cell));
+  const generatedAt = new Date().toISOString();
+
+  return {
+    contractVersion: "sim-provider-feature-density-v1",
+    type: "FeatureCollection",
+    generatedAt,
+    providerId: "sim.situation-data",
+    source: collection.source,
+    query: collection.query,
+    density: {
+      cellSizeDegrees,
+      cellCount: selectedCells.length,
+      maxCells,
+      sampleSize,
+      inputFeatureCount: collection.features.length,
+      omittedFeatureCount: Math.max(0, allCells.length - selectedCells.length),
+      truncated: allCells.length > selectedCells.length,
+      omittedOriginalGeometry: true
+    },
+    summary: {
+      ...collection.summary,
+      cellCount: selectedCells.length,
+      inputFeatureCount: collection.features.length,
+      omittedGeometry: true
+    },
+    features: selectedCells,
+    sources: collection.sources,
+    warnings: collection.warnings
+  };
+}
+
 export function buildSituationTaxonomy(): SituationTaxonomyDocument {
   return {
     contractVersion: "sim-provider-taxonomy-v1",
@@ -201,6 +319,179 @@ export function buildSituationTaxonomy(): SituationTaxonomyDocument {
       }
     ]
   };
+}
+
+interface DensityAccumulator {
+  id: string;
+  bbox: BoundingBox;
+  centroid: [number, number];
+  featureCount: number;
+  staleFeatureCount: number;
+  topSeverity: SituationFeatureProperties["severity"];
+  layerCounts: Map<SituationLayerId, number>;
+  sourceCounts: Map<SituationDataSourceId, number>;
+  severityCounts: Map<SituationFeatureProperties["severity"], number>;
+  sampleFeatureIds: string[];
+}
+
+function createDensityAccumulator(index: { x: number; y: number }, cellSizeDegrees: number): DensityAccumulator {
+  const west = roundCoord(index.x * cellSizeDegrees);
+  const south = roundCoord(index.y * cellSizeDegrees);
+  const east = roundCoord((index.x + 1) * cellSizeDegrees);
+  const north = roundCoord((index.y + 1) * cellSizeDegrees);
+  return {
+    id: `density:${cellSizeDegrees}:${index.x}:${index.y}`,
+    bbox: { west, south, east, north },
+    centroid: [roundCoord((west + east) / 2), roundCoord((south + north) / 2)],
+    featureCount: 0,
+    staleFeatureCount: 0,
+    topSeverity: "info",
+    layerCounts: new Map(),
+    sourceCounts: new Map(),
+    severityCounts: new Map(),
+    sampleFeatureIds: []
+  };
+}
+
+function addFeatureToDensityAccumulator(cell: DensityAccumulator, feature: SituationFeature, sampleSize: number): void {
+  cell.featureCount += 1;
+  if (feature.properties.stale) {
+    cell.staleFeatureCount += 1;
+  }
+  cell.topSeverity = higherSeverity(cell.topSeverity, feature.properties.severity);
+  increment(cell.layerCounts, feature.properties.layer);
+  increment(cell.sourceCounts, feature.properties.sourceId);
+  increment(cell.severityCounts, feature.properties.severity);
+  if (cell.sampleFeatureIds.length < sampleSize) {
+    cell.sampleFeatureIds.push(feature.id);
+  }
+}
+
+function densityAccumulatorFeature(cell: DensityAccumulator): SituationFeatureDensityCell {
+  const primaryLayer = mostCommon(cell.layerCounts) ?? "weather";
+  return {
+    type: "Feature",
+    id: cell.id,
+    geometry: densityCellPolygon(cell.bbox),
+    properties: {
+      featureId: cell.id,
+      providerId: "sim.situation-data",
+      layerId: `density.${primaryLayer}`,
+      providerLayerId: `density.${primaryLayer}`,
+      layer: primaryLayer,
+      category: "density_cell",
+      label: `${cell.featureCount} prvku`,
+      featureCount: cell.featureCount,
+      staleFeatureCount: cell.staleFeatureCount,
+      topSeverity: cell.topSeverity,
+      layerCounts: objectFromCounts(cell.layerCounts),
+      sourceCounts: objectFromCounts(cell.sourceCounts),
+      severityCounts: objectFromCounts(cell.severityCounts),
+      sampleFeatureIds: cell.sampleFeatureIds,
+      bbox: cell.bbox,
+      centroid: cell.centroid,
+      rendering: {
+        mode: "grid",
+        geometryRole: "grid_cell"
+      }
+    }
+  };
+}
+
+function densityCellPolygon(bbox: BoundingBox): SituationFeatureDensityCell["geometry"] {
+  return {
+    type: "Polygon",
+    coordinates: [
+      [
+        [bbox.west, bbox.south],
+        [bbox.east, bbox.south],
+        [bbox.east, bbox.north],
+        [bbox.west, bbox.north],
+        [bbox.west, bbox.south]
+      ]
+    ]
+  };
+}
+
+function densityPoint(feature: SituationFeature): [number, number] | undefined {
+  const summary = summarizeGeometry(feature);
+  if (summary.centroid) {
+    return summary.centroid;
+  }
+  const bbox = summary.bbox;
+  return bbox ? [roundCoord((bbox.west + bbox.east) / 2), roundCoord((bbox.south + bbox.north) / 2)] : undefined;
+}
+
+function densityCellIndex(point: [number, number], cellSizeDegrees: number): { x: number; y: number } {
+  return {
+    x: Math.floor(point[0] / cellSizeDegrees),
+    y: Math.floor(point[1] / cellSizeDegrees)
+  };
+}
+
+function compareDensityAccumulators(left: DensityAccumulator, right: DensityAccumulator): number {
+  const severityDelta = severityRank(right.topSeverity) - severityRank(left.topSeverity);
+  if (severityDelta !== 0) {
+    return severityDelta;
+  }
+  const countDelta = right.featureCount - left.featureCount;
+  if (countDelta !== 0) {
+    return countDelta;
+  }
+  return left.id.localeCompare(right.id);
+}
+
+function autoCellSizeDegrees(bbox: BoundingBox): number {
+  const span = Math.max(bbox.east - bbox.west, bbox.north - bbox.south);
+  if (span <= 0.2) {
+    return 0.01;
+  }
+  if (span <= 0.8) {
+    return 0.025;
+  }
+  if (span <= 2) {
+    return 0.05;
+  }
+  if (span <= 6) {
+    return 0.1;
+  }
+  return 0.25;
+}
+
+function normalizeCellSizeDegrees(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0.1;
+  }
+  return roundCoord(Math.min(2, Math.max(0.001, value)));
+}
+
+function higherSeverity(left: SituationFeatureProperties["severity"], right: SituationFeatureProperties["severity"]): SituationFeatureProperties["severity"] {
+  return severityRank(right) > severityRank(left) ? right : left;
+}
+
+function severityRank(severity: SituationFeatureProperties["severity"]): number {
+  switch (severity) {
+    case "critical":
+      return 3;
+    case "warning":
+      return 2;
+    case "advisory":
+      return 1;
+    case "info":
+      return 0;
+  }
+}
+
+function increment<T extends string>(counts: Map<T, number>, key: T): void {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function mostCommon<T extends string>(counts: Map<T, number>): T | undefined {
+  return Array.from(counts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0];
+}
+
+function objectFromCounts<T extends string>(counts: Map<T, number>): Partial<Record<T, number>> {
+  return Object.fromEntries(counts.entries()) as Partial<Record<T, number>>;
 }
 
 export function findSituationFeature(collection: SituationFeatureCollection, featureId: string): SituationFeature | undefined {

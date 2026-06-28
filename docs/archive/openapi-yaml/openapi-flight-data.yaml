@@ -507,6 +507,10 @@ components:
               type: number
         cacheTtlSeconds:
           type: integer
+        bboxCacheGridDegrees:
+          type: number
+        bboxCachePaddingDegrees:
+          type: number
         staleIfErrorSeconds:
           type: integer
         cacheMaxEntries:

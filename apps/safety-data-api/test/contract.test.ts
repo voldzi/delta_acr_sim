@@ -33,6 +33,8 @@ describe("Safety Data API contract", () => {
       chmiHydroNowBaseUrl: "https://opendata.chmi.cz/hydrology/now/data",
       chmiHydroRecentBaseUrl: "https://opendata.chmi.cz/hydrology/recent/data",
       chmiHydroMaxStations: 20,
+      chmiHydroStationCacheMaxEntries: 148,
+      chmiHydroCurrentSnapshotCacheTtlSeconds: 300,
       chmiHydroDetailDefaultPastHours: 168,
       chmiHydroDetailForecastHours: 72,
       chmiHydroDetailBackfillDays: 0,
@@ -107,6 +109,8 @@ describe("Safety Data API contract", () => {
         cacheMaxEntries: 128,
         staleAfterSeconds: 900,
         hydroMaxStations: 20,
+        hydroStationCacheMaxEntries: 148,
+        hydroCurrentSnapshotCacheTtlSeconds: 300,
         hydroDetailDefaultPastHours: 168,
         hydroDetailForecastHours: 72,
         hydroDetailBackfillDays: 0,
@@ -369,6 +373,38 @@ describe("Safety Data API contract", () => {
           })
         );
       }
+    );
+  });
+
+  it("serves repeated CHMI hydro map bboxes from a current snapshot", async () => {
+    const requestCounts = new Map<string, number>();
+    await withFixtureServer(
+      {
+        "/meta.json": JSON.stringify(chmiHydroMetadataFixture()),
+        "/now/0-203-1-good.json": JSON.stringify(chmiHydroNowFixture("0-203-1-good")),
+        "/now/0-203-1-missing.json": { status: 404, body: "not found" }
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_hydro"],
+          chmiHydroMetadataUrl: `${baseUrl}/meta.json`,
+          chmiHydroNowBaseUrl: `${baseUrl}/now`,
+          cacheTtlSeconds: 1,
+          chmiHydroCurrentSnapshotCacheTtlSeconds: 300
+        });
+
+        await request(configured.app)
+          .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=flood&source=chmi_hydro&limit=10")
+          .expect(200);
+        await request(configured.app)
+          .get("/api/v1/cop/features?bbox=13.90,49.70,15.30,50.40&layers=flood&source=chmi_hydro&limit=10")
+          .expect(200);
+
+        expect(requestCounts.get("/now/0-203-1-good.json")).toBe(1);
+        expect(requestCounts.get("/now/0-203-1-missing.json")).toBe(1);
+      },
+      (url) => requestCounts.set(url, (requestCounts.get(url) ?? 0) + 1)
     );
   });
 
@@ -879,9 +915,11 @@ describe("Safety Data API contract", () => {
 
 async function withFixtureServer(
   routes: Record<string, string | { status: number; body: string }>,
-  fn: (baseUrl: string) => Promise<void>
+  fn: (baseUrl: string) => Promise<void>,
+  onRequest?: (url: string) => void
 ): Promise<void> {
   const server = createServer((req, res) => {
+    onRequest?.(req.url ?? "");
     const route = routes[req.url ?? ""];
     if (route === undefined) {
       res.writeHead(404).end("not found");

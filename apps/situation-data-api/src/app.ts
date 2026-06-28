@@ -16,6 +16,7 @@ import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import {
   buildSituationFeatureDetail,
+  buildSituationFeatureDensityCollection,
   buildSituationFeatureGeometry,
   buildSituationFeatureSummaryCollection,
   buildSituationTaxonomy,
@@ -160,6 +161,17 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       `situation_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
       `situation_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
     ]);
+    const radioPlanningCacheLines = context.radioPlanning.cacheStats().flatMap((cacheStats) => [
+      `situation_data_radio_planning_cache_entries{operation="${cacheStats.operation}"} ${cacheStats.entries}`,
+      `situation_data_radio_planning_cache_inflight{operation="${cacheStats.operation}"} ${cacheStats.inflight}`,
+      `situation_data_radio_planning_cache_hits{operation="${cacheStats.operation}"} ${cacheStats.hits}`,
+      `situation_data_radio_planning_cache_misses{operation="${cacheStats.operation}"} ${cacheStats.misses}`,
+      `situation_data_radio_planning_cache_coalesced_hits{operation="${cacheStats.operation}"} ${cacheStats.coalescedHits}`,
+      `situation_data_radio_planning_cache_stale_hits{operation="${cacheStats.operation}"} ${cacheStats.staleHits}`,
+      `situation_data_radio_planning_cache_refreshes{operation="${cacheStats.operation}"} ${cacheStats.refreshes}`,
+      `situation_data_radio_planning_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
+      `situation_data_radio_planning_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
+    ]);
     const sourceHealthLines = sourceHealth.flatMap(sourceHealthMetricLines);
     res
       .type("text/plain")
@@ -183,6 +195,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           `situation_data_cache_shared_writes ${cache.sharedWrites}`,
           `situation_data_cache_shared_errors ${cache.sharedErrors}`,
           ...sourceCacheLines,
+          ...radioPlanningCacheLines,
           ...sourceHealthLines,
           ...demMetricLines(dem)
         ].join("\n") + "\n"
@@ -234,6 +247,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
       sourceCaches: sourceCacheStats(context).map((sourceCache) => ({
         sourceId: sourceCache.sourceId,
         cache: cacheTelemetry(sourceCache, context.config.cacheMaxEntries)
+      })),
+      radioPlanningCaches: context.radioPlanning.cacheStats().map((cacheStats) => ({
+        operation: cacheStats.operation,
+        cache: cacheTelemetry(cacheStats, context.config.radioPlanningCacheMaxEntries)
       })),
       dataFreshness: sourceFreshness(sourceHealth),
       environmentGrid: environmentGridTelemetry(context.config, sourceHealth),
@@ -492,6 +509,19 @@ function registerFeatureRoutes(app: Express, context: SituationDataAppContext): 
     }
     const collection = await context.aggregation.getFeatures(query.value);
     res.json(buildSituationFeatureSummaryCollection(collection));
+  });
+
+  app.get("/api/v1/features/density", async (req, res) => {
+    const query = parseSituationQuery(req.query, context.config);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const density = parseDensityOptions(req.query);
+    if (!density.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", density.error);
+    }
+    const collection = await context.aggregation.getFeatures(query.value);
+    res.json(buildSituationFeatureDensityCollection(collection, density.value));
   });
 
   app.get("/api/v1/features/:featureId/geometry", async (req, res) => {
@@ -759,6 +789,31 @@ function parseLimit(value: unknown, fallback: number, max: number): number {
   return Number.isFinite(parsed) ? Math.min(max, Math.max(1, Math.trunc(parsed))) : fallback;
 }
 
+function parseDensityOptions(raw: Record<string, unknown>):
+  | { ok: true; value: { cellSizeDegrees?: number; maxCells?: number; sampleSize?: number } }
+  | { ok: false; error: string } {
+  const cellSizeDegrees = parseOptionalNumber(raw.cellSizeDegrees ?? raw.gridDegrees ?? raw.grid);
+  if (cellSizeDegrees !== undefined && (!Number.isFinite(cellSizeDegrees) || cellSizeDegrees <= 0 || cellSizeDegrees > 2)) {
+    return { ok: false, error: "cellSizeDegrees must be a positive number no greater than 2 degrees." };
+  }
+  const maxCells = parseOptionalNumber(raw.maxCells);
+  if (maxCells !== undefined && (!Number.isFinite(maxCells) || maxCells <= 0)) {
+    return { ok: false, error: "maxCells must be a positive number." };
+  }
+  const sampleSize = parseOptionalNumber(raw.sampleSize);
+  if (sampleSize !== undefined && (!Number.isFinite(sampleSize) || sampleSize < 0)) {
+    return { ok: false, error: "sampleSize must be zero or a positive number." };
+  }
+  return {
+    ok: true,
+    value: {
+      cellSizeDegrees,
+      maxCells: maxCells !== undefined ? Math.trunc(maxCells) : undefined,
+      sampleSize: sampleSize !== undefined ? Math.trunc(sampleSize) : undefined
+    }
+  };
+}
+
 function parseBoolean(value: unknown): boolean {
   const raw = asString(value);
   return raw === "1" || raw === "true" || raw === "yes";
@@ -839,7 +894,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       chmiWeatherStations: config.chmiWeatherCacheTtlSeconds,
       chmiWeatherRadar: config.chmiWeatherRadarCacheTtlSeconds,
       chmiWeatherWebcams: config.chmiWeatherWebcamsCacheTtlSeconds,
-      ardosPartner: config.ardosPartnerCacheTtlSeconds
+      ardosPartner: config.ardosPartnerCacheTtlSeconds,
+      radioPlanning: config.radioPlanningCacheTtlSeconds
     },
     weatherRadarFrames: {
       historyHours: config.chmiWeatherRadarFrameHistoryHours,

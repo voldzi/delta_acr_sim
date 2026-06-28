@@ -18,6 +18,8 @@ It verifies:
 - DEM catalog readiness with local and SeaweedFS tile counts,
 - terrain-aware mobile coverage read-model output,
 - `mobile_network` output backed by the prepared read-model,
+- situation-data density grid output for low-zoom COP rendering,
+- repeated radio-planning `link-check` cache telemetry,
 - that public `/metrics` remains hidden by the web gateway.
 
 `tak-gateway` is a future module in the current pilot. SIM still shows its

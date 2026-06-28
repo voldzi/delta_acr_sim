@@ -65,6 +65,31 @@ class Client:
         require(isinstance(payload, dict), f"{response.url}: expected JSON object")
         return payload, response
 
+    def post_json(self, path_or_url: str, payload: dict[str, Any]) -> tuple[dict[str, Any], Response]:
+        url = self.resolve_url(path_or_url)
+        body = json.dumps(payload).encode("utf-8")
+        request = Request(url, data=body, headers={"Accept": "application/json", "Content-Type": "application/json"}, method="POST")
+        start = time.monotonic()
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                response_body = response.read()
+                status = response.status
+        except HTTPError as exc:
+            response_body = exc.read()
+            status = exc.code
+        except URLError as exc:
+            raise SmokeError(f"{url}: network error: {exc}") from exc
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        response = Response(url=url, status=status, body=response_body, elapsed_ms=elapsed_ms)
+        require(status == 200, f"{url}: expected HTTP 200, got {status}")
+        try:
+            parsed = json.loads(response_body.decode("utf-8"))
+        except json.JSONDecodeError as exc:
+            preview = response_body[:200].decode("utf-8", errors="replace")
+            raise SmokeError(f"{url}: invalid JSON: {preview}") from exc
+        require(isinstance(parsed, dict), f"{url}: expected JSON object")
+        return parsed, response
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -177,6 +202,89 @@ def check_feature_flow(client: Client, label: str, summary_paths: list[str]) -> 
     }
 
 
+def check_density_flow(client: Client, label: str, density_paths: list[str]) -> dict[str, Any]:
+    tried: list[dict[str, Any]] = []
+    selected_payload: dict[str, Any] | None = None
+    selected_response: Response | None = None
+
+    for path in density_paths:
+        payload, response = client.json(path)
+        features = payload.get("features")
+        count = len(features) if isinstance(features, list) else 0
+        tried.append({"url": response.url, "cells": count, "elapsedMs": response.elapsed_ms})
+        if count > 0:
+            selected_payload = payload
+            selected_response = response
+            break
+
+    require(selected_payload is not None and selected_response is not None, f"{label}: no density cells returned: {tried}")
+    require(selected_payload.get("contractVersion") == "sim-provider-feature-density-v1", f"{label}: unexpected density contractVersion")
+    require(selected_payload.get("type") == "FeatureCollection", f"{label}: density response is not a FeatureCollection")
+    density = selected_payload.get("density")
+    require(isinstance(density, dict), f"{label}: missing density metadata")
+    require(density.get("omittedOriginalGeometry") is True, f"{label}: density must omit original geometry")
+    require(isinstance(density.get("inputFeatureCount"), int), f"{label}: missing inputFeatureCount")
+    require(isinstance(density.get("cellCount"), int) and density.get("cellCount") > 0, f"{label}: missing positive cellCount")
+
+    cell = selected_payload["features"][0]
+    require(isinstance(cell, dict), f"{label}: first density cell is not an object")
+    geometry = cell.get("geometry")
+    require(isinstance(geometry, dict) and geometry.get("type") == "Polygon", f"{label}: density cell must be a polygon")
+    properties = cell.get("properties")
+    require(isinstance(properties, dict), f"{label}: density cell missing properties")
+    require(properties.get("category") == "density_cell", f"{label}: unexpected density category {properties.get('category')!r}")
+    require(isinstance(properties.get("featureCount"), int) and properties.get("featureCount") > 0, f"{label}: invalid featureCount")
+    require(isinstance(properties.get("sampleFeatureIds"), list), f"{label}: missing sampleFeatureIds")
+    require("raw" not in properties, f"{label}: density exposes raw payload")
+
+    return {
+        "densityUrl": selected_response.url,
+        "cellCount": density.get("cellCount"),
+        "inputFeatureCount": density.get("inputFeatureCount"),
+        "firstCellId": cell.get("id"),
+        "firstCellFeatureCount": properties.get("featureCount"),
+        "tried": tried,
+    }
+
+
+def check_radio_planning_cache(client: Client) -> dict[str, Any]:
+    payload = {
+        "profileId": "pmr446_handheld",
+        "radioName": "provider-smoke",
+        "from": {"lon": 14.42, "lat": 50.08, "antennaHeightM": 1.5},
+        "to": {"lon": 14.425, "lat": 50.085, "receiverHeightM": 1.5},
+    }
+    first, first_response = client.post_json("/situation-data/api/v1/radio/link-check", payload)
+    second, second_response = client.post_json("/situation-data/api/v1/radio/link-check", payload)
+    require(first.get("contractVersion") == "sim-radio-link-check-v1", "radio link-check: unexpected contractVersion")
+    require(second.get("generatedAt") == first.get("generatedAt"), "radio link-check: repeated request was not served from cache")
+    result = second.get("result")
+    require(isinstance(result, dict), "radio link-check: missing result")
+    require(isinstance(result.get("distanceM"), int), "radio link-check: missing distanceM")
+
+    observability, observability_response = client.json("/situation-data/api/v1/observability")
+    caches = observability.get("radioPlanningCaches")
+    require(isinstance(caches, list), "radio observability: missing radioPlanningCaches")
+    link_cache = next((item for item in caches if isinstance(item, dict) and item.get("operation") == "link_check"), None)
+    require(isinstance(link_cache, dict), "radio observability: missing link_check cache")
+    cache = link_cache.get("cache")
+    require(isinstance(cache, dict), "radio observability: missing link_check cache payload")
+    require(int(cache.get("hits") or 0) >= 1, "radio observability: expected at least one link_check cache hit")
+    require(int(cache.get("misses") or 0) >= 1, "radio observability: expected at least one link_check cache miss")
+
+    return {
+        "firstUrl": first_response.url,
+        "secondUrl": second_response.url,
+        "observabilityUrl": observability_response.url,
+        "distanceM": result.get("distanceM"),
+        "cache": {
+            "hits": cache.get("hits"),
+            "misses": cache.get("misses"),
+            "state": cache.get("state"),
+        },
+    }
+
+
 def check_public_access_control(client: Client, public_ip: str) -> dict[str, int]:
     headers = {"X-Forwarded-For": public_ip}
     checks = {
@@ -234,6 +342,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 query_path("/situation-data/api/v1/features/summary", {"limit": 3}),
             ],
         ),
+        "situationDensityFlow": check_density_flow(
+            client,
+            "situation density",
+            [
+                query_path(
+                    "/situation-data/api/v1/features/density",
+                    {"layers": "weather_webcams", "source": "chmi_weather_webcams", "limit": 50, "cellSizeDegrees": "0.5", "sampleSize": 2},
+                ),
+                query_path(
+                    "/situation-data/api/v1/features/density",
+                    {"layers": "weather", "source": "chmi_weather_stations", "limit": 50, "cellSizeDegrees": "0.5", "sampleSize": 2},
+                ),
+                query_path("/situation-data/api/v1/features/density", {"limit": 50, "cellSizeDegrees": "1", "sampleSize": 2}),
+            ],
+        ),
+        "radioPlanningCache": check_radio_planning_cache(client),
     }
     if not args.skip_public_access_control:
         result["publicAccessControl"] = check_public_access_control(client, args.public_ip)

@@ -24,6 +24,8 @@ describe("Flight Data API contract", () => {
       defaultRadiusNm: 120,
       requestTimeoutMs: 1000,
       cacheTtlSeconds: 1,
+      bboxCacheGridDegrees: 0.1,
+      bboxCachePaddingDegrees: 0.08,
       staleIfErrorSeconds: 60,
       cacheMaxEntries: 128,
       staleAfterSeconds: 120,
@@ -90,6 +92,8 @@ describe("Flight Data API contract", () => {
         enabledSources: ["mock"],
         defaultArea: { lat: 50.1008, lon: 14.2632, radiusNm: 120 },
         cacheTtlSeconds: 1,
+        bboxCacheGridDegrees: 0.1,
+        bboxCachePaddingDegrees: 0.08,
         staleIfErrorSeconds: 60,
         cacheMaxEntries: 128,
         staleAfterSeconds: 120,
@@ -396,5 +400,87 @@ describe("Flight Data API contract", () => {
 
     expect(calls).toBe(1);
     expect(service.cacheStats().coalescedHits).toBe(7);
+  });
+
+  it("uses a canonical padded bbox cache and returns the requested viewport", async () => {
+    let calls = 0;
+    const descriptor: FlightDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "test",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const source: FlightDataSource = {
+      descriptor,
+      async fetchObservations(query) {
+        calls += 1;
+        const fetchedAt = new Date().toISOString();
+        const observations = [
+          {
+            sourceId: "mock" as const,
+            sourceRecordId: "test:4d2216",
+            sourcePriority: 10,
+            fetchedAt,
+            seenAt: fetchedAt,
+            icao24: "4d2216",
+            lat: 50.1,
+            lon: 14.1
+          },
+          {
+            sourceId: "mock" as const,
+            sourceRecordId: "test:440090",
+            sourcePriority: 10,
+            fetchedAt,
+            seenAt: fetchedAt,
+            icao24: "440090",
+            lat: 50.2,
+            lon: 14.2
+          }
+        ].filter((observation) => {
+          if (!query.bbox) {
+            return true;
+          }
+          return (
+            observation.lon >= query.bbox.west &&
+            observation.lon <= query.bbox.east &&
+            observation.lat >= query.bbox.south &&
+            observation.lat <= query.bbox.north
+          );
+        });
+        return { source: descriptor, fetchedAt, warnings: [], observations };
+      }
+    };
+    const service = new FlightAggregationService(
+      { ...config, bboxCacheGridDegrees: 1, bboxCachePaddingDegrees: 0.2 },
+      [source]
+    );
+
+    const first = await service.getTracks({
+      bbox: { west: 14.0, south: 50.0, east: 14.15, north: 50.15 },
+      limit: 10,
+      sourceIds: ["mock"],
+      includeStale: false
+    });
+    const second = await service.getTracks({
+      bbox: { west: 14.05, south: 50.05, east: 14.25, north: 50.25 },
+      limit: 10,
+      sourceIds: ["mock"],
+      includeStale: false
+    });
+
+    expect(calls).toBe(1);
+    expect(service.cacheStats().hits).toBe(1);
+    expect(first.query.bbox).toEqual({ west: 14.0, south: 50.0, east: 14.15, north: 50.15 });
+    expect(first.tracks.map((track) => track.icao24)).toEqual(["4d2216"]);
+    expect(second.query.bbox).toEqual({ west: 14.05, south: 50.05, east: 14.25, north: 50.25 });
+    expect(second.tracks.map((track) => track.icao24).sort()).toEqual(["440090", "4d2216"]);
   });
 });

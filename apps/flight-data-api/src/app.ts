@@ -425,6 +425,8 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
       radiusNm: config.defaultRadiusNm
     },
     cacheTtlSeconds: config.cacheTtlSeconds,
+    bboxCacheGridDegrees: config.bboxCacheGridDegrees,
+    bboxCachePaddingDegrees: config.bboxCachePaddingDegrees,
     staleIfErrorSeconds: config.staleIfErrorSeconds,
     cacheMaxEntries: config.cacheMaxEntries,
     staleAfterSeconds: config.staleAfterSeconds,

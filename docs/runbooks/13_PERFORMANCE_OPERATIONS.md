@@ -18,6 +18,9 @@ external storage, not in Git.
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.
+- Flight map queries: protected by canonical padded bbox cache. The cached
+  upstream fetch uses a stable envelope, while the returned track list is
+  filtered back to the requested viewport.
 - Situation map queries: protected by canonical bbox cache and source-level
   caches.
 - CHMI weather radar frame lookup: protected by a small index cache.
@@ -25,6 +28,9 @@ external storage, not in Git.
   frame; protected by local file cache and in-flight deduplication.
 - PostGIS-backed OSM/mobile read models: should stay on Patroni/PostGIS and
   avoid public Overpass in production runtime.
+- DEM/radio-planning requests: protected by normalized per-operation cache for
+  `link-check`, `coverage` and `site-search`, so repeated COP detail actions do
+  not rerun the same terrain sampling loop.
 
 ## Radar Performance Model
 
@@ -56,6 +62,8 @@ CHMI upstream requests or thousands of duplicate PNG crops for the same frame.
 Recommended defaults:
 
 ```bash
+FLIGHT_DATA_BBOX_CACHE_GRID_DEGREES=0.1
+FLIGHT_DATA_BBOX_CACHE_PADDING_DEGREES=0.08
 SITUATION_DATA_CACHE_MAX_ENTRIES=10000
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
 SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS=300
@@ -64,6 +72,8 @@ SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT=72
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=false
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
 SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
+SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS=900
+SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES=512
 ```
 
 `FRAME_STORE_ENABLED=false` is acceptable because clean frames still materialize
@@ -78,6 +88,7 @@ After deploy:
 curl -fsS http://127.0.0.1:5020/health/live
 curl -fsS http://127.0.0.1:5020/api/v1/operations/summary
 curl -fsS http://127.0.0.1:5020/situation-data/health/ready
+curl -fsS http://127.0.0.1:5020/situation-data/api/v1/observability
 python3 scripts/smoke-provider-gateway.py --base-url http://127.0.0.1:5020
 curl -fsS 'http://127.0.0.1:5020/situation-data/api/v1/weather-radar/frames?product=merge1h&hours=1&limit=1'
 ```
@@ -88,7 +99,8 @@ from the local frame cache.
 
 `scripts/smoke-provider-gateway.py` checks the provider contract consumed by
 COP: gateway health, internal-only access-control, taxonomy dictionaries,
-lightweight feature summaries, detail links and separate geometry documents.
+lightweight feature summaries, density grid cells, detail links, separate
+geometry documents and repeated radio `link-check` cache telemetry.
 
 ## Gateway Stale Cache
 
@@ -103,6 +115,21 @@ the gateway cache must be bypassed. The response header `X-SIM-Gateway-Cache`
 shows nginx cache status such as `MISS`, `HIT`, `STALE` or `UPDATING`.
 Gateway responses on these routes use `Cache-Control: private, max-age=10`
 regardless of longer upstream provider cache headers.
+
+## Radio Planning Cache
+
+Radio planning cache state is exposed through:
+
+```http
+GET /situation-data/api/v1/observability
+GET /situation-data/metrics
+```
+
+The Prometheus metric prefix is
+`situation_data_radio_planning_cache_*{operation="link_check|coverage|site_search"}`.
+Low hit rate is normal immediately after deploy; sustained zero hits while COP
+operators repeatedly open the same radio detail usually means COP is changing
+request parameters between refreshes.
 
 ## Remaining Optimizations
 

@@ -422,6 +422,7 @@ class ChmiAlertsSource implements SafetyDataSource {
 class ChmiHydroSource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly metadataCache: ManagedResponseCache<HydroStation[]>;
+  private readonly currentSnapshotCache: ManagedResponseCache<HydroCurrentSnapshot>;
   private readonly stationDataCache: ManagedResponseCache<HydroNowResponse>;
   private readonly recentDataCache: ManagedResponseCache<HydroNowResponse | undefined>;
   private readonly historyStore: ChmiHydroHistoryStore;
@@ -437,7 +438,12 @@ class ChmiHydroSource implements SafetyDataSource {
     this.stationDataCache = new ManagedResponseCache<HydroNowResponse>({
       ttlMs: Math.max(5 * 60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
-      maxEntries: Math.max(64, config.cacheMaxEntries)
+      maxEntries: Math.max(64, config.chmiHydroStationCacheMaxEntries)
+    });
+    this.currentSnapshotCache = new ManagedResponseCache<HydroCurrentSnapshot>({
+      ttlMs: Math.max(5 * 60_000, config.chmiHydroCurrentSnapshotCacheTtlSeconds * 1000),
+      staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
+      maxEntries: 1
     });
     this.recentDataCache = new ManagedResponseCache<HydroNowResponse | undefined>({
       ttlMs: Math.max(10 * 60_000, config.cacheTtlSeconds * 1000),
@@ -468,39 +474,67 @@ class ChmiHydroSource implements SafetyDataSource {
       .filter((station) => isPointInBbox(station.lon, station.lat, query.bbox))
       .slice(0, Math.min(query.limit, this.config.chmiHydroMaxStations));
 
+    if (!query.includeRaw) {
+      const snapshot = await this.currentSnapshotCache.getOrLoad("chmi_hydro_current_snapshot", () => this.fetchCurrentSnapshot(stations));
+      const selectedStationIds = new Set(selectedStations.map((station) => station.objId));
+      const features = snapshot.features
+        .filter((feature) => typeof feature.properties.stationId === "string" && selectedStationIds.has(feature.properties.stationId))
+        .slice(0, query.limit);
+      const missingCurrentDataCount = countMatchingIds(snapshot.missingStationIds, selectedStationIds);
+      const failedStationCount = countMatchingIds(snapshot.failedStationIds, selectedStationIds);
+      const warnings: string[] = [];
+      if (failedStationCount > 0) {
+        warnings.push(`chmi_hydro: ${failedStationCount} station observation fetches failed.`);
+      }
+      if (features.length === 0 && missingCurrentDataCount > 0) {
+        warnings.push(`chmi_hydro: no current observations are available for ${missingCurrentDataCount} selected stations.`);
+      }
+      return { source: this.descriptor, fetchedAt: snapshot.fetchedAt, features, warnings };
+    }
+
+    const batch = await this.fetchStationFeatures(selectedStations, query.includeRaw, fetchedAt);
+    const warnings = hydroFetchWarnings(batch);
+    return { source: this.descriptor, fetchedAt, features: batch.features.slice(0, query.limit), warnings };
+  }
+
+  private async fetchCurrentSnapshot(stations: HydroStation[]): Promise<HydroCurrentSnapshot> {
+    const fetchedAt = new Date().toISOString();
+    const batch = await this.fetchStationFeatures(stations, false, fetchedAt);
+    return {
+      fetchedAt,
+      ...batch
+    };
+  }
+
+  private async fetchStationFeatures(stations: HydroStation[], includeRaw: boolean, fetchedAt: string): Promise<HydroStationFeatureBatch> {
     const features: SafetyFeature[] = [];
-    const warnings: string[] = [];
-    let missingCurrentDataCount = 0;
-    let failedStationCount = 0;
-    for (let index = 0; index < selectedStations.length; index += 8) {
-      const batch = selectedStations.slice(index, index + 8);
-      const settled = await Promise.allSettled(batch.map((station) => this.fetchStationFeature(station, query.includeRaw, fetchedAt)));
-      for (const item of settled) {
+    const missingStationIds: string[] = [];
+    const failedStationIds: string[] = [];
+    for (let index = 0; index < stations.length; index += 8) {
+      const batch = stations.slice(index, index + 8);
+      const settled = await Promise.allSettled(batch.map((station) => this.fetchStationFeature(station, includeRaw, fetchedAt)));
+      settled.forEach((item, settledIndex) => {
+        const station = batch[settledIndex];
+        if (!station) {
+          return;
+        }
         if (item.status === "fulfilled") {
           if (item.value.feature) {
             features.push(item.value.feature);
           }
           if (item.value.missingCurrentData) {
-            missingCurrentDataCount += 1;
+            missingStationIds.push(station.objId);
           }
         } else {
-          failedStationCount += 1;
+          failedStationIds.push(station.objId);
         }
-      }
+      });
     }
-
-    if (failedStationCount > 0) {
-      warnings.push(`chmi_hydro: ${failedStationCount} station observation fetches failed.`);
-    }
-    if (features.length === 0 && missingCurrentDataCount > 0) {
-      warnings.push(`chmi_hydro: no current observations are available for ${missingCurrentDataCount} selected stations.`);
-    }
-
-    return { source: this.descriptor, fetchedAt, features: features.slice(0, query.limit), warnings };
+    return { features, missingStationIds, failedStationIds };
   }
 
   cacheStats(): SourceCacheStats[] {
-    return [cacheStatsFor("chmi_hydro", [this.metadataCache, this.stationDataCache, this.recentDataCache])];
+    return [cacheStatsFor("chmi_hydro", [this.metadataCache, this.currentSnapshotCache, this.stationDataCache, this.recentDataCache])];
   }
 
   async getHydroStationDetail(stationId: string, query: HydroStationDetailQuery): Promise<HydroStationDetail | undefined> {
@@ -824,6 +858,16 @@ interface ChmiBoundaryMatchRow extends AdminBoundaryRow {
 interface HydroStationFetchResult {
   feature?: SafetyFeature;
   missingCurrentData?: boolean;
+}
+
+interface HydroStationFeatureBatch {
+  features: SafetyFeature[];
+  missingStationIds: string[];
+  failedStationIds: string[];
+}
+
+interface HydroCurrentSnapshot extends HydroStationFeatureBatch {
+  fetchedAt: string;
 }
 
 interface FeatureInput {
@@ -1894,6 +1938,21 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     }),
     raw: includeRaw ? payload : undefined
   });
+}
+
+function hydroFetchWarnings(batch: HydroStationFeatureBatch): string[] {
+  const warnings: string[] = [];
+  if (batch.failedStationIds.length > 0) {
+    warnings.push(`chmi_hydro: ${batch.failedStationIds.length} station observation fetches failed.`);
+  }
+  if (batch.features.length === 0 && batch.missingStationIds.length > 0) {
+    warnings.push(`chmi_hydro: no current observations are available for ${batch.missingStationIds.length} selected stations.`);
+  }
+  return warnings;
+}
+
+function countMatchingIds(ids: string[], selectedIds: Set<string>): number {
+  return ids.reduce((count, id) => count + (selectedIds.has(id) ? 1 : 0), 0);
 }
 
 function mapFirmsDetection(

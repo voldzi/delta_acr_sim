@@ -403,6 +403,8 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
     staleAfterSeconds: config.staleAfterSeconds,
     requestTimeoutMs: config.requestTimeoutMs,
     hydroMaxStations: config.chmiHydroMaxStations,
+    hydroStationCacheMaxEntries: config.chmiHydroStationCacheMaxEntries,
+    hydroCurrentSnapshotCacheTtlSeconds: config.chmiHydroCurrentSnapshotCacheTtlSeconds,
     hydroDetailDefaultPastHours: config.chmiHydroDetailDefaultPastHours,
     hydroDetailForecastHours: config.chmiHydroDetailForecastHours,
     hydroDetailBackfillDays: config.chmiHydroDetailBackfillDays,

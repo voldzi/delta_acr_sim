@@ -317,6 +317,20 @@ souřadnice. Každá položka obsahuje `featureId`, `layerId`, `providerLayerId`
 metriky, `rendering`, `geometrySummary` a odkazy `links.detail` a
 `links.geometry`.
 
+Pro oddálenou mapu a husté vrstvy má COP použít agregaci do stabilních WGS84
+buněk:
+
+```http
+GET /situation-data/api/v1/features/density?bbox=...&layers=mobile_network,weather_temperature_grid&limit=1000&cellSizeDegrees=0.1
+```
+
+Density odpověď má `contractVersion=sim-provider-feature-density-v1`, nevrací
+původní geometrie prvků a obsahuje pouze grid cell polygon, počty podle vrstev,
+zdrojů a závažnosti, `topSeverity` a omezené `sampleFeatureIds` pro následný
+drill-down přes `features/summary` nebo detail. Pokud `cellSizeDegrees` není
+zadáno, SIM zvolí stabilní velikost buňky podle rozsahu bboxu. Parametry
+`maxCells` a `sampleSize` omezují velikost odpovědi.
+
 Po kliknutí na objekt má COP dotáhnout detail:
 
 ```http
@@ -649,6 +663,13 @@ COP musi u kazdeho vysledku zobrazit upozorneni, ze jde o modelovy odhad podle
 DEM a zadanych parametru radia. Vystup nezahrnuje budovy, vegetaci, ruseni,
 vytizeni pasma/site, sifrovani, realne operatorovy RF planovani ani
 klasifikovane parametry.
+
+SIM cacheuje normalizovane odpovedi `link-check`, `coverage` a `site-search`
+podle radio profilu, souradnic, parametru vypoctu a DEM fingerprintu.
+Vychozi runtime cache je `SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS=900`
+a `SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES=512`. COP muze bezpecne
+opakovat stejny dotaz po otevreni detailu; SIM nemusi znovu spoustet DEM
+sampling, dokud cache nevyprsi.
 
 Podrobny kontrakt a priklady jsou v
 [`../situation-data/05_RADIO_PLANNING_MODEL.md`](../situation-data/05_RADIO_PLANNING_MODEL.md).

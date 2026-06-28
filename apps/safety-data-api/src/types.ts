@@ -59,6 +59,8 @@ export interface SafetyDataPublicConfig {
   staleAfterSeconds: number;
   requestTimeoutMs: number;
   hydroMaxStations: number;
+  hydroStationCacheMaxEntries: number;
+  hydroCurrentSnapshotCacheTtlSeconds: number;
   hydroDetailDefaultPastHours: number;
   hydroDetailForecastHours: number;
   hydroDetailBackfillDays: number;
