@@ -205,6 +205,12 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 
 `public.safety.flood` používá jako primární feature stream `GET /safety-data/api/v1/features?layers=flood&source=chmi_hydro`. Selectable hydrologické body mohou nést `properties.detailUrl`; COP má tento odkaz použít pro detail hlásného profilu s grafem měření a předpovědi, ne rekonstruovat upstream ČHMÚ URL na klientu.
 
+`public.mobile.network` a `diagnostic.mobile.coverage` jsou polygonové grid vrstvy.
+Když COP požádá o široký bbox s nízkým limitem, SIM vrací prostorově
+rozprostřený vzorek buněk, ne kompletní raster. COP má kreslit přesné GeoJSON
+souřadnice vrácené SIM, nemá buňky přesouvat podle viewportu a pro detailní práci
+má požádat o menší bbox nebo vyšší limit.
+
 ## Kompatibilní feature streamy v SIM
 
 Tyto cesty existují pro backend COM a pro přímé integrační testy:

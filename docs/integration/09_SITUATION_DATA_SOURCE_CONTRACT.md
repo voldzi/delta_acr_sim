@@ -505,6 +505,13 @@ Volitelné parametry:
 - `operator` nebo `operators`: zatím podporuje pouze `unknown`,
 - `limit`: počet polygonů po aplikaci bbox filtru.
 
+Pokud bbox obsahuje více připravených grid buněk než `limit`, SIM vrací
+prostorově deterministický vzorek rozložený přes požadovaný bbox. Odpověď tedy
+nesmí tvořit kompaktní obdélník z jedné hrany území; při širokém bboxu jde o
+mapový vzorek, ne kompletní raster. COP má pro detailnější vykreslení požádat o
+menší bbox nebo vyšší limit a nemá vzorek geometricky posouvat ani doplňovat
+vlastními dlaždicemi.
+
 Metadata:
 
 ```http

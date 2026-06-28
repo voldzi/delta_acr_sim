@@ -10,7 +10,9 @@ import type { SituationDataConfig } from "../src/config.js";
 import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
 import { OsmPostgisSource } from "../src/osm-postgis-source.js";
 import type { SharedResponseCacheStore } from "../src/response-cache.js";
+import { spatiallyLimitFeatures } from "../src/spatial-limit.js";
 import { MobileNetworkSource, type SituationDataSource } from "../src/sources.js";
+import type { SituationFeature } from "../src/types.js";
 
 describe("Situation Data API contract", () => {
   let dataDir: string;
@@ -2810,6 +2812,24 @@ describe("Situation Data API contract", () => {
     expect(result.features[0].properties.raw).toBeUndefined();
   });
 
+  it("spatially distributes limited mobile coverage grid cells across the requested bbox", () => {
+    const bbox = { west: 10, south: 48, east: 20, north: 52 };
+    const features: SituationFeature[] = [];
+    for (let y = 0; y < 10; y += 1) {
+      for (let x = 0; x < 10; x += 1) {
+        features.push(coverageGridFeature(x, y));
+      }
+    }
+
+    const selected = spatiallyLimitFeatures(features, 10, bbox);
+    const selectedTags = selected.map((feature) => feature.properties.tags);
+
+    expect(selected).toHaveLength(10);
+    expect(new Set(selectedTags.map((tags) => tags?.gridX)).size).toBeGreaterThan(3);
+    expect(new Set(selectedTags.map((tags) => tags?.gridY)).size).toBeGreaterThan(3);
+    expect(selected.map((feature) => feature.id)).not.toEqual(features.slice(0, 10).map((feature) => feature.id));
+  });
+
   it("does not synthesize a mobile network bbox polygon when coverage read-model cells are missing", async () => {
     const source = new MobileNetworkSource({
       ...config,
@@ -3143,6 +3163,42 @@ describe("Situation Data API contract", () => {
     expect(secondService.cacheStats().sharedHits).toBe(1);
   });
 });
+
+function coverageGridFeature(x: number, y: number): SituationFeature {
+  const west = 10 + x;
+  const south = 48 + y * 0.4;
+  const east = west + 0.8;
+  const north = south + 0.32;
+  return {
+    type: "Feature",
+    id: `coverage:mobile:4g:test-${x}-${y}`,
+    geometry: {
+      type: "Polygon",
+      coordinates: [[
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south]
+      ]]
+    },
+    properties: {
+      featureId: `coverage:mobile:4g:test-${x}-${y}`,
+      layer: "mobile_coverage",
+      category: "mobile_coverage",
+      label: "4G coverage estimate",
+      sourceId: "mobile_coverage_model",
+      observedAt: "2026-06-28T00:00:00.000Z",
+      confidence: 0.5,
+      stale: false,
+      severity: "info",
+      license: { name: "coverage", attribution: "coverage" },
+      technology: "4G",
+      quality: "unknown",
+      tags: { gridX: String(x), gridY: String(y) }
+    }
+  };
+}
 
 class InMemorySharedResponseCacheStore implements SharedResponseCacheStore {
   private readonly values = new Map<string, { value: string; expiresAtMs: number }>();

@@ -168,6 +168,7 @@ OSM_POSTGIS_TABLE=public.osm_poi
 
 - Aggregated responses use the standard `situation-data` cache and bbox canonicalization.
 - The preferred production path is a prepared PostGIS read-model in `public.mobile_coverage_cells`. Runtime API first tries this table by bbox, technology, operator, model version and freshness.
+- Read-model polygon responses are spatially distributed when the requested bbox contains more cells than the requested `limit`. SIM must not return the first N cells by internal id, because that produces misleading edge rectangles at low zoom. COP should treat limited grid responses as a viewport sample and request a tighter bbox or higher limit for detailed inspection.
 - If the read-model misses, the coverage source falls back to source-level cached on-demand calculation keyed by canonical bbox, technology filter, operator filter, resolution and model version.
 - When no technology filter is supplied, the provider defaults to `4G`, matching the public catalog default. Clients must explicitly request `2G` or `5G` when they want those diagnostics.
 - Coverage cells are aligned to a deterministic resolution ladder (`250`, `500`, `1000`, `2000`, `5000`, `10000`, `25000`, `50000` m) instead of being generated from the current viewport origin.

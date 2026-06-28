@@ -18,6 +18,7 @@ import type { SituationDataConfig } from "./config.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import { spatiallyLimitFeatures } from "./spatial-limit.js";
 import type {
   BoundingBox,
   MobileCoverageQuality,
@@ -1386,10 +1387,11 @@ export class MobileNetworkSource implements SituationDataSource {
       modelVersion: this.config.mobileCoverageModelVersion
     });
     const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildMobileNetwork(cacheBbox, technologies));
-    const features = payload.features
-      .filter((feature) => featureIntersectsBboxByEnvelope(feature, query.bbox))
-      .slice(0, query.limit)
-      .map((feature) => ({
+    const features = spatiallyLimitFeatures(
+      payload.features.filter((feature) => featureIntersectsBboxByEnvelope(feature, query.bbox)),
+      query.limit,
+      query.bbox
+    ).map((feature) => ({
         ...feature,
         properties: {
           ...feature.properties,

@@ -3,6 +3,7 @@ import { canonicalizeBboxForCache, formatBboxKey } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemElevationSampler, type DemTileRef, type ElevationSample } from "./dem-elevation-sampler.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import { spatiallyLimitFeatures } from "./spatial-limit.js";
 import type { SituationDataSource, SourceCacheStats } from "./sources.js";
 import type {
   BoundingBox,
@@ -703,10 +704,11 @@ export class MobileCoverageSource implements SituationDataSource {
       readModelFallback: true
     });
     const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildCoverage(cacheBbox, technologies));
-    const features = payload.features
-      .filter((feature) => featureIntersectsBbox(feature, query.bbox))
-      .slice(0, query.limit)
-      .map((feature) => ({
+    const features = spatiallyLimitFeatures(
+      payload.features.filter((feature) => featureIntersectsBbox(feature, query.bbox)),
+      query.limit,
+      query.bbox
+    ).map((feature) => ({
         ...feature,
         properties: {
           ...feature.properties,
@@ -740,6 +742,80 @@ export class MobileCoverageSource implements SituationDataSource {
     try {
       const result = await this.getPool().query<CoverageCellRow>(
         `
+          with bounds as (
+            select
+              $5::double precision as west,
+              $6::double precision as south,
+              $7::double precision as east,
+              $8::double precision as north,
+              greatest(1, ceil(sqrt($9::double precision))::int) as bucket_count
+          ),
+          candidates as (
+            select
+              feature_id,
+              model_version,
+              technology,
+              operator,
+              quality,
+              estimated_signal_dbm,
+              confidence,
+              resolution_m,
+              dem_dataset_id,
+              generated_at,
+              expires_at,
+              assumptions,
+              metrics,
+              tags,
+              data_quality,
+              bts_status,
+              bts_status_source,
+              operator_status_available,
+              source_revision,
+              st_asgeojson(geom)::json as geometry,
+              st_x(st_centroid(geom)) as center_lon,
+              st_y(st_centroid(geom)) as center_lat
+            from ${table}, bounds
+            where model_version = $1
+              and technology = any($2::text[])
+              and operator = any($3::text[])
+              and expires_at > now()
+              and ($4::int <= 0 or generated_at >= now() - make_interval(secs => $4::int))
+              and geom && st_makeenvelope(bounds.west, bounds.south, bounds.east, bounds.north, 4326)
+              and st_intersects(geom, st_makeenvelope(bounds.west, bounds.south, bounds.east, bounds.north, 4326))
+          ),
+          bucketed as (
+            select
+              candidates.*,
+              least(
+                bounds.bucket_count - 1,
+                greatest(0, floor(((center_lon - bounds.west) / nullif(bounds.east - bounds.west, 0)) * bounds.bucket_count)::int)
+              ) as bucket_x,
+              least(
+                bounds.bucket_count - 1,
+                greatest(0, floor(((center_lat - bounds.south) / nullif(bounds.north - bounds.south, 0)) * bounds.bucket_count)::int)
+              ) as bucket_y
+            from candidates, bounds
+          ),
+          ranked as (
+            select
+              *,
+              row_number() over (
+                partition by bucket_x, bucket_y
+                order by
+                  case quality
+                    when 'good' then 5
+                    when 'fair' then 4
+                    when 'weak' then 3
+                    when 'unknown' then 2
+                    when 'none' then 1
+                    else 0
+                  end desc,
+                  confidence desc,
+                  generated_at desc,
+                  feature_id asc
+              ) as bucket_rank
+            from bucketed
+          )
           select
             feature_id,
             model_version,
@@ -760,16 +836,9 @@ export class MobileCoverageSource implements SituationDataSource {
             bts_status_source,
             operator_status_available,
             source_revision,
-            st_asgeojson(geom)::json as geometry
-          from ${table}
-          where model_version = $1
-            and technology = any($2::text[])
-            and operator = any($3::text[])
-            and expires_at > now()
-            and ($4::int <= 0 or generated_at >= now() - make_interval(secs => $4::int))
-            and geom && st_makeenvelope($5, $6, $7, $8, 4326)
-            and st_intersects(geom, st_makeenvelope($5, $6, $7, $8, 4326))
-          order by generated_at desc, feature_id asc
+            geometry
+          from ranked
+          order by bucket_rank asc, bucket_y asc, bucket_x asc, feature_id asc
           limit $9
         `,
         [
