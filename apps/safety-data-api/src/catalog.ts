@@ -37,13 +37,14 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 300,
         cacheTtlSeconds: config.cacheTtlSeconds,
         styleProfile: "safety-warning-v1",
-        sourceIds: ["chmi_alerts", "gdacs_alerts"],
-        query: query(["warnings"], ["chmi_alerts", "gdacs_alerts"]),
+        sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents"],
+        query: query(["warnings"], ["chmi_alerts", "gdacs_alerts", "hzs_incidents"]),
         notificationPolicy: notificationPolicy("warning"),
         legal: {
-          attribution: "Czech Hydrometeorological Institute (CHMI), Global Disaster Alert and Coordination System (GDACS)",
+          attribution: "Czech Hydrometeorological Institute (CHMI), Global Disaster Alert and Coordination System (GDACS), Hasičský záchranný sbor České republiky",
           notes: [
-            "Vrstva obsahuje jen reálné veřejné výstrahy a katastrofické alerty; technická varování zdrojů patří do provozního dohledu.",
+            "Vrstva obsahuje jen reálné veřejné výstrahy, katastrofické alerty a veřejné probíhající HZS výjezdy; technická varování zdrojů patří do provozního dohledu.",
+            "HZS public feed může vynechávat přesnou GPS polohu; COP má v detailu zobrazit locationPrecision/locationConfidence.",
             "GDACS je strategický krizový kontext; lokální opatření je nutné ověřovat přes IZS a příslušné orgány."
           ]
         }
@@ -92,13 +93,14 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 600,
         cacheTtlSeconds: Math.max(600, config.cacheTtlSeconds),
         styleProfile: "safety-fire-v1",
-        sourceIds: ["chmi_alerts", "nasa_firms", "gdacs_alerts"],
-        query: query(["fire"], ["chmi_alerts", "nasa_firms", "gdacs_alerts"]),
+        sourceIds: ["chmi_alerts", "nasa_firms", "gdacs_alerts", "hzs_incidents"],
+        query: query(["fire"], ["chmi_alerts", "nasa_firms", "gdacs_alerts", "hzs_incidents"]),
         notificationPolicy: notificationPolicy("fire"),
         legal: {
-          attribution: "Czech Hydrometeorological Institute (CHMI), NASA FIRMS, GDACS",
+          attribution: "Czech Hydrometeorological Institute (CHMI), NASA FIRMS, GDACS, Hasičský záchranný sbor České republiky",
           notes: [
             "ČHMÚ poskytuje požární nebezpečí jako oficiální meteorologickou výstrahu, nikoli potvrzený požár.",
+            "HZS public feed poskytuje veřejné probíhající požární výjezdy, ale přesná poloha může být pouze obecní centroid.",
             "NASA FIRMS satelitní detekce a GDACS wildfire alerty jsou situační kontext; pro zásah používejte oficiální kanály HZS/IZS."
           ]
         }
@@ -280,6 +282,15 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         feedsLayerIds: ["safety.warnings", "safety.fire", "safety.flood"],
         feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire", "public.safety.flood"],
         notes: ["Public GDACS disaster alert source for strategic/global context; no secret key is required."]
+      };
+    case "hzs_incidents":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        feedsLayerIds: ["safety.warnings", "safety.fire"],
+        feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"],
+        notes: ["Public HZS active dispatch source for ongoing incidents; SIM exposes type, subtype, status, unit, locality and explicit location precision."]
       };
     case "admin_boundaries":
       return {

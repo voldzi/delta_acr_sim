@@ -10420,6 +10420,7 @@
               "chmi_hydro",
               "nasa_firms",
               "gdacs_alerts",
+              "hzs_incidents",
               "admin_boundaries"
             ]
           },
@@ -10879,8 +10880,9 @@
                   "chmi_alerts",
                   "chmi_hydro",
                   "nasa_firms",
-              "gdacs_alerts",
-              "admin_boundaries"
+                  "gdacs_alerts",
+                  "hzs_incidents",
+                  "admin_boundaries"
                 ]
               },
               "source": {
@@ -11807,7 +11809,7 @@
         "required": false,
         "schema": {
           "type": "string",
-          "example": "chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,admin_boundaries"
+          "example": "chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,admin_boundaries"
         }
       },
       "SafetyDataLimit": {

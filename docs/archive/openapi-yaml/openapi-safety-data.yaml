@@ -203,14 +203,14 @@ components:
       required: false
       schema:
         type: string
-        example: weather_alerts,fire,flood,boundary_admin
+        example: warnings,weather_alerts,fire,flood,boundary_admin
     Sources:
       name: source
       in: query
       required: false
       schema:
         type: string
-        example: chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries
+        example: chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,admin_boundaries
     Limit:
       name: limit
       in: query
@@ -383,7 +383,7 @@ components:
         providerLayerId:
           type: string
         sourceId:
-          enum: [mock, chmi_alerts, chmi_hydro, nasa_firms, admin_boundaries]
+          enum: [mock, chmi_alerts, chmi_hydro, nasa_firms, gdacs_alerts, hzs_incidents, admin_boundaries]
         sourceName:
           type: string
         label:
@@ -600,13 +600,13 @@ components:
               type: string
             layerId:
               type: string
-              enum: [public.safety.weather_alerts, public.safety.fire, public.safety.flood, public.boundary.admin]
+              enum: [public.safety.warnings, public.safety.weather_alerts, public.safety.fire, public.safety.flood, public.boundary.admin]
             providerId:
               type: string
               const: sim.safety-data
             providerLayerId:
               type: string
-              enum: [safety.weather_alerts, safety.fire, safety.flood, boundary.admin]
+              enum: [safety.warnings, safety.weather_alerts, safety.fire, safety.flood, boundary.admin]
             layer:
               enum: [weather_alerts, warnings, fire, flood, boundary_admin]
             category:
@@ -629,7 +629,7 @@ components:
             recommendedAction:
               type: string
             sourceId:
-              enum: [mock, chmi_alerts, chmi_hydro, nasa_firms, admin_boundaries]
+              enum: [mock, chmi_alerts, chmi_hydro, nasa_firms, gdacs_alerts, hzs_incidents, admin_boundaries]
             source:
               type: string
             sourceName:

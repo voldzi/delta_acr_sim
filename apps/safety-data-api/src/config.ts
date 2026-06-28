@@ -3,6 +3,16 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BoundingBox, SafetyDataSourceId } from "./types.js";
 
+export interface HzsIncidentFeedConfig {
+  id: string;
+  url: string;
+  label: string;
+  regionName: string;
+  fallbackLon: number;
+  fallbackLat: number;
+  bbox: BoundingBox;
+}
+
 export interface SafetyDataConfig {
   port: number;
   dataDir: string;
@@ -30,6 +40,10 @@ export interface SafetyDataConfig {
   nasaFirmsDayRange: number;
   gdacsRssUrl: string;
   gdacsCacheTtlSeconds: number;
+  hzsIncidentFeeds: HzsIncidentFeedConfig[];
+  hzsIncidentsCacheTtlSeconds: number;
+  hzsIncidentsDetailCacheTtlSeconds: number;
+  hzsIncidentsMaxActiveDetails: number;
   adminBoundaryConnectionString?: string;
   adminBoundaryTable: string;
   adminBoundaryCacheTtlSeconds: number;
@@ -84,6 +98,10 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     nasaFirmsDayRange: parseInteger(process.env.NASA_FIRMS_DAY_RANGE, 1),
     gdacsRssUrl: process.env.GDACS_RSS_URL ?? "https://www.gdacs.org/xml/rss.xml",
     gdacsCacheTtlSeconds: parseInteger(process.env.GDACS_CACHE_TTL_SECONDS, 900),
+    hzsIncidentFeeds: parseHzsIncidentFeeds(process.env.HZS_INCIDENTS_FEEDS),
+    hzsIncidentsCacheTtlSeconds: parseInteger(process.env.HZS_INCIDENTS_CACHE_TTL_SECONDS, 180),
+    hzsIncidentsDetailCacheTtlSeconds: parseInteger(process.env.HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS, 1800),
+    hzsIncidentsMaxActiveDetails: parseInteger(process.env.HZS_INCIDENTS_MAX_ACTIVE_DETAILS, 50),
     adminBoundaryConnectionString: emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     adminBoundaryTable: process.env.SAFETY_DATA_ADMIN_BOUNDARY_TABLE ?? "public.osm_admin_boundary",
     adminBoundaryCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS, 86_400),
@@ -92,12 +110,58 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
 }
 
 function parseSourceList(value: string | undefined): SafetyDataSourceId[] {
-  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "admin_boundaries"]);
+  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "admin_boundaries"]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())
     .filter((item): item is SafetyDataSourceId => allowed.has(item as SafetyDataSourceId));
   return parsed.length > 0 ? parsed : ["mock"];
+}
+
+function parseHzsIncidentFeeds(value: string | undefined): HzsIncidentFeedConfig[] {
+  const fallback: HzsIncidentFeedConfig[] = [
+    {
+      id: "hzs-pardubice",
+      url: "https://www.hzspa.cz/vyjezdy/aktualni-vyjezdy.php",
+      label: "HZS Pardubického kraje - aktuální výjezdy",
+      regionName: "Pardubický kraj",
+      fallbackLon: 15.78,
+      fallbackLat: 49.94,
+      bbox: { west: 15.3, south: 49.45, east: 16.95, north: 50.35 }
+    }
+  ];
+  const raw = emptyToUndefined(value);
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = raw
+    .split(";")
+    .map((entry, index) => parseHzsIncidentFeed(entry, index))
+    .filter((entry): entry is HzsIncidentFeedConfig => Boolean(entry));
+  return parsed.length > 0 ? parsed : fallback;
+}
+
+function parseHzsIncidentFeed(value: string, index: number): HzsIncidentFeedConfig | undefined {
+  const parts = value.split("|").map((part) => part.trim());
+  const [url, label, regionName, lonRaw, latRaw, bboxRaw, idRaw] = parts;
+  if (!url) {
+    return undefined;
+  }
+  const lon = Number(lonRaw);
+  const lat = Number(latRaw);
+  const bbox = parseBbox(bboxRaw);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat) || !bbox) {
+    return undefined;
+  }
+  return {
+    id: idRaw || `hzs-${index + 1}`,
+    url,
+    label: label || `HZS incident feed ${index + 1}`,
+    regionName: regionName || label || `HZS region ${index + 1}`,
+    fallbackLon: lon,
+    fallbackLat: lat,
+    bbox
+  };
 }
 
 function parseBbox(value: string | undefined): BoundingBox | undefined {

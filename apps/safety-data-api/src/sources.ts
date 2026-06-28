@@ -9,7 +9,7 @@ import {
   type ChmiEventCode,
   type ChmiParameter
 } from "./chmi-taxonomy.js";
-import type { SafetyDataConfig } from "./config.js";
+import type { HzsIncidentFeedConfig, SafetyDataConfig } from "./config.js";
 import { HttpRequestError, requestJson, requestText } from "./http.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
@@ -89,6 +89,19 @@ const GDACS_LICENSE: SafetyDataLicense = {
   ]
 };
 
+const HZS_INCIDENTS_LICENSE: SafetyDataLicense = {
+  name: "HZS public incident dispatch feed",
+  url: "https://www.hzscr.cz/",
+  attribution: "Hasičský záchranný sbor České republiky",
+  commercialUse: "unknown",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Public incident feed intended for situational awareness.",
+    "The public feed can omit exact coordinates and operational detail; SIM marks geocoding precision explicitly.",
+    "Operational response must use official IZS/HZS command channels."
+  ]
+};
+
 const ADMIN_BOUNDARY_SEED_LICENSE: SafetyDataLicense = {
   name: "SIM seed administrative boundary reference",
   attribution: "CSM SIM",
@@ -120,6 +133,7 @@ export function createSafetyDataSources(config: SafetyDataConfig): SafetyDataSou
     chmi_hydro: new ChmiHydroSource(config),
     nasa_firms: new NasaFirmsSource(config),
     gdacs_alerts: new GdacsAlertsSource(config),
+    hzs_incidents: new HzsIncidentsSource(config),
     admin_boundaries: new AdminBoundarySource(config)
   };
 
@@ -134,6 +148,7 @@ export function allSourceDescriptors(config: SafetyDataConfig): SourceDescriptor
     new ChmiHydroSource(config).descriptor,
     new NasaFirmsSource(config).descriptor,
     new GdacsAlertsSource(config).descriptor,
+    new HzsIncidentsSource(config).descriptor,
     new AdminBoundarySource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
@@ -783,6 +798,191 @@ class GdacsAlertsSource implements SafetyDataSource {
   }
 }
 
+class HzsIncidentsSource implements SafetyDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly feedCache: ManagedResponseCache<HzsIncidentRecord[]>;
+  private readonly detailCache: ManagedResponseCache<HzsIncidentDetail>;
+  private readonly geocodeCache: ManagedResponseCache<HzsIncidentGeocode>;
+  private pool?: Pool;
+
+  constructor(private readonly config: SafetyDataConfig) {
+    this.feedCache = new ManagedResponseCache<HzsIncidentRecord[]>({
+      ttlMs: Math.max(60, config.hzsIncidentsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(600, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(8, Math.min(128, config.cacheMaxEntries))
+    });
+    this.detailCache = new ManagedResponseCache<HzsIncidentDetail>({
+      ttlMs: Math.max(300, config.hzsIncidentsDetailCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(1800, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, Math.min(1024, config.cacheMaxEntries * 2))
+    });
+    this.geocodeCache = new ManagedResponseCache<HzsIncidentGeocode>({
+      ttlMs: Math.max(1800, config.adminBoundaryCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(3600, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, Math.min(2048, config.cacheMaxEntries * 4))
+    });
+    this.descriptor = {
+      sourceId: "hzs_incidents",
+      label: "HZS public incident dispatches",
+      enabled: config.enabledSources.includes("hzs_incidents"),
+      mode: "live",
+      priority: 80,
+      layers: ["warnings", "fire"],
+      license: HZS_INCIDENTS_LICENSE,
+      baseUrl: config.hzsIncidentFeeds[0]?.url,
+      updateCadenceSeconds: config.hzsIncidentsCacheTtlSeconds
+    };
+  }
+
+  async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.some((layer) => layer === "warnings" || layer === "fire")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const warnings: string[] = [];
+    const records: HzsIncidentRecord[] = [];
+    for (const feed of this.config.hzsIncidentFeeds) {
+      if (!bboxIntersects(feed.bbox, query.bbox)) {
+        continue;
+      }
+      try {
+        records.push(...(await this.feedCache.getOrLoad(feed.id, () => this.fetchFeed(feed, fetchedAt))));
+      } catch (error) {
+        warnings.push(error instanceof Error ? `hzs_incidents feed ${feed.label} failed: ${error.message}` : `hzs_incidents feed ${feed.label} failed.`);
+      }
+    }
+
+    const limitedRecords = records.slice(0, Math.max(1, this.config.hzsIncidentsMaxActiveDetails));
+    const features: SafetyFeature[] = [];
+    for (const record of limitedRecords) {
+      const detail = await this.fetchDetailSafe(record);
+      const geocode = await this.geocodeIncident(record, detail);
+      features.push(...mapHzsIncident(record, detail, geocode, query, fetchedAt));
+      if (features.length >= query.limit) {
+        break;
+      }
+    }
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features: features
+        .filter((feature) => isFeatureInBbox(feature, query.bbox))
+        .slice(0, query.limit)
+        .map((feature) => stripRawIfNeeded(feature, query.includeRaw)),
+      warnings
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("hzs_incidents", [this.feedCache, this.detailCache, this.geocodeCache])];
+  }
+
+  private async fetchFeed(feed: HzsIncidentFeedConfig, fetchedAt: string): Promise<HzsIncidentRecord[]> {
+    const html = await requestText(feed.url, this.config.requestTimeoutMs);
+    return parseHzsActiveIncidentRows(html, feed, fetchedAt);
+  }
+
+  private async fetchDetailSafe(record: HzsIncidentRecord): Promise<HzsIncidentDetail> {
+    const detailUrl = record.detailUrl;
+    if (!detailUrl) {
+      return {};
+    }
+    try {
+      return await this.detailCache.getOrLoad(detailUrl, async () => {
+        const html = await requestText(detailUrl, this.config.requestTimeoutMs);
+        return parseHzsIncidentDetail(html);
+      });
+    } catch {
+      return {};
+    }
+  }
+
+  private async geocodeIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail): Promise<HzsIncidentGeocode> {
+    const candidates = hzsGeocodeCandidates(record, detail);
+    const cacheKey = `${record.feed.id}:${candidates.join("|")}`;
+    return this.geocodeCache.getOrLoad(cacheKey, async () => {
+      if (this.config.adminBoundaryConnectionString) {
+        try {
+          for (const candidate of candidates) {
+            const row = await this.fetchBoundaryPoint(candidate, record.feed);
+            if (row) {
+              return {
+                lon: row.lon,
+                lat: row.lat,
+                precision: row.admin_level === 8 || row.admin_level === "8" ? "municipality_centroid" : "admin_boundary_centroid",
+                label: optionalString(row.name) ?? candidate,
+                confidence: 0.78,
+                adminLevel: optionalString(row.admin_level),
+                code: optionalString(row.code),
+                countryCode: optionalString(row.country_code) ?? "CZ",
+                source: "admin_boundaries_postgis"
+              };
+            }
+          }
+        } catch {
+          // Fall through to the explicit low-confidence regional fallback. The
+          // HZS incident itself is still useful even when administrative
+          // geocoding is temporarily unavailable.
+        }
+      }
+      return {
+        lon: record.feed.fallbackLon,
+        lat: record.feed.fallbackLat,
+        precision: "region_centroid",
+        label: record.feed.regionName,
+        confidence: 0.52,
+        countryCode: "CZ",
+        source: "feed_region_fallback"
+      };
+    });
+  }
+
+  private async fetchBoundaryPoint(name: string, feed: HzsIncidentFeedConfig): Promise<HzsBoundaryPointRow | undefined> {
+    const pool = this.getPool();
+    const table = quoteQualifiedIdentifier(this.config.adminBoundaryTable);
+    const sql = `
+      select
+        name,
+        admin_level,
+        code,
+        country_code,
+        st_x(st_pointonsurface(geom)) as lon,
+        st_y(st_pointonsurface(geom)) as lat
+      from ${table}
+      where lower(name) = lower($1)
+        and geom && st_makeenvelope($2, $3, $4, $5, 4326)
+        and st_intersects(geom, st_makeenvelope($2, $3, $4, $5, 4326))
+      order by
+        case admin_level
+          when 8 then 0
+          when 9 then 1
+          when 10 then 2
+          when 7 then 3
+          when 6 then 4
+          else 5
+        end,
+        st_area(geom::geography) asc
+      limit 1
+    `;
+    const result = await pool.query<HzsBoundaryPointRow>(sql, [name, feed.bbox.west, feed.bbox.south, feed.bbox.east, feed.bbox.north]);
+    return result.rows[0];
+  }
+
+  private getPool(): Pool {
+    if (!this.pool) {
+      this.pool = new Pool({
+        connectionString: this.config.adminBoundaryConnectionString,
+        max: 2,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: this.config.requestTimeoutMs
+      });
+    }
+    return this.pool;
+  }
+}
+
 class AdminBoundarySource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<AdminBoundaryRow[]>;
@@ -913,6 +1113,51 @@ interface AdminBoundaryRow {
 }
 
 type AdminBoundaryGeometryColumn = "geom_z5" | "geom_z8" | "geom_z11" | "geom";
+
+interface HzsIncidentRecord {
+  id: string;
+  feed: HzsIncidentFeedConfig;
+  location: string;
+  type: string;
+  status?: string;
+  announcedAt: string;
+  detailUrl?: string;
+  iconAlt?: string;
+  raw: Record<string, unknown>;
+}
+
+interface HzsIncidentDetail {
+  description?: string;
+  type?: string;
+  subtype?: string;
+  district?: string;
+  municipality?: string;
+  municipalityPart?: string;
+  street?: string;
+  units?: string;
+  status?: string;
+}
+
+interface HzsIncidentGeocode {
+  lon: number;
+  lat: number;
+  precision: "municipality_centroid" | "admin_boundary_centroid" | "region_centroid";
+  label: string;
+  confidence: number;
+  adminLevel?: string;
+  code?: string;
+  countryCode?: string;
+  source: string;
+}
+
+interface HzsBoundaryPointRow {
+  name: string | null;
+  admin_level: number | string | null;
+  code: string | null;
+  country_code: string | null;
+  lon: number;
+  lat: number;
+}
 
 interface ChmiOrpCodelistEntry {
   code: string;
@@ -2092,6 +2337,442 @@ function mapFirmsDetection(
     }),
     raw: query.includeRaw ? row : undefined
   });
+}
+
+function parseHzsActiveIncidentRows(html: string, feed: HzsIncidentFeedConfig, fetchedAt: string): HzsIncidentRecord[] {
+  const activeSection = sectionBetween(html, "Probíhající výjezdy", "Ukončené výjezdy");
+  if (!activeSection) {
+    return [];
+  }
+  const rows = Array.from(activeSection.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((match) => match[1] ?? "");
+  return rows
+    .map((row) => parseHzsActiveIncidentRow(row, feed, fetchedAt))
+    .filter((record): record is HzsIncidentRecord => Boolean(record));
+}
+
+function parseHzsActiveIncidentRow(row: string, feed: HzsIncidentFeedConfig, fetchedAt: string): HzsIncidentRecord | undefined {
+  if (/aktualizovat|Sledovat přes RSS|Sledovat pres RSS/i.test(row)) {
+    return undefined;
+  }
+  const cells = Array.from(row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)).map((match) => match[1] ?? "");
+  if (cells.length < 5) {
+    return undefined;
+  }
+  const [iconCell = "", dayCell = "", timeCell = "", locationCell = "", typeCell = "", statusCell = ""] = cells;
+  const iconAlt = imageAlt(iconCell);
+  const dayLabel = htmlText(dayCell);
+  const timeLabel = htmlText(timeCell);
+  const location = htmlText(locationCell);
+  const type = htmlText(typeCell) || iconAlt;
+  const status = htmlText(statusCell);
+  if (!location || !type) {
+    return undefined;
+  }
+  const detailUrl = linkHref(locationCell, feed.url);
+  const id = detailUrl ? hzsIncidentIdFromUrl(detailUrl) : stableToken(`${feed.id}:${location}:${type}:${dayLabel}:${timeLabel}`);
+  return {
+    id,
+    feed,
+    location,
+    type,
+    status,
+    announcedAt: parseHzsRelativeTimestamp(dayLabel, timeLabel, fetchedAt) ?? fetchedAt,
+    detailUrl,
+    iconAlt,
+    raw: {
+      feedId: feed.id,
+      dayLabel,
+      timeLabel,
+      location,
+      type,
+      status,
+      detailUrl,
+      iconAlt
+    }
+  };
+}
+
+function parseHzsIncidentDetail(html: string): HzsIncidentDetail {
+  const fields = new Map<string, string>();
+  for (const match of html.matchAll(/<p>\s*<strong>([\s\S]*?):<\/strong>\s*([\s\S]*?)<\/p>/gi)) {
+    const key = normalizeCzechKey(htmlText(match[1] ?? ""));
+    const value = normalizeMissingText(htmlText(match[2] ?? ""));
+    if (key && value) {
+      fields.set(key, value);
+    }
+  }
+  return {
+    description: fields.get("popis"),
+    type: fields.get("typ"),
+    subtype: fields.get("podtyp"),
+    district: fields.get("okres"),
+    municipality: fields.get("obec"),
+    municipalityPart: fields.get("cast obce"),
+    street: fields.get("ulice"),
+    units: fields.get("jednotky"),
+    status: fields.get("stav")
+  };
+}
+
+function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, geocode: HzsIncidentGeocode, query: SafetyQuery, fetchedAt: string): SafetyFeature[] {
+  const classification = classifyHzsIncident(detail.type ?? record.type, detail.subtype, detail.description);
+  const targetLayers = hzsRequestedLayers(classification.primaryLayer, query.layers);
+  if (targetLayers.length === 0) {
+    return [];
+  }
+  const observedAt = record.announcedAt;
+  const expiresAt = addSeconds(fetchedAt, 30 * 60);
+  const address = hzsAddress(record, detail);
+  const status = detail.status ?? record.status ?? "probíhá";
+  const description = hzsDescription(detail, status);
+  const sourceIncident = `HZS-${record.id}`;
+
+  return targetLayers.map((layer) =>
+    makePointFeature({
+      id: `${layer}:hzs_incidents:${stableToken(`${record.feed.id}:${record.id}:${layer}`)}`,
+      lon: geocode.lon,
+      lat: geocode.lat,
+      layer,
+      category: layer === "fire" ? "active_fire_incident" : classification.category,
+      hazardType: classification.hazardType,
+      typeCode: classification.typeCode,
+      sourceCode: classification.typeCode,
+      sourceSystem: "HZS_INCIDENT_TYPE",
+      headline: `${detail.type ?? record.type} - ${record.location}`,
+      description,
+      recommendedAction: "Veřejný situační kontext z HZS; pro zásahové rozhodnutí používejte oficiální operační kanály IZS/HZS.",
+      sourceId: "hzs_incidents",
+      sourceName: "HZS public incident dispatches",
+      license: HZS_INCIDENTS_LICENSE,
+      observedAt,
+      effectiveAt: observedAt,
+      expiresAt,
+      validFrom: observedAt,
+      validUntil: expiresAt,
+      updatedAt: fetchedAt,
+      confidence: Math.min(0.95, classification.confidence * geocode.confidence),
+      severity: classification.severity,
+      status: hzsStatusCode(status),
+      urgency: "immediate",
+      certainty: "observed",
+      fireStatus: layer === "fire" ? "reported" : undefined,
+      detectedAt: layer === "fire" ? observedAt : undefined,
+      sourceIncident,
+      areaName: address || record.location,
+      adminLevel: geocode.adminLevel,
+      affectedArea: address || record.location,
+      code: geocode.code,
+      countryCode: geocode.countryCode ?? "CZ",
+      detailUrl: record.detailUrl,
+      iconHint: classification.iconHint,
+      basis: ["hzs_active_dispatch_table", record.feed.id, classification.typeCode],
+      metrics: compactMetrics({
+        locationConfidence: geocode.confidence
+      }),
+      tags: compactTags({
+        eventType: detail.type ?? record.type,
+        subtype: detail.subtype,
+        status,
+        district: detail.district,
+        municipality: detail.municipality,
+        municipalityPart: detail.municipalityPart,
+        street: detail.street,
+        units: detail.units,
+        locationPrecision: geocode.precision,
+        locationSource: geocode.source,
+        geocodeLabel: geocode.label,
+        feedId: record.feed.id,
+        feedRegion: record.feed.regionName
+      }),
+      providerProperties: {
+        hzs: {
+          id: record.id,
+          feedId: record.feed.id,
+          feedLabel: record.feed.label,
+          regionName: record.feed.regionName,
+          locationPrecision: geocode.precision,
+          locationSource: geocode.source,
+          detail
+        }
+      },
+      raw: {
+        record: record.raw,
+        detail
+      }
+    })
+  );
+}
+
+function classifyHzsIncident(type: string, subtype: string | undefined, description: string | undefined): {
+  primaryLayer: SafetyLayerId;
+  category: string;
+  hazardType: string;
+  typeCode: string;
+  severity: SafetySeverity;
+  confidence: number;
+  iconHint: string;
+} {
+  const text = normalizeCzechKey([type, subtype, description].filter(Boolean).join(" "));
+  if (text.includes("pozar")) {
+    return { primaryLayer: "fire", category: "active_fire_incident", hazardType: "fire", typeCode: "HZS_FIRE", severity: "warning", confidence: 0.92, iconHint: "fire" };
+  }
+  if (text.includes("unik nebezpecnych latek") || text.includes("nebezpecn")) {
+    return { primaryLayer: "warnings", category: "hazmat_incident", hazardType: "hazmat", typeCode: "HZS_HAZMAT", severity: "warning", confidence: 0.9, iconHint: "hazmat" };
+  }
+  if (text.includes("dopravni nehoda") || /\bdn\b/.test(text)) {
+    return { primaryLayer: "warnings", category: "traffic_accident", hazardType: "traffic_accident", typeCode: "HZS_TRAFFIC_ACCIDENT", severity: "warning", confidence: 0.88, iconHint: "traffic-accident" };
+  }
+  if (text.includes("zachrana osob") || text.includes("zachrana zvirat")) {
+    return { primaryLayer: "warnings", category: "rescue_incident", hazardType: "rescue", typeCode: "HZS_RESCUE", severity: "warning", confidence: 0.86, iconHint: "rescue" };
+  }
+  if (text.includes("technicka pomoc")) {
+    return { primaryLayer: "warnings", category: "technical_assistance", hazardType: "technical_assistance", typeCode: "HZS_TECHNICAL_ASSISTANCE", severity: "advisory", confidence: 0.82, iconHint: "technical-assistance" };
+  }
+  if (text.includes("plany poplach")) {
+    return { primaryLayer: "warnings", category: "false_alarm", hazardType: "false_alarm", typeCode: "HZS_FALSE_ALARM", severity: "info", confidence: 0.84, iconHint: "info" };
+  }
+  return { primaryLayer: "warnings", category: "emergency_incident", hazardType: "emergency_incident", typeCode: "HZS_INCIDENT", severity: "advisory", confidence: 0.78, iconHint: "warning" };
+}
+
+function hzsRequestedLayers(primaryLayer: SafetyLayerId, requestedLayers: SafetyLayerId[]): SafetyLayerId[] {
+  const layers: SafetyLayerId[] = [];
+  if (requestedLayers.includes(primaryLayer)) {
+    layers.push(primaryLayer);
+  }
+  if (primaryLayer !== "warnings" && requestedLayers.includes("warnings")) {
+    layers.push("warnings");
+  }
+  return layers;
+}
+
+function hzsGeocodeCandidates(record: HzsIncidentRecord, detail: HzsIncidentDetail): string[] {
+  const locationCity = record.location.split(" - ")[0]?.trim();
+  return unique(
+    [detail.municipalityPart, detail.municipality, locationCity, detail.district, record.feed.regionName]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value))
+  );
+}
+
+function hzsAddress(record: HzsIncidentRecord, detail: HzsIncidentDetail): string {
+  return [detail.street, detail.municipalityPart, detail.municipality, detail.district ? `okres ${detail.district}` : undefined]
+    .filter(Boolean)
+    .join(", ") || record.location;
+}
+
+function hzsDescription(detail: HzsIncidentDetail, status: string): string {
+  const parts = [
+    detail.subtype ? `Podtyp: ${detail.subtype}.` : undefined,
+    detail.description ? `Popis: ${detail.description}.` : undefined,
+    status ? `Stav: ${status}.` : undefined,
+    detail.units ? `Jednotky: ${detail.units}.` : undefined
+  ].filter(Boolean);
+  return parts.join(" ");
+}
+
+function hzsStatusCode(status: string): string {
+  const normalized = normalizeCzechKey(status);
+  if (normalized.includes("na miste")) {
+    return "on_scene";
+  }
+  if (normalized.includes("ukoncen")) {
+    return "closed";
+  }
+  if (normalized.includes("vyhlasen") || normalized.includes("vyslan")) {
+    return "dispatched";
+  }
+  return "active";
+}
+
+function sectionBetween(value: string, startMarker: string, endMarker: string): string | undefined {
+  const start = value.indexOf(startMarker);
+  if (start < 0) {
+    return undefined;
+  }
+  const end = value.indexOf(endMarker, start + startMarker.length);
+  return end > start ? value.slice(start, end) : value.slice(start);
+}
+
+function imageAlt(value: string): string | undefined {
+  const match = value.match(/<img\b[^>]*\balt=["']([^"']+)["'][^>]*>/i);
+  return match?.[1] ? htmlText(match[1]) : undefined;
+}
+
+function linkHref(value: string, baseUrl: string): string | undefined {
+  const match = value.match(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/i);
+  if (!match?.[1]) {
+    return undefined;
+  }
+  try {
+    const url = new URL(decodeHtmlEntities(match[1]), baseUrl);
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function hzsIncidentIdFromUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.searchParams.get("id") ?? stableToken(value);
+  } catch {
+    return stableToken(value);
+  }
+}
+
+function htmlText(value: string): string {
+  return decodeHtmlEntities(
+    value
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function normalizeMissingText(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || normalizeCzechKey(trimmed) === "nezadan") {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function decodeHtmlEntities(value: string): string {
+  const named: Record<string, string> = {
+    nbsp: " ",
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: "\"",
+    apos: "'",
+    aacute: "á",
+    Aacute: "Á",
+    ccaron: "č",
+    Ccaron: "Č",
+    dcaron: "ď",
+    Dcaron: "Ď",
+    eacute: "é",
+    Eacute: "É",
+    ecaron: "ě",
+    Ecaron: "Ě",
+    iacute: "í",
+    Iacute: "Í",
+    ncaron: "ň",
+    Ncaron: "Ň",
+    oacute: "ó",
+    Oacute: "Ó",
+    rcaron: "ř",
+    Rcaron: "Ř",
+    scaron: "š",
+    Scaron: "Š",
+    tcaron: "ť",
+    Tcaron: "Ť",
+    uacute: "ú",
+    Uacute: "Ú",
+    uring: "ů",
+    Uring: "Ů",
+    yacute: "ý",
+    Yacute: "Ý",
+    zcaron: "ž",
+    Zcaron: "Ž"
+  };
+  return value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);/g, (match, entity: string) => {
+    if (entity.startsWith("#x")) {
+      const codePoint = Number.parseInt(entity.slice(2), 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    if (entity.startsWith("#")) {
+      const codePoint = Number.parseInt(entity.slice(1), 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return named[entity] ?? match;
+  });
+}
+
+function normalizeCzechKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseHzsRelativeTimestamp(dayLabel: string, timeLabel: string, fetchedAt: string): string | undefined {
+  const timeMatch = timeLabel.match(/(\d{1,2}):(\d{2})/);
+  if (!timeMatch) {
+    return undefined;
+  }
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return undefined;
+  }
+  const current = pragueDateParts(new Date(fetchedAt));
+  const normalizedDay = normalizeCzechKey(dayLabel);
+  let year = current.year;
+  let month = current.month;
+  let day = current.day;
+
+  if (normalizedDay === "vcera") {
+    const previous = new Date(Date.UTC(year, month - 1, day - 1, 12, 0, 0));
+    const parts = pragueDateParts(previous);
+    year = parts.year;
+    month = parts.month;
+    day = parts.day;
+  } else {
+    const explicit = dayLabel.match(/(\d{1,2})\.\s*(\d{1,2})\.?/);
+    if (explicit) {
+      day = Number(explicit[1]);
+      month = Number(explicit[2]);
+      if (Date.UTC(year, month - 1, day) - Date.UTC(current.year, current.month - 1, current.day) > 24 * 60 * 60 * 1000) {
+        year -= 1;
+      }
+    }
+  }
+
+  return isoFromPragueParts(year, month, day, hour, minute);
+}
+
+function pragueDateParts(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  return {
+    year: Number(parts.find((part) => part.type === "year")?.value),
+    month: Number(parts.find((part) => part.type === "month")?.value),
+    day: Number(parts.find((part) => part.type === "day")?.value)
+  };
+}
+
+function isoFromPragueParts(year: number, month: number, day: number, hour: number, minute: number): string | undefined {
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const offset = timeZoneOffsetMinutes(utcGuess, "Europe/Prague");
+  const timestamp = utcGuess.getTime() - offset * 60_000;
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+}
+
+function timeZoneOffsetMinutes(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(date);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
+  return (asUtc - date.getTime()) / 60_000;
 }
 
 function gdacsItems(parsed: unknown): Record<string, unknown>[] {

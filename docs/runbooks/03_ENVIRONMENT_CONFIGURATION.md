@@ -526,10 +526,10 @@ Výchozí bezpečná konfigurace:
 SAFETY_DATA_ENABLED_SOURCES=mock
 ```
 
-Pilot s reálnými ČHMÚ open-data zdroji:
+Pilot s reálnými ČHMÚ/GDACS/HZS veřejnými zdroji:
 
 ```bash
-SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,admin_boundaries
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,admin_boundaries
 SAFETY_DATA_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 SAFETY_DATA_CACHE_TTL_SECONDS=300
 SAFETY_DATA_STALE_IF_ERROR_SECONDS=3600
@@ -554,6 +554,10 @@ NASA_FIRMS_SOURCE=VIIRS_SNPP_NRT
 NASA_FIRMS_DAY_RANGE=1
 GDACS_RSS_URL=https://www.gdacs.org/xml/rss.xml
 GDACS_CACHE_TTL_SECONDS=900
+HZS_INCIDENTS_FEEDS=https://www.hzspa.cz/vyjezdy/aktualni-vyjezdy.php|HZS Pardubického kraje - aktuální výjezdy|Pardubický kraj|15.78|49.94|15.3,49.45,16.95,50.35|hzs-pardubice
+HZS_INCIDENTS_CACHE_TTL_SECONDS=180
+HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS=1800
+HZS_INCIDENTS_MAX_ACTIVE_DETAILS=50
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
@@ -562,8 +566,12 @@ SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 `gdacs_alerts` je bezklicovy verejny GeoRSS/RSS zdroj GDACS pro globalni
 katastroficke alerty s potencialnim humanitarnim dopadem. SIM ho normalizuje
 do `warnings`, `fire` a `flood`; pro lokalni opatreni zustava zdrojem autority
-IZS/CHMI/prislusny organ. `nasa_firms` zustava volitelny zdroj pro satelitni
-pozarni detekce a nezapina se bez `NASA_FIRMS_MAP_KEY`.
+IZS/CHMI/prislusny organ. `hzs_incidents` je bezklicovy verejny feed
+probihajicich vyjezdu; vychozi konfigurace pokryva pilotne HZS Pardubickeho
+kraje. Dalsi krajsky feed se prida do `HZS_INCIDENTS_FEEDS` jako dalsi polozka
+oddelená strednikem ve tvaru `url|label|region|lon|lat|west,south,east,north|id`.
+`nasa_firms` zustava volitelny zdroj pro satelitni pozarni detekce a nezapina se
+bez `NASA_FIRMS_MAP_KEY`.
 
 Projekce do `situation-data`:
 

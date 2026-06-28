@@ -43,6 +43,20 @@ describe("Safety Data API contract", () => {
       nasaFirmsDayRange: 1,
       gdacsRssUrl: "https://www.gdacs.org/xml/rss.xml",
       gdacsCacheTtlSeconds: 900,
+      hzsIncidentFeeds: [
+        {
+          id: "hzs-test",
+          url: "https://www.hzspa.cz/vyjezdy/aktualni-vyjezdy.php",
+          label: "HZS test feed",
+          regionName: "Pardubický kraj",
+          fallbackLon: 15.78,
+          fallbackLat: 49.94,
+          bbox: { west: 15.0, south: 49.4, east: 16.9, north: 50.4 }
+        }
+      ],
+      hzsIncidentsCacheTtlSeconds: 180,
+      hzsIncidentsDetailCacheTtlSeconds: 1800,
+      hzsIncidentsMaxActiveDetails: 50,
       chmiOrpCodelistUrl:
         "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
       adminBoundaryTable: "public.osm_admin_boundary",
@@ -96,6 +110,10 @@ describe("Safety Data API contract", () => {
           layers: expect.arrayContaining(["warnings", "fire", "flood"])
         }),
         expect.objectContaining({
+          sourceId: "hzs_incidents",
+          layers: expect.arrayContaining(["warnings", "fire"])
+        }),
+        expect.objectContaining({
           sourceId: "admin_boundaries",
           layers: expect.arrayContaining(["boundary_admin"])
         })
@@ -126,6 +144,7 @@ describe("Safety Data API contract", () => {
           expect.objectContaining({ sourceId: "chmi_hydro", authConfigured: true }),
           expect.objectContaining({ sourceId: "nasa_firms", authConfigured: false }),
           expect.objectContaining({ sourceId: "gdacs_alerts", authConfigured: true }),
+          expect.objectContaining({ sourceId: "hzs_incidents", authConfigured: true }),
           expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: false })
         ])
       })
@@ -155,7 +174,7 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.safety.warnings",
           categories: expect.arrayContaining(["disaster_alert"]),
           role: "overlay",
-          sourceIds: ["chmi_alerts", "gdacs_alerts"]
+          sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.weather_alerts",
@@ -176,7 +195,7 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.safety.fire",
           categories: expect.arrayContaining(["fire", "fire_weather_risk"]),
           role: "overlay",
-          sourceIds: ["chmi_alerts", "nasa_firms", "gdacs_alerts"]
+          sourceIds: ["chmi_alerts", "nasa_firms", "gdacs_alerts", "hzs_incidents"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.flood",
@@ -222,6 +241,12 @@ describe("Safety Data API contract", () => {
           sourceRole: "final",
           feedsLayerIds: ["safety.warnings", "safety.fire", "safety.flood"],
           feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire", "public.safety.flood"]
+        }),
+        expect.objectContaining({
+          sourceId: "hzs_incidents",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.warnings", "safety.fire"],
+          feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"]
         }),
         expect.objectContaining({
           sourceId: "admin_boundaries",
@@ -314,7 +339,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("exposes observability with per-source cache state", async () => {
-    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "admin_boundaries"] });
+    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "admin_boundaries"] });
     await request(configured.app).get("/api/v1/observability").expect(200).expect((response) => {
       expect(response.body).toEqual(
         expect.objectContaining({
@@ -325,6 +350,7 @@ describe("Safety Data API contract", () => {
             expect.objectContaining({ sourceId: "chmi_hydro", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "nasa_firms", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "gdacs_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+            expect.objectContaining({ sourceId: "hzs_incidents", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "admin_boundaries", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) })
           ]),
           lastResult: expect.objectContaining({
@@ -799,6 +825,115 @@ describe("Safety Data API contract", () => {
         ])
       );
     });
+  });
+
+  it("normalizes active HZS dispatches without exposing closed incidents as warnings", async () => {
+    const hzsTable = `<!doctype html>
+<html><body><table>
+<tr><th colspan="6">Probíhající výjezdy</th></tr>
+<tr><td align="center"><img src="image/pozar.png" alt="Požár" /></td><td align="center">Dnes</td><td align="center">10:15</td><td><a href="udalost.php?id=123053">Pardubice - Zelené Předměstí</a></td><td>Požár</td><td>SaP na místě</td></tr>
+<tr><td align="center"><img src="image/dopravni-nehoda.png" alt="Dopravní nehoda" /></td><td align="center">Dnes</td><td align="center">10:20</td><td><a href="udalost.php?id=124053">Chrudim</a></td><td>Dopravní nehoda</td><td>Vyhlášen poplach</td></tr>
+<tr><td colspan="4"><input type="checkbox" id="aktualizovat" /></td><td colspan="2">RSS</td></tr>
+<tr><th colspan="6">Ukončené výjezdy</th></tr>
+<tr><td><img src="image/pozar.png" alt="Požár" /></td><td>Včera</td><td>19:21</td><td><a href="udalost.php?id=999053">Dlouhá Loučka</a></td><td colspan="3">Požár</td></tr>
+</table></body></html>`;
+    const fireDetail = `<!doctype html><html><body>
+<h1><img src="image/pozar.png" alt="Požár" /> Požár Pardubice - Zelené Předměstí</h1>
+<p><strong>Popis:</strong> Požár pole.</p>
+<p><strong>Ohlášená:</strong> Dnes v 10:15</p>
+<p><strong>Typ:</strong> Požár</p>
+<p><strong>Podtyp:</strong> Nízké budovy</p>
+<p><strong>Okres:</strong> Pardubice</p>
+<p><strong>Obec:</strong> Pardubice</p>
+<p><strong>Část obce:</strong> Zelené Předměstí</p>
+<p><strong>Ulice:</strong> Jiráskova</p>
+<p><strong>Jednotky:</strong> CHS Pardubice</p>
+<p><strong>Stav:</strong> SaP na místě</p>
+</body></html>`;
+    const trafficDetail = `<!doctype html><html><body>
+<p><strong>Popis:</strong> DN 2 OA se zraněním.</p>
+<p><strong>Typ:</strong> Dopravní nehoda</p>
+<p><strong>Podtyp:</strong> Silniční dopravní nehoda</p>
+<p><strong>Okres:</strong> Chrudim</p>
+<p><strong>Obec:</strong> Chrudim</p>
+<p><strong>Stav:</strong> Vyhlášen poplach</p>
+</body></html>`;
+
+    await withFixtureServer(
+      {
+        "/vyjezdy/aktualni-vyjezdy.php": hzsTable,
+        "/vyjezdy/udalost.php?id=123053": fireDetail,
+        "/vyjezdy/udalost.php?id=124053": trafficDetail
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["hzs_incidents"],
+          hzsIncidentFeeds: [
+            {
+              id: "hzs-fixture",
+              url: `${baseUrl}/vyjezdy/aktualni-vyjezdy.php`,
+              label: "HZS fixture feed",
+              regionName: "Pardubický kraj",
+              fallbackLon: 15.78,
+              fallbackLat: 49.94,
+              bbox: { west: 15.0, south: 49.4, east: 16.9, north: 50.4 }
+            }
+          ]
+        });
+
+        const response = await request(configured.app)
+          .get("/api/v1/features?bbox=15.0,49.4,16.9,50.4&layers=warnings,fire&source=hzs_incidents&limit=10")
+          .expect(200);
+
+        expect(response.body.summary.featureCount).toBe(3);
+        expect(JSON.stringify(response.body)).not.toContain("Dlouhá Loučka");
+        expect(response.body.features).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              properties: expect.objectContaining({
+                layerId: "public.safety.fire",
+                providerLayerId: "safety.fire",
+                layer: "fire",
+                category: "active_fire_incident",
+                hazardType: "fire",
+                sourceId: "hzs_incidents",
+                sourceName: "HZS public incident dispatches",
+                status: "on_scene",
+                detailUrl: expect.stringContaining("/vyjezdy/udalost.php?id=123053"),
+                basis: ["hzs_active_dispatch_table", "hzs-fixture", "HZS_FIRE"],
+                metrics: expect.objectContaining({ locationConfidence: 0.52 }),
+                tags: expect.objectContaining({
+                  locationPrecision: "region_centroid",
+                  municipality: "Pardubice",
+                  street: "Jiráskova",
+                  subtype: "Nízké budovy"
+                })
+              })
+            }),
+            expect.objectContaining({
+              properties: expect.objectContaining({
+                layerId: "public.safety.warnings",
+                providerLayerId: "safety.warnings",
+                layer: "warnings",
+                hazardType: "fire",
+                category: "active_fire_incident"
+              })
+            }),
+            expect.objectContaining({
+              properties: expect.objectContaining({
+                layerId: "public.safety.warnings",
+                providerLayerId: "safety.warnings",
+                layer: "warnings",
+                hazardType: "traffic_accident",
+                category: "traffic_accident",
+                status: "dispatched"
+              })
+            })
+          ])
+        );
+      }
+    );
   });
 
   it("projects CHMI fire danger warnings into the fire layer", async () => {
