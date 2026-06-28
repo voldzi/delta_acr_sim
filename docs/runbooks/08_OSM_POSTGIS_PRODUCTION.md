@@ -147,8 +147,14 @@ use `--require-mobile-coverage-read-model` after the read-model rebuild is in
 regular operation.
 
 The mobile coverage read-model table includes compatibility columns parsed from
-feature ids: `grid_resolution_m`, `grid_row` and `grid_column`. SIM maintains
+feature ids: `grid_resolution_m`, `grid_row` and `grid_column`, plus cached cell
+bounds in `bbox_west`, `bbox_south`, `bbox_east` and `bbox_north`. SIM maintains
 them automatically through `ensureReadModelSchema()` and uses
-`mobile_coverage_cells_grid_idx` for low-zoom spatial sampling. If an older
-table is already populated, the first schema ensure backfills these columns from
-ids like `coverage:mobile:4g:m1000-r5399-c975`; no full OSM reimport is required.
+`mobile_coverage_cells_candidate_idx` and `mobile_coverage_cells_lookup_idx` for
+low-zoom spatial sampling before it joins back to full polygon payloads. If an
+older table is already populated, the first schema ensure backfills these columns
+from ids like
+`coverage:mobile:4g:m1000-r5399-c975` and from existing geometries; no full OSM
+reimport is required. After this one-time backfill, run `vacuum analyze
+public.mobile_coverage_cells;` on the PostGIS database so production queries can
+use index-only scans instead of reading the wide geometry table.

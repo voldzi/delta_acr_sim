@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type QueryResult } from "pg";
 import { canonicalizeBboxForCache, formatBboxKey } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemElevationSampler, type DemTileRef, type ElevationSample } from "./dem-elevation-sampler.js";
@@ -39,6 +39,7 @@ const RECEIVER_HEIGHT_M = 1.5;
 const DEFAULT_VIEWSHED_AZIMUTH_STEP_DEG = 10;
 const DEFAULT_VIEWSHED_DISTANCE_STEP_M = 500;
 const MAX_VIEWSHED_FEATURES = 2500;
+const READ_MODEL_LOOKUP_WORK_MEM = "32MB";
 
 interface TowerRow {
   osm_id: string;
@@ -555,6 +556,10 @@ export class MobileCoverageSource implements SituationDataSource {
         grid_resolution_m integer,
         grid_row integer,
         grid_column integer,
+        bbox_west double precision,
+        bbox_south double precision,
+        bbox_east double precision,
+        bbox_north double precision,
         geom geometry(Polygon, 4326) not null,
         feature_id text primary key
       );
@@ -569,6 +574,10 @@ export class MobileCoverageSource implements SituationDataSource {
       alter table ${table} add column if not exists grid_resolution_m integer;
       alter table ${table} add column if not exists grid_row integer;
       alter table ${table} add column if not exists grid_column integer;
+      alter table ${table} add column if not exists bbox_west double precision;
+      alter table ${table} add column if not exists bbox_south double precision;
+      alter table ${table} add column if not exists bbox_east double precision;
+      alter table ${table} add column if not exists bbox_north double precision;
 
       update ${table}
       set
@@ -578,11 +587,66 @@ export class MobileCoverageSource implements SituationDataSource {
       where (grid_resolution_m is null or grid_row is null or grid_column is null)
         and feature_id ~ 'm[0-9]+-r-?[0-9]+-c-?[0-9]+$';
 
+      update ${table}
+      set
+        bbox_west = st_xmin(box3d(geom)),
+        bbox_south = st_ymin(box3d(geom)),
+        bbox_east = st_xmax(box3d(geom)),
+        bbox_north = st_ymax(box3d(geom))
+      where bbox_west is null
+        or bbox_south is null
+        or bbox_east is null
+        or bbox_north is null;
+
       create index if not exists mobile_coverage_cells_geom_gix on ${table} using gist (geom);
       create index if not exists mobile_coverage_cells_model_idx on ${table}(model_version, technology, operator);
       create index if not exists mobile_coverage_cells_expires_idx on ${table}(expires_at);
       create index if not exists mobile_coverage_cells_generated_idx on ${table}(generated_at);
       create index if not exists mobile_coverage_cells_grid_idx on ${table}(model_version, technology, operator, grid_resolution_m, grid_row, grid_column);
+      create index if not exists mobile_coverage_cells_lookup_idx on ${table}(
+        model_version,
+        technology,
+        operator,
+        grid_resolution_m,
+        bbox_west,
+        bbox_east,
+        bbox_south,
+        bbox_north,
+        grid_row,
+        grid_column
+      ) include (feature_id, quality, confidence, generated_at, expires_at)
+      where grid_resolution_m is not null
+        and grid_row is not null
+        and grid_column is not null
+        and bbox_west is not null
+        and bbox_south is not null
+        and bbox_east is not null
+        and bbox_north is not null;
+      create index if not exists mobile_coverage_cells_candidate_idx on ${table}(
+        model_version,
+        technology,
+        operator,
+        grid_resolution_m
+      ) include (
+        feature_id,
+        quality,
+        confidence,
+        generated_at,
+        expires_at,
+        grid_row,
+        grid_column,
+        bbox_west,
+        bbox_east,
+        bbox_south,
+        bbox_north
+      )
+      where grid_resolution_m is not null
+        and grid_row is not null
+        and grid_column is not null
+        and bbox_west is not null
+        and bbox_south is not null
+        and bbox_east is not null
+        and bbox_north is not null;
     `);
   }
 
@@ -604,6 +668,7 @@ export class MobileCoverageSource implements SituationDataSource {
     await this.ensureReadModelSchemaCached();
     const payload = await this.buildCoverage(bbox, technologies);
     const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
+    let written = 0;
     await this.getPool().query(
       `
         delete from ${table}
@@ -618,6 +683,10 @@ export class MobileCoverageSource implements SituationDataSource {
 
     for (const feature of payload.features) {
       const gridCell = parseCoverageGridFeatureId(String(feature.properties.featureId ?? feature.id ?? ""));
+      const cellBbox = polygonFeatureBbox(feature);
+      if (!cellBbox) {
+        continue;
+      }
       await this.getPool().query(
         `
           insert into ${table} (
@@ -643,14 +712,18 @@ export class MobileCoverageSource implements SituationDataSource {
             grid_resolution_m,
             grid_row,
             grid_column,
+            bbox_west,
+            bbox_south,
+            bbox_east,
+            bbox_north,
             geom,
             feature_id
           ) values (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11::timestamptz,
             $12::jsonb, $13::jsonb, $14::jsonb, $15, $16, $17, $18, $19,
-            $20, $21, $22,
-            st_setsrid(st_geomfromgeojson($23), 4326),
-            $24
+            $20, $21, $22, $23, $24, $25, $26,
+            st_setsrid(st_geomfromgeojson($27), 4326),
+            $28
           )
           on conflict (feature_id) do update set
             dataset_id = excluded.dataset_id,
@@ -675,6 +748,10 @@ export class MobileCoverageSource implements SituationDataSource {
             grid_resolution_m = excluded.grid_resolution_m,
             grid_row = excluded.grid_row,
             grid_column = excluded.grid_column,
+            bbox_west = excluded.bbox_west,
+            bbox_south = excluded.bbox_south,
+            bbox_east = excluded.bbox_east,
+            bbox_north = excluded.bbox_north,
             geom = excluded.geom
         `,
         [
@@ -700,13 +777,18 @@ export class MobileCoverageSource implements SituationDataSource {
           gridCell?.resolutionM ?? feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
           gridCell?.row ?? null,
           gridCell?.column ?? null,
+          cellBbox.west,
+          cellBbox.south,
+          cellBbox.east,
+          cellBbox.north,
           JSON.stringify(feature.geometry),
           feature.properties.featureId
         ]
       );
+      written += 1;
     }
 
-    return payload.features.length;
+    return written;
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -795,51 +877,41 @@ export class MobileCoverageSource implements SituationDataSource {
     const normalizedOperators = operators.includes("aggregate") ? ["unknown"] : operators;
     try {
       await this.ensureReadModelSchemaCached();
-      const result = await this.getPool().query<CoverageCellRow>(
-        `
-          with bounds as (
-            select
-              $5::double precision as west,
-              $6::double precision as south,
-              $7::double precision as east,
-              $8::double precision as north,
-              greatest(1, ceil(sqrt($9::double precision))::int) as bucket_count
+      const client = await this.getPool().connect();
+      let result: QueryResult<CoverageCellRow> | undefined;
+      try {
+        await client.query("begin");
+        await client.query(`set local work_mem = '${READ_MODEL_LOOKUP_WORK_MEM}'`);
+        result = await client.query<CoverageCellRow>(
+          `
+          with constants as (
+            select greatest(1, ceil(sqrt($9::double precision))::int) as bucket_count
           ),
-          candidates as (
+          candidate_keys as (
             select
               feature_id,
-              model_version,
-              technology,
-              operator,
               quality,
-              estimated_signal_dbm,
               confidence,
-              resolution_m,
-              dem_dataset_id,
               generated_at,
-              expires_at,
-              assumptions,
-              metrics,
-              tags,
-              data_quality,
-              bts_status,
-              bts_status_source,
-              operator_status_available,
-              source_revision,
-              grid_resolution_m,
               grid_row,
-              grid_column,
-              geom
-            from ${table}, bounds
+              grid_column
+            from ${table}
             where model_version = $1
               and technology = any($2::text[])
               and operator = any($3::text[])
               and expires_at > now()
               and ($4::int <= 0 or generated_at >= now() - make_interval(secs => $4::int))
-              and grid_resolution_m is not null
+              and grid_resolution_m = $10::int
               and grid_row is not null
               and grid_column is not null
-              and geom && st_makeenvelope(bounds.west, bounds.south, bounds.east, bounds.north, 4326)
+              and bbox_west is not null
+              and bbox_south is not null
+              and bbox_east is not null
+              and bbox_north is not null
+              and bbox_west <= $7::double precision
+              and bbox_east >= $5::double precision
+              and bbox_south <= $8::double precision
+              and bbox_north >= $6::double precision
           ),
           extents as (
             select
@@ -847,34 +919,34 @@ export class MobileCoverageSource implements SituationDataSource {
               max(grid_column) as max_column,
               min(grid_row) as min_row,
               max(grid_row) as max_row
-            from candidates
+            from candidate_keys
           ),
           bucketed as (
             select
-              candidates.*,
+              candidate_keys.*,
               least(
-                bounds.bucket_count - 1,
+                constants.bucket_count - 1,
                 greatest(
                   0,
                   floor(
                     ((grid_column - extents.min_column)::double precision / nullif(extents.max_column - extents.min_column + 1, 0))
-                    * bounds.bucket_count
+                    * constants.bucket_count
                   )::int
                 )
               ) as bucket_x,
               least(
-                bounds.bucket_count - 1,
+                constants.bucket_count - 1,
                 greatest(
                   0,
                   floor(
                     ((grid_row - extents.min_row)::double precision / nullif(extents.max_row - extents.min_row + 1, 0))
-                    * bounds.bucket_count
+                    * constants.bucket_count
                   )::int
                 )
               ) as bucket_y
-            from candidates, bounds, extents
+            from candidate_keys, constants, extents
           ),
-          ranked as (
+          ranked_keys as (
             select
               distinct on (bucket_y, bucket_x)
               *
@@ -893,34 +965,40 @@ export class MobileCoverageSource implements SituationDataSource {
               confidence desc,
               generated_at desc,
               feature_id asc
+          ),
+          limited_keys as (
+            select feature_id
+            from ranked_keys
+            order by bucket_y asc, bucket_x asc, feature_id asc
+            limit $9
           )
           select
-            feature_id,
-            model_version,
-            technology,
-            operator,
-            quality,
-            estimated_signal_dbm,
-            confidence,
-            resolution_m,
-            dem_dataset_id,
-            generated_at,
-            expires_at,
-            assumptions,
-            metrics,
-            tags,
-            data_quality,
-            bts_status,
-            bts_status_source,
-            operator_status_available,
-            source_revision,
-            grid_resolution_m,
-            grid_row,
-            grid_column,
-            st_asgeojson(geom)::json as geometry
-          from ranked
-          order by bucket_y asc, bucket_x asc, feature_id asc
-          limit $9
+            cells.feature_id,
+            cells.model_version,
+            cells.technology,
+            cells.operator,
+            cells.quality,
+            cells.estimated_signal_dbm,
+            cells.confidence,
+            cells.resolution_m,
+            cells.dem_dataset_id,
+            cells.generated_at,
+            cells.expires_at,
+            cells.assumptions,
+            cells.metrics,
+            cells.tags,
+            cells.data_quality,
+            cells.bts_status,
+            cells.bts_status_source,
+            cells.operator_status_available,
+            cells.source_revision,
+            cells.grid_resolution_m,
+            cells.grid_row,
+            cells.grid_column,
+            st_asgeojson(cells.geom)::json as geometry
+          from limited_keys
+          join ${table} cells on cells.feature_id = limited_keys.feature_id
+          order by cells.grid_row asc, cells.grid_column asc, cells.feature_id asc
         `,
         [
           this.config.mobileCoverageModelVersion,
@@ -931,9 +1009,20 @@ export class MobileCoverageSource implements SituationDataSource {
           query.bbox.south,
           query.bbox.east,
           query.bbox.north,
-          Math.max(1, query.limit)
+          Math.max(1, query.limit),
+          this.config.mobileCoverageResolutionM
         ]
-      );
+        );
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+      if (!result) {
+        return { features: [], warnings: ["mobile_coverage_model read-model lookup did not return a result."], hit: false };
+      }
       if (result.rows.length === 0) {
         return { features: [], warnings: [], hit: false };
       }
@@ -1841,14 +1930,22 @@ function bboxAroundPoint(lon: number, lat: number, radiusM: number): BoundingBox
 }
 
 function featureIntersectsBbox(feature: SituationFeature, bbox: BoundingBox): boolean {
-  if (feature.geometry.type !== "Polygon") {
+  const featureBbox = polygonFeatureBbox(feature);
+  if (!featureBbox) {
     return false;
+  }
+  return featureBbox.west <= bbox.east && featureBbox.east >= bbox.west && featureBbox.south <= bbox.north && featureBbox.north >= bbox.south;
+}
+
+function polygonFeatureBbox(feature: SituationFeature): BoundingBox | undefined {
+  if (feature.geometry.type !== "Polygon") {
+    return undefined;
   }
   const points = feature.geometry.coordinates.flat();
   if (points.length === 0) {
-    return false;
+    return undefined;
   }
-  const featureBbox = points.reduce(
+  return points.reduce(
     (acc, [lon, lat]) => ({
       west: Math.min(acc.west, lon),
       south: Math.min(acc.south, lat),
@@ -1857,7 +1954,6 @@ function featureIntersectsBbox(feature: SituationFeature, bbox: BoundingBox): bo
     }),
     { west: Infinity, south: Infinity, east: -Infinity, north: -Infinity }
   );
-  return featureBbox.west <= bbox.east && featureBbox.east >= bbox.west && featureBbox.south <= bbox.north && featureBbox.north >= bbox.south;
 }
 
 function distanceMeters(lonA: number, latA: number, lonB: number, latB: number): number {
