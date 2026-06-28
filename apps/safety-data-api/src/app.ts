@@ -309,7 +309,7 @@ function parseLayers(value: unknown): SafetyLayerId[] {
 }
 
 function parseSources(value: unknown, fallback: SafetyDataSourceId[]): SafetyDataSourceId[] {
-  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"]);
+  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "admin_boundaries"]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -413,6 +413,7 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
       { sourceId: "chmi_alerts", baseUrl: config.chmiAlertsCapBaseUrl, authConfigured: true },
       { sourceId: "chmi_hydro", baseUrl: config.chmiHydroNowBaseUrl, authConfigured: true },
       { sourceId: "nasa_firms", baseUrl: config.nasaFirmsAreaBaseUrl, authConfigured: Boolean(config.nasaFirmsMapKey) },
+      { sourceId: "gdacs_alerts", baseUrl: config.gdacsRssUrl, authConfigured: true },
       { sourceId: "admin_boundaries", baseUrl: publicPostgisBaseUrl(config.adminBoundaryConnectionString), authConfigured: Boolean(config.adminBoundaryConnectionString) }
     ]
   };

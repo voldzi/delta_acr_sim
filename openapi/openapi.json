@@ -10419,6 +10419,7 @@
               "chmi_alerts",
               "chmi_hydro",
               "nasa_firms",
+              "gdacs_alerts",
               "admin_boundaries"
             ]
           },
@@ -10815,6 +10816,7 @@
               "layerId": {
                 "type": "string",
                 "enum": [
+                  "public.safety.warnings",
                   "public.safety.weather_alerts",
                   "public.safety.fire",
                   "public.safety.flood",
@@ -10828,6 +10830,7 @@
               "providerLayerId": {
                 "type": "string",
                 "enum": [
+                  "safety.warnings",
                   "safety.weather_alerts",
                   "safety.fire",
                   "safety.flood",
@@ -10876,7 +10879,8 @@
                   "chmi_alerts",
                   "chmi_hydro",
                   "nasa_firms",
-                  "admin_boundaries"
+              "gdacs_alerts",
+              "admin_boundaries"
                 ]
               },
               "source": {
@@ -11794,7 +11798,7 @@
         "required": false,
         "schema": {
           "type": "string",
-          "example": "weather_alerts,fire,flood,boundary_admin"
+          "example": "warnings,weather_alerts,fire,flood,boundary_admin"
         }
       },
       "SafetyDataSources": {
@@ -11803,7 +11807,7 @@
         "required": false,
         "schema": {
           "type": "string",
-          "example": "chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries"
+          "example": "chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,admin_boundaries"
         }
       },
       "SafetyDataLimit": {

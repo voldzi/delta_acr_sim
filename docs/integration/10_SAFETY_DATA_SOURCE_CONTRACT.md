@@ -23,9 +23,9 @@ https://sim.zeleznalady.cz/safety-data/api/v1/features
 Podporované query parametry:
 
 - `bbox=west,south,east,north` ve WGS84.
-- `layers=weather_alerts,fire,flood,boundary_admin`.
-- `layers=warnings` je pouze kompatibilní alias pro starší adaptéry.
-- `source=chmi_alerts,chmi_hydro,nasa_firms,admin_boundaries` nebo `source=mock`.
+- `layers=warnings,weather_alerts,fire,flood,boundary_admin`.
+- `layers=warnings` je obecná krizová vrstva pro veřejné výstrahy a globální katastrofické alerty; `weather_alerts` zůstává specializovaná meteorologická vrstva.
+- `source=chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,admin_boundaries` nebo `source=mock`.
 - `limit=1..1000`.
 - `includeRaw=1` pouze pro diagnostiku.
 
@@ -60,10 +60,10 @@ Odpověď je GeoJSON `FeatureCollection` s verzí:
 
 Každá feature nese minimálně:
 
-- `properties.layerId`: `public.safety.weather_alerts`, `public.safety.fire`, `public.safety.flood` nebo `public.boundary.admin`.
+- `properties.layerId`: `public.safety.warnings`, `public.safety.weather_alerts`, `public.safety.fire`, `public.safety.flood` nebo `public.boundary.admin`.
 - `properties.providerId`: `sim.safety-data`.
-- `properties.providerLayerId`: `safety.weather_alerts`, `safety.fire`, `safety.flood` nebo `boundary.admin`.
-- `properties.layer`: `weather_alerts`, `fire`, `flood` nebo `boundary_admin`.
+- `properties.providerLayerId`: `safety.warnings`, `safety.weather_alerts`, `safety.fire`, `safety.flood` nebo `boundary.admin`.
+- `properties.layer`: `warnings`, `weather_alerts`, `fire`, `flood` nebo `boundary_admin`.
 - `properties.hazardType`, `properties.status`, `properties.validFrom`, `properties.validUntil`, `properties.updatedAt`.
 - `properties.source`, `properties.sourceName`, `properties.basis`, `properties.styleHint`, `properties.iconHint`.
 - `properties.severity`: `info`, `advisory`, `warning`, `critical`.
@@ -223,14 +223,14 @@ Safety Data API je vstup pro rozhodovani COP, ne notifikacni sluzba. SIM
 neposila push notifikace a nezna uzivatele, zarizeni, skupiny ani sledovane
 oblasti.
 
-Katalogove vrstvy `public.safety.weather_alerts`, `public.safety.fire` a
-`public.safety.flood` obsahuji metadata `notificationPolicy`, ktera popisuji,
-ze vrstva je vhodna pro civilni vyhodnoceni notifikace. COP ma z feature
-vytvorit stabilni `Idempotency-Key` a poslat pozadavek do CSM Messaging pouze
-tehdy, kdyz se udalost tyka konkretniho uzivatele, skupiny nebo sledovane
-oblasti.
+Katalogove vrstvy `public.safety.warnings`, `public.safety.weather_alerts`,
+`public.safety.fire` a `public.safety.flood` obsahuji metadata
+`notificationPolicy`, ktera popisuji, ze vrstva je vhodna pro civilni
+vyhodnoceni notifikace. COP ma z feature vytvorit stabilni `Idempotency-Key` a
+poslat pozadavek do CSM Messaging pouze tehdy, kdyz se udalost tyka konkretniho
+uzivatele, skupiny nebo sledovane oblasti.
 
-Technicke `warnings`, stale stav zdroju a degradace upstreamu patri do
+Technicke `response.warnings`, stale stav zdroju a degradace upstreamu patri do
 provozniho dohledu. Nesmí se posilat obcanum jako safety push, pokud nejsou
 soucasti realne safety feature.
 
@@ -242,6 +242,7 @@ Detailni kontrakt je v
 - `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`; požární nebezpečí se kromě `public.safety.weather_alerts` projektuje také do `public.safety.fire` jako `fire_weather_risk`.
 - `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`; SIM používá aktuální časové řady, omezený `recent` backfill a lokální JSONL historii pro trend, SPA klasifikaci, průtokové prahy, teplotu vody, plochu povodí a hydrologické pořadí.
 - `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
+- `gdacs_alerts`: GDACS veřejné RSS/GeoRSS katastrofické alerty z `https://www.gdacs.org/xml/rss.xml`; bez klíče. `FL` se promítá do `flood`, `WF` do `fire`, ostatní typy jako `EQ`, `TC`, `VO`, `DR` do `warnings`. Pokud COP požádá o `warnings`, SIM vrací i obecnou kopii GDACS požáru/povodně jako krizový alert.
 - `admin_boundaries`: referenční administrativní hranice. Produkčně čte lokální/PostGIS read-model `public.osm_admin_boundary`; pokud není DB nebo view k dispozici, vrací jen hrubý seed ČR s warningem.
 - `mock`: syntetická fixture pro offline testy kontraktu.
 
@@ -298,7 +299,7 @@ Interní Prometheus endpoint `GET /metrics` běží na službě `safety-data-api
 Interní `/metrics` obsahuje aggregate cache metriky i per-source cache metriky:
 
 - `safety_data_cache_hits/misses/stale_hits/errors`,
-- `safety_data_source_cache_hits/misses/stale_hits/errors{source="chmi_alerts|chmi_hydro|nasa_firms|admin_boundaries"}`,
+- `safety_data_source_cache_hits/misses/stale_hits/errors{source="chmi_alerts|chmi_hydro|nasa_firms|gdacs_alerts|admin_boundaries"}`,
 - `safety_data_last_feature_count`,
 - `safety_data_last_layer_features{layer="weather_alerts|fire|flood|boundary_admin"}`,
 - `safety_data_last_generated_age_seconds`.

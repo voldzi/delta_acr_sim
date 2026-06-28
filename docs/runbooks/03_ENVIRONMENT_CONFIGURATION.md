@@ -529,7 +529,7 @@ SAFETY_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými ČHMÚ open-data zdroji:
 
 ```bash
-SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,admin_boundaries
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,admin_boundaries
 SAFETY_DATA_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 SAFETY_DATA_CACHE_TTL_SECONDS=300
 SAFETY_DATA_STALE_IF_ERROR_SECONDS=3600
@@ -552,10 +552,18 @@ NASA_FIRMS_MAP_KEY=
 NASA_FIRMS_AREA_BASE_URL=https://firms.modaps.eosdis.nasa.gov/api/area/csv
 NASA_FIRMS_SOURCE=VIIRS_SNPP_NRT
 NASA_FIRMS_DAY_RANGE=1
+GDACS_RSS_URL=https://www.gdacs.org/xml/rss.xml
+GDACS_CACHE_TTL_SECONDS=900
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 ```
+
+`gdacs_alerts` je bezklicovy verejny GeoRSS/RSS zdroj GDACS pro globalni
+katastroficke alerty s potencialnim humanitarnim dopadem. SIM ho normalizuje
+do `warnings`, `fire` a `flood`; pro lokalni opatreni zustava zdrojem autority
+IZS/CHMI/prislusny organ. `nasa_firms` zustava volitelny zdroj pro satelitni
+pozarni detekce a nezapina se bez `NASA_FIRMS_MAP_KEY`.
 
 Projekce do `situation-data`:
 

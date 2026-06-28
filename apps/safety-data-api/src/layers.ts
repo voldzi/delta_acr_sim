@@ -2,6 +2,14 @@ import type { LayerDescriptor } from "./types.js";
 
 export const LAYERS: LayerDescriptor[] = [
   {
+    layerId: "warnings",
+    label: "Crisis warnings",
+    description: "General public crisis alerts normalized from public warning systems.",
+    defaultVisible: true,
+    geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
     layerId: "weather_alerts",
     label: "Weather alerts",
     description: "Official weather warnings normalized for a COM civil-risk map layer.",

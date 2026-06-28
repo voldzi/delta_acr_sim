@@ -225,8 +225,9 @@ function providerLayerIdForFeature(layer: SafetyLayerId): string {
       return "safety.fire";
     case "boundary_admin":
       return "boundary.admin";
-    case "weather_alerts":
     case "warnings":
+      return "safety.warnings";
+    case "weather_alerts":
       return "safety.weather_alerts";
   }
 }
@@ -239,8 +240,9 @@ function catalogLayerIdForFeature(layer: SafetyLayerId): string {
       return "public.safety.fire";
     case "boundary_admin":
       return "public.boundary.admin";
-    case "weather_alerts":
     case "warnings":
+      return "public.safety.warnings";
+    case "weather_alerts":
       return "public.safety.weather_alerts";
   }
 }

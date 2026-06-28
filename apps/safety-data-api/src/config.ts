@@ -28,6 +28,8 @@ export interface SafetyDataConfig {
   nasaFirmsAreaBaseUrl: string;
   nasaFirmsSource: string;
   nasaFirmsDayRange: number;
+  gdacsRssUrl: string;
+  gdacsCacheTtlSeconds: number;
   adminBoundaryConnectionString?: string;
   adminBoundaryTable: string;
   adminBoundaryCacheTtlSeconds: number;
@@ -80,6 +82,8 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     nasaFirmsAreaBaseUrl: process.env.NASA_FIRMS_AREA_BASE_URL ?? "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
     nasaFirmsSource: process.env.NASA_FIRMS_SOURCE ?? "VIIRS_SNPP_NRT",
     nasaFirmsDayRange: parseInteger(process.env.NASA_FIRMS_DAY_RANGE, 1),
+    gdacsRssUrl: process.env.GDACS_RSS_URL ?? "https://www.gdacs.org/xml/rss.xml",
+    gdacsCacheTtlSeconds: parseInteger(process.env.GDACS_CACHE_TTL_SECONDS, 900),
     adminBoundaryConnectionString: emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     adminBoundaryTable: process.env.SAFETY_DATA_ADMIN_BOUNDARY_TABLE ?? "public.osm_admin_boundary",
     adminBoundaryCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS, 86_400),
@@ -88,7 +92,7 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
 }
 
 function parseSourceList(value: string | undefined): SafetyDataSourceId[] {
-  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"]);
+  const allowed = new Set<SafetyDataSourceId>(["mock", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "admin_boundaries"]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())

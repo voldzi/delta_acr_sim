@@ -20,6 +20,35 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
     },
     layers: [
       {
+        providerLayerId: "safety.warnings",
+        recommendedCatalogLayerId: "public.safety.warnings",
+        label: "Krizové výstrahy",
+        description: "Obecné veřejné krizové výstrahy z normalizovaných veřejných zdrojů.",
+        categoryPath: ["safety", "warnings"],
+        categories: ["safety_warning", "disaster_alert", "public_warning"],
+        role: "overlay",
+        audience: "public",
+        kind: "vector_features",
+        defaultVisible: true,
+        selectable: true,
+        geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+        minZoom: 4,
+        maxZoom: 18,
+        refreshSeconds: 300,
+        cacheTtlSeconds: config.cacheTtlSeconds,
+        styleProfile: "safety-warning-v1",
+        sourceIds: ["chmi_alerts", "gdacs_alerts"],
+        query: query(["warnings"], ["chmi_alerts", "gdacs_alerts"]),
+        notificationPolicy: notificationPolicy("warning"),
+        legal: {
+          attribution: "Czech Hydrometeorological Institute (CHMI), Global Disaster Alert and Coordination System (GDACS)",
+          notes: [
+            "Vrstva obsahuje jen reálné veřejné výstrahy a katastrofické alerty; technická varování zdrojů patří do provozního dohledu.",
+            "GDACS je strategický krizový kontext; lokální opatření je nutné ověřovat přes IZS a příslušné orgány."
+          ]
+        }
+      },
+      {
         providerLayerId: "safety.weather_alerts",
         recommendedCatalogLayerId: "public.safety.weather_alerts",
         label: "Meteorologické výstrahy",
@@ -63,14 +92,14 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 600,
         cacheTtlSeconds: Math.max(600, config.cacheTtlSeconds),
         styleProfile: "safety-fire-v1",
-        sourceIds: ["chmi_alerts", "nasa_firms"],
-        query: query(["fire"], ["chmi_alerts", "nasa_firms"]),
+        sourceIds: ["chmi_alerts", "nasa_firms", "gdacs_alerts"],
+        query: query(["fire"], ["chmi_alerts", "nasa_firms", "gdacs_alerts"]),
         notificationPolicy: notificationPolicy("fire"),
         legal: {
-          attribution: "Czech Hydrometeorological Institute (CHMI), NASA FIRMS",
+          attribution: "Czech Hydrometeorological Institute (CHMI), NASA FIRMS, GDACS",
           notes: [
             "ČHMÚ poskytuje požární nebezpečí jako oficiální meteorologickou výstrahu, nikoli potvrzený požár.",
-            "NASA FIRMS satelitní detekce jsou situační kontext; pro zásah používejte oficiální kanály HZS/IZS."
+            "NASA FIRMS satelitní detekce a GDACS wildfire alerty jsou situační kontext; pro zásah používejte oficiální kanály HZS/IZS."
           ]
         }
       },
@@ -92,12 +121,16 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 600,
         cacheTtlSeconds: config.cacheTtlSeconds,
         styleProfile: "safety-flood-v1",
-        sourceIds: ["chmi_hydro"],
-        query: query(["flood"], ["chmi_hydro"]),
+        sourceIds: ["chmi_hydro", "gdacs_alerts"],
+        query: query(["flood"], ["chmi_hydro", "gdacs_alerts"]),
         notificationPolicy: notificationPolicy("flood"),
         legal: {
-          attribution: "Czech Hydrometeorological Institute (CHMI)",
-          notes: ["Stav externích CHMI endpointů může degradovat část odpovědi; sledujte stale/warnings.", "Detail hlásného profilu je dostupný přes properties.detailUrl pro selectable flood features."]
+          attribution: "Czech Hydrometeorological Institute (CHMI), Global Disaster Alert and Coordination System (GDACS)",
+          notes: [
+            "Stav externích CHMI endpointů může degradovat část odpovědi; sledujte stale/warnings.",
+            "Detail hlásného profilu je dostupný přes properties.detailUrl pro selectable flood features.",
+            "GDACS flood alerty doplňují přeshraniční krizový kontext; nenahrazují lokální ČHMÚ hydrologické profily."
+          ]
         }
       },
       {
@@ -147,7 +180,7 @@ function query(providerLayerIds: SafetyLayerId[], providerSourceIds: SafetyDataS
   };
 }
 
-function notificationPolicy(hazardType: "weather_alert" | "fire" | "flood") {
+function notificationPolicy(hazardType: "weather_alert" | "warning" | "fire" | "flood") {
   return {
     eligible: true,
     audienceDecisionOwner: "cop",
@@ -238,6 +271,15 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         feedsLayerIds: ["safety.fire"],
         feedsCatalogLayerIds: ["public.safety.fire"],
         notes: ["Satellite active fire detection source; requires NASA_FIRMS_MAP_KEY."]
+      };
+    case "gdacs_alerts":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        feedsLayerIds: ["safety.warnings", "safety.fire", "safety.flood"],
+        feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire", "public.safety.flood"],
+        notes: ["Public GDACS disaster alert source for strategic/global context; no secret key is required."]
       };
     case "admin_boundaries":
       return {

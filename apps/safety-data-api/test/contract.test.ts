@@ -41,6 +41,8 @@ describe("Safety Data API contract", () => {
       nasaFirmsAreaBaseUrl: "https://firms.modaps.eosdis.nasa.gov/api/area/csv",
       nasaFirmsSource: "VIIRS_SNPP_NRT",
       nasaFirmsDayRange: 1,
+      gdacsRssUrl: "https://www.gdacs.org/xml/rss.xml",
+      gdacsCacheTtlSeconds: 900,
       chmiOrpCodelistUrl:
         "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
       adminBoundaryTable: "public.osm_admin_boundary",
@@ -90,6 +92,10 @@ describe("Safety Data API contract", () => {
           layers: expect.arrayContaining(["fire"])
         }),
         expect.objectContaining({
+          sourceId: "gdacs_alerts",
+          layers: expect.arrayContaining(["warnings", "fire", "flood"])
+        }),
+        expect.objectContaining({
           sourceId: "admin_boundaries",
           layers: expect.arrayContaining(["boundary_admin"])
         })
@@ -119,6 +125,7 @@ describe("Safety Data API contract", () => {
           expect.objectContaining({ sourceId: "chmi_alerts", authConfigured: true }),
           expect.objectContaining({ sourceId: "chmi_hydro", authConfigured: true }),
           expect.objectContaining({ sourceId: "nasa_firms", authConfigured: false }),
+          expect.objectContaining({ sourceId: "gdacs_alerts", authConfigured: true }),
           expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: false })
         ])
       })
@@ -144,6 +151,13 @@ describe("Safety Data API contract", () => {
     expect(response.body.layers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          providerLayerId: "safety.warnings",
+          recommendedCatalogLayerId: "public.safety.warnings",
+          categories: expect.arrayContaining(["disaster_alert"]),
+          role: "overlay",
+          sourceIds: ["chmi_alerts", "gdacs_alerts"]
+        }),
+        expect.objectContaining({
           providerLayerId: "safety.weather_alerts",
           recommendedCatalogLayerId: "public.safety.weather_alerts",
           categories: expect.arrayContaining(["weather_alert"]),
@@ -162,14 +176,14 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.safety.fire",
           categories: expect.arrayContaining(["fire", "fire_weather_risk"]),
           role: "overlay",
-          sourceIds: ["chmi_alerts", "nasa_firms"]
+          sourceIds: ["chmi_alerts", "nasa_firms", "gdacs_alerts"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.flood",
           recommendedCatalogLayerId: "public.safety.flood",
           categories: expect.arrayContaining(["hydrology"]),
           role: "overlay",
-          sourceIds: ["chmi_hydro"]
+          sourceIds: ["chmi_hydro", "gdacs_alerts"]
         }),
         expect.objectContaining({
           providerLayerId: "boundary.admin",
@@ -202,6 +216,12 @@ describe("Safety Data API contract", () => {
           sourceRole: "final",
           feedsLayerIds: ["safety.fire"],
           feedsCatalogLayerIds: ["public.safety.fire"]
+        }),
+        expect.objectContaining({
+          sourceId: "gdacs_alerts",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.warnings", "safety.fire", "safety.flood"],
+          feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire", "public.safety.flood"]
         }),
         expect.objectContaining({
           sourceId: "admin_boundaries",
@@ -294,7 +314,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("exposes observability with per-source cache state", async () => {
-    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "admin_boundaries"] });
+    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "admin_boundaries"] });
     await request(configured.app).get("/api/v1/observability").expect(200).expect((response) => {
       expect(response.body).toEqual(
         expect.objectContaining({
@@ -304,6 +324,7 @@ describe("Safety Data API contract", () => {
             expect.objectContaining({ sourceId: "chmi_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "chmi_hydro", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "nasa_firms", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+            expect.objectContaining({ sourceId: "gdacs_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
             expect.objectContaining({ sourceId: "admin_boundaries", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) })
           ]),
           lastResult: expect.objectContaining({
@@ -690,6 +711,94 @@ describe("Safety Data API contract", () => {
         );
       }
     );
+  });
+
+  it("normalizes GDACS disaster alerts into warning and hazard layers", async () => {
+    const gdacsRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:gdacs="http://www.gdacs.org" xmlns:georss="http://www.georss.org/georss" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>GDACS RSS information</title>
+    <item>
+      <title>Orange flood alert in Czechia</title>
+      <description>On 28/06/2026, a flood started in Czechia.</description>
+      <link>https://www.gdacs.org/report.aspx?eventtype=FL&amp;eventid=1234567</link>
+      <pubDate>Sun, 28 Jun 2026 11:00:00 GMT</pubDate>
+      <gdacs:datemodified>Sun, 28 Jun 2026 12:00:00 GMT</gdacs:datemodified>
+      <gdacs:iscurrent>true</gdacs:iscurrent>
+      <gdacs:fromdate>Sun, 28 Jun 2026 10:00:00 GMT</gdacs:fromdate>
+      <gdacs:todate>Mon, 29 Jun 2026 10:00:00 GMT</gdacs:todate>
+      <dc:subject>FL2</dc:subject>
+      <guid isPermaLink="false">FL1234567</guid>
+      <geo:Point>
+        <geo:lat>50.0870</geo:lat>
+        <geo:long>14.4200</geo:long>
+      </geo:Point>
+      <gdacs:bbox>14.0 15.0 49.7 50.3</gdacs:bbox>
+      <georss:point>50.0870 14.4200</georss:point>
+      <gdacs:cap>https://www.gdacs.org/contentdata/resources/FL/1234567/cap_1234567.xml</gdacs:cap>
+      <gdacs:eventtype>FL</gdacs:eventtype>
+      <gdacs:alertlevel>Orange</gdacs:alertlevel>
+      <gdacs:alertscore>2</gdacs:alertscore>
+      <gdacs:episodealertlevel>Orange</gdacs:episodealertlevel>
+      <gdacs:episodealertscore>2</gdacs:episodealertscore>
+      <gdacs:eventid>1234567</gdacs:eventid>
+      <gdacs:episodeid>3</gdacs:episodeid>
+      <gdacs:severity unit="" value="2">Magnitude 2</gdacs:severity>
+      <gdacs:population unit="Population Affected" value="1200">1200 affected</gdacs:population>
+      <gdacs:vulnerability value="1" />
+      <gdacs:iso3>CZE</gdacs:iso3>
+      <gdacs:country>Czechia</gdacs:country>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/gdacs/rss.xml": gdacsRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["gdacs_alerts"],
+        gdacsRssUrl: `${baseUrl}/gdacs/rss.xml`
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=warnings,flood&source=gdacs_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(2);
+      expect(response.body.features).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            properties: expect.objectContaining({
+              layerId: "public.safety.flood",
+              providerLayerId: "safety.flood",
+              layer: "flood",
+              hazardType: "flood",
+              sourceId: "gdacs_alerts",
+              sourceName: "GDACS global disaster alerts",
+              severity: "warning",
+              urgency: "immediate",
+              countryCode: "CZE",
+              detailUrl: "https://www.gdacs.org/report.aspx?eventtype=FL&eventid=1234567",
+              basis: ["gdacs_rss", "FL"],
+              tags: expect.objectContaining({
+                eventType: "FL",
+                eventId: "1234567",
+                alertLevel: "Orange",
+                capUrl: "https://www.gdacs.org/contentdata/resources/FL/1234567/cap_1234567.xml"
+              })
+            })
+          }),
+          expect.objectContaining({
+            properties: expect.objectContaining({
+              layerId: "public.safety.warnings",
+              providerLayerId: "safety.warnings",
+              layer: "warnings",
+              hazardType: "flood",
+              category: "gdacs_flood_alert"
+            })
+          })
+        ])
+      );
+    });
   });
 
   it("projects CHMI fire danger warnings into the fire layer", async () => {

@@ -186,6 +186,9 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.safety.thunderstorm_risk`
 - `public.safety.air_quality`
 - `public.safety.air_quality_grid`
+- `public.safety.warnings`
+- `public.safety.fire`
+- `public.safety.flood`
 - `public.mobile.network`
 - `public.traffic.transit`
 - `public.traffic.road_events`
@@ -203,7 +206,7 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `diagnostic.mobile.coverage`
 - `diagnostic.mobile.ctu_measurements`
 
-`public.safety.flood` používá jako primární feature stream `GET /safety-data/api/v1/features?layers=flood&source=chmi_hydro`. Selectable hydrologické body mohou nést `properties.detailUrl`; COP má tento odkaz použít pro detail hlásného profilu s grafem měření a předpovědi, ne rekonstruovat upstream ČHMÚ URL na klientu.
+`public.safety.warnings` je obecná krizová vrstva z `safety-data`; vedle ČHMÚ výstrah může obsahovat GDACS veřejné katastrofické alerty. `public.safety.fire` kombinuje požární nebezpečí ČHMÚ, volitelný NASA FIRMS a GDACS wildfire alerty. `public.safety.flood` používá jako primární feature stream `GET /safety-data/api/v1/features?layers=flood&source=chmi_hydro`; GDACS flood alerty jsou přeshraniční/strategický doplněk. Selectable hydrologické body mohou nést `properties.detailUrl`; COP má tento odkaz použít pro detail hlásného profilu s grafem měření a předpovědi, ne rekonstruovat upstream ČHMÚ URL na klientu.
 
 `public.mobile.network` a `diagnostic.mobile.coverage` jsou polygonové grid vrstvy.
 Když COP požádá o široký bbox s nízkým limitem, SIM vrací prostorově

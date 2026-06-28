@@ -76,6 +76,19 @@ const NASA_FIRMS_LICENSE: SafetyDataLicense = {
   ]
 };
 
+const GDACS_LICENSE: SafetyDataLicense = {
+  name: "GDACS disaster alerts",
+  url: "https://www.gdacs.org/",
+  attribution: "Global Disaster Alert and Coordination System (GDACS)",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "GDACS provides near-real-time global disaster alerts with potential humanitarian impact.",
+    "GDACS resources are public; EU/JRC resource entries require attribution where stated.",
+    "Use as strategic/public situational context. Local operational decisions must rely on official Czech IZS and competent authority channels."
+  ]
+};
+
 const ADMIN_BOUNDARY_SEED_LICENSE: SafetyDataLicense = {
   name: "SIM seed administrative boundary reference",
   attribution: "CSM SIM",
@@ -106,6 +119,7 @@ export function createSafetyDataSources(config: SafetyDataConfig): SafetyDataSou
     chmi_alerts: new ChmiAlertsSource(config),
     chmi_hydro: new ChmiHydroSource(config),
     nasa_firms: new NasaFirmsSource(config),
+    gdacs_alerts: new GdacsAlertsSource(config),
     admin_boundaries: new AdminBoundarySource(config)
   };
 
@@ -119,6 +133,7 @@ export function allSourceDescriptors(config: SafetyDataConfig): SourceDescriptor
     new ChmiAlertsSource(config).descriptor,
     new ChmiHydroSource(config).descriptor,
     new NasaFirmsSource(config).descriptor,
+    new GdacsAlertsSource(config).descriptor,
     new AdminBoundarySource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
@@ -711,6 +726,60 @@ class NasaFirmsSource implements SafetyDataSource {
 
   cacheStats(): SourceCacheStats[] {
     return [cacheStatsFor("nasa_firms", [this.responseCache])];
+  }
+}
+
+class GdacsAlertsSource implements SafetyDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly responseCache: ManagedResponseCache<unknown>;
+
+  constructor(private readonly config: SafetyDataConfig) {
+    this.responseCache = new ManagedResponseCache<unknown>({
+      ttlMs: Math.max(300, config.gdacsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
+      maxEntries: Math.max(8, Math.min(128, config.cacheMaxEntries))
+    });
+    this.descriptor = {
+      sourceId: "gdacs_alerts",
+      label: "GDACS global disaster alerts",
+      enabled: config.enabledSources.includes("gdacs_alerts"),
+      mode: "live",
+      priority: 65,
+      layers: ["warnings", "fire", "flood"],
+      license: GDACS_LICENSE,
+      baseUrl: config.gdacsRssUrl,
+      updateCadenceSeconds: config.gdacsCacheTtlSeconds
+    };
+  }
+
+  async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.some((layer) => layer === "warnings" || layer === "fire" || layer === "flood")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const parsed = await this.responseCache.getOrLoad(this.config.gdacsRssUrl, async () => {
+      const xml = await requestText(this.config.gdacsRssUrl, this.config.requestTimeoutMs);
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        removeNSPrefix: true,
+        isArray: (name) => ["item", "resource"].includes(name)
+      });
+      return parser.parse(xml) as unknown;
+    });
+
+    const features = gdacsItems(parsed)
+      .flatMap((item) => mapGdacsItem(item, query, fetchedAt))
+      .filter((feature): feature is SafetyFeature => Boolean(feature))
+      .filter((feature) => isFeatureInBbox(feature, query.bbox))
+      .slice(0, query.limit)
+      .map((feature) => stripRawIfNeeded(feature, query.includeRaw));
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("gdacs_alerts", [this.responseCache])];
   }
 }
 
@@ -2023,6 +2092,326 @@ function mapFirmsDetection(
     }),
     raw: query.includeRaw ? row : undefined
   });
+}
+
+function gdacsItems(parsed: unknown): Record<string, unknown>[] {
+  const root = asRecord(parsed);
+  const rss = asRecord(root?.rss);
+  const channel = asRecord(rss?.channel);
+  return toArray(channel?.item)
+    .map(asRecord)
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function mapGdacsItem(item: Record<string, unknown>, query: SafetyQuery, fetchedAt: string): SafetyFeature[] {
+  const eventType = optionalString(item.eventtype)?.toUpperCase() ?? optionalString(item.subject)?.slice(0, 2).toUpperCase() ?? "UNKNOWN";
+  const eventLayer = gdacsPrimaryLayer(eventType);
+  const targetLayers = gdacsRequestedLayers(eventLayer, query.layers);
+  if (targetLayers.length === 0) {
+    return [];
+  }
+
+  const eventBbox = parseGdacsBbox(optionalString(item.bbox));
+  const point = gdacsMapPoint(item, eventBbox, query.bbox);
+  if (!point) {
+    return [];
+  }
+
+  const eventId = optionalString(item.eventid) ?? optionalString(item.guid) ?? stableToken(JSON.stringify(item));
+  const episodeId = optionalString(item.episodeid);
+  const alertLevel = optionalString(item.alertlevel);
+  const alertScore = optionalNumber(item.alertscore);
+  const episodeAlertScore = optionalNumber(item.episodealertscore);
+  const publishedAt = normalizeTimestamp(optionalString(item.pubDate));
+  const modifiedAt = normalizeTimestamp(optionalString(item.datemodified)) ?? publishedAt;
+  const fromDate = normalizeTimestamp(optionalString(item.fromdate));
+  const toDate = normalizeTimestamp(optionalString(item.todate));
+  const observedAt = modifiedAt ?? fromDate ?? publishedAt ?? fetchedAt;
+  const validFrom = fromDate ?? publishedAt ?? observedAt;
+  const validUntil = toDate ?? addSeconds(fetchedAt, 24 * 60 * 60);
+  const country = optionalString(item.country);
+  const iso3 = optionalString(item.iso3);
+  const title = optionalString(item.title) ?? `${gdacsEventTypeLabel(eventType)} alert`;
+  const link = optionalString(item.link);
+  const capUrl = optionalString(item.cap);
+  const isCurrent = parseBoolean(item.iscurrent);
+  const severity = gdacsSeverity(alertLevel, alertScore);
+  const confidence = gdacsConfidence(alertLevel, alertScore, isCurrent);
+  const status = isCurrent === false ? "past" : "active";
+  const population = asRecord(item.population);
+  const severityRecord = asRecord(item.severity);
+  const vulnerability = asRecord(item.vulnerability);
+  const glide = optionalString(item.glide);
+  const bboxTag = eventBbox ? `${eventBbox.west},${eventBbox.south},${eventBbox.east},${eventBbox.north}` : undefined;
+
+  return targetLayers.map((layer) => {
+    const category = gdacsCategory(eventType, layer);
+    return makePointFeature({
+      id: `${layer}:gdacs:${stableToken(`${eventType}:${eventId}:${episodeId ?? ""}:${layer}`)}`,
+      lon: point.lon,
+      lat: point.lat,
+      layer,
+      category,
+      hazardType: gdacsHazardType(eventType, layer),
+      typeCode: eventType,
+      sourceCode: optionalString(item.subject),
+      sourceSystem: "GDACS",
+      headline: title,
+      description: optionalString(item.description),
+      recommendedAction: "Použijte jako veřejný strategický krizový kontext; lokální opatření ověřujte přes oficiální kanály IZS a příslušné orgány.",
+      sourceId: "gdacs_alerts",
+      sourceName: "GDACS global disaster alerts",
+      license: GDACS_LICENSE,
+      observedAt,
+      effectiveAt: validFrom,
+      expiresAt: validUntil,
+      validFrom,
+      validUntil,
+      updatedAt: modifiedAt ?? observedAt,
+      confidence,
+      severity,
+      status,
+      urgency: gdacsUrgency(eventType, severity, isCurrent),
+      certainty: gdacsCertainty(isCurrent, severity),
+      areaName: country,
+      affectedArea: country,
+      countryCode: iso3,
+      detailUrl: link,
+      fireStatus: layer === "fire" ? status : undefined,
+      detectedAt: layer === "fire" ? observedAt : undefined,
+      sourceIncident: `${eventType}${eventId}`,
+      iconHint: layer === "fire" ? "fire" : layer === "flood" ? "flood" : "warning",
+      basis: ["gdacs_rss", eventType],
+      metrics: compactMetrics({
+        alertScore,
+        episodeAlertScore,
+        gdacsSeverityValue: optionalNumber(severityRecord?.["@_value"]),
+        populationValue: optionalNumber(population?.["@_value"]),
+        vulnerabilityValue: optionalNumber(vulnerability?.["@_value"]),
+        bboxWest: eventBbox?.west,
+        bboxSouth: eventBbox?.south,
+        bboxEast: eventBbox?.east,
+        bboxNorth: eventBbox?.north
+      }),
+      tags: compactTags({
+        eventType,
+        eventId,
+        episodeId,
+        alertLevel,
+        country,
+        iso3,
+        detailUrl: link,
+        capUrl,
+        glide,
+        isCurrent: isCurrent === undefined ? undefined : String(isCurrent),
+        gdacsBbox: bboxTag,
+        pointBasis: point.basis
+      }),
+      providerProperties: compactUnknownRecord({
+        gdacs: compactUnknownRecord({
+          eventType,
+          eventId,
+          episodeId,
+          alertLevel,
+          episodeAlertLevel: optionalString(item.episodealertlevel),
+          reportUrl: link,
+          capUrl,
+          iconUrl: optionalString(item.icon),
+          mapImageUrl: optionalString(item.mapimage),
+          mapLinkUrl: optionalString(item.maplink),
+          glide,
+          bbox: eventBbox,
+          pointBasis: point.basis
+        })
+      }),
+      raw: query.includeRaw ? item : undefined
+    });
+  });
+}
+
+function gdacsRequestedLayers(eventLayer: SafetyLayerId, requestedLayers: SafetyLayerId[]): SafetyLayerId[] {
+  const layers: SafetyLayerId[] = [];
+  if (requestedLayers.includes(eventLayer)) {
+    layers.push(eventLayer);
+  }
+  if (eventLayer !== "warnings" && requestedLayers.includes("warnings")) {
+    layers.push("warnings");
+  }
+  return Array.from(new Set(layers));
+}
+
+function gdacsPrimaryLayer(eventType: string): SafetyLayerId {
+  if (eventType === "WF") {
+    return "fire";
+  }
+  if (eventType === "FL") {
+    return "flood";
+  }
+  return "warnings";
+}
+
+function gdacsCategory(eventType: string, layer: SafetyLayerId): string {
+  if (layer === "fire") {
+    return "wildfire_alert";
+  }
+  if (layer === "flood") {
+    return "flood_alert";
+  }
+  return `gdacs_${gdacsHazardType(eventType, layer)}_alert`;
+}
+
+function gdacsHazardType(eventType: string, layer: SafetyLayerId): string {
+  if (layer === "fire") {
+    return "fire";
+  }
+  if (layer === "flood") {
+    return "flood";
+  }
+  switch (eventType) {
+    case "EQ":
+      return "earthquake";
+    case "TC":
+      return "tropical_cyclone";
+    case "VO":
+      return "volcano";
+    case "DR":
+      return "drought";
+    case "WF":
+      return "fire";
+    case "FL":
+      return "flood";
+    default:
+      return "disaster_alert";
+  }
+}
+
+function gdacsEventTypeLabel(eventType: string): string {
+  switch (eventType) {
+    case "EQ":
+      return "Earthquake";
+    case "TC":
+      return "Tropical cyclone";
+    case "FL":
+      return "Flood";
+    case "VO":
+      return "Volcano";
+    case "DR":
+      return "Drought";
+    case "WF":
+      return "Wildfire";
+    default:
+      return "Disaster";
+  }
+}
+
+function gdacsSeverity(alertLevel: string | undefined, alertScore: number | undefined): SafetySeverity {
+  const normalized = alertLevel?.toLowerCase();
+  if (normalized === "red" || (alertScore ?? 0) >= 3) {
+    return "critical";
+  }
+  if (normalized === "orange" || (alertScore ?? 0) >= 2) {
+    return "warning";
+  }
+  if (normalized === "green" || (alertScore ?? 0) >= 1) {
+    return "advisory";
+  }
+  return "info";
+}
+
+function gdacsConfidence(alertLevel: string | undefined, alertScore: number | undefined, isCurrent: boolean | undefined): number {
+  const base = alertLevel?.toLowerCase() === "red" ? 0.9 : alertLevel?.toLowerCase() === "orange" ? 0.82 : alertLevel?.toLowerCase() === "green" ? 0.68 : 0.55;
+  const scoreBoost = alertScore !== undefined ? Math.min(0.1, Math.max(0, alertScore) * 0.02) : 0;
+  const currentPenalty = isCurrent === false ? 0.18 : 0;
+  return round(Math.max(0.35, Math.min(0.96, base + scoreBoost - currentPenalty)), 2);
+}
+
+function gdacsUrgency(eventType: string, severity: SafetySeverity, isCurrent: boolean | undefined): SafetyUrgency {
+  if (isCurrent === false) {
+    return "past";
+  }
+  if (severity === "critical" || severity === "warning") {
+    return "immediate";
+  }
+  return eventType === "TC" ? "expected" : "unknown";
+}
+
+function gdacsCertainty(isCurrent: boolean | undefined, severity: SafetySeverity): SafetyCertainty {
+  if (isCurrent === false) {
+    return "observed";
+  }
+  return severity === "critical" || severity === "warning" ? "likely" : "possible";
+}
+
+function gdacsMapPoint(
+  item: Record<string, unknown>,
+  eventBbox: BoundingBox | undefined,
+  queryBbox: BoundingBox
+): { lon: number; lat: number; basis: string } | undefined {
+  const pointRecord = asRecord(item.Point);
+  const lat = optionalNumber(pointRecord?.lat);
+  const lon = optionalNumber(pointRecord?.long);
+  if (lat !== undefined && lon !== undefined && isPointInBbox(lon, lat, queryBbox)) {
+    return { lon, lat, basis: "geo_point" };
+  }
+
+  const georssPoint = optionalString(item.point);
+  if (georssPoint) {
+    const parts = georssPoint.split(/\s+/).map((part) => Number(part));
+    const georssLat = parts[0];
+    const georssLon = parts[1];
+    if (typeof georssLon === "number" && typeof georssLat === "number" && Number.isFinite(georssLon) && Number.isFinite(georssLat) && isPointInBbox(georssLon, georssLat, queryBbox)) {
+      return { lon: georssLon, lat: georssLat, basis: "georss_point" };
+    }
+  }
+
+  if (eventBbox && bboxIntersects(eventBbox, queryBbox)) {
+    return { ...bboxCenter(intersectBbox(eventBbox, queryBbox)), basis: "bbox_intersection_center" };
+  }
+
+  if (lat !== undefined && lon !== undefined) {
+    return { lon, lat, basis: "geo_point_outside_bbox" };
+  }
+  return undefined;
+}
+
+function parseGdacsBbox(value: string | undefined): BoundingBox | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parts = value.split(/\s+/).map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part))) {
+    return undefined;
+  }
+  const [west, east, south, north] = parts as [number, number, number, number];
+  if (west > east || south > north) {
+    return undefined;
+  }
+  return { west, south, east, north };
+}
+
+function intersectBbox(a: BoundingBox, b: BoundingBox): BoundingBox {
+  return {
+    west: Math.max(a.west, b.west),
+    south: Math.max(a.south, b.south),
+    east: Math.min(a.east, b.east),
+    north: Math.min(a.north, b.north)
+  };
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") {
+      return true;
+    }
+    if (normalized === "false") {
+      return false;
+    }
+  }
+  return undefined;
 }
 
 type HydroSeries = NonNullable<NonNullable<HydroNowResponse["objList"]>[number]["tsList"]>[number];
