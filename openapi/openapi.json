@@ -10490,6 +10490,7 @@
               "nonNotificationLayerSkippedCount",
               "staleSkippedCount",
               "belowSeveritySkippedCount",
+              "duplicateSkippedCount",
               "minSeverity",
               "includeStale"
             ],
@@ -10510,6 +10511,9 @@
                 "type": "integer"
               },
               "belowSeveritySkippedCount": {
+                "type": "integer"
+              },
+              "duplicateSkippedCount": {
                 "type": "integer"
               },
               "minSeverity": {

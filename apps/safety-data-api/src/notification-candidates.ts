@@ -26,6 +26,7 @@ export interface SafetyNotificationCandidateCollection {
     nonNotificationLayerSkippedCount: number;
     staleSkippedCount: number;
     belowSeveritySkippedCount: number;
+    duplicateSkippedCount: number;
     minSeverity: SafetySeverity;
     includeStale: boolean;
   };
@@ -117,6 +118,8 @@ export function buildSafetyNotificationCandidateCollection(
   let nonNotificationLayerSkippedCount = 0;
   let staleSkippedCount = 0;
   let belowSeveritySkippedCount = 0;
+  let duplicateSkippedCount = 0;
+  const seenCandidateIds = new Set<string>();
   const candidates: SafetyNotificationCandidate[] = [];
 
   for (const feature of collection.features) {
@@ -132,7 +135,13 @@ export function buildSafetyNotificationCandidateCollection(
       belowSeveritySkippedCount += 1;
       continue;
     }
-    candidates.push(buildSafetyNotificationCandidate(feature, collection.query));
+    const candidate = buildSafetyNotificationCandidate(feature, collection.query);
+    if (seenCandidateIds.has(candidate.candidateId)) {
+      duplicateSkippedCount += 1;
+      continue;
+    }
+    seenCandidateIds.add(candidate.candidateId);
+    candidates.push(candidate);
   }
 
   const skippedCount = collection.features.length - candidates.length;
@@ -160,6 +169,7 @@ export function buildSafetyNotificationCandidateCollection(
       nonNotificationLayerSkippedCount,
       staleSkippedCount,
       belowSeveritySkippedCount,
+      duplicateSkippedCount,
       minSeverity: options.minSeverity,
       includeStale: options.includeStale
     },

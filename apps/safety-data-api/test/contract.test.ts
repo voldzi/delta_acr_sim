@@ -359,6 +359,7 @@ describe("Safety Data API contract", () => {
         summary: expect.objectContaining({
           featureCount: 1,
           candidateCount: 1,
+          duplicateSkippedCount: 0,
           minSeverity: "advisory",
           includeStale: false
         }),

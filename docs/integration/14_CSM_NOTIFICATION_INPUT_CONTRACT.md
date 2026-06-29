@@ -77,6 +77,7 @@ Zkraceny tvar odpovedi:
   },
   "summary": {
     "candidateCount": 1,
+    "duplicateSkippedCount": 0,
     "minSeverity": "advisory",
     "includeStale": false
   },
@@ -119,7 +120,9 @@ Zkraceny tvar odpovedi:
 
 `feature.geometry` je urcena pro geofence rozhodnuti COP. COP muze misto ni
 pouzivat jen `geometrySummary`, pokud dela jen list nebo pocitadla. Raw upstream
-payloady nejsou soucasti kandidatniho kontraktu.
+payloady nejsou soucasti kandidatniho kontraktu. SIM kandidatni odpoved
+deduplikuje podle `candidateId`; pocet zahozenych duplicit je v
+`summary.duplicateSkippedCount`.
 
 ## Povinna pole pro COP
 

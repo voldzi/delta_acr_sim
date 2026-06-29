@@ -169,7 +169,9 @@ GET /safety-data/api/v1/notifications/candidates?bbox=...&layers=warnings,weathe
 
 Odpověď má `contractVersion=sim-safety-notification-candidates-v1`. Obsahuje
 pouze realné bezpečnostní kandidáty z vrstev `warnings`, `weather_alerts`,
-`fire` a `flood`, ne technické warningy služby. Každý kandidát nese:
+`fire` a `flood`, ne technické warningy služby. SIM kandidáty deduplikuje podle
+`candidateId`; počet zahozených duplicit vrací v
+`summary.duplicateSkippedCount`. Každý kandidát nese:
 
 - stabilní `candidateId` a `idempotencyKey`,
 - `feature` s geometrií pro geofence rozhodnutí COP,

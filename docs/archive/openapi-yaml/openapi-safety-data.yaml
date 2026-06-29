@@ -445,7 +445,7 @@ components:
               const: never_push_to_public_users
         summary:
           type: object
-          required: [featureCount, candidateCount, skippedCount, nonNotificationLayerSkippedCount, staleSkippedCount, belowSeveritySkippedCount, minSeverity, includeStale]
+          required: [featureCount, candidateCount, skippedCount, nonNotificationLayerSkippedCount, staleSkippedCount, belowSeveritySkippedCount, duplicateSkippedCount, minSeverity, includeStale]
           properties:
             featureCount:
               type: integer
@@ -458,6 +458,8 @@ components:
             staleSkippedCount:
               type: integer
             belowSeveritySkippedCount:
+              type: integer
+            duplicateSkippedCount:
               type: integer
             minSeverity:
               type: string
