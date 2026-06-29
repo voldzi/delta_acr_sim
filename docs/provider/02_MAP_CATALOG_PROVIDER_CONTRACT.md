@@ -244,6 +244,7 @@ GET /safety-data/api/v1/features/summary
 GET /safety-data/api/v1/features/{featureId}
 GET /safety-data/api/v1/features/{featureId}/geometry
 GET /safety-data/api/v1/taxonomy
+GET /safety-data/api/v1/notifications/candidates
 ```
 
 Všechny feature endpointy používají stejné query parametry jako `/features`
@@ -257,3 +258,9 @@ ji klient skutečně potřebuje.
 `taxonomy` je lehký číselníkový endpoint. COP ho používá pro stabilní mapování
 vrstev, severity, rendering rolí a u `safety-data` také pro autoritativní ČHMÚ
 SIVS/CAP mapování `sourceCode -> typeCode`.
+
+`/safety-data/api/v1/notifications/candidates` je server-to-server pomocný
+endpoint pro COP. Vrací kandidáty vhodné pro CSM Messaging, včetně
+lokalizovaných textů, geometrie pro audience/geofence rozhodnutí a doporučeného
+`X-Idempotency-Key`. Nejde o push službu: COP stále rozhoduje o adresátech a
+CSM Messaging zajišťuje doručení a deduplikaci.

@@ -13,8 +13,9 @@ import {
 } from "./feature-views.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
+import { buildSafetyNotificationCandidateCollection, type SafetyNotificationCandidateOptions } from "./notification-candidates.js";
 import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
-import type { BoundingBox, HydroSeriesId, HydroStationDetail, HydroStationDetailQuery, SafetyDataPublicConfig, SafetyDataSourceId, SafetyLayerId, SafetyQuery } from "./types.js";
+import type { BoundingBox, HydroSeriesId, HydroStationDetail, HydroStationDetailQuery, SafetyDataPublicConfig, SafetyDataSourceId, SafetyLayerId, SafetyQuery, SafetySeverity } from "./types.js";
 
 export interface SafetyDataAppContext {
   config: SafetyDataConfig;
@@ -192,6 +193,25 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
     res.json(buildSafetyFeatureSummaryCollection(collection));
   });
 
+  app.get("/api/v1/notifications/candidates", async (req, res) => {
+    const query = parseSafetyQuery(req.query, context.config, {
+      defaultLayers: ["warnings", "weather_alerts", "fire", "flood"],
+      defaultLimit: 100
+    });
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    const options = parseNotificationCandidateOptions(req.query);
+    if (!options.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", options.error);
+    }
+    const collection = await context.aggregation.getFeatures({
+      ...query.value,
+      includeRaw: false
+    });
+    res.json(buildSafetyNotificationCandidateCollection(collection, options.value));
+  });
+
   app.get("/api/v1/features/:featureId/geometry", async (req, res) => {
     const featureId = req.params.featureId;
     if (!featureId) {
@@ -254,13 +274,14 @@ function compatibilityAliasHeaders(successorPath: string): Record<string, string
 
 function parseSafetyQuery(
   raw: Record<string, unknown>,
-  config: SafetyDataConfig
+  config: SafetyDataConfig,
+  options: { defaultLayers?: SafetyLayerId[]; defaultLimit?: number } = {}
 ): { ok: true; value: SafetyQuery } | { ok: false; error: string } {
   const bbox = parseBbox(raw.bbox, config.defaultBbox);
   if (!bbox.ok) {
     return { ok: false, error: bbox.error };
   }
-  const layers = parseLayers(raw.layer ?? raw.layers);
+  const layers = parseLayers(raw.layer ?? raw.layers, options.defaultLayers);
   if (layers.length === 0) {
     return { ok: false, error: "No valid safety layers requested." };
   }
@@ -274,7 +295,7 @@ function parseSafetyQuery(
       bbox: bbox.value,
       layers,
       sourceIds: sources,
-      limit: parseLimit(raw.limit, 250, 1000),
+      limit: parseLimit(raw.limit, options.defaultLimit ?? 250, 1000),
       includeRaw: parseBoolean(raw.includeRaw)
     }
   };
@@ -296,16 +317,41 @@ function parseBbox(value: unknown, fallback: BoundingBox): { ok: true; value: Bo
   return { ok: true, value: { west, south, east, north } };
 }
 
-function parseLayers(value: unknown): SafetyLayerId[] {
+function parseLayers(value: unknown, fallback: SafetyLayerId[] = ["weather_alerts", "fire", "flood", "boundary_admin"]): SafetyLayerId[] {
   const allowed = new Set<SafetyLayerId>(["weather_alerts", "warnings", "fire", "flood", "boundary_admin"]);
   const raw = asString(value);
   if (!raw) {
-    return ["weather_alerts", "fire", "flood", "boundary_admin"];
+    return fallback;
   }
   return raw
     .split(",")
     .map((item) => item.trim())
     .filter((item): item is SafetyLayerId => allowed.has(item as SafetyLayerId));
+}
+
+function parseNotificationCandidateOptions(
+  raw: Record<string, unknown>
+): { ok: true; value: SafetyNotificationCandidateOptions } | { ok: false; error: string } {
+  const minSeverity = parseSeverity(raw.minSeverity ?? raw.minimumSeverity, "advisory");
+  if (!minSeverity) {
+    return { ok: false, error: "minSeverity must be one of info,advisory,warning,critical." };
+  }
+  return {
+    ok: true,
+    value: {
+      minSeverity,
+      includeStale: parseBoolean(raw.includeStale)
+    }
+  };
+}
+
+function parseSeverity(value: unknown, fallback: SafetySeverity): SafetySeverity | undefined {
+  const raw = asString(value);
+  if (!raw) {
+    return fallback;
+  }
+  const allowed = new Set<SafetySeverity>(["info", "advisory", "warning", "critical"]);
+  return allowed.has(raw as SafetySeverity) ? (raw as SafetySeverity) : undefined;
 }
 
 function parseSources(value: unknown, fallback: SafetyDataSourceId[]): SafetyDataSourceId[] {

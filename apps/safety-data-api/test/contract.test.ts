@@ -343,6 +343,85 @@ describe("Safety Data API contract", () => {
     );
   });
 
+  it("exposes COP and CSM Messaging notification candidates without raw provider payloads", async () => {
+    const response = await request(app).get("/api/v1/notifications/candidates?layers=weather_alerts&source=mock&limit=5").expect(200);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-safety-notification-candidates-v1",
+        providerId: "sim.safety-data",
+        policy: expect.objectContaining({
+          audienceDecisionOwner: "cop",
+          deliveryOwner: "csm-messaging",
+          notificationType: "safety.alert",
+          technicalWarningsPolicy: "never_push_to_public_users"
+        }),
+        summary: expect.objectContaining({
+          featureCount: 1,
+          candidateCount: 1,
+          minSeverity: "advisory",
+          includeStale: false
+        }),
+        candidates: [
+          expect.objectContaining({
+            candidateId: expect.stringContaining("sim.safety-data:safety.weather_alerts:weather_alerts:mock:wind-prague-west"),
+            idempotencyKey: expect.stringContaining("sim.safety-data:safety.weather_alerts:weather_alerts:mock:wind-prague-west"),
+            notificationType: "safety.alert",
+            audienceDecisionOwner: "cop",
+            deliveryOwner: "csm-messaging",
+            feature: expect.objectContaining({
+              featureId: "weather_alerts:mock:wind-prague-west",
+              layerId: "public.safety.weather_alerts",
+              providerLayerId: "safety.weather_alerts",
+              layer: "weather_alerts",
+              severity: "advisory",
+              geometry: expect.objectContaining({ type: "Point" }),
+              geometrySummary: expect.objectContaining({ type: "Point", coordinateCount: 1 }),
+              links: expect.objectContaining({
+                detail: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west?"),
+                geometry: expect.stringContaining("/safety-data/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?")
+              })
+            }),
+            message: expect.objectContaining({
+              title: expect.objectContaining({ cs: "Synthetic wind warning", en: "Synthetic wind warning" }),
+              body: expect.objectContaining({ cs: expect.any(String), en: expect.any(String) }),
+              recommendedAction: expect.objectContaining({ cs: expect.any(String), en: expect.any(String) }),
+              localeFallback: "cs",
+              suggestedAlertId: expect.stringContaining("sim.safety-data:safety.weather_alerts:weather_alerts:mock:wind-prague-west"),
+              suggestedDeepLink: expect.stringContaining("csm://map/alert/")
+            }),
+            messaging: expect.objectContaining({
+              suggestedHeaders: expect.objectContaining({
+                "X-Source-System-Id": "sim.safety-data",
+                "X-Contract-Version": "csm-notification-request-v1",
+                "X-Idempotency-Key": expect.stringContaining("sim.safety-data:safety.weather_alerts:weather_alerts:mock:wind-prague-west")
+              }),
+              requiredAudienceDecisionOwner: "cop",
+              recommendedChannels: ["push", "in_app"]
+            }),
+            audit: expect.objectContaining({
+              basis: expect.any(Array),
+              source: "mock"
+            })
+          })
+        ]
+      })
+    );
+    expect(JSON.stringify(response.body)).not.toContain('"raw"');
+
+    const filtered = await request(app).get("/api/v1/notifications/candidates?layers=weather_alerts&source=mock&minSeverity=critical").expect(200);
+    expect(filtered.body.summary).toEqual(
+      expect.objectContaining({
+        featureCount: 1,
+        candidateCount: 0,
+        belowSeveritySkippedCount: 1,
+        minSeverity: "critical"
+      })
+    );
+
+    await request(app).get("/api/v1/notifications/candidates?minSeverity=urgent").expect(400);
+  });
+
   it("exposes cache metrics", async () => {
     await request(app).get("/api/v1/features?layers=weather_alerts,fire,flood,boundary_admin&source=mock&limit=10").expect(200);
 

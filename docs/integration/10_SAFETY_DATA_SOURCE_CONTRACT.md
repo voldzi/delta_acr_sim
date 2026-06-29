@@ -9,6 +9,7 @@ Safety Data API je samostatný COM zdroj pro veřejná bezpečnostní data. Kont
 ```text
 GET /safety-data/api/v1/catalog
 GET /safety-data/api/v1/features
+GET /safety-data/api/v1/notifications/candidates
 GET /safety-data/api/v1/hydro/stations/{stationId}/observations
 ```
 
@@ -158,6 +159,33 @@ Endpoint obsahuje vrstvy, normalized severity a autoritativní ČHMÚ SIVS/CAP
 slovník. COP má typ jevu odvozovat z `typeCode`/`sourceCode` a tohoto
 číselníku, ne z českého nebo anglického textu výstrahy.
 
+## Kandidáti pro COP a CSM Messaging notifikace
+
+SIM poskytuje samostatný lehký kandidátní endpoint pro notifikace:
+
+```http
+GET /safety-data/api/v1/notifications/candidates?bbox=...&layers=warnings,weather_alerts,fire,flood&minSeverity=advisory&limit=100
+```
+
+Odpověď má `contractVersion=sim-safety-notification-candidates-v1`. Obsahuje
+pouze realné bezpečnostní kandidáty z vrstev `warnings`, `weather_alerts`,
+`fire` a `flood`, ne technické warningy služby. Každý kandidát nese:
+
+- stabilní `candidateId` a `idempotencyKey`,
+- `feature` s geometrií pro geofence rozhodnutí COP,
+- lokalizované `message.title`, `message.body` a `message.recommendedAction`
+  pro `cs` a `en`,
+- doporučené hlavičky pro CSM Messaging v `messaging.suggestedHeaders`,
+- `audit` blok se zdrojem, licencí a základem klasifikace.
+
+SIM zde stále nerozhoduje o adresátech. COP musí kandidáty filtrovat podle
+uživatele, role, oprávnění, sledované oblasti, aktuální polohy a aplikační
+politiky. CSM Messaging přijímá až finální požadavek od COP a deduplikuje jej
+podle `X-Idempotency-Key`.
+
+Detailní hranice odpovědností je v
+[`14_CSM_NOTIFICATION_INPUT_CONTRACT.md`](14_CSM_NOTIFICATION_INPUT_CONTRACT.md).
+
 Specializovaná pole:
 
 - Požáry: `fireStatus`, `detectedAt`, `sourceSatellite`, `sourceIncident`, `confidence`, `intensity`, `frp`.
@@ -229,6 +257,11 @@ Katalogove vrstvy `public.safety.warnings`, `public.safety.weather_alerts`,
 vyhodnoceni notifikace. COP ma z feature vytvorit stabilni `Idempotency-Key` a
 poslat pozadavek do CSM Messaging pouze tehdy, kdyz se udalost tyka konkretniho
 uzivatele, skupiny nebo sledovane oblasti.
+
+Preferovany vstup pro nove COP notifikace je
+`GET /safety-data/api/v1/notifications/candidates`, protoze SIM v nem uz
+odfiltruje nenotifikovatelne vrstvy, prida lokalizovane texty a pripravi
+doporuceny `X-Idempotency-Key`.
 
 Technicke `response.warnings`, stale stav zdroju a degradace upstreamu patri do
 provozniho dohledu. Nesmí se posilat obcanum jako safety push, pokud nejsou

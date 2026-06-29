@@ -104,6 +104,26 @@ paths:
                 $ref: "#/components/schemas/ProviderFeatureSummaryCollection"
         "400":
           $ref: "#/components/responses/Problem"
+  /notifications/candidates:
+    get:
+      summary: Return COP and CSM Messaging safety notification candidates
+      description: Returns candidate safety alerts with localized message text, geometry for COP audience decisions and suggested idempotency headers for CSM Messaging. SIM does not decide recipients or deliver push notifications.
+      parameters:
+        - $ref: "#/components/parameters/Bbox"
+        - $ref: "#/components/parameters/Layers"
+        - $ref: "#/components/parameters/Sources"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/MinSeverity"
+        - $ref: "#/components/parameters/IncludeStale"
+      responses:
+        "200":
+          description: Safety notification candidate collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SafetyNotificationCandidateCollection"
+        "400":
+          $ref: "#/components/responses/Problem"
   /features/{featureId}/geometry:
     get:
       summary: Return geometry for one safety feature
@@ -219,6 +239,23 @@ components:
         type: integer
         default: 250
         maximum: 1000
+    MinSeverity:
+      name: minSeverity
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [info, advisory, warning, critical]
+        default: advisory
+      description: Minimum safety severity to include in notification candidates.
+    IncludeStale:
+      name: includeStale
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: false
+      description: Include stale safety features as notification candidates.
     FeatureId:
       name: featureId
       in: path
@@ -367,6 +404,239 @@ components:
           type: array
           items:
             type: string
+    SafetyNotificationCandidateCollection:
+      type: object
+      required: [contractVersion, generatedAt, providerId, source, query, policy, summary, candidates, sources, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-safety-notification-candidates-v1
+        generatedAt:
+          type: string
+          format: date-time
+        providerId:
+          type: string
+          const: sim.safety-data
+        source:
+          type: object
+          additionalProperties: true
+        query:
+          type: object
+          additionalProperties: true
+        policy:
+          type: object
+          required: [audienceDecisionOwner, deliveryOwner, notificationType, deduplicationKeyFields, technicalWarningsPolicy]
+          properties:
+            audienceDecisionOwner:
+              type: string
+              const: cop
+            deliveryOwner:
+              type: string
+              const: csm-messaging
+            notificationType:
+              type: string
+              const: safety.alert
+            deduplicationKeyFields:
+              type: array
+              items:
+                type: string
+            technicalWarningsPolicy:
+              type: string
+              const: never_push_to_public_users
+        summary:
+          type: object
+          required: [featureCount, candidateCount, skippedCount, nonNotificationLayerSkippedCount, staleSkippedCount, belowSeveritySkippedCount, minSeverity, includeStale]
+          properties:
+            featureCount:
+              type: integer
+            candidateCount:
+              type: integer
+            skippedCount:
+              type: integer
+            nonNotificationLayerSkippedCount:
+              type: integer
+            staleSkippedCount:
+              type: integer
+            belowSeveritySkippedCount:
+              type: integer
+            minSeverity:
+              type: string
+              enum: [info, advisory, warning, critical]
+            includeStale:
+              type: boolean
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/SafetyNotificationCandidate"
+        sources:
+          type: array
+        warnings:
+          type: array
+          items:
+            type: string
+    SafetyNotificationCandidate:
+      type: object
+      required: [candidateId, idempotencyKey, notificationType, audienceDecisionOwner, deliveryOwner, feature, message, messaging, audit]
+      properties:
+        candidateId:
+          type: string
+        idempotencyKey:
+          type: string
+        notificationType:
+          type: string
+          const: safety.alert
+        audienceDecisionOwner:
+          type: string
+          const: cop
+        deliveryOwner:
+          type: string
+          const: csm-messaging
+        feature:
+          type: object
+          required: [featureId, providerId, layerId, providerLayerId, layer, category, hazardType, sourceId, sourceName, severity, urgency, certainty, confidence, status, stale, observedAt, validFrom, updatedAt, geometry, geometrySummary, links]
+          properties:
+            featureId:
+              type: string
+            providerId:
+              type: string
+              const: sim.safety-data
+            layerId:
+              type: string
+              enum: [public.safety.warnings, public.safety.weather_alerts, public.safety.fire, public.safety.flood]
+            providerLayerId:
+              type: string
+              enum: [safety.warnings, safety.weather_alerts, safety.fire, safety.flood]
+            layer:
+              type: string
+              enum: [warnings, weather_alerts, fire, flood]
+            category:
+              type: string
+            hazardType:
+              type: string
+            typeCode:
+              type: string
+            sourceCode:
+              type: string
+            sourceSystem:
+              type: string
+            sourceId:
+              type: string
+            sourceName:
+              type: string
+            severity:
+              type: string
+              enum: [info, advisory, warning, critical]
+            urgency:
+              type: string
+            certainty:
+              type: string
+            confidence:
+              type: number
+            status:
+              type: string
+            stale:
+              type: boolean
+            observedAt:
+              type: string
+              format: date-time
+            validFrom:
+              type: string
+              format: date-time
+            validUntil:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            areaName:
+              type: string
+            affectedArea:
+              type: string
+            geometry:
+              type: object
+              additionalProperties: true
+            geometrySummary:
+              $ref: "#/components/schemas/FeatureGeometrySummary"
+            links:
+              type: object
+              required: [detail, geometry]
+              properties:
+                detail:
+                  type: string
+                geometry:
+                  type: string
+                sourceDetail:
+                  type: string
+                timeline:
+                  type: string
+        message:
+          type: object
+          required: [title, body, recommendedAction, localeFallback, severityLabel, suggestedAlertId, suggestedDeepLink]
+          properties:
+            title:
+              type: object
+              additionalProperties:
+                type: string
+            body:
+              type: object
+              additionalProperties:
+                type: string
+            recommendedAction:
+              type: object
+              additionalProperties:
+                type: string
+            localeFallback:
+              type: string
+              const: cs
+            severityLabel:
+              type: object
+              additionalProperties:
+                type: string
+            suggestedAlertId:
+              type: string
+            suggestedDeepLink:
+              type: string
+        messaging:
+          type: object
+          required: [suggestedHeaders, requiredAudienceDecisionOwner, deliveryPrecondition, recommendedChannels]
+          properties:
+            suggestedHeaders:
+              type: object
+              required: [X-Source-System-Id, X-Contract-Version, X-Idempotency-Key]
+              properties:
+                X-Source-System-Id:
+                  type: string
+                  const: sim.safety-data
+                X-Contract-Version:
+                  type: string
+                  const: csm-notification-request-v1
+                X-Idempotency-Key:
+                  type: string
+            requiredAudienceDecisionOwner:
+              type: string
+              const: cop
+            deliveryPrecondition:
+              type: string
+            recommendedChannels:
+              type: array
+              items:
+                type: string
+                enum: [push, in_app]
+        audit:
+          type: object
+          required: [basis, source, sourceName, license]
+          properties:
+            basis:
+              type: array
+              items:
+                type: string
+            source:
+              type: string
+            sourceName:
+              type: string
+            license:
+              type: object
+              additionalProperties: true
     ProviderFeatureSummary:
       type: object
       required: [featureId, layer, layerId, providerId, providerLayerId, sourceId, sourceName, label, category, hazardType, severity, status, stale, confidence, observedAt, validFrom, updatedAt, geometrySummary, links]
