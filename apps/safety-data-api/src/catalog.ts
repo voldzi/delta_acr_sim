@@ -37,8 +37,8 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 300,
         cacheTtlSeconds: config.cacheTtlSeconds,
         styleProfile: "safety-warning-v1",
-        sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents", "road_srti_lod"],
-        query: query(["warnings"], ["chmi_alerts", "gdacs_alerts", "hzs_incidents", "road_srti_lod"]),
+        sourceIds: ["gdacs_alerts", "hzs_incidents", "road_srti_lod"],
+        query: query(["warnings"], ["gdacs_alerts", "hzs_incidents", "road_srti_lod"]),
         notificationPolicy: notificationPolicy("warning"),
         legal: {
           attribution:

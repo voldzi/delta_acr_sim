@@ -328,8 +328,7 @@ class ChmiAlertsSource implements SafetyDataSource {
       return parser.parse(xml) as unknown;
     });
 
-    const capLayer = query.layers.includes("warnings") && !query.layers.includes("weather_alerts") ? "warnings" : "weather_alerts";
-    const pointFeatures = mapCapAlert(parsed, query, fetchedAt, capUrl, capLayer).filter((feature) => isFeatureInBbox(feature, query.bbox));
+    const pointFeatures = mapCapAlert(parsed, query, fetchedAt, capUrl).filter((feature) => isFeatureInBbox(feature, query.bbox));
     const polygonized = await this.polygonizeCapFeatures(pointFeatures, query);
     const weatherFeatures = weatherRequested ? polygonized.features : [];
     const fireRiskFeatures = fireRequested
@@ -1604,7 +1603,7 @@ interface CapInfoGroup {
   languages: string[];
 }
 
-function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, capUrl: string, layer: Extract<SafetyLayerId, "weather_alerts" | "warnings">): SafetyFeature[] {
+function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, capUrl: string): SafetyFeature[] {
   const root = asRecord(payload) ?? {};
   const alert = asRecord(root.alert) ?? root;
   const identifier = optionalString(alert.identifier) ?? stableToken(capUrl);
@@ -1661,10 +1660,10 @@ function mapCapAlert(payload: unknown, query: SafetyQuery, fetchedAt: string, ca
     const primaryLanguage = localized.cs ? "cs" : primary.language;
 
     return makePointFeature({
-      id: `${layer}:chmi_alerts:${stableToken(group.key)}`,
+      id: `weather_alerts:chmi_alerts:${stableToken(group.key)}`,
       lon: center.lon,
       lat: center.lat,
-      layer,
+      layer: "weather_alerts",
       category,
       hazardType: classification.hazardType,
       typeCode,
@@ -3967,8 +3966,9 @@ function weatherIconHint(event: string, headline: string): string {
 function styleHint(layer: SafetyLayerId, severity: SafetySeverity): string {
   switch (layer) {
     case "weather_alerts":
-    case "warnings":
       return `safety-weather-${severity}`;
+    case "warnings":
+      return `safety-warning-${severity}`;
     case "fire":
       return `safety-fire-${severity}`;
     case "flood":
@@ -4065,14 +4065,11 @@ function splitCsvLine(line: string): string[] {
 }
 
 function layerRequested(layers: SafetyLayerId[], featureLayer: SafetyLayerId): boolean {
-  if (featureLayer === "weather_alerts" || featureLayer === "warnings") {
-    return isWeatherAlertsRequested(layers);
-  }
   return layers.includes(featureLayer);
 }
 
 function isWeatherAlertsRequested(layers: SafetyLayerId[]): boolean {
-  return layers.includes("weather_alerts") || layers.includes("warnings");
+  return layers.includes("weather_alerts");
 }
 
 function mapAdminBoundaryRow(row: AdminBoundaryRow, fetchedAt: string, includeRaw: boolean): SafetyFeature | undefined {

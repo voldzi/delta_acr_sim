@@ -391,9 +391,6 @@ function layerRank(value: SafetyLayerId): number {
 }
 
 function layerRequested(layers: SafetyLayerId[], featureLayer: SafetyLayerId): boolean {
-  if (featureLayer === "weather_alerts" || featureLayer === "warnings") {
-    return layers.includes("weather_alerts") || layers.includes("warnings");
-  }
   return layers.includes(featureLayer);
 }
 

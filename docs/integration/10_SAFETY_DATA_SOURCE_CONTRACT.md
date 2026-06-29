@@ -25,7 +25,7 @@ Podporované query parametry:
 
 - `bbox=west,south,east,north` ve WGS84.
 - `layers=warnings,weather_alerts,fire,flood,boundary_admin`.
-- `layers=warnings` je obecná krizová vrstva pro veřejné výstrahy, katastrofické alerty, probíhající HZS/IZS incidenty a normalizované dopravně-bezpečnostní SRTI události; `weather_alerts` zůstává specializovaná meteorologická vrstva.
+- `layers=warnings` je obecná krizová vrstva pro katastrofické alerty, probíhající HZS/IZS incidenty a normalizované dopravně-bezpečnostní SRTI události; `weather_alerts` zůstává specializovaná meteorologická vrstva. SIM běžné ČHMÚ CAP meteorologické výstrahy do `warnings` nepromítá, aby COP nezobrazoval stejný administrativní polygon ve dvou bezpečnostních vrstvách.
 - `source=chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries` nebo `source=mock`.
 - `limit=1..1000`.
 - `includeRaw=1` pouze pro diagnostiku.
@@ -274,7 +274,7 @@ Detailni kontrakt je v
 
 ## Zdroje v pilotu
 
-- `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`; požární nebezpečí se kromě `public.safety.weather_alerts` projektuje také do `public.safety.fire` jako `fire_weather_risk`.
+- `chmi_alerts`: ČHMÚ CAP výstrahy z `https://opendata.chmi.cz/meteorology/weather/alerts/cap/`; SIM je publikuje jako `public.safety.weather_alerts`. Požární nebezpečí se navíc projektuje také do `public.safety.fire` jako `fire_weather_risk`. ČHMÚ CAP se nepublikuje jako obecné `public.safety.warnings`.
 - `chmi_hydro`: ČHMÚ hydrologické stanice z `https://opendata.chmi.cz/hydrology/`; SIM používá aktuální časové řady, omezený `recent` backfill a lokální JSONL historii pro trend, SPA klasifikaci, průtokové prahy, teplotu vody, plochu povodí a hydrologické pořadí.
 - `nasa_firms`: NASA FIRMS aktivní požáry/tepelné anomálie z Area CSV API; vyžaduje `NASA_FIRMS_MAP_KEY`.
 - `gdacs_alerts`: GDACS veřejné RSS/GeoRSS katastrofické alerty z `https://www.gdacs.org/xml/rss.xml`; bez klíče. `FL` se promítá do `flood`, `WF` do `fire`, ostatní typy jako `EQ`, `TC`, `VO`, `DR` do `warnings`. Pokud COP požádá o `warnings`, SIM vrací i obecnou kopii GDACS požáru/povodně jako krizový alert.

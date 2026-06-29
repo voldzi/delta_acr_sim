@@ -343,8 +343,9 @@ function safetyProviderLayerId(layer: SafetyLayerId): string {
     case "boundary_admin":
       return "boundary.admin";
     case "weather_alerts":
-    case "warnings":
       return "safety.weather_alerts";
+    case "warnings":
+      return "safety.warnings";
   }
 }
 
@@ -357,7 +358,8 @@ function safetyCatalogLayerId(layer: SafetyLayerId): string {
     case "boundary_admin":
       return "public.boundary.admin";
     case "weather_alerts":
-    case "warnings":
       return "public.safety.weather_alerts";
+    case "warnings":
+      return "public.safety.warnings";
   }
 }

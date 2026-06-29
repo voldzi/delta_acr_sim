@@ -183,7 +183,7 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.safety.warnings",
           categories: expect.arrayContaining(["disaster_alert", "road_incident"]),
           role: "overlay",
-          sourceIds: ["chmi_alerts", "gdacs_alerts", "hzs_incidents", "road_srti_lod"]
+          sourceIds: ["gdacs_alerts", "hzs_incidents", "road_srti_lod"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.weather_alerts",
@@ -649,6 +649,41 @@ describe("Safety Data API contract", () => {
         expect(response.body.summary.featureCount).toBe(0);
         expect(response.body.summary.staleFeatureCount).toBe(0);
         expect(response.body.warnings).toEqual([]);
+      }
+    );
+  });
+
+  it("keeps active CHMI CAP alerts out of the generic crisis warnings layer", async () => {
+    await withFixtureServer(
+      {
+        "/cap/": '<html><body><a href="alert.xml">alert.xml</a> 28-May-2026 12:00</body></html>',
+        "/cap/alert.xml": chmiBilingualHeatCapFixture()
+      },
+      async (baseUrl) => {
+        const configured = await createApp({
+          ...config,
+          enabledSources: ["chmi_alerts"],
+          chmiAlertsCapBaseUrl: `${baseUrl}/cap/`
+        });
+
+        const warnings = await request(configured.app)
+          .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=warnings&source=chmi_alerts&limit=10")
+          .expect(200);
+        expect(warnings.body.summary.featureCount).toBe(0);
+        expect(warnings.body.features).toEqual([]);
+
+        const weatherAlerts = await request(configured.app)
+          .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=weather_alerts&source=chmi_alerts&limit=10")
+          .expect(200);
+        expect(weatherAlerts.body.summary.featureCount).toBe(1);
+        expect(weatherAlerts.body.features[0].properties).toEqual(
+          expect.objectContaining({
+            layer: "weather_alerts",
+            layerId: "public.safety.weather_alerts",
+            providerLayerId: "safety.weather_alerts",
+            sourceId: "chmi_alerts"
+          })
+        );
       }
     );
   });
@@ -1248,7 +1283,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("keeps layers represented when a low limit is requested", async () => {
-    const response = await request(app).get("/api/v1/features?layers=warnings,flood&source=mock&limit=2").expect(200);
+    const response = await request(app).get("/api/v1/features?layers=weather_alerts,flood&source=mock&limit=2").expect(200);
 
     const layers = new Set(response.body.features.map((feature: { properties: { layer: string } }) => feature.properties.layer));
     expect(layers).toEqual(new Set(["weather_alerts", "flood"]));
