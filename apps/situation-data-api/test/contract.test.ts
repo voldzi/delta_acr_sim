@@ -2334,6 +2334,7 @@ describe("Situation Data API contract", () => {
 
   it("projects public static GTFS stops from a source-level cache", async () => {
     const staticPayload = zipSync({
+      "route_stops.txt": strToU8(["route_id,direction_id,stop_id,stop_sequence", "L1,0,U1,1"].join("\n")),
       "stops.txt": strToU8(
         [
           "stop_id,stop_code,stop_name,stop_lat,stop_lon,zone_id,location_type,parent_station,wheelchair_boarding",

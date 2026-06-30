@@ -5723,7 +5723,7 @@ async function fetchPublicTransitStaticFeedStops(
     "user-agent": "csm-sim-situation-data/0.1"
   });
   const files = unzipSync(archive);
-  const stopsName = Object.keys(files).find((name) => name.toLowerCase().endsWith("stops.txt"));
+  const stopsName = Object.keys(files).find((name) => gtfsArchiveBasename(name) === "stops.txt");
   if (!stopsName) {
     throw new Error(`public_transit_static GTFS archive did not contain stops.txt: ${feed.url}`);
   }
@@ -5797,6 +5797,10 @@ function mapGtfsStopRecord(
     parentStation: optionalString(record.parent_station),
     wheelchairBoarding: optionalString(record.wheelchair_boarding)
   };
+}
+
+function gtfsArchiveBasename(path: string): string {
+  return path.split(/[\\/]/).pop()?.toLowerCase() ?? path.toLowerCase();
 }
 
 async function fetchRoadSrtiLodEvents(config: SituationDataConfig): Promise<RoadSrtiLodEvent[]> {
