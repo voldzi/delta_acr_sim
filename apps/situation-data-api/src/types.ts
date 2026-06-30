@@ -263,6 +263,8 @@ export interface SituationDataPublicConfig {
     osmPostgis: number;
     osmOverpass: number;
     ctuStationaryMobile: number;
+    pidGtfsRt: number;
+    pidGtfsStatic: number;
     idsjmkVehiclePositions: number;
     roadSrtiLod: number;
     safetyData: number;

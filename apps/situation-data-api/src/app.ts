@@ -14,6 +14,7 @@ import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
+import { TransitDetailService } from "./transit-detail.js";
 import {
   buildSituationFeatureDetail,
   buildSituationFeatureDensityCollection,
@@ -41,6 +42,7 @@ export interface SituationDataAppContext {
   radarFrames: ChmiWeatherRadarFrameCatalog;
   weatherStationDetails: ChmiWeatherStationDetailService;
   weatherWebcams: ChmiWeatherWebcamCatalog;
+  transitDetails: TransitDetailService;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -53,6 +55,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const radarFrames = new ChmiWeatherRadarFrameCatalog(config);
   const weatherStationDetails = new ChmiWeatherStationDetailService(config);
   const weatherWebcams = new ChmiWeatherWebcamCatalog(config);
+  const transitDetails = new TransitDetailService(config);
   const context: SituationDataAppContext = {
     config,
     aggregation,
@@ -61,7 +64,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     radioPlanning,
     radarFrames,
     weatherStationDetails,
-    weatherWebcams
+    weatherWebcams,
+    transitDetails
   };
   const app = express();
 
@@ -72,6 +76,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerHealthRoutes(app, context);
   registerMetadataRoutes(app, context);
   registerRadioRoutes(app, context);
+  registerTransitRoutes(app, context);
   registerFeatureRoutes(app, context);
 
   app.use((req, res) => {
@@ -473,6 +478,35 @@ function registerRadioRoutes(app: Express, context: SituationDataAppContext): vo
       res.json(await context.radioPlanning.siteSearch(req.body));
     } catch (error) {
       return radioProblem(req, res, error, "Radio site search failed.");
+    }
+  });
+}
+
+function registerTransitRoutes(app: Express, context: SituationDataAppContext): void {
+  app.get("/api/v1/transit/vehicles/:featureId", async (req, res) => {
+    const featureId = req.params.featureId;
+    if (!featureId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "featureId is required.");
+    }
+    try {
+      const detail = await context.transitDetails.getVehicleDetail(featureId, {
+        sourceId: asString(req.query.source),
+        includeShape: parseBoolean(req.query.includeShape ?? "true"),
+        maxStopTimes: parseOptionalNumber(req.query.maxStopTimes),
+        maxShapePoints: parseOptionalNumber(req.query.maxShapePoints)
+      });
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "Transit vehicle was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return problem(
+        req,
+        res,
+        502,
+        "UPSTREAM_ERROR",
+        error instanceof Error ? `Transit vehicle detail failed: ${error.message}` : "Transit vehicle detail failed."
+      );
     }
   });
 }
@@ -887,6 +921,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
       ctuStationaryMobile: config.ctuStationaryMobileCacheTtlSeconds,
+      pidGtfsRt: 20,
+      pidGtfsStatic: config.pidGtfsStaticCacheTtlSeconds,
       idsjmkVehiclePositions: config.idsjmkVehiclePositionsCacheTtlSeconds,
       roadSrtiLod: config.roadSrtiLodCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,

@@ -749,6 +749,9 @@ SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metr
 - Default `limit=250`.
 - Layer tree a defaultní viditelnost řídit z `GET /catalog`, ne ze staršího `/sources`.
 - Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COM tracky ani letecké cíle.
+- Veřejnou dopravu vykreslovat podle jednotného kontraktu
+  [`16_PUBLIC_TRANSIT_CONTEXT_CONTRACT.md`](16_PUBLIC_TRANSIT_CONTEXT_CONTRACT.md);
+  COP nemá volat PID/Golemio, IDS JMK ani jiné městské upstreamy přímo.
 - `mobile_network` zobrazovat jako hlavní mobilní vrstvu s legendou kvality a upozorněním, že jde o odhad, ne potvrzený stav konkrétní BTS.
 - `mobile_coverage` používat jen jako technický/detailní vstup, pokud je potřeba ladit model.
 - `aviation_weather` zobrazovat jako letištní počasí, ne jako tracky.

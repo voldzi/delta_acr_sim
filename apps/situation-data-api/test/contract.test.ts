@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { strToU8, zipSync } from "fflate";
 import gtfsRealtime from "gtfs-realtime-bindings";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -66,6 +67,8 @@ describe("Situation Data API contract", () => {
       ],
       ctuStationaryMobileCacheTtlSeconds: 86400,
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
+      pidGtfsStaticUrl: "https://data.pid.cz/PID_GTFS.zip",
+      pidGtfsStaticCacheTtlSeconds: 21600,
       idsjmkVehiclePositionsUrl: "https://example.test/idsjmk/vehicles.json",
       idsjmkVehiclePositionsCacheTtlSeconds: 20,
       roadSrtiLodSparqlUrl: "https://example.test/sparql",
@@ -853,6 +856,8 @@ describe("Situation Data API contract", () => {
           osmPostgis: 21600,
           osmOverpass: 21600,
           ctuStationaryMobile: 86400,
+          pidGtfsRt: 20,
+          pidGtfsStatic: 21600,
           idsjmkVehiclePositions: 20,
           roadSrtiLod: 300,
           safetyData: 300,
@@ -2051,8 +2056,148 @@ describe("Situation Data API contract", () => {
           headingDeg: 82,
           operator: "PID",
           providerProperties: expect.objectContaining({
+            transit: expect.objectContaining({
+              systemId: "pid",
+              sourceId: "pid_gtfs_rt",
+              transportMode: "bus",
+              routeId: "L136",
+              routeShortName: "136",
+              tripId: "trip-136-1",
+              vehicleId: "service-3-pid-veh-1",
+              detailUrl:
+                "/situation-data/api/v1/transit/vehicles/traffic%3Apid_gtfs_rt%3Aservice-3-pid-veh-1?source=pid_gtfs_rt"
+            }),
             raw: expect.any(Object)
           })
+        })
+      })
+    );
+  });
+
+  it("returns PID transit vehicle detail from GTFS-RT and static GTFS", async () => {
+    const feed = gtfsRealtime.transit_realtime.FeedMessage.create({
+      header: {
+        gtfsRealtimeVersion: "2.0",
+        timestamp: Math.round(Date.parse("2026-05-28T08:00:00.000Z") / 1000)
+      },
+      entity: [
+        {
+          id: "pid-entity-1",
+          vehicle: {
+            trip: {
+              tripId: "trip-136-1",
+              routeId: "L136",
+              startDate: "20260528",
+              startTime: "08:00:00"
+            },
+            vehicle: {
+              id: "service-3-pid-veh-1",
+              label: "PID vehicle 1"
+            },
+            position: {
+              latitude: 50.08,
+              longitude: 14.42,
+              bearing: 82,
+              speed: 7.5
+            },
+            timestamp: Math.round(Date.parse("2026-05-28T08:01:00.000Z") / 1000),
+            currentStopSequence: 2,
+            currentStatus: gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.IN_TRANSIT_TO,
+            stopId: "stop-2",
+            occupancyStatus: gtfsRealtime.transit_realtime.VehiclePosition.OccupancyStatus.MANY_SEATS_AVAILABLE,
+            occupancyPercentage: 37
+          }
+        }
+      ]
+    });
+    const realtimePayload = gtfsRealtime.transit_realtime.FeedMessage.encode(feed).finish();
+    const staticPayload = zipSync({
+      "routes.txt": strToU8("route_id,route_short_name,route_long_name,route_type\nL136,136,Sidliste Dablice - Sidliste Repy,3\n"),
+      "trips.txt": strToU8("route_id,service_id,trip_id,trip_headsign,direction_id,shape_id\nL136,WK,trip-136-1,Sidliste Repy,0,shape-136\n"),
+      "stops.txt": strToU8(
+        [
+          "stop_id,stop_name,stop_lat,stop_lon",
+          "stop-1,Sidliste Dablice,50.128,14.486",
+          "stop-2,Stepnicna,50.12,14.45",
+          "stop-3,Ladvi,50.125,14.469"
+        ].join("\n") + "\n"
+      ),
+      "stop_times.txt": strToU8(
+        [
+          "trip_id,arrival_time,departure_time,stop_id,stop_sequence",
+          "trip-136-1,08:00:00,08:00:00,stop-1,1",
+          "trip-136-1,08:05:00,08:05:00,stop-2,2",
+          "trip-136-1,08:08:00,08:08:00,stop-3,3"
+        ].join("\n") + "\n"
+      ),
+      "shapes.txt": strToU8(
+        [
+          "shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
+          "shape-136,50.128,14.486,1",
+          "shape-136,50.12,14.45,2",
+          "shape-136,50.125,14.469,3"
+        ].join("\n") + "\n"
+      )
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("PID_GTFS.zip")) {
+        return new Response(staticPayload, { status: 200, headers: { "content-type": "application/zip" } });
+      }
+      return new Response(realtimePayload, { status: 200, headers: { "content-type": "application/octet-stream" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const pidApp = await createApp({
+      ...config,
+      pidGtfsRtVehiclePositionsUrl: "https://example.test/pid/vehicle_positions.pb",
+      pidGtfsStaticUrl: "https://example.test/pid/PID_GTFS.zip",
+      cacheTtlSeconds: 0,
+      enabledSources: ["pid_gtfs_rt"]
+    });
+
+    const response = await request(pidApp.app)
+      .get("/api/v1/transit/vehicles/traffic%3Apid_gtfs_rt%3Aservice-3-pid-veh-1?source=pid_gtfs_rt&maxStopTimes=10&maxShapePoints=10")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-vehicle-detail-v1",
+        sourceId: "pid_gtfs_rt",
+        systemId: "pid",
+        featureId: "traffic:pid_gtfs_rt:service-3-pid-veh-1",
+        vehicle: expect.objectContaining({
+          vehicleId: "service-3-pid-veh-1",
+          transportMode: "bus",
+          currentStatus: "in_transit_to",
+          currentStopSequence: 2
+        }),
+        trip: expect.objectContaining({
+          tripId: "trip-136-1",
+          routeId: "L136",
+          routeShortName: "136",
+          destination: "Sidliste Repy",
+          status: expect.stringMatching(/in_transit|stale/)
+        }),
+        stopTimes: [
+          expect.objectContaining({ stopId: "stop-1", relationToVehicle: "previous" }),
+          expect.objectContaining({ stopId: "stop-2", relationToVehicle: "current" }),
+          expect.objectContaining({ stopId: "stop-3", relationToVehicle: "next" })
+        ],
+        routeShape: expect.objectContaining({
+          shapeId: "shape-136",
+          truncated: false,
+          coordinates: [
+            [14.486, 50.128],
+            [14.45, 50.12],
+            [14.469, 50.125]
+          ]
+        }),
+        quality: expect.objectContaining({
+          realtimeVehicleAvailable: true,
+          staticModelAvailable: true,
+          tripScheduleAvailable: true,
+          routeShapeAvailable: true
         })
       })
     );

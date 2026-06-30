@@ -2950,9 +2950,12 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
   const occupancyPercent = optionalNumber(vehicle?.occupancyPercentage);
   const occupancyStatus = pidOccupancyStatus(vehicle?.occupancyStatus);
   const tripId = optionalString(vehicle?.trip?.tripId);
+  const routeId = optionalString(vehicle?.trip?.routeId);
+  const currentStopSequence = optionalNumber(vehicle?.currentStopSequence);
+  const featureId = `traffic:pid_gtfs_rt:${stableToken(vehicleId || entity.id)}`;
 
   return makePointFeature({
-    id: `traffic:pid_gtfs_rt:${stableToken(vehicleId || entity.id)}`,
+    id: featureId,
     lon,
     lat,
     layer: "traffic",
@@ -2968,7 +2971,7 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
       speedMps,
       headingDeg,
       odometerM: optionalNumber(position?.odometer),
-      currentStopSequence: optionalNumber(vehicle?.currentStopSequence),
+      currentStopSequence,
       occupancyPercent,
       routeTypeCode: mode.routeTypeCode
     }),
@@ -2976,7 +2979,7 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
       vehicleId: optionalString(vehicleId),
       vehicleLabel: optionalString(vehicle?.vehicle?.label),
       tripId,
-      routeId: optionalString(vehicle?.trip?.routeId),
+      routeId,
       route: optionalString(routeLabel),
       startDate: optionalString(vehicle?.trip?.startDate),
       startTime: optionalString(vehicle?.trip?.startTime),
@@ -2995,6 +2998,28 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
     headingDeg,
     speedMps,
     operator: "PID",
+    providerProperties: {
+      transit: {
+        systemId: "pid",
+        sourceId: "pid_gtfs_rt",
+        transportMode: mode.tag,
+        routeId,
+        routeShortName: routeLabel,
+        tripId,
+        vehicleId: optionalString(vehicleId),
+        vehicleLabel: optionalString(vehicle?.vehicle?.label),
+        startDate: optionalString(vehicle?.trip?.startDate),
+        startTime: optionalString(vehicle?.trip?.startTime),
+        stopId: optionalString(vehicle?.stopId),
+        currentStatus: pidVehicleStopStatus(vehicle?.currentStatus),
+        currentStopSequence,
+        occupancyStatus,
+        occupancyPercent,
+        headingDeg,
+        speedMps,
+        detailUrl: `/situation-data/api/v1/transit/vehicles/${encodeURIComponent(featureId)}?source=pid_gtfs_rt`
+      }
+    },
     raw: query.includeRaw ? entity : undefined
   });
 }
@@ -3019,9 +3044,11 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
   const delaySeconds = numberFromRecord(record, ["delay", "Delay", "delaySeconds", "DelaySeconds"]);
   const destination = stringFromRecord(record, ["destination", "Destination", "headsign", "Headsign", "tripHeadsign", "TripHeadsign"]);
   const operator = stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]) ?? "IDS JMK";
+  const routeId = stringFromRecord(record, ["routeId", "RouteId", "route_id"]);
+  const featureId = `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}`;
 
   return makePointFeature({
-    id: `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}`,
+    id: featureId,
     lon: position.lon,
     lat: position.lat,
     layer: "traffic",
@@ -3041,7 +3068,7 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
     tags: compactTags({
       vehicleId,
       line,
-      routeId: stringFromRecord(record, ["routeId", "RouteId", "route_id"]),
+      routeId,
       tripId,
       operator,
       transportMode: mode.tag,
@@ -3056,6 +3083,24 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
     operator,
     headingDeg,
     speedMps,
+    providerProperties: {
+      transit: {
+        systemId: "idsjmk",
+        sourceId: "idsjmk_vehicle_positions",
+        transportMode: mode.tag,
+        routeId,
+        routeShortName: line,
+        destination,
+        delaySeconds,
+        tripId,
+        vehicleId,
+        operator,
+        headingDeg,
+        speedMps,
+        detailAvailable: false,
+        detailLimitation: "SIM currently exposes live IDS JMK vehicle positions only; stop sequence and route shape require an IDS JMK static schedule adapter."
+      }
+    },
     raw: query.includeRaw ? record : undefined
   });
 }

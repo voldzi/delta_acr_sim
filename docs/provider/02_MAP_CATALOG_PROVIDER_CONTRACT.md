@@ -206,6 +206,15 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `diagnostic.mobile.coverage`
 - `diagnostic.mobile.ctu_measurements`
 
+`public.traffic.transit` je jednotná veřejná dopravní vrstva. SIM ji skládá ze
+server-side adapterů, aktuálně PID/Golemio GTFS-RT a volitelně IDS JMK. COP má
+zobrazovat body vozidel podle normalizovaných polí `transportMode`,
+`routeShortName`, `destination`, `delaySeconds`, `vehicleId` a `tripId`; detail
+vozidla, seznam zastávek, jízdní řád, realtime odhad a tvar trasy patří do
+normalizovaného transit detailu definovaného v
+`docs/integration/16_PUBLIC_TRANSIT_CONTEXT_CONTRACT.md`. COP nemá volat městská
+upstream API přímo.
+
 `public.safety.warnings` je obecná krizová vrstva z `safety-data`; obsahuje GDACS veřejné katastrofické alerty, veřejné probíhající HZS výjezdy a normalizované NDIC/ŘSD SRTI dopravně-bezpečnostní události. Běžné ČHMÚ CAP meteorologické výstrahy do ní SIM nepromítá, aby se v COP nedublovaly s `public.safety.weather_alerts`; ČHMÚ požární nebezpečí se promítá do `public.safety.fire`. `public.safety.fire` kombinuje požární nebezpečí ČHMÚ, volitelný NASA FIRMS, GDACS wildfire alerty a požární výjezdy HZS. HZS incidenty mohou mít jen centroid obce/správního území; COP má v detailu zobrazit `properties.tags.locationPrecision` a `properties.metrics.locationConfidence`, nikoli je vydávat za přesnou GPS zásahu. SRTI warningy mají hotové `headline`, `description`, `recommendedAction`, `typeCode` a `localized`; COP nemá parsovat SRTI URI ani raw provider data. `public.safety.flood` používá jako primární feature stream `GET /safety-data/api/v1/features?layers=flood&source=chmi_hydro`; GDACS flood alerty jsou přeshraniční/strategický doplněk. Selectable hydrologické body mohou nést `properties.detailUrl`; COP má tento odkaz použít pro detail hlásného profilu s grafem měření a předpovědi, ne rekonstruovat upstream ČHMÚ URL na klientu.
 
 `public.mobile.network` a `diagnostic.mobile.coverage` jsou polygonové grid vrstvy.

@@ -46,6 +46,8 @@ export interface SituationDataConfig {
   ctuStationaryMobileUrls: string[];
   ctuStationaryMobileCacheTtlSeconds: number;
   pidGtfsRtVehiclePositionsUrl: string;
+  pidGtfsStaticUrl: string;
+  pidGtfsStaticCacheTtlSeconds: number;
   idsjmkVehiclePositionsUrl: string;
   idsjmkVehiclePositionsCacheTtlSeconds: number;
   roadSrtiLodSparqlUrl: string;
@@ -142,6 +144,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ctuStationaryMobileCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CTU_STATIONARY_MOBILE_CACHE_TTL_SECONDS, 86400),
     pidGtfsRtVehiclePositionsUrl:
       process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
+    pidGtfsStaticUrl: process.env.PID_GTFS_STATIC_URL ?? "https://data.pid.cz/PID_GTFS.zip",
+    pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
     idsjmkVehiclePositionsUrl: process.env.IDSJMK_VEHICLE_POSITIONS_URL ?? "https://mapa.idsjmk.cz/api/vehicles.json",
     idsjmkVehiclePositionsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS, 20),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
