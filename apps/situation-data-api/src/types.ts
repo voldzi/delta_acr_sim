@@ -36,6 +36,7 @@ export type SituationDataSourceId =
   | "ctu_nettest"
   | "ctu_stationary_mobile"
   | "pid_gtfs_rt"
+  | "public_transit_static"
   | "idsjmk_vehicle_positions"
   | "spravazeleznic_trains"
   | "road_srti_lod"
@@ -266,6 +267,7 @@ export interface SituationDataPublicConfig {
     ctuStationaryMobile: number;
     pidGtfsRt: number;
     pidGtfsStatic: number;
+    publicTransitStatic: number;
     idsjmkVehiclePositions: number;
     spravaZeleznicTrains: number;
     roadSrtiLod: number;

@@ -447,6 +447,7 @@ const situationDataSourceIds: SituationDataSourceId[] = [
   "ctu_nettest",
   "ctu_stationary_mobile",
   "pid_gtfs_rt",
+  "public_transit_static",
   "idsjmk_vehicle_positions",
   "spravazeleznic_trains",
   "road_srti_lod",
@@ -594,18 +595,26 @@ function emptySituationDataConfig(enabledSources: SituationDataSourceId[] = []):
     requestTimeoutMs: 0,
     sourceCacheTtlSeconds: {
       openMeteo: 0,
+      metNorway: 0,
       mobileNetwork: 0,
       mobileCoverage: 0,
       osmPostgis: 0,
       osmOverpass: 0,
       ctuStationaryMobile: 0,
+      pidGtfsRt: 0,
+      pidGtfsStatic: 0,
+      publicTransitStatic: 0,
       idsjmkVehiclePositions: 0,
+      spravaZeleznicTrains: 0,
       roadSrtiLod: 0,
       safetyData: 0,
       aviationWeather: 0,
       chmiAirQuality: 0,
       chmiWeatherStations: 0,
-      ardosPartner: 0
+      chmiWeatherRadar: 0,
+      chmiWeatherWebcams: 0,
+      ardosPartner: 0,
+      radioPlanning: 0
     },
     providers: []
   };

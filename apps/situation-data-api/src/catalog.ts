@@ -456,6 +456,36 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       }
     },
     {
+      providerLayerId: "traffic.public_transit_static",
+      recommendedCatalogLayerId: "public.traffic.transit_stops",
+      label: "Zastávky veřejné dopravy",
+      description:
+        "Statické zastávky z veřejných GTFS feedů načítané server-side přes SIM. Zdroj slouží jako kontext pro další města a regiony bez realtime poloh.",
+      categoryPath: ["traffic", "transit", "stops"],
+      categories: ["traffic", "transit_stop", "public_transport_stop"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 11,
+      maxZoom: 18,
+      refreshSeconds: config.publicTransitStaticCacheTtlSeconds,
+      cacheTtlSeconds: config.publicTransitStaticCacheTtlSeconds,
+      styleProfile: "transit-stop-static-v1",
+      sourceIds: ["public_transit_static"],
+      query: query(["traffic"], ["public_transit_static"]),
+      legend: { profile: "transit-stop-static-v1" },
+      legal: {
+        attribution: "Feature-level GTFS agency attribution",
+        notes: [
+          "Statický dopravní kontext, ne live poloha vozidla.",
+          "SIM načítá GTFS ZIPy do sdílené source cache a COP nesmí volat městské GTFS endpointy přímo."
+        ]
+      }
+    },
+    {
       providerLayerId: "traffic.idsjmk_vehicle_positions",
       recommendedCatalogLayerId: "public.traffic.transit",
       label: "Veřejná doprava IDS JMK",
@@ -1415,6 +1445,16 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsLayerIds: ["traffic.pid_gtfs_rt"],
         feedsCatalogLayerIds: ["public.traffic.transit"]
       };
+    case "public_transit_static":
+      return {
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["traffic.public_transit_static"],
+        feedsCatalogLayerIds: ["public.traffic.transit_stops"],
+        notes: ["Static GTFS stop context. SIM caches configured GTFS ZIP feeds server-side and COP must not call upstream feeds directly."]
+      };
     case "idsjmk_vehicle_positions":
       return {
         sourceRole: "final",
@@ -1502,6 +1542,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.ctuStationaryMobileCacheTtlSeconds;
     case "pid_gtfs_rt":
       return 20;
+    case "public_transit_static":
+      return config.publicTransitStaticCacheTtlSeconds;
     case "idsjmk_vehicle_positions":
       return config.idsjmkVehiclePositionsCacheTtlSeconds;
     case "spravazeleznic_trains":
@@ -1526,6 +1568,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "ctu_stationary_mobile") {
     return "ctu-stationary-mobile";
+  }
+  if (sourceId === "public_transit_static") {
+    return "gtfs-static";
   }
   if (sourceId === "idsjmk_vehicle_positions") {
     return "idsjmk-open-data";

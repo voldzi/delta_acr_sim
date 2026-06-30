@@ -251,6 +251,7 @@ export type SituationDataSourceId =
   | "ctu_nettest"
   | "ctu_stationary_mobile"
   | "pid_gtfs_rt"
+  | "public_transit_static"
   | "idsjmk_vehicle_positions"
   | "spravazeleznic_trains"
   | "road_srti_lod"
@@ -335,18 +336,26 @@ export interface SituationDataConfig {
   requestTimeoutMs: number;
   sourceCacheTtlSeconds: {
     openMeteo: number;
+    metNorway: number;
     mobileNetwork: number;
     mobileCoverage: number;
     osmPostgis: number;
     osmOverpass: number;
     ctuStationaryMobile: number;
+    pidGtfsRt: number;
+    pidGtfsStatic: number;
+    publicTransitStatic: number;
     idsjmkVehiclePositions: number;
+    spravaZeleznicTrains: number;
     roadSrtiLod: number;
     safetyData: number;
     aviationWeather: number;
     chmiAirQuality: number;
     chmiWeatherStations: number;
+    chmiWeatherRadar: number;
+    chmiWeatherWebcams: number;
     ardosPartner: number;
+    radioPlanning: number;
   };
   providers: Array<{
     sourceId: SituationDataSourceId;

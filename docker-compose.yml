@@ -144,7 +144,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       SITUATION_DATA_API_PORT: 4020
       SITUATION_DATA_DIR: /data
-      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data}
+      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data}
       SITUATION_DATA_DEFAULT_BBOX: ${SITUATION_DATA_DEFAULT_BBOX:-13.85,49.65,15.35,50.45}
       SITUATION_DATA_REQUEST_TIMEOUT_MS: ${SITUATION_DATA_REQUEST_TIMEOUT_MS:-6000}
       SITUATION_DATA_CACHE_TTL_SECONDS: ${SITUATION_DATA_CACHE_TTL_SECONDS:-30}
@@ -214,6 +214,9 @@ services:
       PID_GTFS_RT_VEHICLE_POSITIONS_URL: ${PID_GTFS_RT_VEHICLE_POSITIONS_URL:-https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb}
       PID_GTFS_STATIC_URL: ${PID_GTFS_STATIC_URL:-https://data.pid.cz/PID_GTFS.zip}
       SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS: ${SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS:-21600}
+      PUBLIC_TRANSIT_STATIC_GTFS_FEEDS: "${PUBLIC_TRANSIT_STATIC_GTFS_FEEDS:-pid|PID statický GTFS|https://data.pid.cz/PID_GTFS.zip}"
+      SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS: ${SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS:-21600}
+      PUBLIC_TRANSIT_STATIC_MAX_STOPS: ${PUBLIC_TRANSIT_STATIC_MAX_STOPS:-25000}
       SAFETY_DATA_BASE_URL: ${SAFETY_DATA_BASE_URL:-http://safety-data-api:4030}
       AVIATION_WEATHER_BASE_URL: ${AVIATION_WEATHER_BASE_URL:-https://aviationweather.gov}
       ARDOS_PARTNER_BASE_URL: ${ARDOS_PARTNER_BASE_URL:-}

@@ -35,6 +35,7 @@ modelem.
 | Systém | Současný zdroj | Stav |
 | --- | --- | --- |
 | PID / Praha a Středočeský kraj | Golemio/PID GTFS-RT vehicle positions + PID statický GTFS | mapová vrstva vozidel a detail vozidla jsou implementované |
+| Veřejné statické GTFS feedy | `public_transit_static` | statické zastávky jsou publikované jako samostatná referenční vrstva `public.traffic.transit_stops`; výchozí ověřený feed je PID, další města se přidávají konfiguračně |
 | IDS JMK / Brno a JMK | IDS JMK vehicle positions JSON | existuje volitelná mapová vrstva vozidel, detail je zatím označený jako nedostupný |
 | Správa železnic / celá ČR | Veřejná mapa provozu vlaků Správy železnic | existuje volitelná mapová vrstva vlaků; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut |
 | Další města ČR | GTFS static + GTFS-RT, nebo proprietární open-data API | připravit jako další adaptéry |
@@ -52,7 +53,7 @@ Adaptér musí do SIM dodat jednotný objekt:
 
 ## Katalogová vrstva
 
-SIM publikuje veřejnou dopravu do jedné katalogové vrstvy:
+SIM publikuje live vozidla veřejné dopravy do jedné katalogové vrstvy:
 
 ```text
 recommendedCatalogLayerId: public.traffic.transit
@@ -74,6 +75,21 @@ Budoucí zdroje mají používat stejný `recommendedCatalogLayerId`, aby COP ne
 přidávat novou vrstvu pro každé město. Rozlišení systému, linky a dopravce je v
 properties.
 
+Statické zastávky z veřejných GTFS ZIPů jsou oddělené od live vozidel:
+
+```text
+recommendedCatalogLayerId: public.traffic.transit_stops
+providerLayerId: traffic.public_transit_static
+layers: traffic
+kind: vector_features
+role: reference
+audience: public
+styleProfile: transit-stop-static-v1
+```
+
+COP je má zobrazovat až od lokálního zoomu podle katalogového `minZoom`, aby
+nedošlo k zahlcení mapy při celostátním pohledu.
+
 ## Mapová feature vozidla
 
 Endpoint:
@@ -81,6 +97,7 @@ Endpoint:
 ```http
 GET /situation-data/api/v1/features?bbox=...&layers=traffic&source=pid_gtfs_rt&limit=250
 GET /situation-data/api/v1/features?bbox=...&layers=traffic&source=spravazeleznic_trains&limit=250
+GET /situation-data/api/v1/features?bbox=...&layers=traffic&source=public_transit_static&limit=250
 ```
 
 Feature vozidla je `Point`. COP kreslí bod/ikonu a číslo linky.

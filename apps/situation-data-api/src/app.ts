@@ -725,6 +725,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "ctu_nettest",
     "ctu_stationary_mobile",
     "pid_gtfs_rt",
+    "public_transit_static",
     "idsjmk_vehicle_positions",
     "spravazeleznic_trains",
     "road_srti_lod",
@@ -924,6 +925,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       ctuStationaryMobile: config.ctuStationaryMobileCacheTtlSeconds,
       pidGtfsRt: 20,
       pidGtfsStatic: config.pidGtfsStaticCacheTtlSeconds,
+      publicTransitStatic: config.publicTransitStaticCacheTtlSeconds,
       idsjmkVehiclePositions: config.idsjmkVehiclePositionsCacheTtlSeconds,
       spravaZeleznicTrains: config.spravaZeleznicTrainPositionsCacheTtlSeconds,
       roadSrtiLod: config.roadSrtiLodCacheTtlSeconds,
@@ -974,6 +976,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
       { sourceId: "ctu_stationary_mobile", baseUrl: "https://ctu.gov.cz", authConfigured: config.ctuStationaryMobileUrls.length > 0 },
       { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
+      {
+        sourceId: "public_transit_static",
+        baseUrl: config.publicTransitStaticGtfsFeeds.map((feed) => feed.url).join(","),
+        authConfigured: config.publicTransitStaticGtfsFeeds.length > 0,
+        backend: "gtfs-static"
+      },
       { sourceId: "idsjmk_vehicle_positions", baseUrl: config.idsjmkVehiclePositionsUrl, authConfigured: true },
       { sourceId: "spravazeleznic_trains", baseUrl: config.spravaZeleznicTrainPositionsUrl, authConfigured: true, backend: "spravazeleznic-mapy" },
       { sourceId: "road_srti_lod", baseUrl: config.roadSrtiLodSparqlUrl, authConfigured: true },

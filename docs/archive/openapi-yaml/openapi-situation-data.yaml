@@ -788,7 +788,7 @@ components:
         ]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, public_transit_static, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -1243,7 +1243,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, pidGtfsRt, pidGtfsStatic, idsjmkVehiclePositions, spravaZeleznicTrains, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner, radioPlanning]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, pidGtfsRt, pidGtfsStatic, publicTransitStatic, idsjmkVehiclePositions, spravaZeleznicTrains, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner, radioPlanning]
           properties:
             openMeteo:
               type: integer
@@ -1260,6 +1260,8 @@ components:
             pidGtfsRt:
               type: integer
             pidGtfsStatic:
+              type: integer
+            publicTransitStatic:
               type: integer
             idsjmkVehiclePositions:
               type: integer

@@ -6662,6 +6662,7 @@
           "ctu_nettest",
           "ctu_stationary_mobile",
           "pid_gtfs_rt",
+          "public_transit_static",
           "idsjmk_vehicle_positions",
           "spravazeleznic_trains",
           "road_srti_lod",
@@ -7461,6 +7462,7 @@
               "ctuStationaryMobile",
               "pidGtfsRt",
               "pidGtfsStatic",
+              "publicTransitStatic",
               "idsjmkVehiclePositions",
               "spravaZeleznicTrains",
               "roadSrtiLod",
@@ -7496,6 +7498,9 @@
                 "type": "integer"
               },
               "pidGtfsStatic": {
+                "type": "integer"
+              },
+              "publicTransitStatic": {
                 "type": "integer"
               },
               "idsjmkVehiclePositions": {

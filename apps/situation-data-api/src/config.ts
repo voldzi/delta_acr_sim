@@ -3,6 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BoundingBox, OsmPostgisBackend, SituationDataSourceId } from "./types.js";
 
+export interface PublicTransitStaticFeedConfig {
+  systemId: string;
+  label: string;
+  url: string;
+}
+
 export interface SituationDataConfig {
   port: number;
   dataDir: string;
@@ -48,6 +54,9 @@ export interface SituationDataConfig {
   pidGtfsRtVehiclePositionsUrl: string;
   pidGtfsStaticUrl: string;
   pidGtfsStaticCacheTtlSeconds: number;
+  publicTransitStaticGtfsFeeds: PublicTransitStaticFeedConfig[];
+  publicTransitStaticCacheTtlSeconds: number;
+  publicTransitStaticMaxStops: number;
   idsjmkVehiclePositionsUrl: string;
   idsjmkVehiclePositionsCacheTtlSeconds: number;
   spravaZeleznicTrainPositionsUrl: string;
@@ -148,6 +157,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
       process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
     pidGtfsStaticUrl: process.env.PID_GTFS_STATIC_URL ?? "https://data.pid.cz/PID_GTFS.zip",
     pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
+    publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS),
+    publicTransitStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
+    publicTransitStaticMaxStops: parseInteger(process.env.PUBLIC_TRANSIT_STATIC_MAX_STOPS, 25000),
     idsjmkVehiclePositionsUrl: process.env.IDSJMK_VEHICLE_POSITIONS_URL ?? "https://mapa.idsjmk.cz/api/vehicles.json",
     idsjmkVehiclePositionsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS, 20),
     spravaZeleznicTrainPositionsUrl:
@@ -217,6 +229,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "ctu_nettest",
     "ctu_stationary_mobile",
     "pid_gtfs_rt",
+    "public_transit_static",
     "idsjmk_vehicle_positions",
     "spravazeleznic_trains",
     "road_srti_lod",
@@ -235,6 +248,32 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
   return parsed.length > 0 ? parsed : ["mock"];
 }
 
+function parsePublicTransitStaticFeeds(value: string | undefined): PublicTransitStaticFeedConfig[] {
+  const raw = parseStringList(value, DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS.map(formatPublicTransitStaticFeed));
+  return raw
+    .map((item) => {
+      const [systemId, label, url] = item.split("|").map((part) => part.trim());
+      if (!systemId || !label || !url) {
+        return undefined;
+      }
+      try {
+        const parsed = new URL(url);
+        return {
+          systemId: systemId.replace(/[^a-z0-9_-]/gi, "_").toLowerCase(),
+          label,
+          url: parsed.toString()
+        };
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((item): item is PublicTransitStaticFeedConfig => Boolean(item));
+}
+
+function formatPublicTransitStaticFeed(feed: PublicTransitStaticFeedConfig): string {
+  return `${feed.systemId}|${feed.label}|${feed.url}`;
+}
+
 const DEFAULT_CTU_STATIONARY_MOBILE_URLS = [
   "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/4g_tm_stacionarni/4g_tm_stacionarni.zip",
   "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/2g_tm_stacionarni/2g_tm_stacionarni.zip",
@@ -242,6 +281,14 @@ const DEFAULT_CTU_STATIONARY_MOBILE_URLS = [
   "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/2g_vf_stacionarni/2g_vf_stacionarni.zip",
   "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/4g_o2_stacionarni/4g_o2_stacionarni.zip",
   "https://ctu.gov.cz/sites/default/files/applications/ctu_imports/import_stacionarni_mereni/2g_o2_stacionarni/2g_o2_stacionarni.zip"
+];
+
+const DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS: PublicTransitStaticFeedConfig[] = [
+  {
+    systemId: "pid",
+    label: "PID statický GTFS",
+    url: "https://data.pid.cz/PID_GTFS.zip"
+  }
 ];
 
 function parseBbox(value: string | undefined): BoundingBox | undefined {

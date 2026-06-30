@@ -469,18 +469,26 @@ export function App() {
         requestTimeoutMs: 0,
         sourceCacheTtlSeconds: {
           openMeteo: 0,
+          metNorway: 0,
           mobileNetwork: 0,
           mobileCoverage: 0,
           osmPostgis: 0,
           osmOverpass: 0,
           ctuStationaryMobile: 0,
+          pidGtfsRt: 0,
+          pidGtfsStatic: 0,
+          publicTransitStatic: 0,
           idsjmkVehiclePositions: 0,
+          spravaZeleznicTrains: 0,
           roadSrtiLod: 0,
           safetyData: 0,
           aviationWeather: 0,
           chmiAirQuality: 0,
           chmiWeatherStations: 0,
-          ardosPartner: 0
+          chmiWeatherRadar: 0,
+          chmiWeatherWebcams: 0,
+          ardosPartner: 0,
+          radioPlanning: 0
         },
         providers: []
       },
@@ -3344,7 +3352,10 @@ function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeco
     `OSM DB ${ttls.osmPostgis}s`,
     `Overpass ${ttls.osmOverpass}s`,
     `CTU ${ttls.ctuStationaryMobile}s`,
+    `PID RT ${ttls.pidGtfsRt}s`,
+    `GTFS stops ${ttls.publicTransitStatic}s`,
     `IDS JMK ${ttls.idsjmkVehiclePositions}s`,
+    `SŽ trains ${ttls.spravaZeleznicTrains}s`,
     `roads ${ttls.roadSrtiLod}s`
   ].join(" / ");
 }

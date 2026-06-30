@@ -192,6 +192,19 @@ const PID_GTFS_RT_LICENSE: SituationDataLicense = {
   ]
 };
 
+const PUBLIC_TRANSIT_STATIC_LICENSE: SituationDataLicense = {
+  name: "Public GTFS static feeds",
+  url: "https://gtfs.org/schedule/",
+  attribution: "Feature-level transit agency attribution; SIM configured public GTFS feeds",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "SIM loads configured public GTFS static ZIP feeds server-side and exposes only normalized stop context.",
+    "Feed-level attribution is preserved in feature properties.",
+    "Static GTFS stops are public transport context; they are not live vehicle positions or disruption alerts."
+  ]
+};
+
 const IDSJMK_VEHICLE_POSITIONS_LICENSE: SituationDataLicense = {
   name: "IDS JMK / Brno Open Data",
   url: "https://data.gov.cz/datové-sady?klíčová-slova=polohy",
@@ -280,6 +293,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     ctu_nettest: new CtuNettestSource(config),
     ctu_stationary_mobile: new CtuStationaryMobileSource(config),
     pid_gtfs_rt: new PidGtfsRtSource(config),
+    public_transit_static: new PublicTransitStaticSource(config),
     idsjmk_vehicle_positions: new IdsjmkVehiclePositionsSource(config),
     spravazeleznic_trains: new SpravaZeleznicTrainsSource(config),
     road_srti_lod: new RoadSrtiLodSource(config),
@@ -307,6 +321,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new CtuNettestSource(config).descriptor,
     new CtuStationaryMobileSource(config).descriptor,
     new PidGtfsRtSource(config).descriptor,
+    new PublicTransitStaticSource(config).descriptor,
     new IdsjmkVehiclePositionsSource(config).descriptor,
     new SpravaZeleznicTrainsSource(config).descriptor,
     new RoadSrtiLodSource(config).descriptor,
@@ -1796,6 +1811,49 @@ class PidGtfsRtSource implements SituationDataSource {
   }
 }
 
+class PublicTransitStaticSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly feedCache: ManagedResponseCache<PublicTransitStaticStop[]>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.feedCache = new ManagedResponseCache<PublicTransitStaticStop[]>({
+      ttlMs: Math.max(3600, config.publicTransitStaticCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.publicTransitStaticCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
+    this.descriptor = {
+      sourceId: "public_transit_static",
+      label: "Public transit static GTFS stops",
+      enabled: config.enabledSources.includes("public_transit_static"),
+      mode: "reference",
+      priority: 62,
+      layers: ["traffic"],
+      license: PUBLIC_TRANSIT_STATIC_LICENSE,
+      baseUrl: config.publicTransitStaticGtfsFeeds.map((feed) => feed.url).join(","),
+      updateCadenceSeconds: Math.max(3600, config.publicTransitStaticCacheTtlSeconds)
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("public_transit_static", this.feedCache)];
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("traffic")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const stops = await this.feedCache.getOrLoad("public_transit_static_gtfs_stops", () => fetchPublicTransitStaticStops(this.config));
+    const features = stops
+      .map((stop) => mapPublicTransitStaticStop(stop, query, fetchedAt))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .slice(0, query.limit);
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
 class IdsjmkVehiclePositionsSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly feedCache: ManagedResponseCache<IdsjmkVehicleFeed>;
@@ -3161,6 +3219,62 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
       }
     },
     raw: query.includeRaw ? record : undefined
+  });
+}
+
+function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: SituationQuery, observedAt: string): SituationFeature | undefined {
+  if (!isPointInBbox(stop.lon, stop.lat, query.bbox)) {
+    return undefined;
+  }
+  const featureId = `traffic:public_transit_static:${stableToken(`${stop.systemId}:${stop.stopId}`)}`;
+  return makePointFeature({
+    id: featureId,
+    lon: stop.lon,
+    lat: stop.lat,
+    layer: "traffic",
+    category: "public_transport_stop",
+    label: stop.stopName,
+    sourceId: "public_transit_static",
+    license: {
+      ...PUBLIC_TRANSIT_STATIC_LICENSE,
+      attribution: stop.systemLabel,
+      url: stop.feedUrl
+    },
+    observedAt,
+    validUntil: addSeconds(observedAt, 24 * 60 * 60),
+    confidence: 0.9,
+    severity: "info",
+    metrics: {},
+    tags: compactTags({
+      sourceSystem: stop.systemId,
+      systemLabel: stop.systemLabel,
+      stopId: stop.stopId,
+      stopCode: stop.stopCode,
+      zoneId: stop.zoneId,
+      locationType: stop.locationType,
+      parentStation: stop.parentStation,
+      wheelchairBoarding: stop.wheelchairBoarding
+    }),
+    transportMode: "public_transport",
+    providerProperties: {
+      transit: {
+        systemId: stop.systemId,
+        sourceId: "public_transit_static",
+        transportMode: "public_transport",
+        stopId: stop.stopId,
+        stopCode: stop.stopCode,
+        stopName: stop.stopName,
+        zoneId: stop.zoneId,
+        locationType: stop.locationType,
+        parentStation: stop.parentStation,
+        wheelchairBoarding: stop.wheelchairBoarding,
+        staticOnly: true,
+        detailAvailable: false,
+        detailLimitation:
+          "SIM currently exposes static GTFS stop context for this source. Live positions and stop departures require a source-specific realtime adapter."
+      }
+    },
+    raw: query.includeRaw ? stop : undefined
   });
 }
 
@@ -4912,6 +5026,21 @@ interface IdsjmkVehicleFeed extends Record<string, unknown> {
 
 type IdsjmkVehicleRecord = Record<string, unknown>;
 
+interface PublicTransitStaticStop {
+  systemId: string;
+  systemLabel: string;
+  feedUrl: string;
+  stopId: string;
+  stopCode?: string;
+  stopName: string;
+  lon: number;
+  lat: number;
+  zoneId?: string;
+  locationType?: string;
+  parentStation?: string;
+  wheelchairBoarding?: string;
+}
+
 interface SpravaZeleznicTrainFeature {
   type?: string;
   id?: string;
@@ -5569,6 +5698,45 @@ async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise
   return gtfsRealtime.transit_realtime.FeedMessage.decode(payload);
 }
 
+async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promise<PublicTransitStaticStop[]> {
+  const feeds = config.publicTransitStaticGtfsFeeds;
+  if (feeds.length === 0) {
+    return [];
+  }
+  const settled = await Promise.allSettled(feeds.map((feed) => fetchPublicTransitStaticFeedStops(feed, config.requestTimeoutMs)));
+  const stops = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  if (stops.length === 0) {
+    const errors = settled
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => (result.reason instanceof Error ? result.reason.message : "unknown failure"));
+    throw new Error(`public_transit_static did not load any GTFS stop${errors.length ? `: ${errors.join("; ")}` : "."}`);
+  }
+  return stops.slice(0, Math.max(1, config.publicTransitStaticMaxStops));
+}
+
+async function fetchPublicTransitStaticFeedStops(
+  feed: SituationDataConfig["publicTransitStaticGtfsFeeds"][number],
+  timeoutMs: number
+): Promise<PublicTransitStaticStop[]> {
+  const archive = await requestBytes(feed.url, timeoutMs, {
+    accept: "application/zip,application/octet-stream,*/*",
+    "user-agent": "csm-sim-situation-data/0.1"
+  });
+  const files = unzipSync(archive);
+  const stopsName = Object.keys(files).find((name) => name.toLowerCase().endsWith("stops.txt"));
+  if (!stopsName) {
+    throw new Error(`public_transit_static GTFS archive did not contain stops.txt: ${feed.url}`);
+  }
+  const stopsFile = files[stopsName];
+  if (!stopsFile) {
+    throw new Error(`public_transit_static stops.txt was empty: ${feed.url}`);
+  }
+  const records = parseCsvRecords(new TextDecoder().decode(stopsFile));
+  return records
+    .map((record) => mapGtfsStopRecord(feed, record))
+    .filter((stop): stop is PublicTransitStaticStop => Boolean(stop));
+}
+
 async function fetchIdsjmkVehicleFeed(config: SituationDataConfig): Promise<IdsjmkVehicleFeed> {
   return requestJsonWithHeaders<IdsjmkVehicleFeed>(config.idsjmkVehiclePositionsUrl, config.requestTimeoutMs, {
     accept: "application/json",
@@ -5599,6 +5767,36 @@ function normalizeIdsjmkVehicles(feed: IdsjmkVehicleFeed): IdsjmkVehicleRecord[]
     return feed.features.map((feature) => ({ ...(feature.attributes ?? {}), geometry: feature.geometry })).filter(isRecord);
   }
   return [];
+}
+
+function mapGtfsStopRecord(
+  feed: SituationDataConfig["publicTransitStaticGtfsFeeds"][number],
+  record: Record<string, string>
+): PublicTransitStaticStop | undefined {
+  const stopId = record.stop_id?.trim();
+  const stopName = record.stop_name?.trim();
+  const lat = Number(record.stop_lat);
+  const lon = Number(record.stop_lon);
+  if (!stopId || !stopName || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return undefined;
+  }
+  if (lat < 47.5 || lat > 52.5 || lon < 10 || lon > 20.5) {
+    return undefined;
+  }
+  return {
+    systemId: feed.systemId,
+    systemLabel: feed.label,
+    feedUrl: feed.url,
+    stopId,
+    stopCode: optionalString(record.stop_code),
+    stopName,
+    lon,
+    lat,
+    zoneId: optionalString(record.zone_id),
+    locationType: optionalString(record.location_type),
+    parentStation: optionalString(record.parent_station),
+    wheelchairBoarding: optionalString(record.wheelchair_boarding)
+  };
 }
 
 async function fetchRoadSrtiLodEvents(config: SituationDataConfig): Promise<RoadSrtiLodEvent[]> {

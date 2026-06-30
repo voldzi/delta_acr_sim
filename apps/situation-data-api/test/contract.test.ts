@@ -69,6 +69,9 @@ describe("Situation Data API contract", () => {
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
       pidGtfsStaticUrl: "https://data.pid.cz/PID_GTFS.zip",
       pidGtfsStaticCacheTtlSeconds: 21600,
+      publicTransitStaticGtfsFeeds: [{ systemId: "pid", label: "PID statický GTFS", url: "https://example.test/pid/PID_GTFS.zip" }],
+      publicTransitStaticCacheTtlSeconds: 21600,
+      publicTransitStaticMaxStops: 25000,
       idsjmkVehiclePositionsUrl: "https://example.test/idsjmk/vehicles.json",
       idsjmkVehiclePositionsCacheTtlSeconds: 20,
       spravaZeleznicTrainPositionsUrl: "https://example.test/spravazeleznic/request2.php?module=Layers%5COsVlaky&action=load2",
@@ -175,6 +178,11 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "pid_gtfs_rt",
           layers: expect.arrayContaining(["traffic"])
+        }),
+        expect.objectContaining({
+          sourceId: "public_transit_static",
+          layers: expect.arrayContaining(["traffic"]),
+          mode: "reference"
         }),
         expect.objectContaining({
           sourceId: "idsjmk_vehicle_positions",
@@ -447,6 +455,14 @@ describe("Situation Data API contract", () => {
           sourceIds: ["idsjmk_vehicle_positions"]
         }),
         expect.objectContaining({
+          providerLayerId: "traffic.public_transit_static",
+          recommendedCatalogLayerId: "public.traffic.transit_stops",
+          role: "reference",
+          audience: "public",
+          minZoom: 11,
+          sourceIds: ["public_transit_static"]
+        }),
+        expect.objectContaining({
           providerLayerId: "traffic.spravazeleznic_trains",
           recommendedCatalogLayerId: "public.traffic.transit",
           role: "reference",
@@ -667,6 +683,16 @@ describe("Situation Data API contract", () => {
           feedsCatalogLayerIds: ["public.traffic.transit"]
         }),
         expect.objectContaining({
+          sourceId: "public_transit_static",
+          sourceRole: "reference",
+          audience: "public",
+          selectableInMap: true,
+          feedsLayerIds: ["traffic.public_transit_static"],
+          feedsCatalogLayerIds: ["public.traffic.transit_stops"],
+          cacheTtlSeconds: 21600,
+          backend: "gtfs-static"
+        }),
+        expect.objectContaining({
           sourceId: "spravazeleznic_trains",
           sourceRole: "final",
           audience: "public",
@@ -883,6 +909,7 @@ describe("Situation Data API contract", () => {
           ctuStationaryMobile: 86400,
           pidGtfsRt: 20,
           pidGtfsStatic: 21600,
+          publicTransitStatic: 21600,
           idsjmkVehiclePositions: 20,
           spravaZeleznicTrains: 900,
           roadSrtiLod: 300,
@@ -904,6 +931,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "ctu_stationary_mobile", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
+          expect.objectContaining({ sourceId: "public_transit_static", authConfigured: true, backend: "gtfs-static" }),
           expect.objectContaining({ sourceId: "idsjmk_vehicle_positions", authConfigured: true }),
           expect.objectContaining({ sourceId: "spravazeleznic_trains", authConfigured: true, backend: "spravazeleznic-mapy" }),
           expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
@@ -1097,6 +1125,7 @@ describe("Situation Data API contract", () => {
         "ctu_nettest",
         "ctu_stationary_mobile",
         "pid_gtfs_rt",
+        "public_transit_static",
         "idsjmk_vehicle_positions",
         "spravazeleznic_trains",
         "road_srti_lod",
@@ -1126,6 +1155,7 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_source_health{source="ctu_stationary_mobile",backend="ctu-stationary-mobile"} 0');
     expect(cachedSourceMetrics.text).toContain('situation_data_ctu_stationary_mobile_backend_info{backend="ctu-stationary-mobile"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="public_transit_static"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="idsjmk_vehicle_positions"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="spravazeleznic_trains"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="road_srti_lod"}');
@@ -2296,6 +2326,60 @@ describe("Situation Data API contract", () => {
           tags: expect.objectContaining({ line: "12", transportMode: "tram" }),
           providerProperties: expect.objectContaining({
             raw: expect.any(Object)
+          })
+        })
+      })
+    );
+  });
+
+  it("projects public static GTFS stops from a source-level cache", async () => {
+    const staticPayload = zipSync({
+      "stops.txt": strToU8(
+        [
+          "stop_id,stop_code,stop_name,stop_lat,stop_lon,zone_id,location_type,parent_station,wheelchair_boarding",
+          "U1,1001,Ústí nad Labem hlavní nádraží,50.6593,14.0447,UL,0,,1",
+          "P1,2001,Praha hlavní nádraží,50.0832,14.4355,P,0,,1"
+        ].join("\n")
+      )
+    });
+    const fetchMock = vi.fn(async () => new Response(staticPayload, { status: 200, headers: { "content-type": "application/zip" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const staticApp = await createApp({
+      ...config,
+      cacheTtlSeconds: 0,
+      enabledSources: ["public_transit_static"],
+      publicTransitStaticGtfsFeeds: [{ systemId: "test_gtfs", label: "Test GTFS", url: "https://example.test/transit/test_gtfs.zip" }]
+    });
+
+    const first = await request(staticApp.app)
+      .get("/api/v1/features?bbox=13.9,50.5,14.2,50.8&layers=traffic&source=public_transit_static&limit=20")
+      .expect(200);
+    const second = await request(staticApp.app)
+      .get("/api/v1/features?bbox=13.9,50.5,14.2,50.8&layers=traffic&source=public_transit_static&limit=21")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first.body.features).toHaveLength(1);
+    expect(second.body.features).toHaveLength(1);
+    expect(first.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "traffic:public_transit_static:test_gtfs:U1",
+        properties: expect.objectContaining({
+          sourceId: "public_transit_static",
+          layerId: "public.traffic.transit_stops",
+          providerLayerId: "traffic.public_transit_static",
+          category: "public_transport_stop",
+          label: "Ústí nad Labem hlavní nádraží",
+          transportMode: "public_transport",
+          tags: expect.objectContaining({ sourceSystem: "test_gtfs", stopId: "U1", stopCode: "1001" }),
+          providerProperties: expect.objectContaining({
+            transit: expect.objectContaining({
+              systemId: "test_gtfs",
+              sourceId: "public_transit_static",
+              stopId: "U1",
+              stopName: "Ústí nad Labem hlavní nádraží",
+              staticOnly: true
+            })
           })
         })
       })
