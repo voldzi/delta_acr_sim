@@ -1844,7 +1844,7 @@ class PublicTransitStaticSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const stops = await this.feedCache.getOrLoad("public_transit_static_gtfs_stops", () => fetchPublicTransitStaticStops(this.config));
+    const stops = await this.feedCache.getOrLoad(publicTransitStaticCacheKey(this.config), () => fetchPublicTransitStaticStops(this.config));
     const features = stops
       .map((stop) => mapPublicTransitStaticStop(stop, query, fetchedAt))
       .filter((feature): feature is SituationFeature => Boolean(feature))
@@ -5712,6 +5712,14 @@ async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promi
     throw new Error(`public_transit_static did not load any GTFS stop${errors.length ? `: ${errors.join("; ")}` : "."}`);
   }
   return stops.slice(0, Math.max(1, config.publicTransitStaticMaxStops));
+}
+
+function publicTransitStaticCacheKey(config: SituationDataConfig): string {
+  const feedSignature = config.publicTransitStaticGtfsFeeds
+    .map((feed) => `${feed.systemId}|${feed.label}|${feed.url}`)
+    .sort()
+    .join(",");
+  return `public_transit_static_gtfs_stops:${stableToken(`${feedSignature}|max=${config.publicTransitStaticMaxStops}`)}`;
 }
 
 async function fetchPublicTransitStaticFeedStops(
