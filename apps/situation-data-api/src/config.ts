@@ -159,7 +159,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
     publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS),
     publicTransitStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
-    publicTransitStaticMaxStops: parseInteger(process.env.PUBLIC_TRANSIT_STATIC_MAX_STOPS, 25000),
+    publicTransitStaticMaxStops: parseInteger(process.env.PUBLIC_TRANSIT_STATIC_MAX_STOPS, 60000),
     idsjmkVehiclePositionsUrl: process.env.IDSJMK_VEHICLE_POSITIONS_URL ?? "https://mapa.idsjmk.cz/api/vehicles.json",
     idsjmkVehiclePositionsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS, 20),
     spravaZeleznicTrainPositionsUrl:
@@ -288,6 +288,21 @@ const DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS: PublicTransitStaticFeedConfig[] 
     systemId: "pid",
     label: "PID statický GTFS",
     url: "https://data.pid.cz/PID_GTFS.zip"
+  },
+  {
+    systemId: "idsjmk",
+    label: "IDS JMK statický GTFS",
+    url: "https://kordis-jmk.cz/gtfs/gtfs.zip"
+  },
+  {
+    systemId: "dpmo",
+    label: "DPMO Olomouc statický GTFS",
+    url: "https://www.dpmo.cz/doc/dpmo-olomouc-cz.zip"
+  },
+  {
+    systemId: "pmdp",
+    label: "PMDP Plzeň statický GTFS",
+    url: "https://jizdnirady.pmdp.cz/jr/gtfs"
   }
 ];
 

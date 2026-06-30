@@ -69,9 +69,14 @@ describe("Situation Data API contract", () => {
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
       pidGtfsStaticUrl: "https://data.pid.cz/PID_GTFS.zip",
       pidGtfsStaticCacheTtlSeconds: 21600,
-      publicTransitStaticGtfsFeeds: [{ systemId: "pid", label: "PID statický GTFS", url: "https://example.test/pid/PID_GTFS.zip" }],
+      publicTransitStaticGtfsFeeds: [
+        { systemId: "pid", label: "PID statický GTFS", url: "https://example.test/pid/PID_GTFS.zip" },
+        { systemId: "idsjmk", label: "IDS JMK statický GTFS", url: "https://example.test/idsjmk/gtfs.zip" },
+        { systemId: "dpmo", label: "DPMO Olomouc statický GTFS", url: "https://example.test/dpmo/dpmo-olomouc-cz.zip" },
+        { systemId: "pmdp", label: "PMDP Plzeň statický GTFS", url: "https://example.test/pmdp/gtfs" }
+      ],
       publicTransitStaticCacheTtlSeconds: 21600,
-      publicTransitStaticMaxStops: 25000,
+      publicTransitStaticMaxStops: 60000,
       idsjmkVehiclePositionsUrl: "https://example.test/idsjmk/vehicles.json",
       idsjmkVehiclePositionsCacheTtlSeconds: 20,
       spravaZeleznicTrainPositionsUrl: "https://example.test/spravazeleznic/request2.php?module=Layers%5COsVlaky&action=load2",
@@ -2333,7 +2338,7 @@ describe("Situation Data API contract", () => {
   });
 
   it("projects public static GTFS stops from a source-level cache", async () => {
-    const staticPayload = zipSync({
+    const staticPayloadA = zipSync({
       "route_stops.txt": strToU8(["route_id,direction_id,stop_id,stop_sequence", "L1,0,U1,1"].join("\n")),
       "stops.txt": strToU8(
         [
@@ -2343,13 +2348,28 @@ describe("Situation Data API contract", () => {
         ].join("\n")
       )
     });
-    const fetchMock = vi.fn(async () => new Response(staticPayload, { status: 200, headers: { "content-type": "application/zip" } }));
+    const staticPayloadB = zipSync({
+      "stops.txt": strToU8(
+        [
+          "stop_id,stop_code,stop_name,stop_lat,stop_lon,zone_id,location_type,parent_station,wheelchair_boarding",
+          "B1,3001,Brno hlavní nádraží,49.1905,16.6128,100,0,,1"
+        ].join("\n")
+      )
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const payload = url.includes("test_gtfs_b.zip") ? staticPayloadB : staticPayloadA;
+      return new Response(payload, { status: 200, headers: { "content-type": "application/zip" } });
+    });
     vi.stubGlobal("fetch", fetchMock);
     const staticApp = await createApp({
       ...config,
       cacheTtlSeconds: 0,
       enabledSources: ["public_transit_static"],
-      publicTransitStaticGtfsFeeds: [{ systemId: "test_gtfs", label: "Test GTFS", url: "https://example.test/transit/test_gtfs.zip" }]
+      publicTransitStaticGtfsFeeds: [
+        { systemId: "test_gtfs", label: "Test GTFS", url: "https://example.test/transit/test_gtfs.zip" },
+        { systemId: "test_gtfs_b", label: "Test GTFS B", url: "https://example.test/transit/test_gtfs_b.zip" }
+      ]
     });
 
     const first = await request(staticApp.app)
@@ -2359,7 +2379,7 @@ describe("Situation Data API contract", () => {
       .get("/api/v1/features?bbox=13.9,50.5,14.2,50.8&layers=traffic&source=public_transit_static&limit=21")
       .expect(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(first.body.features).toHaveLength(1);
     expect(second.body.features).toHaveLength(1);
     expect(first.body.features[0]).toEqual(
