@@ -271,7 +271,8 @@ SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
 SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=${SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS_VALUE}
 IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json
 SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
-PUBLIC_TRANSIT_STATIC_GTFS_FEEDS=pid|PID statický GTFS|https://data.pid.cz/PID_GTFS.zip,idsjmk|IDS JMK statický GTFS|https://kordis-jmk.cz/gtfs/gtfs.zip,dpmo|DPMO Olomouc statický GTFS|https://www.dpmo.cz/doc/dpmo-olomouc-cz.zip,pmdp|PMDP Plzeň statický GTFS|https://jizdnirady.pmdp.cz/jr/gtfs
+PUBLIC_TRANSIT_STATIC_GTFS_FEEDS=pid|PID statický GTFS|https://data.pid.cz/PID_GTFS.zip,idsjmk|IDS JMK statický GTFS|https://kordis-jmk.cz/gtfs/gtfs.zip,dpmo|DPMO Olomouc statický GTFS|https://www.dpmo.cz/doc/dpmo-olomouc-cz.zip,pmdp|PMDP Plzeň statický GTFS|https://jizdnirady.pmdp.cz/jr/gtfs,dpmlj|DPMLJ Liberec/Jablonec statický GTFS|https://www.dpmlj.cz/gtfs.zip
+PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS=dpo_ostrava|DPO Ostrava zastávky MHD GeoJSON|https://mapy.ostrava.cz/opendata/data/opendata/zastavky_MHD_WGS84_gjson.zip
 SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS=21600
 PUBLIC_TRANSIT_STATIC_MAX_STOPS=60000
 SPRAVAZELEZNIC_TRAIN_POSITIONS_URL=https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2

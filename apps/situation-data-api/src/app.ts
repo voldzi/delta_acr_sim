@@ -978,9 +978,9 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
       {
         sourceId: "public_transit_static",
-        baseUrl: config.publicTransitStaticGtfsFeeds.map((feed) => feed.url).join(","),
-        authConfigured: config.publicTransitStaticGtfsFeeds.length > 0,
-        backend: "gtfs-static"
+        baseUrl: [...config.publicTransitStaticGtfsFeeds, ...config.publicTransitStaticGeojsonFeeds].map((feed) => feed.url).join(","),
+        authConfigured: config.publicTransitStaticGtfsFeeds.length + config.publicTransitStaticGeojsonFeeds.length > 0,
+        backend: "gtfs-static+geojson-static"
       },
       { sourceId: "idsjmk_vehicle_positions", baseUrl: config.idsjmkVehiclePositionsUrl, authConfigured: true },
       { sourceId: "spravazeleznic_trains", baseUrl: config.spravaZeleznicTrainPositionsUrl, authConfigured: true, backend: "spravazeleznic-mapy" },

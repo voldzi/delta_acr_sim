@@ -55,6 +55,7 @@ export interface SituationDataConfig {
   pidGtfsStaticUrl: string;
   pidGtfsStaticCacheTtlSeconds: number;
   publicTransitStaticGtfsFeeds: PublicTransitStaticFeedConfig[];
+  publicTransitStaticGeojsonFeeds: PublicTransitStaticFeedConfig[];
   publicTransitStaticCacheTtlSeconds: number;
   publicTransitStaticMaxStops: number;
   idsjmkVehiclePositionsUrl: string;
@@ -157,7 +158,14 @@ export async function loadConfig(): Promise<SituationDataConfig> {
       process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
     pidGtfsStaticUrl: process.env.PID_GTFS_STATIC_URL ?? "https://data.pid.cz/PID_GTFS.zip",
     pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
-    publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS),
+    publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(
+      process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS,
+      DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS
+    ),
+    publicTransitStaticGeojsonFeeds: parsePublicTransitStaticFeeds(
+      process.env.PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS,
+      DEFAULT_PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS
+    ),
     publicTransitStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
     publicTransitStaticMaxStops: parseInteger(process.env.PUBLIC_TRANSIT_STATIC_MAX_STOPS, 60000),
     idsjmkVehiclePositionsUrl: process.env.IDSJMK_VEHICLE_POSITIONS_URL ?? "https://mapa.idsjmk.cz/api/vehicles.json",
@@ -248,8 +256,8 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
   return parsed.length > 0 ? parsed : ["mock"];
 }
 
-function parsePublicTransitStaticFeeds(value: string | undefined): PublicTransitStaticFeedConfig[] {
-  const raw = parseStringList(value, DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS.map(formatPublicTransitStaticFeed));
+function parsePublicTransitStaticFeeds(value: string | undefined, defaults: PublicTransitStaticFeedConfig[]): PublicTransitStaticFeedConfig[] {
+  const raw = parseStringList(value, defaults.map(formatPublicTransitStaticFeed));
   return raw
     .map((item) => {
       const [systemId, label, url] = item.split("|").map((part) => part.trim());
@@ -303,6 +311,19 @@ const DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS: PublicTransitStaticFeedConfig[] 
     systemId: "pmdp",
     label: "PMDP Plzeň statický GTFS",
     url: "https://jizdnirady.pmdp.cz/jr/gtfs"
+  },
+  {
+    systemId: "dpmlj",
+    label: "DPMLJ Liberec/Jablonec statický GTFS",
+    url: "https://www.dpmlj.cz/gtfs.zip"
+  }
+];
+
+const DEFAULT_PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS: PublicTransitStaticFeedConfig[] = [
+  {
+    systemId: "dpo_ostrava",
+    label: "DPO Ostrava zastávky MHD GeoJSON",
+    url: "https://mapy.ostrava.cz/opendata/data/opendata/zastavky_MHD_WGS84_gjson.zip"
   }
 ];
 

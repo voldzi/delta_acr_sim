@@ -73,7 +73,15 @@ describe("Situation Data API contract", () => {
         { systemId: "pid", label: "PID statický GTFS", url: "https://example.test/pid/PID_GTFS.zip" },
         { systemId: "idsjmk", label: "IDS JMK statický GTFS", url: "https://example.test/idsjmk/gtfs.zip" },
         { systemId: "dpmo", label: "DPMO Olomouc statický GTFS", url: "https://example.test/dpmo/dpmo-olomouc-cz.zip" },
-        { systemId: "pmdp", label: "PMDP Plzeň statický GTFS", url: "https://example.test/pmdp/gtfs" }
+        { systemId: "pmdp", label: "PMDP Plzeň statický GTFS", url: "https://example.test/pmdp/gtfs" },
+        { systemId: "dpmlj", label: "DPMLJ Liberec/Jablonec statický GTFS", url: "https://example.test/dpmlj/gtfs.zip" }
+      ],
+      publicTransitStaticGeojsonFeeds: [
+        {
+          systemId: "dpo_ostrava",
+          label: "DPO Ostrava zastávky MHD GeoJSON",
+          url: "https://example.test/ostrava/zastavky_MHD_WGS84_gjson.zip"
+        }
       ],
       publicTransitStaticCacheTtlSeconds: 21600,
       publicTransitStaticMaxStops: 60000,
@@ -936,7 +944,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "ctu_stationary_mobile", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
-          expect.objectContaining({ sourceId: "public_transit_static", authConfigured: true, backend: "gtfs-static" }),
+          expect.objectContaining({ sourceId: "public_transit_static", authConfigured: true, backend: "gtfs-static+geojson-static" }),
           expect.objectContaining({ sourceId: "idsjmk_vehicle_positions", authConfigured: true }),
           expect.objectContaining({ sourceId: "spravazeleznic_trains", authConfigured: true, backend: "spravazeleznic-mapy" }),
           expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
@@ -2356,9 +2364,23 @@ describe("Situation Data API contract", () => {
         ].join("\n")
       )
     });
+    const staticGeojsonPayload = zipSync({
+      "zastavky_MHD_WGS84_gjson.geojson": strToU8(
+        JSON.stringify({
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [18.268441, 49.850552] },
+              properties: { zast_jm: "Hlavní nádraží", sloupek_jm: "nástupní TRAM", bezbarier: "NE" }
+            }
+          ]
+        })
+      )
+    });
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      const payload = url.includes("test_gtfs_b.zip") ? staticPayloadB : staticPayloadA;
+      const payload = url.includes("test_geojson.zip") ? staticGeojsonPayload : url.includes("test_gtfs_b.zip") ? staticPayloadB : staticPayloadA;
       return new Response(payload, { status: 200, headers: { "content-type": "application/zip" } });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -2369,6 +2391,9 @@ describe("Situation Data API contract", () => {
       publicTransitStaticGtfsFeeds: [
         { systemId: "test_gtfs", label: "Test GTFS", url: "https://example.test/transit/test_gtfs.zip" },
         { systemId: "test_gtfs_b", label: "Test GTFS B", url: "https://example.test/transit/test_gtfs_b.zip" }
+      ],
+      publicTransitStaticGeojsonFeeds: [
+        { systemId: "test_geojson", label: "Test GeoJSON", url: "https://example.test/transit/test_geojson.zip" }
       ]
     });
 
@@ -2379,7 +2404,7 @@ describe("Situation Data API contract", () => {
       .get("/api/v1/features?bbox=13.9,50.5,14.2,50.8&layers=traffic&source=public_transit_static&limit=21")
       .expect(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(first.body.features).toHaveLength(1);
     expect(second.body.features).toHaveLength(1);
     expect(first.body.features[0]).toEqual(

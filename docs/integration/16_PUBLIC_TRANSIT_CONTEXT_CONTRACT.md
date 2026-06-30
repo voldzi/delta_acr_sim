@@ -35,7 +35,7 @@ modelem.
 | Systém | Současný zdroj | Stav |
 | --- | --- | --- |
 | PID / Praha a Středočeský kraj | Golemio/PID GTFS-RT vehicle positions + PID statický GTFS | mapová vrstva vozidel a detail vozidla jsou implementované |
-| Veřejné statické GTFS feedy | `public_transit_static` | statické zastávky jsou publikované jako samostatná referenční vrstva `public.traffic.transit_stops`; výchozí ověřená sada je PID, IDS JMK, DPMO Olomouc a PMDP Plzeň, další města se přidávají konfiguračně |
+| Veřejné statické GTFS/GeoJSON feedy | `public_transit_static` | statické zastávky jsou publikované jako samostatná referenční vrstva `public.traffic.transit_stops`; výchozí ověřená sada je PID, IDS JMK, DPMO Olomouc, PMDP Plzeň, DPMLJ Liberec/Jablonec a DPO Ostrava GeoJSON, další města se přidávají konfiguračně |
 | IDS JMK / Brno a JMK | IDS JMK vehicle positions JSON | existuje volitelná mapová vrstva vozidel, detail je zatím označený jako nedostupný |
 | Správa železnic / celá ČR | Veřejná mapa provozu vlaků Správy železnic | existuje volitelná mapová vrstva vlaků; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut |
 | Další města ČR | GTFS static + GTFS-RT, nebo proprietární open-data API | přidávat po ověření stabilní primární URL, licence a provozního limitu |

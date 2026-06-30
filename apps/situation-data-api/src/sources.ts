@@ -193,15 +193,15 @@ const PID_GTFS_RT_LICENSE: SituationDataLicense = {
 };
 
 const PUBLIC_TRANSIT_STATIC_LICENSE: SituationDataLicense = {
-  name: "Public GTFS static feeds",
+  name: "Public transit static feeds",
   url: "https://gtfs.org/schedule/",
-  attribution: "Feature-level transit agency attribution; SIM configured public GTFS feeds",
+  attribution: "Feature-level transit agency attribution; SIM configured public GTFS/GeoJSON feeds",
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "SIM loads configured public GTFS static ZIP feeds server-side and exposes only normalized stop context.",
+    "SIM loads configured public GTFS and GeoJSON static feeds server-side and exposes only normalized stop context.",
     "Feed-level attribution is preserved in feature properties.",
-    "Static GTFS stops are public transport context; they are not live vehicle positions or disruption alerts."
+    "Static transit stops are public transport context; they are not live vehicle positions or disruption alerts."
   ]
 };
 
@@ -1823,13 +1823,13 @@ class PublicTransitStaticSource implements SituationDataSource {
     });
     this.descriptor = {
       sourceId: "public_transit_static",
-      label: "Public transit static GTFS stops",
+      label: "Public transit static stops",
       enabled: config.enabledSources.includes("public_transit_static"),
       mode: "reference",
       priority: 62,
       layers: ["traffic"],
       license: PUBLIC_TRANSIT_STATIC_LICENSE,
-      baseUrl: config.publicTransitStaticGtfsFeeds.map((feed) => feed.url).join(","),
+      baseUrl: [...config.publicTransitStaticGtfsFeeds, ...config.publicTransitStaticGeojsonFeeds].map((feed) => feed.url).join(","),
       updateCadenceSeconds: Math.max(3600, config.publicTransitStaticCacheTtlSeconds)
     };
   }
@@ -5700,10 +5700,14 @@ async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise
 
 async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promise<PublicTransitStaticStop[]> {
   const feeds = config.publicTransitStaticGtfsFeeds;
-  if (feeds.length === 0) {
+  const geojsonFeeds = config.publicTransitStaticGeojsonFeeds;
+  if (feeds.length === 0 && geojsonFeeds.length === 0) {
     return [];
   }
-  const settled = await Promise.allSettled(feeds.map((feed) => fetchPublicTransitStaticFeedStops(feed, config.requestTimeoutMs)));
+  const settled = await Promise.allSettled([
+    ...feeds.map((feed) => fetchPublicTransitStaticFeedStops(feed, config.requestTimeoutMs)),
+    ...geojsonFeeds.map((feed) => fetchPublicTransitStaticGeojsonFeedStops(feed, config.requestTimeoutMs))
+  ]);
   const stops = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
   if (stops.length === 0) {
     const errors = settled
@@ -5716,6 +5720,7 @@ async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promi
 
 function publicTransitStaticCacheKey(config: SituationDataConfig): string {
   const feedSignature = config.publicTransitStaticGtfsFeeds
+    .concat(config.publicTransitStaticGeojsonFeeds)
     .map((feed) => `${feed.systemId}|${feed.label}|${feed.url}`)
     .sort()
     .join(",");
@@ -5743,6 +5748,29 @@ async function fetchPublicTransitStaticFeedStops(
   return records
     .map((record) => mapGtfsStopRecord(feed, record))
     .filter((stop): stop is PublicTransitStaticStop => Boolean(stop));
+}
+
+async function fetchPublicTransitStaticGeojsonFeedStops(
+  feed: SituationDataConfig["publicTransitStaticGeojsonFeeds"][number],
+  timeoutMs: number
+): Promise<PublicTransitStaticStop[]> {
+  const archive = await requestBytes(feed.url, timeoutMs, {
+    accept: "application/zip,application/geo+json,application/json,application/octet-stream,*/*",
+    "user-agent": "csm-sim-situation-data/0.1"
+  });
+  const files = unzipSync(archive);
+  const geojsonName = Object.keys(files).find((name) => {
+    const basename = gtfsArchiveBasename(name);
+    return basename.endsWith(".geojson") || basename.endsWith(".json");
+  });
+  if (!geojsonName) {
+    throw new Error(`public_transit_static GeoJSON archive did not contain a GeoJSON file: ${feed.url}`);
+  }
+  const geojsonFile = files[geojsonName];
+  if (!geojsonFile) {
+    throw new Error(`public_transit_static GeoJSON file was empty: ${feed.url}`);
+  }
+  return mapPublicTransitStaticGeojsonFeatures(feed, JSON.parse(new TextDecoder().decode(geojsonFile)));
 }
 
 async function fetchIdsjmkVehicleFeed(config: SituationDataConfig): Promise<IdsjmkVehicleFeed> {
@@ -5805,6 +5833,66 @@ function mapGtfsStopRecord(
     parentStation: optionalString(record.parent_station),
     wheelchairBoarding: optionalString(record.wheelchair_boarding)
   };
+}
+
+function mapPublicTransitStaticGeojsonFeatures(
+  feed: SituationDataConfig["publicTransitStaticGeojsonFeeds"][number],
+  collection: unknown
+): PublicTransitStaticStop[] {
+  if (!isRecord(collection) || collection.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
+    return [];
+  }
+  return collection.features
+    .map((feature, index) => mapPublicTransitStaticGeojsonFeature(feed, feature, index))
+    .filter((stop): stop is PublicTransitStaticStop => Boolean(stop));
+}
+
+function mapPublicTransitStaticGeojsonFeature(
+  feed: SituationDataConfig["publicTransitStaticGeojsonFeeds"][number],
+  feature: unknown,
+  index: number
+): PublicTransitStaticStop | undefined {
+  if (!isRecord(feature) || !isRecord(feature.geometry) || feature.geometry.type !== "Point" || !Array.isArray(feature.geometry.coordinates)) {
+    return undefined;
+  }
+  const [lonRaw, latRaw] = feature.geometry.coordinates;
+  const lon = Number(lonRaw);
+  const lat = Number(latRaw);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < 47.5 || lat > 52.5 || lon < 10 || lon > 20.5) {
+    return undefined;
+  }
+  const properties = isRecord(feature.properties) ? feature.properties : {};
+  const stopName = optionalString(properties.stop_name) ?? optionalString(properties.name) ?? optionalString(properties.zast_jm);
+  if (!stopName) {
+    return undefined;
+  }
+  const stopCode = optionalString(properties.stop_code) ?? optionalString(properties.ref) ?? optionalString(properties.sloupek_jm);
+  const sourceStopId = optionalString(properties.stop_id) ?? optionalString(properties.id) ?? `${stopName}:${stopCode ?? ""}:${lon}:${lat}:${index}`;
+  return {
+    systemId: feed.systemId,
+    systemLabel: feed.label,
+    feedUrl: feed.url,
+    stopId: sourceStopId,
+    stopCode,
+    stopName,
+    lon,
+    lat,
+    wheelchairBoarding: normalizeWheelchairBoarding(optionalString(properties.wheelchair_boarding) ?? optionalString(properties.bezbarier))
+  };
+}
+
+function normalizeWheelchairBoarding(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (["ano", "yes", "true", "1"].includes(normalized)) {
+    return "1";
+  }
+  if (["ne", "no", "false", "0"].includes(normalized)) {
+    return "2";
+  }
+  return value;
 }
 
 function gtfsArchiveBasename(path: string): string {
