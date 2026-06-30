@@ -71,6 +71,8 @@ describe("Situation Data API contract", () => {
       pidGtfsStaticCacheTtlSeconds: 21600,
       idsjmkVehiclePositionsUrl: "https://example.test/idsjmk/vehicles.json",
       idsjmkVehiclePositionsCacheTtlSeconds: 20,
+      spravaZeleznicTrainPositionsUrl: "https://example.test/spravazeleznic/request2.php?module=Layers%5COsVlaky&action=load2",
+      spravaZeleznicTrainPositionsCacheTtlSeconds: 900,
       roadSrtiLodSparqlUrl: "https://example.test/sparql",
       roadSrtiLodCacheTtlSeconds: 300,
       roadSrtiLodMaxRecords: 1500,
@@ -177,6 +179,11 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "idsjmk_vehicle_positions",
           layers: expect.arrayContaining(["traffic"])
+        }),
+        expect.objectContaining({
+          sourceId: "spravazeleznic_trains",
+          layers: expect.arrayContaining(["traffic"]),
+          updateCadenceSeconds: 900
         }),
         expect.objectContaining({
           sourceId: "road_srti_lod",
@@ -440,6 +447,14 @@ describe("Situation Data API contract", () => {
           sourceIds: ["idsjmk_vehicle_positions"]
         }),
         expect.objectContaining({
+          providerLayerId: "traffic.spravazeleznic_trains",
+          recommendedCatalogLayerId: "public.traffic.transit",
+          role: "reference",
+          audience: "public",
+          refreshSeconds: 900,
+          sourceIds: ["spravazeleznic_trains"]
+        }),
+        expect.objectContaining({
           providerLayerId: "traffic.road_events.srti",
           recommendedCatalogLayerId: "public.traffic.road_events",
           role: "overlay",
@@ -652,6 +667,16 @@ describe("Situation Data API contract", () => {
           feedsCatalogLayerIds: ["public.traffic.transit"]
         }),
         expect.objectContaining({
+          sourceId: "spravazeleznic_trains",
+          sourceRole: "final",
+          audience: "public",
+          selectableInMap: true,
+          feedsLayerIds: ["traffic.spravazeleznic_trains"],
+          feedsCatalogLayerIds: ["public.traffic.transit"],
+          cacheTtlSeconds: 900,
+          backend: "spravazeleznic-mapy"
+        }),
+        expect.objectContaining({
           sourceId: "road_srti_lod",
           sourceRole: "final",
           audience: "public",
@@ -859,6 +884,7 @@ describe("Situation Data API contract", () => {
           pidGtfsRt: 20,
           pidGtfsStatic: 21600,
           idsjmkVehiclePositions: 20,
+          spravaZeleznicTrains: 900,
           roadSrtiLod: 300,
           safetyData: 300,
           aviationWeather: 600,
@@ -879,6 +905,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "ctu_stationary_mobile", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
           expect.objectContaining({ sourceId: "idsjmk_vehicle_positions", authConfigured: true }),
+          expect.objectContaining({ sourceId: "spravazeleznic_trains", authConfigured: true, backend: "spravazeleznic-mapy" }),
           expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
           expect.objectContaining({ sourceId: "safety_data", authConfigured: true }),
           expect.objectContaining({ sourceId: "aviation_weather", authConfigured: true }),
@@ -1071,6 +1098,7 @@ describe("Situation Data API contract", () => {
         "ctu_stationary_mobile",
         "pid_gtfs_rt",
         "idsjmk_vehicle_positions",
+        "spravazeleznic_trains",
         "road_srti_lod",
         "safety_data",
         "aviation_weather",
@@ -1099,6 +1127,7 @@ describe("Situation Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('situation_data_ctu_stationary_mobile_backend_info{backend="ctu-stationary-mobile"} 1');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="pid_gtfs_rt"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="idsjmk_vehicle_positions"}');
+    expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="spravazeleznic_trains"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_errors{source="road_srti_lod"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="safety_data"}');
     expect(cachedSourceMetrics.text).toContain('situation_data_source_cache_hits{source="aviation_weather"}');
@@ -2266,6 +2295,99 @@ describe("Situation Data API contract", () => {
           metrics: expect.objectContaining({ speedMps: 9, headingDeg: 88 }),
           tags: expect.objectContaining({ line: "12", transportMode: "tram" }),
           providerProperties: expect.objectContaining({
+            raw: expect.any(Object)
+          })
+        })
+      })
+    );
+  });
+
+  it("projects Správa železnic train positions from a 15-minute source-level cache", async () => {
+    const encoded = encodeSpravaZeleznicTestPayload([
+      {
+        type: "Feature",
+        id: "TR/1154/KASO---25301/00/2026/20260630",
+        g: { type: "Point", c: [-699292.5296080904, -1145127.4765034965] },
+        p: {
+          id: "TR/1154/KASO---25301/00/2026/20260630",
+          tt: "R",
+          tn: "654",
+          na: "Rožmberk",
+          fn: "Brno hl.n.",
+          ln: "Č.Budějovice os.n.",
+          cna: "Počátky-Žirovnice",
+          de: 13,
+          a: 203.04,
+          nna: "hr.VUSC 0310/0630 04",
+          d: "České dráhy, a.s.",
+          cp: "18:34",
+          cr: "18:47",
+          pde: "13 min",
+          nsn: "Jindřichův Hradec",
+          nsn70: "74362",
+          nst: "18:56",
+          nsp: "19:09",
+          zst_sr70: "757633"
+        }
+      }
+    ]);
+    const fetchMock = vi.fn(async () => jsonResponse({ cachedResult: false, result: [encoded] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const trainsApp = await createApp({
+      ...config,
+      cacheTtlSeconds: 0,
+      enabledSources: ["spravazeleznic_trains"]
+    });
+
+    const first = await request(trainsApp.app)
+      .get("/api/v1/features?bbox=12.0,48.0,19.0,51.5&layers=traffic&source=spravazeleznic_trains&limit=20&includeRaw=true")
+      .expect(200);
+    const second = await request(trainsApp.app)
+      .get("/api/v1/features?bbox=12.0,48.0,19.0,51.5&layers=traffic&source=spravazeleznic_trains&limit=21")
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first.body.features).toHaveLength(1);
+    expect(second.body.features).toHaveLength(1);
+    const coordinates = first.body.features[0].geometry.coordinates as [number, number];
+    expect(coordinates[0]).toBeGreaterThan(14);
+    expect(coordinates[0]).toBeLessThan(16);
+    expect(coordinates[1]).toBeGreaterThan(48);
+    expect(coordinates[1]).toBeLessThan(50);
+    expect(first.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "traffic:spravazeleznic_trains:TR_1154_KASO---25301_00_2026_20260630",
+        properties: expect.objectContaining({
+          sourceId: "spravazeleznic_trains",
+          layerId: "public.traffic.transit",
+          providerLayerId: "traffic.spravazeleznic_trains",
+          category: "public_transport_train",
+          transportMode: "train",
+          routeShortName: "R 654",
+          destination: "Č.Budějovice os.n.",
+          delaySeconds: 780,
+          vehicleId: "TR/1154/KASO---25301/00/2026/20260630",
+          operator: "České dráhy, a.s.",
+          headingDeg: expect.any(Number),
+          metrics: expect.objectContaining({ delayMinutes: 13, delaySeconds: 780 }),
+          tags: expect.objectContaining({
+            trainType: "R",
+            trainNumber: "654",
+            trainName: "Rožmberk",
+            currentStationName: "Počátky-Žirovnice",
+            nextStationName: "Jindřichův Hradec",
+            delayText: "13 min"
+          }),
+          providerProperties: expect.objectContaining({
+            transit: expect.objectContaining({
+              systemId: "spravazeleznic",
+              sourceId: "spravazeleznic_trains",
+              transportMode: "train",
+              routeShortName: "R 654",
+              delayMinutes: 13,
+              delaySeconds: 780,
+              detailAvailable: false
+            }),
             raw: expect.any(Object)
           })
         })
@@ -3626,6 +3748,20 @@ class InMemorySharedResponseCacheStore implements SharedResponseCacheStore {
   isAvailable(): boolean {
     return true;
   }
+}
+
+function encodeSpravaZeleznicTestPayload(value: unknown): string {
+  const json = Buffer.from(JSON.stringify(value), "utf8");
+  const now = new Date();
+  const key = Buffer.from(
+    `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}`,
+    "utf8"
+  );
+  const encoded = Buffer.alloc(json.length);
+  for (let index = 0; index < json.length; index += 1) {
+    encoded[index] = json[index] ^ key[index % key.length];
+  }
+  return encoded.toString("base64");
 }
 
 function jsonResponse(value: unknown): Response {

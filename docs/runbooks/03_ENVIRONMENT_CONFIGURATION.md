@@ -78,6 +78,8 @@
 - `SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS`
 - `IDSJMK_VEHICLE_POSITIONS_URL`
 - `SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS`
+- `SPRAVAZELEZNIC_TRAIN_POSITIONS_URL`
+- `SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS`
 - `ROAD_SRTI_LOD_SPARQL_URL`
 - `SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS`
 - `SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS`
@@ -305,7 +307,7 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -340,6 +342,8 @@ CHMI_AIR_QUALITY_METADATA_URL=https://opendata.chmi.cz/air_quality/now/metadata/
 CHMI_AIR_QUALITY_DATA_URL=https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv
 IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json
 SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
+SPRAVAZELEZNIC_TRAIN_POSITIONS_URL=https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2
+SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS=900
 ROAD_SRTI_LOD_SPARQL_URL=https://lod.tamtamresearch.com/sparql/
 SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=300
 SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=300
@@ -397,7 +401,7 @@ použije pouze lokální in-memory cache.
 ARDOS partner pilot:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data,ardos_partner
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data,ardos_partner
 ARDOS_PARTNER_BASE_URL=https://ardos-partner.example.cz
 ARDOS_PARTNER_TOKEN=...
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
@@ -432,7 +436,7 @@ OVERPASS_MAX_BBOX_DEGREES=1.6
 Preferovaná produkční varianta pro OSM používá samostatnou databázi `sim_osm` v HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -456,7 +460,7 @@ scripts/import-osm-cz-postgis.sh
 Lokální Docker PostGIS může zůstat jen jako rebuildovatelný read-model/cache s explicitním silným heslem a URL:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
@@ -582,7 +586,7 @@ bez `NASA_FIRMS_MAP_KEY`.
 Projekce do `situation-data`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 ```

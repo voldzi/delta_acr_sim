@@ -187,6 +187,9 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "idsjmk_vehicle_positions") {
     return "traffic.idsjmk_vehicle_positions";
   }
+  if (sourceId === "spravazeleznic_trains") {
+    return "traffic.spravazeleznic_trains";
+  }
   if (sourceId === "road_srti_lod") {
     return "traffic.road_events.srti";
   }
@@ -286,6 +289,8 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
     case "traffic.pid_gtfs_rt":
       return "public.traffic.transit";
     case "traffic.idsjmk_vehicle_positions":
+      return "public.traffic.transit";
+    case "traffic.spravazeleznic_trains":
       return "public.traffic.transit";
     case "traffic.road_events.srti":
       return "public.traffic.road_events";

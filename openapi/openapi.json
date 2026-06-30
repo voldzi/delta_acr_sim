@@ -6663,6 +6663,7 @@
           "ctu_stationary_mobile",
           "pid_gtfs_rt",
           "idsjmk_vehicle_positions",
+          "spravazeleznic_trains",
           "road_srti_lod",
           "safety_data",
           "aviation_weather",
@@ -7461,6 +7462,7 @@
               "pidGtfsRt",
               "pidGtfsStatic",
               "idsjmkVehiclePositions",
+              "spravaZeleznicTrains",
               "roadSrtiLod",
               "safetyData",
               "aviationWeather",
@@ -7497,6 +7499,9 @@
                 "type": "integer"
               },
               "idsjmkVehiclePositions": {
+                "type": "integer"
+              },
+              "spravaZeleznicTrains": {
                 "type": "integer"
               },
               "roadSrtiLod": {
@@ -12576,7 +12581,7 @@
         "required": false,
         "schema": {
           "type": "string",
-          "example": "open_meteo,chmi_weather_stations,chmi_air_quality,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data"
+          "example": "open_meteo,chmi_weather_stations,chmi_air_quality,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data"
         }
       },
       "SituationDataTechnologies": {

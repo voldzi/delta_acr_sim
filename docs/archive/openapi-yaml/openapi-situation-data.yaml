@@ -201,6 +201,58 @@ paths:
           $ref: "#/components/responses/Problem"
         "404":
           $ref: "#/components/responses/Problem"
+  /transit/vehicles/{featureId}:
+    get:
+      summary: Return normalized public-transit vehicle detail
+      description: Returns a server-side normalized vehicle detail for COP drill-down. For PID, SIM joins the latest GTFS-RT vehicle position with cached static GTFS routes, trips, stops, stop times and shapes. COP must not call PID/Golemio or other city upstream APIs directly.
+      parameters:
+        - $ref: "#/components/parameters/FeatureId"
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pid_gtfs_rt]
+            default: pid_gtfs_rt
+          description: Transit source adapter. The first implemented detail adapter is PID GTFS-RT.
+        - name: includeShape
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: Whether route shape coordinates should be returned when available.
+        - name: maxStopTimes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 5
+            maximum: 120
+            default: 60
+          description: Maximum scheduled stop rows returned in the detail.
+        - name: maxShapePoints
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 2000
+            default: 500
+          description: Maximum route shape coordinates returned in the detail.
+      responses:
+        "200":
+          description: Normalized transit vehicle detail document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitVehicleDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /cop/features:
     get:
       summary: Compatibility alias for the server-side situation feature stream
@@ -643,7 +695,7 @@ components:
       required: false
       schema:
         type: string
-        example: open_meteo,chmi_weather_stations,chmi_air_quality,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data
+        example: open_meteo,chmi_weather_stations,chmi_air_quality,mobile_network_model,osm_postgis,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data
     Technologies:
       name: technology
       in: query
@@ -736,7 +788,7 @@ components:
         ]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
+      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -1191,7 +1243,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, idsjmkVehiclePositions, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner, radioPlanning]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, pidGtfsRt, pidGtfsStatic, idsjmkVehiclePositions, spravaZeleznicTrains, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner, radioPlanning]
           properties:
             openMeteo:
               type: integer
@@ -1205,7 +1257,13 @@ components:
               type: integer
             ctuStationaryMobile:
               type: integer
+            pidGtfsRt:
+              type: integer
+            pidGtfsStatic:
+              type: integer
             idsjmkVehiclePositions:
+              type: integer
+            spravaZeleznicTrains:
               type: integer
             roadSrtiLod:
               type: integer
@@ -1999,6 +2057,149 @@ components:
           type: array
           items:
             type: string
+    TransitVehicleDetail:
+      type: object
+      required: [contractVersion, generatedAt, sourceId, systemId, featureId, vehicle, trip, stopTimes, quality]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-transit-vehicle-detail-v1
+        generatedAt:
+          type: string
+          format: date-time
+        sourceId:
+          type: string
+          const: pid_gtfs_rt
+        systemId:
+          type: string
+          const: pid
+        featureId:
+          type: string
+          example: traffic:pid_gtfs_rt:service-3-pid-veh-1
+        vehicle:
+          type: object
+          required: [transportMode]
+          properties:
+            vehicleId:
+              type: string
+            label:
+              type: string
+            transportMode:
+              type: string
+              enum: [bus, tram, metro, train, trolleybus]
+            position:
+              type: object
+              properties:
+                lat:
+                  type: number
+                lon:
+                  type: number
+                headingDeg:
+                  type: number
+                speedMps:
+                  type: number
+                observedAt:
+                  type: string
+                  format: date-time
+            occupancyStatus:
+              type: string
+            occupancyPercent:
+              type: number
+              minimum: 0
+              maximum: 100
+            currentStatus:
+              type: string
+            currentStopSequence:
+              type: integer
+            stopId:
+              type: string
+        trip:
+          type: object
+          required: [status]
+          properties:
+            tripId:
+              type: string
+            routeId:
+              type: string
+            routeShortName:
+              type: string
+            routeLongName:
+              type: string
+            destination:
+              type: string
+            directionId:
+              type: string
+            startDate:
+              type: string
+            startTime:
+              type: string
+            status:
+              type: string
+              enum: [on_time, early, delayed, stopped, in_transit, stale, unknown]
+        stopTimes:
+          type: array
+          items:
+            type: object
+            required: [stopId, stopSequence, relationToVehicle]
+            properties:
+              stopId:
+                type: string
+              stopName:
+                type: string
+              stopSequence:
+                type: integer
+              scheduledArrival:
+                type: string
+                example: "16:06:00"
+              scheduledDeparture:
+                type: string
+                example: "16:06:07"
+              relationToVehicle:
+                type: string
+                enum: [previous, current, next, future, unknown]
+              position:
+                type: object
+                properties:
+                  lat:
+                    type: number
+                  lon:
+                    type: number
+        routeShape:
+          type: object
+          required: [shapeId, coordinates, truncated]
+          properties:
+            shapeId:
+              type: string
+            coordinates:
+              type: array
+              items:
+                type: array
+                minItems: 2
+                maxItems: 2
+                items:
+                  type: number
+            truncated:
+              type: boolean
+        quality:
+          type: object
+          required: [realtimeVehicleAvailable, staticModelAvailable, tripScheduleAvailable, routeShapeAvailable, generatedFrom, warnings]
+          properties:
+            realtimeVehicleAvailable:
+              type: boolean
+            staticModelAvailable:
+              type: boolean
+            tripScheduleAvailable:
+              type: boolean
+            routeShapeAvailable:
+              type: boolean
+            generatedFrom:
+              type: array
+              items:
+                type: string
+            warnings:
+              type: array
+              items:
+                type: string
     ProviderFeatureGeometry:
       type: object
       required: [contractVersion, generatedAt, providerId, featureId, layer, layerId, providerLayerId, resolution, geometry, geometrySummary]

@@ -69,6 +69,7 @@ Klíčová pravidla katalogu:
 - `reference.infrastructure.communications` jsou referenční OSM věže, `defaultVisible=false` a `selectable=false`,
 - `public.boundary.country`, `public.boundary.region`, `public.boundary.district`, `public.boundary.orp` jsou referenční boundary read-model vrstvy z lokálního OSM/PostGIS, ne z veřejného Overpassu,
 - `public.weather.temperature_grid`, `public.weather.wind_field`, `public.weather.precipitation_grid`, `public.weather.humidity_grid`, `public.weather.pressure_grid`, `public.weather.radar_reflectivity`, `public.weather.radar_precipitation`, `public.weather.radar_nowcast`, `public.safety.thunderstorm_risk` a `public.safety.air_quality_grid` jsou katalogově připravené environment vrstvy; radarové vrstvy jsou raster overlay metadata, ne raw lightning feed,
+- `public.traffic.transit` sdružuje veřejnou dopravu. Provider vrstva `traffic.spravazeleznic_trains` poskytuje polohy vlaků z mapy Správy železnic; SIM ji dotazuje server-side nejvýše jednou za 15 minut bez ohledu na počet uživatelů COP,
 - `safety_data` v situation-data je označený jako `sourceRole=projection`; COM má pro primární safety vrstvy preferovat provider `sim.safety-data`.
 
 ## Feature projection
@@ -218,6 +219,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření, stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `idsjmk_vehicle_positions` | `traffic` | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features. |
+| `spravazeleznic_trains` | `traffic` | Volitelný zdroj aktuálních poloh vlaků z veřejné mapy Správy železnic. SIM drží jednu server-side cache položku s minimálním TTL 900 s a do COP posílá normalizovaný GeoJSON ve WGS84. |
 | `road_srti_lod` | `traffic` | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď. |
 | `safety_data` | `warnings`, `fire`, `flood`, `boundary_admin` | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |

@@ -144,7 +144,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       SITUATION_DATA_API_PORT: 4020
       SITUATION_DATA_DIR: /data
-      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,road_srti_lod,safety_data}
+      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,spravazeleznic_trains,road_srti_lod,safety_data}
       SITUATION_DATA_DEFAULT_BBOX: ${SITUATION_DATA_DEFAULT_BBOX:-13.85,49.65,15.35,50.45}
       SITUATION_DATA_REQUEST_TIMEOUT_MS: ${SITUATION_DATA_REQUEST_TIMEOUT_MS:-6000}
       SITUATION_DATA_CACHE_TTL_SECONDS: ${SITUATION_DATA_CACHE_TTL_SECONDS:-30}
@@ -162,6 +162,8 @@ services:
       SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS: ${SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS:-300}
       IDSJMK_VEHICLE_POSITIONS_URL: ${IDSJMK_VEHICLE_POSITIONS_URL:-https://mapa.idsjmk.cz/api/vehicles.json}
       SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS: ${SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS:-20}
+      SPRAVAZELEZNIC_TRAIN_POSITIONS_URL: ${SPRAVAZELEZNIC_TRAIN_POSITIONS_URL:-https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2}
+      SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS: ${SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS:-900}
       ROAD_SRTI_LOD_SPARQL_URL: ${ROAD_SRTI_LOD_SPARQL_URL:-https://lod.tamtamresearch.com/sparql/}
       SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS: ${SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS:-300}
       ROAD_SRTI_LOD_MAX_RECORDS: ${ROAD_SRTI_LOD_MAX_RECORDS:-1500}

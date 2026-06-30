@@ -4,7 +4,7 @@
 
 Tento dokument definuje cílový kontrakt veřejné dopravy pro COP. Navazuje na
 existující `situation-data` vrstvu `public.traffic.transit`, která dnes publikuje
-živé polohy vozidel PID/Golemio GTFS-RT a volitelně IDS JMK. Cílem je rozšířit
+živé polohy vozidel PID/Golemio GTFS-RT, IDS JMK a vlaků Správy železnic. Cílem je rozšířit
 SIM tak, aby COP nemusel znát konkrétní městské API, GTFS strukturu ani logiku
 spojování realtime a statických dat.
 
@@ -36,6 +36,7 @@ modelem.
 | --- | --- | --- |
 | PID / Praha a Středočeský kraj | Golemio/PID GTFS-RT vehicle positions + PID statický GTFS | mapová vrstva vozidel a detail vozidla jsou implementované |
 | IDS JMK / Brno a JMK | IDS JMK vehicle positions JSON | existuje volitelná mapová vrstva vozidel, detail je zatím označený jako nedostupný |
+| Správa železnic / celá ČR | Veřejná mapa provozu vlaků Správy železnic | existuje volitelná mapová vrstva vlaků; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut |
 | Další města ČR | GTFS static + GTFS-RT, nebo proprietární open-data API | připravit jako další adaptéry |
 
 Adaptér musí do SIM dodat jednotný objekt:
@@ -66,7 +67,8 @@ styleProfile: transit-vehicle-position-v1
 Současné zdroje:
 
 - `traffic.pid_gtfs_rt`,
-- `traffic.idsjmk_vehicle_positions`.
+- `traffic.idsjmk_vehicle_positions`,
+- `traffic.spravazeleznic_trains`.
 
 Budoucí zdroje mají používat stejný `recommendedCatalogLayerId`, aby COP nemusel
 přidávat novou vrstvu pro každé město. Rozlišení systému, linky a dopravce je v
@@ -78,6 +80,7 @@ Endpoint:
 
 ```http
 GET /situation-data/api/v1/features?bbox=...&layers=traffic&source=pid_gtfs_rt&limit=250
+GET /situation-data/api/v1/features?bbox=...&layers=traffic&source=spravazeleznic_trains&limit=250
 ```
 
 Feature vozidla je `Point`. COP kreslí bod/ikonu a číslo linky.
@@ -125,6 +128,21 @@ Povinná a doporučená pole:
   "realtimeSourceAgeSeconds": 22
 }
 ```
+
+Pro `spravazeleznic_trains` SIM poskytuje minimálně:
+
+- `properties.transportMode=train`,
+- `properties.category=public_transport_train`,
+- `properties.routeShortName` ve tvaru typu a čísla vlaku, např. `R 654`,
+- `properties.destination`, `properties.operator`, `properties.delaySeconds`,
+- `providerProperties.transit.trainType`, `trainNumber`, `trainName`,
+  `origin`, `destination`, `currentStationName`, `nextStationName`,
+  `plannedTime`, `currentTime`, `nextScheduledTime`, `nextPredictedTime`,
+  `delayMinutes`, `delayText`.
+
+COP nemá parsovat zkrácené zdrojové klíče Správy železnic ani volat jejich mapový
+backend přímo. SIM drží jednu zdrojovou cache pro celý vlakový feed s minimálním
+TTL 900 s a bbox aplikuje lokálně.
 
 ## Detail vozidla
 

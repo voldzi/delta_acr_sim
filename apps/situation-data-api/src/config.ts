@@ -50,6 +50,8 @@ export interface SituationDataConfig {
   pidGtfsStaticCacheTtlSeconds: number;
   idsjmkVehiclePositionsUrl: string;
   idsjmkVehiclePositionsCacheTtlSeconds: number;
+  spravaZeleznicTrainPositionsUrl: string;
+  spravaZeleznicTrainPositionsCacheTtlSeconds: number;
   roadSrtiLodSparqlUrl: string;
   roadSrtiLodCacheTtlSeconds: number;
   roadSrtiLodMaxRecords: number;
@@ -148,6 +150,13 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
     idsjmkVehiclePositionsUrl: process.env.IDSJMK_VEHICLE_POSITIONS_URL ?? "https://mapa.idsjmk.cz/api/vehicles.json",
     idsjmkVehiclePositionsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS, 20),
+    spravaZeleznicTrainPositionsUrl:
+      process.env.SPRAVAZELEZNIC_TRAIN_POSITIONS_URL ??
+      "https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2",
+    spravaZeleznicTrainPositionsCacheTtlSeconds: Math.max(
+      900,
+      parseInteger(process.env.SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS, 900)
+    ),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
     roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
@@ -209,6 +218,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "ctu_stationary_mobile",
     "pid_gtfs_rt",
     "idsjmk_vehicle_positions",
+    "spravazeleznic_trains",
     "road_srti_lod",
     "safety_data",
     "aviation_weather",

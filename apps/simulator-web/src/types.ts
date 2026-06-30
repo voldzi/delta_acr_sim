@@ -252,6 +252,7 @@ export type SituationDataSourceId =
   | "ctu_stationary_mobile"
   | "pid_gtfs_rt"
   | "idsjmk_vehicle_positions"
+  | "spravazeleznic_trains"
   | "road_srti_lod"
   | "safety_data"
   | "aviation_weather"

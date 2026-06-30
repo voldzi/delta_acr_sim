@@ -1,6 +1,7 @@
 import { unzipSync } from "fflate";
 import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
+import proj4 from "proj4";
 import { canonicalizeBboxForCache, formatBboxKey, roundPointToGrid } from "./bbox-cache.js";
 import { CHMI_WEBCAMS_LICENSE, CHMI_WEATHER_WEBCAMS_SOURCE_ID, ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import {
@@ -204,6 +205,19 @@ const IDSJMK_VEHICLE_POSITIONS_LICENSE: SituationDataLicense = {
   ]
 };
 
+const SPRAVAZELEZNIC_TRAINS_LICENSE: SituationDataLicense = {
+  name: "Správa železnic train operations map",
+  url: "https://mapy.spravazeleznic.cz/vlaky-provoz",
+  attribution: "Správa železnic, státní organizace",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Server-side SIM cache enforces a minimum refresh interval of 15 minutes for this source.",
+    "COP must consume train positions only through SIM and must not call the Správa železnic map backend directly.",
+    "The feed is public operational context; use official Správa železnic systems for authoritative railway operations."
+  ]
+};
+
 const ROAD_SRTI_LOD_LICENSE: SituationDataLicense = {
   name: "NDIC/ŘSD SRTI Linked Open Data",
   url: "https://lod.tamtamresearch.com/docs/",
@@ -267,6 +281,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     ctu_stationary_mobile: new CtuStationaryMobileSource(config),
     pid_gtfs_rt: new PidGtfsRtSource(config),
     idsjmk_vehicle_positions: new IdsjmkVehiclePositionsSource(config),
+    spravazeleznic_trains: new SpravaZeleznicTrainsSource(config),
     road_srti_lod: new RoadSrtiLodSource(config),
     safety_data: new SafetyDataProjectionSource(config),
     aviation_weather: new AviationWeatherSource(config),
@@ -293,6 +308,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new CtuStationaryMobileSource(config).descriptor,
     new PidGtfsRtSource(config).descriptor,
     new IdsjmkVehiclePositionsSource(config).descriptor,
+    new SpravaZeleznicTrainsSource(config).descriptor,
     new RoadSrtiLodSource(config).descriptor,
     new SafetyDataProjectionSource(config).descriptor,
     new AviationWeatherSource(config).descriptor,
@@ -1825,6 +1841,49 @@ class IdsjmkVehiclePositionsSource implements SituationDataSource {
   }
 }
 
+class SpravaZeleznicTrainsSource implements SituationDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly feedCache: ManagedResponseCache<SpravaZeleznicTrainFeature[]>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.feedCache = new ManagedResponseCache<SpravaZeleznicTrainFeature[]>({
+      ttlMs: Math.max(900, config.spravaZeleznicTrainPositionsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(900, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
+    this.descriptor = {
+      sourceId: "spravazeleznic_trains",
+      label: "Správa železnic train positions",
+      enabled: config.enabledSources.includes("spravazeleznic_trains"),
+      mode: "live",
+      priority: 76,
+      layers: ["traffic"],
+      license: SPRAVAZELEZNIC_TRAINS_LICENSE,
+      baseUrl: config.spravaZeleznicTrainPositionsUrl,
+      updateCadenceSeconds: Math.max(900, config.spravaZeleznicTrainPositionsCacheTtlSeconds)
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("spravazeleznic_trains", this.feedCache)];
+  }
+
+  async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("traffic")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const trains = await this.feedCache.getOrLoad("spravazeleznic_train_positions", () => fetchSpravaZeleznicTrainFeatures(this.config));
+    const features = trains
+      .map((train) => mapSpravaZeleznicTrainFeature(train, query, fetchedAt))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .slice(0, query.limit);
+
+    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+  }
+}
+
 class RoadSrtiLodSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly eventsCache: ManagedResponseCache<RoadSrtiLodEvent[]>;
@@ -3102,6 +3161,109 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
       }
     },
     raw: query.includeRaw ? record : undefined
+  });
+}
+
+function mapSpravaZeleznicTrainFeature(feature: SpravaZeleznicTrainFeature, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+  const position = spravaZeleznicTrainLonLat(feature.geometry?.coordinates);
+  if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
+    return undefined;
+  }
+  const props = feature.properties ?? {};
+  const sourceTrainId = optionalString(props.id) ?? optionalString(feature.id) ?? `${position.lon}:${position.lat}`;
+  const trainType = optionalString(props.tt);
+  const trainNumber = optionalString(props.tn);
+  const trainName = optionalString(props.na);
+  const routeShortName = [trainType, trainNumber].filter(Boolean).join(" ") || trainNumber || trainName;
+  const origin = optionalString(props.fn);
+  const destination = optionalString(props.ln);
+  const carrier = optionalString(props.d);
+  const currentStationName = optionalString(props.cna);
+  const nextStationName = optionalString(props.nsn);
+  const plannedTime = optionalString(props.cp);
+  const currentTime = optionalString(props.cr);
+  const nextScheduledTime = optionalString(props.nst);
+  const nextPredictedTime = optionalString(props.nsp);
+  const delayMinutes = optionalNumber(props.de);
+  const delayText = optionalString(props.pde);
+  const headingDeg = optionalNumber(props.a);
+  const labelParts = [routeShortName, trainName].filter(Boolean);
+  const label = labelParts.length > 0 ? `Vlak ${labelParts.join(" ")}` : "Vlak Správy železnic";
+  const featureId = `traffic:spravazeleznic_trains:${stableToken(sourceTrainId)}`;
+
+  return makePointFeature({
+    id: featureId,
+    lon: position.lon,
+    lat: position.lat,
+    layer: "traffic",
+    category: "public_transport_train",
+    label,
+    sourceId: "spravazeleznic_trains",
+    license: SPRAVAZELEZNIC_TRAINS_LICENSE,
+    observedAt: fetchedAt,
+    validUntil: addSeconds(fetchedAt, 20 * 60),
+    confidence: 0.82,
+    severity: trainDelaySeverity(delayMinutes),
+    metrics: compactMetrics({
+      delayMinutes,
+      delaySeconds: typeof delayMinutes === "number" ? delayMinutes * 60 : undefined,
+      headingDeg
+    }),
+    tags: compactTags({
+      sourceSystem: "spravazeleznic",
+      trainType,
+      trainNumber,
+      trainName,
+      carrier,
+      origin,
+      destination,
+      currentStationName,
+      nextStationName,
+      plannedTime,
+      currentTime,
+      nextScheduledTime,
+      nextPredictedTime,
+      delayText,
+      sr70NextStation: optionalString(props.nsn70),
+      sr70StartStation: optionalString(props.zst_sr70)
+    }),
+    transportMode: "train",
+    routeShortName,
+    destination,
+    delaySeconds: typeof delayMinutes === "number" ? Math.round(delayMinutes * 60) : undefined,
+    vehicleId: sourceTrainId,
+    tripId: sourceTrainId,
+    operator: carrier,
+    headingDeg,
+    providerProperties: {
+      transit: {
+        systemId: "spravazeleznic",
+        sourceId: "spravazeleznic_trains",
+        transportMode: "train",
+        routeShortName,
+        trainType,
+        trainNumber,
+        trainName,
+        origin,
+        destination,
+        currentStationName,
+        nextStationName,
+        plannedTime,
+        currentTime,
+        nextScheduledTime,
+        nextPredictedTime,
+        delayMinutes,
+        delaySeconds: typeof delayMinutes === "number" ? Math.round(delayMinutes * 60) : undefined,
+        delayText,
+        vehicleId: sourceTrainId,
+        tripId: sourceTrainId,
+        operator: carrier,
+        headingDeg,
+        detailAvailable: false,
+        detailLimitation: "SIM currently exposes normalized Správa železnic train positions. Detailed train stop sequence is not yet part of the stable COP contract."
+      }
+    },
+    raw: query.includeRaw ? feature : undefined
   });
 }
 
@@ -4750,6 +4912,21 @@ interface IdsjmkVehicleFeed extends Record<string, unknown> {
 
 type IdsjmkVehicleRecord = Record<string, unknown>;
 
+interface SpravaZeleznicTrainFeature {
+  type?: string;
+  id?: string;
+  geometry?: {
+    type?: string;
+    coordinates?: unknown;
+  };
+  properties?: Record<string, unknown>;
+}
+
+interface SpravaZeleznicTrainResponse {
+  cachedResult?: boolean;
+  result?: unknown;
+}
+
 interface RoadSrtiLodEvent {
   iri: string;
   typeUri: string;
@@ -5296,6 +5473,19 @@ async function requestJsonWithHeaders<T>(url: string, timeoutMs: number, headers
   return (await response.json()) as T;
 }
 
+async function requestJsonPostWithHeaders<T>(url: string, timeoutMs: number, headers: Record<string, string>): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: "",
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  return (await response.json()) as T;
+}
+
 async function requestJsonArray<T>(url: string, timeoutMs: number, headers: Record<string, string>): Promise<T[]> {
   const response = await fetch(url, {
     headers,
@@ -5384,6 +5574,17 @@ async function fetchIdsjmkVehicleFeed(config: SituationDataConfig): Promise<Idsj
     accept: "application/json",
     "user-agent": "csm-sim-situation-data/0.1"
   });
+}
+
+async function fetchSpravaZeleznicTrainFeatures(config: SituationDataConfig): Promise<SpravaZeleznicTrainFeature[]> {
+  const response = await requestJsonPostWithHeaders<SpravaZeleznicTrainResponse>(config.spravaZeleznicTrainPositionsUrl, config.requestTimeoutMs, {
+    accept: "application/json, text/javascript, */*; q=0.01",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "x-requested-with": "XMLHttpRequest",
+    "user-agent": "csm-sim-situation-data/0.1"
+  });
+  const decoded = decodeSpravaZeleznicPayload(response.result);
+  return decoded.filter(isSpravaZeleznicTrainFeature);
 }
 
 function normalizeIdsjmkVehicles(feed: IdsjmkVehicleFeed): IdsjmkVehicleRecord[] {
@@ -5958,6 +6159,99 @@ function idsjmkVehicleMode(record: IdsjmkVehicleRecord): { category: string; lab
     return { category: "public_transport_trolleybus", label: "trolleybus", tag: "trolleybus" };
   }
   return { category: "public_transport_bus", label: "bus", tag: "bus" };
+}
+
+const SJTSK_KROVAK_PROJ =
+  "+proj=krovak +lat_0=49.5 +lon_0=24.83333333333333 +alpha=30.28813975277778 +k=0.9999 +x_0=0 +y_0=0 +ellps=bessel +towgs84=570.8,85.7,462.8,4.998,1.587,5.261,3.56 +units=m +no_defs";
+const WGS84_PROJ = "+proj=longlat +datum=WGS84 +no_defs";
+
+function decodeSpravaZeleznicPayload(value: unknown): SpravaZeleznicTrainFeature[] {
+  const encoded = Array.isArray(value) ? value.find((item): item is string => typeof item === "string") : value;
+  if (typeof encoded !== "string" || encoded.length === 0) {
+    return [];
+  }
+  const bytes = Buffer.from(encoded, "base64");
+  for (const key of spravaZeleznicDecodeKeys(new Date())) {
+    try {
+      const decoded = Buffer.alloc(bytes.length);
+      for (let index = 0; index < bytes.length; index += 1) {
+        decoded[index] = bytes[index]! ^ key[index % key.length]!;
+      }
+      const payload = JSON.parse(new TextDecoder().decode(decoded)) as unknown;
+      const normalized = restoreSpravaZeleznicKeys(payload);
+      return Array.isArray(normalized) ? normalized.filter(isSpravaZeleznicTrainFeature) : [];
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("spravazeleznic_trains payload could not be decoded with current or previous day key.");
+}
+
+function spravaZeleznicDecodeKeys(now: Date): Buffer[] {
+  return [0, -1].map((offsetDays) => {
+    const date = new Date(now);
+    date.setUTCDate(date.getUTCDate() + offsetDays);
+    const key = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
+    return Buffer.from(key, "utf8");
+  });
+}
+
+function restoreSpravaZeleznicKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(restoreSpravaZeleznicKeys);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  const mapped: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const restoredKey = key === "p" ? "properties" : key === "c" ? "coordinates" : key === "g" ? "geometry" : key;
+    mapped[restoredKey] = restoreSpravaZeleznicKeys(item);
+  }
+  return mapped;
+}
+
+function isSpravaZeleznicTrainFeature(value: unknown): value is SpravaZeleznicTrainFeature {
+  return (
+    isRecord(value) &&
+    value.type === "Feature" &&
+    isRecord(value.geometry) &&
+    value.geometry.type === "Point" &&
+    Array.isArray(value.geometry.coordinates) &&
+    isRecord(value.properties)
+  );
+}
+
+function spravaZeleznicTrainLonLat(value: unknown): { lon: number; lat: number } | undefined {
+  if (!isLonLatPair(value)) {
+    return undefined;
+  }
+  const [x, y] = value;
+  try {
+    const [lon, lat] = proj4(SJTSK_KROVAK_PROJ, WGS84_PROJ, [x, y]);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+      return undefined;
+    }
+    return { lon, lat };
+  } catch {
+    return undefined;
+  }
+}
+
+function trainDelaySeverity(delayMinutes: number | undefined): SituationSeverity {
+  if (delayMinutes === undefined) {
+    return "info";
+  }
+  if (delayMinutes >= 60) {
+    return "critical";
+  }
+  if (delayMinutes >= 30) {
+    return "warning";
+  }
+  if (delayMinutes >= 10) {
+    return "advisory";
+  }
+  return "info";
 }
 
 function sparqlValue(binding: Record<string, SparqlBindingValue>, key: string): string | undefined {

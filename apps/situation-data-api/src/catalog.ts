@@ -482,6 +482,35 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       }
     },
     {
+      providerLayerId: "traffic.spravazeleznic_trains",
+      recommendedCatalogLayerId: "public.traffic.transit",
+      label: "Vlaky Správy železnic",
+      description: "Aktuální polohy vlaků z veřejné mapy Správy železnic, načítané výhradně server-side přes SIM s minimálním intervalem 15 minut.",
+      categoryPath: ["traffic", "transit", "rail"],
+      categories: ["traffic", "transit_vehicle", "train"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: config.spravaZeleznicTrainPositionsCacheTtlSeconds,
+      cacheTtlSeconds: config.spravaZeleznicTrainPositionsCacheTtlSeconds,
+      styleProfile: "transit-vehicle-position-v1",
+      sourceIds: ["spravazeleznic_trains"],
+      query: query(["traffic"], ["spravazeleznic_trains"]),
+      legend: { profile: "transit-vehicle-position-v1" },
+      legal: {
+        attribution: "Správa železnic, státní organizace",
+        notes: [
+          "Dopravní kontext, ne bezpečnostní track.",
+          "SIM dotazuje upstream nejvýše jednou za 15 minut bez ohledu na počet uživatelů COP."
+        ]
+      }
+    },
+    {
       providerLayerId: "traffic.road_events.srti",
       recommendedCatalogLayerId: "public.traffic.road_events",
       label: "Silniční dopravní události",
@@ -1396,6 +1425,16 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsCatalogLayerIds: ["public.traffic.transit"],
         notes: ["Regional public-transit context. SIM must cache this source server-side and COM must not call IDS JMK upstream directly."]
       };
+    case "spravazeleznic_trains":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["traffic.spravazeleznic_trains"],
+        feedsCatalogLayerIds: ["public.traffic.transit"],
+        notes: ["Railway traffic context. SIM enforces a minimum 15-minute upstream refresh interval and COP must not call Správa železnic directly."]
+      };
     case "road_srti_lod":
       return {
         sourceRole: "final",
@@ -1465,6 +1504,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return 20;
     case "idsjmk_vehicle_positions":
       return config.idsjmkVehiclePositionsCacheTtlSeconds;
+    case "spravazeleznic_trains":
+      return config.spravaZeleznicTrainPositionsCacheTtlSeconds;
     case "road_srti_lod":
       return config.roadSrtiLodCacheTtlSeconds;
     case "safety_data":
@@ -1488,6 +1529,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "idsjmk_vehicle_positions") {
     return "idsjmk-open-data";
+  }
+  if (sourceId === "spravazeleznic_trains") {
+    return "spravazeleznic-mapy";
   }
   if (sourceId === "road_srti_lod") {
     return "ndic-srti-lod";
