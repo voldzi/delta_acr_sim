@@ -2131,6 +2131,11 @@ describe("Situation Data API contract", () => {
             transit: expect.objectContaining({
               systemId: "pid",
               sourceId: "pid_gtfs_rt",
+              positionKind: "vehicle_live",
+              livePosition: true,
+              motionExpected: true,
+              refreshSeconds: 20,
+              cacheTtlSeconds: 20,
               transportMode: "bus",
               routeId: "L136",
               routeShortName: "136",
@@ -2336,8 +2341,17 @@ describe("Situation Data API contract", () => {
           speedMps: 9,
           headingDeg: 88,
           metrics: expect.objectContaining({ speedMps: 9, headingDeg: 88 }),
-          tags: expect.objectContaining({ line: "12", transportMode: "tram" }),
+          tags: expect.objectContaining({ line: "12", transportMode: "tram", positionKind: "vehicle_live", livePosition: "true" }),
           providerProperties: expect.objectContaining({
+            transit: expect.objectContaining({
+              systemId: "idsjmk",
+              sourceId: "idsjmk_vehicle_positions",
+              positionKind: "vehicle_live",
+              livePosition: true,
+              motionExpected: true,
+              refreshSeconds: 20,
+              cacheTtlSeconds: 20
+            }),
             raw: expect.any(Object)
           })
         })
@@ -2431,11 +2445,22 @@ describe("Situation Data API contract", () => {
           category: "public_transport_stop",
           label: "Ústí nad Labem hlavní nádraží",
           transportMode: "public_transport",
-          tags: expect.objectContaining({ sourceSystem: "test_gtfs", stopId: "U1", stopCode: "1001" }),
+          tags: expect.objectContaining({
+            sourceSystem: "test_gtfs",
+            stopId: "U1",
+            stopCode: "1001",
+            positionKind: "static_stop",
+            livePosition: "false"
+          }),
           providerProperties: expect.objectContaining({
             transit: expect.objectContaining({
               systemId: "test_gtfs",
               sourceId: "public_transit_static",
+              positionKind: "static_stop",
+              livePosition: false,
+              motionExpected: false,
+              refreshSeconds: 21600,
+              cacheTtlSeconds: 21600,
               stopId: "U1",
               stopName: "Ústí nad Labem hlavní nádraží",
               staticOnly: true,
@@ -2584,12 +2609,20 @@ describe("Situation Data API contract", () => {
             trainName: "Rožmberk",
             currentStationName: "Počátky-Žirovnice",
             nextStationName: "Jindřichův Hradec",
-            delayText: "13 min"
+            delayText: "13 min",
+            positionKind: "vehicle_live_cached",
+            livePosition: "true"
           }),
           providerProperties: expect.objectContaining({
             transit: expect.objectContaining({
               systemId: "spravazeleznic",
               sourceId: "spravazeleznic_trains",
+              positionKind: "vehicle_live_cached",
+              livePosition: true,
+              motionExpected: true,
+              refreshSeconds: 900,
+              cacheTtlSeconds: 900,
+              refreshLimitation: "SIM enforces the agreed minimum upstream polling interval of 15 minutes for Správa železnic.",
               transportMode: "train",
               routeShortName: "R 654",
               delayMinutes: 13,

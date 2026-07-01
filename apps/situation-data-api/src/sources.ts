@@ -1846,8 +1846,9 @@ class PublicTransitStaticSource implements SituationDataSource {
     }
 
     const stops = await this.feedCache.getOrLoad(publicTransitStaticCacheKey(this.config), () => fetchPublicTransitStaticStops(this.config));
+    const refreshSeconds = Math.max(3600, this.config.publicTransitStaticCacheTtlSeconds);
     const features = stops
-      .map((stop) => mapPublicTransitStaticStop(stop, query, fetchedAt))
+      .map((stop) => mapPublicTransitStaticStop(stop, query, fetchedAt, refreshSeconds))
       .filter((feature): feature is SituationFeature => Boolean(feature))
       .slice(0, query.limit);
 
@@ -1891,8 +1892,9 @@ class IdsjmkVehiclePositionsSource implements SituationDataSource {
     const feed = await this.feedCache.getOrLoad("idsjmk_vehicle_positions", () => fetchIdsjmkVehicleFeed(this.config));
     const observedAt = parseTimestamp(feed.LastUpdate ?? feed.lastUpdate) ?? fetchedAt;
     const vehicles = normalizeIdsjmkVehicles(feed);
+    const refreshSeconds = Math.max(10, this.config.idsjmkVehiclePositionsCacheTtlSeconds);
     const features = vehicles
-      .map((vehicle) => mapIdsjmkVehiclePosition(vehicle, query, observedAt))
+      .map((vehicle) => mapIdsjmkVehiclePosition(vehicle, query, observedAt, refreshSeconds))
       .filter((feature): feature is SituationFeature => Boolean(feature))
       .slice(0, query.limit);
 
@@ -1934,8 +1936,9 @@ class SpravaZeleznicTrainsSource implements SituationDataSource {
     }
 
     const trains = await this.feedCache.getOrLoad("spravazeleznic_train_positions", () => fetchSpravaZeleznicTrainFeatures(this.config));
+    const refreshSeconds = Math.max(900, this.config.spravaZeleznicTrainPositionsCacheTtlSeconds);
     const features = trains
-      .map((train) => mapSpravaZeleznicTrainFeature(train, query, fetchedAt))
+      .map((train) => mapSpravaZeleznicTrainFeature(train, query, fetchedAt, refreshSeconds))
       .filter((feature): feature is SituationFeature => Boolean(feature))
       .slice(0, query.limit);
 
@@ -3105,7 +3108,9 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
       currentStatus: pidVehicleStopStatus(vehicle?.currentStatus),
       congestionLevel: pidCongestionLevel(vehicle?.congestionLevel),
       occupancyStatus,
-      transportMode: mode.tag
+      transportMode: mode.tag,
+      positionKind: "vehicle_live",
+      livePosition: "true"
     }),
     transportMode: mode.tag,
     routeShortName: routeLabel,
@@ -3120,6 +3125,11 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
       transit: {
         systemId: "pid",
         sourceId: "pid_gtfs_rt",
+        positionKind: "vehicle_live",
+        livePosition: true,
+        motionExpected: true,
+        refreshSeconds: 20,
+        cacheTtlSeconds: 20,
         transportMode: mode.tag,
         routeId,
         routeShortName: routeLabel,
@@ -3142,7 +3152,7 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
   });
 }
 
-function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQuery, sourceObservedAt: string): SituationFeature | undefined {
+function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQuery, sourceObservedAt: string, refreshSeconds: number): SituationFeature | undefined {
   const position = idsjmkVehicleLonLat(record);
   if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
     return undefined;
@@ -3190,7 +3200,9 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
       tripId,
       operator,
       transportMode: mode.tag,
-      sourceSystem: "idsjmk"
+      sourceSystem: "idsjmk",
+      positionKind: "vehicle_live",
+      livePosition: "true"
     }),
     transportMode: mode.tag,
     routeShortName: line,
@@ -3205,6 +3217,11 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
       transit: {
         systemId: "idsjmk",
         sourceId: "idsjmk_vehicle_positions",
+        positionKind: "vehicle_live",
+        livePosition: true,
+        motionExpected: true,
+        refreshSeconds,
+        cacheTtlSeconds: refreshSeconds,
         transportMode: mode.tag,
         routeId,
         routeShortName: line,
@@ -3223,7 +3240,7 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
   });
 }
 
-function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: SituationQuery, observedAt: string): SituationFeature | undefined {
+function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: SituationQuery, observedAt: string, refreshSeconds: number): SituationFeature | undefined {
   if (!isPointInBbox(stop.lon, stop.lat, query.bbox)) {
     return undefined;
   }
@@ -3254,13 +3271,20 @@ function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: Situat
       zoneId: stop.zoneId,
       locationType: stop.locationType,
       parentStation: stop.parentStation,
-      wheelchairBoarding: stop.wheelchairBoarding
+      wheelchairBoarding: stop.wheelchairBoarding,
+      positionKind: "static_stop",
+      livePosition: "false"
     }),
     transportMode: "public_transport",
     providerProperties: {
       transit: {
         systemId: stop.systemId,
         sourceId: "public_transit_static",
+        positionKind: "static_stop",
+        livePosition: false,
+        motionExpected: false,
+        refreshSeconds,
+        cacheTtlSeconds: refreshSeconds,
         transportMode: "public_transport",
         stopId: stop.stopId,
         stopCode: stop.stopCode,
@@ -3282,7 +3306,7 @@ function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: Situat
   });
 }
 
-function mapSpravaZeleznicTrainFeature(feature: SpravaZeleznicTrainFeature, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+function mapSpravaZeleznicTrainFeature(feature: SpravaZeleznicTrainFeature, query: SituationQuery, fetchedAt: string, refreshSeconds: number): SituationFeature | undefined {
   const position = spravaZeleznicTrainLonLat(feature.geometry?.coordinates);
   if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
     return undefined;
@@ -3343,7 +3367,9 @@ function mapSpravaZeleznicTrainFeature(feature: SpravaZeleznicTrainFeature, quer
       nextPredictedTime,
       delayText,
       sr70NextStation: optionalString(props.nsn70),
-      sr70StartStation: optionalString(props.zst_sr70)
+      sr70StartStation: optionalString(props.zst_sr70),
+      positionKind: "vehicle_live_cached",
+      livePosition: "true"
     }),
     transportMode: "train",
     routeShortName,
@@ -3357,6 +3383,12 @@ function mapSpravaZeleznicTrainFeature(feature: SpravaZeleznicTrainFeature, quer
       transit: {
         systemId: "spravazeleznic",
         sourceId: "spravazeleznic_trains",
+        positionKind: "vehicle_live_cached",
+        livePosition: true,
+        motionExpected: true,
+        refreshSeconds,
+        cacheTtlSeconds: refreshSeconds,
+        refreshLimitation: "SIM enforces the agreed minimum upstream polling interval of 15 minutes for Správa železnic.",
         transportMode: "train",
         routeShortName,
         trainType,

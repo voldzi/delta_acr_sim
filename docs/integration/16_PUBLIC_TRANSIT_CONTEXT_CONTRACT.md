@@ -90,6 +90,35 @@ styleProfile: transit-stop-static-v1
 COP je má zobrazovat až od lokálního zoomu podle katalogového `minZoom`, aby
 nedošlo k zahlcení mapy při celostátním pohledu.
 
+## Refresh a pohyb prvků
+
+COP nesmí odvozovat pohyb prvku jen ze sdílené katalogové vrstvy
+`public.traffic.transit`. Tuto vrstvu používá více providerů s různou
+periodicitou. COP musí číst `providerLayerId`, `sourceId` a hlavně
+`providerProperties.transit.positionKind`.
+
+| `positionKind` | Význam | Doporučené chování COP |
+| --- | --- | --- |
+| `vehicle_live` | skutečná živá poloha vozidla, např. PID nebo IDS JMK | obnovovat daný provider podle `providerProperties.transit.refreshSeconds`, pro PID typicky 20 s; polohu po `validUntil` označit jako zastaralou nebo skrýt |
+| `vehicle_live_cached` | poloha vozidla z live veřejného feedu s provozním limitem cache, např. Správa železnic | obnovovat krokově podle `refreshSeconds`, pro Správu železnic 900 s; nečekat plynulý pohyb mezi každými dotazy |
+| `static_stop` | statická zastávka, terminál nebo referenční dopravní bod | nikdy neanimovat a nezobrazovat jako vozidlo; dotazovat až od lokálního zoomu podle katalogu |
+
+Normalizovaná pole:
+
+- `providerProperties.transit.livePosition`: `true` jen pro vozidla,
+- `providerProperties.transit.motionExpected`: zda se má prvek mezi obnovami
+  posouvat,
+- `providerProperties.transit.refreshSeconds`: doporučený interval obnovy
+  konkrétního provideru,
+- `providerProperties.transit.cacheTtlSeconds`: zdrojový TTL v SIM,
+- `properties.observedAt` a `properties.validUntil`: časová platnost konkrétní
+  polohy.
+
+Pokud COP sloučí provider vrstvy pod jednu UI položku, musí uvnitř držet
+samostatné refresh cykly. Pomalý zdroj `spravazeleznic_trains` s limitem 900 s
+nesmí zpomalit `pid_gtfs_rt`. Statické zastávky `public_transit_static` patří do
+`public.traffic.transit_stops`, ne do animace vozidel.
+
 ## Mapová feature vozidla
 
 Endpoint:
@@ -125,12 +154,20 @@ Povinná a doporučená pole:
 | `properties.operator` | např. `PID`, `IDS JMK` |
 | `properties.styleHint` | doporučený styl, např. `transit-vehicle-position-v1` |
 | `properties.iconHint` | doporučená ikona podle módu |
+| `providerProperties.transit.positionKind` | `vehicle_live`, `vehicle_live_cached`, nebo `static_stop` |
+| `providerProperties.transit.refreshSeconds` | interval obnovy pro konkrétní provider |
 
 `providerProperties.transit` doplňuje auditní a detailní hodnoty:
 
 ```json
 {
   "systemId": "pid",
+  "sourceId": "pid_gtfs_rt",
+  "positionKind": "vehicle_live",
+  "livePosition": true,
+  "motionExpected": true,
+  "refreshSeconds": 20,
+  "cacheTtlSeconds": 20,
   "routeId": "10",
   "routeShortName": "10",
   "tripId": "trip-10-20260630",
@@ -177,6 +214,10 @@ Mapová feature statické zastávky obsahuje:
     "transit": {
       "systemId": "pid",
       "sourceId": "public_transit_static",
+      "positionKind": "static_stop",
+      "livePosition": false,
+      "motionExpected": false,
+      "refreshSeconds": 21600,
       "stopId": "U1234",
       "stopName": "Florenc",
       "staticOnly": true,
@@ -379,8 +420,13 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
 
 - vrstvy brát z katalogu `public.traffic.transit`,
 - dotazovat `layers=traffic` podle bboxu mapy,
+- obnovovat každou provider vrstvu podle jejího vlastního `refreshSeconds`,
+  ne podle nejpomalejšího zdroje v celé sdílené dopravní vrstvě,
 - kreslit bod vozidla podle `transportMode`, `routeShortName`, `headingDeg` a
   `delaySeconds`,
+- animovat nebo interpolovat jen prvky s
+  `providerProperties.transit.positionKind=vehicle_live`; prvky
+  `vehicle_live_cached` obnovovat krokově a `static_stop` nikdy neanimovat,
 - po kliknutí na vozidlo otevřít detail z detailního transit endpointu,
 - po kliknutí na statickou zastávku použít `providerProperties.transit.detailUrl`
   a zobrazit odjezdy/linky ze SIM read-modelu,
@@ -395,8 +441,9 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
    a `shapes` je implementovaný pro detail vozidla.
 2. Obecný statický read-model pro `public_transit_static` je implementovaný pro
    detail zastávky, odjezdy, linky, spoje a dostupné tvary tras.
-3. `providerProperties.transit` je implementované pro PID a IDS JMK mapové
-   features.
+3. `providerProperties.transit` včetně `positionKind`, `livePosition`,
+   `motionExpected` a `refreshSeconds` je implementované pro PID, IDS JMK,
+   Správu železnic a statické zastávky.
 4. `GET /situation-data/api/v1/transit/vehicles/{featureId}` je implementovaný
    pro PID.
 5. Přidat PID trip updates a service alerts, pokud jsou dostupné v dané

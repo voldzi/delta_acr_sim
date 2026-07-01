@@ -452,7 +452,10 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       legend: { profile: "transit-vehicle-position-v1" },
       legal: {
         attribution: "PID / Golemio Open Data",
-        notes: ["Dopravní kontext, ne bezpečnostní track."]
+        notes: [
+          "Dopravní kontext, ne bezpečnostní track.",
+          "COP must refresh this provider layer independently at the provider refreshSeconds cadence; do not inherit the slower train refresh interval from the shared public.traffic.transit catalog layer."
+        ]
       }
     },
     {
@@ -481,6 +484,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
         attribution: "Feature-level GTFS agency attribution",
         notes: [
           "Statický dopravní kontext, ne live poloha vozidla.",
+          "Feature providerProperties.transit.positionKind is static_stop and motionExpected is false.",
           "SIM načítá GTFS ZIPy do sdílené source cache a COP nesmí volat městské GTFS endpointy přímo."
         ]
       }
@@ -508,7 +512,10 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
       legend: { profile: "transit-vehicle-position-v1" },
       legal: {
         attribution: "IDS JMK / Brno Open Data",
-        notes: ["Dopravní kontext, ne bezpečnostní track. SIM drží zdrojovou cache a filtruje odpovědi podle bbox."]
+        notes: [
+          "Dopravní kontext, ne bezpečnostní track. SIM drží zdrojovou cache a filtruje odpovědi podle bbox.",
+          "Layer is usable only when source metadata reports idsjmk_vehicle_positions.enabled=true."
+        ]
       }
     },
     {
@@ -536,6 +543,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
         attribution: "Správa železnic, státní organizace",
         notes: [
           "Dopravní kontext, ne bezpečnostní track.",
+          "Feature providerProperties.transit.positionKind is vehicle_live_cached; expected movement is step-wise at the 15-minute source cadence.",
           "SIM dotazuje upstream nejvýše jednou za 15 minut bez ohledu na počet uživatelů COP."
         ]
       }
