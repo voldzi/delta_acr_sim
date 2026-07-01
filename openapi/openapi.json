@@ -9344,6 +9344,21 @@
                   "type": "integer",
                   "description": "Delay estimate applied to this stop time. Negative value means early."
                 },
+                "scheduleRelationship": {
+                  "type": "string",
+                  "enum": [
+                    "scheduled",
+                    "skipped",
+                    "no_data",
+                    "unscheduled"
+                  ],
+                  "description": "GTFS-RT stop-time schedule relationship when official trip update data is available."
+                },
+                "tripUpdateTimestamp": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Timestamp of the GTFS-RT TripUpdate used for this stop prediction."
+                },
                 "relationToVehicle": {
                   "type": "string",
                   "enum": [
@@ -9464,12 +9479,17 @@
               "delaySource": {
                 "type": "string",
                 "enum": [
+                  "official_trip_update",
                   "estimated_from_schedule",
                   "unavailable"
                 ]
               },
               "delaySeconds": {
                 "type": "integer"
+              },
+              "tripUpdateTimestamp": {
+                "type": "string",
+                "format": "date-time"
               },
               "stopTimes": {
                 "type": "array",
@@ -9506,6 +9526,19 @@
                     },
                     "delaySeconds": {
                       "type": "integer"
+                    },
+                    "scheduleRelationship": {
+                      "type": "string",
+                      "enum": [
+                        "scheduled",
+                        "skipped",
+                        "no_data",
+                        "unscheduled"
+                      ]
+                    },
+                    "tripUpdateTimestamp": {
+                      "type": "string",
+                      "format": "date-time"
                     },
                     "relationToVehicle": {
                       "type": "string",
@@ -9582,7 +9615,7 @@
               },
               "tripUpdateAvailable": {
                 "type": "boolean",
-                "description": "False until SIM is configured with a realtime GTFS-RT trip-updates feed for this system."
+                "description": "True when SIM matched an official GTFS-RT TripUpdate for this vehicle detail response."
               },
               "tripScheduleAvailable": {
                 "type": "boolean"

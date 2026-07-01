@@ -67,6 +67,7 @@ describe("Situation Data API contract", () => {
       ],
       ctuStationaryMobileCacheTtlSeconds: 86400,
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
+      pidGtfsRtTripUpdatesUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/trip_updates.pb",
       pidGtfsStaticUrl: "https://data.pid.cz/PID_GTFS.zip",
       pidGtfsStaticCacheTtlSeconds: 21600,
       publicTransitStaticGtfsFeeds: [
@@ -2213,6 +2214,51 @@ describe("Situation Data API contract", () => {
       ]
     });
     const realtimePayload = gtfsRealtime.transit_realtime.FeedMessage.encode(feed).finish();
+    const tripUpdatesFeed = gtfsRealtime.transit_realtime.FeedMessage.create({
+      header: {
+        gtfsRealtimeVersion: "2.0",
+        timestamp: Math.round(Date.parse("2026-05-28T06:05:45.000Z") / 1000)
+      },
+      entity: [
+        {
+          id: "trip-update-1",
+          tripUpdate: {
+            trip: {
+              tripId: "trip-136-1",
+              routeId: "L136",
+              startDate: "20260528",
+              startTime: "08:00:00"
+            },
+            vehicle: {
+              id: "service-3-pid-veh-1"
+            },
+            timestamp: Math.round(Date.parse("2026-05-28T06:05:45.000Z") / 1000),
+            delay: 45,
+            stopTimeUpdate: [
+              {
+                stopSequence: 1,
+                stopId: "stop-1",
+                arrival: { delay: 20 },
+                departure: { delay: 20 }
+              },
+              {
+                stopSequence: 2,
+                stopId: "stop-2",
+                arrival: { delay: 45 },
+                departure: { delay: 45 }
+              },
+              {
+                stopSequence: 3,
+                stopId: "stop-3",
+                arrival: { delay: 70 },
+                departure: { delay: 75 }
+              }
+            ]
+          }
+        }
+      ]
+    });
+    const tripUpdatesPayload = gtfsRealtime.transit_realtime.FeedMessage.encode(tripUpdatesFeed).finish();
     const staticPayload = zipSync({
       "routes.txt": strToU8("route_id,route_short_name,route_long_name,route_type\nL136,136,Sidliste Dablice - Sidliste Repy,3\n"),
       "trips.txt": strToU8("route_id,service_id,trip_id,trip_headsign,direction_id,shape_id\nL136,WK,trip-136-1,Sidliste Repy,0,shape-136\n"),
@@ -2246,12 +2292,16 @@ describe("Situation Data API contract", () => {
       if (url.endsWith("PID_GTFS.zip")) {
         return new Response(staticPayload, { status: 200, headers: { "content-type": "application/zip" } });
       }
+      if (url.endsWith("trip_updates.pb")) {
+        return new Response(tripUpdatesPayload, { status: 200, headers: { "content-type": "application/octet-stream" } });
+      }
       return new Response(realtimePayload, { status: 200, headers: { "content-type": "application/octet-stream" } });
     });
     vi.stubGlobal("fetch", fetchMock);
     const pidApp = await createApp({
       ...config,
       pidGtfsRtVehiclePositionsUrl: "https://example.test/pid/vehicle_positions.pb",
+      pidGtfsRtTripUpdatesUrl: "https://example.test/pid/trip_updates.pb",
       pidGtfsStaticUrl: "https://example.test/pid/PID_GTFS.zip",
       cacheTtlSeconds: 0,
       enabledSources: ["pid_gtfs_rt"]
@@ -2261,7 +2311,7 @@ describe("Situation Data API contract", () => {
       .get("/api/v1/transit/vehicles/traffic%3Apid_gtfs_rt%3Aservice-3-pid-veh-1?source=pid_gtfs_rt&maxStopTimes=10&maxShapePoints=10")
       .expect(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(response.body).toEqual(
       expect.objectContaining({
         contractVersion: "sim-transit-vehicle-detail-v1",
@@ -2279,7 +2329,7 @@ describe("Situation Data API contract", () => {
           routeId: "L136",
           routeShortName: "136",
           destination: "Sidliste Repy",
-          delaySeconds: 30,
+          delaySeconds: 45,
           status: "stale"
         }),
         stopTimes: [
@@ -2287,13 +2337,14 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({
             stopId: "stop-2",
             relationToVehicle: "current",
-            predictedArrival: "2026-05-28T06:05:30.000Z",
-            predictedDeparture: "2026-05-28T06:05:30.000Z",
-            delaySeconds: 30
+            predictedArrival: "2026-05-28T06:05:45.000Z",
+            predictedDeparture: "2026-05-28T06:05:45.000Z",
+            delaySeconds: 45,
+            tripUpdateTimestamp: "2026-05-28T06:05:45.000Z"
           }),
-          expect.objectContaining({ stopId: "stop-3", relationToVehicle: "next" })
+          expect.objectContaining({ stopId: "stop-3", relationToVehicle: "next", delaySeconds: 75 })
         ],
-        delaySeconds: 30,
+        delaySeconds: 45,
         history: expect.objectContaining({
           generatedFrom: expect.arrayContaining(["pid_gtfs_rt_vehicle_positions", "sim_in_memory_vehicle_history"]),
           windowSeconds: 1800,
@@ -2307,13 +2358,14 @@ describe("Situation Data API contract", () => {
           ]
         }),
         prediction: expect.objectContaining({
-          delaySource: "estimated_from_schedule",
-          delaySeconds: 30,
+          delaySource: "official_trip_update",
+          delaySeconds: 45,
+          tripUpdateTimestamp: "2026-05-28T06:05:45.000Z",
           stopTimes: expect.arrayContaining([
             expect.objectContaining({
               stopId: "stop-2",
-              predictedArrival: "2026-05-28T06:05:30.000Z",
-              delaySeconds: 30
+              predictedArrival: "2026-05-28T06:05:45.000Z",
+              delaySeconds: 45
             })
           ])
         }),
@@ -2329,7 +2381,7 @@ describe("Situation Data API contract", () => {
         quality: expect.objectContaining({
           realtimeVehicleAvailable: true,
           staticModelAvailable: true,
-          tripUpdateAvailable: false,
+          tripUpdateAvailable: true,
           tripScheduleAvailable: true,
           routeShapeAvailable: true,
           historyAvailable: true,

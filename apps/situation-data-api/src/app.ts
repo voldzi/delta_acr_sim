@@ -1069,7 +1069,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "osm_overpass", baseUrl: config.overpassBaseUrl, authConfigured: true },
       { sourceId: "ctu_nettest", baseUrl: config.ctuNettestUrl, authConfigured: true },
       { sourceId: "ctu_stationary_mobile", baseUrl: "https://ctu.gov.cz", authConfigured: config.ctuStationaryMobileUrls.length > 0 },
-      { sourceId: "pid_gtfs_rt", baseUrl: config.pidGtfsRtVehiclePositionsUrl, authConfigured: true },
+      {
+        sourceId: "pid_gtfs_rt",
+        baseUrl: `${config.pidGtfsRtVehiclePositionsUrl},${config.pidGtfsRtTripUpdatesUrl}`,
+        authConfigured: true,
+        backend: "golemio-gtfs-rt-vehicle-positions+trip-updates"
+      },
       {
         sourceId: "public_transit_static",
         baseUrl: [...config.publicTransitStaticGtfsFeeds, ...config.publicTransitStaticGeojsonFeeds].map((feed) => feed.url).join(","),

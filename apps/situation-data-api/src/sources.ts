@@ -1774,13 +1774,13 @@ class PidGtfsRtSource implements SituationDataSource {
     });
     this.descriptor = {
       sourceId: "pid_gtfs_rt",
-      label: "PID GTFS-RT vehicle positions",
+      label: "PID GTFS-RT vehicle positions and trip updates",
       enabled: config.enabledSources.includes("pid_gtfs_rt"),
       mode: "live",
       priority: 75,
       layers: ["traffic"],
       license: PID_GTFS_RT_LICENSE,
-      baseUrl: config.pidGtfsRtVehiclePositionsUrl,
+      baseUrl: `${config.pidGtfsRtVehiclePositionsUrl},${config.pidGtfsRtTripUpdatesUrl}`,
       updateCadenceSeconds: 20
     };
   }

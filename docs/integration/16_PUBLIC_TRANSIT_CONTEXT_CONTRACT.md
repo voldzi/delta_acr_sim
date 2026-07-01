@@ -267,9 +267,13 @@ Alternativně může být stejný dokument vložen do
 `providerProperties.transitDetail`. Samostatný endpoint je preferovaný, protože
 detail může obsahovat delší stop list a geometrii trasy.
 
-Pro PID endpoint slučuje aktuální GTFS-RT polohu s cacheovaným statickým
-`PID_GTFS.zip`. První dotaz po restartu může být pomalejší kvůli načtení ZIPu,
-další dotazy používají SIM cache.
+Pro PID endpoint slučuje SIM aktuální GTFS-RT polohu vozidla, GTFS-RT
+TripUpdates a cacheovaný statický `PID_GTFS.zip`. První dotaz po restartu může
+být pomalejší kvůli načtení ZIPu, další dotazy používají SIM cache. Pokud je
+pro konkrétní vozidlo nalezen odpovídající TripUpdate, odpověď má
+`quality.tripUpdateAvailable=true` a `prediction.delaySource=official_trip_update`.
+Když TripUpdate chybí nebo upstream dočasně selže, SIM zachová stejný kontrakt a
+použije dosavadní odhad ze statického jízdního řádu a polohy vozidla.
 
 Odpověď:
 
@@ -375,6 +379,8 @@ Mapová vrstva vozidel má zůstat lehká:
 - detail trasy a stop list se tahá až po kliknutí,
 - route shape má být zjednodušená podle zoomu nebo předpočítaná v read-modelu,
 - SIM drží source cache pro realtime feed a persistent/static cache pro GTFS,
+- PID detail vozidla drží samostatnou krátkou cache pro `vehicle_positions.pb`
+  a `trip_updates.pb`, aby více COP dotazů nezatěžovalo Golemio,
 - COP používá clustering/decluttering podle zoomu, neplošné celostátní načtení.
 
 Pro celoměstský provoz:
@@ -384,9 +390,11 @@ Pro celoměstský provoz:
 - `limit`: pro mapu doporučeně 250-1000 podle zoomu, pro velké městské nebo
   celostátní přehledy lze požádat až o 5000 prvků,
 - detail vozidla má vlastní cache klíč podle `vehicleId/tripId/serviceDate`,
-- detail vozidla vrací `history` a `prediction`; pokud není dostupný GTFS-RT
-  trip-updates feed, `quality.tripUpdateAvailable=false` a predikce je
-  označená jako `delaySource=estimated_from_schedule` nebo `unavailable`.
+- detail vozidla vrací `history` a `prediction`; pro PID má SIM napojený
+  GTFS-RT TripUpdates feed a při nalezené shodě vrací
+  `quality.tripUpdateAvailable=true` a `delaySource=official_trip_update`;
+  pokud shoda pro konkrétní vozidlo chybí, predikce je označená jako
+  `delaySource=estimated_from_schedule` nebo `unavailable`.
 
 ## Přidání dalšího města
 
@@ -437,6 +445,9 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
 - po kliknutí na vozidlo otevřít detail z detailního transit endpointu a pro
   volby Historie/Predikce používat pouze `history` a `prediction` z odpovědi
   SIM; COP nemá dopočítávat trip schedule ani delay z raw GTFS,
+- v detailu rozlišit `prediction.delaySource=official_trip_update` jako
+  oficiální GTFS-RT predikci; hodnoty `estimated_from_schedule` a `unavailable`
+  zobrazit jako odhad nebo chybějící predikci,
 - po kliknutí na statickou zastávku použít `providerProperties.transit.detailUrl`
   a zobrazit odjezdy/linky ze SIM read-modelu,
 - v detailu zobrazit hlavičku vozidla, stav, stáří dat, příští zastávku, tabulku
@@ -455,7 +466,7 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
    Správu železnic a statické zastávky.
 4. `GET /situation-data/api/v1/transit/vehicles/{featureId}` je implementovaný
    pro PID.
-5. Přidat PID trip updates a service alerts, pokud jsou dostupné v dané
-   distribuci.
+5. PID TripUpdates jsou implementované pro detail vozidla; service alerts
+   zůstávají navazující rozšíření.
 6. Přidat IDS JMK realtime detail nad stejným modelem.
 7. Připravit registry dalších měst a kontrolní testy pro každý adaptér.

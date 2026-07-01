@@ -752,7 +752,10 @@ SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metr
   COP má pro husté vrstvy preferovat menší bbox, zoom-based filtraci a
   clustering/decluttering.
 - Layer tree a defaultní viditelnost řídit z `GET /catalog`, ne ze staršího `/sources`.
-- Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COM tracky ani letecké cíle.
+- Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje
+  pohybující se vozidla veřejné dopravy a v detailu vozidla i oficiální
+  GTFS-RT TripUpdates predikce, pokud je SIM pro daný spoj najde; nejsou to COM
+  tracky ani letecké cíle.
 - Veřejnou dopravu vykreslovat podle jednotného kontraktu
   [`16_PUBLIC_TRANSIT_CONTEXT_CONTRACT.md`](16_PUBLIC_TRANSIT_CONTEXT_CONTRACT.md);
   COP nemá volat PID/Golemio, IDS JMK ani jiné městské upstreamy přímo.
