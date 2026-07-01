@@ -46,6 +46,13 @@ Povinné nebo prakticky povinné položky:
 - `role`: `primary`, `reference`, `overlay`, `user`, `partner`, `diagnostic`.
 - `audience`: `public`, `authenticated`, `partner`, `diagnostic`.
 - `kind`: `vector_features`, `grid_field`, `vector_field`, `mvt_tiles`, `raster_tiles`, `track_stream`, `static_reference`.
+- `enabled`: zda jsou všechny zdrojové vstupy vrstvy zapnuté v aktuální runtime
+  konfiguraci providera.
+- `availability`: `available` nebo `disabled`; COM má `disabled` vrstvy
+  nezobrazovat jako zapnutelné běžnému uživateli, může je ale ukázat v
+  diagnostice nebo plánování.
+- `disabledReason`: volitelný strojově čitelný/čtenářský důvod, proč vrstva v
+  aktuální konfiguraci není dostupná.
 - `defaultVisible`, `selectable`.
 - `geometryTypes`.
 - `refreshSeconds`, `cacheTtlSeconds`.

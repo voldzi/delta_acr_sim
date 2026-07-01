@@ -465,6 +465,9 @@ describe("Situation Data API contract", () => {
           recommendedCatalogLayerId: "public.traffic.transit",
           role: "reference",
           audience: "public",
+          enabled: false,
+          availability: "disabled",
+          disabledReason: expect.stringContaining("idsjmk_vehicle_positions"),
           sourceIds: ["idsjmk_vehicle_positions"]
         }),
         expect.objectContaining({
@@ -776,6 +779,28 @@ describe("Situation Data API contract", () => {
         })
       );
     }
+  });
+
+  it("marks provider catalog layers available only when their runtime source is enabled", async () => {
+    const { app: trafficApp } = await createApp({
+      ...config,
+      enabledSources: ["pid_gtfs_rt", "public_transit_static"]
+    });
+
+    const response = await request(trafficApp).get("/api/v1/catalog").expect(200);
+    const pidLayer = response.body.layers.find((layer: { providerLayerId?: string }) => layer.providerLayerId === "traffic.pid_gtfs_rt");
+    const staticLayer = response.body.layers.find((layer: { providerLayerId?: string }) => layer.providerLayerId === "traffic.public_transit_static");
+    const idsjmkLayer = response.body.layers.find((layer: { providerLayerId?: string }) => layer.providerLayerId === "traffic.idsjmk_vehicle_positions");
+
+    expect(pidLayer).toEqual(expect.objectContaining({ enabled: true, availability: "available" }));
+    expect(staticLayer).toEqual(expect.objectContaining({ enabled: true, availability: "available" }));
+    expect(idsjmkLayer).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        availability: "disabled",
+        disabledReason: expect.stringContaining("idsjmk_vehicle_positions")
+      })
+    );
   });
 
   it("exposes lightweight summary, detail, geometry and taxonomy endpoints", async () => {

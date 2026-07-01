@@ -138,6 +138,9 @@ export interface ProviderCatalogLayer {
   role: ProviderCatalogLayerRole;
   audience: ProviderCatalogAudience;
   kind: ProviderCatalogKind;
+  enabled: boolean;
+  availability: "available" | "disabled";
+  disabledReason?: string;
   defaultVisible: boolean;
   selectable: boolean;
   geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;

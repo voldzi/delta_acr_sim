@@ -15,6 +15,8 @@ const PROVIDER_ID = "sim.situation-data" as const;
 const MAP_CATALOG_DOCUMENT = "docs/provider/02_MAP_CATALOG_PROVIDER_CONTRACT.md";
 const DEFAULT_MAX_FEATURES = 250;
 
+type ProviderCatalogLayerDraft = Omit<ProviderCatalogLayer, "availability" | "disabledReason" | "enabled">;
+
 export function buildSituationMapCatalog(config: SituationDataConfig, generatedAt = new Date().toISOString()): ProviderMapCatalog {
   const descriptors = allSourceDescriptors(config);
   return {
@@ -28,12 +30,32 @@ export function buildSituationMapCatalog(config: SituationDataConfig, generatedA
       catalogVersion: "map-catalog-v1",
       document: MAP_CATALOG_DOCUMENT
     },
-    layers: buildProviderLayers(config),
+    layers: withLayerAvailability(buildProviderLayers(config), config),
     sources: descriptors.map((descriptor) => buildProviderSource(descriptor, config))
   };
 }
 
-function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+function withLayerAvailability(layers: ProviderCatalogLayerDraft[], config: SituationDataConfig): ProviderCatalogLayer[] {
+  const enabledSources = new Set<SituationDataSourceId>(config.enabledSources);
+  return layers.map((layer) => {
+    const disabledSources = layer.sourceIds.filter((sourceId) => !enabledSources.has(sourceId));
+    if (disabledSources.length === 0) {
+      return {
+        ...layer,
+        enabled: true,
+        availability: "available"
+      };
+    }
+    return {
+      ...layer,
+      enabled: false,
+      availability: "disabled",
+      disabledReason: `Source disabled in SIM runtime configuration: ${disabledSources.join(", ")}`
+    };
+  });
+}
+
+function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   return [
     {
       providerLayerId: "weather.open_meteo",
@@ -689,7 +711,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[
   ];
 }
 
-function buildEnvironmentalGridLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+function buildEnvironmentalGridLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   const weatherLegal = {
     attribution: "Open-Meteo.com and Czech Hydrometeorological Institute where measured station context is used",
     notes: ["Grid layers are server-side SIM products prepared from cached upstream data; COM must not call upstream weather providers directly."]
@@ -929,7 +951,7 @@ function buildEnvironmentalGridLayers(config: SituationDataConfig): ProviderCata
   ];
 }
 
-function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   const legal = {
     attribution: "Český hydrometeorologický ústav",
     notes: [
@@ -1057,7 +1079,7 @@ function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderC
   ];
 }
 
-function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatalogLayer[] {
+function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   const common = {
     categoryPath: ["boundary", "admin"],
     categories: ["admin_boundary", "boundary"],
