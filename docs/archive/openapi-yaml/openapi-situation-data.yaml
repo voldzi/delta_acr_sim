@@ -253,6 +253,224 @@ paths:
           $ref: "#/components/responses/Problem"
         "502":
           $ref: "#/components/responses/Problem"
+  /transit/stops/{systemId}/{stopId}:
+    get:
+      summary: Return cached static public-transit stop detail
+      description: Returns normalized static stop metadata, route list and scheduled departures from SIM's long-lived public_transit_static read-model. COP must use this instead of parsing GTFS or calling city upstream APIs directly.
+      parameters:
+        - name: systemId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Static transport system identifier, for example pid, idsjmk, dpmlj or dpo_ostrava.
+        - name: stopId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Provider-native stop_id from SIM providerProperties.transit.stopId.
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            const: public_transit_static
+          description: Optional compatibility hint; the endpoint is always backed by public_transit_static.
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2026-05-28"
+          description: Service date in YYYY-MM-DD or YYYYMMDD. Defaults to current Europe/Prague date.
+        - name: time
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "07:55:00"
+          description: Local GTFS time in HH:MM[:SS]. Defaults to current Europe/Prague time.
+        - name: maxDepartures
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 120
+            default: 30
+        - name: maxRoutes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 120
+            default: 30
+      responses:
+        "200":
+          description: Static public-transit stop detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitStaticStopDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /transit/stops/{systemId}/{stopId}/departures:
+    get:
+      summary: Return cached scheduled departures for a static public-transit stop
+      parameters:
+        - name: systemId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: stopId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: time
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: maxDepartures
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 120
+            default: 30
+      responses:
+        "200":
+          description: Scheduled departures for one static stop
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitStaticStopDepartures"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /transit/routes/{systemId}/{routeId}:
+    get:
+      summary: Return cached static public-transit route detail
+      parameters:
+        - name: systemId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: routeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: includeShape
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: maxTrips
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 60
+        - name: maxStopTimes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 120
+        - name: maxShapePoints
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 3000
+            default: 700
+      responses:
+        "200":
+          description: Static route detail with representative stops, trips and optional shape
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitStaticRouteDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /transit/trips/{systemId}/{tripId}:
+    get:
+      summary: Return cached static public-transit trip detail
+      parameters:
+        - name: systemId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: includeShape
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: maxStopTimes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 120
+        - name: maxShapePoints
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 3000
+            default: 700
+      responses:
+        "200":
+          description: Static trip detail with stop list and optional route shape
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitStaticTripDetail"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /cop/features:
     get:
       summary: Compatibility alias for the server-side situation feature stream
@@ -2202,6 +2420,318 @@ components:
               type: array
               items:
                 type: string
+    TransitStaticStopDetail:
+      type: object
+      required: [contractVersion, generatedAt, sourceId, systemId, modelVersion, stop, routes, departures, quality]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-transit-stop-detail-v1
+        generatedAt:
+          type: string
+          format: date-time
+        sourceId:
+          type: string
+          const: public_transit_static
+        systemId:
+          type: string
+        modelVersion:
+          type: string
+        stop:
+          $ref: "#/components/schemas/TransitStaticStop"
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitStaticRouteSummary"
+        departures:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitStaticDeparture"
+        quality:
+          $ref: "#/components/schemas/TransitStaticQuality"
+    TransitStaticStopDepartures:
+      type: object
+      required: [contractVersion, generatedAt, sourceId, systemId, modelVersion, stop, departures, quality]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-transit-stop-departures-v1
+        generatedAt:
+          type: string
+          format: date-time
+        sourceId:
+          type: string
+          const: public_transit_static
+        systemId:
+          type: string
+        modelVersion:
+          type: string
+        stop:
+          $ref: "#/components/schemas/TransitStaticStopSummary"
+        departures:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitStaticDeparture"
+        quality:
+          $ref: "#/components/schemas/TransitStaticQuality"
+    TransitStaticRouteDetail:
+      type: object
+      required: [contractVersion, generatedAt, sourceId, systemId, modelVersion, route, trips, stops, quality]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-transit-route-detail-v1
+        generatedAt:
+          type: string
+          format: date-time
+        sourceId:
+          type: string
+          const: public_transit_static
+        systemId:
+          type: string
+        modelVersion:
+          type: string
+        route:
+          $ref: "#/components/schemas/TransitStaticRouteSummary"
+        trips:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitStaticTripSummary"
+        stops:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitStaticStopSummary"
+        routeShape:
+          $ref: "#/components/schemas/TransitStaticRouteShape"
+        quality:
+          $ref: "#/components/schemas/TransitStaticQuality"
+    TransitStaticTripDetail:
+      type: object
+      required: [contractVersion, generatedAt, sourceId, systemId, modelVersion, trip, stopTimes, quality]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-transit-trip-detail-v1
+        generatedAt:
+          type: string
+          format: date-time
+        sourceId:
+          type: string
+          const: public_transit_static
+        systemId:
+          type: string
+        modelVersion:
+          type: string
+        route:
+          $ref: "#/components/schemas/TransitStaticRouteSummary"
+        trip:
+          $ref: "#/components/schemas/TransitStaticTripSummary"
+        stopTimes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitStaticStopTimeDetail"
+        routeShape:
+          $ref: "#/components/schemas/TransitStaticRouteShape"
+        quality:
+          $ref: "#/components/schemas/TransitStaticQuality"
+    TransitStaticStop:
+      type: object
+      required: [systemId, systemLabel, feedUrl, sourceKind, stopId, stopName, lon, lat]
+      properties:
+        systemId:
+          type: string
+        systemLabel:
+          type: string
+        feedUrl:
+          type: string
+          format: uri
+        sourceKind:
+          type: string
+          enum: [gtfs_static, geojson_static]
+        stopId:
+          type: string
+        stopCode:
+          type: string
+        stopName:
+          type: string
+        lon:
+          type: number
+        lat:
+          type: number
+        zoneId:
+          type: string
+        locationType:
+          type: string
+        parentStation:
+          type: string
+        wheelchairBoarding:
+          type: string
+    TransitStaticStopSummary:
+      type: object
+      required: [systemId, stopId, stopName]
+      properties:
+        systemId:
+          type: string
+        stopId:
+          type: string
+        stopCode:
+          type: string
+        stopName:
+          type: string
+        position:
+          type: object
+          required: [lat, lon]
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
+        zoneId:
+          type: string
+        wheelchairBoarding:
+          type: string
+    TransitStaticRouteSummary:
+      type: object
+      required: [systemId, routeId, transportMode]
+      properties:
+        systemId:
+          type: string
+        routeId:
+          type: string
+        routeShortName:
+          type: string
+        routeLongName:
+          type: string
+        transportMode:
+          type: string
+        routeType:
+          type: integer
+        color:
+          type: string
+        textColor:
+          type: string
+        agencyId:
+          type: string
+    TransitStaticTripSummary:
+      type: object
+      required: [systemId, tripId, routeId]
+      properties:
+        systemId:
+          type: string
+        tripId:
+          type: string
+        routeId:
+          type: string
+        routeShortName:
+          type: string
+        routeLongName:
+          type: string
+        transportMode:
+          type: string
+        destination:
+          type: string
+        directionId:
+          type: string
+        serviceId:
+          type: string
+        shapeId:
+          type: string
+    TransitStaticDeparture:
+      type: object
+      required: [systemId, stopId, tripId, routeId, transportMode, stopSequence, serviceActive]
+      properties:
+        systemId:
+          type: string
+        stopId:
+          type: string
+        tripId:
+          type: string
+        routeId:
+          type: string
+        routeShortName:
+          type: string
+        routeLongName:
+          type: string
+        transportMode:
+          type: string
+        destination:
+          type: string
+        directionId:
+          type: string
+        serviceId:
+          type: string
+        scheduledArrival:
+          type: string
+          example: "08:00:00"
+        scheduledDeparture:
+          type: string
+          example: "08:00:00"
+        minutesFromQueryTime:
+          type: integer
+        stopSequence:
+          type: integer
+        serviceActive:
+          type: boolean
+    TransitStaticStopTimeDetail:
+      type: object
+      required: [stopId, stopSequence]
+      properties:
+        stopId:
+          type: string
+        stopName:
+          type: string
+        stopSequence:
+          type: integer
+        scheduledArrival:
+          type: string
+        scheduledDeparture:
+          type: string
+        position:
+          type: object
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
+    TransitStaticRouteShape:
+      type: object
+      required: [shapeId, coordinates, truncated]
+      properties:
+        shapeId:
+          type: string
+        coordinates:
+          type: array
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: number
+        truncated:
+          type: boolean
+    TransitStaticQuality:
+      type: object
+      required: [staticModelAvailable, scheduleAvailable, routeShapeAvailable, generatedFrom, modelLoadedAt, feedCount, warnings]
+      properties:
+        staticModelAvailable:
+          type: boolean
+        scheduleAvailable:
+          type: boolean
+        routeShapeAvailable:
+          type: boolean
+        generatedFrom:
+          type: array
+          items:
+            type: string
+        modelLoadedAt:
+          type: string
+          format: date-time
+        feedCount:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
     ProviderFeatureGeometry:
       type: object
       required: [contractVersion, generatedAt, providerId, featureId, layer, layerId, providerLayerId, resolution, geometry, geometrySummary]

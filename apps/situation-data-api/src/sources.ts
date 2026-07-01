@@ -20,6 +20,7 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import { spatiallyLimitFeatures } from "./spatial-limit.js";
+import { getPublicTransitStaticStops } from "./transit-static-model.js";
 import type {
   BoundingBox,
   MobileCoverageQuality,
@@ -3269,9 +3270,12 @@ function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: Situat
         parentStation: stop.parentStation,
         wheelchairBoarding: stop.wheelchairBoarding,
         staticOnly: true,
-        detailAvailable: false,
+        detailAvailable: true,
+        detailUrl: `/situation-data/api/v1/transit/stops/${encodeURIComponent(stop.systemId)}/${encodeURIComponent(stop.stopId)}?source=public_transit_static`,
         detailLimitation:
-          "SIM currently exposes static GTFS stop context for this source. Live positions and stop departures require a source-specific realtime adapter."
+          stop.sourceKind === "geojson_static"
+            ? "SIM exposes static stop metadata for this GeoJSON source; timetable details require a GTFS feed for the same system."
+            : undefined
       }
     },
     raw: query.includeRaw ? stop : undefined
@@ -5030,6 +5034,7 @@ interface PublicTransitStaticStop {
   systemId: string;
   systemLabel: string;
   feedUrl: string;
+  sourceKind?: "gtfs_static" | "geojson_static";
   stopId: string;
   stopCode?: string;
   stopName: string;
@@ -5699,23 +5704,7 @@ async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise
 }
 
 async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promise<PublicTransitStaticStop[]> {
-  const feeds = config.publicTransitStaticGtfsFeeds;
-  const geojsonFeeds = config.publicTransitStaticGeojsonFeeds;
-  if (feeds.length === 0 && geojsonFeeds.length === 0) {
-    return [];
-  }
-  const settled = await Promise.allSettled([
-    ...feeds.map((feed) => fetchPublicTransitStaticFeedStops(feed, config.requestTimeoutMs)),
-    ...geojsonFeeds.map((feed) => fetchPublicTransitStaticGeojsonFeedStops(feed, config.requestTimeoutMs))
-  ]);
-  const stops = settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
-  if (stops.length === 0) {
-    const errors = settled
-      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-      .map((result) => (result.reason instanceof Error ? result.reason.message : "unknown failure"));
-    throw new Error(`public_transit_static did not load any GTFS stop${errors.length ? `: ${errors.join("; ")}` : "."}`);
-  }
-  return stops.slice(0, Math.max(1, config.publicTransitStaticMaxStops));
+  return getPublicTransitStaticStops(config);
 }
 
 function publicTransitStaticCacheKey(config: SituationDataConfig): string {
@@ -5725,52 +5714,6 @@ function publicTransitStaticCacheKey(config: SituationDataConfig): string {
     .sort()
     .join(",");
   return `public_transit_static_gtfs_stops:${stableToken(`${feedSignature}|max=${config.publicTransitStaticMaxStops}`)}`;
-}
-
-async function fetchPublicTransitStaticFeedStops(
-  feed: SituationDataConfig["publicTransitStaticGtfsFeeds"][number],
-  timeoutMs: number
-): Promise<PublicTransitStaticStop[]> {
-  const archive = await requestBytes(feed.url, timeoutMs, {
-    accept: "application/zip,application/octet-stream,*/*",
-    "user-agent": "csm-sim-situation-data/0.1"
-  });
-  const files = unzipSync(archive);
-  const stopsName = Object.keys(files).find((name) => gtfsArchiveBasename(name) === "stops.txt");
-  if (!stopsName) {
-    throw new Error(`public_transit_static GTFS archive did not contain stops.txt: ${feed.url}`);
-  }
-  const stopsFile = files[stopsName];
-  if (!stopsFile) {
-    throw new Error(`public_transit_static stops.txt was empty: ${feed.url}`);
-  }
-  const records = parseCsvRecords(new TextDecoder().decode(stopsFile));
-  return records
-    .map((record) => mapGtfsStopRecord(feed, record))
-    .filter((stop): stop is PublicTransitStaticStop => Boolean(stop));
-}
-
-async function fetchPublicTransitStaticGeojsonFeedStops(
-  feed: SituationDataConfig["publicTransitStaticGeojsonFeeds"][number],
-  timeoutMs: number
-): Promise<PublicTransitStaticStop[]> {
-  const archive = await requestBytes(feed.url, timeoutMs, {
-    accept: "application/zip,application/geo+json,application/json,application/octet-stream,*/*",
-    "user-agent": "csm-sim-situation-data/0.1"
-  });
-  const files = unzipSync(archive);
-  const geojsonName = Object.keys(files).find((name) => {
-    const basename = gtfsArchiveBasename(name);
-    return basename.endsWith(".geojson") || basename.endsWith(".json");
-  });
-  if (!geojsonName) {
-    throw new Error(`public_transit_static GeoJSON archive did not contain a GeoJSON file: ${feed.url}`);
-  }
-  const geojsonFile = files[geojsonName];
-  if (!geojsonFile) {
-    throw new Error(`public_transit_static GeoJSON file was empty: ${feed.url}`);
-  }
-  return mapPublicTransitStaticGeojsonFeatures(feed, JSON.parse(new TextDecoder().decode(geojsonFile)));
 }
 
 async function fetchIdsjmkVehicleFeed(config: SituationDataConfig): Promise<IdsjmkVehicleFeed> {
@@ -5803,100 +5746,6 @@ function normalizeIdsjmkVehicles(feed: IdsjmkVehicleFeed): IdsjmkVehicleRecord[]
     return feed.features.map((feature) => ({ ...(feature.attributes ?? {}), geometry: feature.geometry })).filter(isRecord);
   }
   return [];
-}
-
-function mapGtfsStopRecord(
-  feed: SituationDataConfig["publicTransitStaticGtfsFeeds"][number],
-  record: Record<string, string>
-): PublicTransitStaticStop | undefined {
-  const stopId = record.stop_id?.trim();
-  const stopName = record.stop_name?.trim();
-  const lat = Number(record.stop_lat);
-  const lon = Number(record.stop_lon);
-  if (!stopId || !stopName || !Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return undefined;
-  }
-  if (lat < 47.5 || lat > 52.5 || lon < 10 || lon > 20.5) {
-    return undefined;
-  }
-  return {
-    systemId: feed.systemId,
-    systemLabel: feed.label,
-    feedUrl: feed.url,
-    stopId,
-    stopCode: optionalString(record.stop_code),
-    stopName,
-    lon,
-    lat,
-    zoneId: optionalString(record.zone_id),
-    locationType: optionalString(record.location_type),
-    parentStation: optionalString(record.parent_station),
-    wheelchairBoarding: optionalString(record.wheelchair_boarding)
-  };
-}
-
-function mapPublicTransitStaticGeojsonFeatures(
-  feed: SituationDataConfig["publicTransitStaticGeojsonFeeds"][number],
-  collection: unknown
-): PublicTransitStaticStop[] {
-  if (!isRecord(collection) || collection.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
-    return [];
-  }
-  return collection.features
-    .map((feature, index) => mapPublicTransitStaticGeojsonFeature(feed, feature, index))
-    .filter((stop): stop is PublicTransitStaticStop => Boolean(stop));
-}
-
-function mapPublicTransitStaticGeojsonFeature(
-  feed: SituationDataConfig["publicTransitStaticGeojsonFeeds"][number],
-  feature: unknown,
-  index: number
-): PublicTransitStaticStop | undefined {
-  if (!isRecord(feature) || !isRecord(feature.geometry) || feature.geometry.type !== "Point" || !Array.isArray(feature.geometry.coordinates)) {
-    return undefined;
-  }
-  const [lonRaw, latRaw] = feature.geometry.coordinates;
-  const lon = Number(lonRaw);
-  const lat = Number(latRaw);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < 47.5 || lat > 52.5 || lon < 10 || lon > 20.5) {
-    return undefined;
-  }
-  const properties = isRecord(feature.properties) ? feature.properties : {};
-  const stopName = optionalString(properties.stop_name) ?? optionalString(properties.name) ?? optionalString(properties.zast_jm);
-  if (!stopName) {
-    return undefined;
-  }
-  const stopCode = optionalString(properties.stop_code) ?? optionalString(properties.ref) ?? optionalString(properties.sloupek_jm);
-  const sourceStopId = optionalString(properties.stop_id) ?? optionalString(properties.id) ?? `${stopName}:${stopCode ?? ""}:${lon}:${lat}:${index}`;
-  return {
-    systemId: feed.systemId,
-    systemLabel: feed.label,
-    feedUrl: feed.url,
-    stopId: sourceStopId,
-    stopCode,
-    stopName,
-    lon,
-    lat,
-    wheelchairBoarding: normalizeWheelchairBoarding(optionalString(properties.wheelchair_boarding) ?? optionalString(properties.bezbarier))
-  };
-}
-
-function normalizeWheelchairBoarding(value: string | undefined): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (["ano", "yes", "true", "1"].includes(normalized)) {
-    return "1";
-  }
-  if (["ne", "no", "false", "0"].includes(normalized)) {
-    return "2";
-  }
-  return value;
-}
-
-function gtfsArchiveBasename(path: string): string {
-  return path.split(/[\\/]/).pop()?.toLowerCase() ?? path.toLowerCase();
 }
 
 async function fetchRoadSrtiLodEvents(config: SituationDataConfig): Promise<RoadSrtiLodEvent[]> {

@@ -161,6 +161,57 @@ COP nemá parsovat zkrácené zdrojové klíče Správy železnic ani volat jeji
 backend přímo. SIM drží jednu zdrojovou cache pro celý vlakový feed s minimálním
 TTL 900 s a bbox aplikuje lokálně.
 
+## Detail statické zastávky, linky a spoje
+
+SIM drží dlouhodobý read-model pro `public_transit_static`. Model vzniká ze
+všech nakonfigurovaných statických GTFS a GeoJSON feedů a ukládá zastávky,
+linky, spoje, jízdní řády, kalendáře a dostupné tvary tras. COP dál používá
+stejnou mapovou vrstvu `public.traffic.transit_stops`; po kliknutí na zastávku
+má použít `providerProperties.transit.detailUrl`.
+
+Mapová feature statické zastávky obsahuje:
+
+```json
+{
+  "providerProperties": {
+    "transit": {
+      "systemId": "pid",
+      "sourceId": "public_transit_static",
+      "stopId": "U1234",
+      "stopName": "Florenc",
+      "staticOnly": true,
+      "detailAvailable": true,
+      "detailUrl": "/situation-data/api/v1/transit/stops/pid/U1234?source=public_transit_static"
+    }
+  }
+}
+```
+
+Detailní endpointy:
+
+```http
+GET /situation-data/api/v1/transit/stops/{systemId}/{stopId}
+GET /situation-data/api/v1/transit/stops/{systemId}/{stopId}/departures
+GET /situation-data/api/v1/transit/routes/{systemId}/{routeId}
+GET /situation-data/api/v1/transit/trips/{systemId}/{tripId}
+```
+
+Volitelné parametry:
+
+- `date=YYYY-MM-DD` nebo `YYYYMMDD` a `time=HH:MM[:SS]` pro výpočet odjezdů,
+- `maxDepartures`, `maxRoutes`, `maxTrips`, `maxStopTimes`, `maxShapePoints`,
+- `includeShape=true|false` u detailu linky a spoje.
+
+COP má zobrazit hlavně:
+
+- u zastávky: název, systém, kód zastávky, dostupné linky a nejbližší odjezdy,
+- u linky/spoje: číslo linky, směr, seznam zastávek a `routeShape`, pokud je
+  k dispozici,
+- `quality.warnings`, pokud SIM hlásí částečně dostupný feed.
+
+GeoJSON zdroje bez GTFS jízdního řádu vracejí detail zastávky bez odjezdů.
+To je očekávaný stav, ne chyba COP.
+
 ## Detail vozidla
 
 Pro COP detail poskytuje SIM rozšířený detail nad existující feature detail.
@@ -330,7 +381,9 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
 - dotazovat `layers=traffic` podle bboxu mapy,
 - kreslit bod vozidla podle `transportMode`, `routeShortName`, `headingDeg` a
   `delaySeconds`,
-- po kliknutí otevřít detail z detailního transit endpointu,
+- po kliknutí na vozidlo otevřít detail z detailního transit endpointu,
+- po kliknutí na statickou zastávku použít `providerProperties.transit.detailUrl`
+  a zobrazit odjezdy/linky ze SIM read-modelu,
 - v detailu zobrazit hlavičku vozidla, stav, stáří dat, příští zastávku, tabulku
   zastávek a trasu,
 - nikdy nevolat Golemio, IDS JMK ani jiné městské upstreamy přímo,
@@ -340,11 +393,13 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
 
 1. PID statický GTFS read-model pro `routes`, `trips`, `stops`, `stop_times`
    a `shapes` je implementovaný pro detail vozidla.
-2. `providerProperties.transit` je implementované pro PID a IDS JMK mapové
+2. Obecný statický read-model pro `public_transit_static` je implementovaný pro
+   detail zastávky, odjezdy, linky, spoje a dostupné tvary tras.
+3. `providerProperties.transit` je implementované pro PID a IDS JMK mapové
    features.
-3. `GET /situation-data/api/v1/transit/vehicles/{featureId}` je implementovaný
+4. `GET /situation-data/api/v1/transit/vehicles/{featureId}` je implementovaný
    pro PID.
-4. Přidat PID trip updates a service alerts, pokud jsou dostupné v dané
+5. Přidat PID trip updates a service alerts, pokud jsou dostupné v dané
    distribuci.
-5. Přidat IDS JMK statický/realtime detail stejným modelem.
-6. Připravit registry dalších měst a kontrolní testy pro každý adaptér.
+6. Přidat IDS JMK realtime detail nad stejným modelem.
+7. Připravit registry dalších měst a kontrolní testy pro každý adaptér.

@@ -22,14 +22,14 @@ layers.
 ## Decision
 
 SIM will own a normalized public-transit context model under
-`public.traffic.transit`.
+`public.traffic.transit` and `public.traffic.transit_stops`.
 
-The map stream stays lightweight and returns vehicle point features through the
-existing `situation-data` `traffic` layer. SIM will enrich those features with
-stable transit properties and provider metadata. Heavier details such as route
-shape, stop list, scheduled/realtime stop times and service alerts will be
-served by a dedicated transit detail endpoint rather than by every bbox map
-poll.
+The map stream stays lightweight and returns vehicle point features and static
+stop point features through the existing `situation-data` `traffic` layer. SIM
+will enrich those features with stable transit properties and provider metadata.
+Heavier details such as route shape, stop list, scheduled/realtime stop times
+and service alerts will be served by dedicated transit detail endpoints rather
+than by every bbox map poll.
 
 Each city or regional system is integrated as an adapter into the same internal
 model:
@@ -49,9 +49,12 @@ one `public.traffic.transit` layer and uses source/system metadata only for
 labels, attribution and filtering.
 
 The model requires persistent or long-lived static GTFS caching, source-specific
-licence tracking and additional tests per adapter. A full PID-map-like detail
+licence tracking and additional tests per adapter. The generic static read-model
+now caches configured public GTFS/GeoJSON feeds for stop, route, trip, stop-time,
+calendar and shape detail endpoints. A full PID-map-like live detail still
 requires both vehicle positions and trip updates; sources without trip updates
-will show a lower-confidence detail with clear quality warnings.
+will show static schedules or a lower-confidence detail with clear quality
+warnings.
 
 The map stream remains scalable because route shapes and stop-time tables are
 loaded only on click or through a detail endpoint.
@@ -70,7 +73,9 @@ loaded only on click or through a detail endpoint.
 
 - PID static GTFS read-model and the PID transit detail endpoint are implemented
   in the first runtime increment.
+- Generic `public_transit_static` stop, departure, route and trip detail
+  endpoints are implemented over the long-lived static read-model.
 - Add PID trip updates and service alerts when available.
 - `providerProperties.transit` is implemented for PID and IDS JMK map features.
-- Add IDS JMK detail adapter using the same model.
+- Add IDS JMK realtime detail adapter using the same model.
 - Add adapter registry for additional Czech cities and regional systems.

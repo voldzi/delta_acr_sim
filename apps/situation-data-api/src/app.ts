@@ -15,6 +15,7 @@ import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import { TransitDetailService } from "./transit-detail.js";
+import { TransitStaticModelService } from "./transit-static-model.js";
 import {
   buildSituationFeatureDetail,
   buildSituationFeatureDensityCollection,
@@ -43,6 +44,7 @@ export interface SituationDataAppContext {
   weatherStationDetails: ChmiWeatherStationDetailService;
   weatherWebcams: ChmiWeatherWebcamCatalog;
   transitDetails: TransitDetailService;
+  transitStatic: TransitStaticModelService;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -56,6 +58,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const weatherStationDetails = new ChmiWeatherStationDetailService(config);
   const weatherWebcams = new ChmiWeatherWebcamCatalog(config);
   const transitDetails = new TransitDetailService(config);
+  const transitStatic = new TransitStaticModelService(config);
   const context: SituationDataAppContext = {
     config,
     aggregation,
@@ -65,7 +68,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     radarFrames,
     weatherStationDetails,
     weatherWebcams,
-    transitDetails
+    transitDetails,
+    transitStatic
   };
   const app = express();
 
@@ -483,6 +487,92 @@ function registerRadioRoutes(app: Express, context: SituationDataAppContext): vo
 }
 
 function registerTransitRoutes(app: Express, context: SituationDataAppContext): void {
+  app.get("/api/v1/transit/stops/:systemId/:stopId", async (req, res) => {
+    const systemId = req.params.systemId;
+    const stopId = req.params.stopId;
+    if (!systemId || !stopId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "systemId and stopId are required.");
+    }
+    try {
+      const detail = await context.transitStatic.getStopDetail(systemId, stopId, {
+        maxDepartures: parseOptionalNumber(req.query.maxDepartures),
+        maxRoutes: parseOptionalNumber(req.query.maxRoutes),
+        date: asString(req.query.date),
+        time: asString(req.query.time)
+      });
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "Transit stop was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return transitStaticProblem(req, res, error, "Transit stop detail failed.");
+    }
+  });
+
+  app.get("/api/v1/transit/stops/:systemId/:stopId/departures", async (req, res) => {
+    const systemId = req.params.systemId;
+    const stopId = req.params.stopId;
+    if (!systemId || !stopId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "systemId and stopId are required.");
+    }
+    try {
+      const detail = await context.transitStatic.getStopDepartures(systemId, stopId, {
+        maxDepartures: parseOptionalNumber(req.query.maxDepartures),
+        date: asString(req.query.date),
+        time: asString(req.query.time)
+      });
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "Transit stop was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return transitStaticProblem(req, res, error, "Transit stop departures failed.");
+    }
+  });
+
+  app.get("/api/v1/transit/routes/:systemId/:routeId", async (req, res) => {
+    const systemId = req.params.systemId;
+    const routeId = req.params.routeId;
+    if (!systemId || !routeId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "systemId and routeId are required.");
+    }
+    try {
+      const detail = await context.transitStatic.getRouteDetail(systemId, routeId, {
+        includeShape: parseBoolean(req.query.includeShape ?? "true"),
+        maxTrips: parseOptionalNumber(req.query.maxTrips),
+        maxStopTimes: parseOptionalNumber(req.query.maxStopTimes),
+        maxShapePoints: parseOptionalNumber(req.query.maxShapePoints)
+      });
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "Transit route was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return transitStaticProblem(req, res, error, "Transit route detail failed.");
+    }
+  });
+
+  app.get("/api/v1/transit/trips/:systemId/:tripId", async (req, res) => {
+    const systemId = req.params.systemId;
+    const tripId = req.params.tripId;
+    if (!systemId || !tripId) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "systemId and tripId are required.");
+    }
+    try {
+      const detail = await context.transitStatic.getTripDetail(systemId, tripId, {
+        includeShape: parseBoolean(req.query.includeShape ?? "true"),
+        maxStopTimes: parseOptionalNumber(req.query.maxStopTimes),
+        maxShapePoints: parseOptionalNumber(req.query.maxShapePoints)
+      });
+      if (!detail) {
+        return problem(req, res, 404, "NOT_FOUND", "Transit trip was not found.");
+      }
+      res.json(detail);
+    } catch (error) {
+      return transitStaticProblem(req, res, error, "Transit trip detail failed.");
+    }
+  });
+
   app.get("/api/v1/transit/vehicles/:featureId", async (req, res) => {
     const featureId = req.params.featureId;
     if (!featureId) {
@@ -509,6 +599,10 @@ function registerTransitRoutes(app: Express, context: SituationDataAppContext): 
       );
     }
   });
+}
+
+function transitStaticProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {
+  return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
 }
 
 function radioProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {

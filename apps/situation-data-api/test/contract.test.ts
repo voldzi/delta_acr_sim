@@ -2347,7 +2347,21 @@ describe("Situation Data API contract", () => {
 
   it("projects public static GTFS stops from a source-level cache", async () => {
     const staticPayloadA = zipSync({
-      "route_stops.txt": strToU8(["route_id,direction_id,stop_id,stop_sequence", "L1,0,U1,1"].join("\n")),
+      "routes.txt": strToU8(
+        ["route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_color,route_text_color", "L1,A1,10,Linka 10,,3,ff0000,ffffff"].join(
+          "\n"
+        )
+      ),
+      "trips.txt": strToU8(["route_id,service_id,trip_id,trip_headsign,direction_id,block_id,shape_id", "L1,S1,T1,Centrum,0,,SH1"].join("\n")),
+      "stop_times.txt": strToU8(
+        [
+          "trip_id,arrival_time,departure_time,stop_id,stop_sequence,pickup_type,drop_off_type,timepoint",
+          "T1,08:00:00,08:00:00,U1,1,0,0,1",
+          "T1,08:05:00,08:05:00,P1,2,0,0,1"
+        ].join("\n")
+      ),
+      "calendar.txt": strToU8(["service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date", "S1,1,1,1,1,1,1,1,20260101,20261231"].join("\n")),
+      "shapes.txt": strToU8(["shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence", "SH1,50.6593,14.0447,1", "SH1,50.0832,14.4355,2"].join("\n")),
       "stops.txt": strToU8(
         [
           "stop_id,stop_code,stop_name,stop_lat,stop_lon,zone_id,location_type,parent_station,wheelchair_boarding",
@@ -2424,12 +2438,76 @@ describe("Situation Data API contract", () => {
               sourceId: "public_transit_static",
               stopId: "U1",
               stopName: "Ústí nad Labem hlavní nádraží",
-              staticOnly: true
+              staticOnly: true,
+              detailAvailable: true,
+              detailUrl: "/situation-data/api/v1/transit/stops/test_gtfs/U1?source=public_transit_static"
             })
           })
         })
       })
     );
+
+    const stopDetail = await request(staticApp.app)
+      .get("/api/v1/transit/stops/test_gtfs/U1?date=2026-05-28&time=07:55:00&maxDepartures=5")
+      .expect(200);
+    expect(stopDetail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-stop-detail-v1",
+        sourceId: "public_transit_static",
+        systemId: "test_gtfs",
+        stop: expect.objectContaining({ stopId: "U1", stopName: "Ústí nad Labem hlavní nádraží" }),
+        routes: [expect.objectContaining({ routeId: "L1", routeShortName: "10", transportMode: "bus" })],
+        departures: [
+          expect.objectContaining({
+            tripId: "T1",
+            routeId: "L1",
+            routeShortName: "10",
+            scheduledDeparture: "08:00:00",
+            minutesFromQueryTime: 5,
+            destination: "Centrum"
+          })
+        ],
+        quality: expect.objectContaining({ staticModelAvailable: true, scheduleAvailable: true })
+      })
+    );
+
+    const departures = await request(staticApp.app)
+      .get("/api/v1/transit/stops/test_gtfs/U1/departures?date=20260528&time=07:59:00")
+      .expect(200);
+    expect(departures.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-stop-departures-v1",
+        departures: [expect.objectContaining({ tripId: "T1", routeId: "L1", scheduledDeparture: "08:00:00" })]
+      })
+    );
+
+    const routeDetail = await request(staticApp.app).get("/api/v1/transit/routes/test_gtfs/L1?includeShape=true&maxShapePoints=10").expect(200);
+    expect(routeDetail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-route-detail-v1",
+        route: expect.objectContaining({ routeId: "L1", routeShortName: "10" }),
+        trips: [expect.objectContaining({ tripId: "T1", destination: "Centrum" })],
+        stops: [
+          expect.objectContaining({ stopId: "U1" }),
+          expect.objectContaining({ stopId: "P1" })
+        ],
+        routeShape: expect.objectContaining({ shapeId: "SH1", coordinates: [[14.0447, 50.6593], [14.4355, 50.0832]], truncated: false })
+      })
+    );
+
+    const tripDetail = await request(staticApp.app).get("/api/v1/transit/trips/test_gtfs/T1?includeShape=true&maxStopTimes=5&maxShapePoints=10").expect(200);
+    expect(tripDetail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-trip-detail-v1",
+        trip: expect.objectContaining({ tripId: "T1", routeId: "L1", destination: "Centrum" }),
+        stopTimes: [
+          expect.objectContaining({ stopId: "U1", scheduledDeparture: "08:00:00" }),
+          expect.objectContaining({ stopId: "P1", scheduledDeparture: "08:05:00" })
+        ],
+        routeShape: expect.objectContaining({ shapeId: "SH1", truncated: false })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("projects Správa železnic train positions from a 15-minute source-level cache", async () => {
