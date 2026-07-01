@@ -21,6 +21,13 @@ export interface TransitStaticStop {
   wheelchairBoarding?: string;
 }
 
+export interface PublicTransitStaticStopPayload {
+  stops: TransitStaticStop[];
+  warnings: string[];
+  loadedAt: string;
+  modelVersion: string;
+}
+
 interface TransitStaticRoute {
   systemId: string;
   systemLabel: string;
@@ -372,8 +379,18 @@ export class TransitStaticModelService {
 }
 
 export async function getPublicTransitStaticStops(config: SituationDataConfig): Promise<TransitStaticStop[]> {
+  const payload = await getPublicTransitStaticStopPayload(config);
+  return payload.stops.slice(0, Math.max(1, config.publicTransitStaticMaxStops));
+}
+
+export async function getPublicTransitStaticStopPayload(config: SituationDataConfig): Promise<PublicTransitStaticStopPayload> {
   const model = await getPublicTransitStaticReadModel(config);
-  return Array.from(model.stops.values()).slice(0, Math.max(1, config.publicTransitStaticMaxStops));
+  return {
+    stops: Array.from(model.stops.values()),
+    warnings: model.warnings,
+    loadedAt: model.loadedAt,
+    modelVersion: model.modelVersion
+  };
 }
 
 export async function getPublicTransitStaticReadModel(config: SituationDataConfig): Promise<TransitStaticReadModel> {
@@ -404,9 +421,10 @@ function publicTransitStaticReadModelCacheKey(config: SituationDataConfig): stri
 async function fetchPublicTransitStaticReadModel(config: SituationDataConfig): Promise<TransitStaticReadModel> {
   const signature = feedSignature(config);
   const model = emptyModel(signature);
+  const staticFeedTimeoutMs = Math.max(config.requestTimeoutMs, 60_000);
   const settled = await Promise.allSettled([
-    ...config.publicTransitStaticGtfsFeeds.map((feed) => fetchGtfsStaticFeed(feed, config.requestTimeoutMs)),
-    ...config.publicTransitStaticGeojsonFeeds.map((feed) => fetchGeojsonStaticFeed(feed, config.requestTimeoutMs))
+    ...config.publicTransitStaticGtfsFeeds.map((feed) => fetchGtfsStaticFeed(feed, staticFeedTimeoutMs)),
+    ...config.publicTransitStaticGeojsonFeeds.map((feed) => fetchGeojsonStaticFeed(feed, staticFeedTimeoutMs))
   ]);
 
   for (const result of settled) {

@@ -748,7 +748,9 @@ SIM z partner payloadu přebírá geometrii, kategorii, čas, závažnost a metr
 ## COM doporučení
 
 - Dotazovat podle bbox aktuální mapy, ne plošně celou ČR.
-- Default `limit=250`.
+- Default `limit=250`; API přijímá až `limit=5000` pro velké přehledy, ale
+  COP má pro husté vrstvy preferovat menší bbox, zoom-based filtraci a
+  clustering/decluttering.
 - Layer tree a defaultní viditelnost řídit z `GET /catalog`, ne ze staršího `/sources`.
 - Weather a traffic vrstvy zobrazovat jako kontext. `pid_gtfs_rt` obsahuje pohybující se vozidla veřejné dopravy, ale nejsou to COM tracky ani letecké cíle.
 - Veřejnou dopravu vykreslovat podle jednotného kontraktu

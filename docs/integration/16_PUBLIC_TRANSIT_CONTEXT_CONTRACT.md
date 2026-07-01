@@ -381,8 +381,12 @@ Pro celoměstský provoz:
 
 - `refreshSeconds`: 10-20 s podle zdroje,
 - `validUntil`: obvykle `observedAt + 120 s`,
-- `limit`: pro mapu doporučeně 250-1000 podle zoomu,
-- detail vozidla má vlastní cache klíč podle `vehicleId/tripId/serviceDate`.
+- `limit`: pro mapu doporučeně 250-1000 podle zoomu, pro velké městské nebo
+  celostátní přehledy lze požádat až o 5000 prvků,
+- detail vozidla má vlastní cache klíč podle `vehicleId/tripId/serviceDate`,
+- detail vozidla vrací `history` a `prediction`; pokud není dostupný GTFS-RT
+  trip-updates feed, `quality.tripUpdateAvailable=false` a predikce je
+  označená jako `delaySource=estimated_from_schedule` nebo `unavailable`.
 
 ## Přidání dalšího města
 
@@ -424,10 +428,15 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
   ne podle nejpomalejšího zdroje v celé sdílené dopravní vrstvě,
 - kreslit bod vozidla podle `transportMode`, `routeShortName`, `headingDeg` a
   `delaySeconds`,
+- statické zastávky PID/Praha číst z `public.traffic.transit_stops`
+  přes `source=public_transit_static`; SIM je publikuje jako body s
+  `providerLayerId=traffic.public_transit_static`,
 - animovat nebo interpolovat jen prvky s
   `providerProperties.transit.positionKind=vehicle_live`; prvky
   `vehicle_live_cached` obnovovat krokově a `static_stop` nikdy neanimovat,
-- po kliknutí na vozidlo otevřít detail z detailního transit endpointu,
+- po kliknutí na vozidlo otevřít detail z detailního transit endpointu a pro
+  volby Historie/Predikce používat pouze `history` a `prediction` z odpovědi
+  SIM; COP nemá dopočítávat trip schedule ani delay z raw GTFS,
 - po kliknutí na statickou zastávku použít `providerProperties.transit.detailUrl`
   a zobrazit odjezdy/linky ze SIM read-modelu,
 - v detailu zobrazit hlavičku vozidla, stav, stáří dat, příští zastávku, tabulku

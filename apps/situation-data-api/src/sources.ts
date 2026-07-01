@@ -20,7 +20,7 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import { spatiallyLimitFeatures } from "./spatial-limit.js";
-import { getPublicTransitStaticStops } from "./transit-static-model.js";
+import { getPublicTransitStaticStopPayload, type PublicTransitStaticStopPayload } from "./transit-static-model.js";
 import type {
   BoundingBox,
   MobileCoverageQuality,
@@ -1814,10 +1814,10 @@ class PidGtfsRtSource implements SituationDataSource {
 
 class PublicTransitStaticSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
-  private readonly feedCache: ManagedResponseCache<PublicTransitStaticStop[]>;
+  private readonly feedCache: ManagedResponseCache<PublicTransitStaticStopPayload>;
 
   constructor(private readonly config: SituationDataConfig) {
-    this.feedCache = new ManagedResponseCache<PublicTransitStaticStop[]>({
+    this.feedCache = new ManagedResponseCache<PublicTransitStaticStopPayload>({
       ttlMs: Math.max(3600, config.publicTransitStaticCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.publicTransitStaticCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
       maxEntries: 1
@@ -1845,14 +1845,14 @@ class PublicTransitStaticSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const stops = await this.feedCache.getOrLoad(publicTransitStaticCacheKey(this.config), () => fetchPublicTransitStaticStops(this.config));
+    const payload = await this.feedCache.getOrLoad(publicTransitStaticCacheKey(this.config), () => fetchPublicTransitStaticStops(this.config));
     const refreshSeconds = Math.max(3600, this.config.publicTransitStaticCacheTtlSeconds);
-    const features = stops
+    const features = payload.stops
       .map((stop) => mapPublicTransitStaticStop(stop, query, fetchedAt, refreshSeconds))
       .filter((feature): feature is SituationFeature => Boolean(feature))
-      .slice(0, query.limit);
+      .slice(0, Math.min(query.limit, this.config.publicTransitStaticMaxStops));
 
-    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+    return { source: this.descriptor, fetchedAt, features, warnings: payload.warnings.map((warning) => `public_transit_static: ${warning}`) };
   }
 }
 
@@ -5735,8 +5735,8 @@ async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise
   return gtfsRealtime.transit_realtime.FeedMessage.decode(payload);
 }
 
-async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promise<PublicTransitStaticStop[]> {
-  return getPublicTransitStaticStops(config);
+async function fetchPublicTransitStaticStops(config: SituationDataConfig): Promise<PublicTransitStaticStopPayload> {
+  return getPublicTransitStaticStopPayload(config);
 }
 
 function publicTransitStaticCacheKey(config: SituationDataConfig): string {

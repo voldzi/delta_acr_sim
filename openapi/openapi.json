@@ -9168,6 +9168,8 @@
           "vehicle",
           "trip",
           "stopTimes",
+          "history",
+          "prediction",
           "quality"
         ],
         "properties": {
@@ -9283,6 +9285,10 @@
               "startTime": {
                 "type": "string"
               },
+              "delaySeconds": {
+                "type": "integer",
+                "description": "Current delay estimate in seconds. Negative value means the vehicle is early."
+              },
               "status": {
                 "type": "string",
                 "enum": [
@@ -9324,6 +9330,20 @@
                   "type": "string",
                   "example": "16:06:07"
                 },
+                "predictedArrival": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "SIM-normalized predicted arrival when schedule-based prediction is available."
+                },
+                "predictedDeparture": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "SIM-normalized predicted departure when schedule-based prediction is available."
+                },
+                "delaySeconds": {
+                  "type": "integer",
+                  "description": "Delay estimate applied to this stop time. Negative value means early."
+                },
                 "relationToVehicle": {
                   "type": "string",
                   "enum": [
@@ -9342,6 +9362,171 @@
                     },
                     "lon": {
                       "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "delaySeconds": {
+            "type": "integer",
+            "description": "Current delay estimate in seconds. Negative value means the vehicle is early."
+          },
+          "history": {
+            "type": "object",
+            "required": [
+              "generatedFrom",
+              "windowSeconds",
+              "pointCount",
+              "truncated",
+              "points"
+            ],
+            "properties": {
+              "generatedFrom": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "windowSeconds": {
+                "type": "integer"
+              },
+              "pointCount": {
+                "type": "integer"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "observedAt"
+                  ],
+                  "properties": {
+                    "observedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "position": {
+                      "type": "object",
+                      "properties": {
+                        "lat": {
+                          "type": "number"
+                        },
+                        "lon": {
+                          "type": "number"
+                        },
+                        "headingDeg": {
+                          "type": "number"
+                        },
+                        "speedMps": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "stopId": {
+                      "type": "string"
+                    },
+                    "currentStopSequence": {
+                      "type": "integer"
+                    },
+                    "relationToVehicle": {
+                      "type": "string",
+                      "enum": [
+                        "previous",
+                        "current",
+                        "next",
+                        "future",
+                        "unknown"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "prediction": {
+            "type": "object",
+            "required": [
+              "generatedFrom",
+              "delaySource",
+              "stopTimes"
+            ],
+            "properties": {
+              "generatedFrom": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "delaySource": {
+                "type": "string",
+                "enum": [
+                  "estimated_from_schedule",
+                  "unavailable"
+                ]
+              },
+              "delaySeconds": {
+                "type": "integer"
+              },
+              "stopTimes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "stopId",
+                    "stopSequence",
+                    "relationToVehicle"
+                  ],
+                  "properties": {
+                    "stopId": {
+                      "type": "string"
+                    },
+                    "stopName": {
+                      "type": "string"
+                    },
+                    "stopSequence": {
+                      "type": "integer"
+                    },
+                    "scheduledArrival": {
+                      "type": "string"
+                    },
+                    "scheduledDeparture": {
+                      "type": "string"
+                    },
+                    "predictedArrival": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "predictedDeparture": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "delaySeconds": {
+                      "type": "integer"
+                    },
+                    "relationToVehicle": {
+                      "type": "string",
+                      "enum": [
+                        "previous",
+                        "current",
+                        "next",
+                        "future",
+                        "unknown"
+                      ]
+                    },
+                    "position": {
+                      "type": "object",
+                      "properties": {
+                        "lat": {
+                          "type": "number"
+                        },
+                        "lon": {
+                          "type": "number"
+                        }
+                      }
                     }
                   }
                 }
@@ -9380,8 +9565,11 @@
             "required": [
               "realtimeVehicleAvailable",
               "staticModelAvailable",
+              "tripUpdateAvailable",
               "tripScheduleAvailable",
               "routeShapeAvailable",
+              "historyAvailable",
+              "predictionAvailable",
               "generatedFrom",
               "warnings"
             ],
@@ -9392,10 +9580,20 @@
               "staticModelAvailable": {
                 "type": "boolean"
               },
+              "tripUpdateAvailable": {
+                "type": "boolean",
+                "description": "False until SIM is configured with a realtime GTFS-RT trip-updates feed for this system."
+              },
               "tripScheduleAvailable": {
                 "type": "boolean"
               },
               "routeShapeAvailable": {
+                "type": "boolean"
+              },
+              "historyAvailable": {
+                "type": "boolean"
+              },
+              "predictionAvailable": {
                 "type": "boolean"
               },
               "generatedFrom": {
@@ -13510,7 +13708,7 @@
         "schema": {
           "type": "integer",
           "default": 250,
-          "maximum": 1000
+          "maximum": 5000
         }
       },
       "SituationDataFeatureId": {

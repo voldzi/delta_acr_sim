@@ -2202,7 +2202,7 @@ describe("Situation Data API contract", () => {
               bearing: 82,
               speed: 7.5
             },
-            timestamp: Math.round(Date.parse("2026-05-28T08:01:00.000Z") / 1000),
+            timestamp: Math.round(Date.parse("2026-05-28T06:05:30.000Z") / 1000),
             currentStopSequence: 2,
             currentStatus: gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.IN_TRANSIT_TO,
             stopId: "stop-2",
@@ -2279,13 +2279,44 @@ describe("Situation Data API contract", () => {
           routeId: "L136",
           routeShortName: "136",
           destination: "Sidliste Repy",
-          status: expect.stringMatching(/in_transit|stale/)
+          delaySeconds: 30,
+          status: "stale"
         }),
         stopTimes: [
           expect.objectContaining({ stopId: "stop-1", relationToVehicle: "previous" }),
-          expect.objectContaining({ stopId: "stop-2", relationToVehicle: "current" }),
+          expect.objectContaining({
+            stopId: "stop-2",
+            relationToVehicle: "current",
+            predictedArrival: "2026-05-28T06:05:30.000Z",
+            predictedDeparture: "2026-05-28T06:05:30.000Z",
+            delaySeconds: 30
+          }),
           expect.objectContaining({ stopId: "stop-3", relationToVehicle: "next" })
         ],
+        delaySeconds: 30,
+        history: expect.objectContaining({
+          generatedFrom: expect.arrayContaining(["pid_gtfs_rt_vehicle_positions", "sim_in_memory_vehicle_history"]),
+          windowSeconds: 1800,
+          pointCount: 1,
+          points: [
+            expect.objectContaining({
+              observedAt: "2026-05-28T06:05:30.000Z",
+              currentStopSequence: 2,
+              relationToVehicle: "next"
+            })
+          ]
+        }),
+        prediction: expect.objectContaining({
+          delaySource: "estimated_from_schedule",
+          delaySeconds: 30,
+          stopTimes: expect.arrayContaining([
+            expect.objectContaining({
+              stopId: "stop-2",
+              predictedArrival: "2026-05-28T06:05:30.000Z",
+              delaySeconds: 30
+            })
+          ])
+        }),
         routeShape: expect.objectContaining({
           shapeId: "shape-136",
           truncated: false,
@@ -2298,8 +2329,11 @@ describe("Situation Data API contract", () => {
         quality: expect.objectContaining({
           realtimeVehicleAvailable: true,
           staticModelAvailable: true,
+          tripUpdateAvailable: false,
           tripScheduleAvailable: true,
-          routeShapeAvailable: true
+          routeShapeAvailable: true,
+          historyAvailable: true,
+          predictionAvailable: true
         })
       })
     );
@@ -2456,10 +2490,26 @@ describe("Situation Data API contract", () => {
     const second = await request(staticApp.app)
       .get("/api/v1/features?bbox=13.9,50.5,14.2,50.8&layers=traffic&source=public_transit_static&limit=21")
       .expect(200);
+    const pragueStops = await request(staticApp.app)
+      .get("/api/v1/features?bbox=14.3,50.0,14.6,50.2&layers=traffic&source=public_transit_static&limit=5000")
+      .expect(200);
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(first.body.features).toHaveLength(1);
     expect(second.body.features).toHaveLength(1);
+    expect(pragueStops.body.query.limit).toBe(5000);
+    expect(pragueStops.body.features).toHaveLength(1);
+    expect(pragueStops.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: "traffic:public_transit_static:test_gtfs:P1",
+        properties: expect.objectContaining({
+          sourceId: "public_transit_static",
+          layerId: "public.traffic.transit_stops",
+          providerLayerId: "traffic.public_transit_static",
+          label: "Praha hlavní nádraží"
+        })
+      })
+    );
     expect(first.body.features[0]).toEqual(
       expect.objectContaining({
         id: "traffic:public_transit_static:test_gtfs:U1",

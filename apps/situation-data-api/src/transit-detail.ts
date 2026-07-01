@@ -42,6 +42,37 @@ interface GtfsShapePoint {
   sequence: number;
 }
 
+type TransitStopRelation = "previous" | "current" | "next" | "future" | "unknown";
+
+interface TransitVehicleHistoryPoint {
+  observedAt: string;
+  position?: {
+    lat: number;
+    lon: number;
+    headingDeg?: number;
+    speedMps?: number;
+  };
+  stopId?: string;
+  currentStopSequence?: number;
+  relationToVehicle?: TransitStopRelation;
+}
+
+interface TransitVehiclePredictionStop {
+  stopId: string;
+  stopName?: string;
+  stopSequence: number;
+  scheduledArrival?: string;
+  scheduledDeparture?: string;
+  predictedArrival?: string;
+  predictedDeparture?: string;
+  delaySeconds?: number;
+  relationToVehicle: TransitStopRelation;
+  position?: {
+    lat: number;
+    lon: number;
+  };
+}
+
 interface PidStaticModel {
   loadedAt: string;
   routes: Map<string, GtfsRoute>;
@@ -92,6 +123,7 @@ export interface TransitVehicleDetail {
     directionId?: string;
     startDate?: string;
     startTime?: string;
+    delaySeconds?: number;
     status: "on_time" | "early" | "delayed" | "stopped" | "in_transit" | "stale" | "unknown";
   };
   stopTimes: Array<{
@@ -100,12 +132,29 @@ export interface TransitVehicleDetail {
     stopSequence: number;
     scheduledArrival?: string;
     scheduledDeparture?: string;
-    relationToVehicle: "previous" | "current" | "next" | "future" | "unknown";
+    predictedArrival?: string;
+    predictedDeparture?: string;
+    delaySeconds?: number;
+    relationToVehicle: TransitStopRelation;
     position?: {
       lat: number;
       lon: number;
     };
   }>;
+  delaySeconds?: number;
+  history: {
+    generatedFrom: string[];
+    windowSeconds: number;
+    pointCount: number;
+    truncated: boolean;
+    points: TransitVehicleHistoryPoint[];
+  };
+  prediction: {
+    generatedFrom: string[];
+    delaySource: "estimated_from_schedule" | "unavailable";
+    delaySeconds?: number;
+    stopTimes: TransitVehiclePredictionStop[];
+  };
   routeShape?: {
     shapeId: string;
     coordinates: Array<[number, number]>;
@@ -114,8 +163,11 @@ export interface TransitVehicleDetail {
   quality: {
     realtimeVehicleAvailable: boolean;
     staticModelAvailable: boolean;
+    tripUpdateAvailable: boolean;
     tripScheduleAvailable: boolean;
     routeShapeAvailable: boolean;
+    historyAvailable: boolean;
+    predictionAvailable: boolean;
     generatedFrom: string[];
     warnings: string[];
   };
@@ -124,6 +176,9 @@ export interface TransitVehicleDetail {
 export class TransitDetailService {
   private readonly pidVehicleFeedCache: ManagedResponseCache<transit_realtime.FeedMessage>;
   private readonly pidStaticModelCache: ManagedResponseCache<PidStaticModel>;
+  private readonly pidVehicleHistory = new Map<string, TransitVehicleHistoryPoint[]>();
+  private readonly pidHistoryWindowSeconds = 30 * 60;
+  private readonly pidHistoryMaxPoints = 120;
 
   constructor(private readonly config: SituationDataConfig) {
     this.pidVehicleFeedCache = new ManagedResponseCache<transit_realtime.FeedMessage>({
@@ -151,6 +206,7 @@ export class TransitDetailService {
     if (!entity?.vehicle) {
       return undefined;
     }
+    const history = this.recordPidVehicleHistory(entity);
 
     let staticModel: PidStaticModel | undefined;
     try {
@@ -159,11 +215,26 @@ export class TransitDetailService {
       warnings.push(`PID static GTFS is not available: ${errorMessage(error)}`);
     }
 
-    return buildPidVehicleDetail(entity, featureId, generatedAt, staticModel, warnings, {
+    return buildPidVehicleDetail(entity, featureId, generatedAt, staticModel, warnings, history, this.pidHistoryWindowSeconds, {
       includeShape: options.includeShape ?? true,
       maxStopTimes: clampInteger(options.maxStopTimes, 5, 120, 60),
       maxShapePoints: clampInteger(options.maxShapePoints, 10, 2000, 500)
     });
+  }
+
+  private recordPidVehicleHistory(entity: transit_realtime.IFeedEntity): TransitVehicleHistoryPoint[] {
+    const vehicle = entity.vehicle;
+    const vehicleId = optionalString(vehicle?.vehicle?.id) ?? optionalString(entity.id);
+    if (!vehicleId) {
+      return [];
+    }
+    const observedAt = observedAtForVehicle(vehicle);
+    const point = historyPointFromVehicle(vehicle, observedAt);
+    const key = stableToken(vehicleId);
+    const existing = this.pidVehicleHistory.get(key) ?? [];
+    const next = point ? appendHistoryPoint(existing, point, this.pidHistoryWindowSeconds, this.pidHistoryMaxPoints) : existing;
+    this.pidVehicleHistory.set(key, next);
+    return next;
   }
 }
 
@@ -173,6 +244,8 @@ function buildPidVehicleDetail(
   generatedAt: string,
   staticModel: PidStaticModel | undefined,
   warnings: string[],
+  history: TransitVehicleHistoryPoint[],
+  historyWindowSeconds: number,
   options: Required<Pick<TransitDetailOptions, "includeShape" | "maxStopTimes" | "maxShapePoints">>
 ): TransitVehicleDetail {
   const vehicle = entity.vehicle;
@@ -185,8 +258,7 @@ function buildPidVehicleDetail(
   const mode = pidVehicleMode(vehicleId, normalizedRouteId, staticRoute?.type);
   const routeShortName = staticRoute?.shortName ?? pidRouteLabel(normalizedRouteId, vehicleId);
   const position = vehicle?.position;
-  const timestamp = longToNumber(vehicle?.timestamp);
-  const observedAt = timestamp && timestamp > 0 ? new Date(timestamp * 1000).toISOString() : undefined;
+  const observedAt = observedAtForVehicle(vehicle);
   const currentStopSequence = longToNumber(vehicle?.currentStopSequence);
   const stopTimes = tripId && staticModel ? findStopTimesForTrip(staticModel, tripId, options.maxStopTimes) : [];
   const detailedStopTimes = stopTimes.map((stopTime) => {
@@ -207,6 +279,12 @@ function buildPidVehicleDetail(
           : undefined
     };
   });
+  const delaySeconds = estimateDelaySeconds(vehicle, detailedStopTimes, observedAt);
+  const prediction = buildPrediction(detailedStopTimes, optionalString(vehicle?.trip?.startDate), delaySeconds);
+  const qualityWarnings = [...warnings];
+  if (delaySeconds === undefined) {
+    qualityWarnings.push("PID GTFS-RT trip updates are not configured; delay is unavailable unless SIM can estimate it from current stop schedule.");
+  }
   const shape =
     options.includeShape && staticModel && staticTrip?.shapeId
       ? findShapeForTrip(staticModel, staticTrip.shapeId, options.maxShapePoints)
@@ -247,9 +325,19 @@ function buildPidVehicleDetail(
       directionId: staticTrip?.directionId,
       startDate: optionalString(vehicle?.trip?.startDate),
       startTime: optionalString(vehicle?.trip?.startTime),
-      status: transitTripStatus(vehicle?.currentStatus, observedAt)
+      delaySeconds,
+      status: transitTripStatus(vehicle?.currentStatus, observedAt, delaySeconds)
     },
-    stopTimes: detailedStopTimes,
+    stopTimes: prediction.stopTimes,
+    delaySeconds,
+    history: {
+      generatedFrom: history.length > 0 ? ["pid_gtfs_rt_vehicle_positions", "sim_in_memory_vehicle_history"] : ["pid_gtfs_rt_vehicle_positions"],
+      windowSeconds: historyWindowSeconds,
+      pointCount: history.length,
+      truncated: history.length >= 120,
+      points: history
+    },
+    prediction,
     routeShape: shape
       ? {
           shapeId: shape.shapeId,
@@ -260,12 +348,147 @@ function buildPidVehicleDetail(
     quality: {
       realtimeVehicleAvailable: true,
       staticModelAvailable: Boolean(staticModel),
+      tripUpdateAvailable: false,
       tripScheduleAvailable: detailedStopTimes.length > 0,
       routeShapeAvailable: Boolean(shape),
-      generatedFrom: staticModel ? ["pid_gtfs_rt_vehicle_positions", "pid_static_gtfs"] : ["pid_gtfs_rt_vehicle_positions"],
-      warnings
+      historyAvailable: history.length > 0,
+      predictionAvailable: prediction.stopTimes.length > 0,
+      generatedFrom: staticModel
+        ? ["pid_gtfs_rt_vehicle_positions", "pid_static_gtfs", "pid_static_schedule_prediction"]
+        : ["pid_gtfs_rt_vehicle_positions"],
+      warnings: qualityWarnings
     }
   };
+}
+
+function observedAtForVehicle(vehicle: transit_realtime.IVehiclePosition | null | undefined): string | undefined {
+  const timestamp = longToNumber(vehicle?.timestamp);
+  return timestamp && timestamp > 0 ? new Date(timestamp * 1000).toISOString() : undefined;
+}
+
+function historyPointFromVehicle(
+  vehicle: transit_realtime.IVehiclePosition | null | undefined,
+  observedAt: string | undefined
+): TransitVehicleHistoryPoint | undefined {
+  if (!observedAt) {
+    return undefined;
+  }
+  const position = vehicle?.position;
+  const lat = optionalNumber(position?.latitude);
+  const lon = optionalNumber(position?.longitude);
+  return {
+    observedAt,
+    position:
+      lat !== undefined && lon !== undefined
+        ? {
+            lat,
+            lon,
+            headingDeg: optionalNumber(position?.bearing),
+            speedMps: optionalNumber(position?.speed)
+          }
+        : undefined,
+    stopId: optionalString(vehicle?.stopId),
+    currentStopSequence: longToNumber(vehicle?.currentStopSequence),
+    relationToVehicle: relationFromVehicleStatus(vehicle?.currentStatus)
+  };
+}
+
+function appendHistoryPoint(
+  existing: TransitVehicleHistoryPoint[],
+  point: TransitVehicleHistoryPoint,
+  windowSeconds: number,
+  maxPoints: number
+): TransitVehicleHistoryPoint[] {
+  const duplicate = existing.some(
+    (item) =>
+      item.observedAt === point.observedAt &&
+      item.position?.lat === point.position?.lat &&
+      item.position?.lon === point.position?.lon
+  );
+  const withPoint = duplicate ? existing : [...existing, point];
+  const cutoff = Date.parse(point.observedAt) - windowSeconds * 1000;
+  return withPoint
+    .filter((item) => Date.parse(item.observedAt) >= cutoff)
+    .sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt))
+    .slice(-maxPoints);
+}
+
+function estimateDelaySeconds(
+  vehicle: transit_realtime.IVehiclePosition | null | undefined,
+  stopTimes: TransitVehicleDetail["stopTimes"],
+  observedAt: string | undefined
+): number | undefined {
+  const startDate = optionalString(vehicle?.trip?.startDate);
+  const currentStopSequence = longToNumber(vehicle?.currentStopSequence);
+  if (!startDate || currentStopSequence === undefined || !observedAt) {
+    return undefined;
+  }
+  const currentStop = stopTimes.find((stopTime) => stopTime.stopSequence === currentStopSequence);
+  const scheduledTime = currentStop?.scheduledArrival ?? currentStop?.scheduledDeparture;
+  const scheduledAt = gtfsServiceTimeToIso(startDate, scheduledTime, 0);
+  if (!scheduledAt) {
+    return undefined;
+  }
+  return Math.round((Date.parse(observedAt) - Date.parse(scheduledAt)) / 1000);
+}
+
+function buildPrediction(
+  stopTimes: TransitVehicleDetail["stopTimes"],
+  startDate: string | undefined,
+  delaySeconds: number | undefined
+): TransitVehicleDetail["prediction"] {
+  const delaySource = delaySeconds === undefined ? "unavailable" : "estimated_from_schedule";
+  return {
+    generatedFrom: delaySeconds === undefined ? ["pid_static_gtfs"] : ["pid_static_gtfs", "pid_gtfs_rt_vehicle_position"],
+    delaySource,
+    delaySeconds,
+    stopTimes: stopTimes.map((stopTime) => ({
+      ...stopTime,
+      predictedArrival: gtfsServiceTimeToIso(startDate, stopTime.scheduledArrival, delaySeconds),
+      predictedDeparture: gtfsServiceTimeToIso(startDate, stopTime.scheduledDeparture, delaySeconds),
+      delaySeconds
+    }))
+  };
+}
+
+function gtfsServiceTimeToIso(serviceDate: string | undefined, time: string | undefined, delaySeconds: number | undefined): string | undefined {
+  if (!serviceDate || !time) {
+    return undefined;
+  }
+  const dateMatch = serviceDate.match(/^(\d{4})(\d{2})(\d{2})$/);
+  const timeMatch = time.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+  if (!dateMatch || !timeMatch) {
+    return undefined;
+  }
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  const seconds = Number(timeMatch[3]);
+  if (![year, month, day, hours, minutes, seconds].every(Number.isFinite)) {
+    return undefined;
+  }
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds + (delaySeconds ?? 0);
+  const localAsUtc = Date.UTC(year, month - 1, day, 0, 0, 0) + totalSeconds * 1000;
+  const offsetMs = timeZoneOffsetMs("Europe/Prague", new Date(localAsUtc));
+  return new Date(localAsUtc - offsetMs).toISOString();
+}
+
+function timeZoneOffsetMs(timeZone: string, date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes): number => Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
+  return asUtc - date.getTime();
 }
 
 async function fetchPidVehiclePositionFeed(config: SituationDataConfig): Promise<transit_realtime.FeedMessage> {
@@ -594,10 +817,20 @@ function pidRouteLabel(routeId: string | undefined, vehicleId: string | undefine
 
 function transitTripStatus(
   currentStatus: transit_realtime.VehiclePosition.VehicleStopStatus | null | undefined,
-  observedAt: string | undefined
+  observedAt: string | undefined,
+  delaySeconds: number | undefined
 ): TransitVehicleDetail["trip"]["status"] {
   if (observedAt && Date.now() - Date.parse(observedAt) > 2 * 60_000) {
     return "stale";
+  }
+  if (delaySeconds !== undefined) {
+    if (delaySeconds > 60) {
+      return "delayed";
+    }
+    if (delaySeconds < -60) {
+      return "early";
+    }
+    return "on_time";
   }
   switch (currentStatus) {
     case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.STOPPED_AT:
@@ -610,7 +843,7 @@ function transitTripStatus(
   }
 }
 
-function stopRelation(stopSequence: number, currentStopSequence: number | undefined): "previous" | "current" | "next" | "future" | "unknown" {
+function stopRelation(stopSequence: number, currentStopSequence: number | undefined): TransitStopRelation {
   if (currentStopSequence === undefined) {
     return "unknown";
   }
@@ -624,6 +857,20 @@ function stopRelation(stopSequence: number, currentStopSequence: number | undefi
     return "next";
   }
   return "future";
+}
+
+function relationFromVehicleStatus(
+  value: transit_realtime.VehiclePosition.VehicleStopStatus | null | undefined
+): TransitStopRelation | undefined {
+  switch (value) {
+    case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.STOPPED_AT:
+      return "current";
+    case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.IN_TRANSIT_TO:
+    case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.INCOMING_AT:
+      return "next";
+    default:
+      return undefined;
+  }
 }
 
 function pidVehicleStopStatus(value: transit_realtime.VehiclePosition.VehicleStopStatus | null | undefined): string | undefined {

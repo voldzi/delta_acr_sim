@@ -717,7 +717,7 @@ function parseSituationQuery(
       bbox: bbox.value,
       layers,
       sourceIds: sources,
-      limit: parseLimit(raw.limit, 250, 1000),
+      limit: parseLimit(raw.limit, 250, 5000),
       includeRaw: parseBoolean(raw.includeRaw),
       mobileCoverageTechnologies: parseTechnologies(raw.technology ?? raw.technologies),
       mobileCoverageOperators: parseOperators(raw.operator ?? raw.operators)
