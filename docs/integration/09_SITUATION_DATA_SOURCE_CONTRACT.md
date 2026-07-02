@@ -554,7 +554,7 @@ hotovy detailni kontrakt:
 - `contractVersion=sim-mobile-coverage-tower-reference-v1`,
 - `towerId` ve forme `node:<id>`, `way:<id>`, `relation:<id>` nebo `area:<id>`,
 - `viewshedAvailable=true`,
-- `viewshedUrl`, napr. `/api/v1/mobile-coverage/towers/area:436954796/viewshed`,
+- `viewshedUrl`, napr. `/situation-data/api/v1/mobile-coverage/towers/area:436954796/viewshed`,
 - `defaultQuery` s doporucenymi hodnotami `technology=4G`, `radiusM=12000`, `azimuthStepDeg=10`,
   `distanceStepM=500`, `includeNoSignal=false`,
 - `radiusMByTechnology` pro vychozi dosah `2G=25000`, `4G=12000`, `5G=5000`,

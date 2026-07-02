@@ -3036,7 +3036,8 @@ describe("Situation Data API contract", () => {
               contractVersion: "sim-mobile-coverage-tower-reference-v1",
               towerId: "area:436954796",
               viewshedAvailable: true,
-              viewshedUrl: "/api/v1/mobile-coverage/towers/area:436954796/viewshed",
+              viewshedUrl: "/situation-data/api/v1/mobile-coverage/towers/area:436954796/viewshed",
+              serviceViewshedUrl: "/api/v1/mobile-coverage/towers/area:436954796/viewshed",
               defaultQuery: expect.objectContaining({
                 technology: "4G",
                 radiusM: 12000,
