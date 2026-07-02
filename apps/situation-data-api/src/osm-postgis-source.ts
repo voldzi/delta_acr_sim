@@ -61,6 +61,18 @@ interface OsmPostgisMetadata {
 
 type OsmPoiLayer = "ground" | "mobile";
 type OsmAdminBoundaryLayer = "boundary_country" | "boundary_region" | "boundary_district" | "boundary_orp" | "place_settlements";
+const DEFAULT_TOWER_VIEWSHED_QUERY = {
+  technology: "4G",
+  radiusM: 12_000,
+  azimuthStepDeg: 10,
+  distanceStepM: 500,
+  includeNoSignal: false
+} as const;
+const TOWER_VIEWSHED_RADIUS_M_BY_TECHNOLOGY = {
+  "2G": 25_000,
+  "4G": 12_000,
+  "5G": 5_000
+} as const;
 
 export class OsmPostgisSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
@@ -439,6 +451,7 @@ function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): S
     return undefined;
   }
   const id = `${layer}:osm_postgis:${osmType}:${osmId}:${category}`;
+  const towerId = `${osmType}:${osmId}`;
   const tags = normalizeTags(row.tags);
   const isCommunicationsTower = category === "communications_tower";
   return {
@@ -465,6 +478,7 @@ function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): S
       operatorStatusAvailable: isCommunicationsTower ? false : undefined,
       notices: isCommunicationsTower ? ["Referenční OSM komunikační stožár; nejde o ověřený stav BTS ani dostupnost služby."] : undefined,
       disclaimer: isCommunicationsTower ? "Reference infrastructure only; BTS operational status is unknown." : undefined,
+      providerProperties: isCommunicationsTower ? mobileCoverageTowerReference(towerId) : undefined,
       license: {
         name: OSM_POSTGIS_LICENSE.name,
         attribution: OSM_POSTGIS_LICENSE.attribution,
@@ -481,10 +495,28 @@ function mapOsmPoiRow(row: OsmPoiRow, fetchedAt: string, includeRaw: boolean): S
         emergency: tags.emergency,
         manMade: tags.man_made,
         towerType: tags["tower:type"],
+        viewshedTowerId: isCommunicationsTower ? towerId : undefined,
         referenceOnly: isCommunicationsTower ? "true" : undefined,
         btsStatus: isCommunicationsTower ? "unknown" : undefined
       }),
       raw: includeRaw ? row : undefined
+    }
+  };
+}
+
+function mobileCoverageTowerReference(towerId: string): Record<string, unknown> {
+  return {
+    mobileCoverage: {
+      contractVersion: "sim-mobile-coverage-tower-reference-v1",
+      towerId,
+      viewshedAvailable: true,
+      viewshedUrl: `/api/v1/mobile-coverage/towers/${towerId}/viewshed`,
+      defaultQuery: DEFAULT_TOWER_VIEWSHED_QUERY,
+      radiusMByTechnology: TOWER_VIEWSHED_RADIUS_M_BY_TECHNOLOGY,
+      renderPolicy: "coverage_only",
+      btsStatus: "operator_feed_unavailable",
+      operatorStatusAvailable: false,
+      disclaimer: "Modelled line-of-sight coverage estimate only; SIM has no live operator BTS/NOC status for this tower."
     }
   };
 }

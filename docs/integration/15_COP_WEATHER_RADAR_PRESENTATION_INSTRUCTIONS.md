@@ -173,6 +173,15 @@ indicates that the clean frame is already present in SIM local cache.
 In the layer tree:
 
 - Show `public.weather.current` as a point weather observation.
+- Show `public.weather.forecast_area` as forecast polygons from
+  `layers=weather_forecast_area&source=weather_forecast`. Use
+  `properties.providerProperties.presentation.symbolKey` for the icon and
+  `riskScore`/`riskLevel` for fill or outline color. Do not infer all missing
+  weather states as partly cloudy.
+- On forecast-area click, open
+  `properties.providerProperties.weatherForecast.detailUrl` and render the
+  returned `charts[]` as the meteogram for temperature, precipitation, wind and
+  weather risk.
 - Show CHMI station weather/grid layers as measured/grid weather context.
 - Show `public.weather.webcams` as point camera locations; open a custom preview
   window on click and load the snapshot through SIM.

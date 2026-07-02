@@ -18,6 +18,14 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 300
   },
   {
+    layerId: "weather_forecast_area",
+    label: "Weather forecast areas",
+    description: "SIM-normalized forecast polygons with ready-to-render weather symbols, risk summaries and meteogram detail URLs.",
+    defaultVisible: false,
+    geometryTypes: ["Polygon"],
+    expectedCadenceSeconds: 600
+  },
+  {
     layerId: "ground",
     label: "Ground reference",
     description: "Reference infrastructure and points of interest relevant to the ground picture.",

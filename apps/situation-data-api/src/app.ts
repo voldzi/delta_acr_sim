@@ -16,6 +16,7 @@ import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import { TransitDetailService } from "./transit-detail.js";
 import { TransitStaticModelService } from "./transit-static-model.js";
+import { WeatherForecastService } from "./weather-forecast.js";
 import {
   buildSituationFeatureDetail,
   buildSituationFeatureDensityCollection,
@@ -43,6 +44,7 @@ export interface SituationDataAppContext {
   radarFrames: ChmiWeatherRadarFrameCatalog;
   weatherStationDetails: ChmiWeatherStationDetailService;
   weatherWebcams: ChmiWeatherWebcamCatalog;
+  weatherForecast: WeatherForecastService;
   transitDetails: TransitDetailService;
   transitStatic: TransitStaticModelService;
 }
@@ -57,6 +59,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const radarFrames = new ChmiWeatherRadarFrameCatalog(config);
   const weatherStationDetails = new ChmiWeatherStationDetailService(config);
   const weatherWebcams = new ChmiWeatherWebcamCatalog(config);
+  const weatherForecast = new WeatherForecastService(config);
   const transitDetails = new TransitDetailService(config);
   const transitStatic = new TransitStaticModelService(config);
   const context: SituationDataAppContext = {
@@ -68,6 +71,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     radarFrames,
     weatherStationDetails,
     weatherWebcams,
+    weatherForecast,
     transitDetails,
     transitStatic
   };
@@ -92,7 +96,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
 
 function sourceCacheStats(context: SituationDataAppContext): SourceCacheStats[] {
   const statsBySource = new Map<string, SourceCacheStats>();
-  for (const stats of [...context.aggregation.sourceCacheStats(), ...context.mobileCoverage.cacheStats()]) {
+  for (const stats of [...context.aggregation.sourceCacheStats(), ...context.mobileCoverage.cacheStats(), ...context.weatherForecast.cacheStats()]) {
     const existing = statsBySource.get(stats.sourceId);
     if (!existing) {
       statsBySource.set(stats.sourceId, { ...stats });
@@ -287,7 +291,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
   app.get("/api/v1/mobile-coverage/towers/:towerId/viewshed", async (req, res) => {
     const towerId = req.params.towerId;
     if (!towerId || !isValidTowerId(towerId)) {
-      return problem(req, res, 400, "VALIDATION_ERROR", "towerId must use OSM form node:<id>, way:<id> or relation:<id>.");
+      return problem(req, res, 400, "VALIDATION_ERROR", "towerId must use OSM form node:<id>, way:<id>, relation:<id> or area:<id>.");
     }
     if (!context.config.osmPostgisConnectionString) {
       return problem(req, res, 503, "SOURCE_UNAVAILABLE", "OSM_POSTGIS_DATABASE_URL is required for tower viewshed.");
@@ -379,6 +383,26 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         "UPSTREAM_ERROR",
         error instanceof Error ? `CHMI weather station detail failed: ${error.message}` : "CHMI weather station detail failed."
       );
+    }
+  });
+
+  app.get("/api/v1/weather-forecast/areas/:areaId", async (req, res) => {
+    const bbox = parseOptionalBbox(req.query.bbox);
+    if (!bbox.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", bbox.error);
+    }
+    try {
+      res.json(
+        await context.weatherForecast.getAreaDetail(req.params.areaId, {
+          bbox: bbox.value,
+          hours: parseOptionalNumber(req.query.hours ?? req.query.forecastHours),
+          days: parseOptionalNumber(req.query.days)
+        })
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Weather forecast area detail failed.";
+      const status = message.includes("bbox query parameter is required") ? 400 : 502;
+      return problem(req, res, status, status === 400 ? "VALIDATION_ERROR" : "UPSTREAM_ERROR", message);
     }
   });
 
@@ -764,6 +788,7 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "weather_precipitation_grid",
     "weather_humidity_grid",
     "weather_pressure_grid",
+    "weather_forecast_area",
     "weather_radar_reflectivity",
     "weather_radar_precipitation",
     "weather_radar_nowcast",
@@ -794,6 +819,7 @@ function parseLayers(value: unknown): SituationLayerId[] {
       "weather_precipitation_grid",
       "weather_humidity_grid",
       "weather_pressure_grid",
+      "weather_forecast_area",
       "weather_radar_reflectivity",
       "weather_radar_precipitation",
       "weather_radar_nowcast",
@@ -812,6 +838,7 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
   const allowed = new Set<SituationDataSourceId>([
     "mock",
     "open_meteo",
+    "weather_forecast",
     "mobile_coverage_model",
     "mobile_network_model",
     "osm_postgis",
@@ -990,7 +1017,7 @@ function asString(value: unknown): string | undefined {
 }
 
 function isValidTowerId(value: string): boolean {
-  return /^(node|way|relation):-?\d+$/.test(value);
+  return /^(node|way|relation|area):-?\d+$/.test(value);
 }
 
 function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
@@ -1047,6 +1074,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
         authConfigured: true,
         backend: "open-meteo+met-norway",
         fallbackBaseUrl: config.metNorwayBaseUrl
+      },
+      {
+        sourceId: "weather_forecast",
+        baseUrl: config.openMeteoBaseUrl,
+        authConfigured: true,
+        backend: "sim-weather-forecast-open-meteo"
       },
       {
         sourceId: "mobile_coverage_model",

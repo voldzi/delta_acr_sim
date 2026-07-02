@@ -21,9 +21,7 @@
   ],
   "security": [
     {
-      "bearerAuth": [
-
-      ]
+      "bearerAuth": []
     }
   ],
   "tags": [
@@ -3305,10 +3303,10 @@
           "404": {
             "$ref": "#/components/responses/SituationDataProblem"
           },
-          "503": {
+          "502": {
             "$ref": "#/components/responses/SituationDataProblem"
           },
-          "502": {
+          "503": {
             "$ref": "#/components/responses/SituationDataProblem"
           }
         },
@@ -4465,9 +4463,7 @@
         "summary": "Ingest Cursor-on-Target XML event payload",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "requestBody": {
@@ -4553,12 +4549,9 @@
         "description": "Kept for existing COM/COP backend adapters. New provider integrations should prefer /features through a server-side COM adapter.",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           },
-          {
-          }
+          {}
         ],
         "parameters": [
           {
@@ -4637,12 +4630,9 @@
         "summary": "TAK GeoJSON feature projection for server-side COM adapters",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           },
-          {
-          }
+          {}
         ],
         "parameters": [
           {
@@ -4793,9 +4783,7 @@
         "summary": "Current normalized CoT event state",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -4824,9 +4812,7 @@
         "summary": "Clear current TAK event state",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -4857,9 +4843,7 @@
         "tags": [
           "Situation Data: Health"
         ],
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4891,9 +4875,7 @@
         "tags": [
           "Situation Data: Health"
         ],
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4925,9 +4907,7 @@
         "tags": [
           "Safety Data: Health"
         ],
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4959,9 +4939,7 @@
         "tags": [
           "Safety Data: Health"
         ],
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4993,9 +4971,7 @@
         "tags": [
           "TAK Gateway: Health"
         ],
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -5027,9 +5003,7 @@
         "tags": [
           "TAK Gateway: Health"
         ],
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -5052,6 +5026,74 @@
             }
           }
         }
+      }
+    },
+    "/situation-data/api/v1/weather-forecast/areas/{areaId}": {
+      "get": {
+        "summary": "Return SIM-normalized weather forecast area detail with meteogram charts",
+        "parameters": [
+          {
+            "name": "areaId",
+            "in": "path",
+            "required": true,
+            "description": "SIM forecast area token from properties.providerProperties.weatherForecast.detailUrl.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataBbox"
+          },
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 72,
+              "default": 48
+            },
+            "description": "Hourly forecast horizon to include in charts."
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7,
+              "default": 7
+            },
+            "description": "Daily forecast horizon to include."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Forecast area detail with current values, hourly/daily points and chart-ready series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataWeatherForecastAreaDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "404": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_weather_forecast_area_detail",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
       }
     }
   },
@@ -6989,6 +7031,7 @@
           "weather_precipitation_grid",
           "weather_humidity_grid",
           "weather_pressure_grid",
+          "weather_forecast_area",
           "weather_radar_reflectivity",
           "weather_radar_precipitation",
           "weather_radar_nowcast",
@@ -7002,6 +7045,7 @@
         "enum": [
           "mock",
           "open_meteo",
+          "weather_forecast",
           "mobile_coverage_model",
           "mobile_network_model",
           "osm_postgis",
@@ -7459,8 +7503,7 @@
                     "type": "string"
                   }
                 },
-                "defaultValue": {
-                }
+                "defaultValue": {}
               }
             }
           },
@@ -10372,8 +10415,7 @@
                   "MultiPolygon"
                 ]
               },
-              "coordinates": {
-              }
+              "coordinates": {}
             }
           },
           "properties": {
@@ -11591,8 +11633,7 @@
                   "Polygon"
                 ]
               },
-              "coordinates": {
-              }
+              "coordinates": {}
             }
           },
           "properties": {
@@ -13551,6 +13592,263 @@
             }
           }
         }
+      },
+      "SituationDataWeatherForecastAreaDetail": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "sourceId",
+          "providerLayerId",
+          "catalogLayerId",
+          "area",
+          "summary",
+          "current",
+          "nowcast",
+          "hourly",
+          "daily",
+          "charts",
+          "sources",
+          "quality"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-weather-forecast-area-detail-v1"
+            ]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceId": {
+            "type": "string",
+            "enum": [
+              "weather_forecast"
+            ]
+          },
+          "providerLayerId": {
+            "type": "string",
+            "enum": [
+              "weather.forecast_area"
+            ]
+          },
+          "catalogLayerId": {
+            "type": "string",
+            "enum": [
+              "public.weather.forecast_area"
+            ]
+          },
+          "area": {
+            "type": "object",
+            "required": [
+              "areaId",
+              "bbox",
+              "center",
+              "resolutionDegrees",
+              "label"
+            ],
+            "properties": {
+              "areaId": {
+                "type": "string"
+              },
+              "bbox": {
+                "$ref": "#/components/schemas/SituationDataBoundingBox"
+              },
+              "center": {
+                "type": "object",
+                "required": [
+                  "lat",
+                  "lon"
+                ],
+                "properties": {
+                  "lat": {
+                    "type": "number"
+                  },
+                  "lon": {
+                    "type": "number"
+                  }
+                }
+              },
+              "resolutionDegrees": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "symbolKey",
+              "conditionLabel",
+              "headlineCs",
+              "hazardType",
+              "riskLevel",
+              "severity",
+              "confidence",
+              "validFrom",
+              "validUntil"
+            ],
+            "properties": {
+              "symbolKey": {
+                "type": "string"
+              },
+              "conditionLabel": {
+                "type": "string"
+              },
+              "conditionLabelEn": {
+                "type": "string"
+              },
+              "headlineCs": {
+                "type": "string"
+              },
+              "headlineEn": {
+                "type": "string"
+              },
+              "hazardType": {
+                "type": "string"
+              },
+              "riskLevel": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "advisory",
+                  "warning",
+                  "critical"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "validFrom": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "current": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "nowcast": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "hourly": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "daily": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "charts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "chartId",
+                "titleCs",
+                "titleEn",
+                "type",
+                "series"
+              ],
+              "properties": {
+                "chartId": {
+                  "type": "string"
+                },
+                "titleCs": {
+                  "type": "string"
+                },
+                "titleEn": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "line",
+                    "bar",
+                    "area"
+                  ]
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "labelCs",
+                      "labelEn",
+                      "points"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "labelCs": {
+                        "type": "string"
+                      },
+                      "labelEn": {
+                        "type": "string"
+                      },
+                      "unit": {
+                        "type": "string"
+                      },
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "t",
+                            "v"
+                          ],
+                          "properties": {
+                            "t": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "v": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "quality": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -13759,10 +14057,10 @@
         "required": true,
         "schema": {
           "type": "string",
-          "pattern": "^(node|way|relation):-?\\d+$",
+          "pattern": "^(node|way|relation|area):-?\\d+$",
           "example": "node:13743393126"
         },
-        "description": "OSM communications_tower identifier as exposed in mobile coverage tags, e.g. node:13743393126."
+        "description": "OSM communications_tower identifier as exposed in mobile coverage tags, e.g. node:13743393126 or area:436954796."
       },
       "SafetyDataBbox": {
         "name": "bbox",

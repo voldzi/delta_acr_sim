@@ -107,7 +107,7 @@ returned sectors as a temporary analysis overlay.
 Response contract:
 
 - `contractVersion=sim-mobile-coverage-tower-viewshed-v1`,
-- `tower.towerId` is the OSM id in `node:<id>`, `way:<id>` or `relation:<id>` form,
+- `tower.towerId` is the OSM id in `node:<id>`, `way:<id>`, `relation:<id>` or `area:<id>` form,
 - `query` echoes the normalized technology, radius, angular step and radial step,
 - `query.includeNoSignal=false` by default; normal COP display receives only sectors with estimated reach (`good`, `fair`, `weak`),
 - `includeNoSignal=true` returns the full diagnostic radial grid including `quality=none`,
@@ -129,6 +129,15 @@ Default parameters:
 - `distanceStepM=500`,
 - `includeNoSignal=false`.
 
+OSM communication tower features in provider layer `mobile.osm_postgis.communications`
+carry `properties.providerProperties.mobileCoverage` so COP does not have to infer
+the viewshed request from `feature.id`. The object contains
+`contractVersion=sim-mobile-coverage-tower-reference-v1`, `towerId`, `viewshedUrl`,
+`viewshedAvailable`, `defaultQuery`, `radiusMByTechnology`, `btsStatus` and
+`operatorStatusAvailable`. COP should call the supplied `viewshedUrl` directly.
+If the feature contains an OSM `area:<id>` tower id, SIM accepts it as a normal
+read-model identifier and performs the same lookup as for node/way/relation.
+
 COP should render the returned sectors only. It must not draw omitted no-signal
 sectors in normal operator mode; that would turn terrain-blocked viewsheds into
 misleading circular targets. Diagnostic mode may call the same endpoint with
@@ -147,7 +156,7 @@ antenna model. Current assumptions are exposed in `properties.assumptions`:
 ## Configuration
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 MOBILE_COVERAGE_RESOLUTION_M=1000

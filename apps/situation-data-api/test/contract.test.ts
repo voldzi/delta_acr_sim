@@ -149,6 +149,7 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({ layerId: "mobile", defaultVisible: false }),
         expect.objectContaining({ layerId: "boundary_region", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_temperature_grid", defaultVisible: false }),
+        expect.objectContaining({ layerId: "weather_forecast_area", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_radar_reflectivity", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_thunderstorm_risk", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_webcams", defaultVisible: false }),
@@ -167,6 +168,10 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({
           sourceId: "open_meteo",
           license: expect.objectContaining({ name: "Open-Meteo + MET Norway / CC BY 4.0" })
+        }),
+        expect.objectContaining({
+          sourceId: "weather_forecast",
+          layers: expect.arrayContaining(["weather_forecast_area"])
         }),
         expect.objectContaining({
           sourceId: "mobile_coverage_model",
@@ -528,6 +533,19 @@ describe("Situation Data API contract", () => {
           role: "reference",
           audience: "public",
           sourceIds: ["chmi_weather_stations"]
+        }),
+        expect.objectContaining({
+          providerLayerId: "weather.forecast_area",
+          recommendedCatalogLayerId: "public.weather.forecast_area",
+          role: "primary",
+          audience: "public",
+          kind: "vector_features",
+          sourceIds: ["weather_forecast"],
+          delivery: expect.objectContaining({
+            mode: "features",
+            geometryRole: "grid_cell",
+            valueField: "metrics.riskScore"
+          })
         }),
         expect.objectContaining({
           providerLayerId: "weather.chmi_webcams",
@@ -964,6 +982,7 @@ describe("Situation Data API contract", () => {
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "open_meteo", authConfigured: true, backend: "open-meteo+met-norway" }),
+          expect.objectContaining({ sourceId: "weather_forecast", authConfigured: true, backend: "sim-weather-forecast-open-meteo" }),
           expect.objectContaining({ sourceId: "mobile_coverage_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "mobile_network_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
@@ -1076,6 +1095,124 @@ describe("Situation Data API contract", () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("api.met.no/weatherapi/locationforecast/2.0/compact"), expect.objectContaining({
       headers: expect.objectContaining({ "user-agent": "csm-sim-test/0.1 contact:test@example.invalid" })
     }));
+  });
+
+  it("publishes SIM forecast areas with COP-ready symbols and meteogram detail", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://api.open-meteo.com/v1/forecast")) {
+        return jsonResponse({
+          current: {
+            time: "2026-07-01T12:00",
+            temperature_2m: 18.7,
+            relative_humidity_2m: 77,
+            precipitation: 0.8,
+            weather_code: 61,
+            cloud_cover: 92,
+            wind_speed_10m: 5.1,
+            wind_direction_10m: 240,
+            wind_gusts_10m: 12.5
+          },
+          hourly: {
+            time: [
+              "2026-07-01T12:00",
+              "2026-07-01T13:00",
+              "2026-07-01T14:00",
+              "2026-07-01T15:00",
+              "2026-07-01T16:00",
+              "2026-07-01T17:00"
+            ],
+            temperature_2m: [18.7, 19.1, 19.4, 18.9, 18.2, 17.8],
+            relative_humidity_2m: [77, 76, 78, 82, 84, 86],
+            precipitation: [0.8, 1.2, 3.4, 0.6, 0.2, 0],
+            precipitation_probability: [70, 75, 88, 62, 35, 15],
+            weather_code: [61, 63, 80, 61, 3, 2],
+            cloud_cover: [92, 94, 96, 88, 80, 55],
+            wind_speed_10m: [5.1, 5.4, 6.2, 5.9, 4.2, 3.5],
+            wind_direction_10m: [240, 245, 250, 252, 260, 265],
+            wind_gusts_10m: [12.5, 13.2, 15.1, 12.4, 9.5, 7.3]
+          },
+          daily: {
+            time: ["2026-07-01", "2026-07-02"],
+            weather_code: [80, 2],
+            temperature_2m_max: [20.1, 23.4],
+            temperature_2m_min: [14.5, 13.1],
+            precipitation_sum: [8.4, 0.1],
+            precipitation_probability_max: [88, 15],
+            wind_gusts_10m_max: [15.1, 7.2]
+          }
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const forecastApp = await createApp({ ...config, enabledSources: ["weather_forecast"] });
+
+    const response = await request(forecastApp.app)
+      .get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather_forecast_area&source=weather_forecast&limit=1")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(1);
+    const feature = response.body.features[0];
+    expect(feature).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Polygon" }),
+        properties: expect.objectContaining({
+          layer: "weather_forecast_area",
+          layerId: "public.weather.forecast_area",
+          providerLayerId: "weather.forecast_area",
+          sourceId: "weather_forecast",
+          iconHint: expect.any(String),
+          metrics: expect.objectContaining({
+            temperatureC: 18.7,
+            precipitationNext3hMm: 5.4,
+            precipitationProbabilityNext3hPercent: 88,
+            riskScore: expect.any(Number)
+          }),
+          providerProperties: expect.objectContaining({
+            presentation: expect.objectContaining({
+              symbolKey: expect.not.stringMatching(/^partly_cloudy$/),
+              riskLevel: expect.any(String)
+            }),
+            weatherForecast: expect.objectContaining({
+              detailAvailable: true,
+              detailUrl: expect.stringContaining("/api/v1/weather-forecast/areas/")
+            })
+          })
+        })
+      })
+    );
+
+    const detailUrl = feature.properties.providerProperties.weatherForecast.detailUrl;
+    const detail = await request(forecastApp.app).get(detailUrl).expect(200);
+    expect(detail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-weather-forecast-area-detail-v1",
+        sourceId: "weather_forecast",
+        catalogLayerId: "public.weather.forecast_area",
+        summary: expect.objectContaining({
+          symbolKey: expect.any(String),
+          headlineCs: expect.any(String),
+          severity: expect.any(String)
+        }),
+        hourly: expect.objectContaining({
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              time: "2026-07-01T12:00:00.000Z",
+              precipitationMm: 0.8,
+              precipitationProbabilityPercent: 70
+            })
+          ])
+        }),
+        charts: expect.arrayContaining([
+          expect.objectContaining({ chartId: "temperature" }),
+          expect.objectContaining({ chartId: "precipitation" }),
+          expect.objectContaining({ chartId: "wind" }),
+          expect.objectContaining({ chartId: "risk" })
+        ])
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("uses MET Norway as current weather fallback while preserving the Open-Meteo source id for COP", async () => {
@@ -2848,6 +2985,73 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("publishes OSM communication tower viewshed references for COP detail actions", async () => {
+    const source = new OsmPostgisSource({
+      ...config,
+      enabledSources: ["osm_postgis"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    (source as unknown as { fetchRows: () => Promise<unknown[]> }).fetchRows = async () => [
+      {
+        osm_id: "436954796",
+        osm_type: "area",
+        category: "communications_tower",
+        layer: "mobile",
+        name: "Test communications tower",
+        lon: 14.42,
+        lat: 50.08,
+        tags: { man_made: "communications_tower", "tower:type": "communication" },
+        imported_at: "2026-06-27T00:00:00.000Z"
+      }
+    ];
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.41, south: 50.07, east: 14.43, north: 50.09 },
+      layers: ["mobile"],
+      sourceIds: ["osm_postgis"],
+      limit: 10,
+      includeRaw: false
+    });
+
+    expect(result.features).toHaveLength(1);
+    expect(result.features[0]).toEqual(
+      expect.objectContaining({
+        id: "mobile:osm_postgis:area:436954796:communications_tower",
+        properties: expect.objectContaining({
+          layer: "mobile",
+          sourceId: "osm_postgis",
+          category: "communications_tower",
+          btsStatus: "unknown",
+          operatorStatusAvailable: false,
+          tags: expect.objectContaining({
+            osmType: "area",
+            osmId: "436954796",
+            viewshedTowerId: "area:436954796",
+            referenceOnly: "true"
+          }),
+          providerProperties: expect.objectContaining({
+            mobileCoverage: expect.objectContaining({
+              contractVersion: "sim-mobile-coverage-tower-reference-v1",
+              towerId: "area:436954796",
+              viewshedAvailable: true,
+              viewshedUrl: "/api/v1/mobile-coverage/towers/area:436954796/viewshed",
+              defaultQuery: expect.objectContaining({
+                technology: "4G",
+                radiusM: 12000,
+                azimuthStepDeg: 10,
+                distanceStepM: 500,
+                includeNoSignal: false
+              }),
+              btsStatus: "operator_feed_unavailable",
+              operatorStatusAvailable: false
+            })
+          })
+        })
+      })
+    );
+  });
+
   it("projects OSM PostGIS administrative boundaries as provider catalog layers", async () => {
     const source = new OsmPostgisSource({
       ...config,
@@ -3296,6 +3500,51 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("looks up OSM area tower ids for per-tower mobile coverage viewsheds", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    const queryMock = vi.fn(async (_sql: string, params: unknown[]) => {
+      expect(params).toEqual(["area", "436954796"]);
+      return {
+        rows: [
+          {
+            osm_id: "436954796",
+            osm_type: "area",
+            name: "Test area tower",
+            lon: 14.42,
+            lat: 50.08,
+            tags: { operator: "unknown", "tower:type": "communication" }
+          }
+        ]
+      };
+    });
+    (source as unknown as { getPool: () => { query: typeof queryMock } }).getPool = () => ({ query: queryMock });
+
+    const result = await source.buildTowerViewshed({
+      towerId: "area:436954796",
+      technology: "4G",
+      radiusM: 1000,
+      azimuthStepDeg: 180,
+      distanceStepM: 500
+    });
+
+    expect(queryMock).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-mobile-coverage-tower-viewshed-v1",
+        tower: expect.objectContaining({
+          towerId: "area:436954796",
+          name: "Test area tower"
+        }),
+        features: expect.any(Array)
+      })
+    );
+  });
+
   it("omits no-signal tower viewshed sectors by default while keeping diagnostic counts", async () => {
     const source = new MobileCoverageSource({
       ...config,
@@ -3492,6 +3741,72 @@ describe("Situation Data API contract", () => {
         radiusM: 1000,
         azimuthStepDeg: 90,
         distanceStepM: 500
+      })
+    );
+  });
+
+  it("accepts OSM area tower ids on the per-tower mobile coverage viewshed endpoint", async () => {
+    const coverageApp = await createApp({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    vi.spyOn(coverageApp.context.mobileCoverage, "buildTowerViewshed").mockResolvedValue({
+      contractVersion: "sim-mobile-coverage-tower-viewshed-v1",
+      type: "FeatureCollection",
+      generatedAt: "2026-06-27T00:00:00.000Z",
+      source: {
+        sourceId: "mobile_coverage_model",
+        sourceType: "MODELLED_BTS_VIEWSHED",
+        generatedAt: "2026-06-27T00:00:00.000Z"
+      },
+      tower: {
+        towerId: "area:436954796",
+        lon: 14.42,
+        lat: 50.08,
+        btsStatus: "operator_feed_unavailable",
+        btsStatusSource: "none",
+        operatorStatusAvailable: false
+      },
+      query: {
+        technology: "4G",
+        radiusM: 1000,
+        azimuthStepDeg: 90,
+        distanceStepM: 500,
+        antennaHeightM: 30,
+        receiverHeightM: 1.5,
+        includeNoSignal: false
+      },
+      summary: {
+        featureCount: 0,
+        qualityCounts: { good: 0, fair: 0, weak: 0, none: 0, unknown: 0 },
+        computedSectorCount: 0,
+        computedQualityCounts: { good: 0, fair: 0, weak: 0, none: 0, unknown: 0 },
+        omittedNoSignalSectorCount: 0,
+        lineOfSightClearSectorCount: 0,
+        lineOfSightBlockedSectorCount: 0,
+        lineOfSightUnknownSectorCount: 0,
+        renderPolicy: "coverage_only",
+        terrainAware: false,
+        terrainApplied: false,
+        demSource: "not-used-phase-1",
+        warningCount: 0,
+        disclaimer: "Coverage is an estimate, not guaranteed service availability."
+      },
+      features: [],
+      warnings: []
+    });
+
+    const response = await request(coverageApp.app)
+      .get("/api/v1/mobile-coverage/towers/area:436954796/viewshed?technology=4G&radiusM=1000&azimuthStepDeg=90&distanceStepM=500")
+      .expect(200);
+
+    expect(response.body.tower.towerId).toBe("area:436954796");
+    expect(coverageApp.context.mobileCoverage.buildTowerViewshed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        towerId: "area:436954796",
+        technology: "4G"
       })
     );
   });

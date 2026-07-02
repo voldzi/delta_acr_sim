@@ -2044,7 +2044,7 @@ function sectorPolygon(
 
 function parseTowerId(value: string): { osmType: string; osmId: string } | undefined {
   const [osmType, osmId, ...rest] = value.split(":");
-  if (rest.length > 0 || !osmType || !osmId || !/^(node|way|relation)$/.test(osmType) || !/^-?\d+$/.test(osmId)) {
+  if (rest.length > 0 || !osmType || !osmId || !/^(node|way|relation|area)$/.test(osmType) || !/^-?\d+$/.test(osmId)) {
     return undefined;
   }
   return { osmType, osmId };

@@ -233,6 +233,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
   const allowed = new Set<SituationDataSourceId>([
     "mock",
     "open_meteo",
+    "weather_forecast",
     "mobile_coverage_model",
     "mobile_network_model",
     "osm_postgis",

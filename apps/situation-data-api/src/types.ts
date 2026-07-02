@@ -20,6 +20,7 @@ export type SituationLayerId =
   | "weather_precipitation_grid"
   | "weather_humidity_grid"
   | "weather_pressure_grid"
+  | "weather_forecast_area"
   | "weather_radar_reflectivity"
   | "weather_radar_precipitation"
   | "weather_radar_nowcast"
@@ -29,6 +30,7 @@ export type SituationLayerId =
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
+  | "weather_forecast"
   | "mobile_coverage_model"
   | "mobile_network_model"
   | "osm_postgis"

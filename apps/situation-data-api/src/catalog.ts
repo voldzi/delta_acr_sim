@@ -88,6 +88,62 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       }
     },
     {
+      providerLayerId: "weather.forecast_area",
+      recommendedCatalogLayerId: "public.weather.forecast_area",
+      label: "Plošná předpověď počasí",
+      labelLocalized: { cs: "Plošná předpověď počasí", en: "Weather forecast areas" },
+      description: "SIM-normalizované předpovědní polygony se symbolem počasí, rizikem a detailním meteogramem po kliknutí.",
+      descriptionLocalized: {
+        cs: "SIM-normalizované předpovědní polygony se symbolem počasí, rizikem a detailním meteogramem po kliknutí.",
+        en: "SIM-normalized forecast polygons with weather symbols, risk summary and click-through meteogram detail."
+      },
+      categoryPath: ["weather", "forecast"],
+      categories: ["weather", "forecast"],
+      role: "primary",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Polygon"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 600,
+      cacheTtlSeconds: config.openMeteoCacheTtlSeconds,
+      styleProfile: "weather-forecast-area-v1",
+      sourceIds: ["weather_forecast"],
+      technicalInputs: ["open_meteo"],
+      query: query(["weather_forecast_area"], ["weather_forecast"]),
+      legend: {
+        profile: "weather-forecast-area-v1",
+        unit: "risk score",
+        opacity: 0.36,
+        stops: [
+          { value: 0, label: "běžné počasí", color: "#7dd3fc" },
+          { value: 0.25, label: "zvýšené riziko", color: "#facc15" },
+          { value: 0.55, label: "vysoké riziko", color: "#fb923c" },
+          { value: 0.85, label: "závažné riziko", color: "#ef4444" }
+        ]
+      },
+      delivery: {
+        mode: "features",
+        geometryRole: "grid_cell",
+        valueField: "metrics.riskScore",
+        stableGrid: { alignment: "wgs84" }
+      },
+      readModel: {
+        refreshedBy: "/api/v1/weather-forecast/areas/{areaId}",
+        cacheTtlSeconds: config.openMeteoCacheTtlSeconds
+      },
+      legal: {
+        attribution: "Weather data by Open-Meteo.com; forecast normalization by CSM SIM",
+        notes: [
+          "COP must render properties.providerProperties.presentation.symbolKey instead of inferring weather symbols from raw codes.",
+          "Feature payloads carry detailUrl for a SIM meteogram endpoint; COP should render charts[] from that endpoint.",
+          "Official warnings remain in public.safety.weather_alerts and must not be visually merged with this forecast layer."
+        ]
+      }
+    },
+    {
       providerLayerId: "weather.aviation_weather",
       recommendedCatalogLayerId: "public.weather.aviation",
       label: "Letištní počasí",
@@ -1293,6 +1349,20 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsLayerIds: ["weather.open_meteo"],
         feedsCatalogLayerIds: ["public.weather.current"]
       };
+    case "weather_forecast":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["weather.forecast_area"],
+        feedsCatalogLayerIds: ["public.weather.forecast_area"],
+        technicalInputs: ["open_meteo"],
+        notes: [
+          "Final SIM forecast product for COP map rendering.",
+          "COP should use providerProperties.presentation and the supplied detailUrl instead of deriving symbols or chart data itself."
+        ]
+      };
     case "aviation_weather":
       return {
         sourceRole: "final",
@@ -1548,6 +1618,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
   switch (sourceId) {
     case "open_meteo":
       return config.openMeteoCacheTtlSeconds;
+    case "weather_forecast":
+      return config.openMeteoCacheTtlSeconds;
     case "aviation_weather":
       return config.aviationWeatherCacheTtlSeconds;
     case "chmi_air_quality":
@@ -1595,6 +1667,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "ctu_nettest") {
     return "ctu-nettest";
+  }
+  if (sourceId === "weather_forecast") {
+    return "sim-weather-forecast-open-meteo";
   }
   if (sourceId === "ctu_stationary_mobile") {
     return "ctu-stationary-mobile";

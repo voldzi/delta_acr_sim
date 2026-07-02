@@ -144,7 +144,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       SITUATION_DATA_API_PORT: 4020
       SITUATION_DATA_DIR: /data
-      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data}
+      SITUATION_DATA_ENABLED_SOURCES: ${SITUATION_DATA_ENABLED_SOURCES:-open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data}
       SITUATION_DATA_DEFAULT_BBOX: ${SITUATION_DATA_DEFAULT_BBOX:-13.85,49.65,15.35,50.45}
       SITUATION_DATA_REQUEST_TIMEOUT_MS: ${SITUATION_DATA_REQUEST_TIMEOUT_MS:-6000}
       SITUATION_DATA_CACHE_TTL_SECONDS: ${SITUATION_DATA_CACHE_TTL_SECONDS:-30}

@@ -53,7 +53,7 @@ GET /situation-data/api/v1/catalog
 
 COP should use the provider catalog through its server-side map catalog pipeline. In that catalog, `public.mobile.network` is the user-facing layer, while `mobile_coverage_model`, `ctu_nettest`, `ctu_stationary_mobile` and OSM communication towers are marked as diagnostic/reference inputs.
 
-The `reference.infrastructure.communications` layer contains OSM communication towers only as reference infrastructure. Features from that layer carry `btsStatus: "unknown"` and `operatorStatusAvailable: false`; COP must not color them as confirmed healthy BTS sites.
+The `reference.infrastructure.communications` layer contains OSM communication towers only as reference infrastructure. Features from that layer carry `btsStatus: "unknown"` and `operatorStatusAvailable: false`; COP must not color them as confirmed healthy BTS sites. For a click-through terrain estimate, the same feature also carries `properties.providerProperties.mobileCoverage.viewshedUrl` and `towerId`. SIM accepts `node:<id>`, `way:<id>`, `relation:<id>` and `area:<id>` tower ids from the OSM/PostGIS read model.
 
 Features:
 
@@ -142,7 +142,7 @@ Feature properties include:
 ## Configuration
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600

@@ -125,6 +125,9 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "open_meteo") {
     return "weather.open_meteo";
   }
+  if (sourceId === "weather_forecast") {
+    return "weather.forecast_area";
+  }
   if (sourceId === "aviation_weather") {
     return "weather.aviation_weather";
   }
@@ -245,6 +248,8 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
   switch (providerLayerId) {
     case "weather.open_meteo":
       return "public.weather.current";
+    case "weather.forecast_area":
+      return "public.weather.forecast_area";
     case "weather.aviation_weather":
       return "public.weather.aviation";
     case "weather.chmi_station_observations":

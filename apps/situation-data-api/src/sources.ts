@@ -21,6 +21,7 @@ import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import { spatiallyLimitFeatures } from "./spatial-limit.js";
 import { getPublicTransitStaticStopPayload, type PublicTransitStaticStopPayload } from "./transit-static-model.js";
+import { WeatherForecastSource } from "./weather-forecast.js";
 import type {
   BoundingBox,
   MobileCoverageQuality,
@@ -287,6 +288,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
   const allSources: Record<SituationDataSourceId, SituationDataSource> = {
     mock: new MockSituationDataSource(),
     open_meteo: new OpenMeteoSource(config),
+    weather_forecast: new WeatherForecastSource(config),
     mobile_coverage_model: new MobileCoverageSource(config),
     mobile_network_model: new MobileNetworkSource(config),
     osm_postgis: new OsmPostgisSource(config),
@@ -315,6 +317,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
   return [
     new MockSituationDataSource().descriptor,
     new OpenMeteoSource(config).descriptor,
+    new WeatherForecastSource(config).descriptor,
     new MobileCoverageSource(config).descriptor,
     new MobileNetworkSource(config).descriptor,
     new OsmPostgisSource(config).descriptor,
