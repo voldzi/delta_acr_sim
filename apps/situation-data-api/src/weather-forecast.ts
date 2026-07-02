@@ -443,7 +443,8 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
         weatherForecast: {
           contractVersion: "sim-weather-forecast-area-v1",
           detailAvailable: true,
-          detailUrl: `/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`,
+          detailUrl: `/situation-data/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`,
+          serviceDetailUrl: `/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`,
           sourceInputs: ["open_meteo_forecast"],
           graphSeries: ["temperature", "precipitation", "wind", "risk"],
           generatedAt: payload.fetchedAt

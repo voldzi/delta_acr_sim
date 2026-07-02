@@ -1176,14 +1176,15 @@ describe("Situation Data API contract", () => {
             }),
             weatherForecast: expect.objectContaining({
               detailAvailable: true,
-              detailUrl: expect.stringContaining("/api/v1/weather-forecast/areas/")
+              detailUrl: expect.stringContaining("/situation-data/api/v1/weather-forecast/areas/"),
+              serviceDetailUrl: expect.stringContaining("/api/v1/weather-forecast/areas/")
             })
           })
         })
       })
     );
 
-    const detailUrl = feature.properties.providerProperties.weatherForecast.detailUrl;
+    const detailUrl = feature.properties.providerProperties.weatherForecast.serviceDetailUrl;
     const detail = await request(forecastApp.app).get(detailUrl).expect(200);
     expect(detail.body).toEqual(
       expect.objectContaining({
