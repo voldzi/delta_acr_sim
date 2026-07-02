@@ -3337,8 +3337,8 @@ function gdacsMapPoint(
   const pointRecord = asRecord(item.Point);
   const lat = optionalNumber(pointRecord?.lat);
   const lon = optionalNumber(pointRecord?.long);
-  if (lat !== undefined && lon !== undefined && isPointInBbox(lon, lat, queryBbox)) {
-    return { lon, lat, basis: "geo_point" };
+  if (lat !== undefined && lon !== undefined) {
+    return isPointInBbox(lon, lat, queryBbox) ? { lon, lat, basis: "geo_point" } : { lon, lat, basis: "geo_point_outside_bbox" };
   }
 
   const georssPoint = optionalString(item.point);
@@ -3346,8 +3346,10 @@ function gdacsMapPoint(
     const parts = georssPoint.split(/\s+/).map((part) => Number(part));
     const georssLat = parts[0];
     const georssLon = parts[1];
-    if (typeof georssLon === "number" && typeof georssLat === "number" && Number.isFinite(georssLon) && Number.isFinite(georssLat) && isPointInBbox(georssLon, georssLat, queryBbox)) {
-      return { lon: georssLon, lat: georssLat, basis: "georss_point" };
+    if (typeof georssLon === "number" && typeof georssLat === "number" && Number.isFinite(georssLon) && Number.isFinite(georssLat)) {
+      return isPointInBbox(georssLon, georssLat, queryBbox)
+        ? { lon: georssLon, lat: georssLat, basis: "georss_point" }
+        : { lon: georssLon, lat: georssLat, basis: "georss_point_outside_bbox" };
     }
   }
 
@@ -3358,9 +3360,6 @@ function gdacsMapPoint(
     }
   }
 
-  if (lat !== undefined && lon !== undefined) {
-    return { lon, lat, basis: "geo_point_outside_bbox" };
-  }
   return undefined;
 }
 

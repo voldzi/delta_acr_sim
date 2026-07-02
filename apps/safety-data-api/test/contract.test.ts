@@ -1048,6 +1048,49 @@ describe("Safety Data API contract", () => {
     });
   });
 
+  it("keeps an explicit GDACS point authoritative over a bbox fallback", async () => {
+    const gdacsRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:gdacs="http://www.gdacs.org" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <item>
+      <title>Green flood alert with outside point</title>
+      <description>Explicit point must not be replaced by bbox center.</description>
+      <link>https://www.gdacs.org/report.aspx?eventtype=FL&amp;eventid=8888888</link>
+      <pubDate>Thu, 02 Jul 2026 11:18:41 GMT</pubDate>
+      <gdacs:iscurrent>true</gdacs:iscurrent>
+      <dc:subject>FL1</dc:subject>
+      <guid isPermaLink="false">FL8888888</guid>
+      <geo:Point>
+        <geo:lat>49.0000</geo:lat>
+        <geo:long>16.0000</geo:long>
+      </geo:Point>
+      <gdacs:bbox>17.34 17.42 50.10 50.16</gdacs:bbox>
+      <gdacs:eventtype>FL</gdacs:eventtype>
+      <gdacs:alertlevel>Green</gdacs:alertlevel>
+      <gdacs:alertscore>1</gdacs:alertscore>
+      <gdacs:eventid>8888888</gdacs:eventid>
+      <gdacs:iso3>CZE</gdacs:iso3>
+      <gdacs:country>Czechia</gdacs:country>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/gdacs/rss.xml": gdacsRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["gdacs_alerts"],
+        gdacsRssUrl: `${baseUrl}/gdacs/rss.xml`
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood&source=gdacs_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(0);
+      expect(response.body.features).toEqual([]);
+    });
+  });
+
   it("normalizes active HZS dispatches without exposing closed incidents as warnings", async () => {
     const hzsTable = `<!doctype html>
 <html><body><table>
