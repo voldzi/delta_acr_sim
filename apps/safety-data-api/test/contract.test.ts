@@ -958,6 +958,96 @@ describe("Safety Data API contract", () => {
     });
   });
 
+  it("does not localize broad GDACS country bboxes to the queried map center", async () => {
+    const gdacsRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:gdacs="http://www.gdacs.org" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <item>
+      <title>Green flood alert in Slovakia</title>
+      <description>On 01/07/2026, a flood started in Slovakia.</description>
+      <link>https://www.gdacs.org/report.aspx?eventtype=FL&amp;eventid=1103998</link>
+      <pubDate>Thu, 02 Jul 2026 11:18:41 GMT</pubDate>
+      <gdacs:datemodified>Thu, 02 Jul 2026 11:18:41 GMT</gdacs:datemodified>
+      <gdacs:iscurrent>true</gdacs:iscurrent>
+      <gdacs:fromdate>Wed, 01 Jul 2026 01:00:00 GMT</gdacs:fromdate>
+      <gdacs:todate>Thu, 02 Jul 2026 01:00:00 GMT</gdacs:todate>
+      <dc:subject>FL1</dc:subject>
+      <guid isPermaLink="false">FL1103998</guid>
+      <gdacs:bbox>13.7221491 21.7221491 44.28845 52.28845</gdacs:bbox>
+      <gdacs:eventtype>FL</gdacs:eventtype>
+      <gdacs:alertlevel>Green</gdacs:alertlevel>
+      <gdacs:alertscore>1</gdacs:alertscore>
+      <gdacs:eventid>1103998</gdacs:eventid>
+      <gdacs:episodeid>1</gdacs:episodeid>
+      <gdacs:iso3>SVK</gdacs:iso3>
+      <gdacs:country>Slovakia</gdacs:country>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/gdacs/rss.xml": gdacsRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["gdacs_alerts"],
+        gdacsRssUrl: `${baseUrl}/gdacs/rss.xml`
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood,warnings&source=gdacs_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(0);
+      expect(response.body.features).toEqual([]);
+    });
+  });
+
+  it("uses a small GDACS bbox center when no explicit point is available", async () => {
+    const gdacsRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:gdacs="http://www.gdacs.org" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <item>
+      <title>Green flood alert in Czechia</title>
+      <description>Small localized flood alert.</description>
+      <link>https://www.gdacs.org/report.aspx?eventtype=FL&amp;eventid=7654321</link>
+      <pubDate>Thu, 02 Jul 2026 11:18:41 GMT</pubDate>
+      <gdacs:iscurrent>true</gdacs:iscurrent>
+      <dc:subject>FL1</dc:subject>
+      <guid isPermaLink="false">FL7654321</guid>
+      <gdacs:bbox>17.34 17.42 50.10 50.16</gdacs:bbox>
+      <gdacs:eventtype>FL</gdacs:eventtype>
+      <gdacs:alertlevel>Green</gdacs:alertlevel>
+      <gdacs:alertscore>1</gdacs:alertscore>
+      <gdacs:eventid>7654321</gdacs:eventid>
+      <gdacs:iso3>CZE</gdacs:iso3>
+      <gdacs:country>Czechia</gdacs:country>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/gdacs/rss.xml": gdacsRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["gdacs_alerts"],
+        gdacsRssUrl: `${baseUrl}/gdacs/rss.xml`
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood&source=gdacs_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(1);
+      expect(response.body.features[0]).toEqual(
+        expect.objectContaining({
+          geometry: expect.objectContaining({ coordinates: [17.38, 50.13] }),
+          properties: expect.objectContaining({
+            sourceId: "gdacs_alerts",
+            tags: expect.objectContaining({ pointBasis: "gdacs_bbox_center" })
+          })
+        })
+      );
+    });
+  });
+
   it("normalizes active HZS dispatches without exposing closed incidents as warnings", async () => {
     const hzsTable = `<!doctype html>
 <html><body><table>

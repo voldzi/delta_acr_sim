@@ -3351,14 +3351,23 @@ function gdacsMapPoint(
     }
   }
 
-  if (eventBbox && bboxIntersects(eventBbox, queryBbox)) {
-    return { ...bboxCenter(intersectBbox(eventBbox, queryBbox)), basis: "bbox_intersection_center" };
+  if (eventBbox && gdacsBboxIsPreciseEnoughForPoint(eventBbox)) {
+    const center = bboxCenter(eventBbox);
+    if (isPointInBbox(center.lon, center.lat, queryBbox)) {
+      return { ...center, basis: "gdacs_bbox_center" };
+    }
   }
 
   if (lat !== undefined && lon !== undefined) {
     return { lon, lat, basis: "geo_point_outside_bbox" };
   }
   return undefined;
+}
+
+function gdacsBboxIsPreciseEnoughForPoint(bbox: BoundingBox): boolean {
+  const width = Math.abs(bbox.east - bbox.west);
+  const height = Math.abs(bbox.north - bbox.south);
+  return width <= 2 && height <= 2;
 }
 
 function parseGdacsBbox(value: string | undefined): BoundingBox | undefined {
@@ -3433,15 +3442,6 @@ function normalizeSparqlTimestamp(value: string | undefined): string | undefined
   const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
   const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
-function intersectBbox(a: BoundingBox, b: BoundingBox): BoundingBox {
-  return {
-    west: Math.max(a.west, b.west),
-    south: Math.max(a.south, b.south),
-    east: Math.min(a.east, b.east),
-    north: Math.min(a.north, b.north)
-  };
 }
 
 function parseBoolean(value: unknown): boolean | undefined {
