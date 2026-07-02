@@ -74,6 +74,14 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 300
   },
   {
+    layerId: "weather_alerts",
+    label: "Meteorological warnings",
+    description: "Official meteorological warning polygons projected from the Safety Data contract.",
+    defaultVisible: false,
+    geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+    expectedCadenceSeconds: 300
+  },
+  {
     layerId: "fire",
     label: "Fire and fire danger",
     description: "Active fire detections and official fire danger warnings projected from the Safety Data contract.",

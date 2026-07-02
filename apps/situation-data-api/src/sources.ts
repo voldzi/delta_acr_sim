@@ -2008,7 +2008,7 @@ class SafetyDataProjectionSource implements SituationDataSource {
       enabled: config.enabledSources.includes("safety_data"),
       mode: "live",
       priority: 95,
-      layers: ["warnings", "fire", "flood", "boundary_admin"],
+      layers: ["warnings", "weather_alerts", "fire", "flood", "boundary_admin"],
       license: SAFETY_DATA_LICENSE,
       baseUrl: config.safetyDataBaseUrl,
       updateCadenceSeconds: config.safetyDataCacheTtlSeconds
@@ -2022,7 +2022,8 @@ class SafetyDataProjectionSource implements SituationDataSource {
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     const layers = query.layers.filter(
-      (layer): layer is SafetyProjectionLayer => layer === "warnings" || layer === "fire" || layer === "flood" || layer === "boundary_admin"
+      (layer): layer is SafetyProjectionLayer =>
+        layer === "warnings" || layer === "weather_alerts" || layer === "fire" || layer === "flood" || layer === "boundary_admin"
     );
     if (layers.length === 0) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
@@ -5144,7 +5145,7 @@ interface SafetyProjectionCollection {
   warnings?: string[];
 }
 
-type SafetyProjectionLayer = "warnings" | "fire" | "flood" | "boundary_admin";
+type SafetyProjectionLayer = "warnings" | "weather_alerts" | "fire" | "flood" | "boundary_admin";
 
 interface SafetyProjectionFeature {
   type: "Feature";
@@ -5442,6 +5443,8 @@ function safetyProjectionCatalogLayerId(layer: SafetyProjectionLayer): string {
       return "public.safety.fire";
     case "flood":
       return "public.safety.flood";
+    case "weather_alerts":
+      return "public.safety.weather_alerts";
     case "boundary_admin":
       return "public.boundary.admin";
     case "warnings":
@@ -5455,6 +5458,8 @@ function safetyProjectionProviderLayerId(layer: SafetyProjectionLayer): string {
       return "fire.safety_data_projection";
     case "flood":
       return "flood.safety_data_projection";
+    case "weather_alerts":
+      return "weather_alerts.safety_data_projection";
     case "boundary_admin":
       return "boundary_admin.safety_data_projection";
     case "warnings":

@@ -202,6 +202,9 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "safety_data" && layer === "warnings") {
     return "warnings.safety_data_projection";
   }
+  if (sourceId === "safety_data" && layer === "weather_alerts") {
+    return "weather_alerts.safety_data_projection";
+  }
   if (sourceId === "safety_data" && layer === "fire") {
     return "fire.safety_data_projection";
   }
@@ -306,6 +309,8 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.traffic.road_events";
     case "warnings.safety_data_projection":
       return "public.safety.warnings";
+    case "weather_alerts.safety_data_projection":
+      return "public.safety.weather_alerts";
     case "fire.safety_data_projection":
       return "public.safety.fire";
     case "flood.safety_data_projection":
@@ -544,20 +549,22 @@ function layerRank(value: SituationLayerId): number {
       return 5;
     case "warnings":
       return 6;
-    case "fire":
+    case "weather_alerts":
       return 7;
-    case "flood":
+    case "fire":
       return 8;
-    case "boundary_admin":
+    case "flood":
       return 9;
-    case "air_quality":
+    case "boundary_admin":
       return 10;
-    case "boundary_country":
+    case "air_quality":
       return 11;
-    case "boundary_region":
+    case "boundary_country":
       return 12;
-    case "boundary_district":
+    case "boundary_region":
       return 13;
+    case "boundary_district":
+      return 14;
     case "boundary_orp":
       return 14;
     case "place_settlements":

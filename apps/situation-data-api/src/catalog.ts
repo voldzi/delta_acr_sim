@@ -682,6 +682,34 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       preferredProviderId: "sim.safety-data"
     },
     {
+      providerLayerId: "weather_alerts.safety_data_projection",
+      recommendedCatalogLayerId: "public.safety.weather_alerts",
+      label: "Meteorologické výstrahy (kompatibilní projekce)",
+      description: "Kompatibilní projekce oficiálních meteorologických výstrah ze Safety Data API. COP má preferovat provider sim.safety-data.",
+      categoryPath: ["safety", "weather_alerts"],
+      categories: ["weather_alert", "safety_warning"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point", "Polygon", "MultiPolygon"],
+      minZoom: 4,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: config.safetyDataCacheTtlSeconds,
+      styleProfile: "safety-weather-alert-v1",
+      sourceIds: ["safety_data"],
+      query: query(["weather_alerts"], ["safety_data"]),
+      legend: { profile: "safety-weather-alert-v1" },
+      legal: {
+        attribution: "Safety Data API; feature-level attribution preserved from ČHMÚ CAP warnings",
+        notes: ["Compatibility projection only; prefer sim.safety-data catalog provider for safety layers."]
+      },
+      compatibilityOnly: true,
+      preferredProviderId: "sim.safety-data"
+    },
+    {
       providerLayerId: "fire.safety_data_projection",
       recommendedCatalogLayerId: "public.safety.fire",
       label: "Požáry a požární riziko (kompatibilní projekce)",

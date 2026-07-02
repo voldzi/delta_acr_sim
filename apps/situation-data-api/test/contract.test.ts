@@ -507,6 +507,13 @@ describe("Situation Data API contract", () => {
           selectable: false
         }),
         expect.objectContaining({
+          providerLayerId: "weather_alerts.safety_data_projection",
+          recommendedCatalogLayerId: "public.safety.weather_alerts",
+          compatibilityOnly: true,
+          preferredProviderId: "sim.safety-data",
+          selectable: false
+        }),
+        expect.objectContaining({
           providerLayerId: "fire.safety_data_projection",
           recommendedCatalogLayerId: "public.safety.fire",
           compatibilityOnly: true,
@@ -1443,6 +1450,92 @@ describe("Situation Data API contract", () => {
         layers: expect.arrayContaining(["public.boundary.country", "public.boundary.region", "public.boundary.orp"])
       })
     );
+  });
+
+  it("projects meteorological warnings from Safety Data for compatibility COP adapters", async () => {
+    const safetyFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe("/api/v1/features");
+      expect(url.searchParams.get("layers")).toBe("weather_alerts");
+      return new Response(
+        JSON.stringify({
+          features: [
+            {
+              type: "Feature",
+              id: "weather_alerts:chmi_alerts:wind-orp",
+              geometry: {
+                type: "MultiPolygon",
+                coordinates: [[[[14.2, 50.0], [14.3, 50.0], [14.3, 50.1], [14.2, 50.1], [14.2, 50.0]]]]
+              },
+              properties: {
+                featureId: "weather_alerts:chmi_alerts:wind-orp",
+                layerId: "public.safety.weather_alerts",
+                providerId: "sim.safety-data",
+                providerLayerId: "safety.weather_alerts",
+                layer: "weather_alerts",
+                category: "weather_alert",
+                hazardType: "wind",
+                typeCode: "weather.wind.high",
+                headline: "Silný vítr",
+                description: "Test meteorological warning.",
+                recommendedAction: "Sledujte výstrahy ČHMÚ a pokyny IZS.",
+                sourceId: "chmi_alerts",
+                source: "chmi_alerts",
+                sourceName: "CHMI CAP warnings",
+                observedAt: "2026-05-28T08:00:00.000Z",
+                validFrom: "2026-05-28T08:00:00.000Z",
+                validUntil: "2026-05-28T18:00:00.000Z",
+                updatedAt: "2026-05-28T08:00:00.000Z",
+                confidence: 0.92,
+                stale: false,
+                severity: "warning",
+                status: "active",
+                urgency: "expected",
+                certainty: "likely",
+                areaName: "ORP Praha",
+                styleHint: "safety-weather-warning",
+                iconHint: "wind",
+                basis: ["chmi_cap"],
+                license: { name: "CC BY 4.0", attribution: "CHMI" },
+                affectedAreas: ["ORP Praha"],
+                geocodes: [{ scheme: "CISORP", value: "3100" }],
+                metrics: { areaMatchConfidence: 0.96 },
+                tags: { test: "weather_alert" }
+              }
+            }
+          ],
+          warnings: []
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+
+    vi.stubGlobal("fetch", safetyFetch);
+    const safetyApp = await createApp({ ...config, enabledSources: ["safety_data"] });
+    const response = await request(safetyApp.app)
+      .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=weather_alerts&source=safety_data&limit=10")
+      .expect(200);
+
+    expect(response.body.summary.featureCount).toBe(1);
+    expect(response.body.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "MultiPolygon" }),
+        properties: expect.objectContaining({
+          layer: "weather_alerts",
+          layerId: "public.safety.weather_alerts",
+          providerId: "sim.situation-data",
+          providerLayerId: "weather_alerts.safety_data_projection",
+          label: "Silný vítr",
+          typeCode: "weather.wind.high",
+          providerProperties: expect.objectContaining({
+            nativeProviderId: "sim.safety-data",
+            nativeProviderLayerId: "safety.weather_alerts",
+            sourceName: "CHMI CAP warnings"
+          })
+        })
+      })
+    );
+    expect(safetyFetch).toHaveBeenCalledTimes(1);
   });
 
   it("projects fire and administrative boundary features from Safety Data without dropping MultiPolygon geometry", async () => {

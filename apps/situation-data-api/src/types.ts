@@ -6,6 +6,7 @@ export type SituationLayerId =
   | "mobile_network"
   | "traffic"
   | "warnings"
+  | "weather_alerts"
   | "fire"
   | "flood"
   | "boundary_admin"
