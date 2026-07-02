@@ -1174,6 +1174,11 @@ describe("Situation Data API contract", () => {
               symbolKey: expect.not.stringMatching(/^partly_cloudy$/),
               riskLevel: expect.any(String)
             }),
+            display: expect.objectContaining({
+              detailType: "weather_forecast_meteogram",
+              detailUrl: expect.stringContaining("/situation-data/api/v1/weather-forecast/areas/"),
+              chartUrl: expect.stringContaining("/situation-data/api/v1/weather-forecast/areas/")
+            }),
             weatherForecast: expect.objectContaining({
               detailAvailable: true,
               detailUrl: expect.stringContaining("/situation-data/api/v1/weather-forecast/areas/"),
@@ -1214,6 +1219,80 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps SIM forecast areas inside the Czech operational forecast grid", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://api.open-meteo.com/v1/forecast")) {
+        return jsonResponse({
+          current: {
+            time: "2026-07-01T12:00",
+            temperature_2m: 20,
+            relative_humidity_2m: 60,
+            precipitation: 0,
+            weather_code: 2,
+            cloud_cover: 45,
+            wind_speed_10m: 3,
+            wind_direction_10m: 220,
+            wind_gusts_10m: 6
+          },
+          hourly: {
+            time: ["2026-07-01T12:00", "2026-07-01T13:00"],
+            temperature_2m: [20, 21],
+            relative_humidity_2m: [60, 58],
+            precipitation: [0, 0],
+            precipitation_probability: [10, 10],
+            weather_code: [2, 2],
+            cloud_cover: [45, 45],
+            wind_speed_10m: [3, 3],
+            wind_direction_10m: [220, 220],
+            wind_gusts_10m: [6, 6]
+          },
+          daily: {
+            time: ["2026-07-01"],
+            weather_code: [2],
+            temperature_2m_max: [23],
+            temperature_2m_min: [14],
+            precipitation_sum: [0],
+            precipitation_probability_max: [10],
+            wind_gusts_10m_max: [6]
+          }
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const forecastApp = await createApp({ ...config, enabledSources: ["weather_forecast"] });
+
+    const outside = await request(forecastApp.app)
+      .get("/api/v1/features?bbox=21.0,47.0,25.0,50.0&layers=weather_forecast_area&source=weather_forecast&limit=50")
+      .expect(200);
+
+    expect(outside.body.features).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const wide = await request(forecastApp.app)
+      .get("/api/v1/features?bbox=10.0,47.5,31.0,52.5&layers=weather_forecast_area&source=weather_forecast&limit=200")
+      .expect(200);
+
+    expect(wide.body.features.length).toBeGreaterThan(20);
+    expect(wide.body.features.length).toBeLessThanOrEqual(64);
+    for (const forecastFeature of wide.body.features) {
+      const coordinates = forecastFeature.geometry.coordinates[0] as Array<[number, number]>;
+      const lons = coordinates.map(([lon]) => lon);
+      const lats = coordinates.map(([, lat]) => lat);
+      expect(Math.min(...lons)).toBeGreaterThanOrEqual(11.25);
+      expect(Math.max(...lons)).toBeLessThanOrEqual(19.5);
+      expect(Math.min(...lats)).toBeGreaterThanOrEqual(48);
+      expect(Math.max(...lats)).toBeLessThanOrEqual(51.75);
+      expect(forecastFeature.properties.providerProperties.weatherForecast).toEqual(
+        expect.objectContaining({
+          coverageBbox: { west: 11.8, south: 48.4, east: 19.2, north: 51.2 },
+          stableGrid: expect.objectContaining({ alignment: "wgs84" })
+        })
+      );
+    }
   });
 
   it("uses MET Norway as current weather fallback while preserving the Open-Meteo source id for COP", async () => {

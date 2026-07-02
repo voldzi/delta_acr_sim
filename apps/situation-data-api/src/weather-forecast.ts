@@ -15,8 +15,15 @@ const WEATHER_FORECAST_LAYER_ID = "weather_forecast_area" as const;
 const PROVIDER_ID = "sim.situation-data" as const;
 const PROVIDER_LAYER_ID = "weather.forecast_area" as const;
 const CATALOG_LAYER_ID = "public.weather.forecast_area" as const;
-const MAX_FORECAST_AREA_CELLS = 24;
+const MAX_FORECAST_AREA_CELLS = 64;
+const MAX_FORECAST_AREA_CONCURRENCY = 8;
 const DEFAULT_FORECAST_AREA_RESOLUTION_DEGREES = 0.25;
+const WEATHER_FORECAST_CZECHIA_BBOX: BoundingBox = {
+  west: 11.8,
+  south: 48.4,
+  east: 19.2,
+  north: 51.2
+};
 
 export const WEATHER_FORECAST_LICENSE: SituationDataLicense = {
   name: "SIM weather forecast aggregate / Open-Meteo CC BY 4.0",
@@ -223,8 +230,13 @@ export class WeatherForecastSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const cells = forecastCellsForBbox(query.bbox, query.limit);
-    const results = await Promise.allSettled(cells.map((cell) => this.getPayload(cell)));
+    const forecastBbox = intersectBbox(query.bbox, WEATHER_FORECAST_CZECHIA_BBOX);
+    if (!forecastBbox) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+
+    const cells = forecastCellsForBbox(forecastBbox, query.limit);
+    const results = await mapForecastCellsWithConcurrency(cells, (cell) => this.getPayload(cell));
     const warnings = results
       .map((result, index) =>
         result.status === "rejected" ? `weather_forecast area ${cells[index]?.token ?? index} unavailable: ${errorMessage(result.reason)}` : undefined
@@ -363,6 +375,8 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
   const { cell, assessment, current } = payload;
   const bbox = forecastCellBbox(cell);
   const validUntil = payload.hourly[1]?.time ?? addHours(payload.fetchedAt, 1);
+  const detailUrl = `/situation-data/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`;
+  const serviceDetailUrl = `/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`;
   return {
     type: "Feature",
     id: `weather_forecast_area:${cell.token}`,
@@ -440,13 +454,25 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
           riskLevel: assessment.riskLevel,
           colorRamp: "weather-risk-v1"
         },
+        display: {
+          detailType: "weather_forecast_meteogram",
+          detailUrl,
+          chartUrl: detailUrl,
+          serviceDetailUrl,
+          chartSeries: ["temperature", "precipitation", "wind", "risk"]
+        },
         weatherForecast: {
           contractVersion: "sim-weather-forecast-area-v1",
           detailAvailable: true,
-          detailUrl: `/situation-data/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`,
-          serviceDetailUrl: `/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`,
+          detailUrl,
+          serviceDetailUrl,
           sourceInputs: ["open_meteo_forecast"],
           graphSeries: ["temperature", "precipitation", "wind", "risk"],
+          coverageBbox: WEATHER_FORECAST_CZECHIA_BBOX,
+          stableGrid: {
+            alignment: "wgs84",
+            resolutionDegrees: cell.resolutionDegrees
+          },
           generatedAt: payload.fetchedAt
         }
       }),
@@ -761,6 +787,40 @@ function forecastCellsForBbox(bbox: BoundingBox, limit: number): ForecastCell[] 
   return cells
     .sort((left, right) => distanceToBboxCenter(left, bbox) - distanceToBboxCenter(right, bbox))
     .slice(0, Math.min(Math.max(1, limit), MAX_FORECAST_AREA_CELLS));
+}
+
+async function mapForecastCellsWithConcurrency(
+  cells: ForecastCell[],
+  load: (cell: ForecastCell) => Promise<WeatherForecastPayload>
+): Promise<Array<PromiseSettledResult<WeatherForecastPayload>>> {
+  const results = new Array<PromiseSettledResult<WeatherForecastPayload>>(cells.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(MAX_FORECAST_AREA_CONCURRENCY, Math.max(1, cells.length));
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < cells.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        try {
+          results[index] = { status: "fulfilled", value: await load(cells[index] as ForecastCell) };
+        } catch (error) {
+          results[index] = { status: "rejected", reason: error };
+        }
+      }
+    })
+  );
+  return results;
+}
+
+function intersectBbox(a: BoundingBox, b: BoundingBox): BoundingBox | undefined {
+  const west = Math.max(a.west, b.west);
+  const south = Math.max(a.south, b.south);
+  const east = Math.min(a.east, b.east);
+  const north = Math.min(a.north, b.north);
+  if (west >= east || south >= north) {
+    return undefined;
+  }
+  return { west, south, east, north };
 }
 
 function forecastCellForBbox(bbox: BoundingBox): ForecastCell {

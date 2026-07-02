@@ -139,6 +139,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
         notes: [
           "COP must render properties.providerProperties.presentation.symbolKey instead of inferring weather symbols from raw codes.",
           "Feature payloads carry detailUrl for a SIM meteogram endpoint; COP should render charts[] from that endpoint.",
+          "Forecast area polygons are anchored to the Czech operational forecast coverage and must be rendered at returned GeoJSON coordinates.",
           "Official warnings remain in public.safety.weather_alerts and must not be visually merged with this forecast layer."
         ]
       }
