@@ -1,6 +1,6 @@
 export type FlightDataSourceId = "mock" | "adsb_lol" | "opensky" | "local_adsb" | "partner_air_tracks";
 export type FlightTrackKeyKind = "icao24" | "remote_id" | "radar_track" | "partner_track";
-export type PartnerAirTrackSourceKind = "remote_id" | "u_space" | "radar" | "partner";
+export type PartnerAirTrackSourceKind = "remote_id" | "u_space" | "radar" | "partner" | "sensor_node";
 
 export interface BoundingBox {
   west: number;
@@ -59,6 +59,15 @@ export interface FlightDataPublicConfig {
     ttlSeconds: number;
     maxRecords: number;
   };
+  sensorNodes: {
+    ingestEnabled: boolean;
+    statusTtlSeconds: number;
+    maxNodes: number;
+  };
+  takCotExport: {
+    enabled: boolean;
+    staleSeconds: number;
+  };
   referenceData: {
     ourAirportsEnabled: boolean;
     ourAirportsCountries: string[];
@@ -110,7 +119,30 @@ export interface RawFlightObservation {
   squawk?: string;
   emergency?: string;
   category?: string;
+  measurement?: FlightObservationMeasurementQuality;
   raw?: unknown;
+}
+
+export interface FlightObservationMeasurementQuality {
+  sourceProtocol?: "adsb" | "mode_s" | "remote_id" | "mlat" | "radar" | "unknown";
+  receiverId?: string;
+  rssiDbm?: number;
+  rssiDbfs?: number;
+  messageCount?: number;
+  channel?: number | string;
+  frequencyMhz?: number;
+  horizontalAccuracyM?: number;
+  verticalAccuracyM?: number;
+  speedAccuracyMps?: number;
+  headingAccuracyDeg?: number;
+  receiverDistanceM?: number;
+  nic?: number;
+  nacP?: number;
+  nacV?: number;
+  sil?: number;
+  sda?: number;
+  rcM?: number;
+  sampleCount?: number;
 }
 
 export interface SourceFetchResult {
@@ -337,6 +369,7 @@ export interface AggregatedFlightTrack {
     confidence: number;
     stale: boolean;
     positionAgeSeconds?: number;
+    measurement?: FlightTrackMeasurementQuality;
   };
   metadata: {
     onGround?: boolean;
@@ -351,6 +384,33 @@ export interface AggregatedFlightTrack {
     serialNumber?: string;
     sourceLicenses: string[];
   };
+}
+
+export interface FlightTrackMeasurementQuality {
+  predictionSupport: "three_dimensional" | "kinematic" | "position_only" | "stale";
+  sourceCount: number;
+  sensorCount: number;
+  signalCount: number;
+  primaryObservedAt: string;
+  oldestObservedAt: string;
+  hasAltitude: boolean;
+  hasSpeed: boolean;
+  hasHeading: boolean;
+  hasVerticalRate: boolean;
+  horizontalAccuracyM?: number;
+  verticalAccuracyM?: number;
+  speedAccuracyMps?: number;
+  headingAccuracyDeg?: number;
+  rssiDbm?: number;
+  rssiDbfs?: number;
+  nic?: number;
+  nacP?: number;
+  nacV?: number;
+  sil?: number;
+  sda?: number;
+  rcM?: number;
+  sourceProtocols: string[];
+  receiverIds: string[];
 }
 
 export interface FlightTrackResponse {

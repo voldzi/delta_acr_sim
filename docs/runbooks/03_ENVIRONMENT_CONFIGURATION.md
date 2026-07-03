@@ -324,6 +324,33 @@ Endpoint je `POST /flight-data/api/v1/ingest/air-tracks` a vyžaduje
 `Authorization: Bearer <token>`. Bez `FLIGHT_DATA_PARTNER_INGEST_TOKEN` zůstává
 ingest vypnutý a zdroj pouze hlásí diagnostický warning.
 
+COP Sensor Node edge ingest:
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=partner_air_tracks,adsb_lol
+FLIGHT_DATA_PARTNER_INGEST_TOKEN=<high-entropy-partner-token>
+FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN=<high-entropy-sensor-token>
+FLIGHT_DATA_SENSOR_NODE_STATUS_TTL_SECONDS=900
+FLIGHT_DATA_SENSOR_NODE_MAX_NODES=1000
+```
+
+Endpoint je `POST /flight-data/api/v1/ingest/sensor-observations` a přijímá
+dávky `cop.sensor.batch.v1` s observacemi `adsb`, `remote_id`, `weather` a
+`health`. Pokud `FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN` není nastaven, použije se
+jako fallback `FLIGHT_DATA_PARTNER_INGEST_TOKEN`. Detailní kontrakt je v
+[../integration/17_COP_SENSOR_NODE_CONTRACT.md](../integration/17_COP_SENSOR_NODE_CONTRACT.md).
+
+TAK CoT export letových stop pro budoucí vlastní TAK server:
+
+```bash
+FLIGHT_DATA_TAK_COT_EXPORT_TOKEN=<high-entropy-cot-export-token>
+FLIGHT_DATA_TAK_COT_EXPORT_STALE_SECONDS=180
+```
+
+Endpoint je `GET /flight-data/api/v1/cot/tracks` a vyžaduje
+`Authorization: Bearer <token>`. Inbound směr z TAK do SIM řeší samostatně
+`tak-gateway-api` přes `POST /tak-gateway/api/v1/cot/events`.
+
 ## Situation Data API
 
 Výchozí bezpečná konfigurace:

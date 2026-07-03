@@ -6,6 +6,7 @@ import type {
   BoundingBox,
   FlightDataLicense,
   FlightDataSourceId,
+  FlightObservationMeasurementQuality,
   FlightQuery,
   RawFlightObservation,
   SourceDescriptor,
@@ -257,6 +258,7 @@ class AdsbLolSource implements FlightDataSource {
           squawk: cleanString(item.squawk),
           emergency: cleanString(item.emergency),
           category: cleanString(item.category),
+          measurement: readsbMeasurementFor(item, "adsb"),
           raw: item
         };
       })
@@ -460,12 +462,25 @@ interface AdsbLolResponse {
     alt_geom?: number | null;
     gs?: number | null;
     track?: number | null;
+    true_heading?: number | null;
+    mag_heading?: number | null;
     baro_rate?: number | null;
     geom_rate?: number | null;
     squawk?: string | null;
     emergency?: string | null;
     category?: string | null;
     seen: number;
+    seen_pos?: number | null;
+    type?: string | null;
+    rssi?: number | null;
+    rssi_dbfs?: number | null;
+    messages?: number | null;
+    nic?: number | null;
+    nac_p?: number | null;
+    nac_v?: number | null;
+    sil?: number | null;
+    sda?: number | null;
+    rc?: number | null;
   }>;
 }
 
@@ -501,6 +516,15 @@ interface ReadsbAircraft {
   seen?: number | null;
   seen_pos?: number | null;
   type?: string | null;
+  rssi?: number | null;
+  rssi_dbfs?: number | null;
+  messages?: number | null;
+  nic?: number | null;
+  nac_p?: number | null;
+  nac_v?: number | null;
+  sil?: number | null;
+  sda?: number | null;
+  rc?: number | null;
 }
 
 async function requestJson<T>(url: string, timeoutMs: number, headers: Record<string, string> = {}, body?: URLSearchParams): Promise<T> {
@@ -580,10 +604,54 @@ function mapReadsbAircraftResponse(
         squawk: cleanString(item.squawk),
         emergency: cleanString(item.emergency),
         category: cleanString(item.category ?? item.type),
+        measurement: readsbMeasurementFor(item, "adsb", context.receiverId),
         raw: item
       };
     })
     .filter((item): item is RawFlightObservation => Boolean(item));
+}
+
+function readsbMeasurementFor(
+  item: Pick<
+    ReadsbAircraft,
+    "rssi" | "rssi_dbfs" | "messages" | "nic" | "nac_p" | "nac_v" | "sil" | "sda" | "rc" | "type" | "seen_pos"
+  >,
+  fallbackProtocol: FlightObservationMeasurementQuality["sourceProtocol"],
+  receiverId?: string
+): FlightObservationMeasurementQuality | undefined {
+  const measurement: FlightObservationMeasurementQuality = {
+    sourceProtocol: readsbProtocol(item.type) ?? fallbackProtocol,
+    receiverId,
+    rssiDbm: optionalNumber(item.rssi),
+    rssiDbfs: optionalNumber(item.rssi_dbfs),
+    messageCount: optionalNumber(item.messages),
+    nic: optionalNumber(item.nic),
+    nacP: optionalNumber(item.nac_p),
+    nacV: optionalNumber(item.nac_v),
+    sil: optionalNumber(item.sil),
+    sda: optionalNumber(item.sda),
+    rcM: optionalNumber(item.rc),
+    horizontalAccuracyM: optionalNumber(item.rc)
+  };
+  const cleaned = Object.fromEntries(Object.entries(measurement).filter(([, value]) => value !== undefined && value !== null && value !== "")) as FlightObservationMeasurementQuality;
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
+
+function readsbProtocol(value: string | null | undefined): FlightObservationMeasurementQuality["sourceProtocol"] | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized.includes("mlat")) {
+    return "mlat";
+  }
+  if (normalized.includes("adsb")) {
+    return "adsb";
+  }
+  if (normalized.includes("mode_s") || normalized.includes("mode-s")) {
+    return "mode_s";
+  }
+  return "unknown";
 }
 
 function bboxToPointRadius(bbox: BoundingBox): { lat: number; lon: number; radiusNm: number } {

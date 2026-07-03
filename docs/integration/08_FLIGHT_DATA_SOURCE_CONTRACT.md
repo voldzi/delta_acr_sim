@@ -35,6 +35,11 @@ GET /api/v1/aircraft-types
 GET /api/v1/aircraft-types/{designator}
 GET /api/v1/ingest/air-tracks/status
 POST /api/v1/ingest/air-tracks
+GET /api/v1/ingest/sensor-observations/status
+POST /api/v1/ingest/sensor-observations
+GET /api/v1/ingest/sensor-nodes
+GET /api/v1/cot/tracks/status
+GET /api/v1/cot/tracks
 GET /api/v1/sources
 GET /api/v1/config
 GET /health/ready
@@ -166,7 +171,27 @@ speciální ořezávání kvůli této cache optimalizaci.
       "quality": {
         "confidence": 0.84,
         "stale": false,
-        "positionAgeSeconds": 0
+        "positionAgeSeconds": 0,
+        "measurement": {
+          "predictionSupport": "three_dimensional",
+          "sourceCount": 2,
+          "sensorCount": 1,
+          "signalCount": 34,
+          "primaryObservedAt": "2026-05-20T10:00:00.000Z",
+          "oldestObservedAt": "2026-05-20T09:59:56.000Z",
+          "hasAltitude": true,
+          "hasSpeed": true,
+          "hasHeading": true,
+          "hasVerticalRate": true,
+          "horizontalAccuracyM": 75,
+          "nic": 9,
+          "nacP": 10,
+          "nacV": 2,
+          "sil": 3,
+          "sda": 2,
+          "sourceProtocols": ["adsb"],
+          "receiverIds": ["receiver-1"]
+        }
       },
       "metadata": {
         "squawk": "2741",
@@ -210,6 +235,7 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - `presentation.rotationDeg` je hodnota pro otočení symbolu podle kurzu. Ikony jsou orientované nosem na sever, COM je má rotovat přímo touto hodnotou.
 - `presentation.colorKey` je autoritativní doporučená barva pro COP: `normal` zelená `#22c55e`, `delayed` žlutá `#eab308`, `emergency` červená `#ef4444`. Pokud SIM nemá licencovaný schedule feed, `status.delay.status=unknown`, `presentation.colorKey=normal` a `presentation.colorReason=delay_not_available`.
 - Nouze se odvozuje z ADS-B emergency pole a nouzových squawků `7500`, `7600`, `7700`. Při aktivní nouzi má COM vždy preferovat `presentation.colorKey=emergency` před zpožděním.
+- `quality.measurement` je autoritativní sada pro predikci COP: `predictionSupport=three_dimensional` znamená poloha, rychlost, kurz, výška a vertikální rychlost; `kinematic` znamená poloha+rychlost+kurz; `position_only` znamená pouze bod; `stale` znamená nepoužívat pro živou predikci. Pokud zdroj dodá ADS-B kvalitu, SIM přidá `nic`, `nacP`, `nacV`, `sil`, `sda`, `rcM`, RSSI a počty zpráv.
 - Pokud je dostupná referenční trasa podle callsignu, SIM doplní `track.itinerary`. Pole obsahuje původní/destinační letiště, waypointy, IATA/ICAO kódy, prezentační `display.title`, odhad průběhu letu a odhadované ETA. Plánované a skutečné časy odletu/příletu jsou v otevřeném ADS-B číselníku označené jako `status=unavailable`; COM je nesmí zobrazit jako letištní schedule.
 
 Příklad zkrácené části `track.itinerary`:
@@ -250,9 +276,27 @@ Příklad zkrácené části `track.itinerary`:
 | --- | --- | --- |
 | `adsb_lol` | live open-data pilot | ODbL; vhodné pro veřejný pilot se správnou atribucí. |
 | `local_adsb` | live vlastní/přátelská síť | Čte `aircraft.json` z readsb/dump1090 přes `LOCAL_ADSB_AIRCRAFT_JSON_URLS`; priorita je vyšší než veřejné agregátory. |
-| `partner_air_tracks` | autorizovaný ingest | Přijímá Remote ID/U-space/lokální radar/partner tracky přes tokenem chráněný server-to-server endpoint. Vypnuto bez `FLIGHT_DATA_PARTNER_INGEST_TOKEN`. |
+| `partner_air_tracks` | autorizovaný ingest | Přijímá Remote ID/U-space/lokální radar/partner tracky a COP Sensor Node observace přes tokenem chráněný server-to-server endpoint. Vypnuto bez ingest tokenu. |
 | `opensky` | licencované / omezené | Nezapínat pro komerční nebo operativní použití bez písemného oprávnění. |
 | `mock` | syntetika | Pouze pro testy a fallback. |
+
+## COP Sensor Node a TAK
+
+COP Sensor Node používá `POST /api/v1/ingest/sensor-observations` s kontraktem
+`cop.sensor.batch.v1`. ADS-B a Remote ID observace se ukládají do
+`partner_air_tracks`; weather/health observace slouží pro diagnostiku sensor
+node. Detail je v [17_COP_SENSOR_NODE_CONTRACT.md](17_COP_SENSOR_NODE_CONTRACT.md).
+
+SIM umí pro budoucí vlastní TAK server exportovat normalizované letové stopy jako
+CoT:
+
+```http
+GET /api/v1/cot/tracks?bbox=west,south,east,north&source=partner_air_tracks,adsb_lol
+Authorization: Bearer <FLIGHT_DATA_TAK_COT_EXPORT_TOKEN>
+Accept: application/xml
+```
+
+TAK inbound směr zůstává v `tak-gateway-api` (`POST /tak-gateway/api/v1/cot/events`).
 
 ## Referenční data
 

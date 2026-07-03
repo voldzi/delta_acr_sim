@@ -6,10 +6,12 @@ import { AirspaceReferenceService } from "./airspace-reference.js";
 import type { FlightDataConfig } from "./config.js";
 import { FlightAggregationService } from "./aggregation.js";
 import { buildFlightMapCatalog } from "./catalog.js";
+import { renderFlightTracksCot } from "./cot-export.js";
 import { problem } from "./http.js";
 import { PartnerAirTrackStore, type PartnerAirTrackIngestPayload } from "./partner-air-track-store.js";
 import { getAircraftType, ReferenceDataService, searchAircraftTypes } from "./reference-data.js";
 import { FlightRouteEnrichmentService } from "./route-enrichment.js";
+import { ingestSensorNodeBatch, SensorNodeStore, type SensorNodeObservationBatch } from "./sensor-node-ingest.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
 import type { BoundingBox, FlightDataPublicConfig, FlightDataSourceId, FlightQuery } from "./types.js";
 import { UasGeozoneService } from "./uas-geozones.js";
@@ -23,6 +25,7 @@ export interface FlightDataAppContext {
   uasGeozones: UasGeozoneService;
   airspaceActivations: AirspaceActivationService;
   partnerAirTracks: PartnerAirTrackStore;
+  sensorNodes: SensorNodeStore;
 }
 
 export async function createApp(config: FlightDataConfig): Promise<{ app: Express; context: FlightDataAppContext }> {
@@ -31,6 +34,10 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
     maxRecords: config.partnerAirTrackMaxRecords,
     sourcePriority: config.partnerAirTrackPriority
   });
+  const sensorNodes = new SensorNodeStore({
+    ttlSeconds: config.sensorNodeStatusTtlSeconds,
+    maxNodes: config.sensorNodeMaxNodes
+  });
   const sources = createFlightDataSources(config, partnerAirTracks);
   const routeEnrichment = new FlightRouteEnrichmentService(config);
   const aggregation = new FlightAggregationService(config, sources, routeEnrichment);
@@ -38,7 +45,7 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
   const airspaces = new AirspaceReferenceService(config);
   const uasGeozones = new UasGeozoneService(config);
   const airspaceActivations = new AirspaceActivationService(config, uasGeozones);
-  const context: FlightDataAppContext = { config, aggregation, routeEnrichment, referenceData, airspaces, uasGeozones, airspaceActivations, partnerAirTracks };
+  const context: FlightDataAppContext = { config, aggregation, routeEnrichment, referenceData, airspaces, uasGeozones, airspaceActivations, partnerAirTracks, sensorNodes };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-flight-data-api"));
@@ -135,6 +142,7 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
           `flight_data_reference_cache_stale_hits{source="vrs_standing_data_routes"} ${routeEnrichmentCache.staleHits}`,
           `flight_data_reference_cache_errors{source="vrs_standing_data_routes"} ${routeEnrichmentCache.errors}`,
           `flight_data_partner_air_tracks_stored ${context.partnerAirTracks.stats().stored}`,
+          `flight_data_sensor_nodes_stored ${context.sensorNodes.stats().stored}`,
           ...sourceCacheLines
         ].join("\n") + "\n"
       );
@@ -199,6 +207,56 @@ function registerIngestRoutes(app: Express, context: FlightDataAppContext): void
     });
   });
 
+  app.get("/api/v1/ingest/sensor-observations/status", (_req, res) => {
+    res.json({
+      contractVersion: "sim-cop-sensor-node-ingest-v1",
+      enabled: Boolean(context.config.sensorNodeIngestToken),
+      sourceId: "partner_air_tracks",
+      acceptedSchemas: ["cop.sensor.batch.v1", "cop.sensor.observation.v1"],
+      acceptedObservationTypes: ["adsb", "remote_id", "weather", "health"],
+      ttlSeconds: context.config.partnerAirTrackTtlSeconds,
+      maxTrackRecords: context.config.partnerAirTrackMaxRecords,
+      sensorStatusTtlSeconds: context.config.sensorNodeStatusTtlSeconds,
+      maxSensorNodes: context.config.sensorNodeMaxNodes,
+      trackStats: context.partnerAirTracks.stats(),
+      sensorStats: context.sensorNodes.stats()
+    });
+  });
+
+  app.get("/api/v1/ingest/sensor-nodes", (req, res) => {
+    if (!context.config.sensorNodeIngestToken) {
+      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "COP Sensor Node ingest is disabled until FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN or FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured.");
+    }
+    if (!hasBearerToken(req.headers.authorization, context.config.sensorNodeIngestToken)) {
+      return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid COP Sensor Node ingest bearer token.");
+    }
+    res.json({
+      contractVersion: "sim-cop-sensor-node-status-v1",
+      generatedAt: new Date().toISOString(),
+      items: context.sensorNodes.list(),
+      stats: context.sensorNodes.stats()
+    });
+  });
+
+  app.post("/api/v1/ingest/sensor-observations", (req, res) => {
+    if (!context.config.sensorNodeIngestToken) {
+      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "COP Sensor Node ingest is disabled until FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN or FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured.");
+    }
+    if (!hasBearerToken(req.headers.authorization, context.config.sensorNodeIngestToken)) {
+      return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid COP Sensor Node ingest bearer token.");
+    }
+    const payload = req.body as SensorNodeObservationBatch;
+    if (!payload || !Array.isArray(payload.observations)) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "Body must contain observations array.");
+    }
+    const result = ingestSensorNodeBatch(payload, context.partnerAirTracks, context.sensorNodes);
+    res.status(result.rejected > 0 && result.accepted === 0 ? 400 : 202).json({
+      contractVersion: "sim-cop-sensor-node-ingest-v1",
+      sourceId: "partner_air_tracks",
+      ...result
+    });
+  });
+
   app.post("/api/v1/ingest/air-tracks", (req, res) => {
     if (!context.config.partnerAirTrackIngestToken) {
       return problem(req, res, 503, "SOURCE_UNAVAILABLE", "Partner air track ingest is disabled until FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured.");
@@ -254,6 +312,35 @@ function registerFlightRoutes(app: Express, context: FlightDataAppContext): void
       });
     } catch (error) {
       problem(req, res, 502, "SOURCE_UNAVAILABLE", error instanceof Error ? error.message : "Unable to fetch flight data.");
+    }
+  });
+
+  app.get("/api/v1/cot/tracks/status", (_req, res) => {
+    res.json({
+      contractVersion: "sim-flight-cot-export-v1",
+      enabled: Boolean(context.config.takCotExportToken),
+      source: "flight-data-api",
+      staleSeconds: context.config.takCotExportStaleSeconds,
+      acceptedSources: context.config.enabledSources
+    });
+  });
+
+  app.get("/api/v1/cot/tracks", async (req, res) => {
+    if (!context.config.takCotExportToken) {
+      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "Flight CoT export is disabled until FLIGHT_DATA_TAK_COT_EXPORT_TOKEN is configured.");
+    }
+    if (!hasBearerToken(req.headers.authorization, context.config.takCotExportToken)) {
+      return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid Flight CoT export bearer token.");
+    }
+    const query = parseFlightQuery(req.query, context.config.enabledSources);
+    if (!query.ok) {
+      return problem(req, res, 400, "VALIDATION_ERROR", query.error);
+    }
+    try {
+      const response = await context.aggregation.getTracks(query.value);
+      res.type("application/xml").send(renderFlightTracksCot(response, { staleSeconds: context.config.takCotExportStaleSeconds }));
+    } catch (error) {
+      problem(req, res, 502, "SOURCE_UNAVAILABLE", error instanceof Error ? error.message : "Unable to export flight data to CoT.");
     }
   });
 }
@@ -505,6 +592,15 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
       ingestEnabled: Boolean(config.partnerAirTrackIngestToken),
       ttlSeconds: config.partnerAirTrackTtlSeconds,
       maxRecords: config.partnerAirTrackMaxRecords
+    },
+    sensorNodes: {
+      ingestEnabled: Boolean(config.sensorNodeIngestToken),
+      statusTtlSeconds: config.sensorNodeStatusTtlSeconds,
+      maxNodes: config.sensorNodeMaxNodes
+    },
+    takCotExport: {
+      enabled: Boolean(config.takCotExportToken),
+      staleSeconds: config.takCotExportStaleSeconds
     },
     referenceData: {
       ourAirportsEnabled: config.ourAirportsEnabled,

@@ -38,6 +38,11 @@ describe("Flight Data API contract", () => {
       partnerAirTrackTtlSeconds: 90,
       partnerAirTrackMaxRecords: 20_000,
       partnerAirTrackPriority: 95,
+      sensorNodeIngestToken: undefined,
+      sensorNodeStatusTtlSeconds: 900,
+      sensorNodeMaxNodes: 1000,
+      takCotExportToken: undefined,
+      takCotExportStaleSeconds: 180,
       flightRouteEnrichmentEnabled: false,
       flightRouteRoutesCsvUrl: "https://vrs-standing-data.adsb.lol/routes.csv",
       flightRouteAirportsCsvUrl: "https://vrs-standing-data.adsb.lol/airports.csv",
@@ -128,7 +133,9 @@ describe("Flight Data API contract", () => {
           expect.objectContaining({ sourceId: "opensky", authConfigured: false }),
           expect.objectContaining({ sourceId: "local_adsb", authConfigured: false }),
           expect.objectContaining({ sourceId: "partner_air_tracks", authConfigured: false })
-        ])
+        ]),
+        sensorNodes: expect.objectContaining({ ingestEnabled: false, statusTtlSeconds: 900 }),
+        takCotExport: expect.objectContaining({ enabled: false, staleSeconds: 180 })
       })
     );
     expect(JSON.stringify(response.body)).not.toContain("clientSecret");
@@ -568,6 +575,151 @@ describe("Flight Data API contract", () => {
         })
       })
     );
+  });
+
+  it("ingests COP Sensor Node ADS-B and Remote ID observations", async () => {
+    const configured = await createApp({
+      ...config,
+      enabledSources: ["partner_air_tracks"],
+      partnerAirTrackIngestToken: "partner-token",
+      sensorNodeIngestToken: "sensor-token",
+      partnerAirTrackTtlSeconds: 300
+    });
+
+    const status = await request(configured.app).get("/api/v1/ingest/sensor-observations/status").expect(200);
+    expect(status.body).toEqual(expect.objectContaining({ enabled: true, contractVersion: "sim-cop-sensor-node-ingest-v1" }));
+
+    await request(configured.app)
+      .post("/api/v1/ingest/sensor-observations")
+      .set("authorization", "Bearer sensor-token")
+      .send({
+        schema: "cop.sensor.batch.v1",
+        sensor_id: "sensor-node-prg-001",
+        sent_at_utc: new Date().toISOString(),
+        sensor: { lat: 50.087, lon: 14.421, height_m: 285 },
+        observations: [
+          {
+            schema: "cop.sensor.observation.v1",
+            type: "adsb",
+            observed_at_utc: new Date().toISOString(),
+            payload: {
+              icao24: "49d63f",
+              callsign: "OKVCL",
+              lat: 49.966053,
+              lon: 14.247783,
+              altitude_ft: 24550,
+              ground_speed_kt: 310.6,
+              track_deg: 99.83,
+              vertical_rate_fpm: 1216,
+              category: "A1",
+              nic: 9,
+              nac_p: 10,
+              nac_v: 2,
+              sil: 3,
+              sda: 2,
+              rc: 75,
+              radio: { protocol: "adsb", rssi_dbfs: -8.7, message_count: 34 }
+            }
+          },
+          {
+            schema: "cop.sensor.observation.v1",
+            type: "remote_id",
+            observed_at_utc: new Date().toISOString(),
+            payload: {
+              uas_id_hash: "sha256:rid-public-hash",
+              uas_id: "raw-sensitive-id",
+              lat: 50.0892,
+              lon: 14.4231,
+              height_m: 88,
+              speed_mps: 9.4,
+              track_deg: 71,
+              operator_lat: 50.08,
+              operator_lon: 14.42,
+              radio: { protocol: "opendroneid", rssi_dbm: -61, channel: 6 }
+            }
+          },
+          {
+            schema: "cop.sensor.observation.v1",
+            type: "health",
+            observed_at_utc: new Date().toISOString(),
+            payload: { uptime_seconds: 42, gps_fix: true, adsb_messages_per_minute: 120 }
+          }
+        ]
+      })
+      .expect(202);
+
+    const tracks = await request(configured.app)
+      .get("/api/v1/cop/tracks?source=partner_air_tracks&bbox=14.2,49.9,14.5,50.2&limit=10")
+      .expect(200);
+
+    expect(tracks.body.summary.rawObservationCount).toBe(2);
+    expect(tracks.body.tracks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          trackKeyKind: "icao24",
+          icao24: "49d63f",
+          metadata: expect.objectContaining({ sourceKind: "sensor_node", sensorId: "sensor-node-prg-001" }),
+          quality: expect.objectContaining({
+            measurement: expect.objectContaining({
+              predictionSupport: "three_dimensional",
+              nacP: 10,
+              rcM: 75,
+              rssiDbfs: -8.7,
+              signalCount: 34
+            })
+          })
+        }),
+        expect.objectContaining({
+          trackKeyKind: "remote_id",
+          objectType: "UAV",
+          metadata: expect.objectContaining({
+            sourceKind: "remote_id",
+            remoteId: "sha256:rid-public-hash"
+          }),
+          quality: expect.objectContaining({
+            measurement: expect.objectContaining({
+              predictionSupport: "kinematic",
+              rssiDbm: -61,
+              sourceProtocols: ["remote_id"]
+            })
+          })
+        })
+      ])
+    );
+    expect(JSON.stringify(tracks.body)).not.toContain("raw-sensitive-id");
+    expect(JSON.stringify(tracks.body)).not.toContain("operator_lat");
+
+    const nodes = await request(configured.app).get("/api/v1/ingest/sensor-nodes").set("authorization", "Bearer sensor-token").expect(200);
+    expect(nodes.body.items[0]).toEqual(
+      expect.objectContaining({
+        sensorId: "sensor-node-prg-001",
+        capabilities: expect.arrayContaining(["adsb", "remote_id", "health"]),
+        observationCounts: expect.objectContaining({ adsb: 1, remoteId: 1, health: 1 })
+      })
+    );
+  });
+
+  it("exports flight tracks as protected CoT XML", async () => {
+    const configured = await createApp({
+      ...config,
+      enabledSources: ["mock"],
+      takCotExportToken: "cot-export-token"
+    });
+
+    await request(configured.app).get("/api/v1/cot/tracks").expect(401);
+    const status = await request(configured.app).get("/api/v1/cot/tracks/status").expect(200);
+    expect(status.body).toEqual(expect.objectContaining({ enabled: true, contractVersion: "sim-flight-cot-export-v1" }));
+
+    const response = await request(configured.app)
+      .get("/api/v1/cot/tracks?source=mock&limit=1")
+      .set("authorization", "Bearer cot-export-token")
+      .expect(200);
+
+    expect(response.headers["content-type"]).toContain("application/xml");
+    expect(response.text).toContain("<events");
+    expect(response.text).toContain("<event ");
+    expect(response.text).toContain("<point ");
+    expect(response.text).toContain("CSM SIM normalized flight track");
   });
 
   it("exposes airport and aircraft type reference lookups", async () => {

@@ -9,6 +9,7 @@ import type {
   FlightAdsbEmitterCategory,
   FlightDataSourceId,
   FlightTrackKeyKind,
+  FlightTrackMeasurementQuality,
   FlightTrackAircraftClass,
   FlightTrackIconKey,
   FlightTrackIconHint,
@@ -300,7 +301,8 @@ function deduplicateObservations(
       quality: {
         confidence: confidenceFor(sorted.length, positionAgeSeconds, staleAfterSeconds),
         stale,
-        positionAgeSeconds
+        positionAgeSeconds,
+        measurement: measurementQualityFor(sorted, primary, stale)
       },
       metadata: {
         onGround: primary.onGround,
@@ -322,6 +324,62 @@ function deduplicateObservations(
     tracks: tracks.sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt)),
     droppedWithoutPositionCount
   };
+}
+
+function measurementQualityFor(sorted: RawFlightObservation[], primary: RawFlightObservation, stale: boolean): FlightTrackMeasurementQuality {
+  const measurements = sorted.map((item) => item.measurement).filter((item): item is NonNullable<RawFlightObservation["measurement"]> => Boolean(item));
+  const sourceProtocols = uniqueStrings(measurements.map((item) => item.sourceProtocol));
+  const receiverIds = uniqueStrings([...measurements.map((item) => item.receiverId), ...sorted.map((item) => item.sensorId)]);
+  const observedTimes = sorted
+    .map((item) => Date.parse(item.seenAt))
+    .filter((item) => Number.isFinite(item))
+    .sort((a, b) => a - b);
+  const signalCount =
+    sumNumbers(measurements.map((item) => item.messageCount ?? item.sampleCount)) ||
+    Math.max(1, sorted.length);
+  return {
+    predictionSupport: predictionSupportFor(primary, stale),
+    sourceCount: uniqueStrings(sorted.map((item) => item.sourceId)).length,
+    sensorCount: receiverIds.length,
+    signalCount,
+    primaryObservedAt: primary.seenAt,
+    oldestObservedAt: new Date(observedTimes[0] ?? Date.parse(primary.seenAt)).toISOString(),
+    hasAltitude: sorted.some((item) => typeof item.altitudeM === "number"),
+    hasSpeed: sorted.some((item) => typeof item.speedMps === "number"),
+    hasHeading: sorted.some((item) => typeof item.headingDeg === "number"),
+    hasVerticalRate: sorted.some((item) => typeof item.verticalRateMps === "number"),
+    horizontalAccuracyM: minFinite(measurements.flatMap((item) => [item.horizontalAccuracyM, item.rcM])),
+    verticalAccuracyM: minFinite(measurements.map((item) => item.verticalAccuracyM)),
+    speedAccuracyMps: minFinite(measurements.map((item) => item.speedAccuracyMps)),
+    headingAccuracyDeg: minFinite(measurements.map((item) => item.headingAccuracyDeg)),
+    rssiDbm: firstFinite(measurements.map((item) => item.rssiDbm)),
+    rssiDbfs: firstFinite(measurements.map((item) => item.rssiDbfs)),
+    nic: maxFinite(measurements.map((item) => item.nic)),
+    nacP: maxFinite(measurements.map((item) => item.nacP)),
+    nacV: maxFinite(measurements.map((item) => item.nacV)),
+    sil: maxFinite(measurements.map((item) => item.sil)),
+    sda: maxFinite(measurements.map((item) => item.sda)),
+    rcM: minFinite(measurements.map((item) => item.rcM)),
+    sourceProtocols,
+    receiverIds
+  };
+}
+
+function predictionSupportFor(primary: RawFlightObservation, stale: boolean): FlightTrackMeasurementQuality["predictionSupport"] {
+  if (stale) {
+    return "stale";
+  }
+  const hasSpeed = typeof primary.speedMps === "number";
+  const hasHeading = typeof primary.headingDeg === "number";
+  const hasVerticalRate = typeof primary.verticalRateMps === "number";
+  const hasAltitude = typeof primary.altitudeM === "number";
+  if (hasSpeed && hasHeading && hasAltitude && hasVerticalRate) {
+    return "three_dimensional";
+  }
+  if (hasSpeed && hasHeading) {
+    return "kinematic";
+  }
+  return "position_only";
 }
 
 function observationKey(observation: RawFlightObservation): { groupKey: string; kind: FlightTrackKeyKind; value: string } | undefined {
@@ -696,6 +754,28 @@ function confidenceFor(sourceCount: number, positionAgeSeconds: number, staleAft
 
 function firstDefined<T>(values: Array<T | undefined>): T | undefined {
   return values.find((value): value is T => value !== undefined);
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+function firstFinite(values: Array<number | undefined>): number | undefined {
+  return values.find((value): value is number => typeof value === "number" && Number.isFinite(value));
+}
+
+function minFinite(values: Array<number | undefined>): number | undefined {
+  const finite = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return finite.length > 0 ? round(Math.min(...finite), 2) : undefined;
+}
+
+function maxFinite(values: Array<number | undefined>): number | undefined {
+  const finite = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return finite.length > 0 ? round(Math.max(...finite), 2) : undefined;
+}
+
+function sumNumbers(values: Array<number | undefined>): number {
+  return values.reduce<number>((total, value) => (typeof value === "number" && Number.isFinite(value) ? total + value : total), 0);
 }
 
 function normalizeIcao24(value: string | undefined): string | undefined {

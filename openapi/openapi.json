@@ -2287,6 +2287,183 @@
         "operationId": "flightData_post_flight_data_api_v1_ingest_air_tracks"
       }
     },
+    "/flight-data/api/v1/ingest/sensor-observations/status": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Vrátí stav COP Sensor Node ingestu.",
+        "responses": {
+          "200": {
+            "description": "COP Sensor Node ingest status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataSensorNodeIngestStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_ingest_sensor_observations_status"
+      }
+    },
+    "/flight-data/api/v1/ingest/sensor-observations": {
+      "post": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Přijme dávku autorizovaných COP Sensor Node observací.",
+        "description": "Server-to-server endpoint chráněný bearer tokenem. ADS-B a Remote ID observace se převádí do partner_air_tracks.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlightDataSensorNodeBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted sensor observations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataSensorNodeIngestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "503": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_post_flight_data_api_v1_ingest_sensor_observations"
+      }
+    },
+    "/flight-data/api/v1/ingest/sensor-nodes": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Vrátí chráněný přehled posledních COP Sensor Node stavů.",
+        "responses": {
+          "200": {
+            "description": "Sensor node status list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataSensorNodeStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "503": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_ingest_sensor_nodes"
+      }
+    },
+    "/flight-data/api/v1/cot/tracks/status": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Vrátí stav Flight Data CoT exportu.",
+        "responses": {
+          "200": {
+            "description": "CoT export status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataCotTrackExportStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_cot_tracks_status"
+      }
+    },
+    "/flight-data/api/v1/cot/tracks": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Exportuje normalizované letové stopy jako CoT XML.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FlightDataBbox"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataSource"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataLimit"
+          },
+          {
+            "$ref": "#/components/parameters/FlightDataIncludeStale"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CoT XML event batch",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "503": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_cot_tracks"
+      }
+    },
     "/flight-data/health/live": {
       "get": {
         "tags": [
@@ -6513,11 +6690,105 @@
               },
               "positionAgeSeconds": {
                 "type": "integer"
+              },
+              "measurement": {
+                "$ref": "#/components/schemas/FlightDataFlightMeasurementQuality"
               }
             }
           },
           "metadata": {
             "type": "object"
+          }
+        }
+      },
+      "FlightDataFlightMeasurementQuality": {
+        "type": "object",
+        "properties": {
+          "predictionSupport": {
+            "type": "string",
+            "enum": [
+              "three_dimensional",
+              "kinematic",
+              "position_only",
+              "stale"
+            ]
+          },
+          "sourceCount": {
+            "type": "integer"
+          },
+          "sensorCount": {
+            "type": "integer"
+          },
+          "signalCount": {
+            "type": "integer"
+          },
+          "primaryObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "oldestObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasAltitude": {
+            "type": "boolean"
+          },
+          "hasSpeed": {
+            "type": "boolean"
+          },
+          "hasHeading": {
+            "type": "boolean"
+          },
+          "hasVerticalRate": {
+            "type": "boolean"
+          },
+          "horizontalAccuracyM": {
+            "type": "number"
+          },
+          "verticalAccuracyM": {
+            "type": "number"
+          },
+          "speedAccuracyMps": {
+            "type": "number"
+          },
+          "headingAccuracyDeg": {
+            "type": "number"
+          },
+          "rssiDbm": {
+            "type": "number"
+          },
+          "rssiDbfs": {
+            "type": "number"
+          },
+          "nic": {
+            "type": "number"
+          },
+          "nacP": {
+            "type": "number"
+          },
+          "nacV": {
+            "type": "number"
+          },
+          "sil": {
+            "type": "number"
+          },
+          "sda": {
+            "type": "number"
+          },
+          "rcM": {
+            "type": "number"
+          },
+          "sourceProtocols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "receiverIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -6645,6 +6916,31 @@
               }
             }
           },
+          "sensorNodes": {
+            "type": "object",
+            "properties": {
+              "ingestEnabled": {
+                "type": "boolean"
+              },
+              "statusTtlSeconds": {
+                "type": "integer"
+              },
+              "maxNodes": {
+                "type": "integer"
+              }
+            }
+          },
+          "takCotExport": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "staleSeconds": {
+                "type": "integer"
+              }
+            }
+          },
           "referenceData": {
             "type": "object",
             "properties": {
@@ -6743,7 +7039,8 @@
               "remote_id",
               "u_space",
               "radar",
-              "partner"
+              "partner",
+              "sensor_node"
             ]
           },
           "sensorId": {
@@ -6789,7 +7086,8 @@
               "remote_id",
               "u_space",
               "radar",
-              "partner"
+              "partner",
+              "sensor_node"
             ]
           },
           "sensorId": {
@@ -6863,6 +7161,252 @@
           "raw": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataSensorNodeIngestStatus": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "enabled",
+          "sourceId",
+          "acceptedSchemas",
+          "acceptedObservationTypes",
+          "trackStats",
+          "sensorStats"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-cop-sensor-node-ingest-v1"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sourceId": {
+            "type": "string",
+            "const": "partner_air_tracks"
+          },
+          "acceptedSchemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptedObservationTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ttlSeconds": {
+            "type": "integer"
+          },
+          "maxTrackRecords": {
+            "type": "integer"
+          },
+          "sensorStatusTtlSeconds": {
+            "type": "integer"
+          },
+          "maxSensorNodes": {
+            "type": "integer"
+          },
+          "trackStats": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "sensorStats": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataSensorNodeBatch": {
+        "type": "object",
+        "required": [
+          "sensor_id",
+          "observations"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string",
+            "example": "cop.sensor.batch.v1"
+          },
+          "sensor_id": {
+            "type": "string"
+          },
+          "sent_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sensor": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataSensorNodeObservation"
+            }
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      },
+      "FlightDataSensorNodeObservation": {
+        "type": "object",
+        "required": [
+          "type",
+          "payload"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string",
+            "example": "cop.sensor.observation.v1"
+          },
+          "observation_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "adsb",
+              "remote_id",
+              "weather",
+              "health"
+            ]
+          },
+          "observed_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sensor": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataSensorNodeIngestResult": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "sourceId",
+          "accepted",
+          "rejected",
+          "trackAccepted",
+          "trackRejected",
+          "weatherAccepted",
+          "healthAccepted",
+          "warnings",
+          "storedTrackCount",
+          "sensorStats"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-cop-sensor-node-ingest-v1"
+          },
+          "sourceId": {
+            "type": "string",
+            "const": "partner_air_tracks"
+          },
+          "accepted": {
+            "type": "integer"
+          },
+          "rejected": {
+            "type": "integer"
+          },
+          "trackAccepted": {
+            "type": "integer"
+          },
+          "trackRejected": {
+            "type": "integer"
+          },
+          "weatherAccepted": {
+            "type": "integer"
+          },
+          "healthAccepted": {
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "storedTrackCount": {
+            "type": "integer"
+          },
+          "sensorStats": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataSensorNodeStatusResponse": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "items",
+          "stats"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-cop-sensor-node-status-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataCotTrackExportStatus": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "enabled",
+          "source",
+          "staleSeconds",
+          "acceptedSources"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-flight-cot-export-v1"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "const": "flight-data-api"
+          },
+          "staleSeconds": {
+            "type": "integer"
+          },
+          "acceptedSources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

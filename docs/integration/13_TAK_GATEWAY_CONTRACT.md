@@ -4,6 +4,11 @@
 
 TAK Gateway je neveřejný partnerský zdroj pro COM. Přijímá Cursor-on-Target XML z TAK/ARDOS kompatibilních systémů a publikuje poslední známý stav jako GeoJSON. COM nevolá TAK přímo.
 
+Obousměrný model v SIM:
+
+- **TAK -> SIM:** tento dokument, `POST /tak-gateway/api/v1/cot/events`, převod CoT na GeoJSON pro COP.
+- **SIM -> TAK:** flight-data-api, `GET /flight-data/api/v1/cot/tracks`, export normalizovaných letových stop do CoT XML pro budoucí vlastní TAK server. Detail je v [08_FLIGHT_DATA_SOURCE_CONTRACT.md](08_FLIGHT_DATA_SOURCE_CONTRACT.md) a [17_COP_SENSOR_NODE_CONTRACT.md](17_COP_SENSOR_NODE_CONTRACT.md).
+
 ## COM read endpoint
 
 ```http
@@ -205,3 +210,4 @@ GET /tak-gateway/api/v1/config
 4. Zobraz `stale=true` jako degradovaný stav, ne jako aktuální polohu.
 5. Nepoužívej `affiliation` k žádnému targeting nebo naváděcímu workflow. Je to pouze situační metadata.
 6. Pro reálný pilot čti SIM ze serveru COM s `TAK_GATEWAY_READ_TOKEN`; token nevkládej do frontendového bundle.
+7. Flight CoT export nečti z COP frontendů. Pokud bude nasazen vlastní TAK server, jeho backend/převodník čte `GET /flight-data/api/v1/cot/tracks` s `FLIGHT_DATA_TAK_COT_EXPORT_TOKEN`.

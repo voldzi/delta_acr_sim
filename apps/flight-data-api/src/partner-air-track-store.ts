@@ -1,4 +1,4 @@
-import type { BoundingBox, FlightTrackKeyKind, PartnerAirTrackSourceKind, RawFlightObservation } from "./types.js";
+import type { BoundingBox, FlightObservationMeasurementQuality, FlightTrackKeyKind, PartnerAirTrackSourceKind, RawFlightObservation } from "./types.js";
 
 export interface PartnerAirTrackIngestRecord {
   trackId?: string;
@@ -29,6 +29,18 @@ export interface PartnerAirTrackIngestRecord {
   squawk?: string;
   emergency?: string;
   category?: string;
+  measurement?: FlightObservationMeasurementQuality;
+  horizontalAccuracyM?: number;
+  verticalAccuracyM?: number;
+  speedAccuracyMps?: number;
+  headingAccuracyDeg?: number;
+  rssiDbm?: number;
+  rssiDbfs?: number;
+  messageCount?: number;
+  protocol?: "adsb" | "mode_s" | "remote_id" | "mlat" | "radar" | "unknown";
+  channel?: number | string;
+  frequencyMhz?: number;
+  receiverDistanceM?: number;
   observedAt?: string;
   expiresAt?: string;
   raw?: unknown;
@@ -159,6 +171,7 @@ export class PartnerAirTrackStore {
         squawk: cleanString(record.squawk),
         emergency: cleanString(record.emergency),
         category,
+        measurement: measurementFor(payload, record),
         raw: {
           sourceName: payload.sourceName,
           sourceKind,
@@ -187,6 +200,27 @@ export class PartnerAirTrackStore {
       this.observations.delete(key);
     }
   }
+}
+
+function measurementFor(payload: PartnerAirTrackIngestPayload, record: PartnerAirTrackIngestRecord): FlightObservationMeasurementQuality | undefined {
+  const sourceKind = record.sourceKind ?? payload.sourceKind;
+  const merged: FlightObservationMeasurementQuality = {
+    ...record.measurement,
+    sourceProtocol: record.measurement?.sourceProtocol ?? record.protocol ?? (sourceKind === "remote_id" ? "remote_id" : undefined),
+    receiverId: record.measurement?.receiverId ?? cleanString(record.sensorId ?? payload.sensorId),
+    rssiDbm: finiteNumber(record.rssiDbm) ?? record.measurement?.rssiDbm,
+    rssiDbfs: finiteNumber(record.rssiDbfs) ?? record.measurement?.rssiDbfs,
+    messageCount: finiteNumber(record.messageCount) ?? record.measurement?.messageCount,
+    channel: record.channel ?? record.measurement?.channel,
+    frequencyMhz: finiteNumber(record.frequencyMhz) ?? record.measurement?.frequencyMhz,
+    horizontalAccuracyM: finiteNumber(record.horizontalAccuracyM) ?? record.measurement?.horizontalAccuracyM,
+    verticalAccuracyM: finiteNumber(record.verticalAccuracyM) ?? record.measurement?.verticalAccuracyM,
+    speedAccuracyMps: finiteNumber(record.speedAccuracyMps) ?? record.measurement?.speedAccuracyMps,
+    headingAccuracyDeg: finiteNumber(record.headingAccuracyDeg) ?? record.measurement?.headingAccuracyDeg,
+    receiverDistanceM: finiteNumber(record.receiverDistanceM) ?? record.measurement?.receiverDistanceM
+  };
+  const cleaned = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined && value !== null && value !== "")) as FlightObservationMeasurementQuality;
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 
 function trackKeyFor(record: PartnerAirTrackIngestRecord, sourceKind: PartnerAirTrackSourceKind): { kind: FlightTrackKeyKind; value: string } | undefined {

@@ -28,6 +28,11 @@ export interface FlightDataConfig {
   partnerAirTrackTtlSeconds: number;
   partnerAirTrackMaxRecords: number;
   partnerAirTrackPriority: number;
+  sensorNodeIngestToken?: string;
+  sensorNodeStatusTtlSeconds: number;
+  sensorNodeMaxNodes: number;
+  takCotExportToken?: string;
+  takCotExportStaleSeconds: number;
   flightRouteEnrichmentEnabled: boolean;
   flightRouteRoutesCsvUrl: string;
   flightRouteAirportsCsvUrl: string;
@@ -80,6 +85,11 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     partnerAirTrackTtlSeconds: parseInteger(process.env.FLIGHT_DATA_PARTNER_TRACK_TTL_SECONDS, 90),
     partnerAirTrackMaxRecords: parseInteger(process.env.FLIGHT_DATA_PARTNER_TRACK_MAX_RECORDS, 20_000),
     partnerAirTrackPriority: parseInteger(process.env.FLIGHT_DATA_PARTNER_TRACK_PRIORITY, 95),
+    sensorNodeIngestToken: emptyToUndefined(process.env.FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN) ?? emptyToUndefined(process.env.FLIGHT_DATA_PARTNER_INGEST_TOKEN),
+    sensorNodeStatusTtlSeconds: parseInteger(process.env.FLIGHT_DATA_SENSOR_NODE_STATUS_TTL_SECONDS, 15 * 60),
+    sensorNodeMaxNodes: parseInteger(process.env.FLIGHT_DATA_SENSOR_NODE_MAX_NODES, 1_000),
+    takCotExportToken: emptyToUndefined(process.env.FLIGHT_DATA_TAK_COT_EXPORT_TOKEN),
+    takCotExportStaleSeconds: parseInteger(process.env.FLIGHT_DATA_TAK_COT_EXPORT_STALE_SECONDS, 180),
     flightRouteEnrichmentEnabled: parseBoolean(process.env.FLIGHT_ROUTE_ENRICHMENT_ENABLED, true),
     flightRouteRoutesCsvUrl: process.env.FLIGHT_ROUTE_ROUTES_CSV_URL ?? "https://vrs-standing-data.adsb.lol/routes.csv",
     flightRouteAirportsCsvUrl: process.env.FLIGHT_ROUTE_AIRPORTS_CSV_URL ?? "https://vrs-standing-data.adsb.lol/airports.csv",
