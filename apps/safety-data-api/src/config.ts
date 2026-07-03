@@ -216,6 +216,16 @@ function defaultMunicipalAlertFeeds(): MunicipalAlertFeedConfig[] {
       fallbackLat: 50.08,
       bbox: { west: 13.35, south: 49.45, east: 15.65, north: 50.75 },
       format: "rss"
+    },
+    {
+      id: "pkr-stredocesky-jpo",
+      url: "https://pkr.kr-stredocesky.cz/pkr/zasahy-jpo/feed.xml",
+      label: "PKR Středočeský kraj - zásahy JPO",
+      authorityName: "Středočeský kraj",
+      fallbackLon: 14.43,
+      fallbackLat: 50.08,
+      bbox: { west: 13.35, south: 49.45, east: 15.65, north: 50.75 },
+      format: "rss"
     }
   ];
 }

@@ -642,6 +642,9 @@ použije vestavěný ověřený katalog veřejných regionálních zdrojů:
 - `pkr-stredocesky-aktuality`: Středočeský kraj, veřejný PKR RSS aktualit;
   položky bez souřadnic jsou publikované jako autoritativní krajský fallback bod
   s nižší důvěrou a implicitní sedmidenní platností.
+- `pkr-stredocesky-jpo`: Středočeský kraj, veřejný PKR RSS zásahů JPO;
+  feed nedodává souřadnice, proto se publikuje jako autoritativní krajský
+  fallback bod s nižší důvěrou.
 
 ```bash
 SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries
