@@ -387,13 +387,19 @@ function aircraftClassFor(
   if (wake.includes("heavy") || isWidebodyDesignator(designator) || category.includes("a5")) {
     return "widebody_airliner";
   }
+  if (isBusinessJetDesignator(designator)) {
+    return "business_jet";
+  }
+  if (isRegionalJetDesignator(designator)) {
+    return "regional_jet";
+  }
+  if (isNarrowbodyDesignator(designator)) {
+    return "narrowbody_airliner";
+  }
+  if (isTurbopropDesignator(designator)) {
+    return "turboprop";
+  }
   if (engine.includes("jet")) {
-    if (isBusinessJetDesignator(designator)) {
-      return "business_jet";
-    }
-    if (isRegionalJetDesignator(designator)) {
-      return "regional_jet";
-    }
     return "narrowbody_airliner";
   }
   if (iconHint === "turboprop" || engine.includes("turboprop")) {
@@ -556,6 +562,10 @@ function isRegionalJetDesignator(designator: string): boolean {
   return /^(CRJ|E1[3579]|E2[79]|ERJ|F70|F100|BCS[13])/.test(designator);
 }
 
+function isNarrowbodyDesignator(designator: string): boolean {
+  return /^(A19|A20|A21|A22|B70|B71|B72|B73|B38|B39|B75|B752|MD8|MD9|DC9|SU95)/.test(designator);
+}
+
 function isWidebodyDesignator(designator: string): boolean {
   return /^(A30|A31|A33|A34|A35|A38|B76|B77|B78|B74|B748|IL9|IL96|MD11)/.test(designator);
 }
@@ -592,6 +602,10 @@ function isLightTwinDesignator(designator: string): boolean {
   return /^(DA42|BE5[568]|BE9|PA3[014]|P68|C310|C340|C414|C421)/.test(designator);
 }
 
+function isTurbopropDesignator(designator: string): boolean {
+  return /^(AT[457]|DH8|DHC6|SF34|SB20|F50|F27|JS41|L410|E120|PC12|B350|BE20|BE30|BE40|C208)/.test(designator);
+}
+
 function iconHintFor(
   typeDesignator: string | undefined,
   aircraftCategory: string | undefined,
@@ -610,6 +624,18 @@ function iconHintFor(
   }
   if (category.includes("helicopter") || category.includes("rotor") || category.includes("a7") || designator.startsWith("H")) {
     return "helicopter";
+  }
+  if (
+    isBusinessJetDesignator(designator) ||
+    isRegionalJetDesignator(designator) ||
+    isNarrowbodyDesignator(designator) ||
+    isWidebodyDesignator(designator) ||
+    isJumboDesignator(designator)
+  ) {
+    return "jet";
+  }
+  if (isTurbopropDesignator(designator)) {
+    return "turboprop";
   }
   if (engine.includes("turboprop") || engine.includes("turboshaft")) {
     return "turboprop";

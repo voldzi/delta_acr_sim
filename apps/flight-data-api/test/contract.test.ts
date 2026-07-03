@@ -415,7 +415,7 @@ describe("Flight Data API contract", () => {
               seenAt: fetchedAt,
               icao24: "49d304",
               callsign: "TVS8BC",
-              typeDesignator: "B738",
+              typeDesignator: "B739",
               lat: 49.982,
               lon: 14.1842,
               speedMps: 217,
