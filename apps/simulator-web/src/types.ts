@@ -177,8 +177,49 @@ export interface FlightDataTrack {
     manufacturer?: string;
     model?: string;
     category?: string;
+    sourceCategory?: string;
+    adsbCategory?: {
+      code: string;
+      label: string;
+      group: string;
+    };
     engineType?: string;
     wakeTurbulenceCategory?: string;
+    classKey?: string;
+    iconHint?: string;
+    iconKey?: string;
+    iconFile?: string;
+    iconSet?: string;
+  };
+  status?: {
+    emergency: {
+      active: boolean;
+      code?: string;
+      label: string;
+      source: string;
+      squawk?: string;
+      rawEmergency?: string;
+    };
+    delay: {
+      status: "unknown" | "on_time" | "delayed";
+      minutes?: number;
+      source: "not_available" | "schedule_feed";
+      reason?: string;
+    };
+    phase: "ground" | "climb" | "cruise" | "descent" | "unknown";
+  };
+  presentation?: {
+    label: string;
+    iconSet: string;
+    iconKey: string;
+    iconFile: string;
+    iconHint: string;
+    rotateWithHeading: boolean;
+    rotationDeg?: number;
+    colorKey: "normal" | "delayed" | "emergency";
+    colorHex: string;
+    colorReason: string;
+    zIndexPriority: number;
   };
   sources: Array<{
     sourceId: string;

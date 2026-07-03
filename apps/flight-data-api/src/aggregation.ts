@@ -6,8 +6,13 @@ import type { FlightDataSource, SourceCacheStats } from "./sources.js";
 import type {
   AggregatedFlightTrack,
   BoundingBox,
+  FlightAdsbEmitterCategory,
   FlightDataSourceId,
+  FlightTrackAircraftClass,
+  FlightTrackIconKey,
   FlightTrackIconHint,
+  FlightTrackOperationalStatus,
+  FlightTrackPresentation,
   FlightQuery,
   FlightTrackResponse,
   RawFlightObservation,
@@ -218,13 +223,26 @@ function deduplicateObservations(
     const aircraftType = getAircraftType(typeDesignator);
     const sourceCategory = firstDefined(sorted.map((item) => item.category));
     const iconHint = iconHintFor(typeDesignator, aircraftType?.category, aircraftType?.engineType, sourceCategory);
+    const adsbCategory = adsbCategoryFor(sourceCategory);
+    const aircraftClass = aircraftClassFor(typeDesignator, aircraftType?.category, aircraftType?.engineType, aircraftType?.wakeTurbulenceCategory, sourceCategory, iconHint);
+    const iconKey = iconKeyFor(aircraftClass);
     const sourceLicenses = Array.from(new Set(sorted.map((item) => sourceLicenseById.get(item.sourceId)).filter((item): item is string => Boolean(item))));
+    const callsign = firstDefined(sorted.map((item) => item.callsign));
+    const registration = firstDefined(sorted.map((item) => item.registration));
+    const status = operationalStatusFor(primary, sorted);
+    const presentation = presentationFor({
+      label: callsign ?? registration ?? icao24,
+      iconHint,
+      iconKey,
+      headingDeg: primary.headingDeg,
+      status
+    });
 
     tracks.push({
       trackId: `flight:icao24:${icao24}`,
       icao24,
-      callsign: firstDefined(sorted.map((item) => item.callsign)),
-      registration: firstDefined(sorted.map((item) => item.registration)),
+      callsign,
+      registration,
       objectType: iconHint === "uav" ? "UAV" : "AIRCRAFT",
       domain: "AIR",
       lat: round(primary.lat, 6),
@@ -244,10 +262,18 @@ function deduplicateObservations(
         manufacturer: aircraftType?.manufacturer,
         model: aircraftType?.model,
         category: aircraftType?.category,
+        sourceCategory,
+        adsbCategory,
         engineType: aircraftType?.engineType,
         wakeTurbulenceCategory: aircraftType?.wakeTurbulenceCategory,
-        iconHint
+        classKey: aircraftClass,
+        iconHint,
+        iconKey,
+        iconFile: `${iconKey}.svg`,
+        iconSet: "airspace-icons-mono-v1"
       },
+      status,
+      presentation,
       sources: sorted.map((item) => ({
         sourceId: item.sourceId,
         sourceRecordId: item.sourceRecordId,
@@ -268,6 +294,7 @@ function deduplicateObservations(
         onGround: primary.onGround,
         squawk: primary.squawk,
         emergency: primary.emergency,
+        sourceCategory,
         sourceLicenses
       }
     });
@@ -277,6 +304,292 @@ function deduplicateObservations(
     tracks: tracks.sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt)),
     droppedWithoutPositionCount
   };
+}
+
+function adsbCategoryFor(sourceCategory: string | undefined): FlightAdsbEmitterCategory | undefined {
+  const code = sourceCategory?.trim().toUpperCase();
+  if (!code) {
+    return undefined;
+  }
+  const byCode: Record<string, FlightAdsbEmitterCategory> = {
+    A0: { code: "A0", label: "No ADS-B emitter category information", group: "unknown" },
+    A1: { code: "A1", label: "Light aircraft", group: "aircraft" },
+    A2: { code: "A2", label: "Small aircraft", group: "aircraft" },
+    A3: { code: "A3", label: "Large aircraft", group: "aircraft" },
+    A4: { code: "A4", label: "High vortex large aircraft", group: "aircraft" },
+    A5: { code: "A5", label: "Heavy aircraft", group: "aircraft" },
+    A6: { code: "A6", label: "High performance aircraft", group: "aircraft" },
+    A7: { code: "A7", label: "Rotorcraft", group: "rotorcraft" },
+    B1: { code: "B1", label: "Glider or sailplane", group: "aircraft" },
+    B2: { code: "B2", label: "Lighter-than-air aircraft", group: "aircraft" },
+    B3: { code: "B3", label: "Parachutist or skydiver", group: "unknown" },
+    B4: { code: "B4", label: "Ultralight, hang-glider or paraglider", group: "aircraft" },
+    B6: { code: "B6", label: "Unmanned aerial vehicle", group: "uav" },
+    B7: { code: "B7", label: "Space or trans-atmospheric vehicle", group: "unknown" },
+    C1: { code: "C1", label: "Surface emergency vehicle", group: "surface" },
+    C2: { code: "C2", label: "Surface service vehicle", group: "surface" },
+    C3: { code: "C3", label: "Point obstacle", group: "obstacle" },
+    C4: { code: "C4", label: "Cluster obstacle", group: "obstacle" },
+    C5: { code: "C5", label: "Line obstacle", group: "obstacle" }
+  };
+  if (byCode[code]) {
+    return byCode[code];
+  }
+  if (code.startsWith("OPENSKY:")) {
+    return { code, label: `OpenSky category ${code.slice("OPENSKY:".length)}`, group: "unknown" };
+  }
+  return { code, label: `ADS-B category ${code}`, group: "unknown" };
+}
+
+function aircraftClassFor(
+  typeDesignator: string | undefined,
+  aircraftCategory: string | undefined,
+  engineType: string | undefined,
+  wakeTurbulenceCategory: string | undefined,
+  sourceCategory: string | undefined,
+  iconHint: FlightTrackIconHint
+): FlightTrackAircraftClass {
+  const designator = typeDesignator?.toUpperCase() ?? "";
+  const category = `${aircraftCategory ?? ""} ${sourceCategory ?? ""}`.toLowerCase();
+  const engine = engineType?.toLowerCase() ?? "";
+  const wake = wakeTurbulenceCategory?.toLowerCase() ?? "";
+
+  if (iconHint === "uav") {
+    return designator.includes("VTOL") ? "uav_vtol" : "uav_fixed_wing";
+  }
+  if (category.includes("b4")) {
+    return "ultralight";
+  }
+  if (iconHint === "glider") {
+    return "glider";
+  }
+  if (isMilitaryFighterDesignator(designator) || category.includes("a6")) {
+    return "military_fighter";
+  }
+  if (isMilitaryTransportDesignator(designator)) {
+    return "military_transport";
+  }
+  if (isMilitaryBomberDesignator(designator)) {
+    return "military_bomber";
+  }
+  if (iconHint === "helicopter") {
+    if (isMilitaryHelicopterDesignator(designator)) {
+      return "helicopter_military";
+    }
+    return wake.includes("heavy") || isHeavyHelicopterDesignator(designator) ? "helicopter_heavy" : "helicopter_medium";
+  }
+  if (isCargoDesignator(designator)) {
+    return "cargo_freighter";
+  }
+  if (isJumboDesignator(designator)) {
+    return "jumbo_airliner";
+  }
+  if (wake.includes("heavy") || isWidebodyDesignator(designator) || category.includes("a5")) {
+    return "widebody_airliner";
+  }
+  if (engine.includes("jet")) {
+    if (isBusinessJetDesignator(designator)) {
+      return "business_jet";
+    }
+    if (isRegionalJetDesignator(designator)) {
+      return "regional_jet";
+    }
+    return "narrowbody_airliner";
+  }
+  if (iconHint === "turboprop" || engine.includes("turboprop")) {
+    return "turboprop";
+  }
+  if (isLightTwinDesignator(designator)) {
+    return "light_twin";
+  }
+  if (iconHint === "small_aircraft") {
+    return "small_ga";
+  }
+  return "unknown";
+}
+
+function iconKeyFor(aircraftClass: FlightTrackAircraftClass): FlightTrackIconKey {
+  const byClass: Record<FlightTrackAircraftClass, FlightTrackIconKey> = {
+    small_ga: "aircraft_01_small_ga",
+    light_twin: "aircraft_02_light_twin",
+    turboprop: "aircraft_03_turboprop",
+    business_jet: "aircraft_04_business_jet",
+    regional_jet: "aircraft_05_regional_jet",
+    narrowbody_airliner: "aircraft_06_narrowbody_airliner",
+    widebody_airliner: "aircraft_07_widebody_airliner",
+    jumbo_airliner: "aircraft_08_jumbo_airliner",
+    cargo_freighter: "aircraft_09_cargo_freighter",
+    glider: "aircraft_10_glider",
+    military_fighter: "aircraft_11_military_fighter",
+    military_transport: "aircraft_12_military_transport",
+    military_bomber: "aircraft_13_military_bomber",
+    aerobatic_prop: "aircraft_14_aerobatic_prop",
+    seaplane: "aircraft_15_seaplane",
+    ultralight: "aircraft_16_ultralight",
+    helicopter_light: "aircraft_17_helicopter_light",
+    helicopter_medium: "aircraft_18_helicopter_medium",
+    helicopter_heavy: "aircraft_19_helicopter_heavy",
+    helicopter_military: "aircraft_20_helicopter_military",
+    uav_multirotor: "drone_01_quadcopter",
+    uav_fixed_wing: "drone_03_fixed_wing_uav",
+    uav_vtol: "drone_05_vtol_hybrid",
+    unknown: "aircraft_01_small_ga"
+  };
+  return byClass[aircraftClass];
+}
+
+function operationalStatusFor(primary: RawFlightObservation, sorted: RawFlightObservation[]): FlightTrackOperationalStatus {
+  const squawk = firstDefined(sorted.map((item) => item.squawk));
+  const rawEmergency = firstDefined(sorted.map((item) => item.emergency));
+  const emergency = emergencyStatusFor(rawEmergency, squawk);
+  const delay = {
+    status: "unknown" as const,
+    source: "not_available" as const,
+    reason: "No authorized scheduled/actual departure-arrival feed is configured; render as normal unless SIM later reports delayed."
+  };
+  return {
+    emergency,
+    delay,
+    phase: flightPhaseFor(primary)
+  };
+}
+
+function emergencyStatusFor(
+  rawEmergency: string | undefined,
+  squawk: string | undefined
+): FlightTrackOperationalStatus["emergency"] {
+  const normalizedEmergency = rawEmergency?.trim().toLowerCase();
+  if (squawk === "7500") {
+    return { active: true, code: "unlawful_interference", label: "Unlawful interference", source: "squawk", squawk, rawEmergency };
+  }
+  if (squawk === "7600") {
+    return { active: true, code: "radio_failure", label: "Radio failure", source: "squawk", squawk, rawEmergency };
+  }
+  if (squawk === "7700") {
+    return { active: true, code: "general", label: "General emergency", source: "squawk", squawk, rawEmergency };
+  }
+  if (normalizedEmergency && normalizedEmergency !== "none" && normalizedEmergency !== "no") {
+    const mapped = emergencyCodeFor(normalizedEmergency);
+    return { active: true, code: mapped.code, label: mapped.label, source: "adsb_emergency", squawk, rawEmergency };
+  }
+  return { active: false, label: "No emergency reported", source: "none", squawk, rawEmergency };
+}
+
+function emergencyCodeFor(value: string): { code: NonNullable<FlightTrackOperationalStatus["emergency"]["code"]>; label: string } {
+  switch (value) {
+    case "general":
+      return { code: "general", label: "General emergency" };
+    case "nordo":
+    case "radio":
+      return { code: "radio_failure", label: "Radio failure" };
+    case "unlawful":
+    case "hijack":
+      return { code: "unlawful_interference", label: "Unlawful interference" };
+    case "minfuel":
+      return { code: "minimum_fuel", label: "Minimum fuel" };
+    case "lifeguard":
+    case "medical":
+      return { code: "lifeguard", label: "Medical or lifeguard flight" };
+    case "downed":
+      return { code: "downed", label: "Downed aircraft" };
+    case "reserved":
+      return { code: "reserved", label: "Reserved emergency code" };
+    default:
+      return { code: "unknown", label: `Emergency reported: ${value}` };
+  }
+}
+
+function flightPhaseFor(primary: RawFlightObservation): FlightTrackOperationalStatus["phase"] {
+  if (primary.onGround || primary.altitudeM === 0) {
+    return "ground";
+  }
+  if (typeof primary.verticalRateMps === "number") {
+    if (primary.verticalRateMps > 1) {
+      return "climb";
+    }
+    if (primary.verticalRateMps < -1) {
+      return "descent";
+    }
+  }
+  if (typeof primary.altitudeM === "number" && primary.altitudeM > 1500) {
+    return "cruise";
+  }
+  return "unknown";
+}
+
+function presentationFor(input: {
+  label: string;
+  iconHint: FlightTrackIconHint;
+  iconKey: FlightTrackIconKey;
+  headingDeg: number | undefined;
+  status: FlightTrackOperationalStatus;
+}): FlightTrackPresentation {
+  const color =
+    input.status.emergency.active
+      ? { colorKey: "emergency" as const, colorHex: "#ef4444" as const, colorReason: "emergency_detected" as const, zIndexPriority: 90 }
+      : input.status.delay.status === "delayed"
+        ? { colorKey: "delayed" as const, colorHex: "#eab308" as const, colorReason: "delay_detected" as const, zIndexPriority: 50 }
+        : {
+            colorKey: "normal" as const,
+            colorHex: "#22c55e" as const,
+            colorReason: input.status.delay.status === "unknown" ? ("delay_not_available" as const) : ("normal" as const),
+            zIndexPriority: 10
+          };
+
+  return {
+    label: input.label,
+    iconSet: "airspace-icons-mono-v1",
+    iconKey: input.iconKey,
+    iconFile: `${input.iconKey}.svg`,
+    iconHint: input.iconHint,
+    rotateWithHeading: true,
+    rotationDeg: input.headingDeg,
+    ...color
+  };
+}
+
+function isBusinessJetDesignator(designator: string): boolean {
+  return /^(C25|C5[256]|C68|C70|CL3|CL6|E5[05]|F2TH|F900|FA[057]|G[0-9]|GLF|GL[567]|H25|LJ|PRM|SF50)/.test(designator);
+}
+
+function isRegionalJetDesignator(designator: string): boolean {
+  return /^(CRJ|E1[3579]|E2[79]|ERJ|F70|F100|BCS[13])/.test(designator);
+}
+
+function isWidebodyDesignator(designator: string): boolean {
+  return /^(A30|A31|A33|A34|A35|A38|B76|B77|B78|B74|B748|IL9|IL96|MD11)/.test(designator);
+}
+
+function isJumboDesignator(designator: string): boolean {
+  return /^(A388|B74|B748|AN22|AN124|AN225)/.test(designator);
+}
+
+function isCargoDesignator(designator: string): boolean {
+  return /^(BLCF|A3ST|A124|AN12|AN26|C130|C17|C5M|IL76)/.test(designator);
+}
+
+function isMilitaryFighterDesignator(designator: string): boolean {
+  return /^(F1|F2|F3|F4|F5|F6|F7|F8|F9|F15|F16|F18|F22|F35|EUFI|MIG|SU[0-9]|RAFA|TOR|GRIP|L39|L159)/.test(designator);
+}
+
+function isMilitaryTransportDesignator(designator: string): boolean {
+  return /^(A400|C130|C17|C27J|C295|C5M|KC|IL76|AN12|AN26|AN72)/.test(designator);
+}
+
+function isMilitaryBomberDesignator(designator: string): boolean {
+  return /^(B1|B2|B52|TU16|TU22|TU95|TU160)/.test(designator);
+}
+
+function isMilitaryHelicopterDesignator(designator: string): boolean {
+  return /^(AH|H60|UH|CH|MI8|MI17|MI24|MI35|KA)/.test(designator);
+}
+
+function isHeavyHelicopterDesignator(designator: string): boolean {
+  return /^(CH47|CH53|MI26|S64)/.test(designator);
+}
+
+function isLightTwinDesignator(designator: string): boolean {
+  return /^(DA42|BE5[568]|BE9|PA3[014]|P68|C310|C340|C414|C421)/.test(designator);
 }
 
 function iconHintFor(

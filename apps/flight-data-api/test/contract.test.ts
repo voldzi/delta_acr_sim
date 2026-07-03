@@ -252,6 +252,19 @@ describe("Flight Data API contract", () => {
     expect(duplicated.deduplication.mergedRecordCount).toBe(2);
     expect(duplicated.aircraft.typeDesignator).toBe("A320");
     expect(duplicated.aircraft.iconHint).toBe("jet");
+    expect(duplicated.aircraft.iconKey).toBe("aircraft_06_narrowbody_airliner");
+    expect(duplicated.status.delay.status).toBe("unknown");
+    expect(duplicated.status.emergency.active).toBe(false);
+    expect(duplicated.presentation).toEqual(
+      expect.objectContaining({
+        iconSet: "airspace-icons-mono-v1",
+        iconKey: "aircraft_06_narrowbody_airliner",
+        iconFile: "aircraft_06_narrowbody_airliner.svg",
+        colorKey: "normal",
+        colorHex: "#22c55e",
+        colorReason: "delay_not_available"
+      })
+    );
   });
 
   it("provides the COP source projection", async () => {
@@ -368,6 +381,79 @@ describe("Flight Data API contract", () => {
     } finally {
       globalThis.fetch = previousFetch;
     }
+  });
+
+  it("marks emergency aircraft red and keeps the recommended icon metadata", async () => {
+    const descriptor: FlightDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "test",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const fetchedAt = new Date().toISOString();
+    const source: FlightDataSource = {
+      descriptor,
+      async fetchObservations() {
+        return {
+          source: descriptor,
+          fetchedAt,
+          warnings: [],
+          observations: [
+            {
+              sourceId: "mock",
+              sourceRecordId: "test:49d304",
+              sourcePriority: 10,
+              fetchedAt,
+              seenAt: fetchedAt,
+              icao24: "49d304",
+              callsign: "TVS8BC",
+              typeDesignator: "B738",
+              lat: 49.982,
+              lon: 14.1842,
+              speedMps: 217,
+              headingDeg: 116,
+              verticalRateMps: -4.6,
+              squawk: "7700",
+              emergency: "general",
+              category: "A3"
+            }
+          ]
+        };
+      }
+    };
+    const service = new FlightAggregationService(config, [source]);
+
+    const response = await service.getTracks({ bbox: undefined, limit: 10, sourceIds: ["mock"], includeStale: false });
+
+    expect(response.tracks[0]).toEqual(
+      expect.objectContaining({
+        status: expect.objectContaining({
+          emergency: expect.objectContaining({
+            active: true,
+            code: "general",
+            source: "squawk",
+            squawk: "7700"
+          }),
+          phase: "descent"
+        }),
+        presentation: expect.objectContaining({
+          label: "TVS8BC",
+          iconKey: "aircraft_06_narrowbody_airliner",
+          colorKey: "emergency",
+          colorHex: "#ef4444",
+          colorReason: "emergency_detected",
+          rotationDeg: 116
+        })
+      })
+    );
   });
 
   it("reads a local readsb/dump1090 aircraft.json feed", async () => {

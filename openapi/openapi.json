@@ -6539,6 +6539,176 @@
           }
         }
       },
+      "FlightDataOperationalStatus": {
+        "type": "object",
+        "required": [
+          "emergency",
+          "delay",
+          "phase"
+        ],
+        "properties": {
+          "emergency": {
+            "type": "object",
+            "required": [
+              "active",
+              "label",
+              "source"
+            ],
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "radio_failure",
+                  "unlawful_interference",
+                  "minimum_fuel",
+                  "lifeguard",
+                  "downed",
+                  "reserved",
+                  "unknown"
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "adsb_emergency",
+                  "squawk",
+                  "none"
+                ]
+              },
+              "squawk": {
+                "type": "string"
+              },
+              "rawEmergency": {
+                "type": "string"
+              }
+            }
+          },
+          "delay": {
+            "type": "object",
+            "required": [
+              "status",
+              "source"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "on_time",
+                  "delayed"
+                ]
+              },
+              "minutes": {
+                "type": "integer"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "not_available",
+                  "schedule_feed"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "ground",
+              "climb",
+              "cruise",
+              "descent",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "FlightDataPresentation": {
+        "type": "object",
+        "required": [
+          "label",
+          "iconSet",
+          "iconKey",
+          "iconFile",
+          "iconHint",
+          "rotateWithHeading",
+          "colorKey",
+          "colorHex",
+          "colorReason",
+          "zIndexPriority"
+        ],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "iconSet": {
+            "type": "string",
+            "const": "airspace-icons-mono-v1"
+          },
+          "iconKey": {
+            "type": "string"
+          },
+          "iconFile": {
+            "type": "string"
+          },
+          "iconHint": {
+            "type": "string",
+            "enum": [
+              "jet",
+              "turboprop",
+              "small_aircraft",
+              "helicopter",
+              "glider",
+              "uav",
+              "unknown"
+            ]
+          },
+          "rotateWithHeading": {
+            "type": "boolean",
+            "const": true
+          },
+          "rotationDeg": {
+            "type": "number"
+          },
+          "colorKey": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "delayed",
+              "emergency"
+            ]
+          },
+          "colorHex": {
+            "type": "string",
+            "enum": [
+              "#22c55e",
+              "#eab308",
+              "#ef4444"
+            ]
+          },
+          "colorReason": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "delay_detected",
+              "emergency_detected",
+              "delay_not_available"
+            ]
+          },
+          "zIndexPriority": {
+            "type": "integer"
+          }
+        }
+      },
       "FlightDataFlightTrack": {
         "type": "object",
         "required": [
@@ -6550,6 +6720,8 @@
           "lon",
           "position",
           "lastSeenAt",
+          "status",
+          "presentation",
           "sources",
           "deduplication",
           "quality"
@@ -6625,6 +6797,12 @@
           },
           "itinerary": {
             "$ref": "#/components/schemas/FlightDataItinerary"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FlightDataOperationalStatus"
+          },
+          "presentation": {
+            "$ref": "#/components/schemas/FlightDataPresentation"
           },
           "sources": {
             "type": "array",
@@ -7267,10 +7445,38 @@
           "category": {
             "type": "string"
           },
+          "sourceCategory": {
+            "type": "string"
+          },
+          "adsbCategory": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string",
+                "enum": [
+                  "aircraft",
+                  "rotorcraft",
+                  "uav",
+                  "surface",
+                  "obstacle",
+                  "unknown"
+                ]
+              }
+            }
+          },
           "engineType": {
             "type": "string"
           },
           "wakeTurbulenceCategory": {
+            "type": "string"
+          },
+          "classKey": {
             "type": "string"
           },
           "iconHint": {
@@ -7284,6 +7490,16 @@
               "uav",
               "unknown"
             ]
+          },
+          "iconKey": {
+            "type": "string"
+          },
+          "iconFile": {
+            "type": "string"
+          },
+          "iconSet": {
+            "type": "string",
+            "const": "airspace-icons-mono-v1"
           }
         }
       },

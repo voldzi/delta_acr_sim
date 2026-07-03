@@ -113,14 +113,79 @@ export interface FlightTrackSourceRef {
 
 export type FlightTrackIconHint = "jet" | "turboprop" | "small_aircraft" | "helicopter" | "glider" | "uav" | "unknown";
 
+export type FlightTrackIconKey =
+  | "aircraft_01_small_ga"
+  | "aircraft_02_light_twin"
+  | "aircraft_03_turboprop"
+  | "aircraft_04_business_jet"
+  | "aircraft_05_regional_jet"
+  | "aircraft_06_narrowbody_airliner"
+  | "aircraft_07_widebody_airliner"
+  | "aircraft_08_jumbo_airliner"
+  | "aircraft_09_cargo_freighter"
+  | "aircraft_10_glider"
+  | "aircraft_11_military_fighter"
+  | "aircraft_12_military_transport"
+  | "aircraft_13_military_bomber"
+  | "aircraft_14_aerobatic_prop"
+  | "aircraft_15_seaplane"
+  | "aircraft_16_ultralight"
+  | "aircraft_17_helicopter_light"
+  | "aircraft_18_helicopter_medium"
+  | "aircraft_19_helicopter_heavy"
+  | "aircraft_20_helicopter_military"
+  | "drone_01_quadcopter"
+  | "drone_02_hexacopter"
+  | "drone_03_fixed_wing_uav"
+  | "drone_04_fpv_racing"
+  | "drone_05_vtol_hybrid";
+
+export type FlightTrackAircraftClass =
+  | "small_ga"
+  | "light_twin"
+  | "turboprop"
+  | "business_jet"
+  | "regional_jet"
+  | "narrowbody_airliner"
+  | "widebody_airliner"
+  | "jumbo_airliner"
+  | "cargo_freighter"
+  | "glider"
+  | "military_fighter"
+  | "military_transport"
+  | "military_bomber"
+  | "aerobatic_prop"
+  | "seaplane"
+  | "ultralight"
+  | "helicopter_light"
+  | "helicopter_medium"
+  | "helicopter_heavy"
+  | "helicopter_military"
+  | "uav_multirotor"
+  | "uav_fixed_wing"
+  | "uav_vtol"
+  | "unknown";
+
+export interface FlightAdsbEmitterCategory {
+  code: string;
+  label: string;
+  group: "aircraft" | "rotorcraft" | "uav" | "surface" | "obstacle" | "unknown";
+}
+
 export interface FlightTrackAircraft {
   typeDesignator?: string;
   manufacturer?: string;
   model?: string;
   category?: string;
+  sourceCategory?: string;
+  adsbCategory?: FlightAdsbEmitterCategory;
   engineType?: string;
   wakeTurbulenceCategory?: string;
+  classKey: FlightTrackAircraftClass;
   iconHint: FlightTrackIconHint;
+  iconKey: FlightTrackIconKey;
+  iconFile: string;
+  iconSet: "airspace-icons-mono-v1";
 }
 
 export interface FlightItineraryAirport {
@@ -191,6 +256,38 @@ export interface FlightTrackPosition {
   lon: number;
 }
 
+export interface FlightTrackOperationalStatus {
+  emergency: {
+    active: boolean;
+    code?: "general" | "radio_failure" | "unlawful_interference" | "minimum_fuel" | "lifeguard" | "downed" | "reserved" | "unknown";
+    label: string;
+    source: "adsb_emergency" | "squawk" | "none";
+    squawk?: string;
+    rawEmergency?: string;
+  };
+  delay: {
+    status: "unknown" | "on_time" | "delayed";
+    minutes?: number;
+    source: "not_available" | "schedule_feed";
+    reason?: string;
+  };
+  phase: "ground" | "climb" | "cruise" | "descent" | "unknown";
+}
+
+export interface FlightTrackPresentation {
+  label: string;
+  iconSet: "airspace-icons-mono-v1";
+  iconKey: FlightTrackIconKey;
+  iconFile: string;
+  iconHint: FlightTrackIconHint;
+  rotateWithHeading: true;
+  rotationDeg?: number;
+  colorKey: "normal" | "delayed" | "emergency";
+  colorHex: "#22c55e" | "#eab308" | "#ef4444";
+  colorReason: "normal" | "delay_detected" | "emergency_detected" | "delay_not_available";
+  zIndexPriority: number;
+}
+
 export interface AggregatedFlightTrack {
   trackId: string;
   icao24: string;
@@ -209,6 +306,8 @@ export interface AggregatedFlightTrack {
   originCountry?: string;
   aircraft?: FlightTrackAircraft;
   itinerary?: FlightItinerary;
+  status: FlightTrackOperationalStatus;
+  presentation: FlightTrackPresentation;
   sources: FlightTrackSourceRef[];
   deduplication: {
     key: "icao24";
@@ -224,6 +323,7 @@ export interface AggregatedFlightTrack {
     onGround?: boolean;
     squawk?: string;
     emergency?: string;
+    sourceCategory?: string;
     sourceLicenses: string[];
   };
 }

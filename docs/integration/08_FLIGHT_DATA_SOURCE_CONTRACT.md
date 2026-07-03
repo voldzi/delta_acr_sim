@@ -105,9 +105,46 @@ speciální ořezávání kvůli této cache optimalizaci.
         "manufacturer": "Airbus",
         "model": "A320",
         "category": "LandPlane",
+        "sourceCategory": "A3",
+        "adsbCategory": {
+          "code": "A3",
+          "label": "Large aircraft",
+          "group": "aircraft"
+        },
         "engineType": "Jet",
         "wakeTurbulenceCategory": "Medium",
-        "iconHint": "jet"
+        "classKey": "narrowbody_airliner",
+        "iconHint": "jet",
+        "iconKey": "aircraft_06_narrowbody_airliner",
+        "iconFile": "aircraft_06_narrowbody_airliner.svg",
+        "iconSet": "airspace-icons-mono-v1"
+      },
+      "status": {
+        "emergency": {
+          "active": false,
+          "label": "No emergency reported",
+          "source": "none",
+          "squawk": "2741"
+        },
+        "delay": {
+          "status": "unknown",
+          "source": "not_available",
+          "reason": "No authorized scheduled/actual departure-arrival feed is configured; render as normal unless SIM later reports delayed."
+        },
+        "phase": "climb"
+      },
+      "presentation": {
+        "label": "CSA42",
+        "iconSet": "airspace-icons-mono-v1",
+        "iconKey": "aircraft_06_narrowbody_airliner",
+        "iconFile": "aircraft_06_narrowbody_airliner.svg",
+        "iconHint": "jet",
+        "rotateWithHeading": true,
+        "rotationDeg": 268,
+        "colorKey": "normal",
+        "colorHex": "#22c55e",
+        "colorReason": "delay_not_available",
+        "zIndexPriority": 10
       },
       "sources": [
         {
@@ -164,6 +201,10 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - COM má pro zobrazený název preferovat `callsign`, potom `registration`, potom `icao24`. SIM nesmí při chybějícím callsignu posílat technický fallback typu `flight:icao24:*` do pole `callsign`.
 - `position.lat/lon` je normalizovaná poloha pro nové integrace; kořenová pole `lat/lon` zůstávají kvůli zpětné kompatibilitě.
 - `aircraft.iconHint` je volitelný prezentační hint pro civilní symboliku. Povolené hodnoty jsou `jet`, `turboprop`, `small_aircraft`, `helicopter`, `glider`, `uav`, `unknown`.
+- `aircraft.iconKey` a `presentation.iconKey` jsou autoritativní doporučení pro SVG sadu `airspace-icons-mono-v1`. Hodnota odpovídá názvu souboru bez `.svg`, například `aircraft_06_narrowbody_airliner` -> `aircraft_06_narrowbody_airliner.svg`.
+- `presentation.rotationDeg` je hodnota pro otočení symbolu podle kurzu. Ikony jsou orientované nosem na sever, COM je má rotovat přímo touto hodnotou.
+- `presentation.colorKey` je autoritativní doporučená barva pro COP: `normal` zelená `#22c55e`, `delayed` žlutá `#eab308`, `emergency` červená `#ef4444`. Pokud SIM nemá licencovaný schedule feed, `status.delay.status=unknown`, `presentation.colorKey=normal` a `presentation.colorReason=delay_not_available`.
+- Nouze se odvozuje z ADS-B emergency pole a nouzových squawků `7500`, `7600`, `7700`. Při aktivní nouzi má COM vždy preferovat `presentation.colorKey=emergency` před zpožděním.
 - Pokud je dostupná referenční trasa podle callsignu, SIM doplní `track.itinerary`. Pole obsahuje původní/destinační letiště, waypointy, IATA/ICAO kódy, prezentační `display.title`, odhad průběhu letu a odhadované ETA. Plánované a skutečné časy odletu/příletu jsou v otevřeném ADS-B číselníku označené jako `status=unavailable`; COM je nesmí zobrazit jako letištní schedule.
 
 Příklad zkrácené části `track.itinerary`:
@@ -221,6 +262,8 @@ FLIGHT_ROUTE_CACHE_TTL_SECONDS=86400
 ```
 
 Tento zdroj je vhodný pro otevřený route hint podle callsignu a letištní referenci, ne pro plánované nebo skutečné časy letů. Pokud import vypadne, letové stopy zůstávají dostupné a odpověď obsahuje `warnings`.
+
+Odlety, přílety, plánované časy a zpoždění nejsou součástí ADS-B ani VRS standing data. Praha/PRG provozní FIDS data nabízí jako placené datové rozhraní po smluvním zřízení přístupu; komerční zdroje typu SITA/Cirium/FlightAware/aviationstack vyžadují samostatnou licenci a konfiguraci. Do té doby SIM posílá `status.delay.status=unknown` a COP musí let vykreslit zeleně, pokud není aktivní nouze.
 
 `GET /api/v1/airspaces` vrací GeoJSON `FeatureCollection` s referenčními leteckými prostory z AIP/eAIP ENR 5.1:
 
