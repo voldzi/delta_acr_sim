@@ -168,7 +168,7 @@ function parseHzsIncidentFeeds(value: string | undefined): HzsIncidentFeedConfig
     },
     {
       id: "hzs-kralovehradecky",
-      url: "https://udalostikhk.hzscr.cz/api/",
+      url: "http://udalostikhk.hzscr.cz/api/",
       label: "HZS Královéhradeckého kraje - veřejné události",
       regionName: "Královéhradecký kraj",
       fallbackLon: 15.83,

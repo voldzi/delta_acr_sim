@@ -619,7 +619,7 @@ NASA_FIRMS_SOURCE=VIIRS_SNPP_NRT
 NASA_FIRMS_DAY_RANGE=1
 GDACS_RSS_URL=https://www.gdacs.org/xml/rss.xml
 GDACS_CACHE_TTL_SECONDS=900
-HZS_INCIDENTS_FEEDS=https://www.hzspa.cz/vyjezdy/aktualni-vyjezdy.php|HZS Pardubického kraje - aktuální výjezdy|Pardubický kraj|15.78|49.94|15.3,49.45,16.95,50.35|hzs-pardubice|html;https://udalostikhk.hzscr.cz/api/|HZS Královéhradeckého kraje - veřejné události|Královéhradecký kraj|15.83|50.21|15.05,49.9,16.75,50.85|hzs-kralovehradecky|khk-json
+HZS_INCIDENTS_FEEDS=https://www.hzspa.cz/vyjezdy/aktualni-vyjezdy.php|HZS Pardubického kraje - aktuální výjezdy|Pardubický kraj|15.78|49.94|15.3,49.45,16.95,50.35|hzs-pardubice|html;http://udalostikhk.hzscr.cz/api/|HZS Královéhradeckého kraje - veřejné události|Královéhradecký kraj|15.83|50.21|15.05,49.9,16.75,50.85|hzs-kralovehradecky|khk-json
 HZS_INCIDENTS_CACHE_TTL_SECONDS=180
 HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS=1800
 HZS_INCIDENTS_MAX_ACTIVE_DETAILS=50
@@ -673,6 +673,10 @@ kraje a HZS Kralovehradeckeho kraje. Dalsi krajsky feed se prida do
 `url|label|region|lon|lat|west,south,east,north|id|format`, kde `format` je
 `html` pro stranku se sekci `Probihajici vyjezdy` nebo `khk-json` pro verejne
 JSON API HZS Kralovehradeckeho kraje. Pokud `format` chybi, pouzije se `html`.
+KHK feed je ve vychozi konfiguraci veden pres HTTP, protoze verejny HTTPS
+endpoint aktualne neposkytuje kompletni certifikacni retezec pro Node/Alpine;
+feed neobsahuje autentizaci ani tajne udaje. Po oprave TLS retezce upstreamem
+staci zmenit URL na `https://udalostikhk.hzscr.cz/api/`.
 `nasa_firms` zustava volitelny zdroj pro satelitni pozarni detekce a nezapina se
 bez `NASA_FIRMS_MAP_KEY`.
 
