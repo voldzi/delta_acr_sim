@@ -128,6 +128,8 @@ const FILTERED_MUNICIPAL_ALERT_FEED_IDS = new Set([
 const LOCAL_MUNICIPAL_NEWS_FEED_IDS = new Set(["bruntal-uredni-rss", "krnov-aktuality-rss", "vrbno-aktuality-rss"]);
 const MUNICIPAL_WARNING_TEXT_PATTERN =
   /vystrah|varov|nebezpec|zvysene nebezpeci|krizov|mimoradn|evaku|pozar|povod|zaplav|unik nebezpec|havari|kalamit|nakaz|ptaci chrip|pitn|kontamin|hygien|zdrav|nouzov|uzavir|uzavren|omezeni provozu|neprujezd|nesjizd|povodnova skoda|oprava kanalizace|porucha vodovod|vypadek elektr|vypadek proudu/;
+const LOCAL_MUNICIPAL_WARNING_TITLE_PATTERN =
+  /vystrah|varov|nebezpec|mimoradn|evaku|pozar|povodnova skoda|unik nebezpec|havari|kalamit|nouzov|uzavir|uzavren|omezeni provozu|neprujezd|nesjizd|porucha vodovod|vypadek elektr|vypadek proudu/;
 
 const ROAD_SRTI_LOD_LICENSE: SafetyDataLicense = {
   name: "NDIC/ŘSD SRTI Linked Open Data",
@@ -2741,14 +2743,15 @@ function isMunicipalAlertPublishable(item: MunicipalAlertItem, feed: MunicipalAl
     return true;
   }
   const text = normalizeCzechKey(`${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`);
-  if (LOCAL_MUNICIPAL_NEWS_FEED_IDS.has(feed.id) && isMunicipalNewsNoise(text)) {
-    return false;
+  if (LOCAL_MUNICIPAL_NEWS_FEED_IDS.has(feed.id)) {
+    const title = normalizeCzechKey(item.title);
+    return LOCAL_MUNICIPAL_WARNING_TITLE_PATTERN.test(title) && !isMunicipalNewsNoise(title);
   }
   return MUNICIPAL_WARNING_TEXT_PATTERN.test(text);
 }
 
 function isMunicipalNewsNoise(text: string): boolean {
-  return /dotac|zasedani|usneseni|volb|pronajem|prodej|zamer prodeje|zadost o odkoupeni|verejna vyhlaska|zavazne stanovisko|rozpoctove opatreni|nabidka prace|kulturn|festival|sport|kalendar svozu|doklady pripravene|nalezy? -|mereni rychlosti/.test(
+  return /dotac|zasedani|usneseni|volb|pronajem|prodej|zamer prodeje|zadost o odkoupeni|verejna vyhlaska|zavazne stanovisko|rozpoctove opatreni|nabidka prace|kulturn|festival|sport|kalendar svozu|doklady pripravene|nalezy? -|mereni rychlosti|obnova|projekt|zavody|doprovodny program|osoby v krizovych situacich|osoby se zdravotnim|darovani krve|lekarske pohotovostni|pokracuji prace/.test(
     text
   );
 }
