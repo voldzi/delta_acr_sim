@@ -11,7 +11,10 @@ export interface HzsIncidentFeedConfig {
   fallbackLon: number;
   fallbackLat: number;
   bbox: BoundingBox;
+  format?: HzsIncidentFeedFormat;
 }
+
+export type HzsIncidentFeedFormat = "html" | "khk-json";
 
 export type MunicipalAlertFeedFormat = "auto" | "rss" | "atom" | "georss" | "geojson" | "pkr-json";
 
@@ -160,7 +163,18 @@ function parseHzsIncidentFeeds(value: string | undefined): HzsIncidentFeedConfig
       regionName: "Pardubický kraj",
       fallbackLon: 15.78,
       fallbackLat: 49.94,
-      bbox: { west: 15.3, south: 49.45, east: 16.95, north: 50.35 }
+      bbox: { west: 15.3, south: 49.45, east: 16.95, north: 50.35 },
+      format: "html"
+    },
+    {
+      id: "hzs-kralovehradecky",
+      url: "https://udalostikhk.hzscr.cz/api/",
+      label: "HZS Královéhradeckého kraje - veřejné události",
+      regionName: "Královéhradecký kraj",
+      fallbackLon: 15.83,
+      fallbackLat: 50.21,
+      bbox: { west: 15.05, south: 49.9, east: 16.75, north: 50.85 },
+      format: "khk-json"
     }
   ];
   const raw = emptyToUndefined(value);
@@ -304,7 +318,7 @@ function parseMunicipalAlertFeedFormat(value: string | undefined): MunicipalAler
 
 function parseHzsIncidentFeed(value: string, index: number): HzsIncidentFeedConfig | undefined {
   const parts = value.split("|").map((part) => part.trim());
-  const [url, label, regionName, lonRaw, latRaw, bboxRaw, idRaw] = parts;
+  const [url, label, regionName, lonRaw, latRaw, bboxRaw, idRaw, formatRaw] = parts;
   if (!url) {
     return undefined;
   }
@@ -321,8 +335,14 @@ function parseHzsIncidentFeed(value: string, index: number): HzsIncidentFeedConf
     regionName: regionName || label || `HZS region ${index + 1}`,
     fallbackLon: lon,
     fallbackLat: lat,
-    bbox
+    bbox,
+    format: parseHzsIncidentFeedFormat(formatRaw)
   };
+}
+
+function parseHzsIncidentFeedFormat(value: string | undefined): HzsIncidentFeedFormat {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "khk-json" ? "khk-json" : "html";
 }
 
 function parseBbox(value: string | undefined): BoundingBox | undefined {

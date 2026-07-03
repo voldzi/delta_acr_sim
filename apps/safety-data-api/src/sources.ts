@@ -925,11 +925,17 @@ class HzsIncidentsSource implements SafetyDataSource {
   }
 
   private async fetchFeed(feed: HzsIncidentFeedConfig, fetchedAt: string): Promise<HzsIncidentRecord[]> {
+    if (feed.format === "khk-json") {
+      return fetchHzsKhkJsonFeed(feed, fetchedAt, this.config.requestTimeoutMs);
+    }
     const html = await requestText(feed.url, this.config.requestTimeoutMs);
     return parseHzsActiveIncidentRows(html, feed, fetchedAt);
   }
 
   private async fetchDetailSafe(record: HzsIncidentRecord): Promise<HzsIncidentDetail> {
+    if (record.detail) {
+      return record.detail;
+    }
     const detailUrl = record.detailUrl;
     if (!detailUrl) {
       return {};
@@ -945,6 +951,17 @@ class HzsIncidentsSource implements SafetyDataSource {
   }
 
   private async geocodeIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail): Promise<HzsIncidentGeocode> {
+    if (record.point) {
+      return {
+        lon: record.point.lon,
+        lat: record.point.lat,
+        precision: "source_point",
+        label: hzsAddress(record, detail) || record.location,
+        confidence: 0.95,
+        countryCode: "CZ",
+        source: record.point.basis
+      };
+    }
     const candidates = hzsGeocodeCandidates(record, detail);
     const cacheKey = `${record.feed.id}:${candidates.join("|")}`;
     return this.geocodeCache.getOrLoad(cacheKey, async () => {
@@ -1283,6 +1300,8 @@ interface HzsIncidentRecord {
   status?: string;
   announcedAt: string;
   detailUrl?: string;
+  detail?: HzsIncidentDetail;
+  point?: { lon: number; lat: number; basis: string };
   iconAlt?: string;
   raw: Record<string, unknown>;
 }
@@ -1302,7 +1321,7 @@ interface HzsIncidentDetail {
 interface HzsIncidentGeocode {
   lon: number;
   lat: number;
-  precision: "municipality_centroid" | "admin_boundary_centroid" | "region_centroid";
+  precision: "source_point" | "municipality_centroid" | "admin_boundary_centroid" | "region_centroid";
   label: string;
   confidence: number;
   adminLevel?: string;
@@ -1318,6 +1337,25 @@ interface HzsBoundaryPointRow {
   country_code: string | null;
   lon: number;
   lat: number;
+}
+
+interface HzsKhkIncidentDto {
+  id?: number | string;
+  casOhlaseni?: string | null;
+  stavId?: number | string | null;
+  typId?: number | string | null;
+  podtypId?: number | string | null;
+  poznamkaProMedia?: string | null;
+  kraj?: { id?: number | string; nazev?: string | null } | null;
+  okres?: { id?: number | string; nazev?: string | null } | null;
+  obec?: string | null;
+  castObce?: string | null;
+  ORP?: string | null;
+  ulice?: string | null;
+  gis1?: string | number | null;
+  gis2?: string | number | null;
+  silnice?: string | null;
+  zoc?: boolean | null;
 }
 
 interface MunicipalAlertItem {
@@ -2612,6 +2650,186 @@ function parseHzsIncidentDetail(html: string): HzsIncidentDetail {
   };
 }
 
+async function fetchHzsKhkJsonFeed(feed: HzsIncidentFeedConfig, fetchedAt: string, timeoutMs: number): Promise<HzsIncidentRecord[]> {
+  const payload = await requestJson<unknown>(hzsKhkJsonFeedUrl(feed.url, fetchedAt), timeoutMs);
+  const records = Array.isArray(payload) ? payload : [];
+  return records
+    .map((item) => parseHzsKhkJsonIncident(item, feed, fetchedAt))
+    .filter((record): record is HzsIncidentRecord => Boolean(record));
+}
+
+const HZS_KHK_ACTIVE_STATUS_IDS = [210, 400, 410, 420, 430, 440];
+
+const HZS_KHK_TYPE_NAMES = new Map<number, string>([
+  [3100, "POŽÁR"],
+  [3200, "DOPRAVNÍ NEHODA"],
+  [3400, "ÚNIK NEBEZPEČNÝCH LÁTEK"],
+  [3500, "TECHNICKÁ POMOC"],
+  [3550, "ZÁCHRANA OSOB A ZVÍŘAT"],
+  [3600, "FORMÁLNĚ ZALOŽENÁ UDÁLOST"],
+  [3700, "JINÁ UDÁLOST"],
+  [3800, "PLANÝ POPLACH"],
+  [3900, "TECHNOLOGICKÝ TEST"],
+  [5000, "UDÁLOST NA OBJEKT"]
+]);
+
+const HZS_KHK_SUBTYPE_NAMES = new Map<number, string>([
+  [3101, "NÍZKÉ BUDOVY"],
+  [3102, "VÝŠKOVÉ BUDOVY"],
+  [3103, "PRŮMYSLOVÉ, ZEMĚDĚLSKÉ OBJEKTY, SKLADY"],
+  [3104, "SHROMAŽDIŠTĚ OSOB"],
+  [3105, "PODZEMNÍ PROSTORY, TUNELY"],
+  [3106, "POLNÍ POROST, TRÁVA"],
+  [3107, "TRAFOSTANICE, ROZVODNY"],
+  [3108, "DOPRAVNÍ PROSTŘEDKY"],
+  [3109, "POPELNICE, KONTEJNER"],
+  [3110, "LESNÍ POROST"],
+  [3111, "ODPAD, OSTATNÍ"],
+  [3112, "KŮLNY, PŘÍSTŘEŠKY"],
+  [3113, "SKLÁDKA"],
+  [3114, "CHEMICKÝ PRŮMYSL"],
+  [3115, "NEMOCNICE, LDN, DOMOVY DŮCHODCŮ"],
+  [3116, "KABELOVÉ KANÁLY, KOLEKTORY"],
+  [3117, "SAZÍ V KOMÍNĚ"],
+  [3211, "VYPROŠTĚNÍ OSOB"],
+  [3212, "UVOLNĚNÍ KOMUNIKACE, ODTAŽENÍ"],
+  [3213, "ÚKLID VOZOVKY"],
+  [3214, "SE ZRANĚNÍM"],
+  [3215, "PROSTŘEDEK HROMADNÉ PŘEPRAVY OSOB"],
+  [3231, "ŽELEZNIČNÍ"],
+  [3241, "LETECKÁ"],
+  [3401, "NA POZEMNÍ KOMUNIKACI"],
+  [3402, "DO PŮDY"],
+  [3403, "NA (DO) VODNÍ PLOCHU"],
+  [3404, "DO OVZDUŠÍ"],
+  [3501, "ODSTRANĚNÍ NEBEZPEČNÝCH STAVŮ"],
+  [3502, "SPOLUPRÁCE SE SLOŽKAMI IZS"],
+  [3503, "DESTRUKCE OBJEKTU"],
+  [3504, "NÁHRADA NEFUNKČNÍHO ZAŘÍZENÍ"],
+  [3505, "ODSTRANĚNÍ STROMU"],
+  [3521, "Z VODY"],
+  [3522, "Z VÝŠKY"],
+  [3523, "UZAVŘENÉ PROSTORY, VÝTAH"],
+  [3524, "ZASYPANÉ, ZAVALENÉ"],
+  [3525, "OTEVŘENÍ UZAVŘENÝCH PROSTOR"],
+  [3526, "ODSTRAŇOVÁNÍ PŘEKÁŽEK"],
+  [3527, "ČERPÁNÍ VODY"],
+  [3528, "MĚŘENÍ KONCENTRACÍ"],
+  [3529, "Z HLOUBKY"],
+  [3530, "AED"],
+  [3531, "Z TERÉNU"],
+  [3533, "ŽÁDOST ZDRAVOTNICKÉHO ZAŘÍZENÍ"],
+  [3541, "MONITORING"],
+  [3542, "LIKVIDACE OBTÍŽNÉHO HMYZU"],
+  [3543, "TRANSPORT PACIENTA"],
+  [3601, "OSTATNÍ FORMÁLNĚ ZALOŽENÁ UDÁLOST"],
+  [3602, "ŽIVELNÍ POHROMA"],
+  [3603, "HUMANITÁRNÍ POMOC"],
+  [3711, "EVAKUACE A OCHRANA OBYVATEL PLOŠNÁ"],
+  [3712, "JINÉ"],
+  [3713, "INFORMACE PRO DOPRAVU"],
+  [3811, "PLANÝ POPLACH"],
+  [3921, "TECHNOLOGICKÝ TEST"],
+  [3931, "ZLOMYSLNÉ VOLÁNÍ"],
+  [10003, "OSTATNÍ"],
+  [10006, "ZOČ"]
+]);
+
+const HZS_KHK_STATUS_NAMES = new Map<number, string>([
+  [210, "Převzatá"],
+  [400, "Otevřená, bez SaP"],
+  [410, "Otevřená, SaP na cestě"],
+  [420, "Otevřená, SaP na místě"],
+  [430, "Lokalizovaná"],
+  [440, "Likvidovaná"]
+]);
+
+function hzsKhkJsonFeedUrl(baseUrl: string, fetchedAt: string): string {
+  const current = pragueDateParts(new Date(fetchedAt));
+  const from = isoFromPragueParts(current.year, current.month, current.day, 0, 0) ?? fetchedAt;
+  const to = isoFromPragueParts(current.year, current.month, current.day, 23, 59) ?? addSeconds(fetchedAt, 60 * 60);
+  const url = new URL(baseUrl);
+  url.searchParams.set("casOd", from);
+  url.searchParams.set("casDo", to);
+  url.searchParams.set("krajId", "86");
+  for (const statusId of HZS_KHK_ACTIVE_STATUS_IDS) {
+    url.searchParams.append("stavIds", String(statusId));
+  }
+  return url.toString();
+}
+
+function parseHzsKhkJsonIncident(value: unknown, feed: HzsIncidentFeedConfig, fetchedAt: string): HzsIncidentRecord | undefined {
+  const item = asRecord(value) as HzsKhkIncidentDto | undefined;
+  if (!item?.id) {
+    return undefined;
+  }
+  const statusId = optionalNumber(item.stavId);
+  if (statusId !== undefined && !HZS_KHK_ACTIVE_STATUS_IDS.includes(statusId)) {
+    return undefined;
+  }
+  const typeId = optionalNumber(item.typId);
+  const subtypeId = optionalNumber(item.podtypId);
+  const type = (typeId !== undefined ? HZS_KHK_TYPE_NAMES.get(typeId) : undefined) ?? `HZS událost ${typeId ?? ""}`.trim();
+  const subtype = subtypeId !== undefined ? HZS_KHK_SUBTYPE_NAMES.get(subtypeId) : undefined;
+  const status = (statusId !== undefined ? HZS_KHK_STATUS_NAMES.get(statusId) : undefined) ?? (statusId !== undefined ? `Stav ${statusId}` : undefined);
+  const municipality = optionalString(item.obec);
+  const municipalityPart = optionalString(item.castObce);
+  const street = optionalString(item.ulice);
+  const district = optionalString(item.okres?.nazev);
+  const location = [municipality, municipalityPart !== municipality ? municipalityPart : undefined, street].filter(Boolean).join(" - ") || feed.regionName;
+  const point = hzsKhkPoint(item);
+  const description = optionalString(item.poznamkaProMedia);
+
+  return {
+    id: String(item.id),
+    feed,
+    location,
+    type,
+    status,
+    announcedAt: normalizeTimestamp(optionalString(item.casOhlaseni)) ?? fetchedAt,
+    detail: {
+      description,
+      type,
+      subtype,
+      district,
+      municipality,
+      municipalityPart,
+      street: street ?? optionalString(item.silnice),
+      status
+    },
+    point,
+    raw: {
+      feedId: feed.id,
+      format: "khk-json",
+      id: item.id,
+      statusId,
+      typeId,
+      subtypeId,
+      region: optionalString(item.kraj?.nazev),
+      district,
+      municipality,
+      municipalityPart,
+      orp: optionalString(item.ORP),
+      street,
+      road: optionalString(item.silnice),
+      zoc: item.zoc,
+      gis1: item.gis1,
+      gis2: item.gis2,
+      description
+    }
+  };
+}
+
+function hzsKhkPoint(item: HzsKhkIncidentDto): { lon: number; lat: number; basis: string } | undefined {
+  const gis1 = optionalNumber(item.gis1);
+  const gis2 = optionalNumber(item.gis2);
+  if (gis1 === undefined || gis2 === undefined) {
+    return undefined;
+  }
+  const [lon, lat] = proj4(SJTSK_KROVAK_PROJ, WGS84_PROJ, [-Math.abs(gis1), -Math.abs(gis2)]);
+  return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat, basis: "source_sjtsk_point" } : undefined;
+}
+
 function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, geocode: HzsIncidentGeocode, query: SafetyQuery, fetchedAt: string): SafetyFeature[] {
   const classification = classifyHzsIncident(detail.type ?? record.type, detail.subtype, detail.description);
   const targetLayers = hzsRequestedLayers(classification.primaryLayer, query.layers);
@@ -2663,7 +2881,7 @@ function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, ge
       countryCode: geocode.countryCode ?? "CZ",
       detailUrl: record.detailUrl,
       iconHint: classification.iconHint,
-      basis: ["hzs_active_dispatch_table", record.feed.id, classification.typeCode],
+      basis: [record.feed.format === "khk-json" ? "hzs_active_dispatch_json" : "hzs_active_dispatch_table", record.feed.id, classification.typeCode],
       metrics: compactMetrics({
         locationConfidence: geocode.confidence
       }),

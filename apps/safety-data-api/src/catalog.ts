@@ -293,7 +293,10 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         selectableInMap: true,
         feedsLayerIds: ["safety.warnings", "safety.fire"],
         feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"],
-        notes: ["Public HZS active dispatch source for ongoing incidents; SIM exposes type, subtype, status, unit, locality and explicit location precision."]
+        notes: [
+          "Public HZS active dispatch source for ongoing incidents; SIM exposes type, subtype, status, unit, locality and explicit location precision.",
+          "Some feeds provide source coordinates transformed from S-JTSK/Krovak to WGS84; other feeds are geocoded to administrative centroids or explicit regional fallback points."
+        ]
       };
     case "municipal_alerts":
       return {

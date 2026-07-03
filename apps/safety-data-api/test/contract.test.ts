@@ -1213,6 +1213,88 @@ describe("Safety Data API contract", () => {
     );
   });
 
+  it("normalizes Královéhradecký HZS JSON dispatches with source coordinates", async () => {
+    const hzsKhkJson = JSON.stringify([
+      {
+        id: 273442001,
+        casOhlaseni: "2026-07-03T10:15:00.000Z",
+        stavId: 420,
+        typId: 3100,
+        podtypId: 3110,
+        poznamkaProMedia: "Požár lesního porostu.",
+        kraj: { id: 86, nazev: "Královéhradecký" },
+        okres: { id: 3610, nazev: "Trutnov" },
+        obec: "Žacléř",
+        castObce: "Žacléř",
+        ORP: "Trutnov",
+        ulice: "Ml. horníků",
+        gis1: "629800",
+        gis2: "993939",
+        zoc: false
+      },
+      {
+        id: 273442002,
+        casOhlaseni: "2026-07-03T09:15:00.000Z",
+        stavId: 510,
+        typId: 3200,
+        podtypId: 3214,
+        kraj: { id: 86, nazev: "Královéhradecký" },
+        okres: { id: 3602, nazev: "Hradec Králové" },
+        obec: "Hradec Králové",
+        gis1: "641000",
+        gis2: "1045000"
+      }
+    ]);
+
+    await withFixtureServer({ "/api/": hzsKhkJson }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["hzs_incidents"],
+        hzsIncidentFeeds: [
+          {
+            id: "hzs-khk-test",
+            url: `${baseUrl}/api/`,
+            label: "HZS KHK fixture",
+            regionName: "Královéhradecký kraj",
+            fallbackLon: 15.83,
+            fallbackLat: 50.21,
+            bbox: { west: 15.0, south: 49.9, east: 16.8, north: 50.9 },
+            format: "khk-json"
+          }
+        ]
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=15.0,49.9,16.8,50.9&layers=warnings,fire&source=hzs_incidents&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(2);
+      expect(JSON.stringify(response.body)).not.toContain("Hradec Králové");
+      expect(response.body.features).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            properties: expect.objectContaining({
+              layerId: "public.safety.fire",
+              providerLayerId: "safety.fire",
+              category: "active_fire_incident",
+              hazardType: "fire",
+              status: "on_scene",
+              basis: ["hzs_active_dispatch_json", "hzs-khk-test", "HZS_FIRE"],
+              metrics: expect.objectContaining({ locationConfidence: 0.95 }),
+              tags: expect.objectContaining({
+                locationPrecision: "source_point",
+                locationSource: "source_sjtsk_point",
+                municipality: "Žacléř",
+                district: "Trutnov",
+                subtype: "LESNÍ POROST"
+              })
+            })
+          })
+        ])
+      );
+    });
+  });
+
   it("normalizes configured municipal GeoRSS alerts into crisis warnings", async () => {
     const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:georss="http://www.georss.org/georss">
@@ -1777,7 +1859,8 @@ async function withFixtureServer(
 ): Promise<void> {
   const server = createServer((req, res) => {
     onRequest?.(req.url ?? "");
-    const route = routes[req.url ?? ""];
+    const pathname = new URL(req.url ?? "/", "http://fixture.local").pathname;
+    const route = routes[req.url ?? ""] ?? routes[pathname];
     if (route === undefined) {
       res.writeHead(404).end("not found");
       return;
