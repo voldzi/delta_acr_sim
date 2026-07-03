@@ -1,5 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import { Pool } from "pg";
+import proj4 from "proj4";
 import { ChmiHydroHistoryStore, type ChmiHydroHistoryRecord, type ChmiHydroSourceKind } from "./chmi-hydro-history.js";
 import {
   chmiAwarenessLevel,
@@ -108,11 +109,15 @@ const MUNICIPAL_ALERTS_LICENSE: SafetyDataLicense = {
   commercialUse: "unknown",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "SIM only normalizes configured public or partner-authorized RSS/Atom/GeoRSS/GeoJSON feeds.",
+    "SIM normalizes configured public or partner-authorized RSS/Atom/GeoRSS/GeoJSON feeds and selected public regional PKR JSON endpoints.",
     "Exact legal terms, attribution and operational use must be verified for each configured authority feed.",
     "If a feed item has no geometry, SIM publishes an explicitly marked fallback point for situational awareness only."
   ]
 };
+
+const SJTSK_KROVAK_PROJ =
+  "+proj=krovak +lat_0=49.5 +lon_0=24.83333333333333 +alpha=30.28813975277778 +k=0.9999 +x_0=0 +y_0=0 +ellps=bessel +towgs84=570.8,85.7,462.8,4.998,1.587,5.261,3.56 +units=m +no_defs";
+const WGS84_PROJ = "+proj=longlat +datum=WGS84 +no_defs";
 
 const ROAD_SRTI_LOD_LICENSE: SafetyDataLicense = {
   name: "NDIC/ŘSD SRTI Linked Open Data",
@@ -1315,7 +1320,7 @@ interface MunicipalAlertItem {
   geometry?: SafetyGeometry;
   lon?: number;
   lat?: number;
-  geometryBasis: "source_geojson" | "source_point" | "feed_fallback";
+  geometryBasis: "source_geojson" | "source_point" | "source_pkr_json" | "feed_fallback";
   raw: unknown;
 }
 
@@ -2687,7 +2692,7 @@ function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, ge
 async function fetchMunicipalAlertFeed(feed: MunicipalAlertFeedConfig, timeoutMs: number): Promise<unknown> {
   const body = await requestText(feed.url, timeoutMs);
   const format = feed.format === "auto" ? sniffMunicipalAlertFeedFormat(feed.url, body) : feed.format;
-  if (format === "geojson") {
+  if (format === "geojson" || format === "pkr-json") {
     return JSON.parse(body) as unknown;
   }
   const parser = new XMLParser({
@@ -2698,12 +2703,15 @@ async function fetchMunicipalAlertFeed(feed: MunicipalAlertFeedConfig, timeoutMs
   return parser.parse(body) as unknown;
 }
 
-function sniffMunicipalAlertFeedFormat(url: string, body: string): "rss" | "atom" | "georss" | "geojson" {
+function sniffMunicipalAlertFeedFormat(url: string, body: string): "rss" | "atom" | "georss" | "geojson" | "pkr-json" {
   const trimmed = body.trim();
+  const lowerUrl = url.toLowerCase();
+  if (trimmed.startsWith("{") && (lowerUrl.includes("fmt=json") || lowerUrl.includes("format=json"))) {
+    return "pkr-json";
+  }
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     return "geojson";
   }
-  const lowerUrl = url.toLowerCase();
   if (lowerUrl.includes("geojson") || lowerUrl.endsWith(".json")) {
     return "geojson";
   }
@@ -2712,12 +2720,36 @@ function sniffMunicipalAlertFeedFormat(url: string, body: string): "rss" | "atom
 
 function mapMunicipalAlertFeed(parsed: unknown, feed: MunicipalAlertFeedConfig, query: SafetyQuery, fetchedAt: string): SafetyFeature[] {
   return municipalAlertItems(parsed, feed, fetchedAt)
+    .filter((item) => isMunicipalAlertPublishable(item, feed))
+    .filter((item) => !isMunicipalAlertExpired(item, fetchedAt))
     .filter((item) => municipalAlertItemIntersectsQuery(item, feed, query.bbox))
     .map((item) => mapMunicipalAlertItem(item, feed, fetchedAt));
 }
 
+function isMunicipalAlertPublishable(item: MunicipalAlertItem, feed: MunicipalAlertFeedConfig): boolean {
+  if (feed.id !== "pkr-stredocesky-aktuality") {
+    return true;
+  }
+  const text = normalizeCzechKey(`${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`);
+  return /vystrah|varov|nebezpec|kriz|mimorad|evaku|pozar|povod|unik nebezpec|havari|nakaz|ptaci chrip|pitn|hygien|zdrav|pohres|hledame|nouzov/.test(
+    text
+  );
+}
+
+function isMunicipalAlertExpired(item: MunicipalAlertItem, fetchedAt: string): boolean {
+  if (!item.expiresAt) {
+    return false;
+  }
+  const expiresAt = Date.parse(item.expiresAt);
+  const reference = Date.parse(fetchedAt);
+  return Number.isFinite(expiresAt) && Number.isFinite(reference) && expiresAt < reference;
+}
+
 function municipalAlertItems(parsed: unknown, feed: MunicipalAlertFeedConfig, fetchedAt: string): MunicipalAlertItem[] {
   const record = asRecord(parsed);
+  if (!record) {
+    return [];
+  }
   const type = optionalString(record?.type)?.toLowerCase();
   if (type === "featurecollection") {
     return toArray(record?.features)
@@ -2727,6 +2759,11 @@ function municipalAlertItems(parsed: unknown, feed: MunicipalAlertFeedConfig, fe
   if (type === "feature") {
     const item = municipalAlertItemFromGeoJsonFeature(record, feed, fetchedAt, 0);
     return item ? [item] : [];
+  }
+
+  const pkrItems = municipalAlertItemsFromPkrJson(record, feed, fetchedAt);
+  if (pkrItems.length > 0) {
+    return pkrItems;
   }
 
   const rssItems = toArray(asRecord(asRecord(record?.rss)?.channel)?.item ?? asRecord(record?.channel)?.item);
@@ -2771,20 +2808,112 @@ function municipalAlertItemFromXmlItem(value: unknown, feed: MunicipalAlertFeedC
   }
   const title = textValue(item.title) ?? `${feed.label} alert ${index + 1}`;
   const point = municipalPointFromXmlItem(item);
+  const publishedAt = normalizeTimestamp(textValue(item.pubDate) ?? textValue(item.published) ?? textValue(item.issued)) ?? fetchedAt;
   return {
     id: textValue(item.guid) ?? textValue(item.id) ?? textValue(item.identifier) ?? textValue(item.link) ?? stableToken(`${feed.id}:${title}:${index}`),
     title,
     description: textValue(item.description) ?? textValue(item.summary) ?? textValue(item.content),
     link: linkFromXmlItem(item),
-    publishedAt: normalizeTimestamp(textValue(item.pubDate) ?? textValue(item.published) ?? textValue(item.issued)) ?? fetchedAt,
+    publishedAt,
     updatedAt: normalizeTimestamp(textValue(item.updated) ?? textValue(item.datemodified)) ?? fetchedAt,
-    expiresAt: normalizeTimestamp(textValue(item.expires) ?? textValue(item.validUntil)),
+    expiresAt: normalizeTimestamp(textValue(item.expires) ?? textValue(item.validUntil)) ?? addSeconds(publishedAt, 7 * 24 * 60 * 60),
     categories: municipalCategories(item.category),
     lon: point?.lon,
     lat: point?.lat,
     geometryBasis: point ? "source_point" : "feed_fallback",
     raw: value
   };
+}
+
+function municipalAlertItemsFromPkrJson(record: Record<string, unknown>, feed: MunicipalAlertFeedConfig, fetchedAt: string): MunicipalAlertItem[] {
+  const resultItems = toArray(record.result_items);
+  return resultItems
+    .flatMap((group) => toArray(asRecord(group)?.ret))
+    .map((value, index) => municipalAlertItemFromPkrJsonRecord(value, feed, fetchedAt, index))
+    .filter((item): item is MunicipalAlertItem => Boolean(item));
+}
+
+function municipalAlertItemFromPkrJsonRecord(value: unknown, feed: MunicipalAlertFeedConfig, fetchedAt: string, index: number): MunicipalAlertItem | undefined {
+  const item = asRecord(value);
+  if (!item) {
+    return undefined;
+  }
+  const title = textValue(item.label_title) ?? textValue(item.name) ?? `${feed.label} alert ${index + 1}`;
+  const description = textValue(item.label_description);
+  const point = pkrJsonPoint(item);
+  const validity = parsePkrValidity(description, fetchedAt);
+  const detailPath = textValue(item.popup_url);
+  const urlPrefix = textValue(item.url_prefix);
+  const detailUrl = pkrDetailUrl(feed.url, urlPrefix, detailPath);
+  const categories = [textValue(item.name), textValue(item.label_title), textValue(item.iu)]
+    .filter((entry): entry is string => Boolean(entry))
+    .map((entry) => entry.trim());
+  return {
+    id: textValue(item.uuid) ?? textValue(item.id) ?? stableToken(`${feed.id}:${title}:${index}`),
+    title,
+    description,
+    link: detailUrl,
+    publishedAt: validity.publishedAt ?? fetchedAt,
+    updatedAt: fetchedAt,
+    expiresAt: validity.expiresAt ?? addSeconds(fetchedAt, 30 * 60),
+    categories,
+    lon: point?.lon,
+    lat: point?.lat,
+    geometryBasis: point ? "source_pkr_json" : "feed_fallback",
+    raw: value
+  };
+}
+
+function pkrJsonPoint(item: Record<string, unknown>): { lon: number; lat: number } | undefined {
+  const geom = asRecord(item.geom);
+  const x = optionalNumber(geom?.lon);
+  const y = optionalNumber(geom?.lat);
+  if (x === undefined || y === undefined) {
+    return undefined;
+  }
+  const [lon, lat] = proj4(SJTSK_KROVAK_PROJ, WGS84_PROJ, [x, y]);
+  return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat } : undefined;
+}
+
+function parsePkrValidity(description: string | undefined, fetchedAt: string): { publishedAt?: string; expiresAt?: string } {
+  if (!description) {
+    return {};
+  }
+  const publishedAt = parsePkrCzechTimestamp(description.match(/vznik:\s*([^,]+,\s*\d{1,2}:\d{2})/i)?.[1], fetchedAt);
+  const expiresAt = parsePkrCzechTimestamp(description.match(/ukon(?:čení|ceni):\s*([^,]+,\s*\d{1,2}:\d{2})/i)?.[1], fetchedAt);
+  return { publishedAt, expiresAt };
+}
+
+function parsePkrCzechTimestamp(value: string | undefined, fetchedAt: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const match = value.match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})?,?\s*(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return undefined;
+  }
+  const current = pragueDateParts(new Date(fetchedAt));
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const explicitYear = match[3] ? Number(match[3]) : undefined;
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const year = explicitYear ?? current.year;
+  return Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year) && Number.isFinite(hour) && Number.isFinite(minute)
+    ? isoFromPragueParts(year, month, day, hour, minute)
+    : undefined;
+}
+
+function pkrDetailUrl(feedUrl: string, urlPrefix: string | undefined, detailPath: string | undefined): string | undefined {
+  if (!detailPath) {
+    return undefined;
+  }
+  try {
+    const base = new URL(urlPrefix ?? ".", feedUrl);
+    return new URL(detailPath, base).toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function municipalPointFromXmlItem(item: Record<string, unknown>): { lon: number; lat: number } | undefined {

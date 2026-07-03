@@ -13,7 +13,7 @@ export interface HzsIncidentFeedConfig {
   bbox: BoundingBox;
 }
 
-export type MunicipalAlertFeedFormat = "auto" | "rss" | "atom" | "georss" | "geojson";
+export type MunicipalAlertFeedFormat = "auto" | "rss" | "atom" | "georss" | "geojson" | "pkr-json";
 
 export interface MunicipalAlertFeedConfig {
   id: string;
@@ -177,12 +177,47 @@ function parseHzsIncidentFeeds(value: string | undefined): HzsIncidentFeedConfig
 function parseMunicipalAlertFeeds(value: string | undefined): MunicipalAlertFeedConfig[] {
   const raw = emptyToUndefined(value);
   if (!raw) {
-    return [];
+    return defaultMunicipalAlertFeeds();
   }
   return raw
     .split(";")
     .map((entry, index) => parseMunicipalAlertFeed(entry, index))
     .filter((entry): entry is MunicipalAlertFeedConfig => Boolean(entry));
+}
+
+function defaultMunicipalAlertFeeds(): MunicipalAlertFeedConfig[] {
+  return [
+    {
+      id: "pkr-ustecky-jpo",
+      url: "https://pkr.kr-ustecky.cz/pkr/zasahy-jednotek-pozarni-ochrany/?fmt=json",
+      label: "PKR Ústecký kraj - zásahy JPO",
+      authorityName: "Ústecký kraj",
+      fallbackLon: 13.82,
+      fallbackLat: 50.52,
+      bbox: { west: 12.8, south: 50.05, east: 14.7, north: 51.1 },
+      format: "pkr-json"
+    },
+    {
+      id: "pkr-liberecky-udalosti",
+      url: "https://pkr.kraj-lbc.cz/pkr/probihajici-udalosti/?fmt=json",
+      label: "PKR Liberecký kraj - probíhající události",
+      authorityName: "Liberecký kraj",
+      fallbackLon: 15.05,
+      fallbackLat: 50.72,
+      bbox: { west: 14.25, south: 50.45, east: 15.65, north: 51.1 },
+      format: "pkr-json"
+    },
+    {
+      id: "pkr-stredocesky-aktuality",
+      url: "https://pkr.kr-stredocesky.cz/pkr/aktuality/feed.xml",
+      label: "PKR Středočeský kraj - aktuality",
+      authorityName: "Středočeský kraj",
+      fallbackLon: 14.43,
+      fallbackLat: 50.08,
+      bbox: { west: 13.35, south: 49.45, east: 15.65, north: 50.75 },
+      format: "rss"
+    }
+  ];
 }
 
 function parseMunicipalAlertFeed(value: string, index: number): MunicipalAlertFeedConfig | undefined {
@@ -212,7 +247,9 @@ function parseMunicipalAlertFeed(value: string, index: number): MunicipalAlertFe
 
 function parseMunicipalAlertFeedFormat(value: string | undefined): MunicipalAlertFeedFormat {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "rss" || normalized === "atom" || normalized === "georss" || normalized === "geojson" ? normalized : "auto";
+  return normalized === "rss" || normalized === "atom" || normalized === "georss" || normalized === "geojson" || normalized === "pkr-json"
+    ? normalized
+    : "auto";
 }
 
 function parseHzsIncidentFeed(value: string, index: number): HzsIncidentFeedConfig | undefined {

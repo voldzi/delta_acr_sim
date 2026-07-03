@@ -594,7 +594,7 @@ SAFETY_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými ČHMÚ/GDACS/HZS/SRTI veřejnými zdroji:
 
 ```bash
-SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries
 SAFETY_DATA_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 SAFETY_DATA_CACHE_TTL_SECONDS=300
 SAFETY_DATA_STALE_IF_ERROR_SECONDS=3600
@@ -623,13 +623,25 @@ HZS_INCIDENTS_FEEDS=https://www.hzspa.cz/vyjezdy/aktualni-vyjezdy.php|HZS Pardub
 HZS_INCIDENTS_CACHE_TTL_SECONDS=180
 HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS=1800
 HZS_INCIDENTS_MAX_ACTIVE_DETAILS=50
+MUNICIPAL_ALERT_FEEDS=
+MUNICIPAL_ALERTS_CACHE_TTL_SECONDS=300
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 ```
 
 Krajské nebo městské krizové portály lze připojit, pokud poskytují veřejný nebo
-partnerem povolený RSS/Atom/GeoRSS/GeoJSON feed:
+partnerem povolený RSS/Atom/GeoRSS/GeoJSON feed nebo stabilní PKR JSON výstup.
+Pokud je `municipal_alerts` zapnutý a `MUNICIPAL_ALERT_FEEDS` je prázdné, SIM
+použije vestavěný ověřený katalog veřejných regionálních zdrojů:
+
+- `pkr-ustecky-jpo`: Ústecký kraj, veřejný PKR JSON zásahů JPO s přesnou
+  geometrií převáděnou ze S-JTSK/Křováka do WGS84.
+- `pkr-liberecky-udalosti`: Liberecký kraj, veřejný PKR JSON probíhajících
+  událostí s přesnou geometrií převáděnou ze S-JTSK/Křováka do WGS84.
+- `pkr-stredocesky-aktuality`: Středočeský kraj, veřejný PKR RSS aktualit;
+  položky bez souřadnic jsou publikované jako autoritativní krajský fallback bod
+  s nižší důvěrou a implicitní sedmidenní platností.
 
 ```bash
 SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries
@@ -639,7 +651,7 @@ MUNICIPAL_ALERTS_CACHE_TTL_SECONDS=300
 
 Více feedů se odděluje středníkem. Formát položky je
 `url|label|authority|fallbackLon|fallbackLat|bbox|id|format`, kde `format` je
-`auto`, `rss`, `atom`, `georss` nebo `geojson`.
+`auto`, `rss`, `atom`, `georss`, `geojson` nebo `pkr-json`.
 
 `gdacs_alerts` je bezklicovy verejny GeoRSS/RSS zdroj GDACS pro globalni
 katastroficke alerty s potencialnim humanitarnim dopadem. SIM ho normalizuje

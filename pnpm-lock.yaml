@@ -66,6 +66,9 @@ importers:
       pg:
         specifier: ^8.22.0
         version: 8.22.0
+      proj4:
+        specifier: ^2.20.9
+        version: 2.20.9(geotiff@3.0.5)
     devDependencies:
       '@types/cors':
         specifier: ^2.8.19

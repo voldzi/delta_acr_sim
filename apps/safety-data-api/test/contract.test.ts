@@ -1279,6 +1279,81 @@ describe("Safety Data API contract", () => {
     });
   });
 
+  it("normalizes public regional PKR JSON items with projected geometry", async () => {
+    const pkrJson = JSON.stringify({
+      result: { total_items: 1, batch_start: 0, batch_size: 50 },
+      result_items: [
+        {
+          header: "",
+          ret: [
+            {
+              id: 11960,
+              uuid: "hzsudalost_11960",
+              geom: { lon: "-790641.0", lat: "-990557.0" },
+              name: "Požár - popelnice, kontejner - Most",
+              label_title: "Požár - popelnice, kontejner - Most",
+              label_description: "vznik: 4. 7. 2099, 10:00, ukončení: 4. 7. 2099, 14:00",
+              popup_url: "11960/?fmt=popup",
+              url_prefix: "/pkr/zasahy-jednotek-pozarni-ochrany/",
+              iu: "/media/icons/hzs/pozar.gif"
+            }
+          ]
+        }
+      ]
+    });
+
+    await withFixtureServer({ "/pkr/zasahy/?fmt=json": pkrJson }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["municipal_alerts"],
+        municipalAlertFeeds: [
+          {
+            id: "pkr-ustecky-jpo",
+            url: `${baseUrl}/pkr/zasahy/?fmt=json`,
+            label: "PKR Ústecký kraj - zásahy JPO",
+            authorityName: "Ústecký kraj",
+            fallbackLon: 13.82,
+            fallbackLat: 50.52,
+            bbox: { west: 12.8, south: 50.05, east: 14.7, north: 51.1 },
+            format: "pkr-json"
+          }
+        ]
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=13.0,50.0,14.0,50.8&layers=warnings&source=municipal_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(1);
+      expect(response.body.features[0]).toEqual(
+        expect.objectContaining({
+          geometry: { type: "Point", coordinates: [13.652638, 50.493539] },
+          properties: expect.objectContaining({
+            layerId: "public.safety.warnings",
+            providerLayerId: "safety.warnings",
+            sourceId: "municipal_alerts",
+            sourceName: "Ústecký kraj",
+            hazardType: "fire",
+            typeCode: "municipal.fire",
+            severity: "warning",
+            observedAt: "2099-07-04T08:00:00.000Z",
+            validUntil: "2099-07-04T12:00:00.000Z",
+            detailUrl: `${baseUrl}/pkr/zasahy-jednotek-pozarni-ochrany/11960/?fmt=popup`,
+            tags: expect.objectContaining({
+              feedId: "pkr-ustecky-jpo",
+              locationPrecision: "source_pkr_json"
+            }),
+            providerProperties: expect.objectContaining({
+              schemaVersion: "sim.municipal-alerts.v1",
+              sourceAuthority: "Ústecký kraj",
+              geometryBasis: "source_pkr_json"
+            })
+          })
+        })
+      );
+    });
+  });
+
   it("projects NDIC/RSD SRTI road events into normalized safety warnings", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(

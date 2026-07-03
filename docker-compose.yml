@@ -285,7 +285,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${SIM_OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       SAFETY_DATA_API_PORT: 4030
       SAFETY_DATA_DIR: /data
-      SAFETY_DATA_ENABLED_SOURCES: ${SAFETY_DATA_ENABLED_SOURCES:-chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries}
+      SAFETY_DATA_ENABLED_SOURCES: ${SAFETY_DATA_ENABLED_SOURCES:-chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries}
       SAFETY_DATA_DEFAULT_BBOX: ${SAFETY_DATA_DEFAULT_BBOX:-11.8,48.5,19.2,51.2}
       SAFETY_DATA_REQUEST_TIMEOUT_MS: ${SAFETY_DATA_REQUEST_TIMEOUT_MS:-8000}
       SAFETY_DATA_CACHE_TTL_SECONDS: ${SAFETY_DATA_CACHE_TTL_SECONDS:-300}

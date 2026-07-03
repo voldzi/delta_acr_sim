@@ -16,7 +16,8 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "fast-xml-parser": "^5.9.3",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "proj4": "^2.20.9"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

@@ -46,7 +46,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
           notes: [
             "Vrstva obsahuje jen reálné veřejné výstrahy, katastrofické alerty a veřejné probíhající HZS výjezdy; technická varování zdrojů patří do provozního dohledu.",
             "HZS public feed může vynechávat přesnou GPS polohu; COP má v detailu zobrazit locationPrecision/locationConfidence.",
-            "Krajské a městské krizové portály lze připojit přes municipal_alerts, pokud poskytují veřejný nebo partnerem povolený RSS/Atom/GeoRSS/GeoJSON feed.",
+            "Krajské a městské krizové portály lze připojit přes municipal_alerts; SIM umí veřejné/partnerem povolené RSS/Atom/GeoRSS/GeoJSON feedy a vybrané veřejné PKR JSON výstupy.",
             "Silniční SRTI/NDIC události jsou do této vrstvy promítnuté jen jako dopravně-bezpečnostní warningy; plná dopravní vrstva zůstává v situation-data.",
             "GDACS je strategický krizový kontext; lokální opatření je nutné ověřovat přes IZS a příslušné orgány."
           ]
@@ -303,8 +303,9 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         feedsLayerIds: ["safety.warnings"],
         feedsCatalogLayerIds: ["public.safety.warnings"],
         notes: [
-          "Configured municipal/regional RSS, Atom, GeoRSS or GeoJSON source for crisis-management warnings.",
-          "If source items do not carry coordinates, SIM emits a clearly marked authority fallback point with lower confidence."
+          "Configured municipal/regional RSS, Atom, GeoRSS, GeoJSON or public PKR JSON source for crisis-management warnings.",
+          "When MUNICIPAL_ALERT_FEEDS is empty, SIM uses a built-in verified public regional feed catalog.",
+          "PKR JSON items are transformed from S-JTSK/Krovak to WGS84; if source items do not carry coordinates, SIM emits a clearly marked authority fallback point with lower confidence."
         ]
       };
     case "road_srti_lod":
