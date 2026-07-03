@@ -264,6 +264,41 @@ paths:
                 $ref: '#/components/schemas/AircraftType'
         '404':
           $ref: '#/components/responses/Problem'
+  /api/v1/ingest/air-tracks/status:
+    get:
+      tags: [FlightTracks]
+      summary: Vrátí stav autorizovaného ingestu partner dronů a radarových tracků.
+      responses:
+        '200':
+          description: Partner air track ingest status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerAirTrackIngestStatus'
+  /api/v1/ingest/air-tracks:
+    post:
+      tags: [FlightTracks]
+      summary: Přijme autorizované Remote ID, U-space, radarové nebo partner tracky.
+      description: Server-to-server endpoint chráněný bearer tokenem. Nepoužívat z klientského browseru COP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerAirTrackIngestPayload'
+      responses:
+        '202':
+          description: Accepted partner air tracks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerAirTrackIngestResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
   /health/live:
     get:
       tags: [Health]
@@ -391,10 +426,15 @@ components:
           type: integer
     FlightTrack:
       type: object
-      required: [trackId, icao24, objectType, domain, lat, lon, position, lastSeenAt, sources, deduplication, quality]
+      required: [trackId, trackKey, trackKeyKind, objectType, domain, lat, lon, position, lastSeenAt, sources, deduplication, quality]
       properties:
         trackId:
           type: string
+        trackKey:
+          type: string
+        trackKeyKind:
+          type: string
+          enum: [icao24, remote_id, radar_track, partner_track]
         icao24:
           type: string
           pattern: '^[0-9a-f]{6}$'
@@ -450,12 +490,14 @@ components:
               seenAt:
                 type: string
                 format: date-time
+              sensorId:
+                type: string
         deduplication:
           type: object
           properties:
             key:
               type: string
-              const: icao24
+              enum: [icao24, remote_id, radar_track, partner_track]
             mergedRecordCount:
               type: integer
             primarySourceId:
@@ -476,7 +518,7 @@ components:
       properties:
         sourceId:
           type: string
-          enum: [mock, adsb_lol, opensky, local_adsb]
+          enum: [mock, adsb_lol, opensky, local_adsb, partner_air_tracks]
         label:
           type: string
         enabled:
@@ -495,7 +537,7 @@ components:
           type: array
           items:
             type: string
-            enum: [mock, adsb_lol, opensky, local_adsb]
+            enum: [mock, adsb_lol, opensky, local_adsb, partner_air_tracks]
         defaultArea:
           type: object
           properties:
@@ -526,11 +568,20 @@ components:
             properties:
               sourceId:
                 type: string
-                enum: [mock, adsb_lol, opensky, local_adsb]
+                enum: [mock, adsb_lol, opensky, local_adsb, partner_air_tracks]
               baseUrl:
                 type: string
               authConfigured:
                 type: boolean
+        partnerAirTracks:
+          type: object
+          properties:
+            ingestEnabled:
+              type: boolean
+            ttlSeconds:
+              type: integer
+            maxRecords:
+              type: integer
         referenceData:
           type: object
           properties:
@@ -564,6 +615,122 @@ components:
               type: integer
             airspaceActivationBaseUrl:
               type: string
+    PartnerAirTrackIngestStatus:
+      type: object
+      required: [contractVersion, enabled, sourceId, ttlSeconds, maxRecords, stats]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-partner-air-track-ingest-v1
+        enabled:
+          type: boolean
+        sourceId:
+          type: string
+          const: partner_air_tracks
+        ttlSeconds:
+          type: integer
+        maxRecords:
+          type: integer
+        stats:
+          type: object
+          additionalProperties: true
+    PartnerAirTrackIngestPayload:
+      type: object
+      required: [records]
+      properties:
+        sourceKind:
+          type: string
+          enum: [remote_id, u_space, radar, partner]
+        sensorId:
+          type: string
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerAirTrackIngestRecord'
+    PartnerAirTrackIngestRecord:
+      type: object
+      properties:
+        trackId:
+          type: string
+        radarTrackId:
+          type: string
+        icao24:
+          type: string
+        callsign:
+          type: string
+        registration:
+          type: string
+        objectType:
+          type: string
+          enum: [AIRCRAFT, UAV, UNKNOWN]
+        sourceKind:
+          type: string
+          enum: [remote_id, u_space, radar, partner]
+        sensorId:
+          type: string
+        remoteId:
+          type: string
+        uasRegistration:
+          type: string
+        operatorRegistration:
+          type: string
+        serialNumber:
+          type: string
+        position:
+          type: object
+          required: [lat, lon]
+          properties:
+            lat:
+              type: number
+            lon:
+              type: number
+        lat:
+          type: number
+        lon:
+          type: number
+        altitudeM:
+          type: number
+        speedMps:
+          type: number
+        headingDeg:
+          type: number
+        verticalRateMps:
+          type: number
+        onGround:
+          type: boolean
+        squawk:
+          type: string
+        emergency:
+          type: boolean
+        category:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        raw:
+          type: object
+          additionalProperties: true
+    PartnerAirTrackIngestResult:
+      type: object
+      required: [contractVersion, accepted, rejected, warnings, stats]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-partner-air-track-ingest-v1
+        accepted:
+          type: integer
+        rejected:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+        stats:
+          type: object
+          additionalProperties: true
     Airport:
       type: object
       properties:

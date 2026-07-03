@@ -230,7 +230,7 @@ components:
       required: false
       schema:
         type: string
-        example: chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries
+        example: chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries
     Limit:
       name: limit
       in: query

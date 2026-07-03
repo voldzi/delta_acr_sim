@@ -1,4 +1,5 @@
 import type { FlightDataConfig } from "./config.js";
+import type { PartnerAirTrackStore } from "./partner-air-track-store.js";
 import { ManagedResponseCache } from "./response-cache.js";
 import type { ManagedResponseCacheStats } from "./response-cache.js";
 import type {
@@ -59,12 +60,25 @@ const LOCAL_ADSB_LICENSE: FlightDataLicense = {
   ]
 };
 
-export function createFlightDataSources(config: FlightDataConfig): FlightDataSource[] {
+const PARTNER_AIR_TRACKS_LICENSE: FlightDataLicense = {
+  name: "Partner-authorized air track ingest",
+  attribution: "Configured U-space, Remote ID, radar or partner sensor sources",
+  commercialUse: "requires_license",
+  operationalUse: "requires_license",
+  notes: [
+    "Accept only project-owned or partner-authorized drone/radar/Remote ID data.",
+    "Civil drone operator identifiers can be personal or regulated data; access and retention must follow the partner agreement and applicable law.",
+    "Radar/Remote ID positions are situational context and can be delayed, incomplete or sensor-limited."
+  ]
+};
+
+export function createFlightDataSources(config: FlightDataConfig, partnerAirTrackStore?: PartnerAirTrackStore): FlightDataSource[] {
   const allSources: Record<FlightDataSourceId, FlightDataSource> = {
     mock: new MockFlightDataSource(),
     adsb_lol: new AdsbLolSource(config),
     opensky: new OpenSkySource(config),
-    local_adsb: new LocalAdsbSource(config)
+    local_adsb: new LocalAdsbSource(config),
+    partner_air_tracks: new PartnerAirTracksSource(config, partnerAirTrackStore)
   };
 
   return config.enabledSources.map((sourceId) => allSources[sourceId]);
@@ -76,7 +90,8 @@ export function allSourceDescriptors(config: FlightDataConfig): SourceDescriptor
     new MockFlightDataSource().descriptor,
     new AdsbLolSource(config).descriptor,
     new OpenSkySource(config).descriptor,
-    new LocalAdsbSource(config).descriptor
+    new LocalAdsbSource(config).descriptor,
+    new PartnerAirTracksSource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
 }
 
@@ -391,6 +406,43 @@ class LocalAdsbSource implements FlightDataSource {
       fetchedAt,
       observations: observations.filter((observation) => !query.bbox || isObservationInBbox(observation, query.bbox)),
       warnings
+    };
+  }
+}
+
+class PartnerAirTracksSource implements FlightDataSource {
+  readonly descriptor: SourceDescriptor;
+
+  constructor(
+    private readonly config: FlightDataConfig,
+    private readonly store?: PartnerAirTrackStore
+  ) {
+    this.descriptor = {
+      sourceId: "partner_air_tracks",
+      label: "Partner drone, Remote ID and radar tracks",
+      enabled: config.enabledSources.includes("partner_air_tracks"),
+      mode: "live",
+      priority: config.partnerAirTrackPriority,
+      license: PARTNER_AIR_TRACKS_LICENSE,
+      baseUrl: config.partnerAirTrackIngestToken ? "server-side ingest" : undefined
+    };
+  }
+
+  async fetchObservations(query: FlightQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!this.store) {
+      return {
+        source: this.descriptor,
+        fetchedAt,
+        observations: [],
+        warnings: ["partner_air_tracks is enabled but the ingest store is not available."]
+      };
+    }
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      observations: this.store.fetch(query.bbox),
+      warnings: this.config.partnerAirTrackIngestToken ? [] : ["partner_air_tracks ingest endpoint is disabled until FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured."]
     };
   }
 }

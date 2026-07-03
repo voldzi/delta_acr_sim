@@ -57,6 +57,8 @@ describe("Safety Data API contract", () => {
       hzsIncidentsCacheTtlSeconds: 180,
       hzsIncidentsDetailCacheTtlSeconds: 1800,
       hzsIncidentsMaxActiveDetails: 50,
+      municipalAlertFeeds: [],
+      municipalAlertsCacheTtlSeconds: 300,
       roadSrtiLodSparqlUrl: "https://lod.tamtamresearch.com/sparql/",
       roadSrtiLodCacheTtlSeconds: 300,
       roadSrtiLodMaxRecords: 1500,
@@ -118,6 +120,10 @@ describe("Safety Data API contract", () => {
           layers: expect.arrayContaining(["warnings", "fire"])
         }),
         expect.objectContaining({
+          sourceId: "municipal_alerts",
+          layers: expect.arrayContaining(["warnings"])
+        }),
+        expect.objectContaining({
           sourceId: "road_srti_lod",
           layers: expect.arrayContaining(["warnings"])
         }),
@@ -153,6 +159,7 @@ describe("Safety Data API contract", () => {
           expect.objectContaining({ sourceId: "nasa_firms", authConfigured: false }),
           expect.objectContaining({ sourceId: "gdacs_alerts", authConfigured: true }),
           expect.objectContaining({ sourceId: "hzs_incidents", authConfigured: true }),
+          expect.objectContaining({ sourceId: "municipal_alerts", authConfigured: false }),
           expect.objectContaining({ sourceId: "road_srti_lod", authConfigured: true }),
           expect.objectContaining({ sourceId: "admin_boundaries", authConfigured: false })
         ])
@@ -183,7 +190,7 @@ describe("Safety Data API contract", () => {
           recommendedCatalogLayerId: "public.safety.warnings",
           categories: expect.arrayContaining(["disaster_alert", "road_incident"]),
           role: "overlay",
-          sourceIds: ["gdacs_alerts", "hzs_incidents", "road_srti_lod"]
+          sourceIds: ["gdacs_alerts", "hzs_incidents", "municipal_alerts", "road_srti_lod"]
         }),
         expect.objectContaining({
           providerLayerId: "safety.weather_alerts",
@@ -256,6 +263,12 @@ describe("Safety Data API contract", () => {
           sourceRole: "final",
           feedsLayerIds: ["safety.warnings", "safety.fire"],
           feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"]
+        }),
+        expect.objectContaining({
+          sourceId: "municipal_alerts",
+          sourceRole: "final",
+          feedsLayerIds: ["safety.warnings"],
+          feedsCatalogLayerIds: ["public.safety.warnings"]
         }),
         expect.objectContaining({
           sourceId: "road_srti_lod",
@@ -1198,6 +1211,72 @@ describe("Safety Data API contract", () => {
         );
       }
     );
+  });
+
+  it("normalizes configured municipal GeoRSS alerts into crisis warnings", async () => {
+    const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:georss="http://www.georss.org/georss">
+  <channel>
+    <title>Krizový portál města</title>
+    <item>
+      <title>Výstraha: evakuace části obce</title>
+      <description>Nařízena evakuace v okolí průmyslového areálu.</description>
+      <link>https://example.test/krize/1</link>
+      <pubDate>Fri, 03 Jul 2026 08:10:00 GMT</pubDate>
+      <category>evakuace</category>
+      <georss:point>50.0870 14.4200</georss:point>
+      <guid>municipal-1</guid>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/municipal/rss.xml": municipalRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["municipal_alerts"],
+        municipalAlertFeeds: [
+          {
+            id: "praha-crisis",
+            url: `${baseUrl}/municipal/rss.xml`,
+            label: "Praha krizové výstrahy",
+            authorityName: "Hlavní město Praha",
+            fallbackLon: 14.42,
+            fallbackLat: 50.08,
+            bbox: { west: 14.2, south: 49.9, east: 14.7, north: 50.2 },
+            format: "georss"
+          }
+        ]
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=warnings&source=municipal_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(1);
+      expect(response.body.features[0]).toEqual(
+        expect.objectContaining({
+          geometry: { type: "Point", coordinates: [14.42, 50.087] },
+          properties: expect.objectContaining({
+            layerId: "public.safety.warnings",
+            providerLayerId: "safety.warnings",
+            sourceId: "municipal_alerts",
+            sourceName: "Hlavní město Praha",
+            hazardType: "evacuation",
+            typeCode: "municipal.evacuation",
+            severity: "critical",
+            detailUrl: "https://example.test/krize/1",
+            tags: expect.objectContaining({
+              feedId: "praha-crisis",
+              locationPrecision: "source_point"
+            }),
+            providerProperties: expect.objectContaining({
+              schemaVersion: "sim.municipal-alerts.v1",
+              sourceAuthority: "Hlavní město Praha"
+            })
+          })
+        })
+      );
+    });
   });
 
   it("projects NDIC/RSD SRTI road events into normalized safety warnings", async () => {

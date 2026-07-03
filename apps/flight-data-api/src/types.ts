@@ -1,4 +1,6 @@
-export type FlightDataSourceId = "mock" | "adsb_lol" | "opensky" | "local_adsb";
+export type FlightDataSourceId = "mock" | "adsb_lol" | "opensky" | "local_adsb" | "partner_air_tracks";
+export type FlightTrackKeyKind = "icao24" | "remote_id" | "radar_track" | "partner_track";
+export type PartnerAirTrackSourceKind = "remote_id" | "u_space" | "radar" | "partner";
 
 export interface BoundingBox {
   west: number;
@@ -52,6 +54,11 @@ export interface FlightDataPublicConfig {
     baseUrl?: string;
     authConfigured: boolean;
   }>;
+  partnerAirTracks: {
+    ingestEnabled: boolean;
+    ttlSeconds: number;
+    maxRecords: number;
+  };
   referenceData: {
     ourAirportsEnabled: boolean;
     ourAirportsCountries: string[];
@@ -79,11 +86,20 @@ export interface RawFlightObservation {
   sourcePriority: number;
   fetchedAt: string;
   seenAt: string;
-  icao24: string;
+  icao24?: string;
+  trackKey?: string;
+  trackKeyKind?: FlightTrackKeyKind;
   callsign?: string;
   registration?: string;
   typeDesignator?: string;
   originCountry?: string;
+  objectType?: "AIRCRAFT" | "UAV" | "UNKNOWN";
+  sourceKind?: PartnerAirTrackSourceKind;
+  sensorId?: string;
+  remoteId?: string;
+  uasRegistration?: string;
+  operatorRegistration?: string;
+  serialNumber?: string;
   lat?: number;
   lon?: number;
   altitudeM?: number;
@@ -109,6 +125,7 @@ export interface FlightTrackSourceRef {
   sourceRecordId: string;
   fetchedAt: string;
   seenAt: string;
+  sensorId?: string;
 }
 
 export type FlightTrackIconHint = "jet" | "turboprop" | "small_aircraft" | "helicopter" | "glider" | "uav" | "unknown";
@@ -290,7 +307,9 @@ export interface FlightTrackPresentation {
 
 export interface AggregatedFlightTrack {
   trackId: string;
-  icao24: string;
+  trackKey: string;
+  trackKeyKind: FlightTrackKeyKind;
+  icao24?: string;
   callsign?: string;
   registration?: string;
   objectType: "AIRCRAFT" | "UAV" | "UNKNOWN";
@@ -310,7 +329,7 @@ export interface AggregatedFlightTrack {
   presentation: FlightTrackPresentation;
   sources: FlightTrackSourceRef[];
   deduplication: {
-    key: "icao24";
+    key: FlightTrackKeyKind;
     mergedRecordCount: number;
     primarySourceId: FlightDataSourceId;
   };
@@ -324,6 +343,12 @@ export interface AggregatedFlightTrack {
     squawk?: string;
     emergency?: string;
     sourceCategory?: string;
+    sourceKind?: PartnerAirTrackSourceKind;
+    sensorId?: string;
+    remoteId?: string;
+    uasRegistration?: string;
+    operatorRegistration?: string;
+    serialNumber?: string;
     sourceLicenses: string[];
   };
 }

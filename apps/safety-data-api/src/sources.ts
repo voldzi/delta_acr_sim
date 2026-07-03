@@ -9,7 +9,7 @@ import {
   type ChmiEventCode,
   type ChmiParameter
 } from "./chmi-taxonomy.js";
-import type { HzsIncidentFeedConfig, SafetyDataConfig } from "./config.js";
+import type { HzsIncidentFeedConfig, MunicipalAlertFeedConfig, SafetyDataConfig } from "./config.js";
 import { HttpRequestError, requestJson, requestText } from "./http.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type {
@@ -102,6 +102,18 @@ const HZS_INCIDENTS_LICENSE: SafetyDataLicense = {
   ]
 };
 
+const MUNICIPAL_ALERTS_LICENSE: SafetyDataLicense = {
+  name: "Configured municipal/regional public warning feeds",
+  attribution: "Configured municipal and regional crisis-management authorities",
+  commercialUse: "unknown",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "SIM only normalizes configured public or partner-authorized RSS/Atom/GeoRSS/GeoJSON feeds.",
+    "Exact legal terms, attribution and operational use must be verified for each configured authority feed.",
+    "If a feed item has no geometry, SIM publishes an explicitly marked fallback point for situational awareness only."
+  ]
+};
+
 const ROAD_SRTI_LOD_LICENSE: SafetyDataLicense = {
   name: "NDIC/ŘSD SRTI Linked Open Data",
   url: "https://lod.tamtamresearch.com/docs/",
@@ -147,6 +159,7 @@ export function createSafetyDataSources(config: SafetyDataConfig): SafetyDataSou
     nasa_firms: new NasaFirmsSource(config),
     gdacs_alerts: new GdacsAlertsSource(config),
     hzs_incidents: new HzsIncidentsSource(config),
+    municipal_alerts: new MunicipalAlertsSource(config),
     road_srti_lod: new RoadSrtiLodWarningsSource(config),
     admin_boundaries: new AdminBoundarySource(config)
   };
@@ -163,6 +176,7 @@ export function allSourceDescriptors(config: SafetyDataConfig): SourceDescriptor
     new NasaFirmsSource(config).descriptor,
     new GdacsAlertsSource(config).descriptor,
     new HzsIncidentsSource(config).descriptor,
+    new MunicipalAlertsSource(config).descriptor,
     new RoadSrtiLodWarningsSource(config).descriptor,
     new AdminBoundarySource(config).descriptor
   ].map((descriptor) => ({ ...descriptor, enabled: enabled.has(descriptor.sourceId) }));
@@ -997,6 +1011,78 @@ class HzsIncidentsSource implements SafetyDataSource {
   }
 }
 
+class MunicipalAlertsSource implements SafetyDataSource {
+  readonly descriptor: SourceDescriptor;
+  private readonly responseCache: ManagedResponseCache<unknown>;
+
+  constructor(private readonly config: SafetyDataConfig) {
+    this.responseCache = new ManagedResponseCache<unknown>({
+      ttlMs: Math.max(60, config.municipalAlertsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(900, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(16, Math.min(256, config.cacheMaxEntries))
+    });
+    this.descriptor = {
+      sourceId: "municipal_alerts",
+      label: "Municipal and regional crisis warnings",
+      enabled: config.enabledSources.includes("municipal_alerts"),
+      mode: "live",
+      priority: 72,
+      layers: ["warnings"],
+      license: MUNICIPAL_ALERTS_LICENSE,
+      baseUrl: config.municipalAlertFeeds.length === 1 ? config.municipalAlertFeeds[0]?.url : config.municipalAlertFeeds.length > 1 ? "multiple feeds" : undefined,
+      updateCadenceSeconds: config.municipalAlertsCacheTtlSeconds
+    };
+  }
+
+  async fetchFeatures(query: SafetyQuery): Promise<SourceFetchResult> {
+    const fetchedAt = new Date().toISOString();
+    if (!query.layers.includes("warnings")) {
+      return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
+    }
+    if (this.config.municipalAlertFeeds.length === 0) {
+      return {
+        source: this.descriptor,
+        fetchedAt,
+        features: [],
+        warnings: ["municipal_alerts is enabled but MUNICIPAL_ALERT_FEEDS is not configured."]
+      };
+    }
+
+    const warnings: string[] = [];
+    const features: SafetyFeature[] = [];
+    for (const feed of this.config.municipalAlertFeeds) {
+      if (!bboxIntersects(feed.bbox, query.bbox)) {
+        continue;
+      }
+      try {
+        const parsed = await this.responseCache.getOrLoad(`municipal_alerts:${feed.id}:${feed.url}`, () => fetchMunicipalAlertFeed(feed, this.config.requestTimeoutMs));
+        features.push(...mapMunicipalAlertFeed(parsed, feed, query, fetchedAt));
+      } catch (error) {
+        warnings.push(
+          error instanceof Error ? `municipal_alerts feed ${feed.label} failed: ${error.message}` : `municipal_alerts feed ${feed.label} failed.`
+        );
+      }
+      if (features.length >= query.limit) {
+        break;
+      }
+    }
+
+    return {
+      source: this.descriptor,
+      fetchedAt,
+      features: features
+        .filter((feature) => isFeatureInBbox(feature, query.bbox))
+        .slice(0, query.limit)
+        .map((feature) => stripRawIfNeeded(feature, query.includeRaw)),
+      warnings
+    };
+  }
+
+  cacheStats(): SourceCacheStats[] {
+    return [cacheStatsFor("municipal_alerts", [this.responseCache])];
+  }
+}
+
 class RoadSrtiLodWarningsSource implements SafetyDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly responseCache: ManagedResponseCache<RoadSrtiLodEvent[]>;
@@ -1215,6 +1301,22 @@ interface HzsBoundaryPointRow {
   country_code: string | null;
   lon: number;
   lat: number;
+}
+
+interface MunicipalAlertItem {
+  id: string;
+  title: string;
+  description?: string;
+  link?: string;
+  publishedAt?: string;
+  updatedAt?: string;
+  expiresAt?: string;
+  categories: string[];
+  geometry?: SafetyGeometry;
+  lon?: number;
+  lat?: number;
+  geometryBasis: "source_geojson" | "source_point" | "feed_fallback";
+  raw: unknown;
 }
 
 interface RoadSrtiLodEvent {
@@ -2580,6 +2682,327 @@ function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, ge
       }
     })
   );
+}
+
+async function fetchMunicipalAlertFeed(feed: MunicipalAlertFeedConfig, timeoutMs: number): Promise<unknown> {
+  const body = await requestText(feed.url, timeoutMs);
+  const format = feed.format === "auto" ? sniffMunicipalAlertFeedFormat(feed.url, body) : feed.format;
+  if (format === "geojson") {
+    return JSON.parse(body) as unknown;
+  }
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    removeNSPrefix: true,
+    isArray: (name) => ["item", "entry", "category"].includes(name)
+  });
+  return parser.parse(body) as unknown;
+}
+
+function sniffMunicipalAlertFeedFormat(url: string, body: string): "rss" | "atom" | "georss" | "geojson" {
+  const trimmed = body.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return "geojson";
+  }
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.includes("geojson") || lowerUrl.endsWith(".json")) {
+    return "geojson";
+  }
+  return "rss";
+}
+
+function mapMunicipalAlertFeed(parsed: unknown, feed: MunicipalAlertFeedConfig, query: SafetyQuery, fetchedAt: string): SafetyFeature[] {
+  return municipalAlertItems(parsed, feed, fetchedAt)
+    .filter((item) => municipalAlertItemIntersectsQuery(item, feed, query.bbox))
+    .map((item) => mapMunicipalAlertItem(item, feed, fetchedAt));
+}
+
+function municipalAlertItems(parsed: unknown, feed: MunicipalAlertFeedConfig, fetchedAt: string): MunicipalAlertItem[] {
+  const record = asRecord(parsed);
+  const type = optionalString(record?.type)?.toLowerCase();
+  if (type === "featurecollection") {
+    return toArray(record?.features)
+      .map((item, index) => municipalAlertItemFromGeoJsonFeature(item, feed, fetchedAt, index))
+      .filter((item): item is MunicipalAlertItem => Boolean(item));
+  }
+  if (type === "feature") {
+    const item = municipalAlertItemFromGeoJsonFeature(record, feed, fetchedAt, 0);
+    return item ? [item] : [];
+  }
+
+  const rssItems = toArray(asRecord(asRecord(record?.rss)?.channel)?.item ?? asRecord(record?.channel)?.item);
+  const atomItems = toArray(asRecord(record?.feed)?.entry);
+  return [...rssItems, ...atomItems]
+    .map((item, index) => municipalAlertItemFromXmlItem(item, feed, fetchedAt, index))
+    .filter((item): item is MunicipalAlertItem => Boolean(item));
+}
+
+function municipalAlertItemFromGeoJsonFeature(value: unknown, feed: MunicipalAlertFeedConfig, fetchedAt: string, index: number): MunicipalAlertItem | undefined {
+  const feature = asRecord(value);
+  const properties = asRecord(feature?.properties) ?? {};
+  const title =
+    textValue(properties.headline) ??
+    textValue(properties.title) ??
+    textValue(properties.name) ??
+    textValue(properties.label) ??
+    `${feed.label} alert ${index + 1}`;
+  const geometry = parseMunicipalGeometry(feature?.geometry);
+  const point = geometry?.type === "Point" ? { lon: geometry.coordinates[0], lat: geometry.coordinates[1] } : undefined;
+  return {
+    id: textValue(properties.id) ?? textValue(properties.identifier) ?? textValue(feature?.id) ?? stableToken(`${feed.id}:${title}:${index}`),
+    title,
+    description: textValue(properties.description) ?? textValue(properties.summary) ?? textValue(properties.text),
+    link: textValue(properties.url) ?? textValue(properties.link),
+    publishedAt: normalizeTimestamp(textValue(properties.publishedAt) ?? textValue(properties.pubDate) ?? textValue(properties.createdAt)) ?? fetchedAt,
+    updatedAt: normalizeTimestamp(textValue(properties.updatedAt) ?? textValue(properties.modifiedAt)) ?? fetchedAt,
+    expiresAt: normalizeTimestamp(textValue(properties.expiresAt) ?? textValue(properties.validUntil)),
+    categories: municipalCategories(properties.category ?? properties.categories ?? properties.type ?? properties.event),
+    geometry: geometry && geometry.type !== "Point" ? geometry : undefined,
+    lon: point?.lon,
+    lat: point?.lat,
+    geometryBasis: geometry ? "source_geojson" : "feed_fallback",
+    raw: value
+  };
+}
+
+function municipalAlertItemFromXmlItem(value: unknown, feed: MunicipalAlertFeedConfig, fetchedAt: string, index: number): MunicipalAlertItem | undefined {
+  const item = asRecord(value);
+  if (!item) {
+    return undefined;
+  }
+  const title = textValue(item.title) ?? `${feed.label} alert ${index + 1}`;
+  const point = municipalPointFromXmlItem(item);
+  return {
+    id: textValue(item.guid) ?? textValue(item.id) ?? textValue(item.identifier) ?? textValue(item.link) ?? stableToken(`${feed.id}:${title}:${index}`),
+    title,
+    description: textValue(item.description) ?? textValue(item.summary) ?? textValue(item.content),
+    link: linkFromXmlItem(item),
+    publishedAt: normalizeTimestamp(textValue(item.pubDate) ?? textValue(item.published) ?? textValue(item.issued)) ?? fetchedAt,
+    updatedAt: normalizeTimestamp(textValue(item.updated) ?? textValue(item.datemodified)) ?? fetchedAt,
+    expiresAt: normalizeTimestamp(textValue(item.expires) ?? textValue(item.validUntil)),
+    categories: municipalCategories(item.category),
+    lon: point?.lon,
+    lat: point?.lat,
+    geometryBasis: point ? "source_point" : "feed_fallback",
+    raw: value
+  };
+}
+
+function municipalPointFromXmlItem(item: Record<string, unknown>): { lon: number; lat: number } | undefined {
+  const pointRecord = asRecord(item.Point);
+  const pointLat = optionalNumber(pointRecord?.lat);
+  const pointLon = optionalNumber(pointRecord?.long ?? pointRecord?.lon);
+  if (pointLat !== undefined && pointLon !== undefined) {
+    return { lon: pointLon, lat: pointLat };
+  }
+  const georssPoint = textValue(item.point);
+  if (georssPoint) {
+    const parts = georssPoint.split(/\s+/).map((part) => Number(part));
+    const lat = parts[0];
+    const lon = parts[1];
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return { lon: lon as number, lat: lat as number };
+    }
+  }
+  const lat = optionalNumber(item.lat ?? item.latitude);
+  const lon = optionalNumber(item.long ?? item.lon ?? item.longitude);
+  return lat !== undefined && lon !== undefined ? { lon, lat } : undefined;
+}
+
+function linkFromXmlItem(item: Record<string, unknown>): string | undefined {
+  const direct = textValue(item.link);
+  if (direct) {
+    return direct;
+  }
+  const link = toArray(item.link)
+    .map(asRecord)
+    .find((record) => textValue(record?.["@_href"]));
+  return textValue(link?.["@_href"]);
+}
+
+function municipalCategories(value: unknown): string[] {
+  return toArray(value)
+    .flatMap((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        return [String(item)];
+      }
+      const record = asRecord(item);
+      return [textValue(record?.["@_term"]), textValue(record?.term), textValue(record?.label), textValue(record?.["#text"])].filter((entry): entry is string =>
+        Boolean(entry)
+      );
+    })
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function municipalAlertItemIntersectsQuery(item: MunicipalAlertItem, feed: MunicipalAlertFeedConfig, bbox: BoundingBox): boolean {
+  if (item.lon !== undefined && item.lat !== undefined) {
+    return isPointInBbox(item.lon, item.lat, bbox);
+  }
+  if (item.geometry?.type === "Polygon" || item.geometry?.type === "MultiPolygon") {
+    return true;
+  }
+  return bboxIntersects(feed.bbox, bbox);
+}
+
+function mapMunicipalAlertItem(item: MunicipalAlertItem, feed: MunicipalAlertFeedConfig, fetchedAt: string): SafetyFeature {
+  const classification = classifyMunicipalAlert(item);
+  const observedAt = item.publishedAt ?? item.updatedAt ?? fetchedAt;
+  const common = {
+    id: `warnings:municipal_alerts:${stableToken(`${feed.id}:${item.id}`)}`,
+    layer: "warnings" as const,
+    category: "municipal_crisis_alert",
+    hazardType: classification.hazardType,
+    typeCode: classification.typeCode,
+    sourceCode: item.categories[0],
+    sourceSystem: "MUNICIPAL_CRISIS_FEED",
+    headline: item.title,
+    description: item.description,
+    recommendedAction: "Ověřte informaci v oficiálním kanálu příslušného města, kraje nebo složek IZS a řiďte se jejich pokyny.",
+    sourceId: "municipal_alerts" as const,
+    source: "municipal_alerts",
+    sourceName: feed.authorityName,
+    observedAt,
+    effectiveAt: observedAt,
+    expiresAt: item.expiresAt,
+    updatedAt: item.updatedAt ?? observedAt,
+    validUntil: item.expiresAt,
+    confidence: item.geometryBasis === "feed_fallback" ? 0.55 : 0.78,
+    severity: classification.severity,
+    status: item.expiresAt && Date.parse(item.expiresAt) < Date.now() ? "expired" : "active",
+    urgency: classification.urgency,
+    certainty: "unknown" as const,
+    areaName: feed.authorityName,
+    styleHint: classification.styleHint,
+    iconHint: classification.iconHint,
+    detailUrl: item.link,
+    basis: ["municipal_alert_feed", item.geometryBasis],
+    license: MUNICIPAL_ALERTS_LICENSE,
+    metrics: compactMetrics({
+      locationConfidence: item.geometryBasis === "feed_fallback" ? 0.55 : 0.78
+    }),
+    tags: compactTags({
+      feedId: feed.id,
+      feedFormat: feed.format,
+      locationPrecision: item.geometryBasis === "feed_fallback" ? "authority_fallback_point" : item.geometryBasis,
+      categories: item.categories.join(",")
+    }),
+    localized: {
+      cs: {
+        headline: item.title,
+        description: item.description,
+        recommendedAction: "Ověřte informaci v oficiálním kanálu příslušného města, kraje nebo složek IZS."
+      },
+      en: {
+        headline: "Municipal or regional crisis warning",
+        description: item.description,
+        recommendedAction: "Verify the information through the official municipal, regional or emergency-service channel."
+      }
+    },
+    providerProperties: {
+      schemaVersion: "sim.municipal-alerts.v1",
+      sourceAuthority: feed.authorityName,
+      geometryBasis: item.geometryBasis,
+      categories: item.categories
+    },
+    raw: item.raw
+  };
+
+  if (item.geometry) {
+    return makeGeometryFeature({ ...common, geometry: item.geometry });
+  }
+  return makePointFeature({
+    ...common,
+    lon: item.lon ?? feed.fallbackLon,
+    lat: item.lat ?? feed.fallbackLat
+  });
+}
+
+function classifyMunicipalAlert(item: MunicipalAlertItem): {
+  hazardType: string;
+  typeCode: string;
+  severity: SafetySeverity;
+  urgency: SafetyUrgency;
+  styleHint: string;
+  iconHint: string;
+} {
+  const text = `${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`.toLowerCase();
+  const hazard =
+    /povod|záplav|flood|voda|vodní/.test(text)
+      ? { hazardType: "flood", typeCode: "municipal.flood", iconHint: "flood", styleHint: "safety-flood-warning" }
+      : /požár|pozar|fire|kouř|kour/.test(text)
+        ? { hazardType: "fire", typeCode: "municipal.fire", iconHint: "fire", styleHint: "safety-fire-warning" }
+        : /evaku|ukryt|shelter|evacuat/.test(text)
+          ? { hazardType: "evacuation", typeCode: "municipal.evacuation", iconHint: "evacuation", styleHint: "safety-warning-critical" }
+          : /nehod|uzavír|uzavir|dopr|traffic|silnic|road/.test(text)
+            ? { hazardType: "road_incident", typeCode: "municipal.road_incident", iconHint: "traffic", styleHint: "safety-warning-road" }
+            : /pitn|hygien|zdrav|health|epidem/.test(text)
+              ? { hazardType: "public_health", typeCode: "municipal.public_health", iconHint: "health", styleHint: "safety-warning-health" }
+              : /vítr|vitr|bouř|bour|déšť|dest|sníh|snih|led|weather|storm/.test(text)
+                ? { hazardType: "weather", typeCode: "municipal.weather", iconHint: "weather_alert", styleHint: "safety-warning-weather" }
+                : { hazardType: "municipal_alert", typeCode: "municipal.alert", iconHint: "warning", styleHint: "safety-warning-v1" };
+  const severity: SafetySeverity =
+    /kritick|extrém|extrem|bezprostřed|ohrožení života|evaku|critical|emergency/.test(text)
+      ? "critical"
+      : /výstrah|vystrah|nebezpe|varov|warning|požár|povod/.test(text)
+        ? "warning"
+        : /inform|oznámen|notice/.test(text)
+          ? "info"
+          : "advisory";
+  const urgency: SafetyUrgency = severity === "critical" || /ihned|okamžit|immediate|now/.test(text) ? "immediate" : "expected";
+  return { ...hazard, severity, urgency };
+}
+
+function parseMunicipalGeometry(value: unknown): SafetyGeometry | undefined {
+  const geometry = asRecord(value);
+  const type = optionalString(geometry?.type);
+  if (type === "Point") {
+    const coordinates = toCoordinatePair(geometry?.coordinates);
+    return coordinates ? { type, coordinates } : undefined;
+  }
+  if (type === "Polygon") {
+    const coordinates = toPolygonCoordinates(geometry?.coordinates);
+    return coordinates ? { type, coordinates } : undefined;
+  }
+  if (type === "MultiPolygon") {
+    const coordinates = toMultiPolygonCoordinates(geometry?.coordinates);
+    return coordinates ? { type, coordinates } : undefined;
+  }
+  return undefined;
+}
+
+function toCoordinatePair(value: unknown): [number, number] | undefined {
+  if (!Array.isArray(value) || value.length < 2) {
+    return undefined;
+  }
+  const lon = optionalNumber(value[0]);
+  const lat = optionalNumber(value[1]);
+  return lon !== undefined && lat !== undefined ? [round(lon, 6), round(lat, 6)] : undefined;
+}
+
+function toPolygonCoordinates(value: unknown): Array<Array<[number, number]>> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const rings = value
+    .map((ring) => (Array.isArray(ring) ? ring.map(toCoordinatePair).filter((point): point is [number, number] => Boolean(point)) : []))
+    .filter((ring) => ring.length >= 4);
+  return rings.length > 0 ? rings : undefined;
+}
+
+function toMultiPolygonCoordinates(value: unknown): Array<Array<Array<[number, number]>>> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const polygons = value.map(toPolygonCoordinates).filter((polygon): polygon is Array<Array<[number, number]>> => Boolean(polygon));
+  return polygons.length > 0 ? polygons : undefined;
+}
+
+function textValue(value: unknown): string | undefined {
+  if (typeof value === "string" || typeof value === "number") {
+    return optionalString(value);
+  }
+  const record = asRecord(value);
+  return optionalString(record?.["#text"] ?? record?.["@_href"] ?? record?.value);
 }
 
 function mapRoadSrtiLodWarning(event: RoadSrtiLodEvent, query: SafetyQuery, fetchedAt: string): SafetyFeature | undefined {

@@ -21,7 +21,9 @@
   ],
   "security": [
     {
-      "bearerAuth": []
+      "bearerAuth": [
+
+      ]
     }
   ],
   "tags": [
@@ -2213,6 +2215,78 @@
         "operationId": "flightData_get_flight_data_api_v1_aircraft_types_designator"
       }
     },
+    "/flight-data/api/v1/ingest/air-tracks/status": {
+      "get": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Vrátí stav autorizovaného ingestu partner dronů a radarových tracků.",
+        "responses": {
+          "200": {
+            "description": "Partner air track ingest status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataPartnerAirTrackIngestStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "flightData_get_flight_data_api_v1_ingest_air_tracks_status"
+      }
+    },
+    "/flight-data/api/v1/ingest/air-tracks": {
+      "post": {
+        "tags": [
+          "Flight Data: FlightTracks"
+        ],
+        "summary": "Přijme autorizované Remote ID, U-space, radarové nebo partner tracky.",
+        "description": "Server-to-server endpoint chráněný bearer tokenem. Nepoužívat z klientského browseru COP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlightDataPartnerAirTrackIngestPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted partner air tracks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightDataPartnerAirTrackIngestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          },
+          "503": {
+            "$ref": "#/components/responses/FlightDataProblem"
+          }
+        },
+        "operationId": "flightData_post_flight_data_api_v1_ingest_air_tracks"
+      }
+    },
     "/flight-data/health/live": {
       "get": {
         "tags": [
@@ -3136,6 +3210,74 @@
         ]
       }
     },
+    "/situation-data/api/v1/weather-forecast/areas/{areaId}": {
+      "get": {
+        "summary": "Return SIM-normalized weather forecast area detail with meteogram charts",
+        "parameters": [
+          {
+            "name": "areaId",
+            "in": "path",
+            "required": true,
+            "description": "SIM forecast area token from properties.providerProperties.weatherForecast.detailUrl.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/SituationDataBbox"
+          },
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 72,
+              "default": 48
+            },
+            "description": "Hourly forecast horizon to include in charts."
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7,
+              "default": 7
+            },
+            "description": "Daily forecast horizon to include."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Forecast area detail with current values, hourly/daily points and chart-ready series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataWeatherForecastAreaDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "404": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_weather_forecast_areas_areaId",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
     "/situation-data/api/v1/cop/features": {
       "get": {
         "summary": "Compatibility alias for the server-side situation feature stream",
@@ -3303,10 +3445,10 @@
           "404": {
             "$ref": "#/components/responses/SituationDataProblem"
           },
-          "502": {
+          "503": {
             "$ref": "#/components/responses/SituationDataProblem"
           },
-          "503": {
+          "502": {
             "$ref": "#/components/responses/SituationDataProblem"
           }
         },
@@ -4463,7 +4605,9 @@
         "summary": "Ingest Cursor-on-Target XML event payload",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "requestBody": {
@@ -4549,9 +4693,12 @@
         "description": "Kept for existing COM/COP backend adapters. New provider integrations should prefer /features through a server-side COM adapter.",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           },
-          {}
+          {
+          }
         ],
         "parameters": [
           {
@@ -4630,9 +4777,12 @@
         "summary": "TAK GeoJSON feature projection for server-side COM adapters",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           },
-          {}
+          {
+          }
         ],
         "parameters": [
           {
@@ -4783,7 +4933,9 @@
         "summary": "Current normalized CoT event state",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -4812,7 +4964,9 @@
         "summary": "Clear current TAK event state",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -4843,7 +4997,9 @@
         "tags": [
           "Situation Data: Health"
         ],
-        "security": [],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4875,7 +5031,9 @@
         "tags": [
           "Situation Data: Health"
         ],
-        "security": [],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4907,7 +5065,9 @@
         "tags": [
           "Safety Data: Health"
         ],
-        "security": [],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4939,7 +5099,9 @@
         "tags": [
           "Safety Data: Health"
         ],
-        "security": [],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -4971,7 +5133,9 @@
         "tags": [
           "TAK Gateway: Health"
         ],
-        "security": [],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -5003,7 +5167,9 @@
         "tags": [
           "TAK Gateway: Health"
         ],
-        "security": [],
+        "security": [
+
+        ],
         "responses": {
           "200": {
             "description": "Service health response",
@@ -5026,74 +5192,6 @@
             }
           }
         }
-      }
-    },
-    "/situation-data/api/v1/weather-forecast/areas/{areaId}": {
-      "get": {
-        "summary": "Return SIM-normalized weather forecast area detail with meteogram charts",
-        "parameters": [
-          {
-            "name": "areaId",
-            "in": "path",
-            "required": true,
-            "description": "SIM forecast area token from properties.providerProperties.weatherForecast.detailUrl.",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/SituationDataBbox"
-          },
-          {
-            "name": "hours",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 72,
-              "default": 48
-            },
-            "description": "Hourly forecast horizon to include in charts."
-          },
-          {
-            "name": "days",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 7,
-              "default": 7
-            },
-            "description": "Daily forecast horizon to include."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Forecast area detail with current values, hourly/daily points and chart-ready series",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SituationDataWeatherForecastAreaDetail"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/SituationDataProblem"
-          },
-          "404": {
-            "$ref": "#/components/responses/SituationDataProblem"
-          },
-          "502": {
-            "$ref": "#/components/responses/SituationDataProblem"
-          }
-        },
-        "operationId": "situationData_get_situation_data_api_v1_weather_forecast_area_detail",
-        "tags": [
-          "Situation Data: Situation Data"
-        ]
       }
     }
   },
@@ -6262,466 +6360,18 @@
           }
         }
       },
-      "FlightDataItineraryAirport": {
-        "type": "object",
-        "required": [
-          "icao",
-          "name",
-          "lat",
-          "lon"
-        ],
-        "properties": {
-          "icao": {
-            "type": "string"
-          },
-          "iata": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "city": {
-            "type": "string"
-          },
-          "countryCode": {
-            "type": "string"
-          },
-          "lat": {
-            "type": "number"
-          },
-          "lon": {
-            "type": "number"
-          },
-          "elevationFt": {
-            "type": "number"
-          }
-        }
-      },
-      "FlightDataItineraryProgress": {
-        "type": "object",
-        "required": [
-          "basis",
-          "computedAt"
-        ],
-        "properties": {
-          "basis": {
-            "type": "string",
-            "const": "great_circle_current_position"
-          },
-          "totalDistanceKm": {
-            "type": "number"
-          },
-          "distanceTravelledKm": {
-            "type": "number"
-          },
-          "distanceRemainingKm": {
-            "type": "number"
-          },
-          "progressRatio": {
-            "type": "number"
-          },
-          "progressPercent": {
-            "type": "integer"
-          },
-          "estimatedRemainingSeconds": {
-            "type": "integer"
-          },
-          "estimatedArrivalAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "groundSpeedMps": {
-            "type": "number"
-          },
-          "computedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "FlightDataItinerary": {
-        "type": "object",
-        "required": [
-          "source",
-          "callsign",
-          "airportCodes",
-          "airportIataCodes",
-          "waypoints",
-          "display",
-          "timing",
-          "quality"
-        ],
-        "properties": {
-          "source": {
-            "type": "object",
-            "required": [
-              "sourceId",
-              "name",
-              "license",
-              "routesUrl",
-              "airportsUrl"
-            ],
-            "properties": {
-              "sourceId": {
-                "type": "string",
-                "const": "vrs_standing_data"
-              },
-              "name": {
-                "type": "string"
-              },
-              "license": {
-                "type": "string"
-              },
-              "routesUrl": {
-                "type": "string",
-                "format": "uri"
-              },
-              "airportsUrl": {
-                "type": "string",
-                "format": "uri"
-              }
-            }
-          },
-          "callsign": {
-            "type": "string"
-          },
-          "airlineCode": {
-            "type": "string"
-          },
-          "flightNumber": {
-            "type": "string"
-          },
-          "airportCodes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "airportIataCodes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "origin": {
-            "$ref": "#/components/schemas/FlightDataItineraryAirport"
-          },
-          "destination": {
-            "$ref": "#/components/schemas/FlightDataItineraryAirport"
-          },
-          "waypoints": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FlightDataItineraryAirport"
-            }
-          },
-          "display": {
-            "type": "object",
-            "required": [
-              "title"
-            ],
-            "properties": {
-              "title": {
-                "type": "string"
-              },
-              "originCode": {
-                "type": "string"
-              },
-              "destinationCode": {
-                "type": "string"
-              },
-              "originCity": {
-                "type": "string"
-              },
-              "destinationCity": {
-                "type": "string"
-              }
-            }
-          },
-          "progress": {
-            "$ref": "#/components/schemas/FlightDataItineraryProgress"
-          },
-          "timing": {
-            "type": "object",
-            "properties": {
-              "scheduledDeparture": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "const": "unavailable"
-                  },
-                  "reason": {
-                    "type": "string"
-                  }
-                }
-              },
-              "actualDeparture": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "const": "unavailable"
-                  },
-                  "reason": {
-                    "type": "string"
-                  }
-                }
-              },
-              "scheduledArrival": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "const": "unavailable"
-                  },
-                  "reason": {
-                    "type": "string"
-                  }
-                }
-              },
-              "estimatedArrival": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "estimated",
-                      "unavailable"
-                    ]
-                  },
-                  "value": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "basis": {
-                    "type": "string",
-                    "const": "current_position_groundspeed_great_circle"
-                  },
-                  "confidence": {
-                    "type": "number"
-                  },
-                  "reason": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          },
-          "quality": {
-            "type": "object",
-            "properties": {
-              "routeMatch": {
-                "type": "string",
-                "const": "callsign_exact"
-              },
-              "routeConfidence": {
-                "type": "number"
-              },
-              "scheduleAvailable": {
-                "type": "boolean",
-                "const": false
-              },
-              "timingMode": {
-                "type": "string",
-                "enum": [
-                  "position_estimate",
-                  "unavailable"
-                ]
-              },
-              "limitations": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
-      "FlightDataOperationalStatus": {
-        "type": "object",
-        "required": [
-          "emergency",
-          "delay",
-          "phase"
-        ],
-        "properties": {
-          "emergency": {
-            "type": "object",
-            "required": [
-              "active",
-              "label",
-              "source"
-            ],
-            "properties": {
-              "active": {
-                "type": "boolean"
-              },
-              "code": {
-                "type": "string",
-                "enum": [
-                  "general",
-                  "radio_failure",
-                  "unlawful_interference",
-                  "minimum_fuel",
-                  "lifeguard",
-                  "downed",
-                  "reserved",
-                  "unknown"
-                ]
-              },
-              "label": {
-                "type": "string"
-              },
-              "source": {
-                "type": "string",
-                "enum": [
-                  "adsb_emergency",
-                  "squawk",
-                  "none"
-                ]
-              },
-              "squawk": {
-                "type": "string"
-              },
-              "rawEmergency": {
-                "type": "string"
-              }
-            }
-          },
-          "delay": {
-            "type": "object",
-            "required": [
-              "status",
-              "source"
-            ],
-            "properties": {
-              "status": {
-                "type": "string",
-                "enum": [
-                  "unknown",
-                  "on_time",
-                  "delayed"
-                ]
-              },
-              "minutes": {
-                "type": "integer"
-              },
-              "source": {
-                "type": "string",
-                "enum": [
-                  "not_available",
-                  "schedule_feed"
-                ]
-              },
-              "reason": {
-                "type": "string"
-              }
-            }
-          },
-          "phase": {
-            "type": "string",
-            "enum": [
-              "ground",
-              "climb",
-              "cruise",
-              "descent",
-              "unknown"
-            ]
-          }
-        }
-      },
-      "FlightDataPresentation": {
-        "type": "object",
-        "required": [
-          "label",
-          "iconSet",
-          "iconKey",
-          "iconFile",
-          "iconHint",
-          "rotateWithHeading",
-          "colorKey",
-          "colorHex",
-          "colorReason",
-          "zIndexPriority"
-        ],
-        "properties": {
-          "label": {
-            "type": "string"
-          },
-          "iconSet": {
-            "type": "string",
-            "const": "airspace-icons-mono-v1"
-          },
-          "iconKey": {
-            "type": "string"
-          },
-          "iconFile": {
-            "type": "string"
-          },
-          "iconHint": {
-            "type": "string",
-            "enum": [
-              "jet",
-              "turboprop",
-              "small_aircraft",
-              "helicopter",
-              "glider",
-              "uav",
-              "unknown"
-            ]
-          },
-          "rotateWithHeading": {
-            "type": "boolean",
-            "const": true
-          },
-          "rotationDeg": {
-            "type": "number"
-          },
-          "colorKey": {
-            "type": "string",
-            "enum": [
-              "normal",
-              "delayed",
-              "emergency"
-            ]
-          },
-          "colorHex": {
-            "type": "string",
-            "enum": [
-              "#22c55e",
-              "#eab308",
-              "#ef4444"
-            ]
-          },
-          "colorReason": {
-            "type": "string",
-            "enum": [
-              "normal",
-              "delay_detected",
-              "emergency_detected",
-              "delay_not_available"
-            ]
-          },
-          "zIndexPriority": {
-            "type": "integer"
-          }
-        }
-      },
       "FlightDataFlightTrack": {
         "type": "object",
         "required": [
           "trackId",
-          "icao24",
+          "trackKey",
+          "trackKeyKind",
           "objectType",
           "domain",
           "lat",
           "lon",
           "position",
           "lastSeenAt",
-          "status",
-          "presentation",
           "sources",
           "deduplication",
           "quality"
@@ -6729,6 +6379,18 @@
         "properties": {
           "trackId": {
             "type": "string"
+          },
+          "trackKey": {
+            "type": "string"
+          },
+          "trackKeyKind": {
+            "type": "string",
+            "enum": [
+              "icao24",
+              "remote_id",
+              "radar_track",
+              "partner_track"
+            ]
           },
           "icao24": {
             "type": "string",
@@ -6795,15 +6457,6 @@
           "aircraft": {
             "$ref": "#/components/schemas/FlightDataAircraftTypePartial"
           },
-          "itinerary": {
-            "$ref": "#/components/schemas/FlightDataItinerary"
-          },
-          "status": {
-            "$ref": "#/components/schemas/FlightDataOperationalStatus"
-          },
-          "presentation": {
-            "$ref": "#/components/schemas/FlightDataPresentation"
-          },
           "sources": {
             "type": "array",
             "items": {
@@ -6822,6 +6475,9 @@
                 "seenAt": {
                   "type": "string",
                   "format": "date-time"
+                },
+                "sensorId": {
+                  "type": "string"
                 }
               }
             }
@@ -6831,7 +6487,12 @@
             "properties": {
               "key": {
                 "type": "string",
-                "const": "icao24"
+                "enum": [
+                  "icao24",
+                  "remote_id",
+                  "radar_track",
+                  "partner_track"
+                ]
               },
               "mergedRecordCount": {
                 "type": "integer"
@@ -6869,7 +6530,8 @@
               "mock",
               "adsb_lol",
               "opensky",
-              "local_adsb"
+              "local_adsb",
+              "partner_air_tracks"
             ]
           },
           "label": {
@@ -6905,7 +6567,8 @@
                 "mock",
                 "adsb_lol",
                 "opensky",
-                "local_adsb"
+                "local_adsb",
+                "partner_air_tracks"
               ]
             }
           },
@@ -6955,7 +6618,8 @@
                     "mock",
                     "adsb_lol",
                     "opensky",
-                    "local_adsb"
+                    "local_adsb",
+                    "partner_air_tracks"
                   ]
                 },
                 "baseUrl": {
@@ -6964,6 +6628,20 @@
                 "authConfigured": {
                   "type": "boolean"
                 }
+              }
+            }
+          },
+          "partnerAirTracks": {
+            "type": "object",
+            "properties": {
+              "ingestEnabled": {
+                "type": "boolean"
+              },
+              "ttlSeconds": {
+                "type": "integer"
+              },
+              "maxRecords": {
+                "type": "integer"
               }
             }
           },
@@ -7016,6 +6694,207 @@
                 "type": "string"
               }
             }
+          }
+        }
+      },
+      "FlightDataPartnerAirTrackIngestStatus": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "enabled",
+          "sourceId",
+          "ttlSeconds",
+          "maxRecords",
+          "stats"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-partner-air-track-ingest-v1"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "sourceId": {
+            "type": "string",
+            "const": "partner_air_tracks"
+          },
+          "ttlSeconds": {
+            "type": "integer"
+          },
+          "maxRecords": {
+            "type": "integer"
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataPartnerAirTrackIngestPayload": {
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "properties": {
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "remote_id",
+              "u_space",
+              "radar",
+              "partner"
+            ]
+          },
+          "sensorId": {
+            "type": "string"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataPartnerAirTrackIngestRecord"
+            }
+          }
+        }
+      },
+      "FlightDataPartnerAirTrackIngestRecord": {
+        "type": "object",
+        "properties": {
+          "trackId": {
+            "type": "string"
+          },
+          "radarTrackId": {
+            "type": "string"
+          },
+          "icao24": {
+            "type": "string"
+          },
+          "callsign": {
+            "type": "string"
+          },
+          "registration": {
+            "type": "string"
+          },
+          "objectType": {
+            "type": "string",
+            "enum": [
+              "AIRCRAFT",
+              "UAV",
+              "UNKNOWN"
+            ]
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "remote_id",
+              "u_space",
+              "radar",
+              "partner"
+            ]
+          },
+          "sensorId": {
+            "type": "string"
+          },
+          "remoteId": {
+            "type": "string"
+          },
+          "uasRegistration": {
+            "type": "string"
+          },
+          "operatorRegistration": {
+            "type": "string"
+          },
+          "serialNumber": {
+            "type": "string"
+          },
+          "position": {
+            "type": "object",
+            "required": [
+              "lat",
+              "lon"
+            ],
+            "properties": {
+              "lat": {
+                "type": "number"
+              },
+              "lon": {
+                "type": "number"
+              }
+            }
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "altitudeM": {
+            "type": "number"
+          },
+          "speedMps": {
+            "type": "number"
+          },
+          "headingDeg": {
+            "type": "number"
+          },
+          "verticalRateMps": {
+            "type": "number"
+          },
+          "onGround": {
+            "type": "boolean"
+          },
+          "squawk": {
+            "type": "string"
+          },
+          "emergency": {
+            "type": "boolean"
+          },
+          "category": {
+            "type": "string"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "raw": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "FlightDataPartnerAirTrackIngestResult": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "accepted",
+          "rejected",
+          "warnings",
+          "stats"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-partner-air-track-ingest-v1"
+          },
+          "accepted": {
+            "type": "integer"
+          },
+          "rejected": {
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -7445,38 +7324,10 @@
           "category": {
             "type": "string"
           },
-          "sourceCategory": {
-            "type": "string"
-          },
-          "adsbCategory": {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string"
-              },
-              "label": {
-                "type": "string"
-              },
-              "group": {
-                "type": "string",
-                "enum": [
-                  "aircraft",
-                  "rotorcraft",
-                  "uav",
-                  "surface",
-                  "obstacle",
-                  "unknown"
-                ]
-              }
-            }
-          },
           "engineType": {
             "type": "string"
           },
           "wakeTurbulenceCategory": {
-            "type": "string"
-          },
-          "classKey": {
             "type": "string"
           },
           "iconHint": {
@@ -7490,16 +7341,6 @@
               "uav",
               "unknown"
             ]
-          },
-          "iconKey": {
-            "type": "string"
-          },
-          "iconFile": {
-            "type": "string"
-          },
-          "iconSet": {
-            "type": "string",
-            "const": "airspace-icons-mono-v1"
           }
         }
       },
@@ -7513,7 +7354,6 @@
           "mobile_network",
           "traffic",
           "warnings",
-          "weather_alerts",
           "fire",
           "flood",
           "boundary_admin",
@@ -7528,7 +7368,6 @@
           "weather_precipitation_grid",
           "weather_humidity_grid",
           "weather_pressure_grid",
-          "weather_forecast_area",
           "weather_radar_reflectivity",
           "weather_radar_precipitation",
           "weather_radar_nowcast",
@@ -7542,7 +7381,6 @@
         "enum": [
           "mock",
           "open_meteo",
-          "weather_forecast",
           "mobile_coverage_model",
           "mobile_network_model",
           "osm_postgis",
@@ -7649,6 +7487,214 @@
           },
           "north": {
             "type": "number"
+          }
+        }
+      },
+      "SituationDataWeatherForecastAreaDetail": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "sourceId",
+          "providerLayerId",
+          "catalogLayerId",
+          "area",
+          "summary",
+          "current",
+          "nowcast",
+          "hourly",
+          "daily",
+          "charts",
+          "sources",
+          "quality"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-weather-forecast-area-detail-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceId": {
+            "type": "string",
+            "const": "weather_forecast"
+          },
+          "providerLayerId": {
+            "type": "string",
+            "const": "weather.forecast_area"
+          },
+          "catalogLayerId": {
+            "type": "string",
+            "const": "public.weather.forecast_area"
+          },
+          "area": {
+            "type": "object",
+            "required": [
+              "areaId",
+              "bbox",
+              "center",
+              "resolutionDegrees",
+              "label"
+            ],
+            "properties": {
+              "areaId": {
+                "type": "string"
+              },
+              "bbox": {
+                "$ref": "#/components/schemas/SituationDataBoundingBox"
+              },
+              "center": {
+                "type": "object",
+                "required": [
+                  "lat",
+                  "lon"
+                ],
+                "properties": {
+                  "lat": {
+                    "type": "number"
+                  },
+                  "lon": {
+                    "type": "number"
+                  }
+                }
+              },
+              "resolutionDegrees": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "symbolKey",
+              "conditionLabel",
+              "headlineCs",
+              "hazardType",
+              "riskLevel",
+              "severity",
+              "confidence",
+              "validFrom",
+              "validUntil"
+            ],
+            "properties": {
+              "symbolKey": {
+                "type": "string"
+              },
+              "conditionLabel": {
+                "type": "string"
+              },
+              "conditionLabelEn": {
+                "type": "string"
+              },
+              "headlineCs": {
+                "type": "string"
+              },
+              "headlineEn": {
+                "type": "string"
+              },
+              "hazardType": {
+                "type": "string"
+              },
+              "riskLevel": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "info",
+                  "advisory",
+                  "warning",
+                  "critical"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "validFrom": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "current": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "nowcast": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "hourly": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "daily": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "charts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "chartId",
+                "titleCs",
+                "titleEn",
+                "type",
+                "series"
+              ],
+              "properties": {
+                "chartId": {
+                  "type": "string"
+                },
+                "titleCs": {
+                  "type": "string"
+                },
+                "titleEn": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "line",
+                    "bar",
+                    "area"
+                  ]
+                },
+                "series": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "quality": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -8000,7 +8046,8 @@
                     "type": "string"
                   }
                 },
-                "defaultValue": {}
+                "defaultValue": {
+                }
               }
             }
           },
@@ -9708,8 +9755,6 @@
           "vehicle",
           "trip",
           "stopTimes",
-          "history",
-          "prediction",
           "quality"
         ],
         "properties": {
@@ -9825,10 +9870,6 @@
               "startTime": {
                 "type": "string"
               },
-              "delaySeconds": {
-                "type": "integer",
-                "description": "Current delay estimate in seconds. Negative value means the vehicle is early."
-              },
               "status": {
                 "type": "string",
                 "enum": [
@@ -9870,35 +9911,6 @@
                   "type": "string",
                   "example": "16:06:07"
                 },
-                "predictedArrival": {
-                  "type": "string",
-                  "format": "date-time",
-                  "description": "SIM-normalized predicted arrival when schedule-based prediction is available."
-                },
-                "predictedDeparture": {
-                  "type": "string",
-                  "format": "date-time",
-                  "description": "SIM-normalized predicted departure when schedule-based prediction is available."
-                },
-                "delaySeconds": {
-                  "type": "integer",
-                  "description": "Delay estimate applied to this stop time. Negative value means early."
-                },
-                "scheduleRelationship": {
-                  "type": "string",
-                  "enum": [
-                    "scheduled",
-                    "skipped",
-                    "no_data",
-                    "unscheduled"
-                  ],
-                  "description": "GTFS-RT stop-time schedule relationship when official trip update data is available."
-                },
-                "tripUpdateTimestamp": {
-                  "type": "string",
-                  "format": "date-time",
-                  "description": "Timestamp of the GTFS-RT TripUpdate used for this stop prediction."
-                },
                 "relationToVehicle": {
                   "type": "string",
                   "enum": [
@@ -9917,189 +9929,6 @@
                     },
                     "lon": {
                       "type": "number"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "delaySeconds": {
-            "type": "integer",
-            "description": "Current delay estimate in seconds. Negative value means the vehicle is early."
-          },
-          "history": {
-            "type": "object",
-            "required": [
-              "generatedFrom",
-              "windowSeconds",
-              "pointCount",
-              "truncated",
-              "points"
-            ],
-            "properties": {
-              "generatedFrom": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "windowSeconds": {
-                "type": "integer"
-              },
-              "pointCount": {
-                "type": "integer"
-              },
-              "truncated": {
-                "type": "boolean"
-              },
-              "points": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "observedAt"
-                  ],
-                  "properties": {
-                    "observedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "position": {
-                      "type": "object",
-                      "properties": {
-                        "lat": {
-                          "type": "number"
-                        },
-                        "lon": {
-                          "type": "number"
-                        },
-                        "headingDeg": {
-                          "type": "number"
-                        },
-                        "speedMps": {
-                          "type": "number"
-                        }
-                      }
-                    },
-                    "stopId": {
-                      "type": "string"
-                    },
-                    "currentStopSequence": {
-                      "type": "integer"
-                    },
-                    "relationToVehicle": {
-                      "type": "string",
-                      "enum": [
-                        "previous",
-                        "current",
-                        "next",
-                        "future",
-                        "unknown"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "prediction": {
-            "type": "object",
-            "required": [
-              "generatedFrom",
-              "delaySource",
-              "stopTimes"
-            ],
-            "properties": {
-              "generatedFrom": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "delaySource": {
-                "type": "string",
-                "enum": [
-                  "official_trip_update",
-                  "estimated_from_schedule",
-                  "unavailable"
-                ]
-              },
-              "delaySeconds": {
-                "type": "integer"
-              },
-              "tripUpdateTimestamp": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "stopTimes": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "stopId",
-                    "stopSequence",
-                    "relationToVehicle"
-                  ],
-                  "properties": {
-                    "stopId": {
-                      "type": "string"
-                    },
-                    "stopName": {
-                      "type": "string"
-                    },
-                    "stopSequence": {
-                      "type": "integer"
-                    },
-                    "scheduledArrival": {
-                      "type": "string"
-                    },
-                    "scheduledDeparture": {
-                      "type": "string"
-                    },
-                    "predictedArrival": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "predictedDeparture": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "delaySeconds": {
-                      "type": "integer"
-                    },
-                    "scheduleRelationship": {
-                      "type": "string",
-                      "enum": [
-                        "scheduled",
-                        "skipped",
-                        "no_data",
-                        "unscheduled"
-                      ]
-                    },
-                    "tripUpdateTimestamp": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "relationToVehicle": {
-                      "type": "string",
-                      "enum": [
-                        "previous",
-                        "current",
-                        "next",
-                        "future",
-                        "unknown"
-                      ]
-                    },
-                    "position": {
-                      "type": "object",
-                      "properties": {
-                        "lat": {
-                          "type": "number"
-                        },
-                        "lon": {
-                          "type": "number"
-                        }
-                      }
                     }
                   }
                 }
@@ -10138,11 +9967,8 @@
             "required": [
               "realtimeVehicleAvailable",
               "staticModelAvailable",
-              "tripUpdateAvailable",
               "tripScheduleAvailable",
               "routeShapeAvailable",
-              "historyAvailable",
-              "predictionAvailable",
               "generatedFrom",
               "warnings"
             ],
@@ -10153,20 +9979,10 @@
               "staticModelAvailable": {
                 "type": "boolean"
               },
-              "tripUpdateAvailable": {
-                "type": "boolean",
-                "description": "True when SIM matched an official GTFS-RT TripUpdate for this vehicle detail response."
-              },
               "tripScheduleAvailable": {
                 "type": "boolean"
               },
               "routeShapeAvailable": {
-                "type": "boolean"
-              },
-              "historyAvailable": {
-                "type": "boolean"
-              },
-              "predictionAvailable": {
                 "type": "boolean"
               },
               "generatedFrom": {
@@ -10912,7 +10728,8 @@
                   "MultiPolygon"
                 ]
               },
-              "coordinates": {}
+              "coordinates": {
+              }
             }
           },
           "properties": {
@@ -12130,7 +11947,8 @@
                   "Polygon"
                 ]
               },
-              "coordinates": {}
+              "coordinates": {
+              }
             }
           },
           "properties": {
@@ -14089,263 +13907,6 @@
             }
           }
         }
-      },
-      "SituationDataWeatherForecastAreaDetail": {
-        "type": "object",
-        "required": [
-          "contractVersion",
-          "generatedAt",
-          "sourceId",
-          "providerLayerId",
-          "catalogLayerId",
-          "area",
-          "summary",
-          "current",
-          "nowcast",
-          "hourly",
-          "daily",
-          "charts",
-          "sources",
-          "quality"
-        ],
-        "properties": {
-          "contractVersion": {
-            "type": "string",
-            "enum": [
-              "sim-weather-forecast-area-detail-v1"
-            ]
-          },
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "sourceId": {
-            "type": "string",
-            "enum": [
-              "weather_forecast"
-            ]
-          },
-          "providerLayerId": {
-            "type": "string",
-            "enum": [
-              "weather.forecast_area"
-            ]
-          },
-          "catalogLayerId": {
-            "type": "string",
-            "enum": [
-              "public.weather.forecast_area"
-            ]
-          },
-          "area": {
-            "type": "object",
-            "required": [
-              "areaId",
-              "bbox",
-              "center",
-              "resolutionDegrees",
-              "label"
-            ],
-            "properties": {
-              "areaId": {
-                "type": "string"
-              },
-              "bbox": {
-                "$ref": "#/components/schemas/SituationDataBoundingBox"
-              },
-              "center": {
-                "type": "object",
-                "required": [
-                  "lat",
-                  "lon"
-                ],
-                "properties": {
-                  "lat": {
-                    "type": "number"
-                  },
-                  "lon": {
-                    "type": "number"
-                  }
-                }
-              },
-              "resolutionDegrees": {
-                "type": "number"
-              },
-              "label": {
-                "type": "string"
-              }
-            }
-          },
-          "summary": {
-            "type": "object",
-            "required": [
-              "symbolKey",
-              "conditionLabel",
-              "headlineCs",
-              "hazardType",
-              "riskLevel",
-              "severity",
-              "confidence",
-              "validFrom",
-              "validUntil"
-            ],
-            "properties": {
-              "symbolKey": {
-                "type": "string"
-              },
-              "conditionLabel": {
-                "type": "string"
-              },
-              "conditionLabelEn": {
-                "type": "string"
-              },
-              "headlineCs": {
-                "type": "string"
-              },
-              "headlineEn": {
-                "type": "string"
-              },
-              "hazardType": {
-                "type": "string"
-              },
-              "riskLevel": {
-                "type": "string"
-              },
-              "severity": {
-                "type": "string",
-                "enum": [
-                  "info",
-                  "advisory",
-                  "warning",
-                  "critical"
-                ]
-              },
-              "confidence": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1
-              },
-              "validFrom": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "validUntil": {
-                "type": "string",
-                "format": "date-time"
-              }
-            }
-          },
-          "current": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "nowcast": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "hourly": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "daily": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "charts": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "chartId",
-                "titleCs",
-                "titleEn",
-                "type",
-                "series"
-              ],
-              "properties": {
-                "chartId": {
-                  "type": "string"
-                },
-                "titleCs": {
-                  "type": "string"
-                },
-                "titleEn": {
-                  "type": "string"
-                },
-                "unit": {
-                  "type": "string"
-                },
-                "type": {
-                  "type": "string",
-                  "enum": [
-                    "line",
-                    "bar",
-                    "area"
-                  ]
-                },
-                "series": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "required": [
-                      "key",
-                      "labelCs",
-                      "labelEn",
-                      "points"
-                    ],
-                    "properties": {
-                      "key": {
-                        "type": "string"
-                      },
-                      "labelCs": {
-                        "type": "string"
-                      },
-                      "labelEn": {
-                        "type": "string"
-                      },
-                      "unit": {
-                        "type": "string"
-                      },
-                      "points": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "required": [
-                            "t",
-                            "v"
-                          ],
-                          "properties": {
-                            "t": {
-                              "type": "string",
-                              "format": "date-time"
-                            },
-                            "v": {
-                              "type": [
-                                "number",
-                                "null"
-                              ]
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": true
-            }
-          },
-          "quality": {
-            "type": "object",
-            "additionalProperties": true
-          }
-        }
       }
     },
     "securitySchemes": {
@@ -14536,7 +14097,7 @@
         "schema": {
           "type": "integer",
           "default": 250,
-          "maximum": 5000
+          "maximum": 1000
         }
       },
       "SituationDataFeatureId": {
@@ -14554,10 +14115,10 @@
         "required": true,
         "schema": {
           "type": "string",
-          "pattern": "^(node|way|relation|area):-?\\d+$",
+          "pattern": "^(node|way|relation):-?\\d+$",
           "example": "node:13743393126"
         },
-        "description": "OSM communications_tower identifier as exposed in mobile coverage tags, e.g. node:13743393126 or area:436954796."
+        "description": "OSM communications_tower identifier as exposed in mobile coverage tags, e.g. node:13743393126."
       },
       "SafetyDataBbox": {
         "name": "bbox",
@@ -14584,7 +14145,7 @@
         "required": false,
         "schema": {
           "type": "string",
-          "example": "chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,road_srti_lod,admin_boundaries"
+          "example": "chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries"
         }
       },
       "SafetyDataLimit": {

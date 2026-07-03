@@ -12,7 +12,7 @@ Veřejná cesta přes SIM web:
 https://sim.zeleznalady.cz/flight-data/api/v1/aircraft/positions
 ```
 
-Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený. Vlastní přijímače lze připojit přes `local_adsb`, který čte readsb/dump1090 `aircraft.json`.
+Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený. Vlastní přijímače lze připojit přes `local_adsb`, který čte readsb/dump1090 `aircraft.json`. Autorizované Remote ID, U-space nebo lokální radarové zdroje lze napojit přes `partner_air_tracks`; tento zdroj je vypnutý, dokud není nastaven ingest token.
 
 Lokální interní cesta v Docker síti:
 
@@ -33,6 +33,8 @@ GET /api/v1/uas-geozones
 GET /api/v1/airspace-activations
 GET /api/v1/aircraft-types
 GET /api/v1/aircraft-types/{designator}
+GET /api/v1/ingest/air-tracks/status
+POST /api/v1/ingest/air-tracks
 GET /api/v1/sources
 GET /api/v1/config
 GET /health/ready
@@ -53,7 +55,7 @@ COM má pro strom vrstev používat katalog. `sources` jsou pouze upstreamy a li
 | Parametr | Příklad | Popis |
 | --- | --- | --- |
 | `bbox` | `13.5,49.5,15.5,50.6` | `west,south,east,north` ve WGS84. |
-| `source` | `mock`, `adsb_lol`, `local_adsb`, `opensky` | Požadované zdroje. Pokud není vyplněno, použije se serverová konfigurace. |
+| `source` | `mock`, `adsb_lol`, `local_adsb`, `opensky`, `partner_air_tracks` | Požadované zdroje. Pokud není vyplněno, použije se serverová konfigurace. |
 | `limit` | `500` | Maximum vrácených deduplikovaných tracků. Max 1000. |
 | `includeStale` | `true` | Vrátí i stale tracky. Default `false`. |
 
@@ -83,6 +85,8 @@ speciální ořezávání kvůli této cache optimalizaci.
   "tracks": [
     {
       "trackId": "flight:icao24:4d2216",
+      "trackKey": "4d2216",
+      "trackKeyKind": "icao24",
       "icao24": "4d2216",
       "callsign": "CSA42",
       "registration": "OK-TSR",
@@ -200,6 +204,7 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - COM používá `trackId` jako stabilní identifikátor.
 - COM má pro zobrazený název preferovat `callsign`, potom `registration`, potom `icao24`. SIM nesmí při chybějícím callsignu posílat technický fallback typu `flight:icao24:*` do pole `callsign`.
 - `position.lat/lon` je normalizovaná poloha pro nové integrace; kořenová pole `lat/lon` zůstávají kvůli zpětné kompatibilitě.
+- `trackKey` a `trackKeyKind` jsou stabilní identita tracku nezávislá na tom, zda zdroj poskytuje ICAO24. Hodnoty `trackKeyKind` jsou `icao24`, `remote_id`, `radar_track` a `partner_track`. COP nemá u dronů ani radarových stop vyžadovat `icao24`.
 - `aircraft.iconHint` je volitelný prezentační hint pro civilní symboliku. Povolené hodnoty jsou `jet`, `turboprop`, `small_aircraft`, `helicopter`, `glider`, `uav`, `unknown`.
 - `aircraft.iconKey` a `presentation.iconKey` jsou autoritativní doporučení pro SVG sadu `airspace-icons-mono-v1`. Hodnota odpovídá názvu souboru bez `.svg`, například `aircraft_06_narrowbody_airliner` -> `aircraft_06_narrowbody_airliner.svg`.
 - `presentation.rotationDeg` je hodnota pro otočení symbolu podle kurzu. Ikony jsou orientované nosem na sever, COM je má rotovat přímo touto hodnotou.
@@ -245,6 +250,7 @@ Příklad zkrácené části `track.itinerary`:
 | --- | --- | --- |
 | `adsb_lol` | live open-data pilot | ODbL; vhodné pro veřejný pilot se správnou atribucí. |
 | `local_adsb` | live vlastní/přátelská síť | Čte `aircraft.json` z readsb/dump1090 přes `LOCAL_ADSB_AIRCRAFT_JSON_URLS`; priorita je vyšší než veřejné agregátory. |
+| `partner_air_tracks` | autorizovaný ingest | Přijímá Remote ID/U-space/lokální radar/partner tracky přes tokenem chráněný server-to-server endpoint. Vypnuto bez `FLIGHT_DATA_PARTNER_INGEST_TOKEN`. |
 | `opensky` | licencované / omezené | Nezapínat pro komerční nebo operativní použití bez písemného oprávnění. |
 | `mock` | syntetika | Pouze pro testy a fallback. |
 
@@ -264,6 +270,49 @@ FLIGHT_ROUTE_CACHE_TTL_SECONDS=86400
 Tento zdroj je vhodný pro otevřený route hint podle callsignu a letištní referenci, ne pro plánované nebo skutečné časy letů. Pokud import vypadne, letové stopy zůstávají dostupné a odpověď obsahuje `warnings`.
 
 Odlety, přílety, plánované časy a zpoždění nejsou součástí ADS-B ani VRS standing data. Praha/PRG provozní FIDS data nabízí jako placené datové rozhraní po smluvním zřízení přístupu; komerční zdroje typu SITA/Cirium/FlightAware/aviationstack vyžadují samostatnou licenci a konfiguraci. Do té doby SIM posílá `status.delay.status=unknown` a COP musí let vykreslit zeleně, pokud není aktivní nouze.
+
+## Autorizovaný ingest dronů a radarů
+
+`partner_air_tracks` je vstup pro budoucí civilní Remote ID/U-space feedy,
+lokální přijímače a domácí/přátelské radary. Endpoint je server-to-server a
+není veřejný pro klientský browser COP:
+
+```http
+GET /api/v1/ingest/air-tracks/status
+POST /api/v1/ingest/air-tracks
+Authorization: Bearer <FLIGHT_DATA_PARTNER_INGEST_TOKEN>
+```
+
+Minimální payload:
+
+```json
+{
+  "sourceKind": "radar",
+  "sensorId": "radar-home-1",
+  "records": [
+    {
+      "radarTrackId": "trk-20260703-001",
+      "position": { "lat": 50.087, "lon": 14.42 },
+      "altitudeM": 620,
+      "speedMps": 23,
+      "headingDeg": 74,
+      "observedAt": "2026-07-03T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+Pro Remote ID/U-space lze místo `radarTrackId` poslat `remoteId`,
+`uasRegistration`, `operatorRegistration` nebo `serialNumber`; SIM z toho
+vytvoří `trackKeyKind=remote_id` a `objectType=UAV`. Registrační údaje dronů a
+operátorů mohou být osobní nebo regulovaná data. COP je smí zobrazit pouze
+rolím, pro které má provozovatel oprávnění, a v běžném mapovém popisku má
+preferovat neutrální identifikátor tracku.
+
+SIM nepředpokládá veřejný celostátní feed živých civilních dronů ani veřejný
+registr s použitelnými registračními čísly. DroneMap/AIM UAS zóny jsou
+referenční prostorová data, ne live poloha dronů. Pro reálný provoz je správná
+cesta partnerství s U-space/Remote ID zdrojem nebo vlastní autorizované senzory.
 
 `GET /api/v1/airspaces` vrací GeoJSON `FeatureCollection` s referenčními leteckými prostory z AIP/eAIP ENR 5.1:
 

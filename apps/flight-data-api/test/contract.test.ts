@@ -34,6 +34,10 @@ describe("Flight Data API contract", () => {
       openskyBaseUrl: "https://opensky-network.org/api",
       openskyAuthUrl: "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
       localAdsbAircraftJsonUrls: [],
+      partnerAirTrackIngestToken: undefined,
+      partnerAirTrackTtlSeconds: 90,
+      partnerAirTrackMaxRecords: 20_000,
+      partnerAirTrackPriority: 95,
       flightRouteEnrichmentEnabled: false,
       flightRouteRoutesCsvUrl: "https://vrs-standing-data.adsb.lol/routes.csv",
       flightRouteAirportsCsvUrl: "https://vrs-standing-data.adsb.lol/airports.csv",
@@ -84,6 +88,10 @@ describe("Flight Data API contract", () => {
         expect.objectContaining({
           sourceId: "local_adsb",
           license: expect.objectContaining({ name: "Owner-operated ADS-B receiver feed" })
+        }),
+        expect.objectContaining({
+          sourceId: "partner_air_tracks",
+          license: expect.objectContaining({ name: "Partner-authorized air track ingest" })
         })
       ])
     );
@@ -118,7 +126,8 @@ describe("Flight Data API contract", () => {
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
           expect.objectContaining({ sourceId: "opensky", authConfigured: false }),
-          expect.objectContaining({ sourceId: "local_adsb", authConfigured: false })
+          expect.objectContaining({ sourceId: "local_adsb", authConfigured: false }),
+          expect.objectContaining({ sourceId: "partner_air_tracks", authConfigured: false })
         ])
       })
     );
@@ -310,7 +319,7 @@ describe("Flight Data API contract", () => {
           notes: []
         }
       };
-      const fetchedAt = new Date("2026-07-03T10:00:00.000Z").toISOString();
+      const fetchedAt = new Date().toISOString();
       const source: FlightDataSource = {
         descriptor,
         async fetchObservations() {
@@ -498,6 +507,65 @@ describe("Flight Data API contract", () => {
         position: { lat: 50.1174, lon: 14.5121 },
         aircraft: expect.objectContaining({ iconHint: "jet" }),
         deduplication: expect.objectContaining({ primarySourceId: "local_adsb" })
+      })
+    );
+  });
+
+  it("ingests partner Remote ID or radar tracks without ICAO24", async () => {
+    const configured = await createApp({
+      ...config,
+      enabledSources: ["partner_air_tracks"],
+      partnerAirTrackIngestToken: "test-ingest-token",
+      partnerAirTrackTtlSeconds: 300
+    });
+
+    await request(configured.app)
+      .post("/api/v1/ingest/air-tracks")
+      .set("authorization", "Bearer test-ingest-token")
+      .send({
+        sourceName: "Local Remote ID gateway",
+        sourceKind: "remote_id",
+        sensorId: "rid-gw-1",
+        records: [
+          {
+            remoteId: "CZ-REMOTE-123",
+            uasRegistration: "CZE-OP-123456",
+            objectType: "UAV",
+            position: { lat: 50.1001, lon: 14.4012 },
+            altitudeM: 120,
+            speedMps: 14,
+            headingDeg: 72,
+            observedAt: new Date().toISOString()
+          }
+        ]
+      })
+      .expect(202);
+
+    const response = await request(configured.app)
+      .get("/api/v1/cop/tracks?source=partner_air_tracks&bbox=14.3,50.0,14.5,50.2&limit=10")
+      .expect(200);
+
+    expect(response.body.summary.rawObservationCount).toBe(1);
+    expect(response.body.tracks[0]).toEqual(
+      expect.objectContaining({
+        trackKeyKind: "remote_id",
+        trackKey: "cz-remote-123",
+        objectType: "UAV",
+        position: { lat: 50.1001, lon: 14.4012 },
+        aircraft: expect.objectContaining({
+          iconHint: "uav",
+          iconKey: "drone_03_fixed_wing_uav"
+        }),
+        metadata: expect.objectContaining({
+          sourceKind: "remote_id",
+          sensorId: "rid-gw-1",
+          remoteId: "CZ-REMOTE-123",
+          uasRegistration: "CZE-OP-123456"
+        }),
+        deduplication: expect.objectContaining({
+          key: "remote_id",
+          primarySourceId: "partner_air_tracks"
+        })
       })
     );
   });

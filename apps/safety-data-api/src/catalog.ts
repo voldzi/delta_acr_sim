@@ -37,8 +37,8 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
         refreshSeconds: 300,
         cacheTtlSeconds: config.cacheTtlSeconds,
         styleProfile: "safety-warning-v1",
-        sourceIds: ["gdacs_alerts", "hzs_incidents", "road_srti_lod"],
-        query: query(["warnings"], ["gdacs_alerts", "hzs_incidents", "road_srti_lod"]),
+        sourceIds: ["gdacs_alerts", "hzs_incidents", "municipal_alerts", "road_srti_lod"],
+        query: query(["warnings"], ["gdacs_alerts", "hzs_incidents", "municipal_alerts", "road_srti_lod"]),
         notificationPolicy: notificationPolicy("warning"),
         legal: {
           attribution:
@@ -46,6 +46,7 @@ export function buildSafetyMapCatalog(config: SafetyDataConfig, generatedAt = ne
           notes: [
             "Vrstva obsahuje jen reálné veřejné výstrahy, katastrofické alerty a veřejné probíhající HZS výjezdy; technická varování zdrojů patří do provozního dohledu.",
             "HZS public feed může vynechávat přesnou GPS polohu; COP má v detailu zobrazit locationPrecision/locationConfidence.",
+            "Krajské a městské krizové portály lze připojit přes municipal_alerts, pokud poskytují veřejný nebo partnerem povolený RSS/Atom/GeoRSS/GeoJSON feed.",
             "Silniční SRTI/NDIC události jsou do této vrstvy promítnuté jen jako dopravně-bezpečnostní warningy; plná dopravní vrstva zůstává v situation-data.",
             "GDACS je strategický krizový kontext; lokální opatření je nutné ověřovat přes IZS a příslušné orgány."
           ]
@@ -293,6 +294,18 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         feedsLayerIds: ["safety.warnings", "safety.fire"],
         feedsCatalogLayerIds: ["public.safety.warnings", "public.safety.fire"],
         notes: ["Public HZS active dispatch source for ongoing incidents; SIM exposes type, subtype, status, unit, locality and explicit location precision."]
+      };
+    case "municipal_alerts":
+      return {
+        sourceRole: "final",
+        audience: "public",
+        selectableInMap: true,
+        feedsLayerIds: ["safety.warnings"],
+        feedsCatalogLayerIds: ["public.safety.warnings"],
+        notes: [
+          "Configured municipal/regional RSS, Atom, GeoRSS or GeoJSON source for crisis-management warnings.",
+          "If source items do not carry coordinates, SIM emits a clearly marked authority fallback point with lower confidence."
+        ]
       };
     case "road_srti_lod":
       return {

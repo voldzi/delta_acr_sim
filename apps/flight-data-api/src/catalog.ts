@@ -23,9 +23,9 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
         providerLayerId: "flight.tracks",
         recommendedCatalogLayerId: "flight.public.tracks",
         label: "Veřejné lety",
-        description: "Deduplicované civilní polohy letadel podle icao24 z povolených veřejných nebo partnerských ADS-B zdrojů.",
+        description: "Deduplicované civilní polohy letadel, dronů a partnerských radarových stop z povolených veřejných nebo autorizovaných zdrojů.",
         categoryPath: ["flight", "tracks"],
-        categories: ["aircraft_track", "flight"],
+        categories: ["aircraft_track", "uav_track", "radar_track", "flight"],
         role: "overlay",
         audience: "public",
         kind: "track_stream",
@@ -37,18 +37,21 @@ export function buildFlightMapCatalog(config: FlightDataConfig, generatedAt = ne
         refreshSeconds: config.cacheTtlSeconds,
         cacheTtlSeconds: config.cacheTtlSeconds,
         styleProfile: "flight-track-v1",
-        sourceIds: ["adsb_lol", "opensky", "local_adsb"],
+        sourceIds: ["adsb_lol", "opensky", "local_adsb", "partner_air_tracks"],
         query: {
           mode: "bbox",
           providerId: PROVIDER_ID,
           streamId: "aircraft.positions",
           providerLayerIds: ["flight.tracks"],
-          providerSourceIds: ["adsb_lol", "opensky", "local_adsb"],
+          providerSourceIds: ["adsb_lol", "opensky", "local_adsb", "partner_air_tracks"],
           maxFeatures: 500
         },
         legal: {
           attribution: "Feature-level source attribution is preserved from ADS-B/OpenSky/local receiver sources.",
-          notes: ["Flight positions are situational context and can be delayed, incomplete or license-restricted."]
+          notes: [
+            "Flight positions are situational context and can be delayed, incomplete or license-restricted.",
+            "Partner Remote ID/U-space/radar tracks are accepted only through authenticated server-side ingest."
+          ]
         }
       },
       {
@@ -364,6 +367,18 @@ function sourceRole(sourceId: FlightDataSourceId) {
         feedsLayerIds: ["flight.tracks"],
         feedsCatalogLayerIds: ["flight.public.tracks"],
         notes: ["Preferred production path for project-owned or partner-authorized receivers."]
+      };
+    case "partner_air_tracks":
+      return {
+        sourceRole: "final",
+        audience: "controlled",
+        selectableInMap: false,
+        feedsLayerIds: ["flight.tracks"],
+        feedsCatalogLayerIds: ["flight.public.tracks"],
+        notes: [
+          "Authenticated server-side ingest for U-space, Remote ID, local radar and other partner-authorized air tracks.",
+          "Civil drone identifiers can be regulated or personal data; COP must enforce role-based access if these fields are shown."
+        ]
       };
   }
 }

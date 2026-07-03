@@ -8,6 +8,7 @@ import type {
   BoundingBox,
   FlightAdsbEmitterCategory,
   FlightDataSourceId,
+  FlightTrackKeyKind,
   FlightTrackAircraftClass,
   FlightTrackIconKey,
   FlightTrackIconHint,
@@ -191,29 +192,37 @@ function deduplicateObservations(
   let droppedWithoutPositionCount = 0;
 
   for (const observation of observations) {
-    const icao24 = normalizeIcao24(observation.icao24);
-    if (!icao24) {
+    const trackKey = observationKey(observation);
+    if (!trackKey) {
       continue;
     }
     if (typeof observation.lat !== "number" || typeof observation.lon !== "number") {
       droppedWithoutPositionCount += 1;
       continue;
     }
-    const existing = grouped.get(icao24) ?? [];
-    existing.push({ ...observation, icao24 });
-    grouped.set(icao24, existing);
+    const existing = grouped.get(trackKey.groupKey) ?? [];
+    existing.push({
+      ...observation,
+      icao24: observation.icao24 ? normalizeIcao24(observation.icao24) : undefined,
+      trackKey: trackKey.value,
+      trackKeyKind: trackKey.kind
+    });
+    grouped.set(trackKey.groupKey, existing);
   }
 
   const sourceLicenseById = new Map<FlightDataSourceId, string>(sources.map((source) => [source.sourceId, source.license.name]));
   const tracks: AggregatedFlightTrack[] = [];
   const nowMs = Date.now();
 
-  for (const [icao24, group] of grouped) {
+  for (const [groupKey, group] of grouped) {
     const sorted = [...group].sort(compareObservationPriority);
     const primary = sorted[0];
     if (!primary || typeof primary.lat !== "number" || typeof primary.lon !== "number") {
       continue;
     }
+    const trackKey = primary.trackKey ?? groupKey.slice(groupKey.indexOf(":") + 1);
+    const trackKeyKind = primary.trackKeyKind ?? "partner_track";
+    const icao24 = firstDefined(sorted.map((item) => item.icao24).map((value) => (value ? normalizeIcao24(value) : undefined)));
     const positionAgeSeconds = Math.max(0, Math.round((nowMs - Date.parse(primary.seenAt)) / 1000));
     const stale = positionAgeSeconds > staleAfterSeconds;
     if (stale && !includeStale) {
@@ -231,7 +240,7 @@ function deduplicateObservations(
     const registration = firstDefined(sorted.map((item) => item.registration));
     const status = operationalStatusFor(primary, sorted);
     const presentation = presentationFor({
-      label: callsign ?? registration ?? icao24,
+      label: callsign ?? registration ?? icao24 ?? trackKey,
       iconHint,
       iconKey,
       headingDeg: primary.headingDeg,
@@ -239,11 +248,13 @@ function deduplicateObservations(
     });
 
     tracks.push({
-      trackId: `flight:icao24:${icao24}`,
+      trackId: `flight:${trackKeyKind}:${trackKey}`,
+      trackKey,
+      trackKeyKind,
       icao24,
       callsign,
       registration,
-      objectType: iconHint === "uav" ? "UAV" : "AIRCRAFT",
+      objectType: primary.objectType ?? (iconHint === "uav" ? "UAV" : "AIRCRAFT"),
       domain: "AIR",
       lat: round(primary.lat, 6),
       lon: round(primary.lon, 6),
@@ -278,10 +289,11 @@ function deduplicateObservations(
         sourceId: item.sourceId,
         sourceRecordId: item.sourceRecordId,
         fetchedAt: item.fetchedAt,
-        seenAt: item.seenAt
+        seenAt: item.seenAt,
+        sensorId: item.sensorId
       })),
       deduplication: {
-        key: "icao24",
+        key: trackKeyKind,
         mergedRecordCount: sorted.length,
         primarySourceId: primary.sourceId
       },
@@ -295,6 +307,12 @@ function deduplicateObservations(
         squawk: primary.squawk,
         emergency: primary.emergency,
         sourceCategory,
+        sourceKind: primary.sourceKind,
+        sensorId: firstDefined(sorted.map((item) => item.sensorId)),
+        remoteId: firstDefined(sorted.map((item) => item.remoteId)),
+        uasRegistration: firstDefined(sorted.map((item) => item.uasRegistration)),
+        operatorRegistration: firstDefined(sorted.map((item) => item.operatorRegistration)),
+        serialNumber: firstDefined(sorted.map((item) => item.serialNumber)),
         sourceLicenses
       }
     });
@@ -304,6 +322,19 @@ function deduplicateObservations(
     tracks: tracks.sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt)),
     droppedWithoutPositionCount
   };
+}
+
+function observationKey(observation: RawFlightObservation): { groupKey: string; kind: FlightTrackKeyKind; value: string } | undefined {
+  const icao24 = observation.icao24 ? normalizeIcao24(observation.icao24) : undefined;
+  if (icao24) {
+    return { groupKey: `icao24:${icao24}`, kind: "icao24", value: icao24 };
+  }
+  const kind = observation.trackKeyKind;
+  const value = normalizeExternalTrackKey(observation.trackKey ?? observation.remoteId ?? observation.uasRegistration ?? observation.serialNumber);
+  if (kind && value) {
+    return { groupKey: `${kind}:${value}`, kind, value };
+  }
+  return undefined;
 }
 
 function adsbCategoryFor(sourceCategory: string | undefined): FlightAdsbEmitterCategory | undefined {
@@ -667,9 +698,14 @@ function firstDefined<T>(values: Array<T | undefined>): T | undefined {
   return values.find((value): value is T => value !== undefined);
 }
 
-function normalizeIcao24(value: string): string | undefined {
-  const normalized = value.trim().toLowerCase();
-  return /^[0-9a-f]{6}$/.test(normalized) ? normalized : undefined;
+function normalizeIcao24(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && /^[0-9a-f]{6}$/.test(normalized) ? normalized : undefined;
+}
+
+function normalizeExternalTrackKey(value: string | undefined): string | undefined {
+  const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9_.:-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized ? normalized.slice(0, 96) : undefined;
 }
 
 function round(value: number, precision: number): number {

@@ -6,6 +6,7 @@ export type SafetyDataSourceId =
   | "nasa_firms"
   | "gdacs_alerts"
   | "hzs_incidents"
+  | "municipal_alerts"
   | "road_srti_lod"
   | "admin_boundaries";
 export type SourceMode = "live" | "mock" | "reference";

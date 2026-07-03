@@ -310,6 +310,20 @@ FLIGHT_ROUTE_ENRICHMENT_ENABLED=true
 FLIGHT_ROUTE_CACHE_TTL_SECONDS=86400
 ```
 
+Autorizovaný partner ingest pro Remote ID, U-space nebo lokální radarové stopy:
+
+```bash
+FLIGHT_DATA_ENABLED_SOURCES=partner_air_tracks,adsb_lol
+FLIGHT_DATA_PARTNER_INGEST_TOKEN=<high-entropy-partner-token>
+FLIGHT_DATA_PARTNER_TRACK_TTL_SECONDS=90
+FLIGHT_DATA_PARTNER_TRACK_MAX_RECORDS=20000
+FLIGHT_DATA_PARTNER_TRACK_PRIORITY=95
+```
+
+Endpoint je `POST /flight-data/api/v1/ingest/air-tracks` a vyžaduje
+`Authorization: Bearer <token>`. Bez `FLIGHT_DATA_PARTNER_INGEST_TOKEN` zůstává
+ingest vypnutý a zdroj pouze hlásí diagnostický warning.
+
 ## Situation Data API
 
 Výchozí bezpečná konfigurace:
@@ -586,6 +600,19 @@ SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
 ```
+
+Krajské nebo městské krizové portály lze připojit, pokud poskytují veřejný nebo
+partnerem povolený RSS/Atom/GeoRSS/GeoJSON feed:
+
+```bash
+SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries
+MUNICIPAL_ALERT_FEEDS='https://example.gov/krize/rss.xml|Krizové výstrahy města|Statutární město Example|14.4200|50.0870|14.2,49.9,14.7,50.2|example-city|georss'
+MUNICIPAL_ALERTS_CACHE_TTL_SECONDS=300
+```
+
+Více feedů se odděluje středníkem. Formát položky je
+`url|label|authority|fallbackLon|fallbackLat|bbox|id|format`, kde `format` je
+`auto`, `rss`, `atom`, `georss` nebo `geojson`.
 
 `gdacs_alerts` je bezklicovy verejny GeoRSS/RSS zdroj GDACS pro globalni
 katastroficke alerty s potencialnim humanitarnim dopadem. SIM ho normalizuje

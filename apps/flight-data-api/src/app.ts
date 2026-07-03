@@ -7,6 +7,7 @@ import type { FlightDataConfig } from "./config.js";
 import { FlightAggregationService } from "./aggregation.js";
 import { buildFlightMapCatalog } from "./catalog.js";
 import { problem } from "./http.js";
+import { PartnerAirTrackStore, type PartnerAirTrackIngestPayload } from "./partner-air-track-store.js";
 import { getAircraftType, ReferenceDataService, searchAircraftTypes } from "./reference-data.js";
 import { FlightRouteEnrichmentService } from "./route-enrichment.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
@@ -21,17 +22,23 @@ export interface FlightDataAppContext {
   airspaces: AirspaceReferenceService;
   uasGeozones: UasGeozoneService;
   airspaceActivations: AirspaceActivationService;
+  partnerAirTracks: PartnerAirTrackStore;
 }
 
 export async function createApp(config: FlightDataConfig): Promise<{ app: Express; context: FlightDataAppContext }> {
-  const sources = createFlightDataSources(config);
+  const partnerAirTracks = new PartnerAirTrackStore({
+    ttlSeconds: config.partnerAirTrackTtlSeconds,
+    maxRecords: config.partnerAirTrackMaxRecords,
+    sourcePriority: config.partnerAirTrackPriority
+  });
+  const sources = createFlightDataSources(config, partnerAirTracks);
   const routeEnrichment = new FlightRouteEnrichmentService(config);
   const aggregation = new FlightAggregationService(config, sources, routeEnrichment);
   const referenceData = new ReferenceDataService(config);
   const airspaces = new AirspaceReferenceService(config);
   const uasGeozones = new UasGeozoneService(config);
   const airspaceActivations = new AirspaceActivationService(config, uasGeozones);
-  const context: FlightDataAppContext = { config, aggregation, routeEnrichment, referenceData, airspaces, uasGeozones, airspaceActivations };
+  const context: FlightDataAppContext = { config, aggregation, routeEnrichment, referenceData, airspaces, uasGeozones, airspaceActivations, partnerAirTracks };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-flight-data-api"));
@@ -40,6 +47,7 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
 
   registerHealthRoutes(app, context);
   registerSourceRoutes(app, context);
+  registerIngestRoutes(app, context);
   registerFlightRoutes(app, context);
   registerReferenceRoutes(app, context);
 
@@ -126,6 +134,7 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
           `flight_data_reference_cache_misses{source="vrs_standing_data_routes"} ${routeEnrichmentCache.misses}`,
           `flight_data_reference_cache_stale_hits{source="vrs_standing_data_routes"} ${routeEnrichmentCache.staleHits}`,
           `flight_data_reference_cache_errors{source="vrs_standing_data_routes"} ${routeEnrichmentCache.errors}`,
+          `flight_data_partner_air_tracks_stored ${context.partnerAirTracks.stats().stored}`,
           ...sourceCacheLines
         ].join("\n") + "\n"
       );
@@ -175,6 +184,38 @@ function registerSourceRoutes(app: Express, context: FlightDataAppContext): void
 
   app.get("/api/v1/config", (_req, res) => {
     res.json(publicConfig(context.config));
+  });
+}
+
+function registerIngestRoutes(app: Express, context: FlightDataAppContext): void {
+  app.get("/api/v1/ingest/air-tracks/status", (_req, res) => {
+    res.json({
+      contractVersion: "sim-partner-air-track-ingest-v1",
+      enabled: Boolean(context.config.partnerAirTrackIngestToken),
+      sourceId: "partner_air_tracks",
+      ttlSeconds: context.config.partnerAirTrackTtlSeconds,
+      maxRecords: context.config.partnerAirTrackMaxRecords,
+      stats: context.partnerAirTracks.stats()
+    });
+  });
+
+  app.post("/api/v1/ingest/air-tracks", (req, res) => {
+    if (!context.config.partnerAirTrackIngestToken) {
+      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "Partner air track ingest is disabled until FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured.");
+    }
+    if (!hasBearerToken(req.headers.authorization, context.config.partnerAirTrackIngestToken)) {
+      return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid partner air track ingest bearer token.");
+    }
+    const payload = req.body as PartnerAirTrackIngestPayload;
+    if (!payload || !Array.isArray(payload.records)) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "Body must contain records array.");
+    }
+    const result = context.partnerAirTracks.upsert(payload);
+    res.status(result.rejected > 0 && result.accepted === 0 ? 400 : 202).json({
+      contractVersion: "sim-partner-air-track-ingest-v1",
+      sourceId: "partner_air_tracks",
+      ...result
+    });
   });
 }
 
@@ -362,7 +403,7 @@ function parseBbox(value: unknown): { ok: true; value?: BoundingBox } | { ok: fa
 }
 
 function parseSources(value: unknown, fallback: FlightDataSourceId[]): FlightDataSourceId[] {
-  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky", "local_adsb"]);
+  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky", "local_adsb", "partner_air_tracks"]);
   const raw = asString(value);
   if (!raw) {
     return fallback;
@@ -453,8 +494,18 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
         sourceId: "local_adsb",
         baseUrl: config.localAdsbAircraftJsonUrls.length === 1 ? config.localAdsbAircraftJsonUrls[0] : undefined,
         authConfigured: config.localAdsbAircraftJsonUrls.length > 0
+      },
+      {
+        sourceId: "partner_air_tracks",
+        baseUrl: config.partnerAirTrackIngestToken ? "/flight-data/api/v1/ingest/air-tracks" : undefined,
+        authConfigured: Boolean(config.partnerAirTrackIngestToken)
       }
     ],
+    partnerAirTracks: {
+      ingestEnabled: Boolean(config.partnerAirTrackIngestToken),
+      ttlSeconds: config.partnerAirTrackTtlSeconds,
+      maxRecords: config.partnerAirTrackMaxRecords
+    },
     referenceData: {
       ourAirportsEnabled: config.ourAirportsEnabled,
       ourAirportsCountries: config.ourAirportsCountries,
@@ -475,6 +526,11 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
       flightRouteAirportsCsvUrl: config.flightRouteAirportsCsvUrl
     }
   };
+}
+
+function hasBearerToken(header: string | undefined, expected: string): boolean {
+  const match = /^Bearer\s+(.+)$/i.exec(header ?? "");
+  return match?.[1] === expected;
 }
 
 interface CacheStatsLike {

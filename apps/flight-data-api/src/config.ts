@@ -24,6 +24,10 @@ export interface FlightDataConfig {
   openskyClientId?: string;
   openskyClientSecret?: string;
   localAdsbAircraftJsonUrls: string[];
+  partnerAirTrackIngestToken?: string;
+  partnerAirTrackTtlSeconds: number;
+  partnerAirTrackMaxRecords: number;
+  partnerAirTrackPriority: number;
   flightRouteEnrichmentEnabled: boolean;
   flightRouteRoutesCsvUrl: string;
   flightRouteAirportsCsvUrl: string;
@@ -72,6 +76,10 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     openskyClientId: emptyToUndefined(process.env.OPENSKY_CLIENT_ID),
     openskyClientSecret: emptyToUndefined(process.env.OPENSKY_CLIENT_SECRET),
     localAdsbAircraftJsonUrls: parseStringList(process.env.LOCAL_ADSB_AIRCRAFT_JSON_URLS ?? process.env.LOCAL_ADSB_AIRCRAFT_JSON_URL),
+    partnerAirTrackIngestToken: emptyToUndefined(process.env.FLIGHT_DATA_PARTNER_INGEST_TOKEN),
+    partnerAirTrackTtlSeconds: parseInteger(process.env.FLIGHT_DATA_PARTNER_TRACK_TTL_SECONDS, 90),
+    partnerAirTrackMaxRecords: parseInteger(process.env.FLIGHT_DATA_PARTNER_TRACK_MAX_RECORDS, 20_000),
+    partnerAirTrackPriority: parseInteger(process.env.FLIGHT_DATA_PARTNER_TRACK_PRIORITY, 95),
     flightRouteEnrichmentEnabled: parseBoolean(process.env.FLIGHT_ROUTE_ENRICHMENT_ENABLED, true),
     flightRouteRoutesCsvUrl: process.env.FLIGHT_ROUTE_ROUTES_CSV_URL ?? "https://vrs-standing-data.adsb.lol/routes.csv",
     flightRouteAirportsCsvUrl: process.env.FLIGHT_ROUTE_AIRPORTS_CSV_URL ?? "https://vrs-standing-data.adsb.lol/airports.csv",
@@ -106,7 +114,7 @@ export async function loadConfig(): Promise<FlightDataConfig> {
 }
 
 function parseSourceList(value: string | undefined): FlightDataSourceId[] {
-  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky", "local_adsb"]);
+  const allowed = new Set<FlightDataSourceId>(["mock", "adsb_lol", "opensky", "local_adsb", "partner_air_tracks"]);
   const parsed = (value ?? "mock")
     .split(",")
     .map((item) => item.trim())

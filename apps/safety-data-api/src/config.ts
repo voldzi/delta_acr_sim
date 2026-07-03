@@ -13,6 +13,19 @@ export interface HzsIncidentFeedConfig {
   bbox: BoundingBox;
 }
 
+export type MunicipalAlertFeedFormat = "auto" | "rss" | "atom" | "georss" | "geojson";
+
+export interface MunicipalAlertFeedConfig {
+  id: string;
+  url: string;
+  label: string;
+  authorityName: string;
+  fallbackLon: number;
+  fallbackLat: number;
+  bbox: BoundingBox;
+  format: MunicipalAlertFeedFormat;
+}
+
 export interface SafetyDataConfig {
   port: number;
   dataDir: string;
@@ -44,6 +57,8 @@ export interface SafetyDataConfig {
   hzsIncidentsCacheTtlSeconds: number;
   hzsIncidentsDetailCacheTtlSeconds: number;
   hzsIncidentsMaxActiveDetails: number;
+  municipalAlertFeeds: MunicipalAlertFeedConfig[];
+  municipalAlertsCacheTtlSeconds: number;
   roadSrtiLodSparqlUrl: string;
   roadSrtiLodCacheTtlSeconds: number;
   roadSrtiLodMaxRecords: number;
@@ -105,6 +120,8 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     hzsIncidentsCacheTtlSeconds: parseInteger(process.env.HZS_INCIDENTS_CACHE_TTL_SECONDS, 180),
     hzsIncidentsDetailCacheTtlSeconds: parseInteger(process.env.HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS, 1800),
     hzsIncidentsMaxActiveDetails: parseInteger(process.env.HZS_INCIDENTS_MAX_ACTIVE_DETAILS, 50),
+    municipalAlertFeeds: parseMunicipalAlertFeeds(process.env.MUNICIPAL_ALERT_FEEDS),
+    municipalAlertsCacheTtlSeconds: parseInteger(process.env.MUNICIPAL_ALERTS_CACHE_TTL_SECONDS, 300),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
     roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
@@ -123,6 +140,7 @@ function parseSourceList(value: string | undefined): SafetyDataSourceId[] {
     "nasa_firms",
     "gdacs_alerts",
     "hzs_incidents",
+    "municipal_alerts",
     "road_srti_lod",
     "admin_boundaries"
   ]);
@@ -154,6 +172,47 @@ function parseHzsIncidentFeeds(value: string | undefined): HzsIncidentFeedConfig
     .map((entry, index) => parseHzsIncidentFeed(entry, index))
     .filter((entry): entry is HzsIncidentFeedConfig => Boolean(entry));
   return parsed.length > 0 ? parsed : fallback;
+}
+
+function parseMunicipalAlertFeeds(value: string | undefined): MunicipalAlertFeedConfig[] {
+  const raw = emptyToUndefined(value);
+  if (!raw) {
+    return [];
+  }
+  return raw
+    .split(";")
+    .map((entry, index) => parseMunicipalAlertFeed(entry, index))
+    .filter((entry): entry is MunicipalAlertFeedConfig => Boolean(entry));
+}
+
+function parseMunicipalAlertFeed(value: string, index: number): MunicipalAlertFeedConfig | undefined {
+  const parts = value.split("|").map((part) => part.trim());
+  const [url, label, authorityName, lonRaw, latRaw, bboxRaw, idRaw, formatRaw] = parts;
+  if (!url) {
+    return undefined;
+  }
+  const lon = Number(lonRaw);
+  const lat = Number(latRaw);
+  const bbox = parseBbox(bboxRaw);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat) || !bbox) {
+    return undefined;
+  }
+  const format = parseMunicipalAlertFeedFormat(formatRaw);
+  return {
+    id: idRaw || `municipal-${index + 1}`,
+    url,
+    label: label || `Municipal crisis feed ${index + 1}`,
+    authorityName: authorityName || label || `Municipal authority ${index + 1}`,
+    fallbackLon: lon,
+    fallbackLat: lat,
+    bbox,
+    format
+  };
+}
+
+function parseMunicipalAlertFeedFormat(value: string | undefined): MunicipalAlertFeedFormat {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "rss" || normalized === "atom" || normalized === "georss" || normalized === "geojson" ? normalized : "auto";
 }
 
 function parseHzsIncidentFeed(value: string, index: number): HzsIncidentFeedConfig | undefined {
