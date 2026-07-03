@@ -1410,6 +1410,69 @@ describe("Safety Data API contract", () => {
     });
   });
 
+  it("filters local municipal RSS noise while keeping crisis-relevant notices", async () => {
+    const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Město Bruntál</title>
+    <item>
+      <title>Městský úřad Bruntál - Veřejná vyhláška o možnosti převzít písemnost</title>
+      <link>https://example.test/bruntal/uredni-deska/1</link>
+      <pubDate>Fri, 03 Jul 2026 08:10:00 GMT</pubDate>
+      <guid>noise-1</guid>
+    </item>
+    <item>
+      <title>Varování: porucha vodovodu a omezení provozu v části města</title>
+      <description>Platí mimořádné omezení dodávky pitné vody.</description>
+      <link>https://example.test/bruntal/krize/1</link>
+      <pubDate>Fri, 03 Jul 2026 08:15:00 GMT</pubDate>
+      <guid>alert-1</guid>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/bruntal/rss": municipalRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["municipal_alerts"],
+        municipalAlertFeeds: [
+          {
+            id: "bruntal-uredni-rss",
+            url: `${baseUrl}/bruntal/rss`,
+            label: "Město Bruntál - oficiální RSS",
+            authorityName: "Město Bruntál",
+            fallbackLon: 17.4647,
+            fallbackLat: 49.9884,
+            bbox: { west: 17.2, south: 49.78, east: 17.75, north: 50.2 },
+            format: "rss"
+          }
+        ]
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=17.2,49.8,17.7,50.1&layers=warnings&source=municipal_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(1);
+      expect(response.body.features[0]).toEqual(
+        expect.objectContaining({
+          geometry: { type: "Point", coordinates: [17.4647, 49.9884] },
+          properties: expect.objectContaining({
+            headline: "Varování: porucha vodovodu a omezení provozu v části města",
+            sourceName: "Město Bruntál",
+            hazardType: "public_health",
+            typeCode: "municipal.public_health",
+            severity: "warning",
+            tags: expect.objectContaining({
+              feedId: "bruntal-uredni-rss",
+              locationPrecision: "authority_fallback_point"
+            })
+          })
+        })
+      );
+    });
+  });
+
   it("projects NDIC/RSD SRTI road events into normalized safety warnings", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(

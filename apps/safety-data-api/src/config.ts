@@ -226,6 +226,46 @@ function defaultMunicipalAlertFeeds(): MunicipalAlertFeedConfig[] {
       fallbackLat: 50.08,
       bbox: { west: 13.35, south: 49.45, east: 15.65, north: 50.75 },
       format: "rss"
+    },
+    {
+      id: "olkraj-krizove-rizeni",
+      url: "https://www.olkraj.cz/rss/6",
+      label: "Olomoucký kraj - krizové řízení",
+      authorityName: "Olomoucký kraj",
+      fallbackLon: 17.25,
+      fallbackLat: 49.59,
+      bbox: { west: 16.65, south: 49.25, east: 17.95, north: 50.45 },
+      format: "rss"
+    },
+    {
+      id: "bruntal-uredni-rss",
+      url: "https://www.mubruntal.cz/rss",
+      label: "Město Bruntál - oficiální RSS",
+      authorityName: "Město Bruntál",
+      fallbackLon: 17.4647,
+      fallbackLat: 49.9884,
+      bbox: { west: 17.2, south: 49.78, east: 17.75, north: 50.2 },
+      format: "rss"
+    },
+    {
+      id: "krnov-aktuality-rss",
+      url: "https://www.krnov.cz/rss",
+      label: "Město Krnov - oficiální RSS",
+      authorityName: "Město Krnov",
+      fallbackLon: 17.7039,
+      fallbackLat: 50.0897,
+      bbox: { west: 17.5, south: 49.95, east: 17.9, north: 50.2 },
+      format: "rss"
+    },
+    {
+      id: "vrbno-aktuality-rss",
+      url: "https://www.vrbnopp.cz/rss.xml",
+      label: "Vrbno pod Pradědem - oficiální RSS",
+      authorityName: "Město Vrbno pod Pradědem",
+      fallbackLon: 17.3833,
+      fallbackLat: 50.1206,
+      bbox: { west: 17.22, south: 50.0, east: 17.55, north: 50.23 },
+      format: "rss"
     }
   ];
 }

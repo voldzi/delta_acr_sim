@@ -645,6 +645,13 @@ použije vestavěný ověřený katalog veřejných regionálních zdrojů:
 - `pkr-stredocesky-jpo`: Středočeský kraj, veřejný PKR RSS zásahů JPO;
   feed nedodává souřadnice, proto se publikuje jako autoritativní krajský
   fallback bod s nižší důvěrou.
+- `olkraj-krizove-rizeni`: Olomoucký kraj, veřejný RSS kanál kategorie krizové
+  řízení; položky bez souřadnic jsou publikované jako autoritativní krajský
+  fallback bod s nižší důvěrou.
+- `bruntal-uredni-rss`, `krnov-aktuality-rss`, `vrbno-aktuality-rss`: obecní
+  oficiální RSS feedy pro Bruntál, Krnov a Vrbno pod Pradědem. Protože nejde o
+  dedikované krizové feedy, SIM z nich publikuje pouze přísně filtrované
+  krizově relevantní položky a vždy je označí jako fallback polohu autority.
 
 ```bash
 SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod,admin_boundaries

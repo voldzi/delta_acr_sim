@@ -118,6 +118,16 @@ const MUNICIPAL_ALERTS_LICENSE: SafetyDataLicense = {
 const SJTSK_KROVAK_PROJ =
   "+proj=krovak +lat_0=49.5 +lon_0=24.83333333333333 +alpha=30.28813975277778 +k=0.9999 +x_0=0 +y_0=0 +ellps=bessel +towgs84=570.8,85.7,462.8,4.998,1.587,5.261,3.56 +units=m +no_defs";
 const WGS84_PROJ = "+proj=longlat +datum=WGS84 +no_defs";
+const FILTERED_MUNICIPAL_ALERT_FEED_IDS = new Set([
+  "pkr-stredocesky-aktuality",
+  "olkraj-krizove-rizeni",
+  "bruntal-uredni-rss",
+  "krnov-aktuality-rss",
+  "vrbno-aktuality-rss"
+]);
+const LOCAL_MUNICIPAL_NEWS_FEED_IDS = new Set(["bruntal-uredni-rss", "krnov-aktuality-rss", "vrbno-aktuality-rss"]);
+const MUNICIPAL_WARNING_TEXT_PATTERN =
+  /vystrah|varov|nebezpec|zvysene nebezpeci|krizov|mimoradn|evaku|pozar|povod|zaplav|unik nebezpec|havari|kalamit|nakaz|ptaci chrip|pitn|kontamin|hygien|zdrav|nouzov|uzavir|uzavren|omezeni provozu|neprujezd|nesjizd|povodnova skoda|oprava kanalizace|porucha vodovod|vypadek elektr|vypadek proudu/;
 
 const ROAD_SRTI_LOD_LICENSE: SafetyDataLicense = {
   name: "NDIC/ŘSD SRTI Linked Open Data",
@@ -2727,11 +2737,18 @@ function mapMunicipalAlertFeed(parsed: unknown, feed: MunicipalAlertFeedConfig, 
 }
 
 function isMunicipalAlertPublishable(item: MunicipalAlertItem, feed: MunicipalAlertFeedConfig): boolean {
-  if (feed.id !== "pkr-stredocesky-aktuality") {
+  if (!FILTERED_MUNICIPAL_ALERT_FEED_IDS.has(feed.id)) {
     return true;
   }
   const text = normalizeCzechKey(`${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`);
-  return /vystrah|varov|nebezpec|kriz|mimorad|evaku|pozar|povod|unik nebezpec|havari|nakaz|ptaci chrip|pitn|hygien|zdrav|nouzov/.test(
+  if (LOCAL_MUNICIPAL_NEWS_FEED_IDS.has(feed.id) && isMunicipalNewsNoise(text)) {
+    return false;
+  }
+  return MUNICIPAL_WARNING_TEXT_PATTERN.test(text);
+}
+
+function isMunicipalNewsNoise(text: string): boolean {
+  return /dotac|zasedani|usneseni|volb|pronajem|prodej|zamer prodeje|zadost o odkoupeni|verejna vyhlaska|zavazne stanovisko|rozpoctove opatreni|nabidka prace|kulturn|festival|sport|kalendar svozu|doklady pripravene|nalezy? -|mereni rychlosti/.test(
     text
   );
 }
