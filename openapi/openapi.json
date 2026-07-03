@@ -6262,6 +6262,283 @@
           }
         }
       },
+      "FlightDataItineraryAirport": {
+        "type": "object",
+        "required": [
+          "icao",
+          "name",
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "icao": {
+            "type": "string"
+          },
+          "iata": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "elevationFt": {
+            "type": "number"
+          }
+        }
+      },
+      "FlightDataItineraryProgress": {
+        "type": "object",
+        "required": [
+          "basis",
+          "computedAt"
+        ],
+        "properties": {
+          "basis": {
+            "type": "string",
+            "const": "great_circle_current_position"
+          },
+          "totalDistanceKm": {
+            "type": "number"
+          },
+          "distanceTravelledKm": {
+            "type": "number"
+          },
+          "distanceRemainingKm": {
+            "type": "number"
+          },
+          "progressRatio": {
+            "type": "number"
+          },
+          "progressPercent": {
+            "type": "integer"
+          },
+          "estimatedRemainingSeconds": {
+            "type": "integer"
+          },
+          "estimatedArrivalAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "groundSpeedMps": {
+            "type": "number"
+          },
+          "computedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FlightDataItinerary": {
+        "type": "object",
+        "required": [
+          "source",
+          "callsign",
+          "airportCodes",
+          "airportIataCodes",
+          "waypoints",
+          "display",
+          "timing",
+          "quality"
+        ],
+        "properties": {
+          "source": {
+            "type": "object",
+            "required": [
+              "sourceId",
+              "name",
+              "license",
+              "routesUrl",
+              "airportsUrl"
+            ],
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "const": "vrs_standing_data"
+              },
+              "name": {
+                "type": "string"
+              },
+              "license": {
+                "type": "string"
+              },
+              "routesUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "airportsUrl": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          },
+          "callsign": {
+            "type": "string"
+          },
+          "airlineCode": {
+            "type": "string"
+          },
+          "flightNumber": {
+            "type": "string"
+          },
+          "airportCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "airportIataCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "origin": {
+            "$ref": "#/components/schemas/FlightDataItineraryAirport"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/FlightDataItineraryAirport"
+          },
+          "waypoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlightDataItineraryAirport"
+            }
+          },
+          "display": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "originCode": {
+                "type": "string"
+              },
+              "destinationCode": {
+                "type": "string"
+              },
+              "originCity": {
+                "type": "string"
+              },
+              "destinationCity": {
+                "type": "string"
+              }
+            }
+          },
+          "progress": {
+            "$ref": "#/components/schemas/FlightDataItineraryProgress"
+          },
+          "timing": {
+            "type": "object",
+            "properties": {
+              "scheduledDeparture": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "unavailable"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              },
+              "actualDeparture": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "unavailable"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              },
+              "scheduledArrival": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "unavailable"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              },
+              "estimatedArrival": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "estimated",
+                      "unavailable"
+                    ]
+                  },
+                  "value": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "basis": {
+                    "type": "string",
+                    "const": "current_position_groundspeed_great_circle"
+                  },
+                  "confidence": {
+                    "type": "number"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "routeMatch": {
+                "type": "string",
+                "const": "callsign_exact"
+              },
+              "routeConfidence": {
+                "type": "number"
+              },
+              "scheduleAvailable": {
+                "type": "boolean",
+                "const": false
+              },
+              "timingMode": {
+                "type": "string",
+                "enum": [
+                  "position_estimate",
+                  "unavailable"
+                ]
+              },
+              "limitations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
       "FlightDataFlightTrack": {
         "type": "object",
         "required": [
@@ -6345,6 +6622,9 @@
           },
           "aircraft": {
             "$ref": "#/components/schemas/FlightDataAircraftTypePartial"
+          },
+          "itinerary": {
+            "$ref": "#/components/schemas/FlightDataItinerary"
           },
           "sources": {
             "type": "array",

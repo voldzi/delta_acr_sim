@@ -164,6 +164,39 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 - COM má pro zobrazený název preferovat `callsign`, potom `registration`, potom `icao24`. SIM nesmí při chybějícím callsignu posílat technický fallback typu `flight:icao24:*` do pole `callsign`.
 - `position.lat/lon` je normalizovaná poloha pro nové integrace; kořenová pole `lat/lon` zůstávají kvůli zpětné kompatibilitě.
 - `aircraft.iconHint` je volitelný prezentační hint pro civilní symboliku. Povolené hodnoty jsou `jet`, `turboprop`, `small_aircraft`, `helicopter`, `glider`, `uav`, `unknown`.
+- Pokud je dostupná referenční trasa podle callsignu, SIM doplní `track.itinerary`. Pole obsahuje původní/destinační letiště, waypointy, IATA/ICAO kódy, prezentační `display.title`, odhad průběhu letu a odhadované ETA. Plánované a skutečné časy odletu/příletu jsou v otevřeném ADS-B číselníku označené jako `status=unavailable`; COM je nesmí zobrazit jako letištní schedule.
+
+Příklad zkrácené části `track.itinerary`:
+
+```json
+{
+  "display": {
+    "title": "CRA -> DTM",
+    "originCode": "CRA",
+    "destinationCode": "DTM",
+    "originCity": "Craiova",
+    "destinationCity": "Dortmund"
+  },
+  "origin": { "icao": "LRCV", "iata": "CRA", "name": "Craiova International Airport" },
+  "destination": { "icao": "EDLW", "iata": "DTM", "name": "Dortmund Airport" },
+  "progress": {
+    "basis": "great_circle_current_position",
+    "distanceRemainingKm": 420.5,
+    "progressPercent": 62,
+    "estimatedArrivalAt": "2026-07-03T12:20:00.000Z"
+  },
+  "timing": {
+    "scheduledDeparture": { "status": "unavailable", "reason": "not_in_open_adsb_route_reference" },
+    "actualDeparture": { "status": "unavailable", "reason": "not_in_open_adsb_route_reference" },
+    "scheduledArrival": { "status": "unavailable", "reason": "not_in_open_adsb_route_reference" },
+    "estimatedArrival": {
+      "status": "estimated",
+      "basis": "current_position_groundspeed_great_circle",
+      "confidence": 0.55
+    }
+  }
+}
+```
 
 ## Podporované zdroje
 
@@ -177,6 +210,17 @@ Služba normalizuje `icao24` na lowercase hex a slučuje všechny observace se s
 ## Referenční data
 
 `GET /api/v1/airports` používá cacheovaný import OurAirports `airports.csv` pro státy v `OURAIRPORTS_COUNTRIES`. Výchozí sada je `CZ,SK,AT,DE,PL,HU`, aby COM dostal letiště v ČR a okolí bez ručního udržování seed seznamu. Při výpadku importu služba vrací seed fallback a `source.warnings`.
+
+`track.itinerary` používá cacheovaný import VRS standing data `routes.csv` a `airports.csv`:
+
+```bash
+FLIGHT_ROUTE_ENRICHMENT_ENABLED=true
+FLIGHT_ROUTE_ROUTES_CSV_URL=https://vrs-standing-data.adsb.lol/routes.csv
+FLIGHT_ROUTE_AIRPORTS_CSV_URL=https://vrs-standing-data.adsb.lol/airports.csv
+FLIGHT_ROUTE_CACHE_TTL_SECONDS=86400
+```
+
+Tento zdroj je vhodný pro otevřený route hint podle callsignu a letištní referenci, ne pro plánované nebo skutečné časy letů. Pokud import vypadne, letové stopy zůstávají dostupné a odpověď obsahuje `warnings`.
 
 `GET /api/v1/airspaces` vrací GeoJSON `FeatureCollection` s referenčními leteckými prostory z AIP/eAIP ENR 5.1:
 
@@ -215,6 +259,8 @@ FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol
 LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://receiver-1.home.cz/tar1090/data/aircraft.json,http://receiver-2.home.cz/readsb/data/aircraft.json
 FLIGHT_DATA_CACHE_TTL_SECONDS=5
 FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60
+FLIGHT_ROUTE_ENRICHMENT_ENABLED=true
+FLIGHT_ROUTE_CACHE_TTL_SECONDS=86400
 AIP_AIRSPACES_ENABLED=true
 AIP_AIRSPACES_SOURCE_URL=https://aim.rlp.cz/eaip/html/eAIP/LK-ENR-5.1-en-GB.html
 AIP_AIRSPACES_CACHE_TTL_SECONDS=86400

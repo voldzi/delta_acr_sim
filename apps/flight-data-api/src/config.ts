@@ -24,6 +24,10 @@ export interface FlightDataConfig {
   openskyClientId?: string;
   openskyClientSecret?: string;
   localAdsbAircraftJsonUrls: string[];
+  flightRouteEnrichmentEnabled: boolean;
+  flightRouteRoutesCsvUrl: string;
+  flightRouteAirportsCsvUrl: string;
+  flightRouteCacheTtlSeconds: number;
   ourAirportsEnabled: boolean;
   ourAirportsCsvUrl: string;
   ourAirportsCountries: string[];
@@ -68,6 +72,10 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     openskyClientId: emptyToUndefined(process.env.OPENSKY_CLIENT_ID),
     openskyClientSecret: emptyToUndefined(process.env.OPENSKY_CLIENT_SECRET),
     localAdsbAircraftJsonUrls: parseStringList(process.env.LOCAL_ADSB_AIRCRAFT_JSON_URLS ?? process.env.LOCAL_ADSB_AIRCRAFT_JSON_URL),
+    flightRouteEnrichmentEnabled: parseBoolean(process.env.FLIGHT_ROUTE_ENRICHMENT_ENABLED, true),
+    flightRouteRoutesCsvUrl: process.env.FLIGHT_ROUTE_ROUTES_CSV_URL ?? "https://vrs-standing-data.adsb.lol/routes.csv",
+    flightRouteAirportsCsvUrl: process.env.FLIGHT_ROUTE_AIRPORTS_CSV_URL ?? "https://vrs-standing-data.adsb.lol/airports.csv",
+    flightRouteCacheTtlSeconds: parseInteger(process.env.FLIGHT_ROUTE_CACHE_TTL_SECONDS, 24 * 60 * 60),
     ourAirportsEnabled: parseBoolean(process.env.OURAIRPORTS_ENABLED, true),
     ourAirportsCsvUrl: process.env.OURAIRPORTS_AIRPORTS_CSV_URL ?? "https://davidmegginson.github.io/ourairports-data/airports.csv",
     ourAirportsCountries: parseStringList(process.env.OURAIRPORTS_COUNTRIES, ["CZ", "SK", "AT", "DE", "PL", "HU"]),

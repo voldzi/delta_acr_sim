@@ -1,6 +1,7 @@
 import type { FlightDataConfig } from "./config.js";
 import { getAircraftType } from "./reference-data.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import type { FlightRouteEnrichmentService } from "./route-enrichment.js";
 import type { FlightDataSource, SourceCacheStats } from "./sources.js";
 import type {
   AggregatedFlightTrack,
@@ -21,7 +22,8 @@ export class FlightAggregationService {
 
   constructor(
     private readonly config: FlightDataConfig,
-    private readonly sources: FlightDataSource[]
+    private readonly sources: FlightDataSource[],
+    private readonly routeEnrichment?: FlightRouteEnrichmentService
   ) {
     this.cache = new ManagedResponseCache<FlightTrackResponse>({
       ttlMs: config.cacheTtlSeconds * 1000,
@@ -63,6 +65,7 @@ export class FlightAggregationService {
     const rawObservations = results.flatMap((result) => result.observations);
     const { tracks, droppedWithoutPositionCount } = deduplicateObservations(rawObservations, sourceDescriptors, this.config.staleAfterSeconds, query.includeStale);
     const limitedTracks = tracks.slice(0, query.limit);
+    const enriched = this.routeEnrichment ? await this.routeEnrichment.enrichTracks(limitedTracks) : { tracks: limitedTracks, warnings: [] };
     const response: FlightTrackResponse = {
       generatedAt: new Date().toISOString(),
       query: {
@@ -78,8 +81,8 @@ export class FlightAggregationService {
         staleTrackCount: limitedTracks.filter((track) => track.quality.stale).length
       },
       sources: sourceDescriptors,
-      tracks: limitedTracks,
-      warnings
+      tracks: enriched.tracks,
+      warnings: [...warnings, ...enriched.warnings]
     };
     return response;
   }

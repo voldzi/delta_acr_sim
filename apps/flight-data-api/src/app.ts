@@ -8,6 +8,7 @@ import { FlightAggregationService } from "./aggregation.js";
 import { buildFlightMapCatalog } from "./catalog.js";
 import { problem } from "./http.js";
 import { getAircraftType, ReferenceDataService, searchAircraftTypes } from "./reference-data.js";
+import { FlightRouteEnrichmentService } from "./route-enrichment.js";
 import { allSourceDescriptors, createFlightDataSources } from "./sources.js";
 import type { BoundingBox, FlightDataPublicConfig, FlightDataSourceId, FlightQuery } from "./types.js";
 import { UasGeozoneService } from "./uas-geozones.js";
@@ -15,6 +16,7 @@ import { UasGeozoneService } from "./uas-geozones.js";
 export interface FlightDataAppContext {
   config: FlightDataConfig;
   aggregation: FlightAggregationService;
+  routeEnrichment: FlightRouteEnrichmentService;
   referenceData: ReferenceDataService;
   airspaces: AirspaceReferenceService;
   uasGeozones: UasGeozoneService;
@@ -23,12 +25,13 @@ export interface FlightDataAppContext {
 
 export async function createApp(config: FlightDataConfig): Promise<{ app: Express; context: FlightDataAppContext }> {
   const sources = createFlightDataSources(config);
-  const aggregation = new FlightAggregationService(config, sources);
+  const routeEnrichment = new FlightRouteEnrichmentService(config);
+  const aggregation = new FlightAggregationService(config, sources, routeEnrichment);
   const referenceData = new ReferenceDataService(config);
   const airspaces = new AirspaceReferenceService(config);
   const uasGeozones = new UasGeozoneService(config);
   const airspaceActivations = new AirspaceActivationService(config, uasGeozones);
-  const context: FlightDataAppContext = { config, aggregation, referenceData, airspaces, uasGeozones, airspaceActivations };
+  const context: FlightDataAppContext = { config, aggregation, routeEnrichment, referenceData, airspaces, uasGeozones, airspaceActivations };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-flight-data-api"));
@@ -76,6 +79,7 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
     const airspaceCache = context.airspaces.cacheStats();
     const uasGeozoneCache = context.uasGeozones.cacheStats();
     const airspaceActivationCache = context.airspaceActivations.cacheStats();
+    const routeEnrichmentCache = context.routeEnrichment.cacheStats();
     const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
       `flight_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `flight_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -117,6 +121,11 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
           `flight_data_reference_cache_misses{source="czech_aup_uup"} ${airspaceActivationCache.misses}`,
           `flight_data_reference_cache_stale_hits{source="czech_aup_uup"} ${airspaceActivationCache.staleHits}`,
           `flight_data_reference_cache_errors{source="czech_aup_uup"} ${airspaceActivationCache.errors}`,
+          `flight_data_reference_cache_entries{source="vrs_standing_data_routes"} ${routeEnrichmentCache.entries}`,
+          `flight_data_reference_cache_hits{source="vrs_standing_data_routes"} ${routeEnrichmentCache.hits}`,
+          `flight_data_reference_cache_misses{source="vrs_standing_data_routes"} ${routeEnrichmentCache.misses}`,
+          `flight_data_reference_cache_stale_hits{source="vrs_standing_data_routes"} ${routeEnrichmentCache.staleHits}`,
+          `flight_data_reference_cache_errors{source="vrs_standing_data_routes"} ${routeEnrichmentCache.errors}`,
           ...sourceCacheLines
         ].join("\n") + "\n"
       );
@@ -137,7 +146,8 @@ function registerSourceRoutes(app: Express, context: FlightDataAppContext): void
     const referenceCaches = [
       { sourceId: "czech_aip_airspaces", cache: context.airspaces.cacheStats() },
       { sourceId: "czech_uas_geozones", cache: context.uasGeozones.cacheStats() },
-      { sourceId: "czech_aup_uup", cache: context.airspaceActivations.cacheStats() }
+      { sourceId: "czech_aup_uup", cache: context.airspaceActivations.cacheStats() },
+      { sourceId: "vrs_standing_data_routes", cache: context.routeEnrichment.cacheStats() }
     ];
     res.json({
       serviceId: "flight-data-api",
@@ -458,7 +468,11 @@ function publicConfig(config: FlightDataConfig): FlightDataPublicConfig {
       uasGeozonesCatalogUrl: config.uasGeozonesCatalogUrl,
       airspaceActivationEnabled: config.airspaceActivationEnabled,
       airspaceActivationCacheTtlSeconds: config.airspaceActivationCacheTtlSeconds,
-      airspaceActivationBaseUrl: config.airspaceActivationBaseUrl
+      airspaceActivationBaseUrl: config.airspaceActivationBaseUrl,
+      flightRouteEnrichmentEnabled: config.flightRouteEnrichmentEnabled,
+      flightRouteCacheTtlSeconds: config.flightRouteCacheTtlSeconds,
+      flightRouteRoutesCsvUrl: config.flightRouteRoutesCsvUrl,
+      flightRouteAirportsCsvUrl: config.flightRouteAirportsCsvUrl
     }
   };
 }

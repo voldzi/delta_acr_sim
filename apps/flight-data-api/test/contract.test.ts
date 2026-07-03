@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FlightAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { FlightDataConfig } from "../src/config.js";
+import { FlightRouteEnrichmentService } from "../src/route-enrichment.js";
 import type { FlightDataSource } from "../src/sources.js";
 
 describe("Flight Data API contract", () => {
@@ -33,6 +34,10 @@ describe("Flight Data API contract", () => {
       openskyBaseUrl: "https://opensky-network.org/api",
       openskyAuthUrl: "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
       localAdsbAircraftJsonUrls: [],
+      flightRouteEnrichmentEnabled: false,
+      flightRouteRoutesCsvUrl: "https://vrs-standing-data.adsb.lol/routes.csv",
+      flightRouteAirportsCsvUrl: "https://vrs-standing-data.adsb.lol/airports.csv",
+      flightRouteCacheTtlSeconds: 86400,
       ourAirportsEnabled: false,
       ourAirportsCsvUrl: "https://davidmegginson.github.io/ourairports-data/airports.csv",
       ourAirportsCountries: ["CZ", "SK", "AT", "DE", "PL", "HU"],
@@ -106,7 +111,9 @@ describe("Flight Data API contract", () => {
           uasGeozonesEnabled: false,
           uasGeozonesLayerIds: ["LKR320A"],
           airspaceActivationEnabled: false,
-          airspaceActivationCacheTtlSeconds: 300
+          airspaceActivationCacheTtlSeconds: 300,
+          flightRouteEnrichmentEnabled: false,
+          flightRouteCacheTtlSeconds: 86400
         }),
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -221,6 +228,7 @@ describe("Flight Data API contract", () => {
     expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_aip_airspaces"}');
     expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_uas_geozones"}');
     expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="czech_aup_uup"}');
+    expect(cachedSourceMetrics.text).toContain('flight_data_reference_cache_hits{source="vrs_standing_data_routes"}');
   });
 
   it("returns deduplicated aircraft positions by icao24", async () => {
@@ -253,6 +261,113 @@ describe("Flight Data API contract", () => {
     expect(response.body.source.sourceType).toBe("PUBLIC_FLIGHT_AGGREGATE");
     expect(response.body.tracks.length).toBeGreaterThan(0);
     expect(response.body.tracks.every((track: { lat?: number; lon?: number }) => typeof track.lat === "number" && typeof track.lon === "number")).toBe(true);
+  });
+
+  it("enriches aircraft positions with route itinerary reference data", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes("routes.csv")) {
+        return new Response("Callsign,Code,Number,AirlineCode,AirportCodes\nWMT9214,WMT,9214,WMT,LRCV-EDLW\n");
+      }
+      if (url.includes("airports.csv")) {
+        return new Response(
+          [
+            "Code,Name,ICAO,IATA,Location,CountryISO2,Latitude,Longitude,AltitudeFeet",
+            "LRCV,Craiova International Airport,LRCV,CRA,Craiova,RO,44.3181,23.888599,626",
+            "EDLW,Dortmund Airport,EDLW,DTM,Dortmund,DE,51.518299,7.61224,425"
+          ].join("\n")
+        );
+      }
+      return new Response("not found", { status: 404 });
+    };
+
+    try {
+      const descriptor: FlightDataSource["descriptor"] = {
+        sourceId: "mock",
+        label: "test",
+        enabled: true,
+        mode: "mock",
+        priority: 10,
+        license: {
+          name: "test",
+          attribution: "test",
+          commercialUse: "allowed",
+          operationalUse: "allowed",
+          notes: []
+        }
+      };
+      const fetchedAt = new Date("2026-07-03T10:00:00.000Z").toISOString();
+      const source: FlightDataSource = {
+        descriptor,
+        async fetchObservations() {
+          return {
+            source: descriptor,
+            fetchedAt,
+            warnings: [],
+            observations: [
+              {
+                sourceId: "mock",
+                sourceRecordId: "test:4d2216",
+                sourcePriority: 10,
+                fetchedAt,
+                seenAt: fetchedAt,
+                icao24: "4d2216",
+                callsign: "WMT9214",
+                lat: 49.0,
+                lon: 14.0,
+                speedMps: 220
+              }
+            ]
+          };
+        }
+      };
+      const routeConfig = {
+        ...config,
+        flightRouteEnrichmentEnabled: true,
+        flightRouteRoutesCsvUrl: "https://example.test/routes.csv",
+        flightRouteAirportsCsvUrl: "https://example.test/airports.csv"
+      };
+      const service = new FlightAggregationService(routeConfig, [source], new FlightRouteEnrichmentService(routeConfig));
+
+      const response = await service.getTracks({ bbox: undefined, limit: 10, sourceIds: ["mock"], includeStale: false });
+
+      expect(response.tracks[0]?.itinerary).toEqual(
+        expect.objectContaining({
+          callsign: "WMT9214",
+          airlineCode: "WMT",
+          flightNumber: "9214",
+          airportCodes: ["LRCV", "EDLW"],
+          airportIataCodes: ["CRA", "DTM"],
+          display: expect.objectContaining({
+            title: "CRA -> DTM",
+            originCode: "CRA",
+            destinationCode: "DTM",
+            originCity: "Craiova",
+            destinationCity: "Dortmund"
+          }),
+          timing: expect.objectContaining({
+            scheduledDeparture: { status: "unavailable", reason: "not_in_open_adsb_route_reference" },
+            actualDeparture: { status: "unavailable", reason: "not_in_open_adsb_route_reference" },
+            scheduledArrival: { status: "unavailable", reason: "not_in_open_adsb_route_reference" },
+            estimatedArrival: expect.objectContaining({
+              status: "estimated",
+              basis: "current_position_groundspeed_great_circle"
+            })
+          }),
+          quality: expect.objectContaining({
+            routeMatch: "callsign_exact",
+            scheduleAvailable: false,
+            timingMode: "position_estimate"
+          })
+        })
+      );
+      expect(response.tracks[0]?.itinerary?.origin).toEqual(expect.objectContaining({ icao: "LRCV", iata: "CRA" }));
+      expect(response.tracks[0]?.itinerary?.destination).toEqual(expect.objectContaining({ icao: "EDLW", iata: "DTM" }));
+      expect(response.tracks[0]?.itinerary?.progress?.estimatedArrivalAt).toEqual(expect.any(String));
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 
   it("reads a local readsb/dump1090 aircraft.json feed", async () => {

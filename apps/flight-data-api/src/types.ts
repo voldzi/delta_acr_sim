@@ -66,6 +66,10 @@ export interface FlightDataPublicConfig {
     airspaceActivationEnabled: boolean;
     airspaceActivationCacheTtlSeconds: number;
     airspaceActivationBaseUrl: string;
+    flightRouteEnrichmentEnabled: boolean;
+    flightRouteCacheTtlSeconds: number;
+    flightRouteRoutesCsvUrl: string;
+    flightRouteAirportsCsvUrl: string;
   };
 }
 
@@ -119,6 +123,69 @@ export interface FlightTrackAircraft {
   iconHint: FlightTrackIconHint;
 }
 
+export interface FlightItineraryAirport {
+  icao: string;
+  iata?: string;
+  name: string;
+  city?: string;
+  countryCode?: string;
+  lat: number;
+  lon: number;
+  elevationFt?: number;
+}
+
+export interface FlightItineraryProgress {
+  basis: "great_circle_current_position";
+  totalDistanceKm?: number;
+  distanceTravelledKm?: number;
+  distanceRemainingKm?: number;
+  progressRatio?: number;
+  progressPercent?: number;
+  estimatedRemainingSeconds?: number;
+  estimatedArrivalAt?: string;
+  groundSpeedMps?: number;
+  computedAt: string;
+}
+
+export interface FlightItinerary {
+  source: {
+    sourceId: "vrs_standing_data";
+    name: string;
+    license: string;
+    routesUrl: string;
+    airportsUrl: string;
+  };
+  callsign: string;
+  airlineCode?: string;
+  flightNumber?: string;
+  airportCodes: string[];
+  airportIataCodes: string[];
+  origin?: FlightItineraryAirport;
+  destination?: FlightItineraryAirport;
+  waypoints: FlightItineraryAirport[];
+  display: {
+    title: string;
+    originCode?: string;
+    destinationCode?: string;
+    originCity?: string;
+    destinationCity?: string;
+  };
+  progress?: FlightItineraryProgress;
+  timing: {
+    scheduledDeparture: { status: "unavailable"; reason: string };
+    actualDeparture: { status: "unavailable"; reason: string };
+    scheduledArrival: { status: "unavailable"; reason: string };
+    estimatedArrival: { status: "estimated" | "unavailable"; value?: string; basis?: "current_position_groundspeed_great_circle"; confidence: number; reason?: string };
+  };
+  quality: {
+    routeMatch: "callsign_exact";
+    routeConfidence: number;
+    scheduleAvailable: false;
+    timingMode: "position_estimate" | "unavailable";
+    limitations: string[];
+  };
+}
+
 export interface FlightTrackPosition {
   lat: number;
   lon: number;
@@ -141,6 +208,7 @@ export interface AggregatedFlightTrack {
   lastSeenAt: string;
   originCountry?: string;
   aircraft?: FlightTrackAircraft;
+  itinerary?: FlightItinerary;
   sources: FlightTrackSourceRef[];
   deduplication: {
     key: "icao24";

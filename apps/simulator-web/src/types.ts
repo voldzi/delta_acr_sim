@@ -150,6 +150,10 @@ export interface FlightDataConfig {
     airspaceActivationEnabled: boolean;
     airspaceActivationCacheTtlSeconds: number;
     airspaceActivationBaseUrl: string;
+    flightRouteEnrichmentEnabled: boolean;
+    flightRouteCacheTtlSeconds: number;
+    flightRouteRoutesCsvUrl: string;
+    flightRouteAirportsCsvUrl: string;
   };
 }
 
