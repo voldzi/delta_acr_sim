@@ -2731,7 +2731,7 @@ function isMunicipalAlertPublishable(item: MunicipalAlertItem, feed: MunicipalAl
     return true;
   }
   const text = normalizeCzechKey(`${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`);
-  return /vystrah|varov|nebezpec|kriz|mimorad|evaku|pozar|povod|unik nebezpec|havari|nakaz|ptaci chrip|pitn|hygien|zdrav|pohres|hledame|nouzov/.test(
+  return /vystrah|varov|nebezpec|kriz|mimorad|evaku|pozar|povod|unik nebezpec|havari|nakaz|ptaci chrip|pitn|hygien|zdrav|nouzov/.test(
     text
   );
 }
@@ -3054,30 +3054,31 @@ function classifyMunicipalAlert(item: MunicipalAlertItem): {
   styleHint: string;
   iconHint: string;
 } {
-  const text = `${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`.toLowerCase();
+  const text = normalizeCzechKey(`${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`);
+  const hasStandaloneIce = /(^|[^a-z0-9])led([^a-z0-9]|$)/.test(text);
   const hazard =
-    /povod|záplav|flood|voda|vodní/.test(text)
+    /povod|zaplav|flood|voda|vodni/.test(text)
       ? { hazardType: "flood", typeCode: "municipal.flood", iconHint: "flood", styleHint: "safety-flood-warning" }
-      : /požár|pozar|fire|kouř|kour/.test(text)
+      : /pozar|fire|kour/.test(text)
         ? { hazardType: "fire", typeCode: "municipal.fire", iconHint: "fire", styleHint: "safety-fire-warning" }
         : /evaku|ukryt|shelter|evacuat/.test(text)
           ? { hazardType: "evacuation", typeCode: "municipal.evacuation", iconHint: "evacuation", styleHint: "safety-warning-critical" }
-          : /nehod|uzavír|uzavir|dopr|traffic|silnic|road/.test(text)
+          : /nehod|uzavir|dopr|traffic|silnic|road/.test(text)
             ? { hazardType: "road_incident", typeCode: "municipal.road_incident", iconHint: "traffic", styleHint: "safety-warning-road" }
             : /pitn|hygien|zdrav|health|epidem/.test(text)
               ? { hazardType: "public_health", typeCode: "municipal.public_health", iconHint: "health", styleHint: "safety-warning-health" }
-              : /vítr|vitr|bouř|bour|déšť|dest|sníh|snih|led|weather|storm/.test(text)
+              : /vitr|bour|dest|snih|weather|storm/.test(text) || hasStandaloneIce
                 ? { hazardType: "weather", typeCode: "municipal.weather", iconHint: "weather_alert", styleHint: "safety-warning-weather" }
                 : { hazardType: "municipal_alert", typeCode: "municipal.alert", iconHint: "warning", styleHint: "safety-warning-v1" };
   const severity: SafetySeverity =
-    /kritick|extrém|extrem|bezprostřed|ohrožení života|evaku|critical|emergency/.test(text)
+    /kritick|extrem|bezprostred|ohrozeni zivota|evaku|critical|emergency/.test(text)
       ? "critical"
-      : /výstrah|vystrah|nebezpe|varov|warning|požár|povod/.test(text)
+      : /vystrah|nebezpe|varov|warning|pozar|povod/.test(text)
         ? "warning"
-        : /inform|oznámen|notice/.test(text)
+        : /inform|oznamen|notice/.test(text)
           ? "info"
           : "advisory";
-  const urgency: SafetyUrgency = severity === "critical" || /ihned|okamžit|immediate|now/.test(text) ? "immediate" : "expected";
+  const urgency: SafetyUrgency = severity === "critical" || /ihned|okamzit|immediate|now/.test(text) ? "immediate" : "expected";
   return { ...hazard, severity, urgency };
 }
 

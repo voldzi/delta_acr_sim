@@ -1354,6 +1354,62 @@ describe("Safety Data API contract", () => {
     });
   });
 
+  it("filters non-warning Central Bohemian news from municipal crisis warnings", async () => {
+    const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>PKR Středočeský kraj - aktuality</title>
+    <item>
+      <title>Hledáme muže z Příbramska</title>
+      <description>Policie žádá veřejnost o pomoc.</description>
+      <link>https://example.test/pkr/aktuality/hledame-muze/</link>
+      <pubDate>Fri, 03 Jul 2026 08:10:00 GMT</pubDate>
+      <guid>news-1</guid>
+    </item>
+    <item>
+      <title>Výstraha: únik nebezpečné látky</title>
+      <description>Platí varování pro okolí průmyslového areálu.</description>
+      <link>https://example.test/pkr/aktuality/vystraha/</link>
+      <pubDate>Fri, 03 Jul 2026 08:15:00 GMT</pubDate>
+      <guid>news-2</guid>
+    </item>
+  </channel>
+</rss>`;
+
+    await withFixtureServer({ "/pkr/aktuality/feed.xml": municipalRss }, async (baseUrl) => {
+      const configured = await createApp({
+        ...config,
+        enabledSources: ["municipal_alerts"],
+        municipalAlertFeeds: [
+          {
+            id: "pkr-stredocesky-aktuality",
+            url: `${baseUrl}/pkr/aktuality/feed.xml`,
+            label: "PKR Středočeský kraj - aktuality",
+            authorityName: "Středočeský kraj",
+            fallbackLon: 14.43,
+            fallbackLat: 50.08,
+            bbox: { west: 13.35, south: 49.45, east: 15.65, north: 50.75 },
+            format: "rss"
+          }
+        ]
+      });
+
+      const response = await request(configured.app)
+        .get("/api/v1/features?bbox=14.0,49.9,14.8,50.2&layers=warnings&source=municipal_alerts&limit=10")
+        .expect(200);
+
+      expect(response.body.summary.featureCount).toBe(1);
+      expect(response.body.features[0].properties.headline).toBe("Výstraha: únik nebezpečné látky");
+      expect(response.body.features[0].properties.hazardType).toBe("municipal_alert");
+      expect(response.body.features[0].properties.typeCode).toBe("municipal.alert");
+      expect(response.body.features[0].properties.tags).toEqual(
+        expect.objectContaining({
+          locationPrecision: "authority_fallback_point"
+        })
+      );
+    });
+  });
+
   it("projects NDIC/RSD SRTI road events into normalized safety warnings", async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
