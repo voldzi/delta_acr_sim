@@ -146,6 +146,22 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 86400
   },
   {
+    layerId: "trail_routes",
+    label: "Trail routes",
+    description: "Long-distance and local hiking, cycling and MTB route relations from the local OSM/PostGIS read model.",
+    defaultVisible: false,
+    geometryTypes: ["LineString", "MultiLineString"],
+    expectedCadenceSeconds: 21600
+  },
+  {
+    layerId: "trail_poi",
+    label: "Trail points of interest",
+    description: "Outdoor infrastructure near routes: sleep, camp, shelter, water, food, repair, rental, transport and emergency POI from OSM.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 21600
+  },
+  {
     layerId: "air_quality",
     label: "Air quality",
     description: "ČHMÚ measured air-quality station observations and normalized air-quality index context.",

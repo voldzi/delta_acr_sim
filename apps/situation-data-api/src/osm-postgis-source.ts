@@ -51,16 +51,47 @@ interface OsmAdminBoundaryRow {
   imported_at: Date | string | null;
 }
 
+interface OsmTrailRouteRow {
+  osm_id: string;
+  osm_type: string;
+  route_mode: string | null;
+  network: string | null;
+  name: string | null;
+  ref: string | null;
+  operator: string | null;
+  osmc_symbol: string | null;
+  segment_count: number | string | null;
+  length_km: number | string | null;
+  geometry_geojson: unknown;
+  tags: Record<string, unknown> | null;
+  imported_at: Date | string | null;
+}
+
+interface OsmTrailPoiRow {
+  osm_id: string;
+  osm_type: string;
+  category: string;
+  name: string | null;
+  lon: number | string;
+  lat: number | string;
+  tags: Record<string, unknown> | null;
+  imported_at: Date | string | null;
+}
+
 interface OsmPostgisMetadata {
   objectCount: number;
   lastImportAt?: string;
   boundaryFeatureCount: number;
   boundaryLevels: string[];
   boundaryLastImportAt?: string;
+  trailRouteFeatureCount: number;
+  trailPoiFeatureCount: number;
+  trailLastImportAt?: string;
 }
 
 type OsmPoiLayer = "ground" | "mobile";
 type OsmAdminBoundaryLayer = "boundary_country" | "boundary_region" | "boundary_district" | "boundary_orp" | "place_settlements";
+type OsmTrailLayer = "trail_routes" | "trail_poi";
 const DEFAULT_TOWER_VIEWSHED_QUERY = {
   technology: "4G",
   radiusM: 12_000,
@@ -78,6 +109,8 @@ export class OsmPostgisSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<OsmPoiRow[]>;
   private readonly boundaryCache: ManagedResponseCache<OsmAdminBoundaryRow[]>;
+  private readonly trailRoutesCache: ManagedResponseCache<OsmTrailRouteRow[]>;
+  private readonly trailPoiCache: ManagedResponseCache<OsmTrailPoiRow[]>;
   private readonly metadataCache: ManagedResponseCache<OsmPostgisMetadata>;
   private pool?: Pool;
 
@@ -88,6 +121,16 @@ export class OsmPostgisSource implements SituationDataSource {
       maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 4096))
     });
     this.boundaryCache = new ManagedResponseCache<OsmAdminBoundaryRow[]>({
+      ttlMs: Math.max(60, config.osmPostgisCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.osmPostgisCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 2048))
+    });
+    this.trailRoutesCache = new ManagedResponseCache<OsmTrailRouteRow[]>({
+      ttlMs: Math.max(60, config.osmPostgisCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.osmPostgisCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 2048))
+    });
+    this.trailPoiCache = new ManagedResponseCache<OsmTrailPoiRow[]>({
       ttlMs: Math.max(60, config.osmPostgisCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.osmPostgisCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 2048))
@@ -103,7 +146,7 @@ export class OsmPostgisSource implements SituationDataSource {
       enabled: config.enabledSources.includes("osm_postgis"),
       mode: "live",
       priority: 62,
-      layers: ["ground", "mobile", "boundary_country", "boundary_region", "boundary_district", "boundary_orp", "place_settlements"],
+      layers: ["ground", "mobile", "boundary_country", "boundary_region", "boundary_district", "boundary_orp", "place_settlements", "trail_routes", "trail_poi"],
       license: OSM_POSTGIS_LICENSE,
       baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
       updateCadenceSeconds: config.osmPostgisCacheTtlSeconds
@@ -114,7 +157,7 @@ export class OsmPostgisSource implements SituationDataSource {
     return [
       {
         sourceId: "osm_postgis",
-        ...mergeCacheStats([this.payloadCache.stats(), this.boundaryCache.stats()])
+        ...mergeCacheStats([this.payloadCache.stats(), this.boundaryCache.stats(), this.trailRoutesCache.stats(), this.trailPoiCache.stats()])
       }
     ];
   }
@@ -145,8 +188,17 @@ export class OsmPostgisSource implements SituationDataSource {
       if (!metadata.boundaryLastImportAt) {
         warnings.push(`${this.config.osmPostgisAdminBoundaryTable} has no imported_at timestamp.`);
       }
+      if (metadata.trailRouteFeatureCount <= 0) {
+        warnings.push(`${this.config.osmPostgisTrailRoutesTable} is empty or not imported.`);
+      }
+      if (metadata.trailPoiFeatureCount <= 0) {
+        warnings.push(`${this.config.osmPostgisTrailPoiTable} is empty or not imported.`);
+      }
       const boundaryLastImportAgeSeconds = metadata.boundaryLastImportAt
         ? Math.max(0, Math.round((Date.now() - Date.parse(metadata.boundaryLastImportAt)) / 1000))
+        : undefined;
+      const trailLastImportAgeSeconds = metadata.trailLastImportAt
+        ? Math.max(0, Math.round((Date.now() - Date.parse(metadata.trailLastImportAt)) / 1000))
         : undefined;
       return {
         sourceId: "osm_postgis",
@@ -159,6 +211,10 @@ export class OsmPostgisSource implements SituationDataSource {
         boundaryLevels: metadata.boundaryLevels,
         boundaryLastImportAt: metadata.boundaryLastImportAt,
         boundaryLastImportAgeSeconds,
+        trailRouteFeatureCount: metadata.trailRouteFeatureCount,
+        trailPoiFeatureCount: metadata.trailPoiFeatureCount,
+        trailLastImportAt: metadata.trailLastImportAt,
+        trailLastImportAgeSeconds,
         warnings
       };
     } catch (error) {
@@ -175,7 +231,8 @@ export class OsmPostgisSource implements SituationDataSource {
     const fetchedAt = new Date().toISOString();
     const poiLayers = query.layers.filter((layer): layer is OsmPoiLayer => layer === "ground" || layer === "mobile");
     const boundaryLayers = query.layers.filter(isOsmAdminBoundaryLayer);
-    if (poiLayers.length === 0 && boundaryLayers.length === 0) {
+    const trailLayers = query.layers.filter(isOsmTrailLayer);
+    if (poiLayers.length === 0 && boundaryLayers.length === 0 && trailLayers.length === 0) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
     if (!this.config.osmPostgisConnectionString) {
@@ -188,14 +245,16 @@ export class OsmPostgisSource implements SituationDataSource {
     }
 
     const cacheBbox = canonicalizeBboxForCache(query.bbox, this.config.bboxCachePaddingDegrees);
-    const [poiRows, boundaryRows] = await Promise.all([
+    const queryLimit = Math.max(1, Math.min(5000, query.limit));
+    const [poiRows, boundaryRows, trailRouteRows, trailPoiRows] = await Promise.all([
       poiLayers.length > 0
         ? this.payloadCache.getOrLoad(
             JSON.stringify({
               bbox: formatBboxKey(cacheBbox),
-              layers: [...poiLayers].sort()
+              layers: [...poiLayers].sort(),
+              limit: queryLimit
             }),
-            () => this.fetchRows(cacheBbox, poiLayers, 1000)
+            () => this.fetchRows(cacheBbox, poiLayers, queryLimit)
           )
         : Promise.resolve([]),
       boundaryLayers.length > 0
@@ -203,9 +262,29 @@ export class OsmPostgisSource implements SituationDataSource {
             JSON.stringify({
               bbox: formatBboxKey(cacheBbox),
               layers: [...boundaryLayers].sort(),
-              geomColumn: adminBoundaryGeomColumn(cacheBbox).column
+              geomColumn: adminBoundaryGeomColumn(cacheBbox).column,
+              limit: queryLimit
             }),
-            () => this.fetchAdminBoundaryRows(cacheBbox, boundaryLayers, Math.min(1000, query.limit))
+            () => this.fetchAdminBoundaryRows(cacheBbox, boundaryLayers, queryLimit)
+          )
+        : Promise.resolve([]),
+      trailLayers.includes("trail_routes")
+        ? this.trailRoutesCache.getOrLoad(
+            JSON.stringify({
+              bbox: formatBboxKey(cacheBbox),
+              geomColumn: trailRouteGeomColumn(cacheBbox).column,
+              limit: queryLimit
+            }),
+            () => this.fetchTrailRouteRows(cacheBbox, queryLimit)
+          )
+        : Promise.resolve([]),
+      trailLayers.includes("trail_poi")
+        ? this.trailPoiCache.getOrLoad(
+            JSON.stringify({
+              bbox: formatBboxKey(cacheBbox),
+              limit: queryLimit
+            }),
+            () => this.fetchTrailPoiRows(cacheBbox, queryLimit)
           )
         : Promise.resolve([])
     ]);
@@ -220,7 +299,15 @@ export class OsmPostgisSource implements SituationDataSource {
       .filter((feature): feature is SituationFeature => Boolean(feature))
       .filter((feature) => query.layers.includes(feature.properties.layer))
       .filter((feature) => isFeatureEnvelopeInBbox(feature, query.bbox));
-    const features = [...boundaryFeatures, ...poiFeatures].slice(0, query.limit);
+    const trailRouteFeatures = trailRouteRows
+      .map((row) => mapOsmTrailRouteRow(row, fetchedAt, query.includeRaw))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .filter((feature) => isFeatureEnvelopeInBbox(feature, query.bbox));
+    const trailPoiFeatures = trailPoiRows
+      .map((row) => mapOsmTrailPoiRow(row, fetchedAt, query.includeRaw))
+      .filter((feature): feature is SituationFeature => Boolean(feature))
+      .filter((feature) => isFeaturePointInBbox(feature, query.bbox));
+    const features = [...boundaryFeatures, ...trailRouteFeatures, ...trailPoiFeatures, ...poiFeatures].slice(0, query.limit);
 
     return {
       source: this.descriptor,
@@ -260,7 +347,7 @@ export class OsmPostgisSource implements SituationDataSource {
         osm_id
       limit $6
     `;
-    const result = await pool.query<OsmPoiRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, layers, Math.max(1, Math.min(1000, limit))]);
+    const result = await pool.query<OsmPoiRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, layers, Math.max(1, Math.min(5000, limit))]);
     return result.rows;
   }
 
@@ -295,8 +382,84 @@ export class OsmPostgisSource implements SituationDataSource {
       bbox.east,
       bbox.north,
       adminLevels,
-      Math.max(1, Math.min(1000, limit))
+      Math.max(1, Math.min(5000, limit))
     ]);
+    return result.rows;
+  }
+
+  private async fetchTrailRouteRows(bbox: BoundingBox, limit: number): Promise<OsmTrailRouteRow[]> {
+    const pool = this.getPool();
+    const table = quoteQualifiedIdentifier(this.config.osmPostgisTrailRoutesTable, "OSM_POSTGIS_TRAIL_ROUTES_TABLE");
+    const geom = trailRouteGeomColumn(bbox);
+    const sql = `
+      select
+        osm_id::text,
+        osm_type,
+        route_mode,
+        network,
+        name,
+        ref,
+        operator,
+        osmc_symbol,
+        segment_count,
+        length_km,
+        st_asgeojson(${geom.column})::jsonb as geometry_geojson,
+        tags,
+        imported_at
+      from ${table}
+      where ${geom.column} && st_makeenvelope($1, $2, $3, $4, 4326)
+      order by
+        case network
+          when 'iwn' then 1
+          when 'nwn' then 2
+          when 'rwn' then 3
+          when 'lwn' then 4
+          when 'icn' then 5
+          when 'ncn' then 6
+          when 'rcn' then 7
+          when 'lcn' then 8
+          else 20
+        end,
+        length_km desc nulls last,
+        name nulls last,
+        osm_id
+      limit $5
+    `;
+    const result = await pool.query<OsmTrailRouteRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, Math.max(1, Math.min(5000, limit))]);
+    return result.rows;
+  }
+
+  private async fetchTrailPoiRows(bbox: BoundingBox, limit: number): Promise<OsmTrailPoiRow[]> {
+    const pool = this.getPool();
+    const table = quoteQualifiedIdentifier(this.config.osmPostgisTrailPoiTable, "OSM_POSTGIS_TRAIL_POI_TABLE");
+    const sql = `
+      select
+        osm_id::text,
+        osm_type,
+        category,
+        name,
+        lon,
+        lat,
+        tags,
+        imported_at
+      from ${table}
+      where geom && st_makeenvelope($1, $2, $3, $4, 4326)
+      order by
+        case category
+          when 'emergency' then 1
+          when 'water' then 2
+          when 'shelter' then 3
+          when 'sleep' then 4
+          when 'camp' then 5
+          when 'food' then 6
+          when 'transport' then 7
+          else 20
+        end,
+        name nulls last,
+        osm_id
+      limit $5
+    `;
+    const result = await pool.query<OsmTrailPoiRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, Math.max(1, Math.min(5000, limit))]);
     return result.rows;
   }
 
@@ -304,6 +467,8 @@ export class OsmPostgisSource implements SituationDataSource {
     const pool = this.getPool();
     const table = quoteQualifiedIdentifier(this.config.osmPostgisTable);
     const boundaryTable = quoteQualifiedIdentifier(this.config.osmPostgisAdminBoundaryTable, "OSM_POSTGIS_ADMIN_BOUNDARY_TABLE");
+    const trailRoutesTable = quoteQualifiedIdentifier(this.config.osmPostgisTrailRoutesTable, "OSM_POSTGIS_TRAIL_ROUTES_TABLE");
+    const trailPoiTable = quoteQualifiedIdentifier(this.config.osmPostgisTrailPoiTable, "OSM_POSTGIS_TRAIL_POI_TABLE");
     const sql = `
       select
         count(*)::bigint as object_count,
@@ -317,18 +482,39 @@ export class OsmPostgisSource implements SituationDataSource {
         max(imported_at) as boundary_last_import_at
       from ${boundaryTable}
     `;
-    const [result, boundaryResult] = await Promise.all([
+    const trailRoutesSql = `
+      select
+        count(*)::bigint as trail_route_feature_count,
+        max(imported_at) as trail_route_last_import_at
+      from ${trailRoutesTable}
+    `;
+    const trailPoiSql = `
+      select
+        count(*)::bigint as trail_poi_feature_count,
+        max(imported_at) as trail_poi_last_import_at
+      from ${trailPoiTable}
+    `;
+    const [result, boundaryResult, trailRoutesResult, trailPoiResult] = await Promise.all([
       pool.query<{ object_count: string | number; last_import_at: Date | string | null }>(sql),
-      pool.query<{ boundary_feature_count: string | number; boundary_levels: string[] | null; boundary_last_import_at: Date | string | null }>(boundarySql)
+      pool.query<{ boundary_feature_count: string | number; boundary_levels: string[] | null; boundary_last_import_at: Date | string | null }>(boundarySql),
+      pool.query<{ trail_route_feature_count: string | number; trail_route_last_import_at: Date | string | null }>(trailRoutesSql),
+      pool.query<{ trail_poi_feature_count: string | number; trail_poi_last_import_at: Date | string | null }>(trailPoiSql)
     ]);
     const row = result.rows[0];
     const boundaryRow = boundaryResult.rows[0];
+    const trailRouteRow = trailRoutesResult.rows[0];
+    const trailPoiRow = trailPoiResult.rows[0];
+    const trailRouteLastImportAt = normalizeTimestamp(trailRouteRow?.trail_route_last_import_at);
+    const trailPoiLastImportAt = normalizeTimestamp(trailPoiRow?.trail_poi_last_import_at);
     return {
       objectCount: numberFromPg(row?.object_count),
       lastImportAt: normalizeTimestamp(row?.last_import_at),
       boundaryFeatureCount: numberFromPg(boundaryRow?.boundary_feature_count),
       boundaryLevels: boundaryRow?.boundary_levels ?? [],
-      boundaryLastImportAt: normalizeTimestamp(boundaryRow?.boundary_last_import_at)
+      boundaryLastImportAt: normalizeTimestamp(boundaryRow?.boundary_last_import_at),
+      trailRouteFeatureCount: numberFromPg(trailRouteRow?.trail_route_feature_count),
+      trailPoiFeatureCount: numberFromPg(trailPoiRow?.trail_poi_feature_count),
+      trailLastImportAt: newestIsoTimestamp(trailRouteLastImportAt, trailPoiLastImportAt)
     };
   }
 
@@ -609,8 +795,225 @@ function mapOsmAdminBoundaryRow(row: OsmAdminBoundaryRow, fetchedAt: string, inc
   };
 }
 
+function mapOsmTrailRouteRow(row: OsmTrailRouteRow, fetchedAt: string, includeRaw: boolean): SituationFeature | undefined {
+  const geometry = parseGeometry(row.geometry_geojson);
+  const osmId = cleanString(row.osm_id);
+  const routeMode = cleanString(row.route_mode) ?? "hiking";
+  const mode = trailMode(routeMode);
+  const category = trailRouteCategory(routeMode);
+  if (!geometry || !osmId || (geometry.type !== "LineString" && geometry.type !== "MultiLineString")) {
+    return undefined;
+  }
+
+  const tags = normalizeTags(row.tags);
+  const network = cleanString(row.network) ?? "local";
+  const name = cleanString(row.name) ?? cleanString(row.ref) ?? tags.name ?? `OSM ${mode} route ${osmId}`;
+  const ref = cleanString(row.ref) ?? tags.ref;
+  const operator = cleanString(row.operator) ?? tags.operator;
+  const osmcSymbol = cleanString(row.osmc_symbol) ?? tags["osmc:symbol"];
+  const importedAt = normalizeTimestamp(row.imported_at) ?? fetchedAt;
+  const lengthKm = optionalNumber(row.length_km);
+  const segmentCount = optionalNumber(row.segment_count);
+  const id = `trail_routes:osm_postgis:${cleanString(row.osm_type) ?? "relation"}:${stableBoundaryToken(`${osmId}:${routeMode}:${network}`)}`;
+  const style = trailRouteStyle(routeMode, network);
+  const summaryCs = trailRouteSummaryCs(mode, name, lengthKm);
+  const summaryEn = trailRouteSummaryEn(mode, name, lengthKm);
+
+  return {
+    type: "Feature",
+    id,
+    geometry,
+    properties: {
+      featureId: id,
+      layer: "trail_routes",
+      category,
+      label: name,
+      labelLocalized: { cs: name, en: name },
+      summary: summaryCs,
+      summaryLocalized: { cs: summaryCs, en: summaryEn },
+      sourceId: "osm_postgis",
+      source: "osm_postgis",
+      sourceName: "OpenStreetMap trail route read model",
+      observedAt: importedAt,
+      validFrom: importedAt,
+      updatedAt: importedAt,
+      confidence: 0.74,
+      stale: false,
+      severity: "info",
+      license: {
+        name: OSM_POSTGIS_LICENSE.name,
+        attribution: OSM_POSTGIS_LICENSE.attribution,
+        url: OSM_POSTGIS_LICENSE.url
+      },
+      basis: ["osm_postgis_trail_routes", "local_postgis_read_model"],
+      sourceRevision: `osm-trail-routes:${importedAt}`,
+      readModel: true,
+      dataQuality: "observed",
+      styleHint: "trail-route-osm-v1",
+      iconHint: trailRouteIcon(mode),
+      metrics: {
+        ageSeconds: 0,
+        ...(lengthKm !== undefined ? { lengthKm } : {}),
+        ...(segmentCount !== undefined ? { segmentCount } : {})
+      },
+      tags: compactTags({
+        osmId,
+        osmType: cleanString(row.osm_type) ?? "relation",
+        importedAt,
+        routeMode,
+        mode,
+        network,
+        ref,
+        operator,
+        osmcSymbol,
+        sourceRevision: `osm-trail-routes:${importedAt}`
+      }),
+      providerProperties: {
+        trail: {
+          contractVersion: "sim-osm-trail-route-v1",
+          routeId: id,
+          source: "osm",
+          sourceId: "osm_postgis",
+          mode,
+          routeMode,
+          category,
+          network,
+          networkLabel: trailNetworkLabel(network),
+          ref,
+          operator,
+          osmcSymbol,
+          lengthKm,
+          segmentCount,
+          license: OSM_POSTGIS_LICENSE.name,
+          attribution: OSM_POSTGIS_LICENSE.attribution,
+          stageModelAvailable: false,
+          poiCorridorAvailable: false,
+          riskContextAvailable: false
+        },
+        display: {
+          styleProfile: "trail-route-osm-v1",
+          label: name,
+          strokeColor: style.strokeColor,
+          strokeWidth: style.strokeWidth,
+          lineDash: style.lineDash,
+          zIndexHint: style.zIndexHint
+        }
+      },
+      raw: includeRaw ? { ...row, tags: scrubPublicTags(row.tags) } : undefined
+    }
+  };
+}
+
+function mapOsmTrailPoiRow(row: OsmTrailPoiRow, fetchedAt: string, includeRaw: boolean): SituationFeature | undefined {
+  const lon = optionalNumber(row.lon);
+  const lat = optionalNumber(row.lat);
+  const category = cleanString(row.category);
+  const osmType = cleanString(row.osm_type) ?? "object";
+  const osmId = cleanString(row.osm_id);
+  if (lon === undefined || lat === undefined || !category || !osmId) {
+    return undefined;
+  }
+
+  const tags = normalizeTags(row.tags);
+  const labelCs = cleanString(row.name) ?? trailPoiCategoryLabelCs(category);
+  const labelEn = cleanString(row.name) ?? trailPoiCategoryLabelEn(category);
+  const importedAt = normalizeTimestamp(row.imported_at) ?? fetchedAt;
+  const id = `trail_poi:osm_postgis:${osmType}:${osmId}:${category}`;
+  const summaryCs = trailPoiSummaryCs(category, labelCs);
+  const summaryEn = trailPoiSummaryEn(category, labelEn);
+
+  return {
+    type: "Feature",
+    id,
+    geometry: {
+      type: "Point",
+      coordinates: [round(lon, 6), round(lat, 6)]
+    },
+    properties: {
+      featureId: id,
+      layer: "trail_poi",
+      category,
+      label: labelCs,
+      labelLocalized: { cs: labelCs, en: labelEn },
+      summary: summaryCs,
+      summaryLocalized: { cs: summaryCs, en: summaryEn },
+      sourceId: "osm_postgis",
+      source: "osm_postgis",
+      sourceName: "OpenStreetMap trail POI read model",
+      observedAt: importedAt,
+      validFrom: importedAt,
+      updatedAt: importedAt,
+      confidence: trailPoiConfidence(category),
+      stale: false,
+      severity: "info",
+      license: {
+        name: OSM_POSTGIS_LICENSE.name,
+        attribution: OSM_POSTGIS_LICENSE.attribution,
+        url: OSM_POSTGIS_LICENSE.url
+      },
+      basis: ["osm_postgis_trail_poi", "local_postgis_read_model"],
+      sourceRevision: `osm-trail-poi:${importedAt}`,
+      readModel: true,
+      dataQuality: "observed",
+      styleHint: "trail-poi-osm-v1",
+      iconHint: trailPoiIcon(category),
+      metrics: {
+        ageSeconds: 0
+      },
+      tags: compactTags({
+        osmId,
+        osmType,
+        importedAt,
+        category,
+        tourism: tags.tourism,
+        amenity: tags.amenity,
+        shop: tags.shop,
+        railway: tags.railway,
+        highway: tags.highway,
+        publicTransport: tags.public_transport,
+        openingHours: tags.opening_hours,
+        website: tags.website,
+        wheelchair: tags.wheelchair,
+        access: tags.access,
+        sourceRevision: `osm-trail-poi:${importedAt}`
+      }),
+      providerProperties: {
+        trailPoi: {
+          contractVersion: "sim-osm-trail-poi-v1",
+          poiId: id,
+          source: "osm",
+          sourceId: "osm_postgis",
+          category,
+          categoryLabelLocalized: {
+            cs: trailPoiCategoryLabelCs(category),
+            en: trailPoiCategoryLabelEn(category)
+          },
+          openingHours: tags.opening_hours,
+          website: tags.website,
+          wheelchair: tags.wheelchair,
+          access: tags.access,
+          license: OSM_POSTGIS_LICENSE.name,
+          attribution: OSM_POSTGIS_LICENSE.attribution,
+          mayDisplayContact: false
+        },
+        display: {
+          styleProfile: "trail-poi-osm-v1",
+          icon: trailPoiIcon(category),
+          label: labelCs,
+          minZoomHint: trailPoiMinZoom(category)
+        }
+      },
+      raw: includeRaw ? { ...row, tags: scrubPublicTags(row.tags) } : undefined
+    }
+  };
+}
+
 function parseLayer(value: string): SituationLayerId | undefined {
   return value === "ground" || value === "mobile" ? value : undefined;
+}
+
+function isOsmTrailLayer(value: SituationLayerId): value is OsmTrailLayer {
+  return value === "trail_routes" || value === "trail_poi";
 }
 
 function isOsmAdminBoundaryLayer(value: SituationLayerId): value is OsmAdminBoundaryLayer {
@@ -669,6 +1072,20 @@ function adminBoundaryGeomColumn(bbox: BoundingBox): { column: string; simplific
   return { column: "geom", simplificationDegrees: 0 };
 }
 
+function trailRouteGeomColumn(bbox: BoundingBox): { column: string; simplificationDegrees: number } {
+  const span = Math.max(bbox.east - bbox.west, bbox.north - bbox.south);
+  if (span > 4) {
+    return { column: "geom_z5", simplificationDegrees: 0.004 };
+  }
+  if (span > 1) {
+    return { column: "geom_z8", simplificationDegrees: 0.001 };
+  }
+  if (span > 0.25) {
+    return { column: "geom_z11", simplificationDegrees: 0.0003 };
+  }
+  return { column: "geom", simplificationDegrees: 0 };
+}
+
 function adminBoundaryGeneralizationMeters(geometry: SituationFeature["geometry"]): number {
   const coordinates = featureCoordinates(geometry);
   if (coordinates.length < 2) {
@@ -702,6 +1119,12 @@ function parseGeometry(value: unknown): SituationFeature["geometry"] | undefined
     return undefined;
   }
   const geometry = parsed as { type?: unknown; coordinates?: unknown };
+  if (geometry.type === "LineString" && isLineStringCoordinates(geometry.coordinates)) {
+    return { type: "LineString", coordinates: geometry.coordinates };
+  }
+  if (geometry.type === "MultiLineString" && isMultiLineStringCoordinates(geometry.coordinates)) {
+    return { type: "MultiLineString", coordinates: geometry.coordinates };
+  }
   if (geometry.type === "Polygon" && isPolygonCoordinates(geometry.coordinates)) {
     return { type: "Polygon", coordinates: geometry.coordinates };
   }
@@ -717,6 +1140,14 @@ function safeJson(value: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+function isLineStringCoordinates(value: unknown): value is Array<[number, number]> {
+  return Array.isArray(value) && value.every(isLonLat);
+}
+
+function isMultiLineStringCoordinates(value: unknown): value is Array<Array<[number, number]>> {
+  return Array.isArray(value) && value.every(isLineStringCoordinates);
 }
 
 function isPolygonCoordinates(value: unknown): value is Array<Array<[number, number]>> {
@@ -754,6 +1185,8 @@ function featureCoordinates(geometry: SituationFeature["geometry"]): Array<[numb
       return [geometry.coordinates];
     case "LineString":
       return geometry.coordinates;
+    case "MultiLineString":
+      return geometry.coordinates.flat();
     case "Polygon":
       return geometry.coordinates.flat();
     case "MultiPolygon":
@@ -803,6 +1236,161 @@ function styleHintForAdminLayer(layer: OsmAdminBoundaryLayer): string {
     place_settlements: "place-settlements-v1"
   };
   return hints[layer];
+}
+
+function trailMode(routeMode: string): string {
+  if (routeMode === "bicycle" || routeMode === "mtb") {
+    return routeMode;
+  }
+  if (routeMode === "foot") {
+    return "walking";
+  }
+  return "hiking";
+}
+
+function trailRouteCategory(routeMode: string): string {
+  const mode = trailMode(routeMode);
+  if (mode === "bicycle") {
+    return "cycling_route";
+  }
+  if (mode === "mtb") {
+    return "mtb_route";
+  }
+  if (mode === "walking") {
+    return "foot_route";
+  }
+  return "hiking_route";
+}
+
+function trailRouteIcon(mode: string): string {
+  const icons: Record<string, string> = {
+    hiking: "trail-hiking",
+    walking: "trail-walking",
+    bicycle: "trail-cycling",
+    mtb: "trail-mtb"
+  };
+  return icons[mode] ?? "trail-route";
+}
+
+function trailNetworkLabel(network: string): string {
+  const labels: Record<string, string> = {
+    iwn: "international walking network",
+    nwn: "national walking network",
+    rwn: "regional walking network",
+    lwn: "local walking network",
+    icn: "international cycling network",
+    ncn: "national cycling network",
+    rcn: "regional cycling network",
+    lcn: "local cycling network",
+    local: "local route"
+  };
+  return labels[network] ?? network;
+}
+
+function trailRouteStyle(routeMode: string, network: string): { strokeColor: string; strokeWidth: number; lineDash?: number[]; zIndexHint: number } {
+  const mode = trailMode(routeMode);
+  const longDistance = network === "iwn" || network === "nwn" || network === "icn" || network === "ncn";
+  if (mode === "bicycle") {
+    return { strokeColor: longDistance ? "#2563eb" : "#60a5fa", strokeWidth: longDistance ? 4 : 3, lineDash: [8, 4], zIndexHint: 42 };
+  }
+  if (mode === "mtb") {
+    return { strokeColor: longDistance ? "#7c3aed" : "#a78bfa", strokeWidth: longDistance ? 4 : 3, lineDash: [3, 3], zIndexHint: 43 };
+  }
+  if (mode === "walking") {
+    return { strokeColor: longDistance ? "#16a34a" : "#4ade80", strokeWidth: longDistance ? 4 : 3, lineDash: [2, 3], zIndexHint: 41 };
+  }
+  return { strokeColor: longDistance ? "#dc2626" : "#f97316", strokeWidth: longDistance ? 4 : 3, zIndexHint: 44 };
+}
+
+function trailRouteSummaryCs(mode: string, name: string, lengthKm: number | undefined): string {
+  const type = mode === "bicycle" ? "cyklotrasa" : mode === "mtb" ? "MTB trasa" : mode === "walking" ? "pěší trasa" : "turistická trasa";
+  const length = lengthKm !== undefined ? `, přibližně ${formatKilometers(lengthKm)}` : "";
+  return `${name}: ${type}${length}.`;
+}
+
+function trailRouteSummaryEn(mode: string, name: string, lengthKm: number | undefined): string {
+  const type = mode === "bicycle" ? "cycling route" : mode === "mtb" ? "MTB route" : mode === "walking" ? "walking route" : "hiking route";
+  const length = lengthKm !== undefined ? `, approximately ${formatKilometers(lengthKm)}` : "";
+  return `${name}: ${type}${length}.`;
+}
+
+function trailPoiCategoryLabelCs(category: string): string {
+  const labels: Record<string, string> = {
+    sleep: "ubytování",
+    camp: "tábořiště",
+    shelter: "přístřešek",
+    water: "voda",
+    food: "občerstvení",
+    repair: "servis",
+    rental: "půjčovna",
+    transport: "doprava",
+    emergency: "nouzový bod"
+  };
+  return labels[category] ?? "turistický bod";
+}
+
+function trailPoiCategoryLabelEn(category: string): string {
+  const labels: Record<string, string> = {
+    sleep: "accommodation",
+    camp: "camp site",
+    shelter: "shelter",
+    water: "water",
+    food: "food",
+    repair: "repair",
+    rental: "rental",
+    transport: "transport",
+    emergency: "emergency point"
+  };
+  return labels[category] ?? "trail point";
+}
+
+function trailPoiSummaryCs(category: string, label: string): string {
+  return `${label}: ${trailPoiCategoryLabelCs(category)} z lokálního OSM read-modelu.`;
+}
+
+function trailPoiSummaryEn(category: string, label: string): string {
+  return `${label}: ${trailPoiCategoryLabelEn(category)} from the local OSM read model.`;
+}
+
+function trailPoiIcon(category: string): string {
+  const icons: Record<string, string> = {
+    sleep: "trail-sleep",
+    camp: "trail-camp",
+    shelter: "trail-shelter",
+    water: "trail-water",
+    food: "trail-food",
+    repair: "trail-repair",
+    rental: "trail-rental",
+    transport: "trail-transport",
+    emergency: "trail-emergency"
+  };
+  return icons[category] ?? "trail-poi";
+}
+
+function trailPoiConfidence(category: string): number {
+  if (category === "transport" || category === "emergency") {
+    return 0.8;
+  }
+  if (category === "water" || category === "shelter") {
+    return 0.76;
+  }
+  return 0.72;
+}
+
+function trailPoiMinZoom(category: string): number {
+  return category === "transport" || category === "emergency" ? 10 : 12;
+}
+
+function scrubPublicTags(value: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+  const blocked = new Set(["phone", "contact:phone", "email", "contact:email", "fax", "contact:fax"]);
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !blocked.has(key)));
+}
+
+function formatKilometers(value: number): string {
+  return value >= 10 ? `${Math.round(value)} km` : `${Math.round(value * 10) / 10} km`;
 }
 
 function stableBoundaryToken(value: string): string {

@@ -15,6 +15,8 @@ export type SituationLayerId =
   | "boundary_district"
   | "boundary_orp"
   | "place_settlements"
+  | "trail_routes"
+  | "trail_poi"
   | "air_quality"
   | "weather_temperature_grid"
   | "weather_wind_field"
@@ -117,7 +119,7 @@ export interface LayerDescriptor {
   label: string;
   description: string;
   defaultVisible: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
+  geometryTypes: Array<"Point" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon">;
   expectedCadenceSeconds?: number;
 }
 
@@ -146,7 +148,7 @@ export interface ProviderCatalogLayer {
   disabledReason?: string;
   defaultVisible: boolean;
   selectable: boolean;
-  geometryTypes: Array<"Point" | "LineString" | "Polygon" | "MultiPolygon">;
+  geometryTypes: Array<"Point" | "LineString" | "MultiLineString" | "Polygon" | "MultiPolygon">;
   minZoom: number;
   maxZoom: number;
   refreshSeconds: number;
@@ -313,6 +315,10 @@ export interface SourceHealthStatus {
   boundaryLevels?: string[];
   boundaryLastImportAt?: string;
   boundaryLastImportAgeSeconds?: number;
+  trailRouteFeatureCount?: number;
+  trailPoiFeatureCount?: number;
+  trailLastImportAt?: string;
+  trailLastImportAgeSeconds?: number;
   warnings: string[];
 }
 
@@ -347,6 +353,11 @@ export interface LineStringGeometry {
   coordinates: Array<[number, number]>;
 }
 
+export interface MultiLineStringGeometry {
+  type: "MultiLineString";
+  coordinates: Array<Array<[number, number]>>;
+}
+
 export interface PolygonGeometry {
   type: "Polygon";
   coordinates: Array<Array<[number, number]>>;
@@ -357,7 +368,7 @@ export interface MultiPolygonGeometry {
   coordinates: Array<Array<Array<[number, number]>>>;
 }
 
-export type SituationGeometry = PointGeometry | LineStringGeometry | PolygonGeometry | MultiPolygonGeometry;
+export type SituationGeometry = PointGeometry | LineStringGeometry | MultiLineStringGeometry | PolygonGeometry | MultiPolygonGeometry;
 
 export interface SituationFeatureProperties {
   featureId: string;

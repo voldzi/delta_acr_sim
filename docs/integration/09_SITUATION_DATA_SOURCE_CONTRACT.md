@@ -115,7 +115,7 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
 | `providerId` | string | identifikátor providera, např. `sim.situation-data` |
 | `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_forecast_area`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `air_quality_grid` | mapová vrstva |
+| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_forecast_area`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `weather_webcams`, `air_quality_grid` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
 | `labelLocalized` | object, optional | lokalizované názvy, typicky `cs` a `en` |
@@ -147,6 +147,34 @@ Boundary features ve vrstvách `boundary_country`, `boundary_region`, `boundary_
 | `iconHint` | string | `boundary` nebo `place` |
 | `readModel` | boolean | `true`, jde o lokální PostGIS read-model |
 | `sourceRevision` | string | revize/import timestamp read-modelu |
+
+Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
+
+| Vrstva | Geometrie | Popis |
+| --- | --- | --- |
+| `trail_routes` | `LineString` / `MultiLineString` | pěší, turistické, cyklo a MTB trasy z OSM relation/line read-modelu |
+| `trail_poi` | `Point` | ubytování, přístřešky, voda, občerstvení, doprava, servis/půjčovny a nouzové body |
+
+`trail_routes` navíc posílá `properties.providerProperties.trail`:
+
+| Pole | Typ | Popis |
+| --- | --- | --- |
+| `contractVersion` | string | `sim-osm-trail-route-v1` |
+| `mode` | string | `hiking`, `walking`, `bicycle`, `mtb` |
+| `routeMode` | string | původní OSM `route`, např. `hiking`, `foot`, `bicycle`, `mtb` |
+| `network` | string | OSM síť, např. `nwn`, `rwn`, `lwn`, `ncn`, `rcn`, `lcn` |
+| `ref`, `operator`, `osmcSymbol` | string, optional | značení a provozovatel, pokud jsou dostupné |
+| `lengthKm`, `segmentCount` | number, optional | délka a počet segmentů v materializovaném read-modelu |
+
+`trail_poi` navíc posílá `properties.providerProperties.trailPoi`:
+
+| Pole | Typ | Popis |
+| --- | --- | --- |
+| `contractVersion` | string | `sim-osm-trail-poi-v1` |
+| `category` | string | `sleep`, `camp`, `shelter`, `water`, `food`, `repair`, `rental`, `transport`, `emergency` |
+| `categoryLabelLocalized` | object | český a anglický název kategorie |
+| `openingHours`, `website`, `wheelchair`, `access` | string, optional | veřejné OSM atributy pro detail |
+| `mayDisplayContact` | boolean | vždy `false`; SIM nepublikuje přímé kontaktní údaje z OSM jako běžný mapový detail |
 
 Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:
 
@@ -225,7 +253,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `road_srti_lod` | `traffic` | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď. |
 | `safety_data` | `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin` | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry. |
 | `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
-| `osm_postgis` | `ground`, `mobile`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
+| `osm_postgis` | `ground`, `mobile`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
 | `osm_overpass` | `ground`, `mobile` | Jen omezený vývoj/pilot; veřejný Overpass nesmí být runtime backend pro tisíce uživatelů. |
 
 ## OpenStreetMap PostGIS
@@ -244,10 +272,16 @@ Zároveň vrací administrativní hranice z materializovaného pohledu `public.o
 - `boundary_orp`: ORP, pokud jsou dostupné (`admin_level=7`),
 - `place_settlements`: sídla / obecní hranice (`admin_level=8`).
 
+A outdoor/trail kontext z materializovaných pohledů:
+
+- `trail_routes`: `public.osm_trail_routes`, OSM `route=hiking|foot|bicycle|mtb`,
+- `trail_poi`: `public.osm_trail_poi`, normalizované body `sleep|camp|shelter|water|food|repair|rental|transport|emergency`.
+
 Dotaz:
 
 ```http
 GET /features?bbox=12.0,48.5,19.0,51.2&layers=boundary_country,boundary_region&source=osm_postgis&limit=250
+GET /features?bbox=14.0,49.7,15.0,50.4&layers=trail_routes,trail_poi&source=osm_postgis&limit=1000
 ```
 
 Konfigurace:
@@ -256,12 +290,14 @@ Konfigurace:
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
+OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 ```
 
 COM má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
 
-Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt`, `lastImportAgeSeconds`, `boundaryFeatureCount`, `boundaryLevels`, `boundaryLastImportAt` a `boundaryLastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_boundary_read_model_features`, `situation_data_osm_postgis_import_age_seconds`, `situation_data_boundary_read_model_import_age_seconds` a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
+Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt`, `lastImportAgeSeconds`, `boundaryFeatureCount`, `boundaryLevels`, `boundaryLastImportAt`, `boundaryLastImportAgeSeconds`, `trailRouteFeatureCount`, `trailPoiFeatureCount`, `trailLastImportAt` a `trailLastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_boundary_read_model_features`, `situation_data_osm_trail_route_features`, `situation_data_osm_trail_poi_features`, import-age metriky a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
 
 ## Weather a ČHMÚ Open Data
 

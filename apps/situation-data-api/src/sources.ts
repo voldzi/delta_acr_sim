@@ -2992,6 +2992,8 @@ function featureCoordinates(geometry: SituationFeature["geometry"]): Array<[numb
       return [geometry.coordinates];
     case "LineString":
       return geometry.coordinates;
+    case "MultiLineString":
+      return geometry.coordinates.flat();
     case "Polygon":
       return geometry.coordinates.flat();
     case "MultiPolygon":

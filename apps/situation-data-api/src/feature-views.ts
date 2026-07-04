@@ -556,6 +556,9 @@ function geometryPoints(geometry: SituationGeometry): Array<[number, number]> {
   if (geometry.type === "LineString") {
     return geometry.coordinates;
   }
+  if (geometry.type === "MultiLineString") {
+    return geometry.coordinates.flat();
+  }
   if (geometry.type === "Polygon") {
     const points: Array<[number, number]> = [];
     for (const ring of geometry.coordinates) {

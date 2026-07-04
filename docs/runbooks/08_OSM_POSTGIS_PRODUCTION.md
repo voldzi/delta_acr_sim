@@ -1,6 +1,6 @@
 # OSM/PostGIS Production Runbook
 
-SIM source `osm_postgis` publishes OpenStreetMap reference features for COM through `situation-data`. The `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest, ČTÚ stationary mobile measurements and infrastructure hints into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
+SIM source `osm_postgis` publishes OpenStreetMap reference features for COM through `situation-data`: civic/health/emergency points, communication towers, administrative boundaries, settlement boundaries, trail routes and trail POIs. The `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest, ČTÚ stationary mobile measurements and infrastructure hints into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
 
 ## Preferred Backend: Patroni/PostGIS
 
@@ -24,6 +24,8 @@ OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
+OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
@@ -55,7 +57,12 @@ scripts/import-osm-cz-postgis.sh
 docker compose up -d --build situation-data-api sim-web
 ```
 
-The import script detects `haproxy.home.cz` as `patroni-postgis`, does not start the local `osm-postgis` container, runs `osm2pgsql` against the supplied URL, and builds `public.osm_poi` in the same database.
+The import script detects `haproxy.home.cz` as `patroni-postgis`, does not start the local `osm-postgis` container, runs `osm2pgsql` against the supplied URL, and builds these materialized read-model views in the same database:
+
+- `public.osm_poi` for civic/health/emergency/mobile reference points,
+- `public.osm_admin_boundary` for administrative and settlement boundaries,
+- `public.osm_trail_routes` for hiking/walking/cycling/MTB route lines,
+- `public.osm_trail_poi` for normalized outdoor/trail POIs.
 
 ## Acceptable Fallback: Local Rebuildable Cache
 
@@ -83,6 +90,9 @@ OSM_POSTGIS_USER=sim_osm
 OSM_POSTGIS_PASSWORD=<strong-password>
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@osm-postgis:5432/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
+OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
+OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
 ```
 
 Rebuild:
@@ -109,6 +119,10 @@ Relevant fields:
 - `sourceHealth[].objectCount`
 - `sourceHealth[].lastImportAt`
 - `sourceHealth[].lastImportAgeSeconds`
+- `sourceHealth[].boundaryFeatureCount`
+- `sourceHealth[].trailRouteFeatureCount`
+- `sourceHealth[].trailPoiFeatureCount`
+- `sourceHealth[].trailLastImportAgeSeconds`
 - `sourceHealth[].sourceId=mobile_coverage_model`
 - `sourceHealth[].objectCount` for usable `communications_tower` references
 
@@ -117,8 +131,13 @@ Metrics:
 ```text
 situation_data_osm_postgis_backend_info{backend="local-postgis|patroni-postgis"} 1
 situation_data_osm_postgis_objects{backend="..."} <count>
+situation_data_boundary_read_model_features{backend="..."} <count>
+situation_data_osm_trail_route_features{backend="..."} <count>
+situation_data_osm_trail_poi_features{backend="..."} <count>
 situation_data_osm_postgis_last_import_timestamp_seconds{backend="..."} <unix_ts>
 situation_data_osm_postgis_import_age_seconds{backend="..."} <seconds>
+situation_data_osm_trail_last_import_timestamp_seconds{backend="..."} <unix_ts>
+situation_data_osm_trail_import_age_seconds{backend="..."} <seconds>
 situation_data_source_cache_hits{source="osm_postgis"} <count>
 situation_data_source_cache_misses{source="osm_postgis"} <count>
 situation_data_mobile_coverage_backend_info{backend="..."} 1
@@ -132,6 +151,8 @@ Production readiness check:
 ```bash
 python3 scripts/smoke-production-data-plane.py --base-url http://localhost:5020 --cop-base-url http://localhost:4310
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=ground,mobile&source=osm_postgis&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=12.0,48.5,19.0,51.2&layers=boundary_country,boundary_region,boundary_district&source=osm_postgis&limit=20'
+curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=14.0,49.7,15.0,50.4&layers=trail_routes,trail_poi&source=osm_postgis&limit=20'
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=mobile_coverage&source=mobile_coverage_model&technology=4G&limit=20'
 curl -fsS http://localhost:5020/situation-data/api/v1/mobile-coverage/metadata
 curl -fsS 'http://localhost:5020/situation-data/api/v1/mobile-coverage/towers/node:13743393126/viewshed?technology=4G&radiusM=12000&azimuthStepDeg=10&distanceStepM=500'

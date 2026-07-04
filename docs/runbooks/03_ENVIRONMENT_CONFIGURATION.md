@@ -496,6 +496,8 @@ OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
 OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
+OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
@@ -522,12 +524,15 @@ OSM_POSTGIS_USER=sim_osm
 OSM_POSTGIS_PASSWORD=<strong-password>
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<password>@osm-postgis:5432/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
+OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
+OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 ```
 
-Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializovaný pohled `public.osm_poi` pro COM provider features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
+Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializované pohledy `public.osm_poi`, `public.osm_admin_boundary`, `public.osm_trail_routes` a `public.osm_trail_poi` pro COM provider features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
 Produkční deploy skript pro `docker.home.cz` zachovává existující hodnoty
 `OSM_POSTGIS_*` a `SAFETY_DATA_ADMIN_BOUNDARY_*` z `/srv/sim/.env`, pokud nejsou

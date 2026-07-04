@@ -179,6 +179,8 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.boundary.district`
 - `public.boundary.orp`
 - `public.place.settlements`
+- `public.trails.routes`
+- `public.trails.poi`
 - `public.weather.current`
 - `public.weather.aviation`
 - `public.weather.observations`

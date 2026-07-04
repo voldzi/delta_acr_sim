@@ -279,6 +279,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         boundaryLevels: source.boundaryLevels,
         boundaryLastImportAt: source.boundaryLastImportAt,
         boundaryLastImportAgeSeconds: source.boundaryLastImportAgeSeconds,
+        trailRouteFeatureCount: source.trailRouteFeatureCount,
+        trailPoiFeatureCount: source.trailPoiFeatureCount,
+        trailLastImportAt: source.trailLastImportAt,
+        trailLastImportAgeSeconds: source.trailLastImportAgeSeconds,
         warningCount: source.warnings.length
       }))
     });
@@ -783,6 +787,8 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "boundary_district",
     "boundary_orp",
     "place_settlements",
+    "trail_routes",
+    "trail_poi",
     "air_quality",
     "weather_temperature_grid",
     "weather_wind_field",
@@ -815,6 +821,8 @@ function parseLayers(value: unknown): SituationLayerId[] {
       "boundary_district",
       "boundary_orp",
       "place_settlements",
+      "trail_routes",
+      "trail_poi",
       "air_quality",
       "weather_temperature_grid",
       "weather_wind_field",
@@ -1162,6 +1170,12 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     if (typeof status.boundaryFeatureCount === "number") {
       lines.push(`situation_data_boundary_read_model_features{backend="${backend}"} ${status.boundaryFeatureCount}`);
     }
+    if (typeof status.trailRouteFeatureCount === "number") {
+      lines.push(`situation_data_osm_trail_route_features{backend="${backend}"} ${status.trailRouteFeatureCount}`);
+    }
+    if (typeof status.trailPoiFeatureCount === "number") {
+      lines.push(`situation_data_osm_trail_poi_features{backend="${backend}"} ${status.trailPoiFeatureCount}`);
+    }
     if (status.lastImportAt) {
       lines.push(`situation_data_osm_postgis_last_import_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
     }
@@ -1175,6 +1189,12 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     }
     if (typeof status.boundaryLastImportAgeSeconds === "number") {
       lines.push(`situation_data_boundary_read_model_import_age_seconds{backend="${backend}"} ${status.boundaryLastImportAgeSeconds}`);
+    }
+    if (status.trailLastImportAt) {
+      lines.push(`situation_data_osm_trail_last_import_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.trailLastImportAt) / 1000)}`);
+    }
+    if (typeof status.trailLastImportAgeSeconds === "number") {
+      lines.push(`situation_data_osm_trail_import_age_seconds{backend="${backend}"} ${status.trailLastImportAgeSeconds}`);
     }
   }
   if (status.sourceId === "ctu_nettest") {

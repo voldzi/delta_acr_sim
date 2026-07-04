@@ -57,6 +57,8 @@ describe("Situation Data API contract", () => {
       osmPostgisBackend: "unconfigured",
       osmPostgisTable: "public.osm_poi",
       osmPostgisAdminBoundaryTable: "public.osm_admin_boundary",
+      osmPostgisTrailRoutesTable: "public.osm_trail_routes",
+      osmPostgisTrailPoiTable: "public.osm_trail_poi",
       osmPostgisCacheTtlSeconds: 21600,
       overpassBaseUrl: "https://overpass-api.de/api/interpreter",
       overpassCacheTtlSeconds: 21600,
@@ -183,7 +185,17 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "osm_postgis",
-          layers: expect.arrayContaining(["ground", "mobile", "boundary_country", "boundary_region", "boundary_district", "boundary_orp", "place_settlements"]),
+          layers: expect.arrayContaining([
+            "ground",
+            "mobile",
+            "boundary_country",
+            "boundary_region",
+            "boundary_district",
+            "boundary_orp",
+            "place_settlements",
+            "trail_routes",
+            "trail_poi"
+          ]),
           license: expect.objectContaining({ name: "ODbL 1.0" })
         }),
         expect.objectContaining({
@@ -465,6 +477,28 @@ describe("Situation Data API contract", () => {
           role: "reference",
           audience: "public",
           selectable: false
+        }),
+        expect.objectContaining({
+          providerLayerId: "outdoor.osm_postgis.trail_routes",
+          recommendedCatalogLayerId: "public.trails.routes",
+          role: "reference",
+          audience: "public",
+          kind: "vector_features",
+          geometryTypes: ["LineString", "MultiLineString"],
+          styleProfile: "trail-route-osm-v1",
+          sourceIds: ["osm_postgis"],
+          readModel: expect.objectContaining({ table: "public.osm_trail_routes" })
+        }),
+        expect.objectContaining({
+          providerLayerId: "outdoor.osm_postgis.trail_poi",
+          recommendedCatalogLayerId: "public.trails.poi",
+          role: "reference",
+          audience: "public",
+          kind: "vector_features",
+          geometryTypes: ["Point"],
+          styleProfile: "trail-poi-osm-v1",
+          sourceIds: ["osm_postgis"],
+          readModel: expect.objectContaining({ table: "public.osm_trail_poi" })
         }),
         expect.objectContaining({
           providerLayerId: "traffic.idsjmk_vehicle_positions",
@@ -788,7 +822,14 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "osm_postgis",
-          feedsCatalogLayerIds: expect.arrayContaining(["public.boundary.country", "public.boundary.region", "public.boundary.district", "public.boundary.orp"])
+          feedsCatalogLayerIds: expect.arrayContaining([
+            "public.boundary.country",
+            "public.boundary.region",
+            "public.boundary.district",
+            "public.boundary.orp",
+            "public.trails.routes",
+            "public.trails.poi"
+          ])
         })
       ])
     );
@@ -3338,6 +3379,105 @@ describe("Situation Data API contract", () => {
         })
       })
     );
+  });
+
+  it("projects OSM trail routes and trail POIs as dedicated COP layers", async () => {
+    const source = new OsmPostgisSource({
+      ...config,
+      enabledSources: ["osm_postgis"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    (source as unknown as { fetchTrailRouteRows: () => Promise<unknown[]> }).fetchTrailRouteRows = async () => [
+      {
+        osm_id: "123456",
+        osm_type: "relation",
+        route_mode: "hiking",
+        network: "nwn",
+        name: "Testovací hřebenovka",
+        ref: "T1",
+        operator: "KČT",
+        osmc_symbol: "red:white:red_bar",
+        segment_count: 12,
+        length_km: 42.4,
+        geometry_geojson: {
+          type: "MultiLineString",
+          coordinates: [
+            [
+              [14.0, 50.0],
+              [14.2, 50.1]
+            ]
+          ]
+        },
+        tags: { route: "hiking", network: "nwn", name: "Testovací hřebenovka", phone: "+420123456789" },
+        imported_at: "2026-07-01T08:00:00.000Z"
+      }
+    ];
+    (source as unknown as { fetchTrailPoiRows: () => Promise<unknown[]> }).fetchTrailPoiRows = async () => [
+      {
+        osm_id: "987654",
+        osm_type: "node",
+        category: "water",
+        name: "Studánka",
+        lon: 14.1,
+        lat: 50.05,
+        tags: { amenity: "drinking_water", opening_hours: "24/7", website: "https://example.test", phone: "+420123456789" },
+        imported_at: "2026-07-01T08:00:00.000Z"
+      }
+    ];
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 13.9, south: 49.9, east: 14.3, north: 50.2 },
+      layers: ["trail_routes", "trail_poi"],
+      sourceIds: ["osm_postgis"],
+      limit: 20,
+      includeRaw: true
+    });
+
+    expect(result.features).toHaveLength(2);
+    expect(result.features[0]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "MultiLineString" }),
+        properties: expect.objectContaining({
+          layer: "trail_routes",
+          category: "hiking_route",
+          label: "Testovací hřebenovka",
+          styleHint: "trail-route-osm-v1",
+          metrics: expect.objectContaining({ lengthKm: 42.4, segmentCount: 12 }),
+          providerProperties: expect.objectContaining({
+            trail: expect.objectContaining({
+              contractVersion: "sim-osm-trail-route-v1",
+              mode: "hiking",
+              network: "nwn",
+              ref: "T1",
+              license: "ODbL 1.0"
+            })
+          })
+        })
+      })
+    );
+    expect(JSON.stringify(result.features[0].properties.raw)).not.toContain("+420123456789");
+    expect(result.features[1]).toEqual(
+      expect.objectContaining({
+        geometry: expect.objectContaining({ type: "Point", coordinates: [14.1, 50.05] }),
+        properties: expect.objectContaining({
+          layer: "trail_poi",
+          category: "water",
+          label: "Studánka",
+          iconHint: "trail-water",
+          providerProperties: expect.objectContaining({
+            trailPoi: expect.objectContaining({
+              contractVersion: "sim-osm-trail-poi-v1",
+              category: "water",
+              openingHours: "24/7",
+              website: "https://example.test",
+              mayDisplayContact: false
+            })
+          })
+        })
+      })
+    );
+    expect(JSON.stringify(result.features[1].properties.raw)).not.toContain("+420123456789");
   });
 
   it("exposes mobile coverage metadata and configuration warnings", async () => {

@@ -188,10 +188,20 @@ run_psql < deploy/osm/osm-poi-view.sql
 echo "Building materialized administrative boundary view."
 run_psql < deploy/osm/osm-admin-boundary-view.sql
 
+echo "Building materialized trail route view."
+run_psql < deploy/osm/osm-trail-routes-view.sql
+
+echo "Building materialized trail POI view."
+run_psql < deploy/osm/osm-trail-poi-view.sql
+
 echo "OSM POI rows:"
 run_psql -tAc "select count(*) from public.osm_poi;"
 echo "OSM admin boundary rows:"
 run_psql -tAc "select count(*) from public.osm_admin_boundary;"
+echo "OSM trail route rows:"
+run_psql -tAc "select count(*) from public.osm_trail_routes;"
+echo "OSM trail POI rows:"
+run_psql -tAc "select count(*) from public.osm_trail_poi;"
 
 cat <<EOF
 To enable in SIM:
@@ -206,6 +216,8 @@ OSM_POSTGIS_BACKEND=$OSM_POSTGIS_BACKEND
 OSM_POSTGIS_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
 OSM_POSTGIS_TABLE=public.osm_poi
 OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
+OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
+OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
 SAFETY_DATA_ENABLED_SOURCES=chmi_alerts,chmi_hydro,admin_boundaries
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=$(redact_database_url "$OSM_POSTGIS_DATABASE_URL")
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary

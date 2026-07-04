@@ -507,6 +507,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
         notes: ["Referenční veřejný kontext."]
       }
     },
+    ...buildTrailProviderLayers(config),
     ...buildBoundaryProviderLayers(config),
     {
       providerLayerId: "traffic.pid_gtfs_rt",
@@ -1192,6 +1193,120 @@ function buildWeatherRadarProviderLayers(config: SituationDataConfig): ProviderC
   ];
 }
 
+function buildTrailProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
+  const commonLegal = {
+    attribution: "OpenStreetMap contributors",
+    notes: [
+      "Read-model z lokálního OSM/PostGIS importu; veřejný Overpass se v produkci nepoužívá.",
+      "ODbL atribuce musí zůstat viditelná v detailu vrstvy nebo mapovém copyrightu.",
+      "Vrstva je referenční turistický/outdoor kontext, ne autoritativní krizové varování ani garantovaný stav cesty."
+    ]
+  };
+
+  return [
+    {
+      providerLayerId: "outdoor.osm_postgis.trail_routes",
+      recommendedCatalogLayerId: "public.trails.routes",
+      label: "Turistické a cyklo trasy",
+      labelLocalized: { cs: "Turistické a cyklo trasy", en: "Trail and cycling routes" },
+      description: "Normalizované pěší, turistické, cyklo a MTB trasy z lokálního OSM/PostGIS read-modelu.",
+      descriptionLocalized: {
+        cs: "Normalizované pěší, turistické, cyklo a MTB trasy z lokálního OSM/PostGIS read-modelu.",
+        en: "Normalized walking, hiking, cycling and MTB routes from the local OSM/PostGIS read model."
+      },
+      categoryPath: ["outdoor", "trails", "routes"],
+      categories: ["trail", "hiking_route", "foot_route", "cycling_route", "mtb_route", "osm"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["LineString", "MultiLineString"],
+      minZoom: 5,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "trail-route-osm-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["trail_routes"], ["osm_postgis"], ["hiking_route", "foot_route", "cycling_route", "mtb_route"]),
+      legend: {
+        profile: "trail-route-osm-v1",
+        stops: [
+          { value: "hiking_route", label: "turistická", color: "#dc2626" },
+          { value: "foot_route", label: "pěší", color: "#16a34a" },
+          { value: "cycling_route", label: "cyklo", color: "#2563eb" },
+          { value: "mtb_route", label: "MTB", color: "#7c3aed" }
+        ]
+      },
+      delivery: {
+        mode: "features",
+        geometryRole: "feature_geometry"
+      },
+      filters: [
+        {
+          filterId: "route_mode",
+          label: "Typ trasy",
+          type: "multi_select",
+          values: ["hiking_route", "foot_route", "cycling_route", "mtb_route"],
+          defaultValue: ["hiking_route", "foot_route", "cycling_route", "mtb_route"]
+        }
+      ],
+      readModel: {
+        table: config.osmPostgisTrailRoutesTable,
+        refreshedBy: "scripts/import-osm-cz-postgis.sh",
+        cacheTtlSeconds: config.osmPostgisCacheTtlSeconds
+      },
+      legal: commonLegal
+    },
+    {
+      providerLayerId: "outdoor.osm_postgis.trail_poi",
+      recommendedCatalogLayerId: "public.trails.poi",
+      label: "Turistické body",
+      labelLocalized: { cs: "Turistické body", en: "Trail points of interest" },
+      description: "Ubytování, přístřešky, voda, občerstvení, doprava a nouzové body z lokálního OSM/PostGIS read-modelu.",
+      descriptionLocalized: {
+        cs: "Ubytování, přístřešky, voda, občerstvení, doprava a nouzové body z lokálního OSM/PostGIS read-modelu.",
+        en: "Accommodation, shelters, water, food, transport and emergency points from the local OSM/PostGIS read model."
+      },
+      categoryPath: ["outdoor", "trails", "poi"],
+      categories: ["trail_poi", "sleep", "camp", "shelter", "water", "food", "repair", "rental", "transport", "emergency", "osm"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 10,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "trail-poi-osm-v1",
+      sourceIds: ["osm_postgis"],
+      query: query(["trail_poi"], ["osm_postgis"], ["sleep", "camp", "shelter", "water", "food", "repair", "rental", "transport", "emergency"]),
+      legend: { profile: "trail-poi-osm-v1" },
+      delivery: {
+        mode: "features",
+        geometryRole: "feature_geometry"
+      },
+      filters: [
+        {
+          filterId: "category",
+          label: "Kategorie",
+          type: "multi_select",
+          values: ["sleep", "camp", "shelter", "water", "food", "repair", "rental", "transport", "emergency"],
+          defaultValue: ["sleep", "camp", "shelter", "water", "food", "repair", "rental", "transport", "emergency"]
+        }
+      ],
+      readModel: {
+        table: config.osmPostgisTrailPoiTable,
+        refreshedBy: "scripts/import-osm-cz-postgis.sh",
+        cacheTtlSeconds: config.osmPostgisCacheTtlSeconds
+      },
+      legal: commonLegal
+    }
+  ];
+}
+
 function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   const common = {
     categoryPath: ["boundary", "admin"],
@@ -1562,6 +1677,8 @@ function sourceClassification(sourceId: SituationDataSourceId): {
           "ground.osm_postgis.emergency",
           "ground.osm_postgis.civic",
           "mobile.osm_postgis.communications",
+          "outdoor.osm_postgis.trail_routes",
+          "outdoor.osm_postgis.trail_poi",
           "boundary.country",
           "boundary.region",
           "boundary.district",
@@ -1573,6 +1690,8 @@ function sourceClassification(sourceId: SituationDataSourceId): {
           "reference.infrastructure.emergency",
           "reference.infrastructure.civic",
           "reference.infrastructure.communications",
+          "public.trails.routes",
+          "public.trails.poi",
           "public.boundary.country",
           "public.boundary.region",
           "public.boundary.district",
