@@ -3,8 +3,18 @@ import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache } from "./response-cache.js";
+import {
+  fetchIdsjmkVehicleFeed,
+  fetchSpravaZeleznicTrainFeatures,
+  idsjmkVehicleLonLat,
+  normalizeIdsjmkVehicles,
+  spravaZeleznicTrainLonLat,
+  type IdsjmkVehicleFeed,
+  type IdsjmkVehicleRecord,
+  type SpravaZeleznicTrainFeature
+} from "./sources.js";
 
-type TransitSourceId = "pid_gtfs_rt";
+type TransitSourceId = "pid_gtfs_rt" | "idsjmk_vehicle_positions" | "spravazeleznic_trains";
 
 interface GtfsRoute {
   routeId: string;
@@ -97,7 +107,7 @@ export interface TransitVehicleDetail {
   contractVersion: "sim-transit-vehicle-detail-v1";
   generatedAt: string;
   sourceId: TransitSourceId;
-  systemId: "pid";
+  systemId: "pid" | "idsjmk" | "spravazeleznic";
   featureId: string;
   vehicle: {
     vehicleId?: string;
@@ -182,7 +192,11 @@ export class TransitDetailService {
   private readonly pidVehicleFeedCache: ManagedResponseCache<transit_realtime.FeedMessage>;
   private readonly pidTripUpdateFeedCache: ManagedResponseCache<transit_realtime.FeedMessage>;
   private readonly pidStaticModelCache: ManagedResponseCache<PidStaticModel>;
+  private readonly idsjmkVehicleFeedCache: ManagedResponseCache<IdsjmkVehicleFeed>;
+  private readonly spravaZeleznicTrainFeedCache: ManagedResponseCache<SpravaZeleznicTrainFeature[]>;
   private readonly pidVehicleHistory = new Map<string, TransitVehicleHistoryPoint[]>();
+  private readonly idsjmkVehicleHistory = new Map<string, TransitVehicleHistoryPoint[]>();
+  private readonly spravaZeleznicTrainHistory = new Map<string, TransitVehicleHistoryPoint[]>();
   private readonly pidHistoryWindowSeconds = 30 * 60;
   private readonly pidHistoryMaxPoints = 120;
 
@@ -202,10 +216,26 @@ export class TransitDetailService {
       staleIfErrorMs: Math.max(15 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 1
     });
+    this.idsjmkVehicleFeedCache = new ManagedResponseCache<IdsjmkVehicleFeed>({
+      ttlMs: Math.max(10, config.idsjmkVehiclePositionsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
+    this.spravaZeleznicTrainFeedCache = new ManagedResponseCache<SpravaZeleznicTrainFeature[]>({
+      ttlMs: Math.max(900, config.spravaZeleznicTrainPositionsCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(900, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
+    });
   }
 
   async getVehicleDetail(featureId: string, options: TransitDetailOptions = {}): Promise<TransitVehicleDetail | undefined> {
     const sourceId = normalizeTransitSourceId(options.sourceId);
+    if (sourceId === "idsjmk_vehicle_positions") {
+      return this.getIdsjmkVehicleDetail(featureId);
+    }
+    if (sourceId === "spravazeleznic_trains") {
+      return this.getSpravaZeleznicTrainDetail(featureId);
+    }
     if (sourceId !== "pid_gtfs_rt") {
       return undefined;
     }
@@ -255,6 +285,46 @@ export class TransitDetailService {
     const existing = this.pidVehicleHistory.get(key) ?? [];
     const next = point ? appendHistoryPoint(existing, point, this.pidHistoryWindowSeconds, this.pidHistoryMaxPoints) : existing;
     this.pidVehicleHistory.set(key, next);
+    return next;
+  }
+
+  private async getIdsjmkVehicleDetail(featureId: string): Promise<TransitVehicleDetail | undefined> {
+    const feed = await this.idsjmkVehicleFeedCache.getOrLoad("idsjmk_vehicle_positions", () => fetchIdsjmkVehicleFeed(this.config));
+    const sourceObservedAt = parseTimestamp(recordValue(feed, ["LastUpdate", "lastUpdate"])) ?? new Date().toISOString();
+    const record = findIdsjmkVehicleRecord(feed, featureId, sourceObservedAt);
+    if (!record) {
+      return undefined;
+    }
+    const observedAt = idsjmkObservedAt(record, sourceObservedAt);
+    return buildIdsjmkVehicleDetail(record, featureId, observedAt, this.recordExternalVehicleHistory("idsjmk", record, observedAt));
+  }
+
+  private async getSpravaZeleznicTrainDetail(featureId: string): Promise<TransitVehicleDetail | undefined> {
+    const trains = await this.spravaZeleznicTrainFeedCache.getOrLoad("spravazeleznic_train_positions", () =>
+      fetchSpravaZeleznicTrainFeatures(this.config)
+    );
+    const generatedAt = new Date().toISOString();
+    const train = findSpravaZeleznicTrain(trains, featureId);
+    if (!train) {
+      return undefined;
+    }
+    return buildSpravaZeleznicTrainDetail(train, featureId, generatedAt, this.recordExternalVehicleHistory("spravazeleznic", train, generatedAt));
+  }
+
+  private recordExternalVehicleHistory(
+    source: "idsjmk" | "spravazeleznic",
+    record: IdsjmkVehicleRecord | SpravaZeleznicTrainFeature,
+    observedAt: string
+  ): TransitVehicleHistoryPoint[] {
+    const point = source === "idsjmk" ? idsjmkHistoryPoint(record as IdsjmkVehicleRecord, observedAt) : trainHistoryPoint(record as SpravaZeleznicTrainFeature, observedAt);
+    const vehicleId = source === "idsjmk" ? idsjmkVehicleId(record as IdsjmkVehicleRecord, observedAt) : spravaZeleznicTrainId(record as SpravaZeleznicTrainFeature);
+    if (!point || !vehicleId) {
+      return [];
+    }
+    const cache = source === "idsjmk" ? this.idsjmkVehicleHistory : this.spravaZeleznicTrainHistory;
+    const existing = cache.get(stableToken(vehicleId)) ?? [];
+    const next = appendHistoryPoint(existing, point, this.pidHistoryWindowSeconds, this.pidHistoryMaxPoints);
+    cache.set(stableToken(vehicleId), next);
     return next;
   }
 }
@@ -393,9 +463,311 @@ function buildPidVehicleDetail(
   };
 }
 
+function buildIdsjmkVehicleDetail(
+  record: IdsjmkVehicleRecord,
+  featureId: string,
+  sourceObservedAt: string,
+  history: TransitVehicleHistoryPoint[]
+): TransitVehicleDetail {
+  const generatedAt = new Date().toISOString();
+  const position = idsjmkVehicleLonLat(record);
+  const vehicleId = idsjmkVehicleId(record, sourceObservedAt);
+  const routeType = numberFromRecord(record, ["routeType", "RouteType", "route_type", "gtfsRouteType"]);
+  const mode = idsjmkVehicleMode(record, routeType);
+  const routeId = stringFromRecord(record, ["routeId", "RouteId", "route_id"]);
+  const routeShortName = stringFromRecord(record, [
+    "line",
+    "Line",
+    "lineName",
+    "LineName",
+    "linename",
+    "LineID",
+    "lineid",
+    "lineNumber",
+    "LineNumber",
+    "route",
+    "Route",
+    "routeId",
+    "RouteId"
+  ]);
+  const tripId = stringFromRecord(record, ["tripId", "TripId", "trip_id", "course", "Course", "routeId", "RouteId"]);
+  const destination = stringFromRecord(record, ["destination", "Destination", "headsign", "Headsign", "tripHeadsign", "TripHeadsign", "FinalStopID", "finalstopid"]);
+  const operator = stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]) ?? "IDS JMK";
+  const headingDeg = numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "azimuth", "Azimuth"]);
+  const speedMps = numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"]);
+  const delaySeconds = numberFromRecord(record, ["delay", "Delay", "delaySeconds", "DelaySeconds"]);
+  const currentStopSequence = numberFromRecord(record, ["currentStopSequence", "CurrentStopSequence", "stopSequence", "StopSequence"]);
+  const stopId = stringFromRecord(record, ["stopId", "StopId", "stop_id", "nextStopId", "NextStopId"]);
+  const qualityWarnings = [
+    "IDS JMK detail is generated from the live position feed. Complete stop sequence and route shape require a stable match to the static GTFS trip model."
+  ];
+  const generatedFrom = ["idsjmk_vehicle_positions", ...(history.length > 0 ? ["sim_in_memory_vehicle_history"] : [])];
+
+  return {
+    contractVersion: "sim-transit-vehicle-detail-v1",
+    generatedAt,
+    sourceId: "idsjmk_vehicle_positions",
+    systemId: "idsjmk",
+    featureId,
+    vehicle: {
+      vehicleId,
+      label: routeShortName ? `${mode.label} ${routeShortName}` : mode.label,
+      transportMode: mode.transportMode,
+      position: position
+        ? {
+            lat: position.lat,
+            lon: position.lon,
+            headingDeg,
+            speedMps,
+            observedAt: sourceObservedAt
+          }
+        : undefined,
+      currentStopSequence,
+      stopId
+    },
+    trip: {
+      tripId,
+      routeId,
+      routeShortName,
+      destination,
+      delaySeconds,
+      status: externalTransitStatus(sourceObservedAt, delaySeconds)
+    },
+    stopTimes: [],
+    delaySeconds,
+    history: {
+      generatedFrom,
+      windowSeconds: 30 * 60,
+      pointCount: history.length,
+      truncated: history.length >= 120,
+      points: history
+    },
+    prediction: {
+      generatedFrom: ["idsjmk_vehicle_positions"],
+      delaySource: delaySeconds === undefined ? "unavailable" : "estimated_from_schedule",
+      delaySeconds,
+      stopTimes: []
+    },
+    quality: {
+      realtimeVehicleAvailable: Boolean(position),
+      staticModelAvailable: false,
+      tripUpdateAvailable: delaySeconds !== undefined,
+      tripScheduleAvailable: false,
+      routeShapeAvailable: false,
+      historyAvailable: history.length > 0,
+      predictionAvailable: delaySeconds !== undefined,
+      generatedFrom,
+      warnings: qualityWarnings
+    }
+  };
+}
+
+function buildSpravaZeleznicTrainDetail(
+  train: SpravaZeleznicTrainFeature,
+  featureId: string,
+  generatedAt: string,
+  history: TransitVehicleHistoryPoint[]
+): TransitVehicleDetail {
+  const props = train.properties ?? {};
+  const position = spravaZeleznicTrainLonLat(train.geometry?.coordinates);
+  const vehicleId = spravaZeleznicTrainId(train);
+  const trainType = optionalString(props.tt);
+  const trainNumber = optionalString(props.tn);
+  const trainName = optionalString(props.na);
+  const routeShortName = [trainType, trainNumber].filter(Boolean).join(" ") || trainNumber || trainName;
+  const origin = optionalString(props.fn);
+  const destination = optionalString(props.ln);
+  const operator = optionalString(props.d);
+  const currentStationName = optionalString(props.cna);
+  const nextStationName = optionalString(props.nsn);
+  const plannedTime = optionalString(props.cp);
+  const currentTime = optionalString(props.cr);
+  const nextScheduledTime = optionalString(props.nst);
+  const nextPredictedTime = optionalString(props.nsp);
+  const delayMinutes = optionalNumber(props.de);
+  const delaySeconds = delayMinutes === undefined ? undefined : Math.round(delayMinutes * 60);
+  const headingDeg = optionalNumber(props.a);
+  const stopTimes = trainStopTimes({
+    currentStationName,
+    nextStationName,
+    plannedTime,
+    currentTime,
+    nextScheduledTime,
+    nextPredictedTime,
+    delaySeconds
+  });
+  const generatedFrom = ["spravazeleznic_trains", ...(history.length > 0 ? ["sim_in_memory_vehicle_history"] : [])];
+  const qualityWarnings = [
+    "Správa železnic live map feed provides current and next station context, but SIM does not yet have a stable full railway route shape/static stop sequence model."
+  ];
+
+  return {
+    contractVersion: "sim-transit-vehicle-detail-v1",
+    generatedAt,
+    sourceId: "spravazeleznic_trains",
+    systemId: "spravazeleznic",
+    featureId,
+    vehicle: {
+      vehicleId,
+      label: routeShortName ? `Vlak ${routeShortName}` : "Vlak Správy železnic",
+      transportMode: "train",
+      position: position
+        ? {
+            lat: position.lat,
+            lon: position.lon,
+            headingDeg,
+            observedAt: generatedAt
+          }
+        : undefined
+    },
+    trip: {
+      tripId: vehicleId,
+      routeShortName,
+      routeLongName: trainName,
+      destination,
+      delaySeconds,
+      status: externalTransitStatus(generatedAt, delaySeconds)
+    },
+    stopTimes,
+    delaySeconds,
+    history: {
+      generatedFrom,
+      windowSeconds: 30 * 60,
+      pointCount: history.length,
+      truncated: history.length >= 120,
+      points: history
+    },
+    prediction: {
+      generatedFrom: ["spravazeleznic_trains"],
+      delaySource: stopTimes.length === 0 && delaySeconds === undefined ? "unavailable" : "estimated_from_schedule",
+      delaySeconds,
+      stopTimes
+    },
+    quality: {
+      realtimeVehicleAvailable: Boolean(position),
+      staticModelAvailable: false,
+      tripUpdateAvailable: delaySeconds !== undefined || nextPredictedTime !== undefined,
+      tripScheduleAvailable: stopTimes.length > 0,
+      routeShapeAvailable: false,
+      historyAvailable: history.length > 0,
+      predictionAvailable: stopTimes.length > 0 || delaySeconds !== undefined,
+      generatedFrom,
+      warnings: qualityWarnings
+    }
+  };
+}
+
 function observedAtForVehicle(vehicle: transit_realtime.IVehiclePosition | null | undefined): string | undefined {
   const timestamp = longToNumber(vehicle?.timestamp);
   return timestamp && timestamp > 0 ? new Date(timestamp * 1000).toISOString() : undefined;
+}
+
+function findIdsjmkVehicleRecord(feed: IdsjmkVehicleFeed, featureId: string, sourceObservedAt: string): IdsjmkVehicleRecord | undefined {
+  const normalizedFeatureId = decodeURIComponent(featureId);
+  return normalizeIdsjmkVehicles(feed).find((record) => {
+    const vehicleId = idsjmkVehicleId(record, sourceObservedAt);
+    return vehicleId ? `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}` === normalizedFeatureId : false;
+  });
+}
+
+function findSpravaZeleznicTrain(trains: SpravaZeleznicTrainFeature[], featureId: string): SpravaZeleznicTrainFeature | undefined {
+  const normalizedFeatureId = decodeURIComponent(featureId);
+  return trains.find((train) => {
+    const trainId = spravaZeleznicTrainId(train);
+    return trainId ? `traffic:spravazeleznic_trains:${stableToken(trainId)}` === normalizedFeatureId : false;
+  });
+}
+
+function idsjmkHistoryPoint(record: IdsjmkVehicleRecord, observedAt: string): TransitVehicleHistoryPoint | undefined {
+  const position = idsjmkVehicleLonLat(record);
+  return {
+    observedAt,
+    position: position
+      ? {
+          lat: position.lat,
+          lon: position.lon,
+          headingDeg: numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "azimuth", "Azimuth"]),
+          speedMps: numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"])
+        }
+      : undefined,
+    stopId: stringFromRecord(record, ["stopId", "StopId", "stop_id", "nextStopId", "NextStopId"]),
+    currentStopSequence: numberFromRecord(record, ["currentStopSequence", "CurrentStopSequence", "stopSequence", "StopSequence"]),
+    relationToVehicle: "unknown"
+  };
+}
+
+function trainHistoryPoint(train: SpravaZeleznicTrainFeature, observedAt: string): TransitVehicleHistoryPoint | undefined {
+  const position = spravaZeleznicTrainLonLat(train.geometry?.coordinates);
+  const props = train.properties ?? {};
+  return {
+    observedAt,
+    position: position
+      ? {
+          lat: position.lat,
+          lon: position.lon,
+          headingDeg: optionalNumber(props.a)
+        }
+      : undefined,
+    stopId: optionalString(props.cna) ? stableToken(`current:${optionalString(props.cna)}`) : undefined,
+    relationToVehicle: "current"
+  };
+}
+
+function idsjmkVehicleId(record: IdsjmkVehicleRecord, observedAt: string): string | undefined {
+  const position = idsjmkVehicleLonLat(record);
+  return (
+    stringFromRecord(record, ["vehicleId", "VehicleId", "vehicle_id", "globalid", "GlobalID", "id", "Id", "ID", "objectId", "OBJECTID", "vehicle", "Vehicle"]) ??
+    (position ? stableToken(`${position.lon}:${position.lat}:${observedAt}`) : undefined)
+  );
+}
+
+function idsjmkObservedAt(record: IdsjmkVehicleRecord, sourceObservedAt: string): string {
+  return (
+    parseTimestamp(
+      recordValue(record, ["lastUpdate", "LastUpdate", "lastupdate", "TimeUpdated", "last_update", "timestamp", "Timestamp", "time", "Time", "updatedAt", "UpdatedAt"])
+    ) ?? sourceObservedAt
+  );
+}
+
+function spravaZeleznicTrainId(train: SpravaZeleznicTrainFeature): string | undefined {
+  const position = spravaZeleznicTrainLonLat(train.geometry?.coordinates);
+  const props = train.properties ?? {};
+  return optionalString(props.id) ?? optionalString(train.id) ?? (position ? `${position.lon}:${position.lat}` : undefined);
+}
+
+function trainStopTimes(input: {
+  currentStationName?: string;
+  nextStationName?: string;
+  plannedTime?: string;
+  currentTime?: string;
+  nextScheduledTime?: string;
+  nextPredictedTime?: string;
+  delaySeconds?: number;
+}): TransitVehicleDetail["stopTimes"] {
+  const stopTimes: TransitVehicleDetail["stopTimes"] = [];
+  if (input.currentStationName) {
+    stopTimes.push({
+      stopId: stableToken(`current:${input.currentStationName}`),
+      stopName: input.currentStationName,
+      stopSequence: 0,
+      scheduledDeparture: input.plannedTime,
+      predictedDeparture: input.currentTime,
+      delaySeconds: input.delaySeconds,
+      relationToVehicle: "current"
+    });
+  }
+  if (input.nextStationName) {
+    stopTimes.push({
+      stopId: stableToken(`next:${input.nextStationName}`),
+      stopName: input.nextStationName,
+      stopSequence: stopTimes.length,
+      scheduledArrival: input.nextScheduledTime,
+      predictedArrival: input.nextPredictedTime,
+      delaySeconds: input.delaySeconds,
+      relationToVehicle: "next"
+    });
+  }
+  return stopTimes;
 }
 
 function historyPointFromVehicle(
@@ -975,6 +1347,37 @@ function pidModeFromRouteType(routeTypeCode: number): string {
   }
 }
 
+function idsjmkVehicleMode(record: IdsjmkVehicleRecord, routeType: number | undefined): { transportMode: string; label: string } {
+  if (routeType !== undefined) {
+    const transportMode = pidModeFromRouteType(routeType);
+    return { transportMode, label: transportMode };
+  }
+  const vehicleType = numberFromRecord(record, ["vtype", "VType", "vehicleTypeCode", "ltype", "LType"]);
+  if (vehicleType === 1) {
+    return { transportMode: "tram", label: "tram" };
+  }
+  if (vehicleType === 3) {
+    return { transportMode: "trolleybus", label: "trolleybus" };
+  }
+  if (vehicleType === 5) {
+    return { transportMode: "train", label: "train" };
+  }
+  if (vehicleType !== undefined) {
+    return { transportMode: "bus", label: "bus" };
+  }
+  const rawType = (stringFromRecord(record, ["vehicleType", "VehicleType", "type", "Type", "mode", "Mode", "transportMode"]) ?? "").toLowerCase();
+  if (rawType.includes("tram") || rawType.includes("šalina")) {
+    return { transportMode: "tram", label: "tram" };
+  }
+  if (rawType.includes("train") || rawType.includes("vlak")) {
+    return { transportMode: "train", label: "train" };
+  }
+  if (rawType.includes("trolley") || rawType.includes("trolej")) {
+    return { transportMode: "trolleybus", label: "trolleybus" };
+  }
+  return { transportMode: "bus", label: "bus" };
+}
+
 function pidRouteLabel(routeId: string | undefined, vehicleId: string | undefined): string | undefined {
   const route = emptyToUndefined(routeId)?.replace(/^L(?=[A-Z0-9])/i, "");
   if (route) {
@@ -1010,6 +1413,22 @@ function transitTripStatus(
     default:
       return "unknown";
   }
+}
+
+function externalTransitStatus(observedAt: string | undefined, delaySeconds: number | undefined): TransitVehicleDetail["trip"]["status"] {
+  if (observedAt && Date.now() - Date.parse(observedAt) > 15 * 60_000) {
+    return "stale";
+  }
+  if (delaySeconds !== undefined) {
+    if (delaySeconds > 60) {
+      return "delayed";
+    }
+    if (delaySeconds < -60) {
+      return "early";
+    }
+    return "on_time";
+  }
+  return "in_transit";
 }
 
 function stopRelation(stopSequence: number, currentStopSequence: number | undefined): TransitStopRelation {
@@ -1082,6 +1501,9 @@ function normalizeTransitSourceId(value: string | undefined): TransitSourceId | 
   if (!value || value === "pid_gtfs_rt") {
     return "pid_gtfs_rt";
   }
+  if (value === "idsjmk_vehicle_positions" || value === "spravazeleznic_trains") {
+    return value;
+  }
   return undefined;
 }
 
@@ -1116,6 +1538,54 @@ function optionalNumber(value: unknown): number | undefined {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function recordValue(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+  const entries = Object.entries(record);
+  for (const key of keys) {
+    const lowerKey = key.toLowerCase();
+    const match = entries.find(([entryKey, value]) => entryKey.toLowerCase() === lowerKey && value !== undefined && value !== null);
+    if (match) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
+
+function numberFromRecord(record: Record<string, unknown>, keys: string[]): number | undefined {
+  return optionalNumber(recordValue(record, keys));
+}
+
+function stringFromRecord(record: Record<string, unknown>, keys: string[]): string | undefined {
+  const value = recordValue(record, keys);
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return String(value).trim() || undefined;
+}
+
+function parseTimestamp(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const milliseconds = value > 10_000_000_000 ? value : value * 1000;
+    const date = new Date(milliseconds);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  }
+  if (typeof value !== "string" || value.trim() === "") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric) && /^\d+(\.\d+)?$/.test(trimmed)) {
+    return parseTimestamp(numeric);
+  }
+  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
+  const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 function emptyToUndefined(value: string | undefined): string | undefined {

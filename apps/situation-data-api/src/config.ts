@@ -171,7 +171,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ),
     publicTransitStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PUBLIC_TRANSIT_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
     publicTransitStaticMaxStops: parseInteger(process.env.PUBLIC_TRANSIT_STATIC_MAX_STOPS, 60000),
-    idsjmkVehiclePositionsUrl: process.env.IDSJMK_VEHICLE_POSITIONS_URL ?? "https://mapa.idsjmk.cz/api/vehicles.json",
+    idsjmkVehiclePositionsUrl:
+      process.env.IDSJMK_VEHICLE_POSITIONS_URL ??
+      "https://gis.brno.cz/ags1/rest/services/Hosted/Kordis_26_polohy/FeatureServer/0/query?where=IsInactive%3D%27false%27&outFields=*&orderByFields=TimeUpdated%20DESC&f=geojson&resultRecordCount=10000",
     idsjmkVehiclePositionsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS, 20),
     spravaZeleznicTrainPositionsUrl:
       process.env.SPRAVAZELEZNIC_TRAIN_POSITIONS_URL ??

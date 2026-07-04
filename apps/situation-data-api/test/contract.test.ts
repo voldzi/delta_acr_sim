@@ -2708,19 +2708,21 @@ describe("Situation Data API contract", () => {
           LastUpdate: "2026-05-28T08:00:00.000Z",
           features: [
             {
-              attributes: {
-                VehicleId: "idsjmk-veh-1",
+              properties: {
+                globalid: "{IDSJMK-GEO-1}",
                 LineName: "12",
-                VehicleType: "tram",
+                VType: 1,
                 Speed: 9,
                 Bearing: 88,
-                DelaySeconds: 60,
+                DelaySeconds: 120,
                 Destination: "Technologický park",
-                Operator: "DPMB"
+                Operator: "DPMB",
+                TimeUpdated: Date.now(),
+                IsInactive: "false"
               },
               geometry: {
-                x: 16.607,
-                y: 49.195
+                type: "Point",
+                coordinates: [16.607, 49.195]
               }
             }
           ]
@@ -2747,7 +2749,7 @@ describe("Situation Data API contract", () => {
     expect(second.body.features).toHaveLength(1);
     expect(first.body.features[0]).toEqual(
       expect.objectContaining({
-        id: "traffic:idsjmk_vehicle_positions:idsjmk-veh-1",
+        id: "traffic:idsjmk_vehicle_positions:_IDSJMK-GEO-1_",
         properties: expect.objectContaining({
           sourceId: "idsjmk_vehicle_positions",
           layerId: "public.traffic.transit",
@@ -2756,8 +2758,8 @@ describe("Situation Data API contract", () => {
           transportMode: "tram",
           routeShortName: "12",
           destination: "Technologický park",
-          delaySeconds: 60,
-          vehicleId: "idsjmk-veh-1",
+          delaySeconds: 120,
+          vehicleId: "{IDSJMK-GEO-1}",
           operator: "DPMB",
           speedMps: 9,
           headingDeg: 88,
@@ -2771,10 +2773,34 @@ describe("Situation Data API contract", () => {
               livePosition: true,
               motionExpected: true,
               refreshSeconds: 20,
-              cacheTtlSeconds: 20
+              cacheTtlSeconds: 20,
+              detailAvailable: true,
+              detailUrl: "/situation-data/api/v1/transit/vehicles/traffic%3Aidsjmk_vehicle_positions%3A_IDSJMK-GEO-1_?source=idsjmk_vehicle_positions"
             }),
             raw: expect.any(Object)
           })
+        })
+      })
+    );
+
+    const detail = await request(idsjmkApp.app)
+      .get("/api/v1/transit/vehicles/traffic%3Aidsjmk_vehicle_positions%3A_IDSJMK-GEO-1_?source=idsjmk_vehicle_positions")
+      .expect(200);
+    expect(detail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-vehicle-detail-v1",
+        sourceId: "idsjmk_vehicle_positions",
+        systemId: "idsjmk",
+        trip: expect.objectContaining({
+          routeShortName: "12",
+          destination: "Technologický park",
+          delaySeconds: 120,
+          status: "delayed"
+        }),
+        quality: expect.objectContaining({
+          realtimeVehicleAvailable: true,
+          tripUpdateAvailable: true,
+          routeShapeAvailable: false
         })
       })
     );
@@ -3064,10 +3090,44 @@ describe("Situation Data API contract", () => {
               routeShortName: "R 654",
               delayMinutes: 13,
               delaySeconds: 780,
-              detailAvailable: false
+              detailAvailable: true,
+              detailUrl:
+                "/situation-data/api/v1/transit/vehicles/traffic%3Aspravazeleznic_trains%3ATR_1154_KASO---25301_00_2026_20260630?source=spravazeleznic_trains"
             }),
             raw: expect.any(Object)
           })
+        })
+      })
+    );
+
+    const detail = await request(trainsApp.app)
+      .get("/api/v1/transit/vehicles/traffic%3Aspravazeleznic_trains%3ATR_1154_KASO---25301_00_2026_20260630?source=spravazeleznic_trains")
+      .expect(200);
+    expect(detail.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-transit-vehicle-detail-v1",
+        sourceId: "spravazeleznic_trains",
+        systemId: "spravazeleznic",
+        trip: expect.objectContaining({
+          routeShortName: "R 654",
+          destination: "Č.Budějovice os.n.",
+          delaySeconds: 780,
+          status: "delayed"
+        }),
+        stopTimes: [
+          expect.objectContaining({
+            stopName: "Počátky-Žirovnice",
+            relationToVehicle: "current"
+          }),
+          expect.objectContaining({
+            stopName: "Jindřichův Hradec",
+            relationToVehicle: "next"
+          })
+        ],
+        quality: expect.objectContaining({
+          realtimeVehicleAvailable: true,
+          tripUpdateAvailable: true,
+          routeShapeAvailable: false
         })
       })
     );

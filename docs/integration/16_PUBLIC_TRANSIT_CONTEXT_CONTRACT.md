@@ -36,8 +36,8 @@ modelem.
 | --- | --- | --- |
 | PID / Praha a Středočeský kraj | Golemio/PID GTFS-RT vehicle positions + PID statický GTFS | mapová vrstva vozidel a detail vozidla jsou implementované |
 | Veřejné statické GTFS/GeoJSON feedy | `public_transit_static` | statické zastávky jsou publikované jako samostatná referenční vrstva `public.traffic.transit_stops`; výchozí ověřená sada je PID, IDS JMK, DPMO Olomouc, PMDP Plzeň, DPMLJ Liberec/Jablonec a DPO Ostrava GeoJSON, další města se přidávají konfiguračně |
-| IDS JMK / Brno a JMK | IDS JMK vehicle positions JSON | existuje volitelná mapová vrstva vozidel, detail je zatím označený jako nedostupný |
-| Správa železnic / celá ČR | Veřejná mapa provozu vlaků Správy železnic | existuje volitelná mapová vrstva vlaků; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut |
+| IDS JMK / Brno a JMK | IDS JMK vehicle positions JSON | existuje mapová vrstva vozidel a normalizovaný detail vozidla nad live feedem; úplná sekvence zastávek a tvar trasy vyžadují stabilní match na statický GTFS trip |
+| Správa železnic / celá ČR | Veřejná mapa provozu vlaků Správy železnic | existuje mapová vrstva vlaků a normalizovaný detail vlaku nad live feedem; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut |
 | Další města ČR | GTFS static + GTFS-RT, nebo proprietární open-data API | přidávat po ověření stabilní primární URL, licence a provozního limitu |
 
 Adaptér musí do SIM dodat jednotný objekt:
@@ -74,6 +74,15 @@ Současné zdroje:
 Budoucí zdroje mají používat stejný `recommendedCatalogLayerId`, aby COP nemusel
 přidávat novou vrstvu pro každé město. Rozlišení systému, linky a dopravce je v
 properties.
+
+COP může nad jedním `recommendedCatalogLayerId=public.traffic.transit` vytvořit
+jemnější UI submenu podle `providerLayerId` a `providerProperties.transit`:
+
+- `traffic.spravazeleznic_trains` -> Vlaky,
+- `traffic.pid_gtfs_rt` -> Praha/PID,
+- `traffic.idsjmk_vehicle_positions` -> Brno/IDS JMK,
+- budoucí města/regiony -> samostatná položka podle `systemId` a popisku
+  provider vrstvy.
 
 Statické zastávky z veřejných GTFS ZIPů jsou oddělené od live vozidel:
 
@@ -192,7 +201,9 @@ Pro `spravazeleznic_trains` SIM poskytuje minimálně:
 - `providerProperties.transit.trainType`, `trainNumber`, `trainName`,
   `origin`, `destination`, `currentStationName`, `nextStationName`,
   `plannedTime`, `currentTime`, `nextScheduledTime`, `nextPredictedTime`,
-  `delayMinutes`, `delayText`.
+  `delayMinutes`, `delayText`,
+- `providerProperties.transit.detailAvailable=true`,
+- `providerProperties.transit.detailUrl` pro jednotný detailní endpoint.
 
 COP nemá parsovat zkrácené zdrojové klíče Správy železnic ani volat jejich mapový
 backend přímo. SIM drží jednu zdrojovou cache pro celý vlakový feed s minimálním
@@ -260,6 +271,8 @@ Implementovaný endpoint:
 
 ```http
 GET /situation-data/api/v1/transit/vehicles/{featureId}?source=pid_gtfs_rt
+GET /situation-data/api/v1/transit/vehicles/{featureId}?source=idsjmk_vehicle_positions
+GET /situation-data/api/v1/transit/vehicles/{featureId}?source=spravazeleznic_trains
 ```
 
 Alternativně může být stejný dokument vložen do
@@ -426,6 +439,18 @@ detail označí:
 }
 ```
 
+Pro IDS JMK a Správu železnic endpoint zatím vrací detail nad live feedem:
+
+- aktuální polohu, linku/vlak, směr/cíl, dopravce, zpoždění a pohybové údaje,
+- krátkou in-memory historii bodů od posledního běhu služby,
+- u vlaků aktuální a následující stanici, pokud je zdroj posílá,
+- `quality.staticModelAvailable=false` a `quality.routeShapeAvailable=false`,
+  dokud SIM nedoplní stabilní statický rail/regionální trip model.
+
+COP má tyto detaily zobrazit jako platný detail vozidla, ne jako chybu. Pokud
+`routeShapeAvailable=false`, nezobrazovat trasovou geometrii a v detailu uvést
+omezení z `quality.warnings`.
+
 ## Pokyn pro COP
 
 COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
@@ -436,6 +461,10 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
   ne podle nejpomalejšího zdroje v celé sdílené dopravní vrstvě,
 - kreslit bod vozidla podle `transportMode`, `routeShortName`, `headingDeg` a
   `delaySeconds`,
+- veřejnou dopravu v UI dělit minimálně podle provider vrstvy: Vlaky
+  (`spravazeleznic_trains`), Praha/PID (`pid_gtfs_rt`), Brno/IDS JMK
+  (`idsjmk_vehicle_positions`) a Statické zastávky (`public_transit_static`);
+  další města dělit podle `providerProperties.transit.systemId`,
 - statické zastávky PID/Praha číst z `public.traffic.transit_stops`
   přes `source=public_transit_static`; SIM je publikuje jako body s
   `providerLayerId=traffic.public_transit_static`,
@@ -465,8 +494,11 @@ COP má pro veřejnou dopravu implementovat pouze prezentační logiku:
    `motionExpected` a `refreshSeconds` je implementované pro PID, IDS JMK,
    Správu železnic a statické zastávky.
 4. `GET /situation-data/api/v1/transit/vehicles/{featureId}` je implementovaný
-   pro PID.
+   pro PID, IDS JMK a Správu železnic. PID má plný GTFS-RT/static detail; IDS
+   JMK a Správa železnic mají normalizovaný live detail s explicitními quality
+   omezeními.
 5. PID TripUpdates jsou implementované pro detail vozidla; service alerts
    zůstávají navazující rozšíření.
-6. Přidat IDS JMK realtime detail nad stejným modelem.
+6. Doplnit stabilní statický trip/shape match pro IDS JMK a železnici, aby šlo
+   kreslit celé trasy i mimo PID.
 7. Připravit registry dalších měst a kontrolní testy pro každý adaptér.

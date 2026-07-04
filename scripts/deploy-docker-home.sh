@@ -260,7 +260,7 @@ FLIGHT_DATA_PARTNER_TRACK_PRIORITY=95
 OURAIRPORTS_ENABLED=true
 OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU
 OURAIRPORTS_CACHE_TTL_SECONDS=86400
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -273,7 +273,7 @@ SITUATION_DATA_OVERPASS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS=600
 SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=${SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS_VALUE}
-IDSJMK_VEHICLE_POSITIONS_URL=https://mapa.idsjmk.cz/api/vehicles.json
+IDSJMK_VEHICLE_POSITIONS_URL=https://gis.brno.cz/ags1/rest/services/Hosted/Kordis_26_polohy/FeatureServer/0/query?where=IsInactive%3D%27false%27&outFields=*&orderByFields=TimeUpdated%20DESC&f=geojson&resultRecordCount=10000
 SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
 PUBLIC_TRANSIT_STATIC_GTFS_FEEDS=pid|PID statický GTFS|https://data.pid.cz/PID_GTFS.zip,idsjmk|IDS JMK statický GTFS|https://kordis-jmk.cz/gtfs/gtfs.zip,dpmo|DPMO Olomouc statický GTFS|https://www.dpmo.cz/doc/dpmo-olomouc-cz.zip,pmdp|PMDP Plzeň statický GTFS|https://jizdnirady.pmdp.cz/jr/gtfs,dpmlj|DPMLJ Liberec/Jablonec statický GTFS|https://www.dpmlj.cz/gtfs.zip
 PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS=dpo_ostrava|DPO Ostrava zastávky MHD GeoJSON|https://mapy.ostrava.cz/opendata/data/opendata/zastavky_MHD_WGS84_gjson.zip

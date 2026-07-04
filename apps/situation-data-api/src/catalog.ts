@@ -512,9 +512,14 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       providerLayerId: "traffic.pid_gtfs_rt",
       recommendedCatalogLayerId: "public.traffic.transit",
       label: "Doprava",
+      labelLocalized: { cs: "Praha/PID - živá vozidla", en: "Prague/PID live vehicles" },
       description: "Živý dopravní kontext veřejné dopravy z PID/Golemio GTFS-RT.",
+      descriptionLocalized: {
+        cs: "Živý dopravní kontext veřejné dopravy z PID/Golemio GTFS-RT.",
+        en: "Live public-transit vehicle context from PID/Golemio GTFS-RT."
+      },
       categoryPath: ["traffic", "transit"],
-      categories: ["traffic", "transit_vehicle"],
+      categories: ["traffic", "transit_vehicle", "pid", "prague"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -541,10 +546,15 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       providerLayerId: "traffic.public_transit_static",
       recommendedCatalogLayerId: "public.traffic.transit_stops",
       label: "Zastávky veřejné dopravy",
+      labelLocalized: { cs: "Zastávky veřejné dopravy", en: "Public transit stops" },
       description:
         "Statické zastávky z veřejných GTFS feedů načítané server-side přes SIM. Zdroj slouží jako kontext pro další města a regiony bez realtime poloh.",
+      descriptionLocalized: {
+        cs: "Statické zastávky z veřejných GTFS/GeoJSON feedů načítané server-side přes SIM.",
+        en: "Static stops from public GTFS/GeoJSON feeds loaded server-side by SIM."
+      },
       categoryPath: ["traffic", "transit", "stops"],
-      categories: ["traffic", "transit_stop", "public_transport_stop"],
+      categories: ["traffic", "transit_stop", "public_transport_stop", "pid", "idsjmk", "dpmo", "pmdp", "dpmlj", "dpo_ostrava"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -557,6 +567,14 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       cacheTtlSeconds: config.publicTransitStaticCacheTtlSeconds,
       styleProfile: "transit-stop-static-v1",
       sourceIds: ["public_transit_static"],
+      filters: [
+        {
+          filterId: "systemId",
+          label: "Dopravní systém",
+          type: "multi_select",
+          values: ["pid", "idsjmk", "dpmo", "pmdp", "dpmlj", "dpo_ostrava"]
+        }
+      ],
       query: query(["traffic"], ["public_transit_static"]),
       legend: { profile: "transit-stop-static-v1" },
       legal: {
@@ -572,9 +590,14 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       providerLayerId: "traffic.idsjmk_vehicle_positions",
       recommendedCatalogLayerId: "public.traffic.transit",
       label: "Veřejná doprava IDS JMK",
+      labelLocalized: { cs: "Brno/IDS JMK - živá vozidla", en: "Brno/IDS JMK live vehicles" },
       description: "Živé polohy vozidel IDS JMK z cacheovaného serverového zdroje.",
+      descriptionLocalized: {
+        cs: "Živé polohy vozidel IDS JMK z cacheovaného serverového zdroje.",
+        en: "Live IDS JMK vehicle positions from a server-side cached source."
+      },
       categoryPath: ["traffic", "transit"],
-      categories: ["traffic", "transit_vehicle"],
+      categories: ["traffic", "transit_vehicle", "idsjmk", "brno", "south_moravia"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
@@ -601,9 +624,14 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       providerLayerId: "traffic.spravazeleznic_trains",
       recommendedCatalogLayerId: "public.traffic.transit",
       label: "Vlaky Správy železnic",
+      labelLocalized: { cs: "Vlaky", en: "Trains" },
       description: "Aktuální polohy vlaků z veřejné mapy Správy železnic, načítané výhradně server-side přes SIM s minimálním intervalem 15 minut.",
+      descriptionLocalized: {
+        cs: "Aktuální polohy vlaků z veřejné mapy Správy železnic, načítané server-side přes SIM s minimálním intervalem 15 minut.",
+        en: "Current train positions from the public Správa železnic map, fetched server-side by SIM at most once per 15 minutes."
+      },
       categoryPath: ["traffic", "transit", "rail"],
-      categories: ["traffic", "transit_vehicle", "train"],
+      categories: ["traffic", "transit_vehicle", "train", "rail", "spravazeleznic"],
       role: "reference",
       audience: "public",
       kind: "vector_features",
