@@ -30,6 +30,7 @@ class Client:
     def __init__(self, base_url: str, timeout_seconds: float) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.max_attempts = 3
 
     def resolve_url(self, path_or_url: str) -> str:
         if path_or_url.startswith("http://") or path_or_url.startswith("https://"):
@@ -40,24 +41,36 @@ class Client:
 
     def json(self, path_or_url: str) -> tuple[dict[str, Any], Response]:
         url = self.resolve_url(path_or_url)
-        request = Request(url, headers={"Accept": "application/json"})
-        start = time.monotonic()
+        transient_statuses = {502, 503, 504}
+        response: Response | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            request = Request(url, headers={"Accept": "application/json"})
+            start = time.monotonic()
+            try:
+                with urlopen(request, timeout=self.timeout_seconds) as http_response:
+                    body = http_response.read()
+                    status = http_response.status
+            except HTTPError as exc:
+                body = exc.read()
+                status = exc.code
+            except (TimeoutError, URLError) as exc:
+                if attempt < self.max_attempts:
+                    time.sleep(attempt * 2)
+                    continue
+                raise SmokeError(f"{url}: network error after {attempt} attempts: {exc}") from exc
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            response = Response(url=url, status=status, body=body, elapsed_ms=elapsed_ms)
+            if status == 200:
+                break
+            if status in transient_statuses and attempt < self.max_attempts:
+                time.sleep(attempt * 2)
+                continue
+            require(status == 200, f"{url}: expected HTTP 200, got {status}")
+        require(response is not None, f"{url}: no response")
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                body = response.read()
-                status = response.status
-        except HTTPError as exc:
-            body = exc.read()
-            status = exc.code
-        except URLError as exc:
-            raise SmokeError(f"{url}: network error: {exc}") from exc
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        response = Response(url=url, status=status, body=body, elapsed_ms=elapsed_ms)
-        require(status == 200, f"{url}: expected HTTP 200, got {status}")
-        try:
-            payload = json.loads(body.decode("utf-8"))
+            payload = json.loads(response.body.decode("utf-8"))
         except json.JSONDecodeError as exc:
-            preview = body[:200].decode("utf-8", errors="replace")
+            preview = response.body[:200].decode("utf-8", errors="replace")
             raise SmokeError(f"{url}: invalid JSON: {preview}") from exc
         require(isinstance(payload, dict), f"{url}: expected JSON object")
         return payload, response
