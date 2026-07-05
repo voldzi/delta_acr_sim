@@ -4122,6 +4122,103 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("keeps forecast search-data available through MET Norway fallback when Open-Meteo is rate limited", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const parsed = new URL(String(input));
+      if (parsed.hostname === "api.open-meteo-rate-limit.test") {
+        return new Response("rate limited", { status: 429 });
+      }
+      if (parsed.hostname === "api.met-rate-limit.test") {
+        return jsonResponse({
+          properties: {
+            timeseries: [
+              {
+                time: "2099-07-05T20:00:00Z",
+                data: {
+                  instant: {
+                    details: {
+                      air_temperature: 17.6,
+                      relative_humidity: 91,
+                      cloud_area_fraction: 99,
+                      wind_speed: 5.1,
+                      wind_from_direction: 240,
+                      wind_speed_of_gust: 14.2
+                    }
+                  },
+                  next_1_hours: {
+                    summary: { symbol_code: "rainshowersandthunder" },
+                    details: { precipitation_amount: 2.4 }
+                  }
+                }
+              },
+              {
+                time: "2099-07-05T21:00:00Z",
+                data: {
+                  instant: {
+                    details: {
+                      air_temperature: 17.1,
+                      relative_humidity: 94,
+                      cloud_area_fraction: 100,
+                      wind_speed: 4.7,
+                      wind_from_direction: 245,
+                      wind_speed_of_gust: 13.5
+                    }
+                  },
+                  next_1_hours: {
+                    summary: { symbol_code: "rain" },
+                    details: { precipitation_amount: 1.1 }
+                  }
+                }
+              }
+            ]
+          }
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const forecastApp = await createApp({
+      ...config,
+      enabledSources: ["weather_forecast"],
+      openMeteoBaseUrl: "https://api.open-meteo-rate-limit.test",
+      metNorwayBaseUrl: "https://api.met-rate-limit.test"
+    });
+
+    const response = await request(forecastApp.app)
+      .post("/search-data/api/v1/query")
+      .send({
+        text: "bude pršet bouřka srážky",
+        entityTypes: ["weather_forecast"],
+        sourceSystems: ["weather_forecast"],
+        center: { lat: 50.1001, lon: 14.1001 },
+        radiusM: 5000,
+        limit: 5
+      })
+      .expect(200);
+
+    expect(response.body.entities[0]).toEqual(
+      expect.objectContaining({
+        entityType: "weather_forecast",
+        observedAt: "2099-07-05T20:00:00.000Z",
+        metrics: expect.objectContaining({
+          precipitationNext10MinMm: 0.4,
+          precipitationNext1hMm: 2.4,
+          precipitationNext3hMm: 3.5,
+          thunderstormProbabilityPercent: 70,
+          windGustMps: 14.2,
+          lightningStrikeFeedAvailable: false
+        }),
+        providerProperties: expect.objectContaining({
+          weatherForecast: expect.objectContaining({
+            fallbackUsed: true,
+            sourceInputs: ["met_norway_locationforecast"],
+            providerWarning: expect.stringContaining("Open-Meteo forecast unavailable")
+          })
+        })
+      })
+    );
+  });
+
   it("builds mobile coverage polygons from tower references", async () => {
     const source = new MobileCoverageSource({
       ...config,

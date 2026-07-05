@@ -661,7 +661,7 @@ export class SearchDataService {
       bbox: options.bbox,
       layers: ["weather_forecast_area"],
       sourceIds: [WEATHER_FORECAST_SOURCE_ID],
-      limit: Math.max(1, Math.min(64, options.limit)),
+      limit: Math.max(1, Math.min(8, options.limit)),
       includeRaw: false
     });
     return result.features.map(mapWeatherForecastEntity).filter(isEntity);

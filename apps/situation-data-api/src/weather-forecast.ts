@@ -38,6 +38,19 @@ export const WEATHER_FORECAST_LICENSE: SituationDataLicense = {
   ]
 };
 
+const MET_NORWAY_FORECAST_LICENSE: SituationDataLicense = {
+  name: "Norwegian Meteorological Institute Data / CC BY 4.0",
+  url: "https://api.met.no/license_data.html",
+  attribution: "Norwegian Meteorological Institute",
+  commercialUse: "allowed_with_obligations",
+  operationalUse: "allowed_with_obligations",
+  notes: [
+    "Attribution and a descriptive User-Agent are required.",
+    "SIM uses MET Norway Locationforecast only as a server-side forecast fallback when the primary model is temporarily unavailable.",
+    "COP consumes only the normalized SIM weather forecast contract."
+  ]
+};
+
 interface OpenMeteoForecastResponse {
   latitude?: number;
   longitude?: number;
@@ -45,6 +58,25 @@ interface OpenMeteoForecastResponse {
   current?: Record<string, unknown>;
   hourly?: Record<string, unknown>;
   daily?: Record<string, unknown>;
+}
+
+interface MetNorwayLocationForecastResponse {
+  properties?: {
+    timeseries?: Array<{
+      time?: string;
+      data?: {
+        instant?: {
+          details?: Record<string, unknown>;
+        };
+        next_1_hours?: {
+          summary?: {
+            symbol_code?: string;
+          };
+          details?: Record<string, unknown>;
+        };
+      };
+    }>;
+  };
 }
 
 interface ForecastCell {
@@ -117,10 +149,12 @@ interface ForecastAssessment {
 }
 
 interface WeatherForecastPayload {
+  provider: "open_meteo" | "met_norway";
+  providerWarning?: string;
   fetchedAt: string;
   requestedAt: string;
   cell: ForecastCell;
-  raw: OpenMeteoForecastResponse;
+  raw: OpenMeteoForecastResponse | MetNorwayLocationForecastResponse;
   current: ForecastCurrent;
   hourly: ForecastHourlyPoint[];
   daily: ForecastDailyPoint[];
@@ -200,6 +234,7 @@ interface WeatherForecastChart {
 }
 
 const forecastCaches = new Map<string, ManagedResponseCache<WeatherForecastPayload>>();
+const metNorwayForecastCaches = new Map<string, ManagedResponseCache<MetNorwayLocationForecastResponse>>();
 
 export class WeatherForecastSource {
   readonly descriptor: SourceDescriptor;
@@ -254,7 +289,7 @@ export class WeatherForecastSource {
       source: this.descriptor,
       fetchedAt,
       features: payloads.map((payload) => forecastPayloadToFeature(payload, query.includeRaw)),
-      warnings
+      warnings: [...warnings, ...payloads.map((payload) => payload.providerWarning).filter((warning): warning is string => Boolean(warning))]
     };
   }
 
@@ -303,7 +338,34 @@ function weatherForecastCache(config: SituationDataConfig): ManagedResponseCache
   return created;
 }
 
+function metNorwayForecastCache(config: SituationDataConfig): ManagedResponseCache<MetNorwayLocationForecastResponse> {
+  const key = `${config.metNorwayBaseUrl}:${config.metNorwayCacheTtlSeconds}:${config.requestTimeoutMs}`;
+  const existing = metNorwayForecastCaches.get(key);
+  if (existing) {
+    return existing;
+  }
+  const created = new ManagedResponseCache<MetNorwayLocationForecastResponse>({
+    ttlMs: Math.max(300, config.metNorwayCacheTtlSeconds) * 1000,
+    staleIfErrorMs: Math.max(config.staleIfErrorSeconds, config.metNorwayCacheTtlSeconds, 3600) * 1000,
+    maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 4096))
+  });
+  metNorwayForecastCaches.set(key, created);
+  return created;
+}
+
 async function loadWeatherForecastPayload(config: SituationDataConfig, cell: ForecastCell): Promise<WeatherForecastPayload> {
+  try {
+    return await loadOpenMeteoForecastPayload(config, cell);
+  } catch (error) {
+    const fallback = await loadMetNorwayForecastPayload(config, cell);
+    return {
+      ...fallback,
+      providerWarning: `Open-Meteo forecast unavailable; using MET Norway fallback: ${errorMessage(error)}`
+    };
+  }
+}
+
+async function loadOpenMeteoForecastPayload(config: SituationDataConfig, cell: ForecastCell): Promise<WeatherForecastPayload> {
   const requestedAt = new Date().toISOString();
   const url = new URL(`${config.openMeteoBaseUrl}/v1/forecast`);
   url.searchParams.set("latitude", cell.centerLat.toFixed(5));
@@ -360,6 +422,7 @@ async function loadWeatherForecastPayload(config: SituationDataConfig, cell: For
   }
   const resolvedCurrent = current ?? currentFromHourly(hourly[0], requestedAt);
   return {
+    provider: "open_meteo",
     fetchedAt: new Date().toISOString(),
     requestedAt,
     cell,
@@ -371,12 +434,43 @@ async function loadWeatherForecastPayload(config: SituationDataConfig, cell: For
   };
 }
 
+async function loadMetNorwayForecastPayload(config: SituationDataConfig, cell: ForecastCell): Promise<WeatherForecastPayload> {
+  const requestedAt = new Date().toISOString();
+  const url = new URL(`${config.metNorwayBaseUrl}/weatherapi/locationforecast/2.0/compact`);
+  url.searchParams.set("lat", cell.centerLat.toFixed(5));
+  url.searchParams.set("lon", cell.centerLon.toFixed(5));
+  const raw = await metNorwayForecastCache(config).getOrLoad(forecastMetNorwayCacheKey(config, cell), () =>
+    requestJsonWithHeaders<MetNorwayLocationForecastResponse>(url.toString(), config.requestTimeoutMs, {
+      accept: "application/json",
+      "user-agent": config.metNorwayUserAgent
+    })
+  );
+  const hourly = normalizeMetNorwayHourly(raw).slice(0, 72);
+  if (hourly.length === 0) {
+    throw new Error("MET Norway forecast response does not contain usable timeseries values.");
+  }
+  const current = currentFromHourly(hourly[0], requestedAt);
+  const daily = metNorwayDailyFromHourly(hourly).slice(0, 7);
+  return {
+    provider: "met_norway",
+    fetchedAt: new Date().toISOString(),
+    requestedAt,
+    cell,
+    raw,
+    current,
+    hourly,
+    daily,
+    assessment: assessForecast(current, hourly, daily)
+  };
+}
+
 function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: boolean): SituationFeature {
   const { cell, assessment, current } = payload;
   const bbox = forecastCellBbox(cell);
   const validUntil = payload.hourly[1]?.time ?? addHours(payload.fetchedAt, 1);
   const detailUrl = `/situation-data/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`;
   const serviceDetailUrl = `/api/v1/weather-forecast/areas/${encodeURIComponent(cell.token)}?bbox=${encodeURIComponent(formatBbox(bbox))}`;
+  const sourceInputs = [payload.provider === "open_meteo" ? "open_meteo_forecast" : "met_norway_locationforecast"];
   return {
     type: "Feature",
     id: `weather_forecast_area:${cell.token}`,
@@ -471,14 +565,16 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
           detailAvailable: true,
           detailUrl,
           serviceDetailUrl,
-          sourceInputs: ["open_meteo_forecast"],
+          sourceInputs,
           graphSeries: ["temperature", "precipitation", "wind", "risk"],
           coverageBbox: WEATHER_FORECAST_CZECHIA_BBOX,
           stableGrid: {
             alignment: "wgs84",
             resolutionDegrees: cell.resolutionDegrees
           },
-          generatedAt: payload.fetchedAt
+          generatedAt: payload.fetchedAt,
+          fallbackUsed: payload.provider === "met_norway",
+          providerWarning: payload.providerWarning
         },
         aiContext: {
           dynamicDataRequiresTimestamp: true,
@@ -540,10 +636,14 @@ function payloadToDetail(payload: WeatherForecastPayload, options: { areaId: str
     },
     charts: buildForecastCharts(hourly),
     sources: [
-      {
+      payload.provider === "open_meteo" ? {
         sourceId: "open_meteo_forecast",
         label: "Open-Meteo forecast API",
         attribution: "Weather data by Open-Meteo.com"
+      } : {
+        sourceId: "met_norway_locationforecast",
+        label: "MET Norway Locationforecast",
+        attribution: "Norwegian Meteorological Institute"
       },
       {
         sourceId: "sim_weather_forecast_v1",
@@ -556,9 +656,10 @@ function payloadToDetail(payload: WeatherForecastPayload, options: { areaId: str
       radarNowcastFused: false,
       stationObservationFused: false,
       warnings: [
+        payload.providerWarning,
         "Forecast is model-based and normalized by SIM.",
         "ČHMÚ CAP warnings remain in public.safety.weather_alerts and should be displayed separately from this forecast layer."
-      ]
+      ].filter((warning): warning is string => Boolean(warning))
     }
   };
 }
@@ -722,6 +823,65 @@ function normalizeDaily(daily: Record<string, unknown> | undefined): ForecastDai
       precipitationSumMm: numberAt(daily.precipitation_sum, index),
       precipitationProbabilityMaxPercent: numberAt(daily.precipitation_probability_max, index),
       windGustMaxMps: numberAt(daily.wind_gusts_10m_max, index),
+      symbolKey: descriptor.symbolKey,
+      conditionLabel: descriptor.labelCs,
+      conditionLabelEn: descriptor.labelEn
+    };
+  });
+}
+
+function normalizeMetNorwayHourly(payload: MetNorwayLocationForecastResponse): ForecastHourlyPoint[] {
+  return (payload.properties?.timeseries ?? [])
+    .map((point): ForecastHourlyPoint | undefined => {
+      const time = normalizeTime(point.time);
+      if (!time) {
+        return undefined;
+      }
+      const details = point.data?.instant?.details ?? {};
+      const precipitationMm = optionalNumber(point.data?.next_1_hours?.details?.precipitation_amount);
+      const symbolCode = typeof point.data?.next_1_hours?.summary?.symbol_code === "string" ? point.data.next_1_hours.summary.symbol_code : undefined;
+      const weatherCode = weatherCodeFromMetNorwaySymbol(symbolCode, precipitationMm);
+      const windSpeedMps = optionalNumber(details.wind_speed);
+      const windGustMps = optionalNumber(details.wind_speed_of_gust);
+      const descriptor = weatherDescriptor(weatherCode);
+      return {
+        time,
+        temperatureC: optionalNumber(details.air_temperature),
+        relativeHumidityPercent: optionalNumber(details.relative_humidity),
+        precipitationMm,
+        weatherCode,
+        cloudCoverPercent: optionalNumber(details.cloud_area_fraction),
+        windSpeedMps,
+        windDirectionDeg: optionalNumber(details.wind_from_direction),
+        windGustMps,
+        symbolKey: descriptor.symbolKey,
+        conditionLabel: descriptor.labelCs,
+        conditionLabelEn: descriptor.labelEn,
+        riskScore: riskScore({ weatherCode, precipitationMm, windSpeedMps, windGustMps })
+      };
+    })
+    .filter((point): point is ForecastHourlyPoint => Boolean(point));
+}
+
+function metNorwayDailyFromHourly(hourly: ForecastHourlyPoint[]): ForecastDailyPoint[] {
+  const byDate = new Map<string, ForecastHourlyPoint[]>();
+  for (const point of hourly) {
+    const date = point.time.slice(0, 10);
+    const bucket = byDate.get(date) ?? [];
+    bucket.push(point);
+    byDate.set(date, bucket);
+  }
+  return Array.from(byDate.entries()).map(([date, points]) => {
+    const weatherCode = dominantWeatherCode(points.map((point) => point.weatherCode));
+    const descriptor = weatherDescriptor(weatherCode);
+    const precipitationSumMm = sumDefined(points.map((point) => point.precipitationMm));
+    return {
+      date,
+      weatherCode,
+      temperatureMaxC: maxDefined(points.map((point) => point.temperatureC)),
+      temperatureMinC: minDefined(points.map((point) => point.temperatureC)),
+      precipitationSumMm: precipitationSumMm === undefined ? undefined : round(precipitationSumMm, 2),
+      windGustMaxMps: maxDefined(points.map((point) => point.windGustMps ?? point.windSpeedMps)),
       symbolKey: descriptor.symbolKey,
       conditionLabel: descriptor.labelCs,
       conditionLabelEn: descriptor.labelEn
@@ -1131,6 +1291,14 @@ async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestJsonWithHeaders<T>(url: string, timeoutMs: number, headers: Record<string, string>): Promise<T> {
+  const response = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  return (await response.json()) as T;
+}
+
 function normalizeTime(value: unknown): string | undefined {
   if (typeof value !== "string" || value.trim() === "") {
     return undefined;
@@ -1148,6 +1316,11 @@ function sumDefined(values: Array<number | undefined>): number | undefined {
 function maxDefined(values: Array<number | undefined>): number | undefined {
   const defined = values.filter((value): value is number => typeof value === "number");
   return defined.length > 0 ? Math.max(...defined) : undefined;
+}
+
+function minDefined(values: Array<number | undefined>): number | undefined {
+  const defined = values.filter((value): value is number => typeof value === "number");
+  return defined.length > 0 ? Math.min(...defined) : undefined;
 }
 
 function distanceToBboxCenter(cell: ForecastCell, bbox: BoundingBox): number {
@@ -1205,4 +1378,48 @@ function clamp(value: number, min: number, max: number): number {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function forecastMetNorwayCacheKey(config: SituationDataConfig, cell: ForecastCell): string {
+  return `met_norway_forecast:${config.metNorwayBaseUrl}:${cell.centerLat.toFixed(5)}:${cell.centerLon.toFixed(5)}`;
+}
+
+function weatherCodeFromMetNorwaySymbol(symbolCode: string | undefined, precipitationMm: number | undefined): number | undefined {
+  if (!symbolCode) {
+    return undefined;
+  }
+  if (symbolCode.includes("thunder")) {
+    return 95;
+  }
+  if (symbolCode.includes("heavyrain")) {
+    return 65;
+  }
+  if (symbolCode.includes("rainshowers")) {
+    return 80;
+  }
+  if (symbolCode.includes("rain")) {
+    return 61;
+  }
+  if (symbolCode.includes("heavysnow")) {
+    return 75;
+  }
+  if (symbolCode.includes("snow")) {
+    return 71;
+  }
+  if (symbolCode.includes("sleet")) {
+    return 69;
+  }
+  if (symbolCode.includes("fog")) {
+    return 45;
+  }
+  if (symbolCode.includes("cloudy")) {
+    return symbolCode.includes("partly") ? 2 : 3;
+  }
+  if (symbolCode.includes("fair")) {
+    return 1;
+  }
+  if (symbolCode.includes("clearsky")) {
+    return 0;
+  }
+  return (precipitationMm ?? 0) > 0 ? 61 : undefined;
 }
