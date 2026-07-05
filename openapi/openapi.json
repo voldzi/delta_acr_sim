@@ -3855,6 +3855,186 @@
         ]
       }
     },
+    "/situation-data/api/v1/routing/profiles": {
+      "get": {
+        "summary": "Return emergency routing profiles and backend status",
+        "responses": {
+          "200": {
+            "description": "Routing profile catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataRoutingProfileCatalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_routing_profiles",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/routing/route": {
+      "post": {
+        "summary": "Build a route between two WGS84 points",
+        "description": "Computes a server-side emergency route for COP using the local OSM/PostGIS graph when available. If the graph is unavailable, SIM returns a clearly marked direct_fallback geometry.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SituationDataRoutingRouteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Route response with GeoJSON features for COP rendering",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataRoutingRouteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_post_situation_data_api_v1_routing_route",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/routing/alternatives": {
+      "post": {
+        "summary": "Build one to three alternative routes",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SituationDataRoutingRouteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Alternative route response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataRoutingRouteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_post_situation_data_api_v1_routing_alternatives",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/routing/isochrone": {
+      "post": {
+        "summary": "Build a travel-time reach polygon from one origin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SituationDataRoutingIsochroneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Isochrone GeoJSON response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataRoutingIsochroneResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_post_situation_data_api_v1_routing_isochrone",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/routing/nearest-access": {
+      "post": {
+        "summary": "Find nearest routable access point for a WGS84 point",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SituationDataRoutingNearestAccessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nearest access point response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataRoutingNearestAccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_post_situation_data_api_v1_routing_nearest_access",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
     "/situation-data/api/v1/weather-radar/frames": {
       "get": {
         "summary": "Return CHMI weather radar frame catalog metadata",
@@ -12548,6 +12728,592 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SituationDataRadioFeature"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingProfileId": {
+        "type": "string",
+        "enum": [
+          "car",
+          "emergency_vehicle",
+          "large_emergency_vehicle",
+          "offroad_4x4",
+          "walking",
+          "evacuation_walking"
+        ]
+      },
+      "SituationDataRoutingAvoid": {
+        "type": "string",
+        "enum": [
+          "flood",
+          "fire",
+          "road_closure",
+          "unpaved",
+          "tunnel",
+          "bridge"
+        ]
+      },
+      "SituationDataRoutingCoordinate": {
+        "type": "object",
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "properties": {
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "SituationDataRoutingProfile": {
+        "type": "object",
+        "required": [
+          "profileId",
+          "label",
+          "labelLocalized",
+          "transportMode",
+          "descriptionLocalized",
+          "defaultSpeedKph",
+          "maxSearchRadiusM",
+          "supportsAvoid",
+          "notes"
+        ],
+        "properties": {
+          "profileId": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfileId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "labelLocalized": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "transportMode": {
+            "type": "string",
+            "enum": [
+              "road",
+              "walk",
+              "offroad"
+            ]
+          },
+          "descriptionLocalized": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "defaultSpeedKph": {
+            "type": "number"
+          },
+          "maxSearchRadiusM": {
+            "type": "integer"
+          },
+          "supportsAvoid": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingAvoid"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingBackendStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "backend",
+          "osmPostgisConfigured",
+          "graphTable",
+          "maxGraphEdges",
+          "cacheTtlSeconds",
+          "limitations"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "osm-postgis-graph",
+              "unconfigured"
+            ]
+          },
+          "osmPostgisConfigured": {
+            "type": "boolean"
+          },
+          "graphTable": {
+            "type": "string",
+            "example": "public.osm_roads"
+          },
+          "maxGraphEdges": {
+            "type": "integer"
+          },
+          "cacheTtlSeconds": {
+            "type": "integer"
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingProfileCatalog": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "profiles",
+          "backend",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-routing-profile-catalog-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingProfile"
+            }
+          },
+          "backend": {
+            "$ref": "#/components/schemas/SituationDataRoutingBackendStatus"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingRouteRequest": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "profileId": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfileId"
+          },
+          "from": {
+            "$ref": "#/components/schemas/SituationDataRoutingCoordinate"
+          },
+          "to": {
+            "$ref": "#/components/schemas/SituationDataRoutingCoordinate"
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingAvoid"
+            }
+          },
+          "departureTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "alternatives": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "includeSteps": {
+            "type": "boolean"
+          },
+          "includeDebug": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SituationDataRoutingIsochroneRequest": {
+        "type": "object",
+        "required": [
+          "origin"
+        ],
+        "properties": {
+          "profileId": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfileId"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SituationDataRoutingCoordinate"
+          },
+          "maxTravelTimeMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 180,
+            "default": 15
+          },
+          "maxDistanceM": {
+            "type": "number"
+          },
+          "avoid": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingAvoid"
+            }
+          },
+          "includeDebug": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SituationDataRoutingNearestAccessRequest": {
+        "type": "object",
+        "required": [
+          "point"
+        ],
+        "properties": {
+          "profileId": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfileId"
+          },
+          "point": {
+            "$ref": "#/components/schemas/SituationDataRoutingCoordinate"
+          },
+          "radiusM": {
+            "type": "number",
+            "minimum": 1
+          },
+          "includeDebug": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SituationDataRoutingSource": {
+        "type": "object",
+        "required": [
+          "sourceId",
+          "sourceType",
+          "generatedAt",
+          "backend"
+        ],
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "const": "routing_model"
+          },
+          "sourceType": {
+            "type": "string",
+            "const": "MODELLED_ROUTING"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "backend": {
+            "type": "string",
+            "const": "osm-postgis-graph"
+          }
+        }
+      },
+      "SituationDataRoutingFeature": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "geometry",
+          "properties"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "Feature"
+          },
+          "id": {
+            "type": "string"
+          },
+          "geometry": {
+            "type": "object",
+            "required": [
+              "type",
+              "coordinates"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Point",
+                  "LineString",
+                  "Polygon"
+                ]
+              },
+              "coordinates": {
+              }
+            }
+          },
+          "properties": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SituationDataRoutingRoute": {
+        "type": "object",
+        "required": [
+          "routeId",
+          "profileId",
+          "rank",
+          "status",
+          "geometry",
+          "distanceM",
+          "durationSeconds",
+          "snap",
+          "steps",
+          "warnings",
+          "quality"
+        ],
+        "properties": {
+          "routeId": {
+            "type": "string"
+          },
+          "profileId": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfileId"
+          },
+          "rank": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "partial",
+              "unavailable"
+            ]
+          },
+          "geometry": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "distanceM": {
+            "type": "integer"
+          },
+          "durationSeconds": {
+            "type": "integer"
+          },
+          "snap": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quality": {
+            "type": "object",
+            "required": [
+              "mode",
+              "confidence",
+              "graphEdgesScanned",
+              "graphEdgesUsed",
+              "routingModelVersion"
+            ],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "osm_graph",
+                  "direct_fallback"
+                ]
+              },
+              "confidence": {
+                "type": "number"
+              },
+              "graphEdgesScanned": {
+                "type": "integer"
+              },
+              "graphEdgesUsed": {
+                "type": "integer"
+              },
+              "routingModelVersion": {
+                "type": "string"
+              },
+              "fallbackReason": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "SituationDataRoutingRouteResponse": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "source",
+          "query",
+          "profile",
+          "routes",
+          "features",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-routing-route-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SituationDataRoutingSource"
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfile"
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingRoute"
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingFeature"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingIsochroneResponse": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "source",
+          "query",
+          "profile",
+          "summary",
+          "features",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-routing-isochrone-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SituationDataRoutingSource"
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfile"
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingFeature"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingNearestAccessResponse": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "source",
+          "query",
+          "profile",
+          "features",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-routing-nearest-access-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SituationDataRoutingSource"
+          },
+          "query": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "profile": {
+            "$ref": "#/components/schemas/SituationDataRoutingProfile"
+          },
+          "accessPoint": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingFeature"
             }
           },
           "warnings": {

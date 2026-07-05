@@ -1,0 +1,1583 @@
+import { Pool } from "pg";
+import { createHash } from "node:crypto";
+import type { SituationDataConfig } from "./config.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry } from "./types.js";
+
+export type RoutingProfileId =
+  | "car"
+  | "emergency_vehicle"
+  | "large_emergency_vehicle"
+  | "offroad_4x4"
+  | "walking"
+  | "evacuation_walking";
+
+export type RoutingAvoid = "flood" | "fire" | "road_closure" | "unpaved" | "tunnel" | "bridge";
+export type RoutingQualityMode = "osm_graph" | "direct_fallback";
+
+export interface RoutingProfile {
+  profileId: RoutingProfileId;
+  label: string;
+  labelLocalized: Record<"cs" | "en", string>;
+  transportMode: "road" | "walk" | "offroad";
+  descriptionLocalized: Record<"cs" | "en", string>;
+  defaultSpeedKph: number;
+  maxSearchRadiusM: number;
+  supportsAvoid: RoutingAvoid[];
+  notes: string[];
+}
+
+export interface RoutingProfileCatalog {
+  contractVersion: "sim-routing-profile-catalog-v1";
+  generatedAt: string;
+  profiles: RoutingProfile[];
+  backend: RoutingBackendStatus;
+  warnings: string[];
+}
+
+export interface RoutingCoordinate {
+  lon: number;
+  lat: number;
+  label?: string;
+}
+
+export interface RoutingRouteRequest {
+  profileId?: RoutingProfileId;
+  from?: RoutingCoordinate;
+  to?: RoutingCoordinate;
+  avoid?: RoutingAvoid[];
+  departureTime?: string;
+  alternatives?: number;
+  includeSteps?: boolean;
+  includeDebug?: boolean;
+}
+
+export interface RoutingAlternativesRequest extends RoutingRouteRequest {
+  alternatives?: number;
+}
+
+export interface RoutingIsochroneRequest {
+  profileId?: RoutingProfileId;
+  origin?: RoutingCoordinate;
+  maxTravelTimeMinutes?: number;
+  maxDistanceM?: number;
+  avoid?: RoutingAvoid[];
+  includeDebug?: boolean;
+}
+
+export interface RoutingNearestAccessRequest {
+  profileId?: RoutingProfileId;
+  point?: RoutingCoordinate;
+  radiusM?: number;
+  includeDebug?: boolean;
+}
+
+export interface RoutingFeature {
+  type: "Feature";
+  id: string;
+  geometry: PointGeometry | LineStringGeometry | PolygonGeometry;
+  properties: Record<string, unknown>;
+}
+
+export interface RoutingRoute {
+  routeId: string;
+  profileId: RoutingProfileId;
+  rank: number;
+  status: "ok" | "partial" | "unavailable";
+  geometry: LineStringGeometry;
+  distanceM: number;
+  durationSeconds: number;
+  ascentM?: number;
+  descentM?: number;
+  snap: {
+    fromDistanceM: number;
+    toDistanceM: number;
+    from: RoutingCoordinate;
+    to: RoutingCoordinate;
+  };
+  steps: RoutingStep[];
+  warnings: string[];
+  quality: {
+    mode: RoutingQualityMode;
+    confidence: number;
+    graphEdgesScanned: number;
+    graphEdgesUsed: number;
+    routingModelVersion: string;
+    fallbackReason?: string;
+  };
+}
+
+export interface RoutingStep {
+  index: number;
+  instructionLocalized: Record<"cs" | "en", string>;
+  distanceM: number;
+  durationSeconds: number;
+  roadName?: string;
+  roadRef?: string;
+  highway?: string;
+  geometry: LineStringGeometry;
+}
+
+export interface RoutingRouteResponse {
+  contractVersion: "sim-routing-route-v1";
+  generatedAt: string;
+  source: RoutingSource;
+  query: Record<string, unknown>;
+  profile: RoutingProfile;
+  routes: RoutingRoute[];
+  features: RoutingFeature[];
+  warnings: string[];
+}
+
+export interface RoutingIsochroneResponse {
+  contractVersion: "sim-routing-isochrone-v1";
+  generatedAt: string;
+  source: RoutingSource;
+  query: Record<string, unknown>;
+  profile: RoutingProfile;
+  summary: {
+    maxTravelTimeMinutes: number;
+    maxDistanceM?: number;
+    reachedNodeCount: number;
+    areaKm2?: number;
+  };
+  features: RoutingFeature[];
+  warnings: string[];
+}
+
+export interface RoutingNearestAccessResponse {
+  contractVersion: "sim-routing-nearest-access-v1";
+  generatedAt: string;
+  source: RoutingSource;
+  query: Record<string, unknown>;
+  profile: RoutingProfile;
+  accessPoint?: {
+    lon: number;
+    lat: number;
+    distanceM: number;
+    osmId?: number;
+    roadName?: string;
+    roadRef?: string;
+    highway?: string;
+  };
+  features: RoutingFeature[];
+  warnings: string[];
+}
+
+export interface RoutingCacheStats extends ManagedResponseCacheStats {
+  operation: "route" | "isochrone" | "nearest_access";
+}
+
+export class RoutingError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+interface RoutingSource {
+  sourceId: "routing_model";
+  sourceType: "MODELLED_ROUTING";
+  generatedAt: string;
+  backend: "osm-postgis-graph";
+}
+
+interface RoutingBackendStatus {
+  enabled: boolean;
+  backend: "osm-postgis-graph" | "unconfigured";
+  osmPostgisConfigured: boolean;
+  graphTable: string;
+  maxGraphEdges: number;
+  cacheTtlSeconds: number;
+  limitations: string[];
+}
+
+interface RoadEdgeRow {
+  osm_id: string | number;
+  highway: string | null;
+  name: string | null;
+  ref: string | null;
+  access: string | null;
+  motorcar: string | null;
+  foot: string | null;
+  bicycle: string | null;
+  surface: string | null;
+  tracktype: string | null;
+  oneway: string | null;
+  bridge: string | null;
+  tunnel: string | null;
+  geom: unknown;
+}
+
+interface RoadGeometry {
+  type: "LineString" | "MultiLineString";
+  coordinates: Array<[number, number]> | Array<Array<[number, number]>>;
+}
+
+interface GraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  fromCoord: [number, number];
+  toCoord: [number, number];
+  distanceM: number;
+  durationSeconds: number;
+  highway?: string;
+  roadName?: string;
+  roadRef?: string;
+  osmId?: number;
+  tags: {
+    surface?: string;
+    tracktype?: string;
+    bridge?: string;
+    tunnel?: string;
+    access?: string;
+  };
+}
+
+interface RoadGraph {
+  bbox: BoundingBox;
+  nodeCoords: Map<string, [number, number]>;
+  adjacency: Map<string, GraphEdge[]>;
+  edgeCount: number;
+  warnings: string[];
+}
+
+interface PathResult {
+  nodeIds: string[];
+  edges: GraphEdge[];
+  distanceM: number;
+  durationSeconds: number;
+}
+
+interface SnapResult {
+  nodeId: string;
+  coordinate: [number, number];
+  distanceM: number;
+}
+
+interface DijkstraState {
+  nodeId: string;
+  cost: number;
+}
+
+const ROUTING_MODEL_VERSION = "osm-postgis-graph-v1";
+
+const ROUTING_PROFILES: RoutingProfile[] = [
+  {
+    profileId: "car",
+    label: "Car",
+    labelLocalized: { cs: "Osobní vozidlo", en: "Car" },
+    transportMode: "road",
+    descriptionLocalized: {
+      cs: "Běžná silniční trasa pro osobní vozidlo.",
+      en: "Standard road route for a passenger car."
+    },
+    defaultSpeedKph: 55,
+    maxSearchRadiusM: 120_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
+    notes: ["Uses local OSM road geometry. It does not yet enforce live closures as hard constraints."]
+  },
+  {
+    profileId: "emergency_vehicle",
+    label: "Emergency vehicle",
+    labelLocalized: { cs: "Zásahové vozidlo", en: "Emergency vehicle" },
+    transportMode: "road",
+    descriptionLocalized: {
+      cs: "Silniční trasa pro zásahové vozidlo s vyšší tolerancí k servisním komunikacím.",
+      en: "Road route for emergency response vehicles with broader service-road tolerance."
+    },
+    defaultSpeedKph: 65,
+    maxSearchRadiusM: 160_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
+    notes: ["Operational priority is modelled as speed/penalty preference only, not as permission to ignore legal closures."]
+  },
+  {
+    profileId: "large_emergency_vehicle",
+    label: "Large emergency vehicle",
+    labelLocalized: { cs: "Velké zásahové vozidlo", en: "Large emergency vehicle" },
+    transportMode: "road",
+    descriptionLocalized: {
+      cs: "Konzervativnější trasa pro velká vozidla, omezuje malé servisní a nezpevněné cesty.",
+      en: "More conservative route for large vehicles, limiting minor service and unpaved roads."
+    },
+    defaultSpeedKph: 48,
+    maxSearchRadiusM: 140_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
+    notes: ["OSM height/width/weight limits are not fully normalized in this first model."]
+  },
+  {
+    profileId: "offroad_4x4",
+    label: "4x4 / field vehicle",
+    labelLocalized: { cs: "Terénní vozidlo 4x4", en: "4x4 / field vehicle" },
+    transportMode: "offroad",
+    descriptionLocalized: {
+      cs: "Trasa pro terénní vozidlo s využitím track/service cest, pokud jsou v OSM.",
+      en: "Route for a field-capable vehicle using track/service roads where OSM provides them."
+    },
+    defaultSpeedKph: 32,
+    maxSearchRadiusM: 90_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "tunnel", "bridge"],
+    notes: ["Does not guarantee physical passability; surface, seasonal closures and private access may be incomplete."]
+  },
+  {
+    profileId: "walking",
+    label: "Walking",
+    labelLocalized: { cs: "Pěší", en: "Walking" },
+    transportMode: "walk",
+    descriptionLocalized: {
+      cs: "Pěší trasa po komunikacích a cestách dostupných v OSM.",
+      en: "Walking route on roads and paths available in OSM."
+    },
+    defaultSpeedKph: 4.8,
+    maxSearchRadiusM: 35_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "tunnel", "bridge"],
+    notes: ["Terrain slope is not yet used as a speed penalty in this endpoint."]
+  },
+  {
+    profileId: "evacuation_walking",
+    label: "Evacuation walking",
+    labelLocalized: { cs: "Evakuační pěší trasa", en: "Evacuation walking" },
+    transportMode: "walk",
+    descriptionLocalized: {
+      cs: "Pěší evakuační trasa preferující širší a běžnější komunikace.",
+      en: "Walking evacuation route preferring broader and more common roads."
+    },
+    defaultSpeedKph: 3.8,
+    maxSearchRadiusM: 25_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "tunnel", "bridge"],
+    notes: ["Designed for planning support; final evacuation instructions remain an operator decision."]
+  }
+];
+
+const HIGHWAYS_BY_PROFILE: Record<RoutingProfileId, string[]> = {
+  car: [
+    "motorway",
+    "motorway_link",
+    "trunk",
+    "trunk_link",
+    "primary",
+    "primary_link",
+    "secondary",
+    "secondary_link",
+    "tertiary",
+    "tertiary_link",
+    "unclassified",
+    "residential",
+    "living_street",
+    "service"
+  ],
+  emergency_vehicle: [
+    "motorway",
+    "motorway_link",
+    "trunk",
+    "trunk_link",
+    "primary",
+    "primary_link",
+    "secondary",
+    "secondary_link",
+    "tertiary",
+    "tertiary_link",
+    "unclassified",
+    "residential",
+    "living_street",
+    "service",
+    "track"
+  ],
+  large_emergency_vehicle: [
+    "motorway",
+    "motorway_link",
+    "trunk",
+    "trunk_link",
+    "primary",
+    "primary_link",
+    "secondary",
+    "secondary_link",
+    "tertiary",
+    "tertiary_link",
+    "unclassified",
+    "residential"
+  ],
+  offroad_4x4: [
+    "primary",
+    "secondary",
+    "tertiary",
+    "unclassified",
+    "residential",
+    "living_street",
+    "service",
+    "track",
+    "path"
+  ],
+  walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian", "steps"],
+  evacuation_walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian"]
+};
+
+const BASE_SPEED_KPH_BY_HIGHWAY: Record<string, number> = {
+  motorway: 100,
+  motorway_link: 55,
+  trunk: 85,
+  trunk_link: 50,
+  primary: 70,
+  primary_link: 45,
+  secondary: 60,
+  secondary_link: 40,
+  tertiary: 50,
+  tertiary_link: 35,
+  unclassified: 40,
+  residential: 30,
+  living_street: 18,
+  service: 18,
+  track: 16,
+  path: 5,
+  footway: 5,
+  pedestrian: 5,
+  steps: 2.5
+};
+
+export class RoutingService {
+  private pool?: Pool;
+  private readonly routeCache: ManagedResponseCache<RoutingRouteResponse>;
+  private readonly isochroneCache: ManagedResponseCache<RoutingIsochroneResponse>;
+  private readonly nearestAccessCache: ManagedResponseCache<RoutingNearestAccessResponse>;
+
+  constructor(private readonly config: SituationDataConfig) {
+    this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
+      ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: config.routingCacheMaxEntries
+    });
+    this.isochroneCache = new ManagedResponseCache<RoutingIsochroneResponse>({
+      ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: config.routingCacheMaxEntries
+    });
+    this.nearestAccessCache = new ManagedResponseCache<RoutingNearestAccessResponse>({
+      ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: config.routingCacheMaxEntries
+    });
+  }
+
+  listProfiles(): RoutingProfileCatalog {
+    return {
+      contractVersion: "sim-routing-profile-catalog-v1",
+      generatedAt: new Date().toISOString(),
+      profiles: ROUTING_PROFILES,
+      backend: this.backendStatus(),
+      warnings: this.config.osmPostgisConnectionString
+        ? []
+        : ["OSM_POSTGIS_DATABASE_URL is not configured. Routing endpoints will return direct fallback geometry."]
+    };
+  }
+
+  cacheStats(): RoutingCacheStats[] {
+    return [
+      { operation: "route", ...this.routeCache.stats() },
+      { operation: "isochrone", ...this.isochroneCache.stats() },
+      { operation: "nearest_access", ...this.nearestAccessCache.stats() }
+    ];
+  }
+
+  async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
+    const request = this.normalizeRouteRequest(raw, 1);
+    return this.routeCache.getOrLoad(`route:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+  }
+
+  async alternatives(raw: RoutingAlternativesRequest): Promise<RoutingRouteResponse> {
+    const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
+    const request = this.normalizeRouteRequest(raw, requestedAlternatives);
+    return this.routeCache.getOrLoad(`alternatives:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+  }
+
+  async isochrone(raw: RoutingIsochroneRequest): Promise<RoutingIsochroneResponse> {
+    const request = this.normalizeIsochroneRequest(raw);
+    return this.isochroneCache.getOrLoad(`isochrone:${stablePayload(request)}`, () => this.computeIsochroneResponse(request));
+  }
+
+  async nearestAccess(raw: RoutingNearestAccessRequest): Promise<RoutingNearestAccessResponse> {
+    const request = this.normalizeNearestAccessRequest(raw);
+    return this.nearestAccessCache.getOrLoad(`nearest:${stablePayload(request)}`, () => this.computeNearestAccessResponse(request));
+  }
+
+  private async computeRouteResponse(request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest): Promise<RoutingRouteResponse> {
+    const generatedAt = new Date().toISOString();
+    const profile = getRoutingProfile(request.profileId);
+    const warnings: string[] = [];
+    const routes: RoutingRoute[] = [];
+    if (!this.config.osmPostgisConnectionString) {
+      warnings.push("OSM PostGIS is not configured; returning a direct fallback line.");
+      const fallback = directFallbackRoute(profile, request.from, request.to, 1, "OSM_POSTGIS_DATABASE_URL is not configured.");
+      return this.routeResponse(generatedAt, profile, request, [fallback], warnings);
+    }
+
+    try {
+      const searchBbox = routeSearchBbox(request.from, request.to, profile, this.config.routingMaxSearchRadiusM);
+      const graph = await this.loadGraph(profile, searchBbox, request.avoid);
+      warnings.push(...graph.warnings);
+      if (graph.edgeCount === 0) {
+        warnings.push("No routable OSM graph edges were found in the search area; returning a direct fallback line.");
+        const fallback = directFallbackRoute(profile, request.from, request.to, 1, "No routable graph edges in search area.");
+        return this.routeResponse(generatedAt, profile, request, [fallback], warnings);
+      }
+      const fromSnap = nearestNode(graph, request.from);
+      const toSnap = nearestNode(graph, request.to);
+      if (!fromSnap || !toSnap) {
+        warnings.push("Could not snap one or both route endpoints to the OSM graph; returning a direct fallback line.");
+        const fallback = directFallbackRoute(profile, request.from, request.to, 1, "Endpoint snap failed.");
+        return this.routeResponse(generatedAt, profile, request, [fallback], warnings);
+      }
+      if (fromSnap.distanceM > this.config.routingMaxSnapDistanceM || toSnap.distanceM > this.config.routingMaxSnapDistanceM) {
+        warnings.push(`Endpoint snap distance exceeds configured threshold ${this.config.routingMaxSnapDistanceM} m; route is only indicative.`);
+      }
+
+      const penalizedEdges = new Set<string>();
+      const alternativeCount = Math.max(1, Math.min(3, request.alternatives));
+      for (let index = 0; index < alternativeCount; index += 1) {
+        const path = shortestPath(graph, fromSnap.nodeId, toSnap.nodeId, penalizedEdges, index === 0 ? 1 : 2.8 + index);
+        if (!path) {
+          if (routes.length === 0) {
+            warnings.push("No connected route was found in the OSM graph; returning a direct fallback line.");
+            routes.push(directFallbackRoute(profile, request.from, request.to, 1, "No connected path in OSM graph."));
+          }
+          break;
+        }
+        const route = buildRouteFromPath(profile, request, path, fromSnap, toSnap, index + 1, graph.edgeCount);
+        routes.push(route);
+        for (const edge of path.edges) {
+          penalizedEdges.add(edge.id);
+        }
+      }
+    } catch (error) {
+      warnings.push(error instanceof Error ? `OSM graph routing failed: ${error.message}` : "OSM graph routing failed.");
+      routes.push(directFallbackRoute(profile, request.from, request.to, 1, "OSM graph routing failed."));
+    }
+    return this.routeResponse(generatedAt, profile, request, routes, warnings);
+  }
+
+  private routeResponse(
+    generatedAt: string,
+    profile: RoutingProfile,
+    request: unknown,
+    routes: RoutingRoute[],
+    warnings: string[]
+  ): RoutingRouteResponse {
+    return {
+      contractVersion: "sim-routing-route-v1",
+      generatedAt,
+      source: routingSource(generatedAt),
+      query: publicQuery(request),
+      profile,
+      routes,
+      features: routes.map((route) => routeFeature(route)),
+      warnings
+    };
+  }
+
+  private async computeIsochroneResponse(
+    request: Required<Pick<RoutingIsochroneRequest, "profileId" | "origin" | "maxTravelTimeMinutes" | "avoid">> & RoutingIsochroneRequest
+  ): Promise<RoutingIsochroneResponse> {
+    const generatedAt = new Date().toISOString();
+    const profile = getRoutingProfile(request.profileId);
+    const warnings: string[] = [];
+    const maxDistanceM = request.maxDistanceM ?? (profile.defaultSpeedKph * 1000 * request.maxTravelTimeMinutes) / 60;
+    if (!this.config.osmPostgisConnectionString) {
+      warnings.push("OSM PostGIS is not configured; returning circular direct-distance isochrone.");
+      return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings);
+    }
+    try {
+      const bbox = bboxAroundPoint(request.origin, Math.min(maxDistanceM * 1.25, profile.maxSearchRadiusM, this.config.routingMaxSearchRadiusM));
+      const graph = await this.loadGraph(profile, bbox, request.avoid);
+      warnings.push(...graph.warnings);
+      const snap = nearestNode(graph, request.origin);
+      if (!snap || graph.edgeCount === 0) {
+        warnings.push("No routable OSM graph was found near the origin; returning circular direct-distance isochrone.");
+        return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings);
+      }
+      const distances = shortestPathTree(graph, snap.nodeId, request.maxTravelTimeMinutes * 60);
+      const reached = Array.from(distances.keys()).flatMap((nodeId) => {
+        const coordinate = graph.nodeCoords.get(nodeId);
+        return coordinate ? [coordinate] : [];
+      });
+      const polygon = radialReachPolygon(request.origin, reached, maxDistanceM);
+      return {
+        contractVersion: "sim-routing-isochrone-v1",
+        generatedAt,
+        source: routingSource(generatedAt),
+        query: publicQuery(request),
+        profile,
+        summary: {
+          maxTravelTimeMinutes: request.maxTravelTimeMinutes,
+          maxDistanceM: Math.round(maxDistanceM),
+          reachedNodeCount: reached.length,
+          areaKm2: approximatePolygonAreaKm2(polygon.coordinates[0] ?? [])
+        },
+        features: [
+          {
+            type: "Feature",
+            id: `routing:isochrone:${stablePayload(request)}`,
+            geometry: polygon,
+            properties: {
+              profileId: profile.profileId,
+              mode: "osm_graph",
+              maxTravelTimeMinutes: request.maxTravelTimeMinutes,
+              maxDistanceM: Math.round(maxDistanceM),
+              confidence: reached.length > 2 ? 0.68 : 0.42,
+              styleHint: "routing-isochrone-v1"
+            }
+          }
+        ],
+        warnings
+      };
+    } catch (error) {
+      warnings.push(error instanceof Error ? `OSM isochrone failed: ${error.message}` : "OSM isochrone failed.");
+      return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings);
+    }
+  }
+
+  private async computeNearestAccessResponse(
+    request: Required<Pick<RoutingNearestAccessRequest, "profileId" | "point" | "radiusM">> & RoutingNearestAccessRequest
+  ): Promise<RoutingNearestAccessResponse> {
+    const generatedAt = new Date().toISOString();
+    const profile = getRoutingProfile(request.profileId);
+    const warnings: string[] = [];
+    if (!this.config.osmPostgisConnectionString) {
+      warnings.push("OSM PostGIS is not configured; nearest access point is unavailable.");
+      return { contractVersion: "sim-routing-nearest-access-v1", generatedAt, source: routingSource(generatedAt), query: publicQuery(request), profile, features: [], warnings };
+    }
+    const table = quoteQualifiedIdentifier(this.config.routingOsmRoadsTable, "ROUTING_OSM_ROADS_TABLE");
+    const highways = HIGHWAYS_BY_PROFILE[profile.profileId];
+    const bbox = bboxAroundPoint(request.point, request.radiusM);
+    const result = await this.getPool().query<{
+      osm_id: string | number;
+      highway: string | null;
+      name: string | null;
+      ref: string | null;
+      lon: number | string;
+      lat: number | string;
+      distance_m: number | string;
+    }>(
+      `
+        with origin as (select st_setsrid(st_makepoint($1, $2), 4326) as geom),
+        candidates as (
+          select osm_id, highway, name, ref, way
+          from ${table}
+          where highway = any($7::text[])
+            and way && st_makeenvelope($3, $4, $5, $6, 4326)
+            and st_dwithin(way::geography, (select geom::geography from origin), $8)
+          order by way <-> (select geom from origin)
+          limit 100
+        )
+        select
+          osm_id,
+          highway,
+          name,
+          ref,
+          st_x(st_closestpoint(way, (select geom from origin))) as lon,
+          st_y(st_closestpoint(way, (select geom from origin))) as lat,
+          st_distance(way::geography, (select geom::geography from origin)) as distance_m
+        from candidates
+        order by distance_m asc
+        limit 1
+      `,
+      [request.point.lon, request.point.lat, bbox.west, bbox.south, bbox.east, bbox.north, highways, request.radiusM]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      warnings.push("No routable access geometry was found within the requested radius.");
+      return { contractVersion: "sim-routing-nearest-access-v1", generatedAt, source: routingSource(generatedAt), query: publicQuery(request), profile, features: [], warnings };
+    }
+    const lon = Number(row.lon);
+    const lat = Number(row.lat);
+    const distanceM = Number(row.distance_m);
+    const accessPoint = {
+      lon,
+      lat,
+      distanceM: Math.round(distanceM),
+      osmId: optionalInteger(row.osm_id),
+      roadName: cleanString(row.name),
+      roadRef: cleanString(row.ref),
+      highway: cleanString(row.highway)
+    };
+    return {
+      contractVersion: "sim-routing-nearest-access-v1",
+      generatedAt,
+      source: routingSource(generatedAt),
+      query: publicQuery(request),
+      profile,
+      accessPoint,
+      features: [
+        {
+          type: "Feature",
+          id: `routing:nearest-access:${stablePayload(request)}`,
+          geometry: { type: "Point", coordinates: [lon, lat] },
+          properties: {
+            profileId: profile.profileId,
+            distanceM: accessPoint.distanceM,
+            highway: accessPoint.highway,
+            roadName: accessPoint.roadName,
+            roadRef: accessPoint.roadRef,
+            styleHint: "routing-nearest-access-v1"
+          }
+        }
+      ],
+      warnings
+    };
+  }
+
+  private normalizeRouteRequest(
+    raw: RoutingRouteRequest,
+    alternatives: number
+  ): Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest {
+    const profileId = parseProfileId(raw.profileId);
+    const from = parseCoordinate(raw.from, "from");
+    const to = parseCoordinate(raw.to, "to");
+    const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
+    const profile = getRoutingProfile(profileId);
+    if (distanceM > Math.min(profile.maxSearchRadiusM, this.config.routingMaxSearchRadiusM)) {
+      throw new RoutingError(400, "VALIDATION_ERROR", `Route distance ${Math.round(distanceM)} m exceeds profile/search limit.`);
+    }
+    return {
+      ...raw,
+      profileId,
+      from,
+      to,
+      avoid: parseAvoid(raw.avoid),
+      alternatives: Math.max(1, Math.min(3, alternatives))
+    };
+  }
+
+  private normalizeIsochroneRequest(
+    raw: RoutingIsochroneRequest
+  ): Required<Pick<RoutingIsochroneRequest, "profileId" | "origin" | "maxTravelTimeMinutes" | "avoid">> & RoutingIsochroneRequest {
+    const profileId = parseProfileId(raw.profileId);
+    const profile = getRoutingProfile(profileId);
+    const origin = parseCoordinate(raw.origin, "origin");
+    const maxTravelTimeMinutes = integerInRange(raw.maxTravelTimeMinutes, 15, 1, 180);
+    const maxDistanceM = raw.maxDistanceM === undefined ? undefined : positiveNumber(raw.maxDistanceM, "maxDistanceM");
+    const effectiveDistance = maxDistanceM ?? (profile.defaultSpeedKph * 1000 * maxTravelTimeMinutes) / 60;
+    if (effectiveDistance > Math.min(profile.maxSearchRadiusM, this.config.routingMaxSearchRadiusM)) {
+      throw new RoutingError(400, "VALIDATION_ERROR", "Isochrone radius exceeds profile/search limit.");
+    }
+    return { ...raw, profileId, origin, maxTravelTimeMinutes, maxDistanceM, avoid: parseAvoid(raw.avoid) };
+  }
+
+  private normalizeNearestAccessRequest(
+    raw: RoutingNearestAccessRequest
+  ): Required<Pick<RoutingNearestAccessRequest, "profileId" | "point" | "radiusM">> & RoutingNearestAccessRequest {
+    const profileId = parseProfileId(raw.profileId);
+    const point = parseCoordinate(raw.point, "point");
+    const radiusM = raw.radiusM === undefined ? 1500 : positiveNumber(raw.radiusM, "radiusM");
+    if (radiusM > this.config.routingMaxSearchRadiusM) {
+      throw new RoutingError(400, "VALIDATION_ERROR", "radiusM exceeds configured routing search limit.");
+    }
+    return { ...raw, profileId, point, radiusM };
+  }
+
+  private async loadGraph(profile: RoutingProfile, bbox: BoundingBox, avoid: RoutingAvoid[] = []): Promise<RoadGraph> {
+    const table = quoteQualifiedIdentifier(this.config.routingOsmRoadsTable, "ROUTING_OSM_ROADS_TABLE");
+    const highways = HIGHWAYS_BY_PROFILE[profile.profileId];
+    const result = await this.getPool().query<RoadEdgeRow>(
+      `
+        select
+          osm_id,
+          highway,
+          name,
+          ref,
+          access,
+          motorcar,
+          foot,
+          bicycle,
+          surface,
+          tracktype,
+          oneway,
+          bridge,
+          tunnel,
+          st_asgeojson(way)::json as geom
+        from ${table}
+        where highway = any($5::text[])
+          and way && st_makeenvelope($1, $2, $3, $4, 4326)
+          and st_intersects(way, st_makeenvelope($1, $2, $3, $4, 4326))
+        order by way <-> st_centroid(st_makeenvelope($1, $2, $3, $4, 4326))
+        limit $6
+      `,
+      [bbox.west, bbox.south, bbox.east, bbox.north, highways, this.config.routingMaxGraphEdges]
+    );
+    const graph: RoadGraph = { bbox, nodeCoords: new Map(), adjacency: new Map(), edgeCount: 0, warnings: [] };
+    if (result.rows.length >= this.config.routingMaxGraphEdges) {
+      graph.warnings.push(`Routing graph reached max edge row limit ${this.config.routingMaxGraphEdges}; result can be incomplete.`);
+    }
+    for (const row of result.rows) {
+      if (!roadAllowedForProfile(row, profile, avoid)) {
+        continue;
+      }
+      const lineStrings = roadLineStrings(row.geom);
+      for (const line of lineStrings) {
+        for (let index = 1; index < line.length; index += 1) {
+          const fromCoord = line[index - 1];
+          const toCoord = line[index];
+          if (!fromCoord || !toCoord) {
+            continue;
+          }
+          const distanceM = haversineMeters(fromCoord, toCoord);
+          if (!Number.isFinite(distanceM) || distanceM <= 0.2) {
+            continue;
+          }
+          const oneWay = oneWayDirection(row.oneway);
+          const base = buildGraphEdge(row, fromCoord, toCoord, index, distanceM, profile);
+          if (oneWay !== "reverse") {
+            addGraphEdge(graph, base);
+          }
+          if (oneWay !== "forward" || profile.transportMode === "walk") {
+            addGraphEdge(graph, reverseGraphEdge(base));
+          }
+        }
+      }
+    }
+    return graph;
+  }
+
+  private getPool(): Pool {
+    if (!this.pool) {
+      this.pool = new Pool({
+        connectionString: this.config.osmPostgisConnectionString,
+        max: 4,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: this.config.requestTimeoutMs
+      });
+    }
+    return this.pool;
+  }
+
+  private backendStatus(): RoutingBackendStatus {
+    return {
+      enabled: Boolean(this.config.osmPostgisConnectionString),
+      backend: this.config.osmPostgisConnectionString ? "osm-postgis-graph" : "unconfigured",
+      osmPostgisConfigured: Boolean(this.config.osmPostgisConnectionString),
+      graphTable: this.config.routingOsmRoadsTable,
+      maxGraphEdges: this.config.routingMaxGraphEdges,
+      cacheTtlSeconds: this.config.routingCacheTtlSeconds,
+      limitations: [
+        "Initial SIM routing uses a local in-process graph built from OSM road geometries.",
+        "It does not yet use pgRouting, OSRM or Valhalla turn restrictions.",
+        "Live closures and hazards are reported as avoid preferences in the contract, not hard constraints until source geometries are normalized into the graph."
+      ]
+    };
+  }
+}
+
+function roadAllowedForProfile(row: RoadEdgeRow, profile: RoutingProfile, avoid: RoutingAvoid[]): boolean {
+  const highway = cleanString(row.highway);
+  if (!highway || !HIGHWAYS_BY_PROFILE[profile.profileId].includes(highway)) {
+    return false;
+  }
+  const access = cleanString(row.access)?.toLowerCase();
+  if (access && ["private", "no", "customers"].includes(access)) {
+    return false;
+  }
+  if (profile.transportMode === "road" || profile.transportMode === "offroad") {
+    const motorcar = cleanString(row.motorcar)?.toLowerCase();
+    if (motorcar && ["private", "no"].includes(motorcar)) {
+      return false;
+    }
+  }
+  if (profile.transportMode === "walk") {
+    const foot = cleanString(row.foot)?.toLowerCase();
+    if (foot && ["private", "no"].includes(foot)) {
+      return false;
+    }
+  }
+  if (avoid.includes("unpaved") && isLikelyUnpaved(row.surface, row.tracktype)) {
+    return false;
+  }
+  if (avoid.includes("bridge") && truthyTag(row.bridge)) {
+    return false;
+  }
+  if (avoid.includes("tunnel") && truthyTag(row.tunnel)) {
+    return false;
+  }
+  if (profile.profileId === "large_emergency_vehicle" && (highway === "track" || highway === "service" || isLikelyUnpaved(row.surface, row.tracktype))) {
+    return false;
+  }
+  return true;
+}
+
+function buildGraphEdge(
+  row: RoadEdgeRow,
+  fromCoord: [number, number],
+  toCoord: [number, number],
+  segmentIndex: number,
+  distanceM: number,
+  profile: RoutingProfile
+): GraphEdge {
+  const highway = cleanString(row.highway);
+  const speedKph = speedForEdge(profile, highway, cleanString(row.surface), cleanString(row.tracktype));
+  const durationSeconds = (distanceM / Math.max(1, speedKph * 1000)) * 3600;
+  const osmId = optionalInteger(row.osm_id);
+  return {
+    id: `${osmId ?? "osm"}:${segmentIndex}:${nodeKey(fromCoord)}:${nodeKey(toCoord)}`,
+    from: nodeKey(fromCoord),
+    to: nodeKey(toCoord),
+    fromCoord,
+    toCoord,
+    distanceM,
+    durationSeconds,
+    highway,
+    roadName: cleanString(row.name),
+    roadRef: cleanString(row.ref),
+    osmId,
+    tags: {
+      surface: cleanString(row.surface),
+      tracktype: cleanString(row.tracktype),
+      bridge: cleanString(row.bridge),
+      tunnel: cleanString(row.tunnel),
+      access: cleanString(row.access)
+    }
+  };
+}
+
+function addGraphEdge(graph: RoadGraph, edge: GraphEdge): void {
+  graph.nodeCoords.set(edge.from, edge.fromCoord);
+  graph.nodeCoords.set(edge.to, edge.toCoord);
+  const edges = graph.adjacency.get(edge.from) ?? [];
+  edges.push(edge);
+  graph.adjacency.set(edge.from, edges);
+  graph.edgeCount += 1;
+}
+
+function reverseGraphEdge(edge: GraphEdge): GraphEdge {
+  return {
+    ...edge,
+    id: `${edge.id}:reverse`,
+    from: edge.to,
+    to: edge.from,
+    fromCoord: edge.toCoord,
+    toCoord: edge.fromCoord
+  };
+}
+
+function roadLineStrings(value: unknown): Array<Array<[number, number]>> {
+  const geometry = value as RoadGeometry | null | undefined;
+  if (!geometry || !Array.isArray(geometry.coordinates)) {
+    return [];
+  }
+  if (geometry.type === "LineString") {
+    return [normalizeLineString(geometry.coordinates as Array<[number, number]>)];
+  }
+  if (geometry.type === "MultiLineString") {
+    return (geometry.coordinates as Array<Array<[number, number]>>).map(normalizeLineString).filter((line) => line.length >= 2);
+  }
+  return [];
+}
+
+function normalizeLineString(coordinates: Array<[number, number]>): Array<[number, number]> {
+  return coordinates.filter(
+    (coordinate): coordinate is [number, number] =>
+      Array.isArray(coordinate) &&
+      coordinate.length >= 2 &&
+      Number.isFinite(Number(coordinate[0])) &&
+      Number.isFinite(Number(coordinate[1]))
+  ).map((coordinate) => [Number(coordinate[0]), Number(coordinate[1])]);
+}
+
+function shortestPath(graph: RoadGraph, fromNode: string, toNode: string, penalizedEdges = new Set<string>(), penaltyMultiplier = 1): PathResult | undefined {
+  if (fromNode === toNode) {
+    return { nodeIds: [fromNode], edges: [], distanceM: 0, durationSeconds: 0 };
+  }
+  const heap = new MinHeap<DijkstraState>((left, right) => left.cost - right.cost);
+  const costs = new Map<string, number>([[fromNode, 0]]);
+  const previous = new Map<string, { nodeId: string; edge: GraphEdge }>();
+  heap.push({ nodeId: fromNode, cost: 0 });
+
+  while (heap.size > 0) {
+    const current = heap.pop();
+    if (!current) {
+      break;
+    }
+    if (current.cost > (costs.get(current.nodeId) ?? Infinity)) {
+      continue;
+    }
+    if (current.nodeId === toNode) {
+      break;
+    }
+    for (const edge of graph.adjacency.get(current.nodeId) ?? []) {
+      const penalty = penalizedEdges.has(edge.id.replace(/:reverse$/, "")) || penalizedEdges.has(edge.id) ? penaltyMultiplier : 1;
+      const edgeCost = edge.durationSeconds * penalty;
+      const nextCost = current.cost + edgeCost;
+      if (nextCost < (costs.get(edge.to) ?? Infinity)) {
+        costs.set(edge.to, nextCost);
+        previous.set(edge.to, { nodeId: current.nodeId, edge });
+        heap.push({ nodeId: edge.to, cost: nextCost });
+      }
+    }
+  }
+  if (!previous.has(toNode)) {
+    return undefined;
+  }
+  const nodeIds: string[] = [toNode];
+  const edges: GraphEdge[] = [];
+  let cursor = toNode;
+  while (cursor !== fromNode) {
+    const item = previous.get(cursor);
+    if (!item) {
+      return undefined;
+    }
+    edges.push(item.edge);
+    cursor = item.nodeId;
+    nodeIds.push(cursor);
+  }
+  edges.reverse();
+  nodeIds.reverse();
+  return {
+    nodeIds,
+    edges,
+    distanceM: edges.reduce((sum, edge) => sum + edge.distanceM, 0),
+    durationSeconds: edges.reduce((sum, edge) => sum + edge.durationSeconds, 0)
+  };
+}
+
+function shortestPathTree(graph: RoadGraph, fromNode: string, maxCostSeconds: number): Map<string, number> {
+  const heap = new MinHeap<DijkstraState>((left, right) => left.cost - right.cost);
+  const costs = new Map<string, number>([[fromNode, 0]]);
+  heap.push({ nodeId: fromNode, cost: 0 });
+  while (heap.size > 0) {
+    const current = heap.pop();
+    if (!current || current.cost > maxCostSeconds) {
+      continue;
+    }
+    if (current.cost > (costs.get(current.nodeId) ?? Infinity)) {
+      continue;
+    }
+    for (const edge of graph.adjacency.get(current.nodeId) ?? []) {
+      const nextCost = current.cost + edge.durationSeconds;
+      if (nextCost <= maxCostSeconds && nextCost < (costs.get(edge.to) ?? Infinity)) {
+        costs.set(edge.to, nextCost);
+        heap.push({ nodeId: edge.to, cost: nextCost });
+      }
+    }
+  }
+  return costs;
+}
+
+function nearestNode(graph: RoadGraph, point: RoutingCoordinate): SnapResult | undefined {
+  let best: SnapResult | undefined;
+  for (const [nodeId, coordinate] of graph.nodeCoords.entries()) {
+    const distanceM = haversineMeters([point.lon, point.lat], coordinate);
+    if (!best || distanceM < best.distanceM) {
+      best = { nodeId, coordinate, distanceM };
+    }
+  }
+  return best;
+}
+
+function buildRouteFromPath(
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingRouteRequest, "from" | "to">> & RoutingRouteRequest,
+  path: PathResult,
+  fromSnap: SnapResult,
+  toSnap: SnapResult,
+  rank: number,
+  graphEdgesScanned: number
+): RoutingRoute {
+  const routeCoords = dedupeConsecutiveCoordinates([
+    [request.from.lon, request.from.lat] as [number, number],
+    fromSnap.coordinate,
+    ...path.edges.map((edge) => edge.toCoord),
+    toSnap.coordinate,
+    [request.to.lon, request.to.lat] as [number, number]
+  ]);
+  const connectorDistanceM = fromSnap.distanceM + toSnap.distanceM;
+  const totalDistanceM = path.distanceM + connectorDistanceM;
+  const durationSeconds = path.durationSeconds + (connectorDistanceM / Math.max(1, profile.defaultSpeedKph * 1000)) * 3600;
+  const warnings: string[] = [];
+  if (connectorDistanceM > 0) {
+    warnings.push("Route includes endpoint connector segments from requested coordinates to the nearest OSM graph nodes.");
+  }
+  return {
+    routeId: `routing:${profile.profileId}:${stablePayload({ from: request.from, to: request.to, rank })}`,
+    profileId: profile.profileId,
+    rank,
+    status: "ok",
+    geometry: { type: "LineString", coordinates: routeCoords },
+    distanceM: Math.round(totalDistanceM),
+    durationSeconds: Math.round(durationSeconds),
+    snap: {
+      fromDistanceM: Math.round(fromSnap.distanceM),
+      toDistanceM: Math.round(toSnap.distanceM),
+      from: { lon: roundCoord(fromSnap.coordinate[0]), lat: roundCoord(fromSnap.coordinate[1]) },
+      to: { lon: roundCoord(toSnap.coordinate[0]), lat: roundCoord(toSnap.coordinate[1]) }
+    },
+    steps: buildSteps(path),
+    warnings,
+    quality: {
+      mode: "osm_graph",
+      confidence: path.edges.length > 0 ? 0.74 : 0.4,
+      graphEdgesScanned,
+      graphEdgesUsed: path.edges.length,
+      routingModelVersion: ROUTING_MODEL_VERSION
+    }
+  };
+}
+
+function buildSteps(path: PathResult): RoutingStep[] {
+  const groups: GraphEdge[][] = [];
+  for (const edge of path.edges) {
+    const current = groups[groups.length - 1];
+    if (current && sameRoad(current[0]!, edge)) {
+      current.push(edge);
+    } else {
+      groups.push([edge]);
+    }
+  }
+  return groups.map((group, index) => {
+    const first = group[0]!;
+    const coordinates = dedupeConsecutiveCoordinates([first.fromCoord, ...group.map((edge) => edge.toCoord)]);
+    const distanceM = group.reduce((sum, edge) => sum + edge.distanceM, 0);
+    const durationSeconds = group.reduce((sum, edge) => sum + edge.durationSeconds, 0);
+    const road = first.roadName ?? first.roadRef ?? first.highway ?? "road";
+    return {
+      index,
+      instructionLocalized: {
+        cs: `Pokračujte po ${road}.`,
+        en: `Continue on ${road}.`
+      },
+      distanceM: Math.round(distanceM),
+      durationSeconds: Math.round(durationSeconds),
+      roadName: first.roadName,
+      roadRef: first.roadRef,
+      highway: first.highway,
+      geometry: { type: "LineString", coordinates }
+    };
+  });
+}
+
+function sameRoad(left: GraphEdge, right: GraphEdge): boolean {
+  return left.roadName === right.roadName && left.roadRef === right.roadRef && left.highway === right.highway;
+}
+
+function directFallbackRoute(profile: RoutingProfile, from: RoutingCoordinate, to: RoutingCoordinate, rank: number, reason: string): RoutingRoute {
+  const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
+  const durationSeconds = (distanceM / Math.max(1, profile.defaultSpeedKph * 1000)) * 3600;
+  return {
+    routeId: `routing:${profile.profileId}:direct:${stablePayload({ from, to, rank })}`,
+    profileId: profile.profileId,
+    rank,
+    status: "partial",
+    geometry: { type: "LineString", coordinates: [[from.lon, from.lat], [to.lon, to.lat]] },
+    distanceM: Math.round(distanceM),
+    durationSeconds: Math.round(durationSeconds),
+    snap: {
+      fromDistanceM: 0,
+      toDistanceM: 0,
+      from,
+      to
+    },
+    steps: [
+      {
+        index: 0,
+        instructionLocalized: {
+          cs: "Přímá spojnice bez routování po komunikacích.",
+          en: "Direct connector without road-graph routing."
+        },
+        distanceM: Math.round(distanceM),
+        durationSeconds: Math.round(durationSeconds),
+        geometry: { type: "LineString", coordinates: [[from.lon, from.lat], [to.lon, to.lat]] }
+      }
+    ],
+    warnings: [reason],
+    quality: {
+      mode: "direct_fallback",
+      confidence: 0.18,
+      graphEdgesScanned: 0,
+      graphEdgesUsed: 0,
+      routingModelVersion: ROUTING_MODEL_VERSION,
+      fallbackReason: reason
+    }
+  };
+}
+
+function routeFeature(route: RoutingRoute): RoutingFeature {
+  return {
+    type: "Feature",
+    id: route.routeId,
+    geometry: route.geometry,
+    properties: {
+      profileId: route.profileId,
+      rank: route.rank,
+      status: route.status,
+      distanceM: route.distanceM,
+      durationSeconds: route.durationSeconds,
+      quality: route.quality,
+      warnings: route.warnings,
+      styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
+    }
+  };
+}
+
+function directIsochroneResponse(
+  generatedAt: string,
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingIsochroneRequest, "origin" | "maxTravelTimeMinutes">> & RoutingIsochroneRequest,
+  maxDistanceM: number,
+  warnings: string[]
+): RoutingIsochroneResponse {
+  const polygon = circlePolygon(request.origin, maxDistanceM);
+  return {
+    contractVersion: "sim-routing-isochrone-v1",
+    generatedAt,
+    source: routingSource(generatedAt),
+    query: publicQuery(request),
+    profile,
+    summary: {
+      maxTravelTimeMinutes: request.maxTravelTimeMinutes,
+      maxDistanceM: Math.round(maxDistanceM),
+      reachedNodeCount: 0,
+      areaKm2: approximatePolygonAreaKm2(polygon.coordinates[0] ?? [])
+    },
+    features: [
+      {
+        type: "Feature",
+        id: `routing:isochrone:direct:${stablePayload(request)}`,
+        geometry: polygon,
+        properties: {
+          profileId: profile.profileId,
+          mode: "direct_fallback",
+          maxTravelTimeMinutes: request.maxTravelTimeMinutes,
+          maxDistanceM: Math.round(maxDistanceM),
+          confidence: 0.18,
+          styleHint: "routing-isochrone-v1"
+        }
+      }
+    ],
+    warnings
+  };
+}
+
+function radialReachPolygon(origin: RoutingCoordinate, reached: Array<[number, number]>, fallbackRadiusM: number): PolygonGeometry {
+  if (reached.length < 3) {
+    return circlePolygon(origin, fallbackRadiusM);
+  }
+  const bins = new Array<{ distanceM: number; coordinate: [number, number] } | undefined>(36).fill(undefined);
+  for (const coordinate of reached) {
+    const azimuth = bearingDegrees([origin.lon, origin.lat], coordinate);
+    const index = Math.min(35, Math.floor(azimuth / 10));
+    const distanceM = haversineMeters([origin.lon, origin.lat], coordinate);
+    const current = bins[index];
+    if (!current || distanceM > current.distanceM) {
+      bins[index] = { distanceM, coordinate };
+    }
+  }
+  const coordinates = bins
+    .map((bin, index) => bin?.coordinate ?? destinationPoint(origin, fallbackRadiusM * 0.25, index * 10 + 5))
+    .map(([lon, lat]) => [roundCoord(lon), roundCoord(lat)] as [number, number]);
+  coordinates.push(coordinates[0]!);
+  return { type: "Polygon", coordinates: [coordinates] };
+}
+
+function circlePolygon(origin: RoutingCoordinate, radiusM: number): PolygonGeometry {
+  const coordinates: Array<[number, number]> = [];
+  for (let angle = 0; angle < 360; angle += 10) {
+    const point = destinationPoint(origin, radiusM, angle);
+    coordinates.push([roundCoord(point[0]), roundCoord(point[1])]);
+  }
+  coordinates.push(coordinates[0]!);
+  return { type: "Polygon", coordinates: [coordinates] };
+}
+
+function routingSource(generatedAt: string): RoutingSource {
+  return {
+    sourceId: "routing_model",
+    sourceType: "MODELLED_ROUTING",
+    generatedAt,
+    backend: "osm-postgis-graph"
+  };
+}
+
+function publicQuery(value: unknown): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function routeSearchBbox(from: RoutingCoordinate, to: RoutingCoordinate, profile: RoutingProfile, maxSearchRadiusM: number): BoundingBox {
+  const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
+  const paddingM = Math.min(Math.max(2500, distanceM * 0.35), Math.min(profile.maxSearchRadiusM, maxSearchRadiusM) * 0.35);
+  return expandBbox(
+    {
+      west: Math.min(from.lon, to.lon),
+      south: Math.min(from.lat, to.lat),
+      east: Math.max(from.lon, to.lon),
+      north: Math.max(from.lat, to.lat)
+    },
+    paddingM
+  );
+}
+
+function bboxAroundPoint(point: RoutingCoordinate, radiusM: number): BoundingBox {
+  return expandBbox({ west: point.lon, south: point.lat, east: point.lon, north: point.lat }, radiusM);
+}
+
+function expandBbox(bbox: BoundingBox, paddingM: number): BoundingBox {
+  const centerLat = (bbox.south + bbox.north) / 2;
+  const latPad = paddingM / 111_320;
+  const lonPad = paddingM / Math.max(1, 111_320 * Math.cos((centerLat * Math.PI) / 180));
+  return {
+    west: clamp(bbox.west - lonPad, -180, 180),
+    south: clamp(bbox.south - latPad, -90, 90),
+    east: clamp(bbox.east + lonPad, -180, 180),
+    north: clamp(bbox.north + latPad, -90, 90)
+  };
+}
+
+function parseProfileId(value: unknown): RoutingProfileId {
+  if (typeof value === "string" && ROUTING_PROFILES.some((profile) => profile.profileId === value)) {
+    return value as RoutingProfileId;
+  }
+  return "emergency_vehicle";
+}
+
+function getRoutingProfile(profileId: RoutingProfileId): RoutingProfile {
+  return ROUTING_PROFILES.find((profile) => profile.profileId === profileId) ?? ROUTING_PROFILES[1]!;
+}
+
+function parseCoordinate(value: unknown, label: string): RoutingCoordinate {
+  if (!value || typeof value !== "object") {
+    throw new RoutingError(400, "VALIDATION_ERROR", `${label} coordinate is required.`);
+  }
+  const record = value as Record<string, unknown>;
+  const lon = Number(record.lon ?? record.lng ?? record.longitude);
+  const lat = Number(record.lat ?? record.latitude);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+    throw new RoutingError(400, "VALIDATION_ERROR", `${label} must contain valid WGS84 lon/lat.`);
+  }
+  return {
+    lon,
+    lat,
+    label: cleanString(record.label)
+  };
+}
+
+function parseAvoid(value: unknown): RoutingAvoid[] {
+  const allowed = new Set<RoutingAvoid>(["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"]);
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [];
+  return raw.map((item) => String(item).trim()).filter((item): item is RoutingAvoid => allowed.has(item as RoutingAvoid));
+}
+
+function positiveNumber(value: unknown, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new RoutingError(400, "VALIDATION_ERROR", `${label} must be a positive number.`);
+  }
+  return parsed;
+}
+
+function integerInRange(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, Math.trunc(parsed)));
+}
+
+function speedForEdge(profile: RoutingProfile, highway: string | undefined, surface: string | undefined, tracktype: string | undefined): number {
+  if (profile.transportMode === "walk") {
+    const base = highway === "steps" ? 2.5 : profile.defaultSpeedKph;
+    return profile.profileId === "evacuation_walking" && (highway === "path" || highway === "track") ? Math.min(base, 3.2) : base;
+  }
+  const highwaySpeed = highway ? (BASE_SPEED_KPH_BY_HIGHWAY[highway] ?? profile.defaultSpeedKph) : profile.defaultSpeedKph;
+  let speed = Math.min(highwaySpeed, profile.defaultSpeedKph * 1.35);
+  if (profile.profileId === "emergency_vehicle") {
+    speed *= 1.08;
+  }
+  if (profile.profileId === "large_emergency_vehicle") {
+    speed *= 0.86;
+  }
+  if (profile.profileId === "offroad_4x4" && (highway === "track" || highway === "path")) {
+    speed = Math.min(speed, 22);
+  }
+  if (isLikelyUnpaved(surface, tracktype)) {
+    speed *= profile.profileId === "offroad_4x4" ? 0.8 : 0.55;
+  }
+  return Math.max(2, speed);
+}
+
+function isLikelyUnpaved(surface: unknown, tracktype: unknown): boolean {
+  const surfaceText = cleanString(surface)?.toLowerCase();
+  const trackText = cleanString(tracktype)?.toLowerCase();
+  return (
+    Boolean(trackText && !["grade1"].includes(trackText)) ||
+    Boolean(surfaceText && ["unpaved", "gravel", "dirt", "earth", "grass", "sand", "mud", "ground"].includes(surfaceText))
+  );
+}
+
+function oneWayDirection(value: unknown): "both" | "forward" | "reverse" {
+  const normalized = cleanString(value)?.toLowerCase();
+  if (!normalized) {
+    return "both";
+  }
+  if (["yes", "true", "1"].includes(normalized)) {
+    return "forward";
+  }
+  if (normalized === "-1" || normalized === "reverse") {
+    return "reverse";
+  }
+  return "both";
+}
+
+function truthyTag(value: unknown): boolean {
+  const normalized = cleanString(value)?.toLowerCase();
+  return Boolean(normalized && !["no", "false", "0"].includes(normalized));
+}
+
+function nodeKey(coordinate: [number, number]): string {
+  return `${roundCoord(coordinate[0])},${roundCoord(coordinate[1])}`;
+}
+
+function haversineMeters(left: [number, number], right: [number, number]): number {
+  const earthRadiusM = 6_371_000;
+  const lat1 = (left[1] * Math.PI) / 180;
+  const lat2 = (right[1] * Math.PI) / 180;
+  const dLat = ((right[1] - left[1]) * Math.PI) / 180;
+  const dLon = ((right[0] - left[0]) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return earthRadiusM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearingDegrees(from: [number, number], to: [number, number]): number {
+  const lat1 = (from[1] * Math.PI) / 180;
+  const lat2 = (to[1] * Math.PI) / 180;
+  const dLon = ((to[0] - from[0]) * Math.PI) / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+}
+
+function destinationPoint(origin: RoutingCoordinate, distanceM: number, bearingDeg: number): [number, number] {
+  const earthRadiusM = 6_371_000;
+  const angularDistance = distanceM / earthRadiusM;
+  const bearing = (bearingDeg * Math.PI) / 180;
+  const lat1 = (origin.lat * Math.PI) / 180;
+  const lon1 = (origin.lon * Math.PI) / 180;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDistance) + Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing));
+  const lon2 =
+    lon1 + Math.atan2(Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1), Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2));
+  return [(((lon2 * 180) / Math.PI + 540) % 360) - 180, (lat2 * 180) / Math.PI];
+}
+
+function approximatePolygonAreaKm2(coordinates: Array<[number, number]>): number | undefined {
+  if (coordinates.length < 4) {
+    return undefined;
+  }
+  const lat = coordinates.reduce((sum, coordinate) => sum + coordinate[1], 0) / coordinates.length;
+  const metersPerLon = 111_320 * Math.cos((lat * Math.PI) / 180);
+  const metersPerLat = 111_320;
+  let area = 0;
+  for (let index = 0; index < coordinates.length - 1; index += 1) {
+    const [x1, y1] = coordinates[index]!;
+    const [x2, y2] = coordinates[index + 1]!;
+    area += x1 * metersPerLon * (y2 * metersPerLat) - x2 * metersPerLon * (y1 * metersPerLat);
+  }
+  return Math.round((Math.abs(area) / 2 / 1_000_000) * 100) / 100;
+}
+
+function dedupeConsecutiveCoordinates(coordinates: Array<[number, number]>): Array<[number, number]> {
+  const result: Array<[number, number]> = [];
+  for (const coordinate of coordinates) {
+    const rounded: [number, number] = [roundCoord(coordinate[0]), roundCoord(coordinate[1])];
+    const last = result[result.length - 1];
+    if (!last || last[0] !== rounded[0] || last[1] !== rounded[1]) {
+      result.push(rounded);
+    }
+  }
+  return result.length >= 2 ? result : coordinates;
+}
+
+function stablePayload(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
+}
+
+function roundCoord(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function cleanString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function optionalInteger(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function quoteQualifiedIdentifier(value: string, label = "ROUTING_OSM_ROADS_TABLE"): string {
+  const parts = value.split(".").map((part) => part.trim()).filter((part) => part.length > 0);
+  if (parts.length === 0 || parts.length > 2 || parts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))) {
+    throw new Error(`Invalid ${label} identifier.`);
+  }
+  return parts.map((part) => `"${part.replace(/"/g, '""')}"`).join(".");
+}
+
+class MinHeap<T> {
+  private items: T[] = [];
+
+  constructor(private readonly compare: (left: T, right: T) => number) {}
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  push(item: T): void {
+    this.items.push(item);
+    this.bubbleUp(this.items.length - 1);
+  }
+
+  pop(): T | undefined {
+    if (this.items.length === 0) {
+      return undefined;
+    }
+    const first = this.items[0]!;
+    const last = this.items.pop();
+    if (last !== undefined && this.items.length > 0) {
+      this.items[0] = last;
+      this.bubbleDown(0);
+    }
+    return first;
+  }
+
+  private bubbleUp(index: number): void {
+    let cursor = index;
+    while (cursor > 0) {
+      const parent = Math.floor((cursor - 1) / 2);
+      if (this.compare(this.items[cursor]!, this.items[parent]!) >= 0) {
+        break;
+      }
+      [this.items[cursor], this.items[parent]] = [this.items[parent]!, this.items[cursor]!];
+      cursor = parent;
+    }
+  }
+
+  private bubbleDown(index: number): void {
+    let cursor = index;
+    while (true) {
+      const left = cursor * 2 + 1;
+      const right = cursor * 2 + 2;
+      let smallest = cursor;
+      if (left < this.items.length && this.compare(this.items[left]!, this.items[smallest]!) < 0) {
+        smallest = left;
+      }
+      if (right < this.items.length && this.compare(this.items[right]!, this.items[smallest]!) < 0) {
+        smallest = right;
+      }
+      if (smallest === cursor) {
+        break;
+      }
+      [this.items[cursor], this.items[smallest]] = [this.items[smallest]!, this.items[cursor]!];
+      cursor = smallest;
+    }
+  }
+}

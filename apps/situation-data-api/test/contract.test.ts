@@ -121,6 +121,12 @@ describe("Situation Data API contract", () => {
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
+      routingCacheTtlSeconds: 300,
+      routingCacheMaxEntries: 512,
+      routingOsmRoadsTable: "public.osm_roads",
+      routingMaxGraphEdges: 45000,
+      routingMaxSearchRadiusM: 160000,
+      routingMaxSnapDistanceM: 2500,
       radioPlanningCacheTtlSeconds: 900,
       radioPlanningCacheMaxEntries: 512,
       demEnabled: false,
@@ -1026,7 +1032,16 @@ describe("Situation Data API contract", () => {
           chmiWeatherRadar: 300,
           chmiWeatherWebcams: 300,
           ardosPartner: 15,
+          routing: 300,
           radioPlanning: 900
+        },
+        routing: {
+          enabled: false,
+          backend: "unconfigured",
+          graphTable: "public.osm_roads",
+          maxGraphEdges: 45000,
+          maxSearchRadiusM: 160000,
+          maxSnapDistanceM: 2500
         },
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -3702,6 +3717,83 @@ describe("Situation Data API contract", () => {
     expect(metrics.text).toContain('situation_data_radio_planning_cache_hits{operation="link_check"} 1');
     expect(metrics.text).toContain('situation_data_radio_planning_cache_hits{operation="coverage"} 1');
     expect(metrics.text).toContain('situation_data_radio_planning_cache_hits{operation="site_search"} 1');
+  });
+
+  it("exposes emergency routing profiles and direct fallback responses", async () => {
+    const catalog = await request(app).get("/api/v1/routing/profiles").expect(200);
+    expect(catalog.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-routing-profile-catalog-v1",
+        backend: expect.objectContaining({ backend: "unconfigured", graphTable: "public.osm_roads" }),
+        profiles: expect.arrayContaining([
+          expect.objectContaining({ profileId: "emergency_vehicle", transportMode: "road" }),
+          expect.objectContaining({ profileId: "large_emergency_vehicle", transportMode: "road" }),
+          expect.objectContaining({ profileId: "evacuation_walking", transportMode: "walk" })
+        ])
+      })
+    );
+
+    const payload = {
+      profileId: "emergency_vehicle",
+      from: { lon: 14.42, lat: 50.08, label: "Start" },
+      to: { lon: 14.45, lat: 50.1, label: "Cíl" },
+      avoid: ["flood", "road_closure"]
+    };
+    const route = await request(app).post("/api/v1/routing/route").send(payload).expect(200);
+    expect(route.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-routing-route-v1",
+        profile: expect.objectContaining({ profileId: "emergency_vehicle" }),
+        routes: [
+          expect.objectContaining({
+            status: "partial",
+            geometry: expect.objectContaining({ type: "LineString" }),
+            distanceM: expect.any(Number),
+            durationSeconds: expect.any(Number),
+            quality: expect.objectContaining({ mode: "direct_fallback", fallbackReason: expect.stringContaining("OSM_POSTGIS_DATABASE_URL") })
+          })
+        ],
+        features: [
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "LineString" }),
+            properties: expect.objectContaining({ styleHint: "routing-primary-v1" })
+          })
+        ]
+      })
+    );
+
+    const secondRoute = await request(app).post("/api/v1/routing/route").send(payload).expect(200);
+    expect(secondRoute.body.generatedAt).toBe(route.body.generatedAt);
+
+    const isochrone = await request(app)
+      .post("/api/v1/routing/isochrone")
+      .send({ profileId: "evacuation_walking", origin: { lon: 14.42, lat: 50.08 }, maxTravelTimeMinutes: 10 })
+      .expect(200);
+    expect(isochrone.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-routing-isochrone-v1",
+        features: [expect.objectContaining({ geometry: expect.objectContaining({ type: "Polygon" }) })]
+      })
+    );
+
+    const nearest = await request(app)
+      .post("/api/v1/routing/nearest-access")
+      .send({ profileId: "emergency_vehicle", point: { lon: 14.42, lat: 50.08 } })
+      .expect(200);
+    expect(nearest.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-routing-nearest-access-v1",
+        profile: expect.objectContaining({ profileId: "emergency_vehicle" }),
+        features: []
+      })
+    );
+
+    const observability = await request(app).get("/api/v1/observability").expect(200);
+    expect(observability.body.routingCaches).toEqual(
+      expect.arrayContaining([expect.objectContaining({ operation: "route", cache: expect.objectContaining({ hits: 1, misses: 1 }) })])
+    );
+    const metrics = await request(app).get("/metrics").expect(200);
+    expect(metrics.text).toContain('situation_data_routing_cache_hits{operation="route"} 1');
   });
 
   it("builds mobile coverage polygons from tower references", async () => {

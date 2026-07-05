@@ -286,7 +286,16 @@ export interface SituationDataPublicConfig {
     chmiWeatherRadar: number;
     chmiWeatherWebcams: number;
     ardosPartner: number;
+    routing: number;
     radioPlanning: number;
+  };
+  routing: {
+    enabled: boolean;
+    backend: "osm-postgis-graph" | "unconfigured";
+    graphTable: string;
+    maxGraphEdges: number;
+    maxSearchRadiusM: number;
+    maxSnapDistanceM: number;
   };
   weatherRadarFrames: {
     historyHours: number;

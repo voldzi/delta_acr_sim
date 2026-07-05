@@ -719,6 +719,97 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DemCatalogStatus"
+  /routing/profiles:
+    get:
+      summary: Return emergency routing profiles and backend status
+      responses:
+        "200":
+          description: Routing profile catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingProfileCatalog"
+  /routing/route:
+    post:
+      summary: Build a route between two WGS84 points
+      description: Computes a server-side emergency route for COP using the local OSM/PostGIS graph when available. If the graph is unavailable, SIM returns a clearly marked direct_fallback geometry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutingRouteRequest"
+      responses:
+        "200":
+          description: Route response with GeoJSON features for COP rendering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRouteResponse"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /routing/alternatives:
+    post:
+      summary: Build one to three alternative routes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutingRouteRequest"
+      responses:
+        "200":
+          description: Alternative route response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRouteResponse"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /routing/isochrone:
+    post:
+      summary: Build a travel-time reach polygon from one origin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutingIsochroneRequest"
+      responses:
+        "200":
+          description: Isochrone GeoJSON response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingIsochroneResponse"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
+  /routing/nearest-access:
+    post:
+      summary: Find nearest routable access point for a WGS84 point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutingNearestAccessRequest"
+      responses:
+        "200":
+          description: Nearest access point response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingNearestAccessResponse"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "502":
+          $ref: "#/components/responses/Problem"
   /weather-radar/frames:
     get:
       summary: Return CHMI weather radar frame catalog metadata
@@ -3734,6 +3825,328 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RadioFeature"
+        warnings:
+          type: array
+          items:
+            type: string
+    RoutingProfileId:
+      type: string
+      enum: [car, emergency_vehicle, large_emergency_vehicle, offroad_4x4, walking, evacuation_walking]
+    RoutingAvoid:
+      type: string
+      enum: [flood, fire, road_closure, unpaved, tunnel, bridge]
+    RoutingCoordinate:
+      type: object
+      required: [lon, lat]
+      properties:
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        label:
+          type: string
+    RoutingProfile:
+      type: object
+      required: [profileId, label, labelLocalized, transportMode, descriptionLocalized, defaultSpeedKph, maxSearchRadiusM, supportsAvoid, notes]
+      properties:
+        profileId:
+          $ref: "#/components/schemas/RoutingProfileId"
+        label:
+          type: string
+        labelLocalized:
+          type: object
+          additionalProperties:
+            type: string
+        transportMode:
+          type: string
+          enum: [road, walk, offroad]
+        descriptionLocalized:
+          type: object
+          additionalProperties:
+            type: string
+        defaultSpeedKph:
+          type: number
+        maxSearchRadiusM:
+          type: integer
+        supportsAvoid:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingAvoid"
+        notes:
+          type: array
+          items:
+            type: string
+    RoutingBackendStatus:
+      type: object
+      required: [enabled, backend, osmPostgisConfigured, graphTable, maxGraphEdges, cacheTtlSeconds, limitations]
+      properties:
+        enabled:
+          type: boolean
+        backend:
+          type: string
+          enum: [osm-postgis-graph, unconfigured]
+        osmPostgisConfigured:
+          type: boolean
+        graphTable:
+          type: string
+          example: public.osm_roads
+        maxGraphEdges:
+          type: integer
+        cacheTtlSeconds:
+          type: integer
+        limitations:
+          type: array
+          items:
+            type: string
+    RoutingProfileCatalog:
+      type: object
+      required: [contractVersion, generatedAt, profiles, backend, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-routing-profile-catalog-v1
+        generatedAt:
+          type: string
+          format: date-time
+        profiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingProfile"
+        backend:
+          $ref: "#/components/schemas/RoutingBackendStatus"
+        warnings:
+          type: array
+          items:
+            type: string
+    RoutingRouteRequest:
+      type: object
+      required: [from, to]
+      properties:
+        profileId:
+          $ref: "#/components/schemas/RoutingProfileId"
+        from:
+          $ref: "#/components/schemas/RoutingCoordinate"
+        to:
+          $ref: "#/components/schemas/RoutingCoordinate"
+        avoid:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingAvoid"
+        departureTime:
+          type: string
+          format: date-time
+        alternatives:
+          type: integer
+          minimum: 1
+          maximum: 3
+        includeSteps:
+          type: boolean
+        includeDebug:
+          type: boolean
+    RoutingIsochroneRequest:
+      type: object
+      required: [origin]
+      properties:
+        profileId:
+          $ref: "#/components/schemas/RoutingProfileId"
+        origin:
+          $ref: "#/components/schemas/RoutingCoordinate"
+        maxTravelTimeMinutes:
+          type: integer
+          minimum: 1
+          maximum: 180
+          default: 15
+        maxDistanceM:
+          type: number
+        avoid:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingAvoid"
+        includeDebug:
+          type: boolean
+    RoutingNearestAccessRequest:
+      type: object
+      required: [point]
+      properties:
+        profileId:
+          $ref: "#/components/schemas/RoutingProfileId"
+        point:
+          $ref: "#/components/schemas/RoutingCoordinate"
+        radiusM:
+          type: number
+          minimum: 1
+        includeDebug:
+          type: boolean
+    RoutingSource:
+      type: object
+      required: [sourceId, sourceType, generatedAt, backend]
+      properties:
+        sourceId:
+          type: string
+          const: routing_model
+        sourceType:
+          type: string
+          const: MODELLED_ROUTING
+        generatedAt:
+          type: string
+          format: date-time
+        backend:
+          type: string
+          const: osm-postgis-graph
+    RoutingFeature:
+      type: object
+      required: [type, id, geometry, properties]
+      properties:
+        type:
+          type: string
+          const: Feature
+        id:
+          type: string
+        geometry:
+          type: object
+          required: [type, coordinates]
+          properties:
+            type:
+              type: string
+              enum: [Point, LineString, Polygon]
+            coordinates: {}
+        properties:
+          type: object
+          additionalProperties: true
+    RoutingRoute:
+      type: object
+      required: [routeId, profileId, rank, status, geometry, distanceM, durationSeconds, snap, steps, warnings, quality]
+      properties:
+        routeId:
+          type: string
+        profileId:
+          $ref: "#/components/schemas/RoutingProfileId"
+        rank:
+          type: integer
+        status:
+          type: string
+          enum: [ok, partial, unavailable]
+        geometry:
+          type: object
+          additionalProperties: true
+        distanceM:
+          type: integer
+        durationSeconds:
+          type: integer
+        snap:
+          type: object
+          additionalProperties: true
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+        quality:
+          type: object
+          required: [mode, confidence, graphEdgesScanned, graphEdgesUsed, routingModelVersion]
+          properties:
+            mode:
+              type: string
+              enum: [osm_graph, direct_fallback]
+            confidence:
+              type: number
+            graphEdgesScanned:
+              type: integer
+            graphEdgesUsed:
+              type: integer
+            routingModelVersion:
+              type: string
+            fallbackReason:
+              type: string
+    RoutingRouteResponse:
+      type: object
+      required: [contractVersion, generatedAt, source, query, profile, routes, features, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-routing-route-v1
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          $ref: "#/components/schemas/RoutingSource"
+        query:
+          type: object
+          additionalProperties: true
+        profile:
+          $ref: "#/components/schemas/RoutingProfile"
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingRoute"
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingFeature"
+        warnings:
+          type: array
+          items:
+            type: string
+    RoutingIsochroneResponse:
+      type: object
+      required: [contractVersion, generatedAt, source, query, profile, summary, features, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-routing-isochrone-v1
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          $ref: "#/components/schemas/RoutingSource"
+        query:
+          type: object
+          additionalProperties: true
+        profile:
+          $ref: "#/components/schemas/RoutingProfile"
+        summary:
+          type: object
+          additionalProperties: true
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingFeature"
+        warnings:
+          type: array
+          items:
+            type: string
+    RoutingNearestAccessResponse:
+      type: object
+      required: [contractVersion, generatedAt, source, query, profile, features, warnings]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-routing-nearest-access-v1
+        generatedAt:
+          type: string
+          format: date-time
+        source:
+          $ref: "#/components/schemas/RoutingSource"
+        query:
+          type: object
+          additionalProperties: true
+        profile:
+          $ref: "#/components/schemas/RoutingProfile"
+        accessPoint:
+          type: object
+          additionalProperties: true
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingFeature"
         warnings:
           type: array
           items:

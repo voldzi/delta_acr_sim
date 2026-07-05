@@ -26,6 +26,7 @@ OSM_POSTGIS_TABLE=public.osm_poi
 OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
 OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
+ROUTING_OSM_ROADS_TABLE=public.osm_roads
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
@@ -93,6 +94,7 @@ OSM_POSTGIS_TABLE=public.osm_poi
 OSM_POSTGIS_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 OSM_POSTGIS_TRAIL_ROUTES_TABLE=public.osm_trail_routes
 OSM_POSTGIS_TRAIL_POI_TABLE=public.osm_trail_poi
+ROUTING_OSM_ROADS_TABLE=public.osm_roads
 ```
 
 Rebuild:

@@ -12,6 +12,7 @@ import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
+import { RoutingError, RoutingService } from "./routing-service.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import { TransitDetailService } from "./transit-detail.js";
@@ -47,6 +48,7 @@ export interface SituationDataAppContext {
   weatherForecast: WeatherForecastService;
   transitDetails: TransitDetailService;
   transitStatic: TransitStaticModelService;
+  routing: RoutingService;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -62,6 +64,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const weatherForecast = new WeatherForecastService(config);
   const transitDetails = new TransitDetailService(config);
   const transitStatic = new TransitStaticModelService(config);
+  const routing = new RoutingService(config);
   const context: SituationDataAppContext = {
     config,
     aggregation,
@@ -73,7 +76,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     weatherWebcams,
     weatherForecast,
     transitDetails,
-    transitStatic
+    transitStatic,
+    routing
   };
   const app = express();
 
@@ -85,6 +89,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerMetadataRoutes(app, context);
   registerRadioRoutes(app, context);
   registerTransitRoutes(app, context);
+  registerRoutingRoutes(app, context);
   registerFeatureRoutes(app, context);
 
   app.use((req, res) => {
@@ -185,6 +190,17 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       `situation_data_radio_planning_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
       `situation_data_radio_planning_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
     ]);
+    const routingCacheLines = context.routing.cacheStats().flatMap((cacheStats) => [
+      `situation_data_routing_cache_entries{operation="${cacheStats.operation}"} ${cacheStats.entries}`,
+      `situation_data_routing_cache_inflight{operation="${cacheStats.operation}"} ${cacheStats.inflight}`,
+      `situation_data_routing_cache_hits{operation="${cacheStats.operation}"} ${cacheStats.hits}`,
+      `situation_data_routing_cache_misses{operation="${cacheStats.operation}"} ${cacheStats.misses}`,
+      `situation_data_routing_cache_coalesced_hits{operation="${cacheStats.operation}"} ${cacheStats.coalescedHits}`,
+      `situation_data_routing_cache_stale_hits{operation="${cacheStats.operation}"} ${cacheStats.staleHits}`,
+      `situation_data_routing_cache_refreshes{operation="${cacheStats.operation}"} ${cacheStats.refreshes}`,
+      `situation_data_routing_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
+      `situation_data_routing_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
+    ]);
     const sourceHealthLines = sourceHealth.flatMap(sourceHealthMetricLines);
     res
       .type("text/plain")
@@ -209,6 +225,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           `situation_data_cache_shared_errors ${cache.sharedErrors}`,
           ...sourceCacheLines,
           ...radioPlanningCacheLines,
+          ...routingCacheLines,
           ...sourceHealthLines,
           ...demMetricLines(dem)
         ].join("\n") + "\n"
@@ -264,6 +281,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
       radioPlanningCaches: context.radioPlanning.cacheStats().map((cacheStats) => ({
         operation: cacheStats.operation,
         cache: cacheTelemetry(cacheStats, context.config.radioPlanningCacheMaxEntries)
+      })),
+      routingCaches: context.routing.cacheStats().map((cacheStats) => ({
+        operation: cacheStats.operation,
+        cache: cacheTelemetry(cacheStats, context.config.routingCacheMaxEntries)
       })),
       dataFreshness: sourceFreshness(sourceHealth),
       environmentGrid: environmentGridTelemetry(context.config, sourceHealth),
@@ -629,12 +650,57 @@ function registerTransitRoutes(app: Express, context: SituationDataAppContext): 
   });
 }
 
+function registerRoutingRoutes(app: Express, context: SituationDataAppContext): void {
+  app.get("/api/v1/routing/profiles", (_req, res) => {
+    res.json(context.routing.listProfiles());
+  });
+
+  app.post("/api/v1/routing/route", async (req, res) => {
+    try {
+      res.json(await context.routing.route(req.body));
+    } catch (error) {
+      return routingProblem(req, res, error, "Routing route failed.");
+    }
+  });
+
+  app.post("/api/v1/routing/alternatives", async (req, res) => {
+    try {
+      res.json(await context.routing.alternatives(req.body));
+    } catch (error) {
+      return routingProblem(req, res, error, "Routing alternatives failed.");
+    }
+  });
+
+  app.post("/api/v1/routing/isochrone", async (req, res) => {
+    try {
+      res.json(await context.routing.isochrone(req.body));
+    } catch (error) {
+      return routingProblem(req, res, error, "Routing isochrone failed.");
+    }
+  });
+
+  app.post("/api/v1/routing/nearest-access", async (req, res) => {
+    try {
+      res.json(await context.routing.nearestAccess(req.body));
+    } catch (error) {
+      return routingProblem(req, res, error, "Routing nearest access failed.");
+    }
+  });
+}
+
 function transitStaticProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {
   return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
 }
 
 function radioProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {
   if (error instanceof RadioPlanningError) {
+    return problem(req, res, error.status, error.code, error.message);
+  }
+  return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
+}
+
+function routingProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {
+  if (error instanceof RoutingError) {
     return problem(req, res, error.status, error.code, error.message);
   }
   return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
@@ -1067,7 +1133,16 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       chmiWeatherRadar: config.chmiWeatherRadarCacheTtlSeconds,
       chmiWeatherWebcams: config.chmiWeatherWebcamsCacheTtlSeconds,
       ardosPartner: config.ardosPartnerCacheTtlSeconds,
+      routing: config.routingCacheTtlSeconds,
       radioPlanning: config.radioPlanningCacheTtlSeconds
+    },
+    routing: {
+      enabled: Boolean(config.osmPostgisConnectionString),
+      backend: config.osmPostgisConnectionString ? "osm-postgis-graph" : "unconfigured",
+      graphTable: config.routingOsmRoadsTable,
+      maxGraphEdges: config.routingMaxGraphEdges,
+      maxSearchRadiusM: config.routingMaxSearchRadiusM,
+      maxSnapDistanceM: config.routingMaxSnapDistanceM
     },
     weatherRadarFrames: {
       historyHours: config.chmiWeatherRadarFrameHistoryHours,

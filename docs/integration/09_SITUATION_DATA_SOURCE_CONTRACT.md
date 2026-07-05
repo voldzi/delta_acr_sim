@@ -36,6 +36,11 @@ POST /radio/coverage
 POST /radio/site-search
 GET /weather-stations/{stationId}/detail
 GET /dem/metadata
+GET /routing/profiles
+POST /routing/route
+POST /routing/alternatives
+POST /routing/isochrone
+POST /routing/nearest-access
 ```
 
 ## Map Catalog v1 metadata
@@ -175,6 +180,72 @@ Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
 | `categoryLabelLocalized` | object | český a anglický název kategorie |
 | `openingHours`, `website`, `wheelchair`, `access` | string, optional | veřejné OSM atributy pro detail |
 | `mayDisplayContact` | boolean | vždy `false`; SIM nepublikuje přímé kontaktní údaje z OSM jako běžný mapový detail |
+
+## Emergency routing support
+
+SIM poskytuje pro COP server-side routovací výpočet nad lokálním OSM/PostGIS
+read-modelem. COP má ovládat zadání a vykreslit vrácené GeoJSON features;
+algoritmus routingu, snap na komunikace, cache, limity a kvalitu výpočtu řeší
+SIM.
+
+Endpointy:
+
+```http
+GET /situation-data/api/v1/routing/profiles
+POST /situation-data/api/v1/routing/route
+POST /situation-data/api/v1/routing/alternatives
+POST /situation-data/api/v1/routing/isochrone
+POST /situation-data/api/v1/routing/nearest-access
+```
+
+`GET /routing/profiles` vrací kontrakt `sim-routing-profile-catalog-v1` s
+profily:
+
+| `profileId` | Použití |
+| --- | --- |
+| `car` | běžné osobní vozidlo |
+| `emergency_vehicle` | zásahové vozidlo, výchozí pro COP emergency route |
+| `large_emergency_vehicle` | velké zásahové vozidlo s konzervativnější volbou cest |
+| `offroad_4x4` | terénní vozidlo, využívá i track/service cesty |
+| `walking` | běžná pěší trasa |
+| `evacuation_walking` | pomalejší pěší evakuační profil |
+
+Minimální požadavek na trasu:
+
+```json
+{
+  "profileId": "emergency_vehicle",
+  "from": { "lon": 14.42, "lat": 50.08, "label": "Start" },
+  "to": { "lon": 14.45, "lat": 50.1, "label": "Cíl" },
+  "avoid": ["flood", "road_closure"],
+  "alternatives": 2
+}
+```
+
+Odpověď `sim-routing-route-v1` obsahuje:
+
+| Pole | Popis |
+| --- | --- |
+| `routes[]` | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků a kvality |
+| `features[]` | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1` |
+| `routes[].quality.mode` | `osm_graph`, pokud SIM použil OSM graph; `direct_fallback`, pokud není routovací graf dostupný |
+| `routes[].quality.confidence` | modelová důvěra; COP ji má zobrazit v detailu |
+| `warnings[]` | důvody degradace nebo omezení výpočtu |
+
+`POST /routing/alternatives` má stejný vstup jako `/routing/route`, ale vrací
+1-3 varianty. `POST /routing/isochrone` přijímá `origin`,
+`maxTravelTimeMinutes` a profil, vrací polygon dosahu. `POST
+/routing/nearest-access` přijímá `point`, `profileId` a volitelný `radiusM`,
+vrací nejbližší routovatelný přístupový bod.
+
+První produkční model je `osm-postgis-graph-v1`: SIM skládá lokální graf z
+`public.osm_roads`, respektuje profil, základní access tagy, one-way směr a
+volitelné vyhýbání `unpaved`, `tunnel`, `bridge`. `flood`, `fire` a
+`road_closure` jsou zatím v kontraktu vedeny jako plánovací preference; jako
+tvrdé překážky se zapnou po normalizaci hazardních geometrií do routovacího
+grafu. Pokud `OSM_POSTGIS_DATABASE_URL` není dostupný, SIM vrátí přímou
+fallback geometrii s `quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
+že nejde o trasu po komunikacích.
 
 Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:
 

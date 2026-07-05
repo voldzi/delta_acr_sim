@@ -93,6 +93,12 @@ export interface SituationDataConfig {
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
+  routingCacheTtlSeconds: number;
+  routingCacheMaxEntries: number;
+  routingOsmRoadsTable: string;
+  routingMaxGraphEdges: number;
+  routingMaxSearchRadiusM: number;
+  routingMaxSnapDistanceM: number;
   radioPlanningCacheTtlSeconds: number;
   radioPlanningCacheMaxEntries: number;
   demEnabled: boolean;
@@ -222,6 +228,12 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
+    routingCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS, 300),
+    routingCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES, 512),
+    routingOsmRoadsTable: process.env.ROUTING_OSM_ROADS_TABLE ?? "public.osm_roads",
+    routingMaxGraphEdges: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_GRAPH_EDGES, 45000),
+    routingMaxSearchRadiusM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M, 160000),
+    routingMaxSnapDistanceM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SNAP_DISTANCE_M, 2500),
     radioPlanningCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS, 900),
     radioPlanningCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES, 512),
     demEnabled: parseBoolean(process.env.DEM_ENABLED, false),
