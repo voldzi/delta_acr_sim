@@ -3855,14 +3855,14 @@ describe("Situation Data API contract", () => {
         center: { lat: 50.1201, lon: 17.3832 },
         radiusM: 25000,
         includeStale: false,
-        limit: 20
+        limit: 10
       })
       .expect(200);
     expect(query.body).toEqual(
       expect.objectContaining({
         contractVersion: "sim-search-source-v1",
         providerId: "sim.search-data",
-        query: expect.objectContaining({ sourceSystems: ["osm_reference"] }),
+        query: expect.objectContaining({ limit: 10, sourceSystems: ["osm_reference"] }),
         summary: expect.objectContaining({ returnedCount: 0 }),
         entities: []
       })

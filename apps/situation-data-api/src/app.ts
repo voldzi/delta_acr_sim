@@ -1257,11 +1257,17 @@ function parseDensityOptions(raw: Record<string, unknown>):
 }
 
 function parseBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
   const raw = asString(value);
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
 function parseOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
   const raw = asString(value);
   if (!raw) {
     return undefined;
@@ -1271,6 +1277,9 @@ function parseOptionalNumber(value: unknown): number | undefined {
 }
 
 function parsePositiveOptionalNumber(value: unknown): { ok: true; value?: number } | { ok: false } {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? { ok: true, value } : { ok: false };
+  }
   const raw = asString(value);
   if (!raw) {
     return { ok: true };
