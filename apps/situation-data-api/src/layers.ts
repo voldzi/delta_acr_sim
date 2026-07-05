@@ -162,6 +162,22 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 21600
   },
   {
+    layerId: "community_places",
+    label: "Community places",
+    description: "Practical civil community points from SIM: toilets, water, charging, shelters, pharmacies and similar reference places prepared for future user verification.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 21600
+  },
+  {
+    layerId: "community_reports",
+    label: "Community reports",
+    description: "Future user-submitted field observations, photos and proposed edits after COP/community moderation.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 300
+  },
+  {
     layerId: "air_quality",
     label: "Air quality",
     description: "ČHMÚ measured air-quality station observations and normalized air-quality index context.",

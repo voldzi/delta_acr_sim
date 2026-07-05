@@ -8,6 +8,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SituationAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
+import { CommunityContextSource } from "../src/community-context-source.js";
 import type { SituationDataConfig } from "../src/config.js";
 import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
 import { OsmPostgisSource } from "../src/osm-postgis-source.js";
@@ -165,7 +166,9 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({ layerId: "weather_radar_reflectivity", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_thunderstorm_risk", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_webcams", defaultVisible: false }),
-        expect.objectContaining({ layerId: "air_quality_grid", defaultVisible: false })
+        expect.objectContaining({ layerId: "air_quality_grid", defaultVisible: false }),
+        expect.objectContaining({ layerId: "community_places", defaultVisible: false }),
+        expect.objectContaining({ layerId: "community_reports", defaultVisible: false })
       ])
     );
 
@@ -207,6 +210,11 @@ describe("Situation Data API contract", () => {
             "trail_poi"
           ]),
           license: expect.objectContaining({ name: "ODbL 1.0" })
+        }),
+        expect.objectContaining({
+          sourceId: "community_context",
+          layers: expect.arrayContaining(["community_places"]),
+          mode: "reference"
         }),
         expect.objectContaining({
           sourceId: "osm_overpass",
@@ -509,6 +517,28 @@ describe("Situation Data API contract", () => {
           styleProfile: "trail-poi-osm-v1",
           sourceIds: ["osm_postgis"],
           readModel: expect.objectContaining({ table: "public.osm_trail_poi" })
+        }),
+        expect.objectContaining({
+          providerLayerId: "outdoor.community.places",
+          recommendedCatalogLayerId: "public.outdoor.community_places",
+          role: "reference",
+          audience: "public",
+          kind: "vector_features",
+          selectable: true,
+          geometryTypes: ["Point"],
+          styleProfile: "community-place-osm-v1",
+          sourceIds: ["community_context"],
+          technicalInputs: ["osm_postgis"],
+          readModel: expect.objectContaining({ table: "public.osm_poi" })
+        }),
+        expect.objectContaining({
+          providerLayerId: "outdoor.community.reports",
+          recommendedCatalogLayerId: "public.outdoor.community_reports",
+          role: "user",
+          audience: "authenticated",
+          kind: "user_objects",
+          selectable: false,
+          sourceIds: ["community_context"]
         }),
         expect.objectContaining({
           providerLayerId: "traffic.idsjmk_vehicle_positions",
@@ -840,6 +870,16 @@ describe("Situation Data API contract", () => {
             "public.trails.routes",
             "public.trails.poi"
           ])
+        }),
+        expect.objectContaining({
+          sourceId: "community_context",
+          sourceRole: "reference",
+          audience: "public",
+          selectableInMap: true,
+          visibleInDiagnostics: true,
+          feedsLayerIds: ["outdoor.community.places"],
+          feedsCatalogLayerIds: ["public.outdoor.community_places"],
+          technicalInputs: ["osm_postgis"]
         })
       ])
     );
@@ -1020,6 +1060,7 @@ describe("Situation Data API contract", () => {
           mobileNetwork: 3600,
           mobileCoverage: 21600,
           osmPostgis: 21600,
+          communityContext: 21600,
           osmOverpass: 21600,
           ctuStationaryMobile: 86400,
           pidGtfsRt: 20,
@@ -1061,6 +1102,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "mobile_coverage_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "mobile_network_model", authConfigured: false, backend: "unconfigured" }),
           expect.objectContaining({ sourceId: "osm_postgis", authConfigured: false, backend: "unconfigured" }),
+          expect.objectContaining({ sourceId: "community_context", authConfigured: false, backend: "unconfigured:community-reference" }),
           expect.objectContaining({ sourceId: "ctu_nettest", authConfigured: true }),
           expect.objectContaining({ sourceId: "ctu_stationary_mobile", authConfigured: true }),
           expect.objectContaining({ sourceId: "pid_gtfs_rt", authConfigured: true }),
@@ -3505,6 +3547,80 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(JSON.stringify(result.features[1].properties.raw)).not.toContain("+420123456789");
+  });
+
+  it("projects OSM community context as a dedicated outdoor layer", async () => {
+    const source = new CommunityContextSource({
+      ...config,
+      enabledSources: ["community_context"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis"
+    });
+    (source as unknown as { fetchRows: () => Promise<unknown[]> }).fetchRows = async () => [
+      {
+        osm_id: "123",
+        osm_type: "node",
+        category: "toilets",
+        name: "Veřejné WC",
+        lon: 14.1,
+        lat: 50.05,
+        tags: { amenity: "toilets", wheelchair: "yes", fee: "no", opening_hours: "24/7", phone: "+420123456789" },
+        imported_at: "2026-07-05T08:00:00.000Z"
+      }
+    ];
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.0, south: 50.0, east: 14.2, north: 50.1 },
+      layers: ["community_places"],
+      sourceIds: ["community_context"],
+      limit: 20,
+      includeRaw: true
+    });
+
+    expect(result.features).toHaveLength(1);
+    expect(result.features[0]).toEqual(
+      expect.objectContaining({
+        id: "community_places:osm_postgis:node:123:toilet",
+        geometry: expect.objectContaining({ type: "Point", coordinates: [14.1, 50.05] }),
+        properties: expect.objectContaining({
+          layer: "community_places",
+          sourceId: "community_context",
+          category: "toilet",
+          label: "Veřejné WC",
+          labelLocalized: expect.objectContaining({ cs: "Veřejné WC", en: "Veřejné WC" }),
+          styleHint: "community-place-osm-v1",
+          iconHint: "community-toilet",
+          dataQuality: "observed",
+          tags: expect.objectContaining({
+            communityStatus: "reference_only",
+            sourceAuthority: "reference",
+            rawCategory: "toilets"
+          }),
+          providerProperties: expect.objectContaining({
+            community: expect.objectContaining({
+              contractVersion: "sim-community-context-v1",
+              sourceAuthority: "reference",
+              communityStatus: "reference_only",
+              category: "toilet",
+              categoryGroup: "sanitation",
+              openingHours: "24/7",
+              wheelchair: "yes",
+              fee: "no",
+              canAcceptContributions: true,
+              acceptedContributionTypes: ["photo", "review", "status_report", "proposed_edit"],
+              moderationRequired: true,
+              mayDisplayContact: false
+            }),
+            display: expect.objectContaining({
+              styleProfile: "community-place-osm-v1",
+              icon: "community-toilet",
+              minZoomHint: 13
+            })
+          })
+        })
+      })
+    );
+    expect(JSON.stringify(result.features[0].properties.raw)).not.toContain("+420123456789");
   });
 
   it("keeps police and fire stations out of the OSM trail POI read model", () => {

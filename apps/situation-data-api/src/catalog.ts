@@ -508,6 +508,7 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       }
     },
     ...buildTrailProviderLayers(config),
+    ...buildCommunityProviderLayers(config),
     ...buildBoundaryProviderLayers(config),
     {
       providerLayerId: "traffic.pid_gtfs_rt",
@@ -1307,6 +1308,141 @@ function buildTrailProviderLayers(config: SituationDataConfig): ProviderCatalogL
   ];
 }
 
+function buildCommunityProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
+  const commonLegal = {
+    attribution: "OpenStreetMap contributors; normalized by CSM SIM",
+    notes: [
+      "Vrstva je praktický komunitní/outdoor kontext, ne autoritativní krizové varování.",
+      "Aktuální implementace čte referenční OSM/PostGIS read-model; uživatelské fotky a hlášení musí vznikat přes COP/community moderaci.",
+      "COP má zobrazit sourceAuthority/communityStatus a nemá vydávat OSM referenci za ověřený aktuální provozní stav."
+    ]
+  };
+
+  return [
+    {
+      providerLayerId: "outdoor.community.places",
+      recommendedCatalogLayerId: "public.outdoor.community_places",
+      label: "Komunitní kontext",
+      labelLocalized: { cs: "Komunitní kontext", en: "Community context" },
+      description: "Praktické civilní body pro běžné použití i krizový kontext: WC, voda, nabíjení, lékárny, AED, přístřeší a další referenční místa.",
+      descriptionLocalized: {
+        cs: "Praktické civilní body pro běžné použití i krizový kontext: WC, voda, nabíjení, lékárny, AED, přístřeší a další referenční místa.",
+        en: "Practical civil points for daily use and crisis context: toilets, water, charging, pharmacies, AED, shelters and similar reference places."
+      },
+      categoryPath: ["outdoor", "community", "places"],
+      categories: [
+        "community",
+        "toilet",
+        "drinking_water",
+        "water_point",
+        "shower",
+        "charging",
+        "fuel",
+        "bicycle_repair",
+        "internet_access",
+        "public_library",
+        "community_centre",
+        "municipal_office",
+        "pharmacy",
+        "defibrillator",
+        "shelter",
+        "assembly_point",
+        "osm"
+      ],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 10,
+      maxZoom: 18,
+      refreshSeconds: 21600,
+      cacheTtlSeconds: config.osmPostgisCacheTtlSeconds,
+      styleProfile: "community-place-osm-v1",
+      sourceIds: ["community_context"],
+      technicalInputs: ["osm_postgis"],
+      query: query(["community_places"], ["community_context"], [
+        "toilet",
+        "drinking_water",
+        "water_point",
+        "shower",
+        "charging",
+        "fuel",
+        "bicycle_repair",
+        "internet_access",
+        "public_library",
+        "community_centre",
+        "municipal_office",
+        "pharmacy",
+        "defibrillator",
+        "shelter",
+        "assembly_point"
+      ]),
+      legend: { profile: "community-place-osm-v1" },
+      delivery: {
+        mode: "features",
+        geometryRole: "feature_geometry"
+      },
+      filters: [
+        {
+          filterId: "category_group",
+          label: "Skupina",
+          type: "multi_select",
+          values: ["sanitation", "water", "connectivity", "health", "civic_support", "mobility"],
+          defaultValue: ["sanitation", "water", "connectivity", "health", "civic_support", "mobility"]
+        }
+      ],
+      readModel: {
+        table: config.osmPostgisTable,
+        refreshedBy: "scripts/import-osm-cz-postgis.sh",
+        cacheTtlSeconds: config.osmPostgisCacheTtlSeconds
+      },
+      legal: commonLegal
+    },
+    {
+      providerLayerId: "outdoor.community.reports",
+      recommendedCatalogLayerId: "public.outdoor.community_reports",
+      label: "Komunitní hlášení",
+      labelLocalized: { cs: "Komunitní hlášení", en: "Community reports" },
+      description: "Budoucí vrstva uživatelských poznatků, fotek a návrhů změn po ověření a moderaci.",
+      descriptionLocalized: {
+        cs: "Budoucí vrstva uživatelských poznatků, fotek a návrhů změn po ověření a moderaci.",
+        en: "Future layer of user-submitted observations, photos and proposed edits after verification and moderation."
+      },
+      categoryPath: ["outdoor", "community", "reports"],
+      categories: ["community", "report", "photo", "proposed_edit", "proof_of_visit"],
+      role: "user",
+      audience: "authenticated",
+      kind: "user_objects",
+      defaultVisible: false,
+      selectable: false,
+      geometryTypes: ["Point"],
+      minZoom: 10,
+      maxZoom: 18,
+      refreshSeconds: 300,
+      cacheTtlSeconds: 300,
+      styleProfile: "community-report-v1",
+      sourceIds: ["community_context"],
+      query: query(["community_reports"], ["community_context"], ["status_report", "photo", "proposed_edit"]),
+      legend: { profile: "community-report-v1" },
+      delivery: {
+        mode: "features",
+        geometryRole: "feature_geometry",
+        fallbackPolicy: "hide_if_unsupported"
+      },
+      legal: {
+        attribution: "CSM SIM / COP community moderation",
+        notes: [
+          "This is a roadmap catalog entry. The current community_context source publishes reference community places only.",
+          "COP must not enable user-submitted reports until identity, moderation, retention and abuse controls are implemented.",
+          "Use this entry to reserve the Turistika / Outdoor submenu slot; do not request the layer from SIM until the community ingest endpoint exists."
+        ]
+      }
+    }
+  ];
+}
+
 function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   const common = {
     categoryPath: ["boundary", "admin"],
@@ -1712,6 +1848,20 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsCatalogLayerIds: [],
         notes: ["Development fallback only; public Overpass is not a production runtime backend."]
       };
+    case "community_context":
+      return {
+        sourceRole: "reference",
+        audience: "public",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["outdoor.community.places"],
+        feedsCatalogLayerIds: ["public.outdoor.community_places"],
+        technicalInputs: ["osm_postgis"],
+        notes: [
+          "Practical community/outdoor context for COP. Current implementation is OSM/PostGIS reference only.",
+          "User-submitted observations and photos must be collected and moderated by COP or a future community ingest service before SIM publishes them as verified."
+        ]
+      };
     case "pid_gtfs_rt":
       return {
         sourceRole: "final",
@@ -1830,6 +1980,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.roadSrtiLodCacheTtlSeconds;
     case "safety_data":
       return config.safetyDataCacheTtlSeconds;
+    case "community_context":
+      return config.osmPostgisCacheTtlSeconds;
     case "ardos_partner":
       return config.ardosPartnerCacheTtlSeconds;
     case "mock":
@@ -1838,7 +1990,7 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
 }
 
 function backendForSource(sourceId: SituationDataSourceId, config: SituationDataConfig): string | undefined {
-  if (sourceId === "mobile_network_model" || sourceId === "mobile_coverage_model" || sourceId === "osm_postgis") {
+  if (sourceId === "mobile_network_model" || sourceId === "mobile_coverage_model" || sourceId === "osm_postgis" || sourceId === "community_context") {
     return config.osmPostgisBackend;
   }
   if (sourceId === "ctu_nettest") {

@@ -386,7 +386,7 @@ SITUATION_DATA_ENABLED_SOURCES=mock
 Pilot s reálnými open-data zdroji:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -520,7 +520,7 @@ OVERPASS_MAX_BBOX_DEGREES=1.6
 Preferovaná produkční varianta pro OSM používá samostatnou databázi `sim_osm` v HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
 OSM_POSTGIS_BACKEND=patroni-postgis
 OSM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
 OSM_POSTGIS_TABLE=public.osm_poi
@@ -547,7 +547,7 @@ scripts/import-osm-cz-postgis.sh
 Lokální Docker PostGIS může zůstat jen jako rebuildovatelný read-model/cache s explicitním silným heslem a URL:
 
 ```bash
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_webcams,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
 OSM_POSTGIS_BACKEND=local-postgis
 OSM_POSTGIS_DB=sim_osm
 OSM_POSTGIS_USER=sim_osm
@@ -562,7 +562,7 @@ SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
 ```
 
-Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializované pohledy `public.osm_poi`, `public.osm_admin_boundary`, `public.osm_trail_routes` a `public.osm_trail_poi` pro COM provider features. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
+Importní skript stahuje `https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf`, naplní PostGIS přes `osm2pgsql` a vytvoří materializované pohledy `public.osm_poi`, `public.osm_admin_boundary`, `public.osm_trail_routes` a `public.osm_trail_poi` pro COM provider features. `public.osm_poi` zároveň živí `community_context` pro outdoor/komunitní body typu WC, voda, AED, přístřeší, nabíjení, knihovny, úřady a lékárny. Podrobný postup je v `docs/runbooks/08_OSM_POSTGIS_PRODUCTION.md`.
 
 Produkční deploy skript pro `docker.home.cz` zachovává existující hodnoty
 `OSM_POSTGIS_*` a `SAFETY_DATA_ADMIN_BOUNDARY_*` z `/srv/sim/.env`, pokud nejsou

@@ -390,6 +390,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `ctu_stationary_mobile` | `mobile` | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav. |
 | `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
 | `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření, stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
+| `community_context` | `community_places` | Praktický komunitní/outdoor kontext z lokálního OSM/PostGIS read-modelu: WC, voda, sprchy, nabíjení, AED, lékárny, přístřeší, knihovny, úřady a podobné civilní body. |
 | `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
 | `idsjmk_vehicle_positions` | `traffic` | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features. |
 | `spravazeleznic_trains` | `traffic` | Volitelný zdroj aktuálních poloh vlaků z veřejné mapy Správy železnic. SIM drží jednu server-side cache položku s minimálním TTL 900 s a do COP posílá normalizovaný GeoJSON ve WGS84. |
@@ -441,6 +442,47 @@ SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 COM má tento zdroj používat stejně jako ostatní situační features. Nejde o autoritativní registr IZS; je to referenční kontext pro mapu. Veřejný Overpass endpoint zůstává pouze vývojová záloha.
 
 Health `/situation-data/health/ready` u `osm_postgis` vrací `sourceHealth` s `backend`, `objectCount`, `lastImportAt`, `lastImportAgeSeconds`, `boundaryFeatureCount`, `boundaryLevels`, `boundaryLastImportAt`, `boundaryLastImportAgeSeconds`, `trailRouteFeatureCount`, `trailPoiFeatureCount`, `trailLastImportAt` a `trailLastImportAgeSeconds`. Metrics obsahují `situation_data_osm_postgis_objects`, `situation_data_boundary_read_model_features`, `situation_data_osm_trail_route_features`, `situation_data_osm_trail_poi_features`, import-age metriky a cache metriky `situation_data_source_cache_hits/misses{source="osm_postgis"}`.
+
+## Community Context
+
+`community_context` je samostatný SIM zdroj nad stejným lokálním OSM/PostGIS read-modelem jako `osm_postgis`. Je určený pro COP submenu `Turistika / Outdoor`, nikoli pro krizový prioritní pruh. Aktivní produkční vrstva je:
+
+- provider layer `outdoor.community.places`,
+- doporučené COP layer ID `public.outdoor.community_places`,
+- SIM query `layers=community_places&source=community_context`,
+- geometrie `Point`,
+- `styleHint=community-place-osm-v1`,
+- `sourceAuthority=reference`,
+- `communityStatus=reference_only`.
+
+Kategorie:
+
+```text
+toilet, drinking_water, water_point, shower, charging, fuel,
+bicycle_repair, internet_access, public_library, community_centre,
+municipal_office, pharmacy, defibrillator, shelter, assembly_point
+```
+
+Každá feature nese `providerProperties.community`:
+
+| Pole | Význam |
+| --- | --- |
+| `contractVersion` | `sim-community-context-v1` |
+| `placeId` | stabilní SIM identifikátor bodu |
+| `sourceAuthority` | nyní `reference`; nejde o potvrzený aktuální stav |
+| `communityStatus` | nyní `reference_only` |
+| `category`, `rawCategory`, `categoryGroup` | normalizace pro ikony, filtry a detail |
+| `categoryLabelLocalized.cs/en` | hotové texty pro COP UI |
+| `openingHours`, `access`, `wheelchair`, `fee`, `payment`, `website` | veřejně zobrazitelné hodnoty z OSM, pokud existují |
+| `canAcceptContributions` | `true`; COP může nabídnout nahlášení stavu, fotku nebo návrh změny |
+| `acceptedContributionTypes` | `photo`, `review`, `status_report`, `proposed_edit` |
+| `proofOfVisitRecommended` | doporučení pro budoucí ověření návštěvy |
+| `moderationRequired` | uživatelský obsah musí projít moderací před publikací jako ověřený |
+| `mayDisplayContact` | `false`; SIM nepředává osobní kontakty z OSM do veřejného detailu |
+
+COP má pro první fázi zobrazit tyto body jako referenční civilní kontext a v detailu jasně uvést, že dostupnost není ověřený aktuální stav. Uživatelské fotky, recenze, hlášení a návrhy změn jsou budoucí navazující workflow: COP řeší formuláře, Keycloak identitu, fotky, Proof-of-Visit, anti-abuse a moderaci; SIM bude po schválení publikovat normalizovaný výstup jako `community_reports` nebo aktualizovaný komunitní stav.
+
+Rezervovaná katalogová vrstva `outdoor.community.reports` / `public.outdoor.community_reports` je zatím `selectable=false`. COP ji nemá běžnému uživateli zapínat, dokud nebude hotový ingest a retenční/moderační pravidla.
 
 ## Weather a ČHMÚ Open Data
 

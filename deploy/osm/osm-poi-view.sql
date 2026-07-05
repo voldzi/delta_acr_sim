@@ -17,6 +17,7 @@ with raw as (
     or tags ? 'man_made'
     or tags ? 'tower:type'
     or tags ? 'communication:mobile_phone'
+    or tags ? 'internet_access'
 
   union all
 
@@ -32,6 +33,7 @@ with raw as (
     or tags ? 'man_made'
     or tags ? 'tower:type'
     or tags ? 'communication:mobile_phone'
+    or tags ? 'internet_access'
 ),
 classified as (
   select
@@ -41,6 +43,7 @@ classified as (
     geom,
     case
       when tags->'amenity' in ('hospital', 'clinic', 'doctors', 'pharmacy', 'police', 'fire_station', 'shelter', 'community_centre', 'townhall') then tags->'amenity'
+      when tags->'amenity' in ('toilets', 'drinking_water', 'water_point', 'shower', 'charging_station', 'fuel', 'bicycle_repair_station', 'internet_cafe', 'library') then tags->'amenity'
       when tags->'healthcare' in ('hospital', 'clinic', 'doctor', 'pharmacy') then concat('healthcare_', tags->'healthcare')
       when tags->'emergency' in ('ambulance_station', 'fire_hydrant', 'defibrillator', 'siren', 'assembly_point') then tags->'emergency'
       when tags->'man_made' = 'communications_tower'
@@ -54,7 +57,22 @@ select
   osm_id,
   osm_type,
   category,
-  case when category = 'communications_tower' then 'mobile' else 'ground' end as layer,
+  case
+    when category = 'communications_tower' then 'mobile'
+    when category in (
+      'toilets',
+      'drinking_water',
+      'water_point',
+      'shower',
+      'charging_station',
+      'fuel',
+      'bicycle_repair_station',
+      'internet_cafe',
+      'library',
+      'community_centre'
+    ) then 'community'
+    else 'ground'
+  end as layer,
   coalesce(nullif(tags->'name', ''), nullif(tags->'operator', ''), nullif(tags->'brand', '')) as name,
   geom,
   st_x(geom)::double precision as lon,

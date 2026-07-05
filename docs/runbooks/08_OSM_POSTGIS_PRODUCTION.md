@@ -1,13 +1,13 @@
 # OSM/PostGIS Production Runbook
 
-SIM source `osm_postgis` publishes OpenStreetMap reference features for COM through `situation-data`: civic/health/emergency points, communication towers, administrative boundaries, settlement boundaries, trail routes and trail POIs. The `mobile_coverage_model` source uses the same imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest, ČTÚ stationary mobile measurements and infrastructure hints into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
+SIM source `osm_postgis` publishes OpenStreetMap reference features for COM through `situation-data`: civic/health/emergency points, communication towers, administrative boundaries, settlement boundaries, trail routes and trail POIs. The `community_context` source reads the same local PostGIS read-model and exposes practical outdoor/community points such as toilets, drinking water, charging, AED, shelters, pharmacies, libraries and municipal offices. The `mobile_coverage_model` source uses the imported `communications_tower` references to publish estimated `mobile_coverage` polygons, and `mobile_network_model` combines that lower-level model with ČTÚ NetTest, ČTÚ stationary mobile measurements and infrastructure hints into the preferred citizen-facing `mobile_network` layer. Public Overpass must not be used as a production runtime backend.
 
 ## Preferred Backend: Patroni/PostGIS
 
 Use the HA PostgreSQL/Patroni endpoint behind HAProxy:
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -60,7 +60,7 @@ docker compose up -d --build situation-data-api sim-web
 
 The import script detects `haproxy.home.cz` as `patroni-postgis`, does not start the local `osm-postgis` container, runs `osm2pgsql` against the supplied URL, and builds these materialized read-model views in the same database:
 
-- `public.osm_poi` for civic/health/emergency/mobile reference points,
+- `public.osm_poi` for civic/health/emergency/mobile/community reference points,
 - `public.osm_admin_boundary` for administrative and settlement boundaries,
 - `public.osm_trail_routes` for hiking/walking/cycling/MTB route lines,
 - `public.osm_trail_poi` for normalized outdoor/trail POIs.
@@ -81,7 +81,7 @@ Required conditions:
 Example:
 
 ```env
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600

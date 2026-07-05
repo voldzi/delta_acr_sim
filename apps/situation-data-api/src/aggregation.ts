@@ -214,6 +214,12 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
   if (sourceId === "safety_data" && layer === "boundary_admin") {
     return "boundary_admin.safety_data_projection";
   }
+  if (sourceId === "community_context" && layer === "community_places") {
+    return "outdoor.community.places";
+  }
+  if (sourceId === "community_context" && layer === "community_reports") {
+    return "outdoor.community.reports";
+  }
   if (sourceId === "osm_postgis") {
     if (layer === "boundary_country") {
       return "boundary.country";
@@ -327,6 +333,10 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.boundary.orp";
     case "place.settlements":
       return "public.place.settlements";
+    case "outdoor.community.places":
+      return "public.outdoor.community_places";
+    case "outdoor.community.reports":
+      return "public.outdoor.community_reports";
     default:
       return sourceId === "mock" ? `diagnostic.mock.${layer}` : `provider.${sourceId}.${layer}`;
   }

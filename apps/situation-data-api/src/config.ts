@@ -270,6 +270,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "spravazeleznic_trains",
     "road_srti_lod",
     "safety_data",
+    "community_context",
     "aviation_weather",
     "chmi_air_quality",
     "chmi_weather_stations",

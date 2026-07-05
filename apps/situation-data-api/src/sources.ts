@@ -16,6 +16,7 @@ import {
   type ChmiRadarProductDefinition
 } from "./chmi-radar.js";
 import type { SituationDataConfig } from "./config.js";
+import { CommunityContextSource } from "./community-context-source.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { OsmPostgisSource } from "./osm-postgis-source.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
@@ -301,6 +302,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     spravazeleznic_trains: new SpravaZeleznicTrainsSource(config),
     road_srti_lod: new RoadSrtiLodSource(config),
     safety_data: new SafetyDataProjectionSource(config),
+    community_context: new CommunityContextSource(config),
     aviation_weather: new AviationWeatherSource(config),
     chmi_air_quality: new ChmiAirQualitySource(config),
     chmi_weather_stations: new ChmiWeatherStationsSource(config),
@@ -330,6 +332,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new SpravaZeleznicTrainsSource(config).descriptor,
     new RoadSrtiLodSource(config).descriptor,
     new SafetyDataProjectionSource(config).descriptor,
+    new CommunityContextSource(config).descriptor,
     new AviationWeatherSource(config).descriptor,
     new ChmiAirQualitySource(config).descriptor,
     new ChmiWeatherStationsSource(config).descriptor,

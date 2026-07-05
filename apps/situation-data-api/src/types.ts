@@ -17,6 +17,8 @@ export type SituationLayerId =
   | "place_settlements"
   | "trail_routes"
   | "trail_poi"
+  | "community_places"
+  | "community_reports"
   | "air_quality"
   | "weather_temperature_grid"
   | "weather_wind_field"
@@ -46,6 +48,7 @@ export type SituationDataSourceId =
   | "spravazeleznic_trains"
   | "road_srti_lod"
   | "safety_data"
+  | "community_context"
   | "aviation_weather"
   | "chmi_air_quality"
   | "chmi_weather_stations"
@@ -286,6 +289,7 @@ export interface SituationDataPublicConfig {
     chmiWeatherRadar: number;
     chmiWeatherWebcams: number;
     ardosPartner: number;
+    communityContext: number;
     routing: number;
     radioPlanning: number;
   };

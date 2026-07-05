@@ -166,6 +166,21 @@ V `source` metadatech je `mobile_network_model` označen jako `sourceRole=final`
 
 `mobile_network_model` smí vracet pouze geometrii připraveného coverage read-modelu (`readModel=true`). Pokud jsou dostupná jen ČTÚ měření bez coverage buňky, SIM vrací `0` features a warning; nesmí publikovat syntetický polygon z dotazovaného bboxu ani `mobile_network:aggregate:mixed:*` fallback.
 
+## Outdoor a komunitní kontext
+
+Praktické civilní body z OSM, které se dají použít v běžném provozu i při krizi, patří v COP do větve `Turistika / Outdoor`, ne do krizových výstrah:
+
+- COM layer: `public.outdoor.community_places`
+- provider layer: `outdoor.community.places`
+- source: `community_context`
+- role: `reference`
+- audience: `public`
+- style: `community-place-osm-v1`
+
+Typické kategorie jsou WC, pitná voda, sprchy, nabíjení, AED, lékárny, přístřeší, knihovny, úřady a komunitní centra. Provider musí u těchto bodů rozlišit `sourceAuthority=reference` a `communityStatus=reference_only`, aby COP neprezentoval OSM referenci jako ověřený aktuální stav.
+
+Uživatelská komunitní hlášení, fotky a návrhy změn jsou samostatný navazující produkt. Katalog může rezervovat `public.outdoor.community_reports`, ale dokud není zajištěna identita, moderace, retence a anti-abuse, má být `selectable=false` a běžným uživatelům nezapnutelné.
+
 ## Doporučená katalogová ID
 
 SIM používá nebo doporučuje tato stabilní COM layer ID:
@@ -181,6 +196,8 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.place.settlements`
 - `public.trails.routes`
 - `public.trails.poi`
+- `public.outdoor.community_places`
+- `public.outdoor.community_reports`
 - `public.weather.current`
 - `public.weather.aviation`
 - `public.weather.observations`

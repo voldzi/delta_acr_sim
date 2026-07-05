@@ -1116,6 +1116,7 @@ components:
           mobile_network,
           traffic,
           warnings,
+          weather_alerts,
           fire,
           flood,
           boundary_admin,
@@ -1124,12 +1125,17 @@ components:
           boundary_district,
           boundary_orp,
           place_settlements,
+          trail_routes,
+          trail_poi,
+          community_places,
+          community_reports,
           air_quality,
           weather_temperature_grid,
           weather_wind_field,
           weather_precipitation_grid,
           weather_humidity_grid,
           weather_pressure_grid,
+          weather_forecast_area,
           weather_radar_reflectivity,
           weather_radar_precipitation,
           weather_radar_nowcast,
@@ -1139,7 +1145,7 @@ components:
         ]
     SourceId:
       type: string
-      enum: [mock, open_meteo, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, public_transit_static, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
+      enum: [mock, open_meteo, weather_forecast, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, public_transit_static, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, community_context, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
