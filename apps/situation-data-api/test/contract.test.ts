@@ -1282,8 +1282,13 @@ describe("Situation Data API contract", () => {
           iconHint: expect.any(String),
           metrics: expect.objectContaining({
             temperatureC: 18.7,
+            precipitationNext10MinMm: 0.13,
+            precipitationNext1hMm: 0.8,
             precipitationNext3hMm: 5.4,
+            precipitationProbabilityNext1hPercent: 70,
             precipitationProbabilityNext3hPercent: 88,
+            thunderstormProbabilityPercent: expect.any(Number),
+            lightningStrikeFeedAvailable: false,
             riskScore: expect.any(Number)
           }),
           providerProperties: expect.objectContaining({
@@ -1300,6 +1305,10 @@ describe("Situation Data API contract", () => {
               detailAvailable: true,
               detailUrl: expect.stringContaining("/situation-data/api/v1/weather-forecast/areas/"),
               serviceDetailUrl: expect.stringContaining("/api/v1/weather-forecast/areas/")
+            }),
+            aiContext: expect.objectContaining({
+              dynamicDataRequiresTimestamp: true,
+              lightningNearbyAvailable: false
             })
           })
         })
@@ -3932,6 +3941,10 @@ describe("Situation Data API contract", () => {
         entityTypes: expect.arrayContaining([
           expect.objectContaining({ entityType: "police_station", layerIds: ["public.security.police"] }),
           expect.objectContaining({ entityType: "fire_station", layerIds: ["public.security.fire_station"] }),
+          expect.objectContaining({ entityType: "weather_forecast", layerIds: ["public.weather.forecast_area"], sourceSystems: ["weather_forecast"] }),
+          expect.objectContaining({ entityType: "weather_nowcast", layerIds: ["public.weather.radar_nowcast"], sourceSystems: ["chmi_weather_radar"] }),
+          expect.objectContaining({ entityType: "weather_radar", layerIds: ["public.weather.radar_reflectivity", "public.weather.radar_precipitation"] }),
+          expect.objectContaining({ entityType: "thunderstorm_risk", layerIds: ["public.safety.thunderstorm_risk"] }),
           expect.objectContaining({ entityType: "weather_warning", layerIds: ["public.safety.weather_alerts"] })
         ]),
         sourceAuthorities: expect.arrayContaining(["official", "reference", "modelled"]),
@@ -3990,10 +4003,14 @@ describe("Situation Data API contract", () => {
         serviceId: "search-data-api",
         contractVersion: "sim-search-source-v1",
         providerId: "sim.search-data",
-        status: "degraded",
+        status: "ok",
+        dataQualityStatus: "degraded",
+        degradedSourceCount: expect.any(Number),
         sources: expect.arrayContaining([
           expect.objectContaining({ sourceSystem: "osm_reference", status: "degraded" }),
-          expect.objectContaining({ sourceSystem: "safety_data", status: "degraded" })
+          expect.objectContaining({ sourceSystem: "safety_data", status: "degraded" }),
+          expect.objectContaining({ sourceSystem: "weather_forecast", status: "degraded" }),
+          expect.objectContaining({ sourceSystem: "chmi_weather_radar", status: "degraded" })
         ]),
         capabilities: expect.objectContaining({
           incrementalSync: true,
@@ -4010,6 +4027,99 @@ describe("Situation Data API contract", () => {
     const metrics = await request(app).get("/metrics").expect(200);
     expect(metrics.text).toContain("search_data_cache_hits 1");
     expect(metrics.text).toContain("search_data_cache_misses 1");
+  });
+
+  it("adds forecast weather context to search-data for deterministic COP AI answers", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://api.open-meteo-search.test/v1/forecast")) {
+        return jsonResponse({
+          current: {
+            time: "2099-07-05T20:00",
+            temperature_2m: 19.4,
+            relative_humidity_2m: 84,
+            precipitation: 0.2,
+            weather_code: 95,
+            cloud_cover: 91,
+            wind_speed_10m: 4.8,
+            wind_direction_10m: 238,
+            wind_gusts_10m: 13.1
+          },
+          hourly: {
+            time: ["2099-07-05T20:00", "2099-07-05T21:00", "2099-07-05T22:00"],
+            temperature_2m: [19.4, 18.9, 18.1],
+            relative_humidity_2m: [84, 86, 89],
+            precipitation: [1.8, 3.2, 0.7],
+            precipitation_probability: [76, 82, 54],
+            weather_code: [95, 96, 61],
+            cloud_cover: [91, 94, 87],
+            wind_speed_10m: [4.8, 5.6, 4.1],
+            wind_direction_10m: [238, 241, 248],
+            wind_gusts_10m: [13.1, 17.4, 10.2]
+          },
+          daily: {
+            time: ["2099-07-05"],
+            weather_code: [95],
+            temperature_2m_max: [24.1],
+            temperature_2m_min: [15.2],
+            precipitation_sum: [7.2],
+            precipitation_probability_max: [82],
+            wind_gusts_10m_max: [17.4]
+          }
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const forecastApp = await createApp({
+      ...config,
+      enabledSources: ["weather_forecast"],
+      openMeteoBaseUrl: "https://api.open-meteo-search.test"
+    });
+
+    const response = await request(forecastApp.app)
+      .post("/search-data/api/v1/query")
+      .send({
+        text: "bude pršet bouřka srážky",
+        entityTypes: ["weather_forecast"],
+        sourceSystems: ["weather_forecast"],
+        center: { lat: 50.1001, lon: 14.1001 },
+        radiusM: 5000,
+        limit: 5
+      })
+      .expect(200);
+
+    expect(response.body.entities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entityType: "weather_forecast",
+          sourceSystem: "weather_forecast",
+          handling: expect.arrayContaining(["dynamic_data_requires_timestamp"]),
+          observedAt: "2099-07-05T20:00:00.000Z",
+          validFrom: "2099-07-05T20:00:00.000Z",
+          validUntil: expect.any(String),
+          metrics: expect.objectContaining({
+            precipitationNext10MinMm: 0.3,
+            precipitationNext1hMm: 1.8,
+            precipitationProbabilityNext1hPercent: 76,
+            precipitationNext3hMm: 5.7,
+            thunderstormProbabilityPercent: 70,
+            windGustMps: 13.1,
+            lightningStrikeFeedAvailable: false
+          }),
+          providerProperties: expect.objectContaining({
+            display: expect.objectContaining({
+              detailType: "weather_forecast_meteogram",
+              detailUrl: expect.stringContaining("/situation-data/api/v1/weather-forecast/areas/")
+            }),
+            aiContext: expect.objectContaining({
+              dynamicDataRequiresTimestamp: true,
+              lightningNearbyAvailable: false
+            })
+          })
+        })
+      ])
+    );
   });
 
   it("builds mobile coverage polygons from tower references", async () => {

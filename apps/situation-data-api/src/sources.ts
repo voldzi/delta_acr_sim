@@ -1010,7 +1010,7 @@ class ChmiWeatherStationsSource implements SituationDataSource {
   }
 }
 
-class ChmiWeatherRadarSource implements SituationDataSource {
+export class ChmiWeatherRadarSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
   private readonly indexCache: ManagedResponseCache<string>;
 

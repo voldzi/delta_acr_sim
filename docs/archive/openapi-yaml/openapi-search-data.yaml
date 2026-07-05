@@ -128,14 +128,14 @@ components:
       required: false
       schema:
         type: string
-      description: Comma-separated entity types, for example police_station,fire_station,hospital.
+      description: Comma-separated entity types, for example police_station,fire_station,hospital,weather_forecast,weather_nowcast.
     SourceSystems:
       name: sourceSystems
       in: query
       required: false
       schema:
         type: string
-      description: Comma-separated source systems, for example osm_reference,chmi_hydro,chmi_alerts.
+      description: Comma-separated source systems, for example osm_reference,weather_forecast,chmi_weather_radar,chmi_hydro,chmi_alerts.
     IncludeDeleted:
       name: includeDeleted
       in: query
@@ -517,6 +517,13 @@ components:
         status:
           type: string
           enum: [ok, degraded]
+        dataQualityStatus:
+          type: string
+          description: Aggregate source-data quality state. Unlike status, this can be degraded while the search-data service itself remains reachable.
+          enum: [ok, degraded]
+        degradedSourceCount:
+          type: integer
+          minimum: 0
         sources:
           type: array
           items:
@@ -549,6 +556,10 @@ components:
         status:
           type: string
           enum: [ok, degraded]
+        dataQualityStatus:
+          type: string
+          description: Per-source data quality/freshness state. COP should not treat this as service outage by itself.
+          enum: [ok, degraded]
         entityCount:
           type: integer
         staleCount:
@@ -577,6 +588,10 @@ components:
         - medical_emergency
         - hydro_station
         - hydro_measurement
+        - weather_forecast
+        - weather_nowcast
+        - weather_radar
+        - thunderstorm_risk
         - weather_warning
         - safety_alert
         - fire_incident

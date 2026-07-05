@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { Pool } from "pg";
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type { BoundingBox, SituationGeometry } from "./types.js";
+import { ChmiWeatherRadarSource } from "./sources.js";
+import { WEATHER_FORECAST_SOURCE_ID, WeatherForecastSource } from "./weather-forecast.js";
+import type { BoundingBox, SituationFeature, SituationGeometry, SituationLayerId } from "./types.js";
 
 export type SearchEntityType =
   | "police_station"
@@ -11,6 +13,10 @@ export type SearchEntityType =
   | "medical_emergency"
   | "hydro_station"
   | "hydro_measurement"
+  | "weather_forecast"
+  | "weather_nowcast"
+  | "weather_radar"
+  | "thunderstorm_risk"
   | "weather_warning"
   | "safety_alert"
   | "fire_incident"
@@ -183,6 +189,10 @@ const SEARCH_ENTITY_TYPES: SearchEntityType[] = [
   "medical_emergency",
   "hydro_station",
   "hydro_measurement",
+  "weather_forecast",
+  "weather_nowcast",
+  "weather_radar",
+  "thunderstorm_risk",
   "weather_warning",
   "safety_alert",
   "fire_incident",
@@ -208,6 +218,9 @@ const OSM_POI_ENTITY_TYPES = new Set<SearchEntityType>([
 ]);
 const OSM_ADMIN_ENTITY_TYPES = new Set<SearchEntityType>(["municipality", "district", "region"]);
 const SAFETY_ENTITY_TYPES = new Set<SearchEntityType>(["hydro_station", "hydro_measurement", "weather_warning", "safety_alert", "fire_incident", "flood_risk_area", "road_closure"]);
+const SAFETY_SOURCE_SYSTEMS = ["safety_data", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "municipal_alerts", "road_srti_lod"];
+const WEATHER_FORECAST_ENTITY_TYPES = new Set<SearchEntityType>(["weather_forecast"]);
+const WEATHER_RADAR_ENTITY_TYPES = new Set<SearchEntityType>(["weather_radar", "weather_nowcast", "thunderstorm_risk"]);
 const OSM_POI_CATEGORIES = [
   "police",
   "fire_station",
@@ -233,6 +246,8 @@ const OSM_POI_CATEGORIES = [
 export class SearchDataService {
   private readonly cache: ManagedResponseCache<SearchEntityFeed>;
   private pool?: Pool;
+  private weatherForecastSource?: WeatherForecastSource;
+  private chmiWeatherRadarSource?: ChmiWeatherRadarSource;
 
   constructor(private readonly config: SituationDataConfig) {
     this.cache = new ManagedResponseCache<SearchEntityFeed>({
@@ -358,6 +373,14 @@ export class SearchDataService {
       });
       return collected.entities.find((entity) => entity.providerEntityId === providerEntityId);
     }
+    if (providerEntityId.startsWith("weather_forecast:") || providerEntityId.startsWith("weather_radar:")) {
+      const collected = await this.collectEntities({
+        bbox: CZECHIA_BBOX,
+        limit: this.config.searchDataMaxLimit,
+        includeStale: true
+      });
+      return collected.entities.find((entity) => entity.providerEntityId === providerEntityId);
+    }
     return undefined;
   }
 
@@ -379,7 +402,7 @@ export class SearchDataService {
     const scored = collected.entities
       .filter((entity) => (request.includeStale === true ? true : !entity.stale))
       .filter((entity) => (validAt ? entityValidAt(entity, validAt) : true))
-      .filter((entity) => (request.center && request.radiusM ? distanceMeters(request.center, entity.centroid) <= request.radiusM : true))
+      .filter((entity) => (request.center && request.radiusM ? distanceToEntityMeters(request.center, entity) <= request.radiusM : true))
       .map((entity) => ({ entity, score: scoreEntity(entity, text, request.center) }))
       .filter((item) => (text ? item.score > 0 : true))
       .sort((left, right) => right.score - left.score || compareEntitiesForFeed(left.entity, right.entity))
@@ -412,15 +435,17 @@ export class SearchDataService {
 
   async observability() {
     const generatedAt = new Date().toISOString();
-    const sourceStatuses = await Promise.all([this.osmStatus(), this.safetyStatus()]);
-    const degraded = sourceStatuses.some((source) => source.status === "degraded");
+    const sourceStatuses = await Promise.all([this.osmStatus(), this.safetyStatus(), this.weatherForecastStatus(), this.weatherRadarStatus()]);
+    const degradedSourceCount = sourceStatuses.filter((source) => source.status === "degraded").length;
     const cache = this.cache.stats();
     return {
       serviceId: "search-data-api",
       contractVersion: CONTRACT_VERSION,
       providerId: PROVIDER_ID,
       generatedAt,
-      status: degraded ? "degraded" : "ok",
+      status: "ok",
+      dataQualityStatus: degradedSourceCount > 0 ? "degraded" : "ok",
+      degradedSourceCount,
       sources: sourceStatuses,
       cache: {
         entries: cache.entries,
@@ -448,13 +473,15 @@ export class SearchDataService {
   private async collectEntities(options: CollectOptions): Promise<{ entities: SearchEntity[]; warnings: string[] }> {
     const warnings: string[] = [];
     const entityTypes = options.entityTypes ?? SEARCH_ENTITY_TYPES;
-    const [poiResult, adminResult, safetyResult] = await Promise.allSettled([
+    const [poiResult, adminResult, safetyResult, forecastResult, radarResult] = await Promise.allSettled([
       this.shouldFetchOsmPoi(entityTypes, options.sourceSystems) ? this.fetchOsmPoiRows(options).then((rows) => rows.map(mapOsmPoiEntity).filter(isEntity)) : Promise.resolve([]),
       this.shouldFetchOsmAdmin(entityTypes, options.sourceSystems) ? this.fetchOsmAdminRows(options).then((rows) => rows.map(mapOsmAdminEntity).filter(isEntity)) : Promise.resolve([]),
-      this.shouldFetchSafety(entityTypes, options.sourceSystems) ? this.fetchSafetyEntities(options) : Promise.resolve([])
+      this.shouldFetchSafety(entityTypes, options.sourceSystems) ? this.fetchSafetyEntities(options) : Promise.resolve([]),
+      this.shouldFetchWeatherForecast(entityTypes, options.sourceSystems) ? this.fetchWeatherForecastEntities(options) : Promise.resolve([]),
+      this.shouldFetchWeatherRadar(entityTypes, options.sourceSystems) ? this.fetchWeatherRadarEntities(options) : Promise.resolve([])
     ]);
     const entities: SearchEntity[] = [];
-    for (const result of [poiResult, adminResult, safetyResult]) {
+    for (const result of [poiResult, adminResult, safetyResult, forecastResult, radarResult]) {
       if (result.status === "fulfilled") {
         entities.push(...result.value);
       } else {
@@ -479,7 +506,15 @@ export class SearchDataService {
   }
 
   private shouldFetchSafety(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
-    return this.config.enabledSources.includes("safety_data") && sourceAllowed(undefined, sourceSystems) && entityTypes.some((type) => SAFETY_ENTITY_TYPES.has(type));
+    return this.config.enabledSources.includes("safety_data") && sourceSystemsAllowAny(SAFETY_SOURCE_SYSTEMS, sourceSystems) && entityTypes.some((type) => SAFETY_ENTITY_TYPES.has(type));
+  }
+
+  private shouldFetchWeatherForecast(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
+    return this.config.enabledSources.includes(WEATHER_FORECAST_SOURCE_ID) && sourceAllowed(WEATHER_FORECAST_SOURCE_ID, sourceSystems) && entityTypes.some((type) => WEATHER_FORECAST_ENTITY_TYPES.has(type));
+  }
+
+  private shouldFetchWeatherRadar(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
+    return this.config.enabledSources.includes("chmi_weather_radar") && sourceAllowed("chmi_weather_radar", sourceSystems) && entityTypes.some((type) => WEATHER_RADAR_ENTITY_TYPES.has(type));
   }
 
   private async fetchOsmPoiRows(options: CollectOptions & { providerEntityId?: string }): Promise<OsmPoiSearchRow[]> {
@@ -620,11 +655,37 @@ export class SearchDataService {
     }
   }
 
+  private async fetchWeatherForecastEntities(options: CollectOptions): Promise<SearchEntity[]> {
+    this.weatherForecastSource ??= new WeatherForecastSource(this.config);
+    const result = await this.weatherForecastSource.fetchFeatures({
+      bbox: options.bbox,
+      layers: ["weather_forecast_area"],
+      sourceIds: [WEATHER_FORECAST_SOURCE_ID],
+      limit: Math.max(1, Math.min(64, options.limit)),
+      includeRaw: false
+    });
+    return result.features.map(mapWeatherForecastEntity).filter(isEntity);
+  }
+
+  private async fetchWeatherRadarEntities(options: CollectOptions): Promise<SearchEntity[]> {
+    this.chmiWeatherRadarSource ??= new ChmiWeatherRadarSource(this.config);
+    const layers = radarLayersForEntityTypes(options.entityTypes ?? SEARCH_ENTITY_TYPES);
+    const result = await this.chmiWeatherRadarSource.fetchFeatures({
+      bbox: options.bbox,
+      layers,
+      sourceIds: ["chmi_weather_radar"],
+      limit: Math.max(1, Math.min(20, options.limit)),
+      includeRaw: false
+    });
+    return result.features.map(mapWeatherRadarEntity).filter(isEntity);
+  }
+
   private async osmStatus() {
     if (!this.config.osmPostgisConnectionString) {
       return {
         sourceSystem: "osm_reference",
         status: "degraded",
+        dataQualityStatus: "degraded",
         entityCount: 0,
         staleCount: 0,
         warnings: ["OSM_POSTGIS_DATABASE_URL is not configured; reference search entities are unavailable."]
@@ -642,6 +703,7 @@ export class SearchDataService {
       return {
         sourceSystem: "osm_reference",
         status: count > 0 ? "ok" : "degraded",
+        dataQualityStatus: count > 0 ? "ok" : "degraded",
         entityCount: count,
         staleCount: 0,
         lastSuccessAt: newestIsoTimestamp(normalizeTimestamp(poi.rows[0]?.imported_at), normalizeTimestamp(boundary.rows[0]?.imported_at)),
@@ -651,6 +713,7 @@ export class SearchDataService {
       return {
         sourceSystem: "osm_reference",
         status: "degraded",
+        dataQualityStatus: "degraded",
         entityCount: 0,
         staleCount: 0,
         warnings: [error instanceof Error ? error.message : "Unknown OSM search status failure."]
@@ -663,6 +726,7 @@ export class SearchDataService {
       return {
         sourceSystem: "safety_data",
         status: "degraded",
+        dataQualityStatus: "degraded",
         entityCount: 0,
         staleCount: 0,
         warnings: ["safety_data is not enabled in SITUATION_DATA_ENABLED_SOURCES; dynamic search entities are unavailable."]
@@ -682,6 +746,7 @@ export class SearchDataService {
       return {
         sourceSystem: "safety_data",
         status: body.status === "ok" ? "ok" : "degraded",
+        dataQualityStatus: body.status === "ok" ? "ok" : "degraded",
         entityCount: numberValue(lastResult?.featureCount) ?? 0,
         staleCount: numberValue(lastResult?.staleFeatureCount) ?? 0,
         lastSuccessAt: stringValue(body.generatedAt),
@@ -691,9 +756,68 @@ export class SearchDataService {
       return {
         sourceSystem: "safety_data",
         status: "degraded",
+        dataQualityStatus: "degraded",
         entityCount: 0,
         staleCount: 0,
         warnings: [error instanceof Error ? error.message : "Unknown safety search status failure."]
+      };
+    }
+  }
+
+  private async weatherForecastStatus() {
+    if (!this.config.enabledSources.includes(WEATHER_FORECAST_SOURCE_ID)) {
+      return {
+        sourceSystem: WEATHER_FORECAST_SOURCE_ID,
+        status: "degraded",
+        dataQualityStatus: "degraded",
+        entityCount: 0,
+        staleCount: 0,
+        warnings: ["weather_forecast is not enabled in SITUATION_DATA_ENABLED_SOURCES; forecast search entities are unavailable."]
+      };
+    }
+    return {
+      sourceSystem: WEATHER_FORECAST_SOURCE_ID,
+      status: "ok",
+      dataQualityStatus: "ok",
+      entityCount: 0,
+      staleCount: 0,
+      backend: "sim-weather-forecast-open-meteo",
+      warnings: []
+    };
+  }
+
+  private async weatherRadarStatus() {
+    if (!this.config.enabledSources.includes("chmi_weather_radar")) {
+      return {
+        sourceSystem: "chmi_weather_radar",
+        status: "degraded",
+        dataQualityStatus: "degraded",
+        entityCount: 0,
+        staleCount: 0,
+        warnings: ["chmi_weather_radar is not enabled in SITUATION_DATA_ENABLED_SOURCES; radar search entities are unavailable."]
+      };
+    }
+    try {
+      this.chmiWeatherRadarSource ??= new ChmiWeatherRadarSource(this.config);
+      const status = await this.chmiWeatherRadarSource.healthStatus();
+      return {
+        sourceSystem: "chmi_weather_radar",
+        status: status.status,
+        dataQualityStatus: status.status,
+        entityCount: status.objectCount ?? 0,
+        staleCount: status.status === "degraded" && status.lastImportAgeSeconds && status.lastImportAgeSeconds > 2 * 60 * 60 ? 1 : 0,
+        lastSuccessAt: status.lastImportAt,
+        backend: status.backend,
+        warnings: status.warnings
+      };
+    } catch (error) {
+      return {
+        sourceSystem: "chmi_weather_radar",
+        status: "degraded",
+        dataQualityStatus: "degraded",
+        entityCount: 0,
+        staleCount: 0,
+        warnings: [error instanceof Error ? error.message : "Unknown weather radar search status failure."]
       };
     }
   }
@@ -966,6 +1090,185 @@ function mapSafetyEntity(feature: SafetyFeature): SearchEntity | undefined {
   };
 }
 
+function mapWeatherForecastEntity(feature: SituationFeature): SearchEntity | undefined {
+  const properties = asRecord(feature.properties);
+  const geometry = feature.geometry;
+  const centroid = centroidForGeometry(geometry);
+  if (!properties || !centroid) {
+    return undefined;
+  }
+  const featureId = String(feature.id ?? stringValue(properties.featureId) ?? stableHash(JSON.stringify({ geometry, properties })));
+  const labelLocalized = asRecord(properties.labelLocalized);
+  const summaryLocalized = asRecord(properties.summaryLocalized);
+  const titleCs = stringValue(labelLocalized?.cs) ?? stringValue(properties.label) ?? "Předpověď počasí";
+  const titleEn = stringValue(labelLocalized?.en) ?? "Weather forecast";
+  const summaryCs = stringValue(summaryLocalized?.cs) ?? stringValue(properties.summary) ?? titleCs;
+  const summaryEn = stringValue(summaryLocalized?.en) ?? "Weather forecast context for this map area.";
+  const observedAt = normalizeTimestamp(properties.observedAt);
+  const validFrom = normalizeTimestamp(properties.validFrom) ?? observedAt;
+  const validUntil = normalizeTimestamp(properties.validUntil);
+  const updatedAt = normalizeTimestamp(properties.updatedAt ?? properties.generatedAt ?? properties.observedAt) ?? new Date().toISOString();
+  const metrics = mixedMetricsFrom(properties.metrics);
+  const providerProperties = asRecord(properties.providerProperties) ?? {};
+  const tags = tagsFromProperties(properties, ["weather", "forecast", "nowcast", "precipitation", "rain", "srazky", "bourka"]);
+  const hazardType = stringValue(asRecord(providerProperties.presentation)?.hazardType) ?? tagValue(properties, "hazardType") ?? "weather_forecast";
+  const stale = (booleanValue(properties.stale) ?? false) || isExpired(validUntil);
+  return {
+    contractVersion: CONTRACT_VERSION,
+    providerId: PROVIDER_ID,
+    providerEntityId: `weather_forecast:${stableHash(featureId)}`,
+    sourceSystem: WEATHER_FORECAST_SOURCE_ID,
+    sourceEntityId: featureId,
+    entityType: "weather_forecast",
+    entitySubtype: hazardType,
+    title: titleCs,
+    summary: summaryCs,
+    searchableText: searchableText([
+      titleCs,
+      titleEn,
+      summaryCs,
+      summaryEn,
+      hazardType,
+      stringValue(asRecord(providerProperties.presentation)?.conditionLabel),
+      stringValue(asRecord(providerProperties.presentation)?.conditionLabelEn),
+      "déšť srážky pršet bouřka vítr nárazy předpověď počasí nowcast radar rain precipitation thunderstorm wind forecast"
+    ]),
+    aliases: Array.from(new Set([titleCs, titleEn, "bude pršet", "srážky", "bouřka", "weather forecast", "rain forecast"].filter(isNonEmptyString))),
+    localized: {
+      cs: { title: titleCs, summary: summaryCs },
+      en: { title: titleEn, summary: summaryEn }
+    },
+    geometry,
+    centroid,
+    address: {
+      countryCode: "CZ"
+    },
+    status: isExpired(validUntil) ? "expired" : "active",
+    severity: normalizeSeverity(stringValue(properties.severity)),
+    confidence: clampNumber(properties.confidence, 0.7, 0, 1),
+    dataQuality: "modelled",
+    sourceAuthority: "modelled",
+    classification: "PUBLIC",
+    handling: ["server_to_server", "cop_index_allowed", "dynamic_data_requires_timestamp", "forecast_model_not_official_warning"],
+    visibility: "cop_internal",
+    allowedUse: ["search", "map_context", "ai_rag_grounding", "weather_question_answering"],
+    observedAt: observedAt ?? null,
+    validFrom: validFrom ?? updatedAt,
+    validUntil: validUntil ?? null,
+    updatedAt,
+    expiresAt: validUntil ?? null,
+    stale,
+    sourceRevision: `${WEATHER_FORECAST_SOURCE_ID}:${updatedAt}`,
+    layerIds: layerIdsForEntityType("weather_forecast"),
+    tags,
+    metrics,
+    positionQuality: {
+      accuracy: "approximate",
+      source: "SIM weather forecast grid"
+    },
+    providerProperties: {
+      ...providerProperties,
+      aiContext: {
+        dynamicDataRequiresTimestamp: true,
+        preferredAnswerScope: "nearest_or_intersecting_forecast_area",
+        precipitationMetrics: ["precipitationNext10MinMm", "precipitationNext1hMm", "precipitationNext3hMm", "precipitationProbabilityNext1hPercent"],
+        thunderstormMetrics: ["thunderstormProbabilityPercent", "riskScore"],
+        windMetrics: ["windSpeedMps", "windGustMps", "maxWindGustNext6hMps"],
+        lightningNearbyAvailable: false,
+        radarNowcastShouldBeCorroboratedFromSourceSystem: "chmi_weather_radar"
+      }
+    },
+    deleted: false
+  };
+}
+
+function mapWeatherRadarEntity(feature: SituationFeature): SearchEntity | undefined {
+  const properties = asRecord(feature.properties);
+  const geometry = feature.geometry;
+  const centroid = centroidForGeometry(geometry);
+  if (!properties || !centroid) {
+    return undefined;
+  }
+  const layer = stringValue(properties.layer) ?? "weather_radar_reflectivity";
+  const entityType = weatherRadarEntityType(layer, stringValue(properties.category));
+  const featureId = String(feature.id ?? stringValue(properties.featureId) ?? stableHash(JSON.stringify({ geometry, properties })));
+  const observedAt = normalizeTimestamp(properties.observedAt);
+  const validUntil = normalizeTimestamp(properties.validUntil);
+  const updatedAt = normalizeTimestamp(properties.updatedAt ?? properties.generatedAt ?? properties.observedAt) ?? new Date().toISOString();
+  const title = stringValue(properties.label) ?? entityTypeLabel(entityType);
+  const summary = stringValue(properties.summary) ?? `${title}: radarový kontext ČHMÚ pro srážky a bouřky.`;
+  const providerProperties = asRecord(properties.providerProperties) ?? {};
+  const metrics = mixedMetricsFrom(properties.metrics);
+  metrics.lightningStrikeFeedAvailable = false;
+  if (entityType === "weather_nowcast") {
+    metrics.nowcastHorizonMinutes = numberValue(metrics.forecastHorizonMinutes) ?? numberValue(asRecord(providerProperties.raster)?.forecastHorizonMinutes) ?? 60;
+  }
+  const stale = (booleanValue(properties.stale) ?? false) || isExpired(validUntil);
+  return {
+    contractVersion: CONTRACT_VERSION,
+    providerId: PROVIDER_ID,
+    providerEntityId: `weather_radar:${stableHash(featureId)}`,
+    sourceSystem: "chmi_weather_radar",
+    sourceEntityId: featureId,
+    entityType,
+    entitySubtype: stringValue(properties.category) ?? layer,
+    title,
+    summary,
+    searchableText: searchableText([
+      title,
+      summary,
+      layer,
+      stringValue(properties.category),
+      "radar srážky déšť bouřka nowcast odrazivost intenzita precipitation thunderstorm reflectivity"
+    ]),
+    aliases: Array.from(new Set([title, "radar", "srážkový radar", "bouřkový radar", "weather radar", "rain radar"].filter(isNonEmptyString))),
+    localized: {
+      cs: { title, summary },
+      en: { title, summary: stringValue(properties.summary) ?? "CHMI weather radar context for precipitation and thunderstorms." }
+    },
+    geometry,
+    centroid,
+    address: {
+      countryCode: "CZ"
+    },
+    status: isExpired(validUntil) ? "expired" : "active",
+    severity: normalizeSeverity(stringValue(properties.severity)),
+    confidence: clampNumber(properties.confidence, 0.68, 0, 1),
+    dataQuality: "official_observed",
+    sourceAuthority: "official",
+    classification: "PUBLIC",
+    handling: ["server_to_server", "cop_index_allowed", "dynamic_data_requires_timestamp", "render_raster_for_visual_detail"],
+    visibility: "cop_internal",
+    allowedUse: ["search", "map_context", "ai_rag_grounding", "weather_question_answering"],
+    observedAt: observedAt ?? null,
+    validFrom: observedAt ?? updatedAt,
+    validUntil: validUntil ?? null,
+    updatedAt,
+    expiresAt: validUntil ?? null,
+    stale,
+    sourceRevision: stringValue(properties.sourceRevision) ?? `${layer}:${updatedAt}`,
+    layerIds: layerIdsForEntityType(entityType),
+    tags: tagsFromProperties(properties, ["weather", "radar", "precipitation", "thunderstorm", entityType]),
+    metrics,
+    positionQuality: {
+      accuracy: "approximate",
+      source: "ČHMÚ radar raster extent"
+    },
+    providerProperties: {
+      ...providerProperties,
+      aiContext: {
+        dynamicDataRequiresTimestamp: true,
+        preferredAnswerScope: "intersecting_radar_extent",
+        radarIntensitySource: "raster_overlay",
+        radarIntensityNumericAtPointAvailable: false,
+        lightningNearbyAvailable: false,
+        rawLightningStrikeFeedAvailable: false
+      }
+    },
+    deleted: false
+  };
+}
+
 function categoriesForEntityTypes(entityTypes: SearchEntityType[]): string[] {
   const categories = new Set<string>();
   for (const entityType of entityTypes) {
@@ -1060,6 +1363,10 @@ function layerIdsForEntityType(entityType: SearchEntityType): string[] {
     medical_emergency: ["public.health.emergency"],
     hydro_station: ["public.safety.hydro"],
     hydro_measurement: ["public.safety.hydro"],
+    weather_forecast: ["public.weather.forecast_area"],
+    weather_nowcast: ["public.weather.radar_nowcast"],
+    weather_radar: ["public.weather.radar_reflectivity", "public.weather.radar_precipitation"],
+    thunderstorm_risk: ["public.safety.thunderstorm_risk"],
     weather_warning: ["public.safety.weather_alerts"],
     safety_alert: ["public.safety.warnings"],
     fire_incident: ["public.safety.fire"],
@@ -1080,6 +1387,12 @@ function sourceSystemsForEntityType(entityType: SearchEntityType): string[] {
   if (OSM_POI_ENTITY_TYPES.has(entityType) || OSM_ADMIN_ENTITY_TYPES.has(entityType)) {
     return ["osm_reference"];
   }
+  if (WEATHER_FORECAST_ENTITY_TYPES.has(entityType)) {
+    return [WEATHER_FORECAST_SOURCE_ID];
+  }
+  if (WEATHER_RADAR_ENTITY_TYPES.has(entityType)) {
+    return ["chmi_weather_radar"];
+  }
   return ["safety_data", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "municipal_alerts", "road_srti_lod"];
 }
 
@@ -1091,6 +1404,10 @@ function entityTypeLabel(entityType: SearchEntityType): string {
     medical_emergency: "Medical emergency point",
     hydro_station: "Hydrological station",
     hydro_measurement: "Hydrological measurement",
+    weather_forecast: "Weather forecast",
+    weather_nowcast: "Weather nowcast",
+    weather_radar: "Weather radar",
+    thunderstorm_risk: "Thunderstorm risk",
     weather_warning: "Weather warning",
     safety_alert: "Safety alert",
     fire_incident: "Fire incident",
@@ -1204,6 +1521,72 @@ function numericMetrics(properties: Record<string, unknown>): Record<string, num
   return result;
 }
 
+function mixedMetricsFrom(value: unknown): Record<string, number | string | boolean> {
+  const record = asRecord(value);
+  if (!record) {
+    return {};
+  }
+  const result: Record<string, number | string | boolean> = {};
+  for (const [key, item] of Object.entries(record)) {
+    if (typeof item === "number" || typeof item === "string" || typeof item === "boolean") {
+      result[key] = item;
+    }
+  }
+  return result;
+}
+
+function tagsFromProperties(properties: Record<string, unknown>, fallback: string[]): string[] {
+  const tagValues = Array.isArray(properties.tags)
+    ? properties.tags.flatMap((item) => {
+        if (typeof item === "string") {
+          return [item];
+        }
+        const record = asRecord(item);
+        return record ? Object.values(record).filter(isNonEmptyString) : [];
+      })
+    : [];
+  return Array.from(new Set([...fallback, ...tagValues].filter(isNonEmptyString)));
+}
+
+function tagValue(properties: Record<string, unknown>, key: string): string | undefined {
+  if (!Array.isArray(properties.tags)) {
+    return undefined;
+  }
+  for (const item of properties.tags) {
+    const record = asRecord(item);
+    const value = record ? stringValue(record[key]) : undefined;
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function weatherRadarEntityType(layer: string, category: string | undefined): SearchEntityType {
+  if (layer === "weather_radar_nowcast") {
+    return "weather_nowcast";
+  }
+  if (layer === "weather_thunderstorm_risk" || category === "weather_thunderstorm_risk") {
+    return "thunderstorm_risk";
+  }
+  return "weather_radar";
+}
+
+function radarLayersForEntityTypes(entityTypes: SearchEntityType[]): SituationLayerId[] {
+  const layers = new Set<SituationLayerId>();
+  if (entityTypes.includes("weather_radar")) {
+    layers.add("weather_radar_reflectivity");
+    layers.add("weather_radar_precipitation");
+  }
+  if (entityTypes.includes("weather_nowcast")) {
+    layers.add("weather_radar_nowcast");
+  }
+  if (entityTypes.includes("thunderstorm_risk")) {
+    layers.add("weather_thunderstorm_risk");
+  }
+  return Array.from(layers);
+}
+
 function compareEntitiesForFeed(left: SearchEntity, right: SearchEntity): number {
   const leftTime = Date.parse(left.updatedAt);
   const rightTime = Date.parse(right.updatedAt);
@@ -1236,11 +1619,32 @@ function scoreEntity(entity: SearchEntity, normalizedText: string, center?: Sear
     }
   }
   if (center) {
-    const distance = distanceMeters(center, entity.centroid);
+    const distance = distanceToEntityMeters(center, entity);
     score += Math.max(0, 0.5 - distance / 100_000);
   }
   score += entity.confidence * 0.1;
   return score;
+}
+
+function distanceToEntityMeters(center: SearchCoordinate, entity: SearchEntity): number {
+  const bounds = geometryBounds(entity.geometry);
+  if (bounds && center.lon >= bounds.west && center.lon <= bounds.east && center.lat >= bounds.south && center.lat <= bounds.north) {
+    return 0;
+  }
+  return distanceMeters(center, entity.centroid);
+}
+
+function geometryBounds(geometry: SituationGeometry): BoundingBox | undefined {
+  const points = geometry.type === "Point" ? [geometry.coordinates as [number, number]] : flattenCoordinates(geometry.coordinates);
+  if (points.length === 0) {
+    return undefined;
+  }
+  return {
+    west: Math.min(...points.map((point) => point[0])),
+    south: Math.min(...points.map((point) => point[1])),
+    east: Math.max(...points.map((point) => point[0])),
+    north: Math.max(...points.map((point) => point[1]))
+  };
 }
 
 function entityValidAt(entity: SearchEntity, validAt: string): boolean {
@@ -1267,6 +1671,13 @@ function sourceAllowed(sourceSystem: string | undefined, filters?: string[]): bo
     return filters.some((filter) => filter !== "osm_reference");
   }
   return filters.includes(sourceSystem);
+}
+
+function sourceSystemsAllowAny(sourceSystems: string[], filters?: string[]): boolean {
+  if (!filters || filters.length === 0) {
+    return true;
+  }
+  return filters.some((filter) => sourceSystems.includes(filter));
 }
 
 function normalizeEntityTypes(value: unknown): SearchEntityType[] {

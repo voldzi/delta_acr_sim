@@ -84,7 +84,7 @@ Kontrakt odpovědí:
 | `providerId` | vždy `sim.search-data` |
 | `providerEntityId` | stabilní SIM identifikátor entity pro detail a deduplikaci |
 | `entityType` | autoritativní typ entity, ne jazykově odvozený text |
-| `sourceSystem` | původní zdroj/read-model, např. `osm_reference`, `chmi_alerts`, `chmi_hydro`, `safety_data` |
+| `sourceSystem` | původní zdroj/read-model, např. `osm_reference`, `weather_forecast`, `chmi_weather_radar`, `chmi_alerts`, `chmi_hydro`, `safety_data` |
 | `sourceEntityId` | identifikátor objektu v původním zdroji |
 | `sourceAuthority` | `official`, `internal_verified`, `partner_verified`, `reference`, `community_verified`, `community_unverified`, `modelled` nebo `unknown` |
 | `dataQuality` | `official_observed`, `official_warning`, `verified_reference`, `reference`, `modelled`, `mixed` nebo `unknown` |
@@ -94,7 +94,7 @@ Kontrakt odpovědí:
 | `address` | správní/adresní zařazení, pokud je ve zdroji dostupné |
 | `status`, `severity`, `confidence` | stav, závažnost a důvěra normalizované entity |
 | `layerIds`, `tags` | doporučené napojení na COP vrstvy a vyhledávací tagy |
-| `metrics` | strojově čitelné hodnoty, např. závažnost, pravděpodobnost, voda, průtok |
+| `metrics` | strojově čitelné hodnoty, např. závažnost, pravděpodobnost, voda, průtok, srážky, vítr, radar/nowcast stav |
 | `classification`, `handling`, `visibility`, `allowedUse` | pravidla klasifikace, zobrazitelnosti a povoleného použití |
 | `positionQuality` | přesnost polohy: `exact`, `centroid`, `approximate` nebo `unknown` |
 | `providerProperties` | omezené provider-native hodnoty pro audit a detail |
@@ -105,10 +105,35 @@ Podporované `entityType` hodnoty v první produkční verzi:
 ```text
 police_station, fire_station, hospital, medical_emergency,
 hydro_station, hydro_measurement, weather_warning, safety_alert,
+weather_forecast, weather_nowcast, weather_radar, thunderstorm_risk,
 fire_incident, flood_risk_area, road_closure, shelter,
 evacuation_point, municipality, district, region,
 critical_infrastructure, public_resource
 ```
+
+Pro dotazy typu „bude pršet“, „srážky“, „blíží se bouřka“ má COP používat
+`POST /query` s mapovým `center`/`radiusM` nebo `bbox` a preferovat entity:
+
+- `weather_forecast` ze `sourceSystem=weather_forecast`: plošná forecast buňka
+  s `observedAt`, `validFrom`, `validUntil`, `handling` obsahujícím
+  `dynamic_data_requires_timestamp`, detailním `providerProperties.display`
+  a metrikami `precipitationNext10MinMm`, `precipitationNext1hMm`,
+  `precipitationNext3hMm`, `precipitationProbabilityNext1hPercent`,
+  `precipitationProbabilityNext3hPercent`, `thunderstormProbabilityPercent`,
+  `windSpeedMps`, `windGustMps`, `maxWindGustNext6hMps` a `riskScore`.
+- `weather_radar`, `weather_nowcast`, `thunderstorm_risk` ze
+  `sourceSystem=chmi_weather_radar`: radarová metadata ČHMÚ a raster overlay
+  reference pro korelaci aktuálních srážek, nowcastu a bouřkového kontextu.
+  SIM zatím neposkytuje redistribuovatelný raw feed blesků; entity proto nesou
+  `metrics.lightningStrikeFeedAvailable=false` a
+  `providerProperties.aiContext.lightningNearbyAvailable=false`.
+
+`GET /observability` vrací top-level `status` jako dostupnost služby
+search-data. Dílčí kvalita a čerstvost zdrojů je oddělená v
+`dataQualityStatus`, `degradedSourceCount` a `sources[].dataQualityStatus`.
+COP proto nemá top-level zdroj skrývat při `status=ok`, i když některé
+`sources[]` hlásí `degraded`; má pouze zobrazit varování kvality pro konkrétní
+zdroj.
 
 COP má pro indexování používat primárně `GET /entities` se stránkováním přes
 `nextCursor`. Pro interaktivní dotaz může použít `POST /query`, který vrací

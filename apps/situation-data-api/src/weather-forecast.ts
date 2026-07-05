@@ -414,7 +414,10 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
         temperatureC: current.temperatureC,
         relativeHumidityPercent: current.relativeHumidityPercent,
         precipitationMm: current.precipitationMm,
+        precipitationNext10MinMm: payload.hourly[0]?.precipitationMm === undefined ? undefined : round(payload.hourly[0].precipitationMm / 6, 2),
+        precipitationNext1hMm: payload.hourly[0]?.precipitationMm,
         precipitationNext3hMm: assessment.precipitationNext3hMm,
+        precipitationProbabilityNext1hPercent: payload.hourly[0]?.precipitationProbabilityPercent,
         precipitationProbabilityNext3hPercent: assessment.precipitationProbabilityNext3hPercent,
         cloudCoverPercent: current.cloudCoverPercent,
         windSpeedMps: current.windSpeedMps,
@@ -422,6 +425,8 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
         windGustMps: current.windGustMps,
         maxWindGustNext6hMps: assessment.maxWindGustNext6hMps,
         weatherCode: current.weatherCode,
+        thunderstormProbabilityPercent: thunderstormProbabilityPercent(current.weatherCode, payload.hourly[0]?.weatherCode, assessment.riskScore),
+        lightningStrikeFeedAvailable: false,
         riskScore: assessment.riskScore,
         resolutionM: Math.round(cell.resolutionDegrees * 111_320)
       }),
@@ -474,6 +479,12 @@ function forecastPayloadToFeature(payload: WeatherForecastPayload, includeRaw: b
             resolutionDegrees: cell.resolutionDegrees
           },
           generatedAt: payload.fetchedAt
+        },
+        aiContext: {
+          dynamicDataRequiresTimestamp: true,
+          precipitationNext10MinBasis: "hourly_model_scaled_to_10_minutes",
+          lightningNearbyAvailable: false,
+          thunderstormProbabilityBasis: "weather_code_and_risk_score_heuristic"
         }
       }),
       raw: includeRaw ? payload.raw : undefined
@@ -954,6 +965,23 @@ function riskScore(input: { weatherCode?: number; precipitationMm?: number; wind
   const windScore = clamp(Math.max(input.windSpeedMps ?? 0, input.windGustMps ?? 0) / 25, 0, 1);
   const codeScore = code === 96 || code === 99 ? 1 : code === 95 ? 0.85 : code && code >= 80 ? 0.55 : code && code >= 61 ? 0.42 : 0;
   return round(Math.max(precipitationScore, windScore, codeScore), 2);
+}
+
+function thunderstormProbabilityPercent(currentCode: number | undefined, nextHourCode: number | undefined, riskScoreValue: number): number {
+  const code = Math.max(currentCode ?? 0, nextHourCode ?? 0);
+  if (code === 96 || code === 99) {
+    return 85;
+  }
+  if (code === 95) {
+    return 70;
+  }
+  if (riskScoreValue >= 0.75) {
+    return 45;
+  }
+  if (riskScoreValue >= 0.5) {
+    return 25;
+  }
+  return 0;
 }
 
 function temperatureRiskScore(temperatureC: number | undefined): number {
