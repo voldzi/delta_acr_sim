@@ -13,6 +13,7 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { RoutingError, RoutingService } from "./routing-service.js";
+import { SearchDataService, type SearchEntityType, type SearchQueryRequest } from "./search-data.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import { TransitDetailService } from "./transit-detail.js";
@@ -49,6 +50,7 @@ export interface SituationDataAppContext {
   transitDetails: TransitDetailService;
   transitStatic: TransitStaticModelService;
   routing: RoutingService;
+  searchData: SearchDataService;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -65,6 +67,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const transitDetails = new TransitDetailService(config);
   const transitStatic = new TransitStaticModelService(config);
   const routing = new RoutingService(config);
+  const searchData = new SearchDataService(config);
   const context: SituationDataAppContext = {
     config,
     aggregation,
@@ -77,7 +80,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     weatherForecast,
     transitDetails,
     transitStatic,
-    routing
+    routing,
+    searchData
   };
   const app = express();
 
@@ -90,6 +94,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerRadioRoutes(app, context);
   registerTransitRoutes(app, context);
   registerRoutingRoutes(app, context);
+  registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);
 
   app.use((req, res) => {
@@ -201,6 +206,18 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       `situation_data_routing_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
       `situation_data_routing_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
     ]);
+    const searchDataCache = context.searchData.cacheStats();
+    const searchDataCacheLines = [
+      `search_data_cache_entries ${searchDataCache.entries}`,
+      `search_data_cache_inflight ${searchDataCache.inflight}`,
+      `search_data_cache_hits ${searchDataCache.hits}`,
+      `search_data_cache_misses ${searchDataCache.misses}`,
+      `search_data_cache_coalesced_hits ${searchDataCache.coalescedHits}`,
+      `search_data_cache_stale_hits ${searchDataCache.staleHits}`,
+      `search_data_cache_refreshes ${searchDataCache.refreshes}`,
+      `search_data_cache_errors ${searchDataCache.errors}`,
+      `search_data_cache_evictions ${searchDataCache.evictions}`
+    ];
     const sourceHealthLines = sourceHealth.flatMap(sourceHealthMetricLines);
     res
       .type("text/plain")
@@ -226,6 +243,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           ...sourceCacheLines,
           ...radioPlanningCacheLines,
           ...routingCacheLines,
+          ...searchDataCacheLines,
           ...sourceHealthLines,
           ...demMetricLines(dem)
         ].join("\n") + "\n"
@@ -706,6 +724,60 @@ function routingProblem(req: Parameters<typeof problem>[0], res: Parameters<type
   return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
 }
 
+function registerSearchDataRoutes(app: Express, context: SituationDataAppContext): void {
+  const prefixes = ["/search-data/api/v1", "/api/v1/search-data"];
+  for (const prefix of prefixes) {
+    app.get(`${prefix}/taxonomy`, (_req, res) => {
+      res.json(context.searchData.taxonomy());
+    });
+
+    app.get(`${prefix}/entities`, async (req, res) => {
+      try {
+        const query = parseSearchEntitiesQuery(req.query);
+        res.json(await context.searchData.entities(query));
+      } catch (error) {
+        return searchDataProblem(req, res, error, "Search entity feed failed.");
+      }
+    });
+
+    app.get(`${prefix}/entities/:providerEntityId`, async (req, res) => {
+      const providerEntityId = req.params.providerEntityId;
+      if (!providerEntityId) {
+        return problem(req, res, 400, "VALIDATION_ERROR", "providerEntityId is required.");
+      }
+      try {
+        const entity = await context.searchData.getEntity(providerEntityId);
+        if (!entity) {
+          return problem(req, res, 404, "NOT_FOUND", "Search entity was not found.");
+        }
+        res.json(entity);
+      } catch (error) {
+        return searchDataProblem(req, res, error, "Search entity detail failed.");
+      }
+    });
+
+    app.post(`${prefix}/query`, async (req, res) => {
+      const parsed = parseSearchQueryRequest(req.body);
+      if (!parsed.ok) {
+        return problem(req, res, 400, "VALIDATION_ERROR", parsed.error);
+      }
+      try {
+        res.json(await context.searchData.query(parsed.value));
+      } catch (error) {
+        return searchDataProblem(req, res, error, "Search query failed.");
+      }
+    });
+
+    app.get(`${prefix}/observability`, async (_req, res) => {
+      res.json(await context.searchData.observability());
+    });
+  }
+}
+
+function searchDataProblem(req: Parameters<typeof problem>[0], res: Parameters<typeof problem>[1], error: unknown, fallbackMessage: string): void {
+  return problem(req, res, 502, "UPSTREAM_ERROR", error instanceof Error ? `${fallbackMessage}: ${error.message}` : fallbackMessage);
+}
+
 function registerFeatureRoutes(app: Express, context: SituationDataAppContext): void {
   app.get("/api/v1/features", async (req, res) => {
     const query = parseSituationQuery(req.query, context.config);
@@ -817,6 +889,143 @@ function parseSituationQuery(
       mobileCoverageOperators: parseOperators(raw.operator ?? raw.operators)
     }
   };
+}
+
+function parseSearchEntitiesQuery(raw: Record<string, unknown>): {
+  updatedSince?: string;
+  cursor?: string;
+  limit?: number;
+  entityTypes?: SearchEntityType[];
+  sourceSystems?: string[];
+  includeDeleted?: boolean;
+} {
+  return {
+    updatedSince: asString(raw.updatedSince),
+    cursor: asString(raw.cursor),
+    limit: parseOptionalNumber(raw.limit),
+    entityTypes: parseSearchEntityTypes(raw.entityTypes ?? raw.entityType),
+    sourceSystems: parseStringList(raw.sourceSystems ?? raw.sourceSystem),
+    includeDeleted: parseBoolean(raw.includeDeleted)
+  };
+}
+
+function parseSearchQueryRequest(value: unknown): { ok: true; value: SearchQueryRequest } | { ok: false; error: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "Request body must be a JSON object." };
+  }
+  const raw = value as Record<string, unknown>;
+  const center = parseSearchCoordinate(raw.center);
+  if (!center.ok) {
+    return { ok: false, error: center.error };
+  }
+  const bbox = parseSearchBbox(raw.bbox);
+  if (!bbox.ok) {
+    return { ok: false, error: bbox.error };
+  }
+  const radiusM = parseOptionalNumber(raw.radiusM);
+  if (radiusM !== undefined && (!Number.isFinite(radiusM) || radiusM <= 0 || radiusM > 250000)) {
+    return { ok: false, error: "radiusM must be a positive number no greater than 250000." };
+  }
+  const limit = parseOptionalNumber(raw.limit);
+  if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+    return { ok: false, error: "limit must be a positive number." };
+  }
+  const validAt = asString(raw.validAt);
+  if (validAt && !Number.isFinite(Date.parse(validAt))) {
+    return { ok: false, error: "validAt must be an ISO datetime." };
+  }
+  return {
+    ok: true,
+    value: {
+      text: asString(raw.text),
+      entityTypes: parseSearchEntityTypes(raw.entityTypes ?? raw.entityType),
+      sourceSystems: parseDelimitedStringList(raw.sourceSystems ?? raw.sourceSystem),
+      center: center.value,
+      radiusM,
+      bbox: bbox.value,
+      validAt,
+      includeStale: parseBoolean(raw.includeStale),
+      limit
+    }
+  };
+}
+
+function parseSearchCoordinate(value: unknown): { ok: true; value?: { lat: number; lon: number } } | { ok: false; error: string } {
+  if (value === undefined || value === null) {
+    return { ok: true, value: undefined };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "center must be an object with lat and lon." };
+  }
+  const record = value as Record<string, unknown>;
+  const lat = Number(record.lat);
+  const lon = Number(record.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return { ok: false, error: "center.lat and center.lon must be valid WGS84 coordinates." };
+  }
+  return { ok: true, value: { lat, lon } };
+}
+
+function parseSearchBbox(value: unknown): { ok: true; value?: BoundingBox | null } | { ok: false; error: string } {
+  if (value === undefined) {
+    return { ok: true, value: undefined };
+  }
+  if (value === null) {
+    return { ok: true, value: null };
+  }
+  if (typeof value === "string") {
+    return parseBbox(value, { west: -180, south: -90, east: 180, north: 90 });
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ok: false, error: "bbox must be null, west,south,east,north or an object." };
+  }
+  const record = value as Record<string, unknown>;
+  const west = Number(record.west);
+  const south = Number(record.south);
+  const east = Number(record.east);
+  const north = Number(record.north);
+  if (!Number.isFinite(west) || !Number.isFinite(south) || !Number.isFinite(east) || !Number.isFinite(north)) {
+    return { ok: false, error: "bbox object must include west, south, east and north numbers." };
+  }
+  if (west < -180 || east > 180 || south < -90 || north > 90 || west >= east || south >= north) {
+    return { ok: false, error: "bbox coordinates are outside WGS84 bounds or not ordered west,south,east,north." };
+  }
+  return { ok: true, value: { west, south, east, north } };
+}
+
+function parseSearchEntityTypes(value: unknown): SearchEntityType[] | undefined {
+  const parsed = parseDelimitedStringList(value)
+    .map((item) => item.trim())
+    .filter((item): item is SearchEntityType => isSearchEntityType(item));
+  return parsed.length > 0 ? Array.from(new Set(parsed)) : undefined;
+}
+
+function isSearchEntityType(value: string): value is SearchEntityType {
+  return [
+    "police_station",
+    "fire_station",
+    "hospital",
+    "medical_emergency",
+    "hydro_station",
+    "hydro_measurement",
+    "weather_warning",
+    "safety_alert",
+    "fire_incident",
+    "flood_risk_area",
+    "road_closure",
+    "shelter",
+    "evacuation_point",
+    "municipality",
+    "district",
+    "region",
+    "critical_infrastructure",
+    "public_resource"
+  ].includes(value);
+}
+
+function parseDelimitedStringList(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value.flatMap((item) => String(item).split(",")) : asString(value)?.split(",") ?? [];
+  return raw.map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
 function parseBbox(value: unknown, fallback: BoundingBox): { ok: true; value: BoundingBox } | { ok: false; error: string } {
@@ -1143,6 +1352,14 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       maxGraphEdges: config.routingMaxGraphEdges,
       maxSearchRadiusM: config.routingMaxSearchRadiusM,
       maxSnapDistanceM: config.routingMaxSnapDistanceM
+    },
+    searchData: {
+      enabled: true,
+      contractVersion: "sim-search-source-v1",
+      basePath: "/search-data/api/v1",
+      cacheTtlSeconds: config.searchDataCacheTtlSeconds,
+      cacheMaxEntries: config.searchDataCacheMaxEntries,
+      maxLimit: config.searchDataMaxLimit
     },
     weatherRadarFrames: {
       historyHours: config.chmiWeatherRadarFrameHistoryHours,

@@ -285,10 +285,56 @@ def check_radio_planning_cache(client: Client) -> dict[str, Any]:
     }
 
 
+def check_search_data_contract(client: Client) -> dict[str, Any]:
+    taxonomy, taxonomy_response = client.json("/search-data/api/v1/taxonomy")
+    require(taxonomy.get("contractVersion") == "sim-search-source-v1", "search-data taxonomy: unexpected contractVersion")
+    require(taxonomy.get("providerId") == "sim.search-data", "search-data taxonomy: unexpected providerId")
+    taxonomy_text = json.dumps(taxonomy, ensure_ascii=False)
+    for token in ["police_station", "fire_station", "weather_warning", "official_observed"]:
+        require(token in taxonomy_text, f"search-data taxonomy: missing token {token}")
+
+    feed, feed_response = client.json("/search-data/api/v1/entities?entityTypes=police_station,fire_station,hospital&limit=3")
+    require(feed.get("contractVersion") == "sim-search-source-v1", "search-data feed: unexpected contractVersion")
+    require(feed.get("providerId") == "sim.search-data", "search-data feed: unexpected providerId")
+    require(isinstance(feed.get("entities"), list), "search-data feed: missing entities")
+    summary = feed.get("summary")
+    require(isinstance(summary, dict), "search-data feed: missing summary")
+    require(isinstance(summary.get("returnedCount"), int), "search-data feed: missing returnedCount")
+
+    query, query_response = client.post_json(
+        "/search-data/api/v1/query",
+        {
+            "text": "policie Vrbno",
+            "entityTypes": ["police_station", "fire_station", "hospital"],
+            "center": {"lat": 50.1201, "lon": 17.3832},
+            "radiusM": 25000,
+            "limit": 5,
+        },
+    )
+    require(query.get("contractVersion") == "sim-search-source-v1", "search-data query: unexpected contractVersion")
+    require(isinstance(query.get("entities"), list), "search-data query: missing entities")
+
+    observability, observability_response = client.json("/search-data/api/v1/observability")
+    require(observability.get("providerId") == "sim.search-data", "search-data observability: unexpected providerId")
+    require(observability.get("status") in {"ok", "degraded"}, f"search-data observability: unexpected status {observability.get('status')!r}")
+    require(isinstance(observability.get("sources"), list), "search-data observability: missing sources")
+
+    return {
+        "taxonomyUrl": taxonomy_response.url,
+        "feedUrl": feed_response.url,
+        "queryUrl": query_response.url,
+        "observabilityUrl": observability_response.url,
+        "feedReturnedCount": summary.get("returnedCount"),
+        "queryReturnedCount": query.get("summary", {}).get("returnedCount") if isinstance(query.get("summary"), dict) else None,
+        "status": observability.get("status"),
+    }
+
+
 def check_public_access_control(client: Client, public_ip: str) -> dict[str, int]:
     headers = {"X-Forwarded-For": public_ip}
     checks = {
         "provider": ("/safety-data/api/v1/taxonomy", 403),
+        "searchProvider": ("/search-data/api/v1/taxonomy", 403),
         "root": ("/", 200),
         "api": ("/api/v1/operations/summary", 401),
         "health": ("/health/live", 200),
@@ -357,6 +403,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 query_path("/situation-data/api/v1/features/density", {"limit": 50, "cellSizeDegrees": "1", "sampleSize": 2}),
             ],
         ),
+        "searchData": check_search_data_contract(client),
         "radioPlanningCache": check_radio_planning_cache(client),
     }
     if not args.skip_public_access_control:

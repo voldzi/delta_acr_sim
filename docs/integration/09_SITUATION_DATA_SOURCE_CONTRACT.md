@@ -43,6 +43,78 @@ POST /routing/isochrone
 POST /routing/nearest-access
 ```
 
+## Search Data pro COP AI kontext
+
+SIM poskytuje samostatné normalizované rozhraní pro AI vyhledávání kontextu nad
+mapou. Nejde o chat ani o rozhodovací AI. SIM zde vystupuje jako server-side
+zdroj pravdy, který dodává stabilní entity, geometrii, klasifikaci, kvalitu dat,
+časovou platnost a pravidla zacházení. COP nad tím staví uživatelský dotaz,
+oprávnění, RAG/LLM orchestrace, audit a mapové akce.
+
+Privátní base URL pro COP backend:
+
+```text
+http://docker.home.cz:5020/search-data/api/v1
+```
+
+Veřejný reverzní proxy používá stejnou cestu, ale provider endpointy mají
+zůstat server-to-server a nemají být volané přímo z klienta:
+
+```text
+https://sim.zeleznalady.cz/search-data/api/v1
+```
+
+Endpointy:
+
+```http
+GET /search-data/api/v1/taxonomy
+GET /search-data/api/v1/entities?limit=1000&cursor=...
+GET /search-data/api/v1/entities/{providerEntityId}
+POST /search-data/api/v1/query
+GET /search-data/api/v1/observability
+```
+
+Kompatibilní interní alias je dostupný také jako `/api/v1/search-data/*`.
+
+Kontrakt odpovědí:
+
+| Pole | Význam |
+| --- | --- |
+| `contractVersion` | vždy `sim-search-source-v1` |
+| `providerId` | vždy `sim.search-data` |
+| `providerEntityId` | stabilní SIM identifikátor entity pro detail a deduplikaci |
+| `entityType` | autoritativní typ entity, ne jazykově odvozený text |
+| `sourceSystem` | původní zdroj/read-model, např. `osm_reference`, `chmi_alerts`, `chmi_hydro`, `safety_data` |
+| `sourceEntityId` | identifikátor objektu v původním zdroji |
+| `sourceAuthority` | `official`, `internal_verified`, `partner_verified`, `reference`, `community_verified`, `community_unverified`, `modelled` nebo `unknown` |
+| `dataQuality` | `official_observed`, `official_warning`, `verified_reference`, `reference`, `modelled`, `mixed` nebo `unknown` |
+| `title`, `summary`, `searchableText`, `aliases` | normalizovaný text pro UI, indexaci a RAG grounding |
+| `localized.cs`, `localized.en` | lokalizované texty pro COP UI a AI kontext |
+| `geometry`, `centroid` | GeoJSON geometrie ve WGS84 a bod pro řazení/vzdálenosti |
+| `address` | správní/adresní zařazení, pokud je ve zdroji dostupné |
+| `status`, `severity`, `confidence` | stav, závažnost a důvěra normalizované entity |
+| `layerIds`, `tags` | doporučené napojení na COP vrstvy a vyhledávací tagy |
+| `metrics` | strojově čitelné hodnoty, např. závažnost, pravděpodobnost, voda, průtok |
+| `classification`, `handling`, `visibility`, `allowedUse` | pravidla klasifikace, zobrazitelnosti a povoleného použití |
+| `positionQuality` | přesnost polohy: `exact`, `centroid`, `approximate` nebo `unknown` |
+| `providerProperties` | omezené provider-native hodnoty pro audit a detail |
+| `deleted` | v1 vrací aktuální živý/read-model stav; tombstones jsou označený follow-up |
+
+Podporované `entityType` hodnoty v první produkční verzi:
+
+```text
+police_station, fire_station, hospital, medical_emergency,
+hydro_station, hydro_measurement, weather_warning, safety_alert,
+fire_incident, flood_risk_area, road_closure, shelter,
+evacuation_point, municipality, district, region,
+critical_infrastructure, public_resource
+```
+
+COP má pro indexování používat primárně `GET /entities` se stránkováním přes
+`nextCursor`. Pro interaktivní dotaz může použít `POST /query`, který vrací
+rankované entity s důvody shody. SIM schválně nevrací raw upstream payloady jako
+AI kontext; `rawRef` slouží jen jako omezená auditní reference.
+
 ## Map Catalog v1 metadata
 
 `GET /catalog` je preferovaný metadata endpoint pro COM layer tree. Vrací provider metadata pro autoritativní source-neutral kontrakt Map Catalog v1:

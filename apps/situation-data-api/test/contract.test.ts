@@ -121,6 +121,9 @@ describe("Situation Data API contract", () => {
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
+      searchDataCacheTtlSeconds: 300,
+      searchDataCacheMaxEntries: 256,
+      searchDataMaxLimit: 5000,
       routingCacheTtlSeconds: 300,
       routingCacheMaxEntries: 512,
       routingOsmRoadsTable: "public.osm_roads",
@@ -1042,6 +1045,14 @@ describe("Situation Data API contract", () => {
           maxGraphEdges: 45000,
           maxSearchRadiusM: 160000,
           maxSnapDistanceM: 2500
+        },
+        searchData: {
+          enabled: true,
+          contractVersion: "sim-search-source-v1",
+          basePath: "/search-data/api/v1",
+          cacheTtlSeconds: 300,
+          cacheMaxEntries: 256,
+          maxLimit: 5000
         },
         providers: expect.arrayContaining([
           expect.objectContaining({ sourceId: "mock", authConfigured: true }),
@@ -3794,6 +3805,95 @@ describe("Situation Data API contract", () => {
     );
     const metrics = await request(app).get("/metrics").expect(200);
     expect(metrics.text).toContain('situation_data_routing_cache_hits{operation="route"} 1');
+  });
+
+  it("exposes normalized search-data provider contract for COP AI indexing", async () => {
+    const taxonomy = await request(app).get("/search-data/api/v1/taxonomy").expect(200);
+    expect(taxonomy.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-search-source-v1",
+        providerId: "sim.search-data",
+        entityTypes: expect.arrayContaining([
+          expect.objectContaining({ entityType: "police_station", layerIds: ["public.security.police"] }),
+          expect.objectContaining({ entityType: "fire_station", layerIds: ["public.security.fire_station"] }),
+          expect.objectContaining({ entityType: "weather_warning", layerIds: ["public.safety.weather_alerts"] })
+        ]),
+        sourceAuthorities: expect.arrayContaining(["official", "reference", "modelled"]),
+        dataQualities: expect.arrayContaining(["official_observed", "verified_reference", "modelled"])
+      })
+    );
+
+    const feed = await request(app).get("/search-data/api/v1/entities?entityTypes=police_station,fire_station&limit=5&includeDeleted=true").expect(200);
+    expect(feed.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-search-source-v1",
+        providerId: "sim.search-data",
+        query: expect.objectContaining({
+          limit: 5,
+          entityTypes: ["police_station", "fire_station"],
+          includeDeleted: true
+        }),
+        summary: expect.objectContaining({
+          returnedCount: 0,
+          deletedCount: 0,
+          warningCount: expect.any(Number)
+        }),
+        entities: [],
+        warnings: expect.arrayContaining([expect.stringContaining("includeDeleted")])
+      })
+    );
+
+    const secondFeed = await request(app).get("/search-data/api/v1/entities?entityTypes=police_station,fire_station&limit=5&includeDeleted=true").expect(200);
+    expect(secondFeed.body.generatedAt).toBe(feed.body.generatedAt);
+
+    const query = await request(app)
+      .post("/search-data/api/v1/query")
+      .send({
+        text: "policie Vrbno",
+        entityTypes: ["police_station", "fire_station"],
+        sourceSystems: ["osm_reference"],
+        center: { lat: 50.1201, lon: 17.3832 },
+        radiusM: 25000,
+        includeStale: false,
+        limit: 20
+      })
+      .expect(200);
+    expect(query.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "sim-search-source-v1",
+        providerId: "sim.search-data",
+        query: expect.objectContaining({ sourceSystems: ["osm_reference"] }),
+        summary: expect.objectContaining({ returnedCount: 0 }),
+        entities: []
+      })
+    );
+
+    const observability = await request(app).get("/search-data/api/v1/observability").expect(200);
+    expect(observability.body).toEqual(
+      expect.objectContaining({
+        serviceId: "search-data-api",
+        contractVersion: "sim-search-source-v1",
+        providerId: "sim.search-data",
+        status: "degraded",
+        sources: expect.arrayContaining([
+          expect.objectContaining({ sourceSystem: "osm_reference", status: "degraded" }),
+          expect.objectContaining({ sourceSystem: "safety_data", status: "degraded" })
+        ]),
+        capabilities: expect.objectContaining({
+          incrementalSync: true,
+          cursorPagination: true,
+          providerLocalQuery: true,
+          browserDirectAccess: false
+        })
+      })
+    );
+
+    const alias = await request(app).get("/api/v1/search-data/taxonomy").expect(200);
+    expect(alias.body.contractVersion).toBe("sim-search-source-v1");
+
+    const metrics = await request(app).get("/metrics").expect(200);
+    expect(metrics.text).toContain("search_data_cache_hits 1");
+    expect(metrics.text).toContain("search_data_cache_misses 1");
   });
 
   it("builds mobile coverage polygons from tower references", async () => {

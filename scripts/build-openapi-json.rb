@@ -32,6 +32,13 @@ SPECS = [
     path_prefix: "/situation-data/api/v1"
   },
   {
+    key: "searchData",
+    prefix: "SearchData",
+    tag_prefix: "Search Data",
+    file: "docs/archive/openapi-yaml/openapi-search-data.yaml",
+    path_prefix: "/search-data/api/v1"
+  },
+  {
     key: "safetyData",
     prefix: "SafetyData",
     tag_prefix: "Safety Data",

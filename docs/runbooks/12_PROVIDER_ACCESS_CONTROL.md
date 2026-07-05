@@ -82,7 +82,7 @@ server {
         proxy_set_header X-Forwarded-Proto https;
     }
 
-    location ~ ^/(flight-data|situation-data|safety-data|tak-gateway|health|metrics)(/|$) {
+    location ~ ^/(flight-data|situation-data|search-data|safety-data|tak-gateway|health|metrics)(/|$) {
         return 403;
     }
 
@@ -121,6 +121,7 @@ COP backend should call one of these private provider base URLs:
 
 ```text
 http://docker.home.cz:5020/situation-data/api/v1
+http://docker.home.cz:5020/search-data/api/v1
 http://docker.home.cz:5020/safety-data/api/v1
 http://docker.home.cz:5020/flight-data
 http://docker.home.cz:5020/tak-gateway/api/v1
@@ -140,6 +141,7 @@ From an internal host or VPN:
 ```bash
 curl -fsS http://docker.home.cz:5020/health/live
 curl -fsS http://docker.home.cz:5020/situation-data/api/v1/catalog
+curl -fsS http://docker.home.cz:5020/search-data/api/v1/taxonomy
 curl -fsS 'http://docker.home.cz:5020/situation-data/api/v1/features?layers=weather&limit=1'
 ```
 
@@ -150,6 +152,7 @@ curl -i https://sim.zeleznalady.cz/health/live
 curl -i https://sim.zeleznalady.cz/
 curl -i https://sim.zeleznalady.cz/api/v1/operations/summary
 curl -i https://sim.zeleznalady.cz/situation-data/api/v1/catalog
+curl -i https://sim.zeleznalady.cz/search-data/api/v1/taxonomy
 ```
 
 Expected public result:

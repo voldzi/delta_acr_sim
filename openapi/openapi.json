@@ -4411,6 +4411,192 @@
         ]
       }
     },
+    "/search-data/api/v1/taxonomy": {
+      "get": {
+        "operationId": "searchData_getSearchDataTaxonomy",
+        "summary": "Return stable entity taxonomy for COP AI context indexing",
+        "responses": {
+          "200": {
+            "description": "Search-data taxonomy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchDataSearchTaxonomyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Search Data: Search Data"
+        ]
+      }
+    },
+    "/search-data/api/v1/entities": {
+      "get": {
+        "operationId": "searchData_listSearchDataEntities",
+        "summary": "Return a normalized entity feed for COP indexing",
+        "description": "Returns source-normalized, stable entities with GeoJSON geometry, quality metadata and handling rules. COP should page by nextCursor when present.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchDataUpdatedSince"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDataCursor"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDataLimit"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDataEntityTypes"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDataSourceSystems"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDataIncludeDeleted"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search entity feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchDataSearchEntityFeed"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SearchDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SearchDataProblem"
+          }
+        },
+        "tags": [
+          "Search Data: Search Data"
+        ]
+      }
+    },
+    "/search-data/api/v1/entities/{providerEntityId}": {
+      "get": {
+        "operationId": "searchData_getSearchDataEntity",
+        "summary": "Return one normalized search entity",
+        "parameters": [
+          {
+            "name": "providerEntityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable SIM provider entity id from the entity feed."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search entity detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchDataSearchEntity"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/SearchDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SearchDataProblem"
+          }
+        },
+        "tags": [
+          "Search Data: Search Data"
+        ]
+      }
+    },
+    "/search-data/api/v1/query": {
+      "post": {
+        "operationId": "searchData_querySearchDataEntities",
+        "summary": "Run a bounded server-side search over normalized entities",
+        "description": "Supports COP AI context retrieval without exposing raw upstream systems to COP clients. The response uses the same SearchEntityFeed contract as /entities.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchDataSearchQueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked search entity feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchDataSearchEntityFeed"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/SearchDataProblem"
+          },
+          "502": {
+            "$ref": "#/components/responses/SearchDataProblem"
+          }
+        },
+        "tags": [
+          "Search Data: Search Data"
+        ]
+      }
+    },
+    "/search-data/api/v1/observability": {
+      "get": {
+        "operationId": "searchData_getSearchDataObservability",
+        "summary": "Return search-data source health and cache state",
+        "responses": {
+          "200": {
+            "description": "Search-data observability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchDataSearchObservabilityResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or unauthorized bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Search Data: Search Data"
+        ]
+      }
+    },
     "/safety-data/api/v1/layers": {
       "get": {
         "summary": "List available safety layers",
@@ -13401,6 +13587,838 @@
           }
         }
       },
+      "SearchDataSearchTaxonomyResponse": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "providerId",
+          "generatedAt",
+          "entityTypes",
+          "severities",
+          "statuses",
+          "sourceAuthorities",
+          "dataQualities",
+          "visibility",
+          "classification",
+          "supportedLayers",
+          "notes"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-search-source-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.search-data"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entityTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchEntityTypeDescriptor"
+            }
+          },
+          "severities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchSeverity"
+            }
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchStatus"
+            }
+          },
+          "sourceAuthorities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchSourceAuthority"
+            }
+          },
+          "dataQualities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchDataQuality"
+            }
+          },
+          "visibility": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cop_internal",
+                "restricted",
+                "public"
+              ]
+            }
+          },
+          "classification": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PUBLIC",
+                "INTERNAL",
+                "RESTRICTED"
+              ]
+            }
+          },
+          "supportedLayers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchDataSearchEntityTypeDescriptor": {
+        "type": "object",
+        "required": [
+          "entityType",
+          "label",
+          "layerIds",
+          "sourceSystems"
+        ],
+        "properties": {
+          "entityType": {
+            "$ref": "#/components/schemas/SearchDataSearchEntityType"
+          },
+          "label": {
+            "type": "string"
+          },
+          "layerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceSystems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchDataSearchEntityFeed": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "providerId",
+          "generatedAt",
+          "query",
+          "summary",
+          "entities",
+          "warnings"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-search-source-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.search-data"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "query": {
+            "type": "object",
+            "required": [
+              "limit",
+              "entityTypes",
+              "sourceSystems",
+              "includeDeleted"
+            ],
+            "properties": {
+              "updatedSince": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "cursor": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "entityTypes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SearchDataSearchEntityType"
+                }
+              },
+              "sourceSystems": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "includeDeleted": {
+                "type": "boolean"
+              }
+            }
+          },
+          "summary": {
+            "type": "object",
+            "required": [
+              "entityCount",
+              "returnedCount",
+              "staleEntityCount",
+              "deletedCount",
+              "warningCount"
+            ],
+            "properties": {
+              "entityCount": {
+                "type": "integer"
+              },
+              "returnedCount": {
+                "type": "integer"
+              },
+              "staleEntityCount": {
+                "type": "integer"
+              },
+              "deletedCount": {
+                "type": "integer"
+              },
+              "warningCount": {
+                "type": "integer"
+              }
+            }
+          },
+          "entities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchEntity"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchDataSearchEntity": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "providerId",
+          "providerEntityId",
+          "sourceSystem",
+          "sourceEntityId",
+          "entityType",
+          "title",
+          "summary",
+          "searchableText",
+          "aliases",
+          "localized",
+          "geometry",
+          "centroid",
+          "address",
+          "status",
+          "confidence",
+          "dataQuality",
+          "sourceAuthority",
+          "classification",
+          "handling",
+          "visibility",
+          "allowedUse",
+          "updatedAt",
+          "stale",
+          "sourceRevision",
+          "layerIds",
+          "tags",
+          "metrics",
+          "positionQuality",
+          "providerProperties",
+          "deleted"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-search-source-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.search-data"
+          },
+          "providerEntityId": {
+            "type": "string"
+          },
+          "sourceSystem": {
+            "type": "string"
+          },
+          "sourceEntityId": {
+            "type": "string"
+          },
+          "entityType": {
+            "$ref": "#/components/schemas/SearchDataSearchEntityType"
+          },
+          "entitySubtype": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "searchableText": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "localized": {
+            "type": "object",
+            "required": [
+              "cs"
+            ],
+            "properties": {
+              "cs": {
+                "$ref": "#/components/schemas/SearchDataSearchLocalizedText"
+              },
+              "en": {
+                "$ref": "#/components/schemas/SearchDataSearchLocalizedText"
+              }
+            }
+          },
+          "geometry": {
+            "type": "object",
+            "description": "GeoJSON geometry in WGS84.",
+            "additionalProperties": true
+          },
+          "centroid": {
+            "$ref": "#/components/schemas/SearchDataCoordinate"
+          },
+          "address": {
+            "type": "object",
+            "required": [
+              "countryCode"
+            ],
+            "properties": {
+              "countryCode": {
+                "type": "string"
+              },
+              "region": {
+                "type": "string"
+              },
+              "district": {
+                "type": "string"
+              },
+              "municipality": {
+                "type": "string"
+              },
+              "street": {
+                "type": "string"
+              }
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/SearchDataSearchStatus"
+          },
+          "severity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SearchDataSearchSeverity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "dataQuality": {
+            "$ref": "#/components/schemas/SearchDataSearchDataQuality"
+          },
+          "sourceAuthority": {
+            "$ref": "#/components/schemas/SearchDataSearchSourceAuthority"
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "PUBLIC",
+              "INTERNAL",
+              "RESTRICTED"
+            ]
+          },
+          "handling": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "cop_internal",
+              "restricted",
+              "public"
+            ]
+          },
+          "allowedUse": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "observedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validFrom": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validUntil": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "sourceRevision": {
+            "type": "string"
+          },
+          "layerIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "positionQuality": {
+            "type": "object",
+            "required": [
+              "accuracy",
+              "source"
+            ],
+            "properties": {
+              "accuracy": {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "centroid",
+                  "approximate",
+                  "unknown"
+                ]
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          },
+          "providerProperties": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": false
+          }
+        }
+      },
+      "SearchDataSearchQueryRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "entityTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchEntityType"
+            }
+          },
+          "sourceSystems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "center": {
+            "$ref": "#/components/schemas/SearchDataCoordinate"
+          },
+          "radiusM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 250000
+          },
+          "bbox": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SearchDataBbox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "includeStale": {
+            "type": "boolean",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 20
+          }
+        }
+      },
+      "SearchDataSearchObservabilityResponse": {
+        "type": "object",
+        "required": [
+          "serviceId",
+          "contractVersion",
+          "providerId",
+          "generatedAt",
+          "status",
+          "sources",
+          "cache",
+          "capabilities"
+        ],
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "const": "search-data-api"
+          },
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-search-source-v1"
+          },
+          "providerId": {
+            "type": "string",
+            "const": "sim.search-data"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchDataSearchSourceObservability"
+            }
+          },
+          "cache": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "capabilities": {
+            "type": "object",
+            "required": [
+              "incrementalSync",
+              "cursorPagination",
+              "deletedTombstones",
+              "providerLocalQuery",
+              "wholeCountrySearch",
+              "browserDirectAccess"
+            ],
+            "properties": {
+              "incrementalSync": {
+                "type": "boolean"
+              },
+              "cursorPagination": {
+                "type": "boolean"
+              },
+              "deletedTombstones": {
+                "type": "boolean"
+              },
+              "providerLocalQuery": {
+                "type": "boolean"
+              },
+              "wholeCountrySearch": {
+                "type": "boolean"
+              },
+              "browserDirectAccess": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "SearchDataSearchSourceObservability": {
+        "type": "object",
+        "required": [
+          "sourceSystem",
+          "status",
+          "entityCount",
+          "staleCount",
+          "warnings"
+        ],
+        "properties": {
+          "sourceSystem": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          },
+          "entityCount": {
+            "type": "integer"
+          },
+          "staleCount": {
+            "type": "integer"
+          },
+          "lastSuccessAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchDataSearchLocalizedText": {
+        "type": "object",
+        "required": [
+          "title",
+          "summary"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchDataSearchEntityType": {
+        "type": "string",
+        "enum": [
+          "police_station",
+          "fire_station",
+          "hospital",
+          "medical_emergency",
+          "hydro_station",
+          "hydro_measurement",
+          "weather_warning",
+          "safety_alert",
+          "fire_incident",
+          "flood_risk_area",
+          "road_closure",
+          "shelter",
+          "evacuation_point",
+          "municipality",
+          "district",
+          "region",
+          "critical_infrastructure",
+          "public_resource"
+        ]
+      },
+      "SearchDataSearchSourceAuthority": {
+        "type": "string",
+        "enum": [
+          "official",
+          "internal_verified",
+          "partner_verified",
+          "reference",
+          "community_verified",
+          "community_unverified",
+          "modelled",
+          "unknown"
+        ]
+      },
+      "SearchDataSearchDataQuality": {
+        "type": "string",
+        "enum": [
+          "official_observed",
+          "official_warning",
+          "verified_reference",
+          "reference",
+          "modelled",
+          "mixed",
+          "unknown"
+        ]
+      },
+      "SearchDataSearchStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "inactive",
+          "expired",
+          "unknown"
+        ]
+      },
+      "SearchDataSearchSeverity": {
+        "type": "string",
+        "enum": [
+          "info",
+          "advisory",
+          "warning",
+          "critical"
+        ]
+      },
+      "SearchDataCoordinate": {
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          }
+        }
+      },
+      "SearchDataBbox": {
+        "type": "object",
+        "required": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ],
+        "properties": {
+          "west": {
+            "type": "number"
+          },
+          "south": {
+            "type": "number"
+          },
+          "east": {
+            "type": "number"
+          },
+          "north": {
+            "type": "number"
+          }
+        }
+      },
+      "SearchDataProblem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "correlationId"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
       "SafetyDataBoundingBox": {
         "type": "object",
         "required": [
@@ -15288,6 +16306,16 @@
           }
         }
       },
+      "SearchDataProblem": {
+        "description": "RFC7807-compatible problem response",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/SearchDataProblem"
+            }
+          }
+        }
+      },
       "SafetyDataProblem": {
         "description": "Problem response",
         "content": {
@@ -15429,6 +16457,64 @@
           "example": "node:13743393126"
         },
         "description": "OSM communications_tower identifier as exposed in mobile coverage tags, e.g. node:13743393126."
+      },
+      "SearchDataUpdatedSince": {
+        "name": "updatedSince",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Optional ISO timestamp for incremental consumers. The v1 feed accepts the parameter but only current live/read-model entities are emitted."
+      },
+      "SearchDataCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Opaque cursor returned as nextCursor."
+      },
+      "SearchDataLimit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000,
+          "default": 1000
+        }
+      },
+      "SearchDataEntityTypes": {
+        "name": "entityTypes",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated entity types, for example police_station,fire_station,hospital."
+      },
+      "SearchDataSourceSystems": {
+        "name": "sourceSystems",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated source systems, for example osm_reference,chmi_hydro,chmi_alerts."
+      },
+      "SearchDataIncludeDeleted": {
+        "name": "includeDeleted",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": "Requests tombstones. SIM v1 returns live/current entities and emits a warning when tombstones are not yet available."
       },
       "SafetyDataBbox": {
         "name": "bbox",

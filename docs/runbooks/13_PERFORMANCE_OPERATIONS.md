@@ -89,6 +89,7 @@ curl -fsS http://127.0.0.1:5020/health/live
 curl -fsS http://127.0.0.1:5020/api/v1/operations/summary
 curl -fsS http://127.0.0.1:5020/situation-data/health/ready
 curl -fsS http://127.0.0.1:5020/situation-data/api/v1/observability
+curl -fsS http://127.0.0.1:5020/search-data/api/v1/observability
 python3 scripts/smoke-provider-gateway.py --base-url http://127.0.0.1:5020
 curl -fsS 'http://127.0.0.1:5020/situation-data/api/v1/weather-radar/frames?product=merge1h&hours=1&limit=1'
 ```
@@ -105,10 +106,11 @@ geometry documents and repeated radio `link-check` cache telemetry.
 ## Gateway Stale Cache
 
 `sim-web` has a short nginx cache for internal GET provider API routes:
-`/flight-data/api/*`, `/situation-data/api/*` and `/safety-data/api/*`. It keeps
-successful `200` responses valid for 10 seconds and may serve them stale on
-backend errors during deploy. This is intended to protect COP polling loops from
-brief `502` windows while a single backend container is recreated.
+`/flight-data/api/*`, `/situation-data/api/*`, `/search-data/api/*` and
+`/safety-data/api/*`. It keeps successful `200` responses valid for 10 seconds
+and may serve them stale on backend errors during deploy. This is intended to
+protect COP polling loops from brief `502` windows while a single backend
+container is recreated.
 
 Use `?nocache=1` or an `Authorization` header when diagnosing an endpoint and
 the gateway cache must be bypassed. The response header `X-SIM-Gateway-Cache`

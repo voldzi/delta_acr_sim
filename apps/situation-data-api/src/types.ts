@@ -297,6 +297,14 @@ export interface SituationDataPublicConfig {
     maxSearchRadiusM: number;
     maxSnapDistanceM: number;
   };
+  searchData: {
+    enabled: boolean;
+    contractVersion: "sim-search-source-v1";
+    basePath: "/search-data/api/v1";
+    cacheTtlSeconds: number;
+    cacheMaxEntries: number;
+    maxLimit: number;
+  };
   weatherRadarFrames: {
     historyHours: number;
     maxCount: number;

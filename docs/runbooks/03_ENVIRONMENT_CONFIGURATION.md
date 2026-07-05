@@ -99,6 +99,9 @@
 - `SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M`
 - `SITUATION_DATA_ROUTING_MAX_SNAP_DISTANCE_M`
 - `ROUTING_OSM_ROADS_TABLE`
+- `SEARCH_DATA_CACHE_TTL_SECONDS`
+- `SEARCH_DATA_CACHE_MAX_ENTRIES`
+- `SEARCH_DATA_MAX_LIMIT`
 - `MOBILE_COVERAGE_RESOLUTION_M`
 - `MOBILE_COVERAGE_MAX_CELLS`
 - `MOBILE_COVERAGE_MODEL_VERSION`
@@ -217,6 +220,21 @@ SIM_OPERATIONS_SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 SIM_OPERATIONS_TAK_GATEWAY_BASE_URL=http://tak-gateway-api:4040
 SIM_OPERATIONS_REPORT_FILE=/data/operational-checks/latest.json
 ```
+
+## Search Data pro COP AI kontext
+
+`search-data` běží v `situation-data-api` a poskytuje normalizované entity pro
+server-side COP indexaci a dotazy nad mapovým kontextem. Doporučené produkční
+hodnoty:
+
+```bash
+SEARCH_DATA_CACHE_TTL_SECONDS=300
+SEARCH_DATA_CACHE_MAX_ENTRIES=256
+SEARCH_DATA_MAX_LIMIT=5000
+```
+
+COP backend volá `http://docker.home.cz:5020/search-data/api/v1`. Frontend ani
+mobilní klienti nemají volat SIM provider endpointy přímo.
 
 `SIM_OPERATIONS_REPORT_FILE` je volitelný. Když soubor existuje, Overview
 zobrazí poslední periodický operational check; když neexistuje, endpoint zůstává

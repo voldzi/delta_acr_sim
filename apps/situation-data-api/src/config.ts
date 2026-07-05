@@ -93,6 +93,9 @@ export interface SituationDataConfig {
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
+  searchDataCacheTtlSeconds: number;
+  searchDataCacheMaxEntries: number;
+  searchDataMaxLimit: number;
   routingCacheTtlSeconds: number;
   routingCacheMaxEntries: number;
   routingOsmRoadsTable: string;
@@ -228,6 +231,9 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
+    searchDataCacheTtlSeconds: parseInteger(process.env.SEARCH_DATA_CACHE_TTL_SECONDS, 300),
+    searchDataCacheMaxEntries: parseInteger(process.env.SEARCH_DATA_CACHE_MAX_ENTRIES, 256),
+    searchDataMaxLimit: parseInteger(process.env.SEARCH_DATA_MAX_LIMIT, 5000),
     routingCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS, 300),
     routingCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES, 512),
     routingOsmRoadsTable: process.env.ROUTING_OSM_ROADS_TABLE ?? "public.osm_roads",
