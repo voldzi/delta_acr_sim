@@ -153,7 +153,7 @@ Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
 | Vrstva | Geometrie | Popis |
 | --- | --- | --- |
 | `trail_routes` | `LineString` / `MultiLineString` | pěší, turistické, cyklo a MTB trasy z OSM relation/line read-modelu |
-| `trail_poi` | `Point` | ubytování, přístřešky, voda, občerstvení, doprava, servis/půjčovny a nouzové body |
+| `trail_poi` | `Point` | ubytování, přístřešky, voda, občerstvení, doprava, servis/půjčovny a outdoor nouzové body; ne IZS stanice |
 
 `trail_routes` navíc posílá `properties.providerProperties.trail`:
 
@@ -171,7 +171,7 @@ Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
 | Pole | Typ | Popis |
 | --- | --- | --- |
 | `contractVersion` | string | `sim-osm-trail-poi-v1` |
-| `category` | string | `sleep`, `camp`, `shelter`, `water`, `food`, `repair`, `rental`, `transport`, `emergency` |
+| `category` | string | `sleep`, `camp`, `shelter`, `water`, `food`, `repair`, `rental`, `transport`, `emergency`; `emergency` znamená outdoor nouzový bod, defibrilátor, nouzový telefon nebo záchranný bod, ne `police`/`fire_station` |
 | `categoryLabelLocalized` | object | český a anglický název kategorie |
 | `openingHours`, `website`, `wheelchair`, `access` | string, optional | veřejné OSM atributy pro detail |
 | `mayDisplayContact` | boolean | vždy `false`; SIM nepublikuje přímé kontaktní údaje z OSM jako běžný mapový detail |
@@ -275,7 +275,7 @@ Zároveň vrací administrativní hranice z materializovaného pohledu `public.o
 A outdoor/trail kontext z materializovaných pohledů:
 
 - `trail_routes`: `public.osm_trail_routes`, OSM `route=hiking|foot|bicycle|mtb`,
-- `trail_poi`: `public.osm_trail_poi`, normalizované body `sleep|camp|shelter|water|food|repair|rental|transport|emergency`.
+- `trail_poi`: `public.osm_trail_poi`, normalizované body `sleep|camp|shelter|water|food|repair|rental|transport|emergency`; hasičské, policejní a zdravotnické stanice zůstávají v infrastrukturních vrstvách `ground`, ne v outdoor vrstvě.
 
 Dotaz:
 

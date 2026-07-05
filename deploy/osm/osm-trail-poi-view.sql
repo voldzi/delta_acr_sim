@@ -17,6 +17,7 @@ with raw as (
     or tags ? 'railway'
     or tags ? 'highway'
     or tags ? 'public_transport'
+    or tags ? 'emergency'
     or tags ? 'drinking_water'
     or tags ? 'service:bicycle:rental'
 
@@ -34,6 +35,7 @@ with raw as (
     or tags ? 'railway'
     or tags ? 'highway'
     or tags ? 'public_transport'
+    or tags ? 'emergency'
     or tags ? 'drinking_water'
     or tags ? 'service:bicycle:rental'
 ),
@@ -52,7 +54,9 @@ classified as (
       when tags->'shop' = 'bicycle' then 'repair'
       when tags->'amenity' in ('bicycle_rental', 'boat_rental') or tags->'service:bicycle:rental' = 'yes' then 'rental'
       when tags->'railway' in ('station', 'halt') or tags->'highway' = 'bus_stop' or tags->'public_transport' in ('platform', 'stop_position') then 'transport'
-      when tags->'amenity' in ('police', 'fire_station') or tags->'emergency' in ('ambulance_station', 'defibrillator', 'assembly_point') then 'emergency'
+      when tags->'highway' = 'emergency_access_point'
+        or tags->'emergency' in ('access_point', 'phone', 'defibrillator', 'assembly_point', 'first_aid', 'lifeguard', 'fire_water_pond')
+        then 'emergency'
       else null
     end as category
   from raw
@@ -66,7 +70,7 @@ select
   st_x(geom)::double precision as lon,
   st_y(geom)::double precision as lat,
   hstore_to_jsonb(slice(tags, array[
-    'name', 'operator', 'brand', 'tourism', 'amenity', 'shop', 'railway', 'highway', 'public_transport',
+    'name', 'operator', 'brand', 'tourism', 'amenity', 'shop', 'railway', 'highway', 'public_transport', 'emergency',
     'drinking_water', 'service:bicycle:rental', 'opening_hours', 'website',
     'wheelchair', 'fee', 'capacity', 'access'
   ])) as tags,

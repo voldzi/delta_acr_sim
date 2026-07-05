@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -3478,6 +3479,15 @@ describe("Situation Data API contract", () => {
       })
     );
     expect(JSON.stringify(result.features[1].properties.raw)).not.toContain("+420123456789");
+  });
+
+  it("keeps police and fire stations out of the OSM trail POI read model", () => {
+    const sql = readFileSync(new URL("../../../deploy/osm/osm-trail-poi-view.sql", import.meta.url), "utf8");
+
+    expect(sql).not.toContain("tags->'amenity' in ('police', 'fire_station')");
+    expect(sql).not.toContain("tags->'emergency' in ('ambulance_station'");
+    expect(sql).toContain("tags->'highway' = 'emergency_access_point'");
+    expect(sql).toContain("'defibrillator'");
   });
 
   it("exposes mobile coverage metadata and configuration warnings", async () => {
