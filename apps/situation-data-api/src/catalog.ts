@@ -1331,7 +1331,7 @@ function buildTrailProviderLayers(config: SituationDataConfig): ProviderCatalogL
       cacheTtlSeconds: config.chmiWeatherWebcamsCacheTtlSeconds,
       styleProfile: "outdoor-webcam-point-v1",
       sourceIds: ["chmi_weather_webcams"],
-      query: query(["outdoor_webcams"], ["chmi_weather_webcams"], ["outdoor_webcam"]),
+      query: query(["outdoor_webcams"], ["chmi_weather_webcams"], ["outdoor_webcam"], 500),
       legend: { profile: "outdoor-webcam-point-v1" },
       delivery: {
         mode: "features",
@@ -1656,14 +1656,19 @@ function buildProviderSource(descriptor: SourceDescriptor, config: SituationData
   };
 }
 
-function query(providerLayerIds: SituationLayerId[], providerSourceIds: SituationDataSourceId[], categoryFilter?: string[]): ProviderCatalogLayer["query"] {
+function query(
+  providerLayerIds: SituationLayerId[],
+  providerSourceIds: SituationDataSourceId[],
+  categoryFilter?: string[],
+  maxFeatures = DEFAULT_MAX_FEATURES
+): ProviderCatalogLayer["query"] {
   return {
     mode: "bbox",
     providerId: PROVIDER_ID,
     streamId: "cop.features",
     providerLayerIds,
     providerSourceIds,
-    maxFeatures: DEFAULT_MAX_FEATURES,
+    maxFeatures,
     categoryFilter
   };
 }
