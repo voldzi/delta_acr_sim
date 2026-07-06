@@ -63,6 +63,9 @@ interface OsmTrailRouteRow {
   segment_count: number | string | null;
   length_km: number | string | null;
   geometry_geojson: unknown;
+  geometry_detail: string | null;
+  simplification_degrees: number | string | null;
+  generalization_m: number | string | null;
   tags: Record<string, unknown> | null;
   imported_at: Date | string | null;
 }
@@ -282,10 +285,10 @@ export class OsmPostgisSource implements SituationDataSource {
         ? this.trailRoutesCache.getOrLoad(
             JSON.stringify({
               bbox: formatBboxKey(cacheBbox),
-              geomColumn: trailRouteGeomColumn(cacheBbox).column,
+              geometryDetail: trailRouteGeometrySpec(query.bbox).cacheKey,
               limit: queryLimit
             }),
-            () => this.fetchTrailRouteRows(cacheBbox, queryLimit)
+            () => this.fetchTrailRouteRows(cacheBbox, query.bbox, queryLimit)
           )
         : Promise.resolve([]),
       trailLayers.includes("trail_poi")
@@ -390,10 +393,10 @@ export class OsmPostgisSource implements SituationDataSource {
     return result.rows;
   }
 
-  private async fetchTrailRouteRows(bbox: BoundingBox, limit: number): Promise<OsmTrailRouteRow[]> {
+  private async fetchTrailRouteRows(bbox: BoundingBox, detailBbox: BoundingBox, limit: number): Promise<OsmTrailRouteRow[]> {
     const pool = this.getPool();
     const table = quoteQualifiedIdentifier(this.config.osmPostgisTrailRoutesTable, "OSM_POSTGIS_TRAIL_ROUTES_TABLE");
-    const geom = trailRouteGeomColumn(bbox);
+    const geom = trailRouteGeometrySpec(detailBbox);
     const sql = `
       select
         osm_id::text,
@@ -406,11 +409,14 @@ export class OsmPostgisSource implements SituationDataSource {
         osmc_symbol,
         segment_count,
         length_km,
-        st_asgeojson(${geom.column})::jsonb as geometry_geojson,
+        st_asgeojson(${geom.expression})::jsonb as geometry_geojson,
+        $6::text as geometry_detail,
+        $7::double precision as simplification_degrees,
+        $8::double precision as generalization_m,
         tags,
         imported_at
       from ${table}
-      where ${geom.column} && st_makeenvelope($1, $2, $3, $4, 4326)
+      where geom && st_makeenvelope($1, $2, $3, $4, 4326)
       order by
         case network
           when 'iwn' then 1
@@ -428,7 +434,16 @@ export class OsmPostgisSource implements SituationDataSource {
         osm_id
       limit $5
     `;
-    const result = await pool.query<OsmTrailRouteRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, Math.max(1, Math.min(5000, limit))]);
+    const result = await pool.query<OsmTrailRouteRow>(sql, [
+      bbox.west,
+      bbox.south,
+      bbox.east,
+      bbox.north,
+      Math.max(1, Math.min(5000, limit)),
+      geom.detail,
+      geom.simplificationDegrees,
+      geom.generalizationMeters
+    ]);
     return result.rows;
   }
 
@@ -817,6 +832,9 @@ function mapOsmTrailRouteRow(row: OsmTrailRouteRow, fetchedAt: string, includeRa
   const importedAt = normalizeTimestamp(row.imported_at) ?? fetchedAt;
   const lengthKm = optionalNumber(row.length_km);
   const segmentCount = optionalNumber(row.segment_count);
+  const simplificationDegrees = optionalNumber(row.simplification_degrees) ?? 0;
+  const generalizationM = optionalNumber(row.generalization_m) ?? 0;
+  const geometryDetail = cleanString(row.geometry_detail) ?? (simplificationDegrees > 0 ? "generalized" : "full");
   const id = `trail_routes:osm_postgis:${cleanString(row.osm_type) ?? "relation"}:${stableBoundaryToken(`${osmId}:${routeMode}:${network}`)}`;
   const style = trailRouteStyle(routeMode, network);
   const summaryCs = trailRouteSummaryCs(mode, name, lengthKm);
@@ -857,7 +875,10 @@ function mapOsmTrailRouteRow(row: OsmTrailRouteRow, fetchedAt: string, includeRa
       metrics: {
         ageSeconds: 0,
         ...(lengthKm !== undefined ? { lengthKm } : {}),
-        ...(segmentCount !== undefined ? { segmentCount } : {})
+        ...(segmentCount !== undefined ? { segmentCount } : {}),
+        geometryDetail,
+        simplificationDegrees,
+        generalizationM
       },
       tags: compactTags({
         osmId,
@@ -887,6 +908,9 @@ function mapOsmTrailRouteRow(row: OsmTrailRouteRow, fetchedAt: string, includeRa
           osmcSymbol,
           lengthKm,
           segmentCount,
+          geometryDetail,
+          simplificationDegrees,
+          generalizationM,
           license: OSM_POSTGIS_LICENSE.name,
           attribution: OSM_POSTGIS_LICENSE.attribution,
           stageModelAvailable: false,
@@ -899,7 +923,9 @@ function mapOsmTrailRouteRow(row: OsmTrailRouteRow, fetchedAt: string, includeRa
           strokeColor: style.strokeColor,
           strokeWidth: style.strokeWidth,
           lineDash: style.lineDash,
-          zIndexHint: style.zIndexHint
+          zIndexHint: style.zIndexHint,
+          geometryDetail,
+          generalizationM
         }
       },
       raw: includeRaw ? { ...row, tags: scrubPublicTags(row.tags) } : undefined
@@ -1071,18 +1097,32 @@ function adminBoundaryGeomColumn(bbox: BoundingBox): { column: string; simplific
   return { column: "geom", simplificationDegrees: 0 };
 }
 
-function trailRouteGeomColumn(bbox: BoundingBox): { column: string; simplificationDegrees: number } {
+function trailRouteGeometrySpec(bbox: BoundingBox): {
+  expression: string;
+  detail: "full" | "generalized";
+  cacheKey: string;
+  simplificationDegrees: number;
+  generalizationMeters: number;
+} {
   const span = Math.max(bbox.east - bbox.west, bbox.north - bbox.south);
-  if (span > 4) {
-    return { column: "geom_z5", simplificationDegrees: 0.004 };
+  const simplificationDegrees = span > 4 ? 0.00025 : span > 1 ? 0.00015 : span > 0.25 ? 0.00006 : 0;
+  if (simplificationDegrees > 0) {
+    const generalizationMeters = round(simplificationDegrees * 111_320, 1);
+    return {
+      expression: `st_simplifypreservetopology(geom, ${simplificationDegrees})`,
+      detail: "generalized",
+      cacheKey: `generalized:${simplificationDegrees}`,
+      simplificationDegrees,
+      generalizationMeters
+    };
   }
-  if (span > 1) {
-    return { column: "geom_z8", simplificationDegrees: 0.001 };
-  }
-  if (span > 0.25) {
-    return { column: "geom_z11", simplificationDegrees: 0.0003 };
-  }
-  return { column: "geom", simplificationDegrees: 0 };
+  return {
+    expression: "geom",
+    detail: "full",
+    cacheKey: "full",
+    simplificationDegrees: 0,
+    generalizationMeters: 0
+  };
 }
 
 function adminBoundaryGeneralizationMeters(geometry: SituationFeature["geometry"]): number {

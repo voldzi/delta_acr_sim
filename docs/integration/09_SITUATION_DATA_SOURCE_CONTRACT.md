@@ -273,6 +273,8 @@ Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
 | `network` | string | OSM síť, např. `nwn`, `rwn`, `lwn`, `ncn`, `rcn`, `lcn` |
 | `ref`, `operator`, `osmcSymbol` | string, optional | značení a provozovatel, pokud jsou dostupné |
 | `lengthKm`, `segmentCount` | number, optional | délka a počet segmentů v materializovaném read-modelu |
+| `geometryDetail` | string | `full` nebo `generalized`; pro detailní turistickou navigaci preferovat `full` |
+| `simplificationDegrees`, `generalizationM` | number | použitá geometrická generalizace; pokud je `generalizationM > 0`, COP má při přiblížení vyžádat čerstvá data pro aktuální bbox a nepoužívat starší přehledovou cache |
 
 `trail_poi` navíc posílá `properties.providerProperties.trailPoi`:
 

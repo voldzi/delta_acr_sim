@@ -3757,6 +3757,9 @@ describe("Situation Data API contract", () => {
             ]
           ]
         },
+        geometry_detail: "full",
+        simplification_degrees: 0,
+        generalization_m: 0,
         tags: { route: "hiking", network: "nwn", name: "Testovací hřebenovka", phone: "+420123456789" },
         imported_at: "2026-07-01T08:00:00.000Z"
       }
@@ -3798,6 +3801,8 @@ describe("Situation Data API contract", () => {
               mode: "hiking",
               network: "nwn",
               ref: "T1",
+              geometryDetail: "full",
+              generalizationM: 0,
               license: "ODbL 1.0"
             })
           })
