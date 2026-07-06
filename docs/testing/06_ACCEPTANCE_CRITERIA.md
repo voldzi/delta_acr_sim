@@ -35,3 +35,11 @@
 - 1 000 zpráv/s lab režim
 - queue neztratí data při krátkodobém výpadku
 - restart neztratí uložené scénáře
+- SIM web splní bundle budget `pnpm build:budget`
+- operations dashboard chrání interní provider dotazy timeoutem a limitem velikosti odpovědi `SIM_OPERATIONS_PROVIDER_MAX_RESPONSE_BYTES`
+
+## Kvalita verze 1.0
+
+- `pnpm format:check` musí projít nad zdrojovým kódem, package konfigurací a skripty
+- `pnpm verify` musí projít před produkčním nasazením nebo musí být výslovně popsán blokující důvod
+- generované a archivní artefakty zůstávají mimo Prettier gate přes `.prettierignore`

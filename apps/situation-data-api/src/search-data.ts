@@ -30,7 +30,8 @@ export type SearchEntityType =
   | "critical_infrastructure"
   | "public_resource";
 
-export type SearchSourceAuthority = "official" | "internal_verified" | "partner_verified" | "reference" | "community_verified" | "community_unverified" | "modelled" | "unknown";
+export type SearchSourceAuthority =
+  "official" | "internal_verified" | "partner_verified" | "reference" | "community_verified" | "community_unverified" | "modelled" | "unknown";
 export type SearchDataQuality = "official_observed" | "official_warning" | "verified_reference" | "reference" | "modelled" | "mixed" | "unknown";
 
 export interface SearchCoordinate {
@@ -217,7 +218,15 @@ const OSM_POI_ENTITY_TYPES = new Set<SearchEntityType>([
   "public_resource"
 ]);
 const OSM_ADMIN_ENTITY_TYPES = new Set<SearchEntityType>(["municipality", "district", "region"]);
-const SAFETY_ENTITY_TYPES = new Set<SearchEntityType>(["hydro_station", "hydro_measurement", "weather_warning", "safety_alert", "fire_incident", "flood_risk_area", "road_closure"]);
+const SAFETY_ENTITY_TYPES = new Set<SearchEntityType>([
+  "hydro_station",
+  "hydro_measurement",
+  "weather_warning",
+  "safety_alert",
+  "fire_incident",
+  "flood_risk_area",
+  "road_closure"
+]);
 const SAFETY_SOURCE_SYSTEMS = ["safety_data", "chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "municipal_alerts", "road_srti_lod"];
 const WEATHER_FORECAST_ENTITY_TYPES = new Set<SearchEntityType>(["weather_forecast"]);
 const WEATHER_RADAR_ENTITY_TYPES = new Set<SearchEntityType>(["weather_radar", "weather_nowcast", "thunderstorm_risk"]);
@@ -271,7 +280,16 @@ export class SearchDataService {
       })),
       severities: ["info", "advisory", "warning", "critical"],
       statuses: ["active", "inactive", "expired", "unknown"],
-      sourceAuthorities: ["official", "internal_verified", "partner_verified", "reference", "community_verified", "community_unverified", "modelled", "unknown"],
+      sourceAuthorities: [
+        "official",
+        "internal_verified",
+        "partner_verified",
+        "reference",
+        "community_verified",
+        "community_unverified",
+        "modelled",
+        "unknown"
+      ],
       dataQualities: ["official_observed", "official_warning", "verified_reference", "reference", "modelled", "mixed", "unknown"],
       visibility: ["cop_internal", "restricted", "public"],
       classification: ["PUBLIC", "INTERNAL", "RESTRICTED"],
@@ -474,8 +492,12 @@ export class SearchDataService {
     const warnings: string[] = [];
     const entityTypes = options.entityTypes ?? SEARCH_ENTITY_TYPES;
     const [poiResult, adminResult, safetyResult, forecastResult, radarResult] = await Promise.allSettled([
-      this.shouldFetchOsmPoi(entityTypes, options.sourceSystems) ? this.fetchOsmPoiRows(options).then((rows) => rows.map(mapOsmPoiEntity).filter(isEntity)) : Promise.resolve([]),
-      this.shouldFetchOsmAdmin(entityTypes, options.sourceSystems) ? this.fetchOsmAdminRows(options).then((rows) => rows.map(mapOsmAdminEntity).filter(isEntity)) : Promise.resolve([]),
+      this.shouldFetchOsmPoi(entityTypes, options.sourceSystems)
+        ? this.fetchOsmPoiRows(options).then((rows) => rows.map(mapOsmPoiEntity).filter(isEntity))
+        : Promise.resolve([]),
+      this.shouldFetchOsmAdmin(entityTypes, options.sourceSystems)
+        ? this.fetchOsmAdminRows(options).then((rows) => rows.map(mapOsmAdminEntity).filter(isEntity))
+        : Promise.resolve([]),
       this.shouldFetchSafety(entityTypes, options.sourceSystems) ? this.fetchSafetyEntities(options) : Promise.resolve([]),
       this.shouldFetchWeatherForecast(entityTypes, options.sourceSystems) ? this.fetchWeatherForecastEntities(options) : Promise.resolve([]),
       this.shouldFetchWeatherRadar(entityTypes, options.sourceSystems) ? this.fetchWeatherRadarEntities(options) : Promise.resolve([])
@@ -498,23 +520,43 @@ export class SearchDataService {
   }
 
   private shouldFetchOsmPoi(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
-    return Boolean(this.config.osmPostgisConnectionString) && sourceAllowed("osm_reference", sourceSystems) && entityTypes.some((type) => OSM_POI_ENTITY_TYPES.has(type));
+    return (
+      Boolean(this.config.osmPostgisConnectionString) &&
+      sourceAllowed("osm_reference", sourceSystems) &&
+      entityTypes.some((type) => OSM_POI_ENTITY_TYPES.has(type))
+    );
   }
 
   private shouldFetchOsmAdmin(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
-    return Boolean(this.config.osmPostgisConnectionString) && sourceAllowed("osm_reference", sourceSystems) && entityTypes.some((type) => OSM_ADMIN_ENTITY_TYPES.has(type));
+    return (
+      Boolean(this.config.osmPostgisConnectionString) &&
+      sourceAllowed("osm_reference", sourceSystems) &&
+      entityTypes.some((type) => OSM_ADMIN_ENTITY_TYPES.has(type))
+    );
   }
 
   private shouldFetchSafety(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
-    return this.config.enabledSources.includes("safety_data") && sourceSystemsAllowAny(SAFETY_SOURCE_SYSTEMS, sourceSystems) && entityTypes.some((type) => SAFETY_ENTITY_TYPES.has(type));
+    return (
+      this.config.enabledSources.includes("safety_data") &&
+      sourceSystemsAllowAny(SAFETY_SOURCE_SYSTEMS, sourceSystems) &&
+      entityTypes.some((type) => SAFETY_ENTITY_TYPES.has(type))
+    );
   }
 
   private shouldFetchWeatherForecast(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
-    return this.config.enabledSources.includes(WEATHER_FORECAST_SOURCE_ID) && sourceAllowed(WEATHER_FORECAST_SOURCE_ID, sourceSystems) && entityTypes.some((type) => WEATHER_FORECAST_ENTITY_TYPES.has(type));
+    return (
+      this.config.enabledSources.includes(WEATHER_FORECAST_SOURCE_ID) &&
+      sourceAllowed(WEATHER_FORECAST_SOURCE_ID, sourceSystems) &&
+      entityTypes.some((type) => WEATHER_FORECAST_ENTITY_TYPES.has(type))
+    );
   }
 
   private shouldFetchWeatherRadar(entityTypes: SearchEntityType[], sourceSystems?: string[]): boolean {
-    return this.config.enabledSources.includes("chmi_weather_radar") && sourceAllowed("chmi_weather_radar", sourceSystems) && entityTypes.some((type) => WEATHER_RADAR_ENTITY_TYPES.has(type));
+    return (
+      this.config.enabledSources.includes("chmi_weather_radar") &&
+      sourceAllowed("chmi_weather_radar", sourceSystems) &&
+      entityTypes.some((type) => WEATHER_RADAR_ENTITY_TYPES.has(type))
+    );
   }
 
   private async fetchOsmPoiRows(options: CollectOptions & { providerEntityId?: string }): Promise<OsmPoiSearchRow[]> {
@@ -1039,8 +1081,18 @@ function mapSafetyEntity(feature: SafetyFeature): SearchEntity | undefined {
     entitySubtype: hazardType,
     title,
     summary: description,
-    searchableText: searchableText([title, description, hazardType, sourceId, stringValue(properties.areaName), stringValue(properties.riverName), stringValue(properties.stationId)]),
-    aliases: Array.from(new Set([title, stringValue(properties.areaName), stringValue(properties.riverName), stringValue(properties.stationId)].filter(isNonEmptyString))),
+    searchableText: searchableText([
+      title,
+      description,
+      hazardType,
+      sourceId,
+      stringValue(properties.areaName),
+      stringValue(properties.riverName),
+      stringValue(properties.stationId)
+    ]),
+    aliases: Array.from(
+      new Set([title, stringValue(properties.areaName), stringValue(properties.riverName), stringValue(properties.stationId)].filter(isNonEmptyString))
+    ),
     localized: {
       cs: { title: titleCs, summary: summaryCs }
     },
@@ -1201,7 +1253,8 @@ function mapWeatherRadarEntity(feature: SituationFeature): SearchEntity | undefi
   const metrics = mixedMetricsFrom(properties.metrics);
   metrics.lightningStrikeFeedAvailable = false;
   if (entityType === "weather_nowcast") {
-    metrics.nowcastHorizonMinutes = numberValue(metrics.forecastHorizonMinutes) ?? numberValue(asRecord(providerProperties.raster)?.forecastHorizonMinutes) ?? 60;
+    metrics.nowcastHorizonMinutes =
+      numberValue(metrics.forecastHorizonMinutes) ?? numberValue(asRecord(providerProperties.raster)?.forecastHorizonMinutes) ?? 60;
   }
   const stale = (booleanValue(properties.stale) ?? false) || isExpired(validUntil);
   return {
@@ -1854,9 +1907,7 @@ function normalizeTimestamp(value: unknown): string | undefined {
 }
 
 function newestIsoTimestamp(...values: Array<string | undefined>): string | undefined {
-  return values
-    .filter(isNonEmptyString)
-    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+  return values.filter(isNonEmptyString).sort((left, right) => Date.parse(right) - Date.parse(left))[0];
 }
 
 function clampInteger(value: unknown, fallback: number, min: number, max: number): number {

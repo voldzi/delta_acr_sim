@@ -338,7 +338,7 @@ export class TransitStaticModelService {
           .filter((stop): stop is TransitStaticStop => Boolean(stop))
           .map(stopSummary)
       : [];
-    const shape = options.includeShape ?? true ? shapeForFirstTrip(model, trips, options) : undefined;
+    const shape = (options.includeShape ?? true) ? shapeForFirstTrip(model, trips, options) : undefined;
     return {
       contractVersion: "sim-transit-route-detail-v1",
       generatedAt: new Date().toISOString(),
@@ -362,7 +362,7 @@ export class TransitStaticModelService {
     const route = model.routes.get(modelKey(trip.systemId, trip.routeId));
     const limit = clampInteger(options.maxStopTimes, 1, 500, 120);
     const stopTimes = (model.stopTimesByTrip.get(modelKey(systemId, tripId)) ?? []).slice(0, limit);
-    const shape = options.includeShape ?? true ? shapeForTrip(model, trip, options) : undefined;
+    const shape = (options.includeShape ?? true) ? shapeForTrip(model, trip, options) : undefined;
     return {
       contractVersion: "sim-transit-trip-detail-v1",
       generatedAt: new Date().toISOString(),
@@ -746,9 +746,7 @@ function parseGeojsonStops(feed: PublicTransitStaticFeedConfig, collection: unkn
   if (!isRecord(collection) || collection.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
     return [];
   }
-  return collection.features
-    .map((feature, index) => mapGeojsonStopFeature(feed, feature, index))
-    .filter((stop): stop is TransitStaticStop => Boolean(stop));
+  return collection.features.map((feature, index) => mapGeojsonStopFeature(feed, feature, index)).filter((stop): stop is TransitStaticStop => Boolean(stop));
 }
 
 function mapGtfsStopRecord(feed: PublicTransitStaticFeedConfig, record: Record<string, string>): TransitStaticStop | undefined {
@@ -1163,9 +1161,9 @@ function parseCsvLine(line: string): string[] {
   let quoted = false;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
-    if (char === "\"") {
-      if (quoted && line[index + 1] === "\"") {
-        field += "\"";
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        field += '"';
         index += 1;
       } else {
         quoted = !quoted;
@@ -1263,7 +1261,10 @@ function feedSignature(config: SituationDataConfig): string {
 }
 
 function stableToken(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 128);
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .slice(0, 128);
 }
 
 function shortHash(value: string): string {

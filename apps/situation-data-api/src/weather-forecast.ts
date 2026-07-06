@@ -1,14 +1,6 @@
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type {
-  BoundingBox,
-  SituationDataLicense,
-  SituationFeature,
-  SituationQuery,
-  SituationSeverity,
-  SourceDescriptor,
-  SourceFetchResult
-} from "./types.js";
+import type { BoundingBox, SituationDataLicense, SituationFeature, SituationQuery, SituationSeverity, SourceDescriptor, SourceFetchResult } from "./types.js";
 
 export const WEATHER_FORECAST_SOURCE_ID = "weather_forecast" as const;
 const WEATHER_FORECAST_LAYER_ID = "weather_forecast_area" as const;
@@ -372,16 +364,9 @@ async function loadOpenMeteoForecastPayload(config: SituationDataConfig, cell: F
   url.searchParams.set("longitude", cell.centerLon.toFixed(5));
   url.searchParams.set(
     "current",
-    [
-      "temperature_2m",
-      "relative_humidity_2m",
-      "precipitation",
-      "weather_code",
-      "cloud_cover",
-      "wind_speed_10m",
-      "wind_direction_10m",
-      "wind_gusts_10m"
-    ].join(",")
+    ["temperature_2m", "relative_humidity_2m", "precipitation", "weather_code", "cloud_cover", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"].join(
+      ","
+    )
   );
   url.searchParams.set(
     "hourly",
@@ -399,14 +384,7 @@ async function loadOpenMeteoForecastPayload(config: SituationDataConfig, cell: F
   );
   url.searchParams.set(
     "daily",
-    [
-      "weather_code",
-      "temperature_2m_max",
-      "temperature_2m_min",
-      "precipitation_sum",
-      "precipitation_probability_max",
-      "wind_gusts_10m_max"
-    ].join(",")
+    ["weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum", "precipitation_probability_max", "wind_gusts_10m_max"].join(",")
   );
   url.searchParams.set("forecast_days", "7");
   url.searchParams.set("forecast_hours", "72");
@@ -636,15 +614,17 @@ function payloadToDetail(payload: WeatherForecastPayload, options: { areaId: str
     },
     charts: buildForecastCharts(hourly),
     sources: [
-      payload.provider === "open_meteo" ? {
-        sourceId: "open_meteo_forecast",
-        label: "Open-Meteo forecast API",
-        attribution: "Weather data by Open-Meteo.com"
-      } : {
-        sourceId: "met_norway_locationforecast",
-        label: "MET Norway Locationforecast",
-        attribution: "Norwegian Meteorological Institute"
-      },
+      payload.provider === "open_meteo"
+        ? {
+            sourceId: "open_meteo_forecast",
+            label: "Open-Meteo forecast API",
+            attribution: "Weather data by Open-Meteo.com"
+          }
+        : {
+            sourceId: "met_norway_locationforecast",
+            label: "MET Norway Locationforecast",
+            attribution: "Norwegian Meteorological Institute"
+          },
       {
         sourceId: "sim_weather_forecast_v1",
         label: "SIM forecast normalization",
@@ -1226,15 +1206,16 @@ function hazardTypeFromWeather(
 function buildHeadlineCs(condition: string, hazardType: string, riskLevel: string, current: ForecastCurrent): string {
   const suffix = typeof current.temperatureC === "number" ? `, ${round(current.temperatureC, 0)} °C` : "";
   if (riskLevel === "severe" || riskLevel === "high") {
-    const hazard = {
-      thunderstorm: "riziko bouřek",
-      rain: "riziko intenzivních srážek",
-      snow: "riziko sněžení",
-      wind: "riziko silného větru",
-      heat: "vysoké teploty",
-      frost: "nízké teploty",
-      fog: "snížená dohlednost"
-    }[hazardType] ?? "zhoršené počasí";
+    const hazard =
+      {
+        thunderstorm: "riziko bouřek",
+        rain: "riziko intenzivních srážek",
+        snow: "riziko sněžení",
+        wind: "riziko silného větru",
+        heat: "vysoké teploty",
+        frost: "nízké teploty",
+        fog: "snížená dohlednost"
+      }[hazardType] ?? "zhoršené počasí";
     return `${hazard}${suffix}`;
   }
   return `${condition}${suffix}`;
@@ -1243,15 +1224,16 @@ function buildHeadlineCs(condition: string, hazardType: string, riskLevel: strin
 function buildHeadlineEn(condition: string, hazardType: string, riskLevel: string, current: ForecastCurrent): string {
   const suffix = typeof current.temperatureC === "number" ? `, ${round(current.temperatureC, 0)} °C` : "";
   if (riskLevel === "severe" || riskLevel === "high") {
-    const hazard = {
-      thunderstorm: "thunderstorm risk",
-      rain: "heavy precipitation risk",
-      snow: "snow risk",
-      wind: "strong wind risk",
-      heat: "high temperatures",
-      frost: "low temperatures",
-      fog: "reduced visibility"
-    }[hazardType] ?? "adverse weather";
+    const hazard =
+      {
+        thunderstorm: "thunderstorm risk",
+        rain: "heavy precipitation risk",
+        snow: "snow risk",
+        wind: "strong wind risk",
+        heat: "high temperatures",
+        frost: "low temperatures",
+        fog: "reduced visibility"
+      }[hazardType] ?? "adverse weather";
     return `${hazard}${suffix}`;
   }
   return `${condition}${suffix}`;
@@ -1340,8 +1322,7 @@ function addHours(isoTimestamp: string, hours: number): string {
 
 function compactMixedMetrics(values: Record<string, number | string | boolean | undefined>): Record<string, number | string | boolean> | undefined {
   const entries = Object.entries(values).filter(
-    (entry): entry is [string, number | string | boolean] =>
-      typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+    (entry): entry is [string, number | string | boolean] => typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }

@@ -70,7 +70,12 @@ export class FlightAggregationService {
 
     const sourceDescriptors = enabledSources.map((source) => source.descriptor);
     const rawObservations = results.flatMap((result) => result.observations);
-    const { tracks, droppedWithoutPositionCount } = deduplicateObservations(rawObservations, sourceDescriptors, this.config.staleAfterSeconds, query.includeStale);
+    const { tracks, droppedWithoutPositionCount } = deduplicateObservations(
+      rawObservations,
+      sourceDescriptors,
+      this.config.staleAfterSeconds,
+      query.includeStale
+    );
     const limitedTracks = tracks.slice(0, query.limit);
     const enriched = this.routeEnrichment ? await this.routeEnrichment.enrichTracks(limitedTracks) : { tracks: limitedTracks, warnings: [] };
     const response: FlightTrackResponse = {
@@ -104,9 +109,7 @@ function cacheQueryForFlightQuery(query: FlightQuery, config: FlightDataConfig):
 }
 
 function projectFlightResponse(response: FlightTrackResponse, query: FlightQuery): FlightTrackResponse {
-  const tracks = response.tracks
-    .filter((track) => !query.bbox || isTrackInBbox(track, query.bbox))
-    .slice(0, query.limit);
+  const tracks = response.tracks.filter((track) => !query.bbox || isTrackInBbox(track, query.bbox)).slice(0, query.limit);
 
   return {
     ...response,
@@ -234,7 +237,14 @@ function deduplicateObservations(
     const sourceCategory = firstDefined(sorted.map((item) => item.category));
     const iconHint = iconHintFor(typeDesignator, aircraftType?.category, aircraftType?.engineType, sourceCategory);
     const adsbCategory = adsbCategoryFor(sourceCategory);
-    const aircraftClass = aircraftClassFor(typeDesignator, aircraftType?.category, aircraftType?.engineType, aircraftType?.wakeTurbulenceCategory, sourceCategory, iconHint);
+    const aircraftClass = aircraftClassFor(
+      typeDesignator,
+      aircraftType?.category,
+      aircraftType?.engineType,
+      aircraftType?.wakeTurbulenceCategory,
+      sourceCategory,
+      iconHint
+    );
     const iconKey = iconKeyFor(aircraftClass);
     const sourceLicenses = Array.from(new Set(sorted.map((item) => sourceLicenseById.get(item.sourceId)).filter((item): item is string => Boolean(item))));
     const callsign = firstDefined(sorted.map((item) => item.callsign));
@@ -334,9 +344,7 @@ function measurementQualityFor(sorted: RawFlightObservation[], primary: RawFligh
     .map((item) => Date.parse(item.seenAt))
     .filter((item) => Number.isFinite(item))
     .sort((a, b) => a - b);
-  const signalCount =
-    sumNumbers(measurements.map((item) => item.messageCount ?? item.sampleCount)) ||
-    Math.max(1, sorted.length);
+  const signalCount = sumNumbers(measurements.map((item) => item.messageCount ?? item.sampleCount)) || Math.max(1, sorted.length);
   return {
     predictionSupport: predictionSupportFor(primary, stale),
     sourceCount: uniqueStrings(sorted.map((item) => item.sourceId)).length,
@@ -549,10 +557,7 @@ function operationalStatusFor(primary: RawFlightObservation, sorted: RawFlightOb
   };
 }
 
-function emergencyStatusFor(
-  rawEmergency: string | undefined,
-  squawk: string | undefined
-): FlightTrackOperationalStatus["emergency"] {
+function emergencyStatusFor(rawEmergency: string | undefined, squawk: string | undefined): FlightTrackOperationalStatus["emergency"] {
   const normalizedEmergency = rawEmergency?.trim().toLowerCase();
   if (squawk === "7500") {
     return { active: true, code: "unlawful_interference", label: "Unlawful interference", source: "squawk", squawk, rawEmergency };
@@ -619,17 +624,16 @@ function presentationFor(input: {
   headingDeg: number | undefined;
   status: FlightTrackOperationalStatus;
 }): FlightTrackPresentation {
-  const color =
-    input.status.emergency.active
-      ? { colorKey: "emergency" as const, colorHex: "#ef4444" as const, colorReason: "emergency_detected" as const, zIndexPriority: 90 }
-      : input.status.delay.status === "delayed"
-        ? { colorKey: "delayed" as const, colorHex: "#eab308" as const, colorReason: "delay_detected" as const, zIndexPriority: 50 }
-        : {
-            colorKey: "normal" as const,
-            colorHex: "#22c55e" as const,
-            colorReason: input.status.delay.status === "unknown" ? ("delay_not_available" as const) : ("normal" as const),
-            zIndexPriority: 10
-          };
+  const color = input.status.emergency.active
+    ? { colorKey: "emergency" as const, colorHex: "#ef4444" as const, colorReason: "emergency_detected" as const, zIndexPriority: 90 }
+    : input.status.delay.status === "delayed"
+      ? { colorKey: "delayed" as const, colorHex: "#eab308" as const, colorReason: "delay_detected" as const, zIndexPriority: 50 }
+      : {
+          colorKey: "normal" as const,
+          colorHex: "#22c55e" as const,
+          colorReason: input.status.delay.status === "unknown" ? ("delay_not_available" as const) : ("normal" as const),
+          zIndexPriority: 10
+        };
 
   return {
     label: input.label,
@@ -784,7 +788,11 @@ function normalizeIcao24(value: string | undefined): string | undefined {
 }
 
 function normalizeExternalTrackKey(value: string | undefined): string | undefined {
-  const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9_.:-]+/g, "-").replace(/^-+|-+$/g, "");
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return normalized ? normalized.slice(0, 96) : undefined;
 }
 

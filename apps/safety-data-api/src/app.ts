@@ -15,7 +15,17 @@ import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { buildSafetyNotificationCandidateCollection, type SafetyNotificationCandidateOptions } from "./notification-candidates.js";
 import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
-import type { BoundingBox, HydroSeriesId, HydroStationDetail, HydroStationDetailQuery, SafetyDataPublicConfig, SafetyDataSourceId, SafetyLayerId, SafetyQuery, SafetySeverity } from "./types.js";
+import type {
+  BoundingBox,
+  HydroSeriesId,
+  HydroStationDetail,
+  HydroStationDetailQuery,
+  SafetyDataPublicConfig,
+  SafetyDataSourceId,
+  SafetyLayerId,
+  SafetyQuery,
+  SafetySeverity
+} from "./types.js";
 
 export interface SafetyDataAppContext {
   config: SafetyDataConfig;
@@ -29,9 +39,7 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   const sources = createSafetyDataSources(config);
   const aggregation = new SafetyAggregationService(config, sources);
   const hydroSource = sources.find((source) => source.descriptor.sourceId === "chmi_hydro" && source.getHydroStationDetail);
-  const hydroDetails = hydroSource?.getHydroStationDetail
-    ? { getHydroStationDetail: hydroSource.getHydroStationDetail.bind(hydroSource) }
-    : undefined;
+  const hydroDetails = hydroSource?.getHydroStationDetail ? { getHydroStationDetail: hydroSource.getHydroStationDetail.bind(hydroSource) } : undefined;
   const context: SafetyDataAppContext = { config, aggregation, hydroDetails };
   const app = express();
 
@@ -78,17 +86,19 @@ function registerHealthRoutes(app: Express, context: SafetyDataAppContext): void
   app.get("/metrics", (_req, res) => {
     const cache = context.aggregation.cacheStats();
     const snapshot = context.aggregation.telemetrySnapshot();
-    const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
-      `safety_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
-      `safety_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
-      `safety_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
-      `safety_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
-      `safety_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
-      `safety_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
-      `safety_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
-      `safety_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
-      `safety_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
-    ]);
+    const sourceCacheLines = context.aggregation
+      .sourceCacheStats()
+      .flatMap((sourceCache) => [
+        `safety_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
+        `safety_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
+        `safety_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
+        `safety_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
+        `safety_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
+        `safety_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
+        `safety_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
+        `safety_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
+        `safety_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
+      ]);
     const layerCountLines = Object.entries(snapshot.layerCounts).map(([layer, count]) => `safety_data_last_layer_features{layer="${layer}"} ${count ?? 0}`);
     res
       .type("text/plain")
@@ -390,9 +400,7 @@ function parseBoolean(value: unknown): boolean {
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
-function parseHydroDetailQuery(
-  raw: Record<string, unknown>
-): { ok: true; value: HydroStationDetailQuery } | { ok: false; error: string } {
+function parseHydroDetailQuery(raw: Record<string, unknown>): { ok: true; value: HydroStationDetailQuery } | { ok: false; error: string } {
   const from = parseIsoDateParam(raw.from, "from");
   if (!from.ok) {
     return from;
@@ -473,7 +481,11 @@ function publicConfig(config: SafetyDataConfig): SafetyDataPublicConfig {
       { sourceId: "hzs_incidents", baseUrl: config.hzsIncidentFeeds[0]?.url, authConfigured: true },
       { sourceId: "municipal_alerts", baseUrl: config.municipalAlertFeeds[0]?.url, authConfigured: config.municipalAlertFeeds.length > 0 },
       { sourceId: "road_srti_lod", baseUrl: config.roadSrtiLodSparqlUrl, authConfigured: true },
-      { sourceId: "admin_boundaries", baseUrl: publicPostgisBaseUrl(config.adminBoundaryConnectionString), authConfigured: Boolean(config.adminBoundaryConnectionString) }
+      {
+        sourceId: "admin_boundaries",
+        baseUrl: publicPostgisBaseUrl(config.adminBoundaryConnectionString),
+        authConfigured: Boolean(config.adminBoundaryConnectionString)
+      }
     ]
   };
 }

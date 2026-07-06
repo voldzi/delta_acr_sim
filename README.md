@@ -91,6 +91,14 @@ DEM katalog pro budoucí terrain-aware coverage model používá Copernicus DEM 
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm build:budget
+pnpm format:check
 pnpm openapi:validate
 bash scripts/validate-skeleton.sh
+```
+
+Před produkčním releasem v1.0 lze spustit souhrnnou kontrolu:
+
+```bash
+pnpm verify
 ```

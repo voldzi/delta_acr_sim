@@ -248,13 +248,12 @@ function estimateProgress(track: AggregatedFlightTrack, waypoints: FlightItinera
   const distanceRemainingKm = roundDistance(haversineKm(track.lat, track.lon, destination.lat, destination.lon));
   const distanceTravelledKm = roundDistance(Math.max(0, Math.min(totalDistanceKm, totalDistanceKm - distanceRemainingKm)));
   const progressRatio = totalDistanceKm > 0 ? clamp(distanceTravelledKm / totalDistanceKm, 0, 1) : undefined;
-  const groundSpeedMps = typeof track.speedMps === "number" && Number.isFinite(track.speedMps) && track.speedMps >= MIN_ESTIMATION_SPEED_MPS ? track.speedMps : undefined;
+  const groundSpeedMps =
+    typeof track.speedMps === "number" && Number.isFinite(track.speedMps) && track.speedMps >= MIN_ESTIMATION_SPEED_MPS ? track.speedMps : undefined;
   const estimatedRemainingSeconds = groundSpeedMps ? Math.round((distanceRemainingKm * 1000) / groundSpeedMps) : undefined;
   const lastSeenMs = Date.parse(track.lastSeenAt);
   const estimatedArrivalAt =
-    estimatedRemainingSeconds !== undefined && Number.isFinite(lastSeenMs)
-      ? new Date(lastSeenMs + estimatedRemainingSeconds * 1000).toISOString()
-      : undefined;
+    estimatedRemainingSeconds !== undefined && Number.isFinite(lastSeenMs) ? new Date(lastSeenMs + estimatedRemainingSeconds * 1000).toISOString() : undefined;
 
   return {
     basis: "great_circle_current_position",
@@ -286,8 +285,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const deltaLat = toRadians(lat2 - lat1);
   const deltaLon = toRadians(lon2 - lon1);
   const a =
-    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
   return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 

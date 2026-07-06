@@ -800,7 +800,8 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       providerLayerId: "boundary_admin.safety_data_projection",
       recommendedCatalogLayerId: "public.boundary.admin",
       label: "Administrativní hranice (kompatibilní projekce)",
-      description: "Kompatibilní projekce administrativních hranic ze Safety Data API. COM má preferovat provider sim.safety-data nebo vlastní boundary provider.",
+      description:
+        "Kompatibilní projekce administrativních hranic ze Safety Data API. COM má preferovat provider sim.safety-data nebo vlastní boundary provider.",
       categoryPath: ["boundary", "admin"],
       categories: ["admin_boundary", "boundary"],
       role: "reference",
@@ -1407,23 +1408,27 @@ function buildCommunityProviderLayers(config: SituationDataConfig): ProviderCata
       styleProfile: "community-place-osm-v1",
       sourceIds: ["community_context"],
       technicalInputs: ["osm_postgis"],
-      query: query(["community_places"], ["community_context"], [
-        "toilet",
-        "drinking_water",
-        "water_point",
-        "shower",
-        "charging",
-        "fuel",
-        "bicycle_repair",
-        "internet_access",
-        "public_library",
-        "community_centre",
-        "municipal_office",
-        "pharmacy",
-        "defibrillator",
-        "shelter",
-        "assembly_point"
-      ]),
+      query: query(
+        ["community_places"],
+        ["community_context"],
+        [
+          "toilet",
+          "drinking_water",
+          "water_point",
+          "shower",
+          "charging",
+          "fuel",
+          "bicycle_repair",
+          "internet_access",
+          "public_library",
+          "community_centre",
+          "municipal_office",
+          "pharmacy",
+          "defibrillator",
+          "shelter",
+          "assembly_point"
+        ]
+      ),
       legend: { profile: "community-place-osm-v1" },
       delivery: {
         mode: "features",
@@ -1578,7 +1583,10 @@ function buildBoundaryProviderLayers(config: SituationDataConfig): ProviderCatal
       label: "Sídla",
       labelLocalized: { cs: "Sídla", en: "Settlements" },
       description: "Referenční vrstva sídel připravená pro civilní basemap kontext.",
-      descriptionLocalized: { cs: "Referenční vrstva sídel připravená pro civilní basemap kontext.", en: "Settlement reference layer for civil basemap context." },
+      descriptionLocalized: {
+        cs: "Referenční vrstva sídel připravená pro civilní basemap kontext.",
+        en: "Settlement reference layer for civil basemap context."
+      },
       categoryPath: ["place", "settlements"],
       categories: ["place", "settlement"],
       role: "reference",
@@ -1760,12 +1768,7 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
-        feedsLayerIds: [
-          "weather.radar_reflectivity",
-          "weather.radar_precipitation",
-          "weather.radar_nowcast",
-          "weather.thunderstorm_risk"
-        ],
+        feedsLayerIds: ["weather.radar_reflectivity", "weather.radar_precipitation", "weather.radar_nowcast", "weather.thunderstorm_risk"],
         feedsCatalogLayerIds: [
           "public.weather.radar_reflectivity",
           "public.weather.radar_precipitation",

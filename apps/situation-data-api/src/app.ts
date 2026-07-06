@@ -184,28 +184,32 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       `situation_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
       `situation_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
     ]);
-    const radioPlanningCacheLines = context.radioPlanning.cacheStats().flatMap((cacheStats) => [
-      `situation_data_radio_planning_cache_entries{operation="${cacheStats.operation}"} ${cacheStats.entries}`,
-      `situation_data_radio_planning_cache_inflight{operation="${cacheStats.operation}"} ${cacheStats.inflight}`,
-      `situation_data_radio_planning_cache_hits{operation="${cacheStats.operation}"} ${cacheStats.hits}`,
-      `situation_data_radio_planning_cache_misses{operation="${cacheStats.operation}"} ${cacheStats.misses}`,
-      `situation_data_radio_planning_cache_coalesced_hits{operation="${cacheStats.operation}"} ${cacheStats.coalescedHits}`,
-      `situation_data_radio_planning_cache_stale_hits{operation="${cacheStats.operation}"} ${cacheStats.staleHits}`,
-      `situation_data_radio_planning_cache_refreshes{operation="${cacheStats.operation}"} ${cacheStats.refreshes}`,
-      `situation_data_radio_planning_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
-      `situation_data_radio_planning_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
-    ]);
-    const routingCacheLines = context.routing.cacheStats().flatMap((cacheStats) => [
-      `situation_data_routing_cache_entries{operation="${cacheStats.operation}"} ${cacheStats.entries}`,
-      `situation_data_routing_cache_inflight{operation="${cacheStats.operation}"} ${cacheStats.inflight}`,
-      `situation_data_routing_cache_hits{operation="${cacheStats.operation}"} ${cacheStats.hits}`,
-      `situation_data_routing_cache_misses{operation="${cacheStats.operation}"} ${cacheStats.misses}`,
-      `situation_data_routing_cache_coalesced_hits{operation="${cacheStats.operation}"} ${cacheStats.coalescedHits}`,
-      `situation_data_routing_cache_stale_hits{operation="${cacheStats.operation}"} ${cacheStats.staleHits}`,
-      `situation_data_routing_cache_refreshes{operation="${cacheStats.operation}"} ${cacheStats.refreshes}`,
-      `situation_data_routing_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
-      `situation_data_routing_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
-    ]);
+    const radioPlanningCacheLines = context.radioPlanning
+      .cacheStats()
+      .flatMap((cacheStats) => [
+        `situation_data_radio_planning_cache_entries{operation="${cacheStats.operation}"} ${cacheStats.entries}`,
+        `situation_data_radio_planning_cache_inflight{operation="${cacheStats.operation}"} ${cacheStats.inflight}`,
+        `situation_data_radio_planning_cache_hits{operation="${cacheStats.operation}"} ${cacheStats.hits}`,
+        `situation_data_radio_planning_cache_misses{operation="${cacheStats.operation}"} ${cacheStats.misses}`,
+        `situation_data_radio_planning_cache_coalesced_hits{operation="${cacheStats.operation}"} ${cacheStats.coalescedHits}`,
+        `situation_data_radio_planning_cache_stale_hits{operation="${cacheStats.operation}"} ${cacheStats.staleHits}`,
+        `situation_data_radio_planning_cache_refreshes{operation="${cacheStats.operation}"} ${cacheStats.refreshes}`,
+        `situation_data_radio_planning_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
+        `situation_data_radio_planning_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
+      ]);
+    const routingCacheLines = context.routing
+      .cacheStats()
+      .flatMap((cacheStats) => [
+        `situation_data_routing_cache_entries{operation="${cacheStats.operation}"} ${cacheStats.entries}`,
+        `situation_data_routing_cache_inflight{operation="${cacheStats.operation}"} ${cacheStats.inflight}`,
+        `situation_data_routing_cache_hits{operation="${cacheStats.operation}"} ${cacheStats.hits}`,
+        `situation_data_routing_cache_misses{operation="${cacheStats.operation}"} ${cacheStats.misses}`,
+        `situation_data_routing_cache_coalesced_hits{operation="${cacheStats.operation}"} ${cacheStats.coalescedHits}`,
+        `situation_data_routing_cache_stale_hits{operation="${cacheStats.operation}"} ${cacheStats.staleHits}`,
+        `situation_data_routing_cache_refreshes{operation="${cacheStats.operation}"} ${cacheStats.refreshes}`,
+        `situation_data_routing_cache_errors{operation="${cacheStats.operation}"} ${cacheStats.errors}`,
+        `situation_data_routing_cache_evictions{operation="${cacheStats.operation}"} ${cacheStats.evictions}`
+      ]);
     const searchDataCache = context.searchData.cacheStats();
     const searchDataCacheLines = [
       `search_data_cache_entries ${searchDataCache.entries}`,
@@ -861,10 +865,7 @@ function compatibilityAliasHeaders(successorPath: string): Record<string, string
   };
 }
 
-function parseSituationQuery(
-  raw: Record<string, unknown>,
-  config: SituationDataConfig
-): { ok: true; value: SituationQuery } | { ok: false; error: string } {
+function parseSituationQuery(raw: Record<string, unknown>, config: SituationDataConfig): { ok: true; value: SituationQuery } | { ok: false; error: string } {
   const bbox = parseBbox(raw.bbox, config.defaultBbox);
   if (!bbox.ok) {
     return { ok: false, error: bbox.error };
@@ -1024,7 +1025,7 @@ function isSearchEntityType(value: string): value is SearchEntityType {
 }
 
 function parseDelimitedStringList(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value.flatMap((item) => String(item).split(",")) : asString(value)?.split(",") ?? [];
+  const raw = Array.isArray(value) ? value.flatMap((item) => String(item).split(",")) : (asString(value)?.split(",") ?? []);
   return raw.map((item) => item.trim()).filter((item) => item.length > 0);
 }
 
@@ -1172,9 +1173,7 @@ function parseTechnologies(value: unknown): MobileCoverageTechnology[] | undefin
   return parsed.length > 0 ? parsed : undefined;
 }
 
-function parseMobileCoverageViewshedQuery(
-  raw: Record<string, unknown>
-):
+function parseMobileCoverageViewshedQuery(raw: Record<string, unknown>):
   | {
       ok: true;
       value: {
@@ -1237,9 +1236,9 @@ function parseLimit(value: unknown, fallback: number, max: number): number {
   return Number.isFinite(parsed) ? Math.min(max, Math.max(1, Math.trunc(parsed))) : fallback;
 }
 
-function parseDensityOptions(raw: Record<string, unknown>):
-  | { ok: true; value: { cellSizeDegrees?: number; maxCells?: number; sampleSize?: number } }
-  | { ok: false; error: string } {
+function parseDensityOptions(
+  raw: Record<string, unknown>
+): { ok: true; value: { cellSizeDegrees?: number; maxCells?: number; sampleSize?: number } } | { ok: false; error: string } {
   const cellSizeDegrees = parseOptionalNumber(raw.cellSizeDegrees ?? raw.gridDegrees ?? raw.grid);
   if (cellSizeDegrees !== undefined && (!Number.isFinite(cellSizeDegrees) || cellSizeDegrees <= 0 || cellSizeDegrees > 2)) {
     return { ok: false, error: "cellSizeDegrees must be a positive number no greater than 2 degrees." };
@@ -1529,7 +1528,9 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
       lines.push(`situation_data_ctu_stationary_mobile_measurements{backend="${backend}"} ${status.objectCount}`);
     }
     if (status.lastImportAt) {
-      lines.push(`situation_data_ctu_stationary_mobile_latest_measurement_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+      lines.push(
+        `situation_data_ctu_stationary_mobile_latest_measurement_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`
+      );
     }
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_ctu_stationary_mobile_latest_measurement_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
@@ -1541,7 +1542,9 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
       lines.push(`situation_data_chmi_air_quality_stations{backend="${backend}"} ${status.objectCount}`);
     }
     if (status.lastImportAt) {
-      lines.push(`situation_data_chmi_air_quality_latest_observation_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+      lines.push(
+        `situation_data_chmi_air_quality_latest_observation_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`
+      );
     }
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_chmi_air_quality_latest_observation_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
@@ -1553,7 +1556,9 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
       lines.push(`situation_data_chmi_weather_stations{backend="${backend}"} ${status.objectCount}`);
     }
     if (status.lastImportAt) {
-      lines.push(`situation_data_chmi_weather_latest_observation_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+      lines.push(
+        `situation_data_chmi_weather_latest_observation_timestamp_seconds{backend="${backend}"} ${Math.round(Date.parse(status.lastImportAt) / 1000)}`
+      );
     }
     if (typeof status.lastImportAgeSeconds === "number") {
       lines.push(`situation_data_chmi_weather_latest_observation_age_seconds{backend="${backend}"} ${status.lastImportAgeSeconds}`);
@@ -1633,7 +1638,9 @@ function isAfterIso(left: string | undefined, right: string | undefined): boolea
 }
 
 function sourceFreshness(sourceHealth: SourceHealthStatus[]): Record<string, number> {
-  const ages = sourceHealth.map((source) => source.lastImportAgeSeconds).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const ages = sourceHealth
+    .map((source) => source.lastImportAgeSeconds)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   return {
     sourceCount: sourceHealth.length,
     sourcesWithImportAge: ages.length,
@@ -1696,7 +1703,9 @@ function environmentGridTelemetry(config: SituationDataConfig, sourceHealth: Sou
     },
     warnings:
       weatherReady || airQualityReady || radarReady
-        ? ["Weather grid and radar overlay layers are cataloged. SIM provides clean cropped radar PNG frames; tiled radar delivery remains a future optimization."]
+        ? [
+            "Weather grid and radar overlay layers are cataloged. SIM provides clean cropped radar PNG frames; tiled radar delivery remains a future optimization."
+          ]
         : ["Environment grid sources are not healthy or not enabled."]
   };
 }

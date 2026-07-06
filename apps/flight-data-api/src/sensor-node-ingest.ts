@@ -253,7 +253,12 @@ export function ingestSensorNodeBatch(
       lastSeenAt: newestTimestamp([sentAt, latestWeather?.observedAt, latestHealth?.observedAt, ...records.map((record) => record.observedAt)]),
       lastBatchAt: sentAt,
       lastLocation,
-      capabilities: uniqueStrings([counts.adsb > 0 ? "adsb" : undefined, counts.remoteId > 0 ? "remote_id" : undefined, counts.weather > 0 ? "weather" : undefined, counts.health > 0 ? "health" : undefined]),
+      capabilities: uniqueStrings([
+        counts.adsb > 0 ? "adsb" : undefined,
+        counts.remoteId > 0 ? "remote_id" : undefined,
+        counts.weather > 0 ? "weather" : undefined,
+        counts.health > 0 ? "health" : undefined
+      ]),
       observationCounts: counts,
       latestWeather,
       latestHealth
@@ -296,10 +301,16 @@ function mapAdsbObservation(
     sourceKind: "sensor_node",
     sensorId,
     position: { lat, lon },
-    altitudeM: finiteNumber(payload.altitude_m ?? payload.altitudeM) ?? feetToMeters(finiteNumber(payload.altitude_ft ?? payload.altitudeFt ?? payload.alt_baro ?? payload.alt_geom)),
-    speedMps: finiteNumber(payload.ground_speed_mps ?? payload.speed_mps ?? payload.speedMps) ?? knotsToMps(finiteNumber(payload.ground_speed_kt ?? payload.groundSpeedKt ?? payload.gs)),
+    altitudeM:
+      finiteNumber(payload.altitude_m ?? payload.altitudeM) ??
+      feetToMeters(finiteNumber(payload.altitude_ft ?? payload.altitudeFt ?? payload.alt_baro ?? payload.alt_geom)),
+    speedMps:
+      finiteNumber(payload.ground_speed_mps ?? payload.speed_mps ?? payload.speedMps) ??
+      knotsToMps(finiteNumber(payload.ground_speed_kt ?? payload.groundSpeedKt ?? payload.gs)),
     headingDeg: finiteNumber(payload.track_deg ?? payload.trackDeg ?? payload.track ?? payload.heading_deg ?? payload.headingDeg),
-    verticalRateMps: finiteNumber(payload.vertical_rate_mps ?? payload.verticalRateMps) ?? feetPerMinuteToMps(finiteNumber(payload.vertical_rate_fpm ?? payload.verticalRateFpm ?? payload.baro_rate ?? payload.geom_rate)),
+    verticalRateMps:
+      finiteNumber(payload.vertical_rate_mps ?? payload.verticalRateMps) ??
+      feetPerMinuteToMps(finiteNumber(payload.vertical_rate_fpm ?? payload.verticalRateFpm ?? payload.baro_rate ?? payload.geom_rate)),
     onGround: booleanValue(payload.on_ground ?? payload.onGround),
     squawk: cleanString(asString(payload.squawk)),
     emergency: cleanString(asString(payload.emergency)),
@@ -321,9 +332,14 @@ function mapRemoteIdObservation(
   index: number
 ): PartnerAirTrackIngestRecord | undefined {
   const rawId = asString(payload.uas_id ?? payload.uasId ?? payload.serial_number ?? payload.serialNumber);
-  const remoteId = cleanString(asString(payload.uas_id_hash ?? payload.uasIdHash ?? payload.remote_id ?? payload.remoteId)) ?? (rawId ? hashIdentifier(rawId) : undefined);
-  const lat = finiteNumber(payload.lat ?? payload.latitude ?? payload.uas_lat ?? payload.uasLat ?? (payload.position as Record<string, unknown> | undefined)?.lat);
-  const lon = finiteNumber(payload.lon ?? payload.longitude ?? payload.uas_lon ?? payload.uasLon ?? (payload.position as Record<string, unknown> | undefined)?.lon);
+  const remoteId =
+    cleanString(asString(payload.uas_id_hash ?? payload.uasIdHash ?? payload.remote_id ?? payload.remoteId)) ?? (rawId ? hashIdentifier(rawId) : undefined);
+  const lat = finiteNumber(
+    payload.lat ?? payload.latitude ?? payload.uas_lat ?? payload.uasLat ?? (payload.position as Record<string, unknown> | undefined)?.lat
+  );
+  const lon = finiteNumber(
+    payload.lon ?? payload.longitude ?? payload.uas_lon ?? payload.uasLon ?? (payload.position as Record<string, unknown> | undefined)?.lon
+  );
   if (!remoteId || lat === undefined || lon === undefined) {
     return undefined;
   }
@@ -375,7 +391,9 @@ function measurementFromPayload(
     sda: finiteNumber(payload.sda),
     rcM: finiteNumber(payload.rc ?? payload.rc_m ?? payload.rcM)
   };
-  const cleaned = Object.fromEntries(Object.entries(measurement).filter(([, value]) => value !== undefined && value !== null && value !== "")) as FlightObservationMeasurementQuality;
+  const cleaned = Object.fromEntries(
+    Object.entries(measurement).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ) as FlightObservationMeasurementQuality;
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 

@@ -172,7 +172,8 @@ export const LAYERS: LayerDescriptor[] = [
   {
     layerId: "community_places",
     label: "Community places",
-    description: "Practical civil community points from SIM: toilets, water, charging, shelters, pharmacies and similar reference places prepared for future user verification.",
+    description:
+      "Practical civil community points from SIM: toilets, water, charging, shelters, pharmacies and similar reference places prepared for future user verification.",
     defaultVisible: false,
     geometryTypes: ["Point"],
     expectedCadenceSeconds: 21600

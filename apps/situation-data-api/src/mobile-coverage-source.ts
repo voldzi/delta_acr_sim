@@ -660,10 +660,7 @@ export class MobileCoverageSource implements SituationDataSource {
   async replaceReadModelFeatures(
     bbox: BoundingBox,
     technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES,
-    expiresAt = addSeconds(
-      new Date().toISOString(),
-      Math.max(this.config.mobileCoverageReadModelMaxAgeSeconds, this.config.mobileCoverageCacheTtlSeconds)
-    )
+    expiresAt = addSeconds(new Date().toISOString(), Math.max(this.config.mobileCoverageReadModelMaxAgeSeconds, this.config.mobileCoverageCacheTtlSeconds))
   ): Promise<number> {
     await this.ensureReadModelSchemaCached();
     const payload = await this.buildCoverage(bbox, technologies);
@@ -845,12 +842,12 @@ export class MobileCoverageSource implements SituationDataSource {
       query.limit,
       query.bbox
     ).map((feature) => ({
-        ...feature,
-        properties: {
-          ...feature.properties,
-          raw: query.includeRaw ? feature.properties.raw : undefined
-        }
-      }));
+      ...feature,
+      properties: {
+        ...feature.properties,
+        raw: query.includeRaw ? feature.properties.raw : undefined
+      }
+    }));
 
     return {
       source: this.descriptor,
@@ -858,18 +855,12 @@ export class MobileCoverageSource implements SituationDataSource {
       features,
       warnings: [
         ...payload.warnings,
-        ...(payload.towerCount > 0
-          ? []
-          : ["mobile_coverage_model has no communications_tower references in the requested area; features are marked unknown."])
+        ...(payload.towerCount > 0 ? [] : ["mobile_coverage_model has no communications_tower references in the requested area; features are marked unknown."])
       ]
     };
   }
 
-  private async fetchReadModelFeatures(
-    query: SituationQuery,
-    technologies: MobileCoverageTechnology[],
-    operators: string[]
-  ): Promise<ReadModelLookup> {
+  private async fetchReadModelFeatures(query: SituationQuery, technologies: MobileCoverageTechnology[], operators: string[]): Promise<ReadModelLookup> {
     if (!this.config.mobileCoverageReadModelEnabled || !this.config.osmPostgisConnectionString) {
       return { features: [], warnings: [], hit: false };
     }
@@ -1000,18 +991,18 @@ export class MobileCoverageSource implements SituationDataSource {
           join ${table} cells on cells.feature_id = limited_keys.feature_id
           order by cells.grid_row asc, cells.grid_column asc, cells.feature_id asc
         `,
-        [
-          this.config.mobileCoverageModelVersion,
-          technologies,
-          normalizedOperators,
-          this.config.mobileCoverageReadModelMaxAgeSeconds,
-          query.bbox.west,
-          query.bbox.south,
-          query.bbox.east,
-          query.bbox.north,
-          Math.max(1, query.limit),
-          this.config.mobileCoverageResolutionM
-        ]
+          [
+            this.config.mobileCoverageModelVersion,
+            technologies,
+            normalizedOperators,
+            this.config.mobileCoverageReadModelMaxAgeSeconds,
+            query.bbox.west,
+            query.bbox.south,
+            query.bbox.east,
+            query.bbox.north,
+            Math.max(1, query.limit),
+            this.config.mobileCoverageResolutionM
+          ]
         );
         await client.query("commit");
       } catch (error) {
@@ -1168,7 +1159,10 @@ export class MobileCoverageSource implements SituationDataSource {
     terrainSampler: DemElevationSampler | undefined,
     demTiles: DemTileRef[]
   ): Promise<SituationFeature> {
-    const terrain = nearest && terrainSampler && demTiles.length > 0 ? await terrainAssessment(terrainSampler, demTiles, nearest, cell.center, this.config.mobileCoverageAntennaHeightM) : undefined;
+    const terrain =
+      nearest && terrainSampler && demTiles.length > 0
+        ? await terrainAssessment(terrainSampler, demTiles, nearest, cell.center, this.config.mobileCoverageAntennaHeightM)
+        : undefined;
     const estimate = nearest ? estimateSignal(nearest.distanceM, technology, terrain?.penaltyDb) : undefined;
     const quality = estimate ? qualityForSignal(estimate.signalDbm) : "unknown";
     const confidence = estimate && nearest ? confidenceForEstimate(nearest.distanceM, technology, terrain) : 0.2;
@@ -1745,7 +1739,27 @@ function mergeCacheStats(stats: ManagedResponseCacheStats[]): ManagedResponseCac
   };
 }
 
-function sumStats(stats: ManagedResponseCacheStats[], key: keyof Pick<ManagedResponseCacheStats, "entries" | "inflight" | "maxEntries" | "hits" | "misses" | "coalescedHits" | "staleHits" | "refreshes" | "errors" | "evictions" | "sharedHits" | "sharedMisses" | "sharedStaleHits" | "sharedWrites" | "sharedErrors">): number {
+function sumStats(
+  stats: ManagedResponseCacheStats[],
+  key: keyof Pick<
+    ManagedResponseCacheStats,
+    | "entries"
+    | "inflight"
+    | "maxEntries"
+    | "hits"
+    | "misses"
+    | "coalescedHits"
+    | "staleHits"
+    | "refreshes"
+    | "errors"
+    | "evictions"
+    | "sharedHits"
+    | "sharedMisses"
+    | "sharedStaleHits"
+    | "sharedWrites"
+    | "sharedErrors"
+  >
+): number {
   return stats.reduce((sum, item) => sum + item[key], 0);
 }
 
@@ -2055,7 +2069,10 @@ function sanitizeFeatureId(value: string): string {
 }
 
 function quoteQualifiedIdentifier(value: string): string {
-  const parts = value.split(".").map((part) => part.trim()).filter((part) => part.length > 0);
+  const parts = value
+    .split(".")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
   if (parts.length === 0 || parts.length > 2 || parts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))) {
     throw new Error("Invalid OSM_POSTGIS_TABLE identifier.");
   }
@@ -2117,8 +2134,8 @@ function compactMixedMetrics(values: Record<string, unknown> | null): Record<str
   if (!values) {
     return undefined;
   }
-  const entries = Object.entries(values).filter((entry): entry is [string, number | string | boolean] =>
-    typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+  const entries = Object.entries(values).filter(
+    (entry): entry is [string, number | string | boolean] => typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
@@ -2143,8 +2160,8 @@ function compactAssumptions(values: Record<string, unknown> | null): Record<stri
   if (!values) {
     return undefined;
   }
-  const entries = Object.entries(values).filter((entry): entry is [string, string | number | boolean] =>
-    typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+  const entries = Object.entries(values).filter(
+    (entry): entry is [string, string | number | boolean] => typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }

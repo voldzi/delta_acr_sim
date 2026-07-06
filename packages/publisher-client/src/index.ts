@@ -3,13 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-export type QueueState =
-  | "PENDING"
-  | "SENDING"
-  | "SENT"
-  | "RETRY_SCHEDULED"
-  | "DEAD_LETTER"
-  | "DRY_RUN_VALIDATED";
+export type QueueState = "PENDING" | "SENDING" | "SENT" | "RETRY_SCHEDULED" | "DEAD_LETTER" | "DRY_RUN_VALIDATED";
 
 export interface PublisherQueueItem {
   queueId: string;
@@ -180,8 +174,7 @@ export class PublisherClient {
     await this.persistUnlessDeferred(options.deferPersist);
 
     try {
-      const response =
-        this.config.mode === "MOCK" ? await mockCopResponse(item.event) : await this.sendLive(item.event, item.idempotencyKey);
+      const response = this.config.mode === "MOCK" ? await mockCopResponse(item.event) : await this.sendLive(item.event, item.idempotencyKey);
 
       item.response = response;
       item.state = "SENT";
@@ -221,12 +214,14 @@ export class PublisherClient {
   }
 
   async retryDueQueue(now: Date = new Date(), limit = MAX_DUE_RETRIES_PER_TICK): Promise<number> {
-    const candidates = this.data.items.filter((item) => {
-      if (item.state !== "PENDING" && item.state !== "RETRY_SCHEDULED") {
-        return false;
-      }
-      return !item.nextAttemptAt || new Date(item.nextAttemptAt).getTime() <= now.getTime();
-    }).slice(0, limit);
+    const candidates = this.data.items
+      .filter((item) => {
+        if (item.state !== "PENDING" && item.state !== "RETRY_SCHEDULED") {
+          return false;
+        }
+        return !item.nextAttemptAt || new Date(item.nextAttemptAt).getTime() <= now.getTime();
+      })
+      .slice(0, limit);
 
     for (const item of candidates) {
       await this.processExistingItem(item);
@@ -292,13 +287,15 @@ export class PublisherClient {
   }
 
   private async persist(): Promise<void> {
-    const nextPersist = this.persistChain.catch(() => undefined).then(async () => {
-      this.pruneRetainedItems();
-      await mkdir(dirname(this.storePath), { recursive: true });
-      const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
-      await writeFile(tempPath, JSON.stringify(this.data), "utf8");
-      await rename(tempPath, this.storePath);
-    });
+    const nextPersist = this.persistChain
+      .catch(() => undefined)
+      .then(async () => {
+        this.pruneRetainedItems();
+        await mkdir(dirname(this.storePath), { recursive: true });
+        const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
+        await writeFile(tempPath, JSON.stringify(this.data), "utf8");
+        await rename(tempPath, this.storePath);
+      });
     this.persistChain = nextPersist;
     return this.persistChain;
   }

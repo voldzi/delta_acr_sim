@@ -283,7 +283,6 @@ class MockSafetyDataSource implements SafetyDataSource {
       warnings: []
     };
   }
-
 }
 
 class ChmiAlertsSource implements SafetyDataSource {
@@ -336,9 +335,7 @@ class ChmiAlertsSource implements SafetyDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const listing = await this.listingCache.getOrLoad("chmi_alerts_listing", () =>
-      requestText(this.config.chmiAlertsCapBaseUrl, this.config.requestTimeoutMs)
-    );
+    const listing = await this.listingCache.getOrLoad("chmi_alerts_listing", () => requestText(this.config.chmiAlertsCapBaseUrl, this.config.requestTimeoutMs));
     const capUrl = latestCapUrl(listing, this.config.chmiAlertsCapBaseUrl);
     if (!capUrl) {
       return {
@@ -382,7 +379,9 @@ class ChmiAlertsSource implements SafetyDataSource {
     if (!this.config.adminBoundaryConnectionString) {
       return {
         features: features.map((feature) => markCapPointFallback(feature, requestedCodes.length, 0, "postgis_not_configured")),
-        warnings: ["chmi_alerts CAP polygonization disabled: configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL to resolve CISORP areas."]
+        warnings: [
+          "chmi_alerts CAP polygonization disabled: configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL to resolve CISORP areas."
+        ]
       };
     }
 
@@ -1063,7 +1062,8 @@ class MunicipalAlertsSource implements SafetyDataSource {
       priority: 72,
       layers: ["warnings"],
       license: MUNICIPAL_ALERTS_LICENSE,
-      baseUrl: config.municipalAlertFeeds.length === 1 ? config.municipalAlertFeeds[0]?.url : config.municipalAlertFeeds.length > 1 ? "multiple feeds" : undefined,
+      baseUrl:
+        config.municipalAlertFeeds.length === 1 ? config.municipalAlertFeeds[0]?.url : config.municipalAlertFeeds.length > 1 ? "multiple feeds" : undefined,
       updateCadenceSeconds: config.municipalAlertsCacheTtlSeconds
     };
   }
@@ -1089,12 +1089,12 @@ class MunicipalAlertsSource implements SafetyDataSource {
         continue;
       }
       try {
-        const parsed = await this.responseCache.getOrLoad(`municipal_alerts:${feed.id}:${feed.url}`, () => fetchMunicipalAlertFeed(feed, this.config.requestTimeoutMs));
+        const parsed = await this.responseCache.getOrLoad(`municipal_alerts:${feed.id}:${feed.url}`, () =>
+          fetchMunicipalAlertFeed(feed, this.config.requestTimeoutMs)
+        );
         features.push(...mapMunicipalAlertFeed(parsed, feed, query, fetchedAt));
       } catch (error) {
-        warnings.push(
-          error instanceof Error ? `municipal_alerts feed ${feed.label} failed: ${error.message}` : `municipal_alerts feed ${feed.label} failed.`
-        );
+        warnings.push(error instanceof Error ? `municipal_alerts feed ${feed.label} failed: ${error.message}` : `municipal_alerts feed ${feed.label} failed.`);
       }
       if (features.length >= query.limit) {
         break;
@@ -1215,7 +1215,11 @@ class AdminBoundarySource implements SafetyDataSource {
           source: this.descriptor,
           fetchedAt,
           features: seedAdminBoundaryFeatures(query.bbox, fetchedAt),
-          warnings: [error instanceof Error ? `admin_boundaries PostGIS read-model failed; using coarse seed fallback: ${error.message}` : "admin_boundaries PostGIS read-model failed; using coarse seed fallback."]
+          warnings: [
+            error instanceof Error
+              ? `admin_boundaries PostGIS read-model failed; using coarse seed fallback: ${error.message}`
+              : "admin_boundaries PostGIS read-model failed; using coarse seed fallback."
+          ]
         };
       }
     }
@@ -1224,7 +1228,9 @@ class AdminBoundarySource implements SafetyDataSource {
       source: this.descriptor,
       fetchedAt,
       features: seedAdminBoundaryFeatures(query.bbox, fetchedAt),
-      warnings: ["admin_boundaries is using a coarse seed fallback; configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL for production PostGIS boundaries."]
+      warnings: [
+        "admin_boundaries is using a coarse seed fallback; configure SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL or OSM_POSTGIS_DATABASE_URL for production PostGIS boundaries."
+      ]
     };
   }
 
@@ -1254,14 +1260,7 @@ class AdminBoundarySource implements SafetyDataSource {
       order by admin_level asc, st_area(geom::geography) asc, name nulls last
       limit $6
     `;
-    const result = await pool.query<AdminBoundaryRow>(sql, [
-      bbox.west,
-      bbox.south,
-      bbox.east,
-      bbox.north,
-      adminLevels,
-      Math.max(1, Math.min(500, limit))
-    ]);
+    const result = await pool.query<AdminBoundaryRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, adminLevels, Math.max(1, Math.min(500, limit))]);
     return result.rows;
   }
 
@@ -1931,11 +1930,7 @@ function projectCapInfo(info: Record<string, unknown>, index: number): CapInfoPr
   const parameters = parseCapParameters(info.parameter);
   const classification = classifyChmiAlert({ event, headline, eventCodes, parameters });
   const areas = toArray(info.area).map(asRecord).filter(Boolean) as Array<Record<string, unknown>>;
-  const affectedAreas = unique(
-    areas
-      .map((area) => optionalString(area.areaDesc))
-      .filter((value): value is string => Boolean(value))
-  );
+  const affectedAreas = unique(areas.map((area) => optionalString(area.areaDesc)).filter((value): value is string => Boolean(value)));
   const geocodes = uniqueGeocodes(
     areas.flatMap((area) =>
       toArray(area.geocode)
@@ -1966,7 +1961,9 @@ function projectCapInfo(info: Record<string, unknown>, index: number): CapInfoPr
     classification,
     eventCodes,
     parameters,
-    responseTypes: toArray(info.responseType).map(optionalString).filter((value): value is string => Boolean(value)),
+    responseTypes: toArray(info.responseType)
+      .map(optionalString)
+      .filter((value): value is string => Boolean(value)),
     affectedAreas,
     geocodes
   };
@@ -2154,9 +2151,7 @@ function polygonizeCapFeature(feature: SafetyFeature, boundaryByCode: Map<string
     return feature;
   }
 
-  const matchedRows = requestedCodes
-    .map((code) => boundaryByCode.get(code))
-    .filter((row): row is ChmiBoundaryMatchRow => Boolean(row));
+  const matchedRows = requestedCodes.map((code) => boundaryByCode.get(code)).filter((row): row is ChmiBoundaryMatchRow => Boolean(row));
   const geometry = mergeBoundaryGeometries(matchedRows);
   if (!geometry) {
     return undefined;
@@ -2581,9 +2576,7 @@ function parseHzsActiveIncidentRows(html: string, feed: HzsIncidentFeedConfig, f
     return [];
   }
   const rows = Array.from(activeSection.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((match) => match[1] ?? "");
-  return rows
-    .map((row) => parseHzsActiveIncidentRow(row, feed, fetchedAt))
-    .filter((record): record is HzsIncidentRecord => Boolean(record));
+  return rows.map((row) => parseHzsActiveIncidentRow(row, feed, fetchedAt)).filter((record): record is HzsIncidentRecord => Boolean(record));
 }
 
 function parseHzsActiveIncidentRow(row: string, feed: HzsIncidentFeedConfig, fetchedAt: string): HzsIncidentRecord | undefined {
@@ -2653,9 +2646,7 @@ function parseHzsIncidentDetail(html: string): HzsIncidentDetail {
 async function fetchHzsKhkJsonFeed(feed: HzsIncidentFeedConfig, fetchedAt: string, timeoutMs: number): Promise<HzsIncidentRecord[]> {
   const payload = await requestJson<unknown>(hzsKhkJsonFeedUrl(feed.url, fetchedAt), timeoutMs);
   const records = Array.isArray(payload) ? payload : [];
-  return records
-    .map((item) => parseHzsKhkJsonIncident(item, feed, fetchedAt))
-    .filter((record): record is HzsIncidentRecord => Boolean(record));
+  return records.map((item) => parseHzsKhkJsonIncident(item, feed, fetchedAt)).filter((record): record is HzsIncidentRecord => Boolean(record));
 }
 
 const HZS_KHK_ACTIVE_STATUS_IDS = [210, 400, 410, 420, 430, 440];
@@ -2830,7 +2821,13 @@ function hzsKhkPoint(item: HzsKhkIncidentDto): { lon: number; lat: number; basis
   return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat, basis: "source_sjtsk_point" } : undefined;
 }
 
-function mapHzsIncident(record: HzsIncidentRecord, detail: HzsIncidentDetail, geocode: HzsIncidentGeocode, query: SafetyQuery, fetchedAt: string): SafetyFeature[] {
+function mapHzsIncident(
+  record: HzsIncidentRecord,
+  detail: HzsIncidentDetail,
+  geocode: HzsIncidentGeocode,
+  query: SafetyQuery,
+  fetchedAt: string
+): SafetyFeature[] {
   const classification = classifyHzsIncident(detail.type ?? record.type, detail.subtype, detail.description);
   const targetLayers = hzsRequestedLayers(classification.primaryLayer, query.layers);
   if (targetLayers.length === 0) {
@@ -3011,7 +3008,12 @@ function municipalAlertItems(parsed: unknown, feed: MunicipalAlertFeedConfig, fe
     .filter((item): item is MunicipalAlertItem => Boolean(item));
 }
 
-function municipalAlertItemFromGeoJsonFeature(value: unknown, feed: MunicipalAlertFeedConfig, fetchedAt: string, index: number): MunicipalAlertItem | undefined {
+function municipalAlertItemFromGeoJsonFeature(
+  value: unknown,
+  feed: MunicipalAlertFeedConfig,
+  fetchedAt: string,
+  index: number
+): MunicipalAlertItem | undefined {
   const feature = asRecord(value);
   const properties = asRecord(feature?.properties) ?? {};
   const title =
@@ -3294,28 +3296,26 @@ function classifyMunicipalAlert(item: MunicipalAlertItem): {
 } {
   const text = normalizeCzechKey(`${item.title} ${item.description ?? ""} ${item.categories.join(" ")}`);
   const hasStandaloneIce = /(^|[^a-z0-9])led([^a-z0-9]|$)/.test(text);
-  const hazard =
-    /povod|zaplav|flood|voda|vodni/.test(text)
-      ? { hazardType: "flood", typeCode: "municipal.flood", iconHint: "flood", styleHint: "safety-flood-warning" }
-      : /pozar|fire|kour/.test(text)
-        ? { hazardType: "fire", typeCode: "municipal.fire", iconHint: "fire", styleHint: "safety-fire-warning" }
-        : /evaku|ukryt|shelter|evacuat/.test(text)
-          ? { hazardType: "evacuation", typeCode: "municipal.evacuation", iconHint: "evacuation", styleHint: "safety-warning-critical" }
-          : /nehod|uzavir|dopr|traffic|silnic|road/.test(text)
-            ? { hazardType: "road_incident", typeCode: "municipal.road_incident", iconHint: "traffic", styleHint: "safety-warning-road" }
-            : /pitn|hygien|zdrav|health|epidem/.test(text)
-              ? { hazardType: "public_health", typeCode: "municipal.public_health", iconHint: "health", styleHint: "safety-warning-health" }
-              : /vitr|bour|dest|snih|weather|storm/.test(text) || hasStandaloneIce
-                ? { hazardType: "weather", typeCode: "municipal.weather", iconHint: "weather_alert", styleHint: "safety-warning-weather" }
-                : { hazardType: "municipal_alert", typeCode: "municipal.alert", iconHint: "warning", styleHint: "safety-warning-v1" };
-  const severity: SafetySeverity =
-    /kritick|extrem|bezprostred|ohrozeni zivota|evaku|critical|emergency/.test(text)
-      ? "critical"
-      : /vystrah|nebezpe|varov|warning|pozar|povod/.test(text)
-        ? "warning"
-        : /inform|oznamen|notice/.test(text)
-          ? "info"
-          : "advisory";
+  const hazard = /povod|zaplav|flood|voda|vodni/.test(text)
+    ? { hazardType: "flood", typeCode: "municipal.flood", iconHint: "flood", styleHint: "safety-flood-warning" }
+    : /pozar|fire|kour/.test(text)
+      ? { hazardType: "fire", typeCode: "municipal.fire", iconHint: "fire", styleHint: "safety-fire-warning" }
+      : /evaku|ukryt|shelter|evacuat/.test(text)
+        ? { hazardType: "evacuation", typeCode: "municipal.evacuation", iconHint: "evacuation", styleHint: "safety-warning-critical" }
+        : /nehod|uzavir|dopr|traffic|silnic|road/.test(text)
+          ? { hazardType: "road_incident", typeCode: "municipal.road_incident", iconHint: "traffic", styleHint: "safety-warning-road" }
+          : /pitn|hygien|zdrav|health|epidem/.test(text)
+            ? { hazardType: "public_health", typeCode: "municipal.public_health", iconHint: "health", styleHint: "safety-warning-health" }
+            : /vitr|bour|dest|snih|weather|storm/.test(text) || hasStandaloneIce
+              ? { hazardType: "weather", typeCode: "municipal.weather", iconHint: "weather_alert", styleHint: "safety-warning-weather" }
+              : { hazardType: "municipal_alert", typeCode: "municipal.alert", iconHint: "warning", styleHint: "safety-warning-v1" };
+  const severity: SafetySeverity = /kritick|extrem|bezprostred|ohrozeni zivota|evaku|critical|emergency/.test(text)
+    ? "critical"
+    : /vystrah|nebezpe|varov|warning|pozar|povod/.test(text)
+      ? "warning"
+      : /inform|oznamen|notice/.test(text)
+        ? "info"
+        : "advisory";
   const urgency: SafetyUrgency = severity === "critical" || /ihned|okamzit|immediate|now/.test(text) ? "immediate" : "expected";
   return { ...hazard, severity, urgency };
 }
@@ -3488,7 +3488,11 @@ LIMIT ${limit}
     .filter((event): event is RoadSrtiLodEvent => Boolean(event));
 }
 
-function classifyHzsIncident(type: string, subtype: string | undefined, description: string | undefined): {
+function classifyHzsIncident(
+  type: string,
+  subtype: string | undefined,
+  description: string | undefined
+): {
   primaryLayer: SafetyLayerId;
   category: string;
   hazardType: string;
@@ -3499,24 +3503,80 @@ function classifyHzsIncident(type: string, subtype: string | undefined, descript
 } {
   const text = normalizeCzechKey([type, subtype, description].filter(Boolean).join(" "));
   if (text.includes("pozar")) {
-    return { primaryLayer: "fire", category: "active_fire_incident", hazardType: "fire", typeCode: "HZS_FIRE", severity: "warning", confidence: 0.92, iconHint: "fire" };
+    return {
+      primaryLayer: "fire",
+      category: "active_fire_incident",
+      hazardType: "fire",
+      typeCode: "HZS_FIRE",
+      severity: "warning",
+      confidence: 0.92,
+      iconHint: "fire"
+    };
   }
   if (text.includes("unik nebezpecnych latek") || text.includes("nebezpecn")) {
-    return { primaryLayer: "warnings", category: "hazmat_incident", hazardType: "hazmat", typeCode: "HZS_HAZMAT", severity: "warning", confidence: 0.9, iconHint: "hazmat" };
+    return {
+      primaryLayer: "warnings",
+      category: "hazmat_incident",
+      hazardType: "hazmat",
+      typeCode: "HZS_HAZMAT",
+      severity: "warning",
+      confidence: 0.9,
+      iconHint: "hazmat"
+    };
   }
   if (text.includes("dopravni nehoda") || /\bdn\b/.test(text)) {
-    return { primaryLayer: "warnings", category: "traffic_accident", hazardType: "traffic_accident", typeCode: "HZS_TRAFFIC_ACCIDENT", severity: "warning", confidence: 0.88, iconHint: "traffic-accident" };
+    return {
+      primaryLayer: "warnings",
+      category: "traffic_accident",
+      hazardType: "traffic_accident",
+      typeCode: "HZS_TRAFFIC_ACCIDENT",
+      severity: "warning",
+      confidence: 0.88,
+      iconHint: "traffic-accident"
+    };
   }
   if (text.includes("zachrana osob") || text.includes("zachrana zvirat")) {
-    return { primaryLayer: "warnings", category: "rescue_incident", hazardType: "rescue", typeCode: "HZS_RESCUE", severity: "warning", confidence: 0.86, iconHint: "rescue" };
+    return {
+      primaryLayer: "warnings",
+      category: "rescue_incident",
+      hazardType: "rescue",
+      typeCode: "HZS_RESCUE",
+      severity: "warning",
+      confidence: 0.86,
+      iconHint: "rescue"
+    };
   }
   if (text.includes("technicka pomoc")) {
-    return { primaryLayer: "warnings", category: "technical_assistance", hazardType: "technical_assistance", typeCode: "HZS_TECHNICAL_ASSISTANCE", severity: "advisory", confidence: 0.82, iconHint: "technical-assistance" };
+    return {
+      primaryLayer: "warnings",
+      category: "technical_assistance",
+      hazardType: "technical_assistance",
+      typeCode: "HZS_TECHNICAL_ASSISTANCE",
+      severity: "advisory",
+      confidence: 0.82,
+      iconHint: "technical-assistance"
+    };
   }
   if (text.includes("plany poplach")) {
-    return { primaryLayer: "warnings", category: "false_alarm", hazardType: "false_alarm", typeCode: "HZS_FALSE_ALARM", severity: "info", confidence: 0.84, iconHint: "info" };
+    return {
+      primaryLayer: "warnings",
+      category: "false_alarm",
+      hazardType: "false_alarm",
+      typeCode: "HZS_FALSE_ALARM",
+      severity: "info",
+      confidence: 0.84,
+      iconHint: "info"
+    };
   }
-  return { primaryLayer: "warnings", category: "emergency_incident", hazardType: "emergency_incident", typeCode: "HZS_INCIDENT", severity: "advisory", confidence: 0.78, iconHint: "warning" };
+  return {
+    primaryLayer: "warnings",
+    category: "emergency_incident",
+    hazardType: "emergency_incident",
+    typeCode: "HZS_INCIDENT",
+    severity: "advisory",
+    confidence: 0.78,
+    iconHint: "warning"
+  };
 }
 
 function classifyRoadSrtiEvent(typeLabel: string):
@@ -3652,9 +3712,10 @@ function hzsGeocodeCandidates(record: HzsIncidentRecord, detail: HzsIncidentDeta
 }
 
 function hzsAddress(record: HzsIncidentRecord, detail: HzsIncidentDetail): string {
-  return [detail.street, detail.municipalityPart, detail.municipality, detail.district ? `okres ${detail.district}` : undefined]
-    .filter(Boolean)
-    .join(", ") || record.location;
+  return (
+    [detail.street, detail.municipalityPart, detail.municipality, detail.district ? `okres ${detail.district}` : undefined].filter(Boolean).join(", ") ||
+    record.location
+  );
 }
 
 function hzsDescription(detail: HzsIncidentDetail, status: string): string {
@@ -3744,7 +3805,7 @@ function decodeHtmlEntities(value: string): string {
     amp: "&",
     lt: "<",
     gt: ">",
-    quot: "\"",
+    quot: '"',
     apos: "'",
     aacute: "á",
     Aacute: "Á",
@@ -4269,9 +4330,7 @@ function hydroObservations(series: HydroSeries | undefined): HydroObservation[] 
 }
 
 function latestForecastTimestamp(seriesList: Array<HydroSeries | undefined>): string | undefined {
-  return seriesList
-    .flatMap((series) => hydroObservations(series))
-    .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0]?.observedAt;
+  return seriesList.flatMap((series) => hydroObservations(series)).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0]?.observedAt;
 }
 
 function findHydroStation(stations: HydroStation[], stationId: string): HydroStation | undefined {
@@ -4287,11 +4346,7 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-function hydroDetailWindow(
-  query: HydroStationDetailQuery,
-  config: SafetyDataConfig,
-  generatedAt: string
-): { from: string; to: string } {
+function hydroDetailWindow(query: HydroStationDetailQuery, config: SafetyDataConfig, generatedAt: string): { from: string; to: string } {
   const nowMs = Date.parse(generatedAt);
   const from = query.from ?? new Date(nowMs - Math.max(1, config.chmiHydroDetailDefaultPastHours) * 60 * 60 * 1000).toISOString();
   const to = query.to ?? new Date(nowMs + Math.max(0, config.chmiHydroDetailForecastHours) * 60 * 60 * 1000).toISOString();
@@ -4548,7 +4603,13 @@ function floodLevel(waterLevelCm: number | undefined, flowM3s: number | undefine
   );
 }
 
-function thresholdLevel(value: number | undefined, spa1: number | undefined, spa2: number | undefined, spa3: number | undefined, spa4: number | undefined): number {
+function thresholdLevel(
+  value: number | undefined,
+  spa1: number | undefined,
+  spa2: number | undefined,
+  spa3: number | undefined,
+  spa4: number | undefined
+): number {
   if (value === undefined) {
     return 0;
   }

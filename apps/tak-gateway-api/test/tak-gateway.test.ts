@@ -100,11 +100,7 @@ describe("tak-gateway-api", () => {
   it("ingests CoT XML and exposes a COP GeoJSON projection", async () => {
     const { app } = await createApp(config());
 
-    const ingest = await request(app)
-      .post("/api/v1/cot/events")
-      .set("authorization", "Bearer secret")
-      .set("content-type", "application/xml")
-      .send(cotEvent());
+    const ingest = await request(app).post("/api/v1/cot/events").set("authorization", "Bearer secret").set("content-type", "application/xml").send(cotEvent());
 
     expect(ingest.status).toBe(202);
     expect(ingest.body.eventCount).toBe(1);

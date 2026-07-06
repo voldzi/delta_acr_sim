@@ -62,8 +62,7 @@ describe("Safety Data API contract", () => {
       roadSrtiLodSparqlUrl: "https://lod.tamtamresearch.com/sparql/",
       roadSrtiLodCacheTtlSeconds: 300,
       roadSrtiLodMaxRecords: 1500,
-      chmiOrpCodelistUrl:
-        "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
+      chmiOrpCodelistUrl: "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
       adminBoundaryTable: "public.osm_admin_boundary",
       adminBoundaryCacheTtlSeconds: 86_400
     };
@@ -343,7 +342,9 @@ describe("Safety Data API contract", () => {
     );
     expect(detail.body.properties.raw).toBeUndefined();
 
-    const geometry = await request(app).get("/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?layers=weather_alerts&source=mock&limit=1").expect(200);
+    const geometry = await request(app)
+      .get("/api/v1/features/weather_alerts%3Amock%3Awind-prague-west/geometry?layers=weather_alerts&source=mock&limit=1")
+      .expect(200);
     expect(geometry.body).toEqual(
       expect.objectContaining({
         contractVersion: "sim-provider-feature-geometry-v1",
@@ -447,29 +448,38 @@ describe("Safety Data API contract", () => {
   });
 
   it("exposes observability with per-source cache state", async () => {
-    const configured = await createApp({ ...config, enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "road_srti_lod", "admin_boundaries"] });
-    await request(configured.app).get("/api/v1/observability").expect(200).expect((response) => {
-      expect(response.body).toEqual(
-        expect.objectContaining({
-          serviceId: "safety-data-api",
-          cache: expect.objectContaining({ entries: expect.any(Number), hitRate: expect.any(Number) }),
-          sourceCaches: expect.arrayContaining([
-            expect.objectContaining({ sourceId: "chmi_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
-            expect.objectContaining({ sourceId: "chmi_hydro", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
-            expect.objectContaining({ sourceId: "nasa_firms", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
-            expect.objectContaining({ sourceId: "gdacs_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
-            expect.objectContaining({ sourceId: "hzs_incidents", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
-            expect.objectContaining({ sourceId: "road_srti_lod", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
-            expect.objectContaining({ sourceId: "admin_boundaries", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) })
-          ]),
-          lastResult: expect.objectContaining({
-            featureCount: 0,
-            generatedAgeSeconds: -1,
-            layerCounts: {}
-          })
-        })
-      );
+    const configured = await createApp({
+      ...config,
+      enabledSources: ["chmi_alerts", "chmi_hydro", "nasa_firms", "gdacs_alerts", "hzs_incidents", "road_srti_lod", "admin_boundaries"]
     });
+    await request(configured.app)
+      .get("/api/v1/observability")
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual(
+          expect.objectContaining({
+            serviceId: "safety-data-api",
+            cache: expect.objectContaining({ entries: expect.any(Number), hitRate: expect.any(Number) }),
+            sourceCaches: expect.arrayContaining([
+              expect.objectContaining({ sourceId: "chmi_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+              expect.objectContaining({ sourceId: "chmi_hydro", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+              expect.objectContaining({ sourceId: "nasa_firms", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+              expect.objectContaining({ sourceId: "gdacs_alerts", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+              expect.objectContaining({ sourceId: "hzs_incidents", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+              expect.objectContaining({ sourceId: "road_srti_lod", cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) }) }),
+              expect.objectContaining({
+                sourceId: "admin_boundaries",
+                cache: expect.objectContaining({ hits: expect.any(Number), misses: expect.any(Number) })
+              })
+            ]),
+            lastResult: expect.objectContaining({
+              featureCount: 0,
+              generatedAgeSeconds: -1,
+              layerCounts: {}
+            })
+          })
+        );
+      });
   });
 
   it("skips CHMI hydro stations with missing current data without degrading a partial response", async () => {
@@ -550,12 +560,8 @@ describe("Safety Data API contract", () => {
           chmiHydroCurrentSnapshotCacheTtlSeconds: 300
         });
 
-        await request(configured.app)
-          .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=flood&source=chmi_hydro&limit=10")
-          .expect(200);
-        await request(configured.app)
-          .get("/api/v1/cop/features?bbox=13.90,49.70,15.30,50.40&layers=flood&source=chmi_hydro&limit=10")
-          .expect(200);
+        await request(configured.app).get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=flood&source=chmi_hydro&limit=10").expect(200);
+        await request(configured.app).get("/api/v1/cop/features?bbox=13.90,49.70,15.30,50.40&layers=flood&source=chmi_hydro&limit=10").expect(200);
 
         expect(requestCounts.get("/now/0-203-1-good.json")).toBe(1);
         expect(requestCounts.get("/now/0-203-1-missing.json")).toBe(1);
@@ -581,9 +587,7 @@ describe("Safety Data API contract", () => {
         });
 
         const response = await request(configured.app)
-          .get(
-            "/api/v1/hydro/stations/0-203-1-good/observations?from=2026-05-28T08:00:00Z&to=2026-05-29T12:00:00Z&series=H,Q,TH,H_F,Q_F"
-          )
+          .get("/api/v1/hydro/stations/0-203-1-good/observations?from=2026-05-28T08:00:00Z&to=2026-05-29T12:00:00Z&series=H,Q,TH,H_F,Q_F")
           .expect(200);
 
         expect(response.body).toEqual(
@@ -787,8 +791,7 @@ describe("Safety Data API contract", () => {
           country_code: "CZ",
           source: "osm_postgis",
           imported_at: "2026-05-28T00:00:00.000Z",
-          geometry_geojson:
-            '{"type":"Polygon","coordinates":[[[14.3,49.7],[14.9,49.7],[14.9,50.1],[14.3,50.1],[14.3,49.7]]]}',
+          geometry_geojson: '{"type":"Polygon","coordinates":[[[14.3,49.7],[14.9,49.7],[14.9,50.1],[14.3,50.1],[14.3,49.7]]]}',
           tags: { short_name: "Benešov" }
         }
       ]
@@ -856,9 +859,7 @@ describe("Safety Data API contract", () => {
           nasaFirmsAreaBaseUrl: `${baseUrl}/firms`
         });
 
-        const response = await request(configured.app)
-          .get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=fire&source=nasa_firms&limit=10")
-          .expect(200);
+        const response = await request(configured.app).get("/api/v1/features?bbox=13.85,49.65,15.35,50.45&layers=fire&source=nasa_firms&limit=10").expect(200);
 
         expect(response.body.summary.featureCount).toBe(1);
         expect(response.body.features[0].properties).toEqual(
@@ -1044,9 +1045,7 @@ describe("Safety Data API contract", () => {
         gdacsRssUrl: `${baseUrl}/gdacs/rss.xml`
       });
 
-      const response = await request(configured.app)
-        .get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood&source=gdacs_alerts&limit=10")
-        .expect(200);
+      const response = await request(configured.app).get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood&source=gdacs_alerts&limit=10").expect(200);
 
       expect(response.body.summary.featureCount).toBe(1);
       expect(response.body.features[0]).toEqual(
@@ -1095,9 +1094,7 @@ describe("Safety Data API contract", () => {
         gdacsRssUrl: `${baseUrl}/gdacs/rss.xml`
       });
 
-      const response = await request(configured.app)
-        .get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood&source=gdacs_alerts&limit=10")
-        .expect(200);
+      const response = await request(configured.app).get("/api/v1/features?bbox=17.25,50.05,17.50,50.20&layers=flood&source=gdacs_alerts&limit=10").expect(200);
 
       expect(response.body.summary.featureCount).toBe(0);
       expect(response.body.features).toEqual([]);
@@ -1586,9 +1583,7 @@ describe("Safety Data API contract", () => {
       enabledSources: ["road_srti_lod"]
     });
 
-    const response = await request(configured.app)
-      .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=warnings&source=road_srti_lod&limit=10")
-      .expect(200);
+    const response = await request(configured.app).get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=warnings&source=road_srti_lod&limit=10").expect(200);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(response.body.summary.featureCount).toBe(2);
@@ -1644,8 +1639,7 @@ describe("Safety Data API contract", () => {
           country_code: "CZ",
           source: "osm_postgis",
           imported_at: "2026-05-28T00:00:00.000Z",
-          geometry_geojson:
-            '{"type":"Polygon","coordinates":[[[14.3,49.7],[14.9,49.7],[14.9,50.1],[14.3,50.1],[14.3,49.7]]]}',
+          geometry_geojson: '{"type":"Polygon","coordinates":[[[14.3,49.7],[14.9,49.7],[14.9,50.1],[14.3,50.1],[14.3,49.7]]]}',
           tags: { short_name: "Benešov" }
         }
       ]
@@ -1666,9 +1660,7 @@ describe("Safety Data API contract", () => {
           adminBoundaryConnectionString: "postgresql://sim:test@localhost:5432/sim_osm"
         });
 
-        const response = await request(configured.app)
-          .get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=fire&source=chmi_alerts&limit=10")
-          .expect(200);
+        const response = await request(configured.app).get("/api/v1/features?bbox=14.0,49.5,15.1,50.2&layers=fire&source=chmi_alerts&limit=10").expect(200);
 
         expect(response.body.summary.featureCount).toBe(1);
         expect(response.body.features[0]).toEqual(
@@ -1703,9 +1695,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("returns the COP GeoJSON projection", async () => {
-    const response = await request(app)
-      .get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=warnings,flood&source=mock&limit=20")
-      .expect(200);
+    const response = await request(app).get("/api/v1/cop/features?bbox=13.85,49.65,15.35,50.45&layers=warnings,flood&source=mock&limit=20").expect(200);
 
     expect(response.body.contractVersion).toBe("cop-safety-source-v1");
     expect(response.body.type).toBe("FeatureCollection");
@@ -1894,8 +1884,7 @@ function chmiHydroMetadataFixture(): unknown {
   return {
     data: {
       data: {
-        header:
-          "objID,DBC,STATION_NAME,STREAM_NAME,GEOGR1,GEOGR2,SPA_TYP,DRYH,SPA1H,SPA2H,SPA3H,SPA4H,DRYQ,SPA1Q,SPA2Q,SPA3Q,SPA4Q,PLO_STA,HLGP4",
+        header: "objID,DBC,STATION_NAME,STREAM_NAME,GEOGR1,GEOGR2,SPA_TYP,DRYH,SPA1H,SPA2H,SPA3H,SPA4H,DRYQ,SPA1Q,SPA2Q,SPA3Q,SPA4Q,PLO_STA,HLGP4",
         values: [
           ["0-203-1-good", "GOOD", "Good station", "Vltava", 50.05, 14.4, "H", 10, 100, 150, 200, 250, 2, 20, 35, 50, 70, 123.45, "1-01-01-0000"],
           ["0-203-1-missing", "MISS", "Missing station", "Vltava", 50.06, 14.41, "H", 10, 100, 150, 200, 250, 2, 20, 35, 50, 70, 123.45, "1-01-01-0000"]

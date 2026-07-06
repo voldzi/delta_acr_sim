@@ -386,12 +386,9 @@ describe("SIM API contract baseline", () => {
     });
 
     const kyivNorthHostileUavs = events.filter(
-      (event) => event.payload.objectId.startsWith("HOSTILE_UAV")
-        && event.payload.attributes?.routeLabel === "Kyiv north approach"
+      (event) => event.payload.objectId.startsWith("HOSTILE_UAV") && event.payload.attributes?.routeLabel === "Kyiv north approach"
     );
-    const laneOffsets = kyivNorthHostileUavs
-      .map((event) => Number(event.payload.attributes?.routeLaneOffsetM))
-      .filter(Number.isFinite);
+    const laneOffsets = kyivNorthHostileUavs.map((event) => Number(event.payload.attributes?.routeLaneOffsetM)).filter(Number.isFinite);
 
     expect(kyivNorthHostileUavs).toHaveLength(8);
     expect(new Set(laneOffsets).size).toBeGreaterThanOrEqual(7);
@@ -675,6 +672,27 @@ describe("SIM API contract baseline", () => {
     expect(requestedUrls).toContain("http://127.0.0.1:4020/api/v1/features?limit=12");
   });
 
+  it("bounds provider dashboard response size before parsing JSON", async () => {
+    context.runtimeRunner.dispose();
+    ({ app, context } = await createApp(testConfig(dataDir, { operationsProviderMaxResponseBytes: 64 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ status: "ok", padding: "x".repeat(512) }), {
+            headers: { "content-type": "application/json" },
+            status: 200
+          })
+      )
+    );
+
+    const response = await request(app).get("/api/v1/operations/provider-details?includeDetails=true&includeObservability=true").expect(200);
+
+    expect(response.body.contractVersion).toBe("sim-operations-provider-details-v1");
+    expect(response.body.warnings).toEqual(expect.arrayContaining([expect.stringContaining("response too large")]));
+    expect(response.body.flightData).toEqual({});
+  });
+
   it("keeps source data quality notices separate from technical service degradation", async () => {
     vi.stubGlobal(
       "fetch",
@@ -814,11 +832,7 @@ describe("SIM API contract baseline", () => {
     expect(response.body.status).toBe("degraded");
     expect(safetyService.status).toBe("degraded");
     expect(safetyService.warnings).toEqual(
-      expect.arrayContaining([
-        "observability status degraded",
-        "chmi_alerts cache state degraded",
-        "chmi_alerts cache has 2 errors"
-      ])
+      expect.arrayContaining(["observability status degraded", "chmi_alerts cache state degraded", "chmi_alerts cache has 2 errors"])
     );
     expect(safetyService.warnings).not.toContain("chmi_hydro cache pressure 1.07");
     expect(safetyAlert).toEqual(
@@ -964,7 +978,10 @@ describe("SIM API security controls", () => {
       kid: keyId,
       use: "sig"
     };
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ keys: [publicJwk] })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ keys: [publicJwk] }))
+    );
     const now = Math.floor(Date.now() / 1000);
     const token = signJwt(privateKey, keyId, {
       azp: "csm-sim-web",
@@ -1006,7 +1023,10 @@ describe("SIM API security controls", () => {
       kid: keyId,
       use: "sig"
     };
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ keys: [publicJwk] })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ keys: [publicJwk] }))
+    );
     const now = Math.floor(Date.now() / 1000);
     const token = signJwt(privateKey, keyId, {
       azp: "csm-sim-web",
@@ -1048,7 +1068,10 @@ describe("SIM API security controls", () => {
       kid: keyId,
       use: "sig"
     };
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ keys: [publicJwk] })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ keys: [publicJwk] }))
+    );
     const now = Math.floor(Date.now() / 1000);
     const token = signJwt(privateKey, keyId, {
       azp: "csm-sim-web",
@@ -1171,11 +1194,10 @@ function base64Url(value: string): string {
 }
 
 function jsonResponse(body: unknown): Response {
-  return {
-    json: async () => body,
-    ok: true,
+  return new Response(JSON.stringify(body), {
+    headers: { "content-type": "application/json" },
     status: 200
-  } as Response;
+  });
 }
 
 function distanceMeters(start: { lat?: number; lon?: number }, end: { lat?: number; lon?: number }): number {

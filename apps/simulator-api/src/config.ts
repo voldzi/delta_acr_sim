@@ -38,6 +38,7 @@ export interface ApiConfig {
   scenarioMaxBlocks?: number;
   scenarioMaxActiveObjects?: number;
   scenarioMaxEventsPerSecond?: number;
+  operationsProviderMaxResponseBytes?: number;
   operationsProviderTimeoutMs?: number;
   operationsFlightDataBaseUrl?: string;
   operationsSituationDataBaseUrl?: string;
@@ -55,7 +56,9 @@ export async function loadConfig(): Promise<ApiConfig> {
   const apiPrincipals = parseApiPrincipals(process.env.SIM_API_TOKENS, process.env.SIM_API_ADMIN_TOKEN, process.env.SIM_API_INTERNAL_TOKEN);
   const apiOidcIssuer = normalizeIssuer(process.env.SIM_OIDC_ISSUER ?? process.env.COP_OIDC_ISSUER ?? "");
   if (apiAuthRequired && apiAuthMode !== "oidc" && apiPrincipals.length === 0) {
-    throw new Error("SIM_API_AUTH_REQUIRED is enabled in token/hybrid mode but no SIM_API_ADMIN_TOKEN, SIM_API_TOKENS, or SIM_API_INTERNAL_TOKEN is configured.");
+    throw new Error(
+      "SIM_API_AUTH_REQUIRED is enabled in token/hybrid mode but no SIM_API_ADMIN_TOKEN, SIM_API_TOKENS, or SIM_API_INTERNAL_TOKEN is configured."
+    );
   }
   if (apiAuthRequired && apiAuthMode !== "token" && !apiOidcIssuer) {
     throw new Error("SIM_API_AUTH_REQUIRED is enabled in oidc/hybrid mode but SIM_OIDC_ISSUER is not configured.");
@@ -67,7 +70,7 @@ export async function loadConfig(): Promise<ApiConfig> {
     schemaDir: resolve(process.env.SIM_SCHEMA_DIR ?? `${projectRoot}/docs/api/schemas`),
     publisherMode: parsePublisherMode(process.env.SIM_PUBLISHER_MODE),
     sourceSystemId: process.env.SIM_SOURCE_SYSTEM_ID ?? DEFAULT_SOURCE_SYSTEM_ID,
-    adapterVersion: process.env.SIM_ADAPTER_VERSION ?? "0.1.0",
+    adapterVersion: process.env.SIM_ADAPTER_VERSION ?? "1.0.0",
     mainCopBaseUrl: process.env.MAIN_COP_BASE_URL,
     mainCopBearerToken: process.env.MAIN_COP_BEARER_TOKEN ?? "dev-lab-token",
     externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true",
@@ -85,6 +88,7 @@ export async function loadConfig(): Promise<ApiConfig> {
     scenarioMaxBlocks: parseInteger(process.env.SIM_SCENARIO_MAX_BLOCKS, 24),
     scenarioMaxActiveObjects: parseInteger(process.env.SIM_SCENARIO_MAX_ACTIVE_OBJECTS, 1000),
     scenarioMaxEventsPerSecond: parseInteger(process.env.SIM_SCENARIO_MAX_EVENTS_PER_SECOND, 1000),
+    operationsProviderMaxResponseBytes: parseInteger(process.env.SIM_OPERATIONS_PROVIDER_MAX_RESPONSE_BYTES, 1024 * 1024),
     operationsProviderTimeoutMs: parseInteger(process.env.SIM_OPERATIONS_PROVIDER_TIMEOUT_MS, 1500),
     operationsFlightDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_FLIGHT_DATA_BASE_URL ?? "http://127.0.0.1:4010"),
     operationsSituationDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_SITUATION_DATA_BASE_URL ?? "http://127.0.0.1:4020"),

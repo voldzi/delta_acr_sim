@@ -5,14 +5,7 @@ import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response
 import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry } from "./types.js";
 import type { SituationDataConfig } from "./config.js";
 
-export type RadioProfileCategory =
-  | "civil"
-  | "amateur"
-  | "business"
-  | "public_safety"
-  | "military_generic"
-  | "iot"
-  | "data_link";
+export type RadioProfileCategory = "civil" | "amateur" | "business" | "public_safety" | "military_generic" | "iot" | "data_link";
 export type RadioProfileSource = "builtin" | "custom";
 export type RadioQuality = "good" | "fair" | "weak" | "none" | "unknown";
 export type RadioLinkStatus = "clear" | "marginal" | "obstructed" | "unknown";
@@ -185,21 +178,96 @@ const BUILTIN_RADIO_PROFILES: RadioProfile[] = [
   builtin("pmr446_elevated", "PMR446 elevated antenna", "civil", 446, 0.5, 5, 1.5, 2, 0, 2, -116, 8000, 10, 250, [
     "Licence-free PMR446 estimate with an elevated operator-side antenna."
   ]),
-  builtin("cb_27_handheld", "CB 27 MHz handheld", "civil", 27, 4, 1.5, 1.5, 0, 0, 2, -112, 10000, 10, 500, [
-    "Terrain LoS is only a partial indicator for 27 MHz; propagation may differ materially."
-  ], "limited_for_beyond_line_of_sight"),
-  builtin("cb_27_vehicle", "CB 27 MHz vehicle", "civil", 27, 4, 2.5, 1.5, 1, 0, 2, -112, 20000, 10, 500, [
-    "Vehicle CB estimate. Low-band propagation can exceed or underperform DEM LoS."
-  ], "limited_for_beyond_line_of_sight"),
-  builtin("cb_27_base", "CB 27 MHz base", "civil", 27, 4, 10, 1.5, 2, 0, 2, -112, 30000, 10, 500, [
-    "Base CB estimate; terrain LoS is indicative only for this band."
-  ], "limited_for_beyond_line_of_sight"),
-  builtin("ham_50_mobile", "HAM 50 MHz mobile", "amateur", 50, 10, 2.5, 1.5, 1, 0, 2, -120, 30000, 10, 500, [
-    "Amateur 6 m mobile profile. Requires appropriate licence."
-  ], "limited_for_beyond_line_of_sight"),
-  builtin("ham_50_base", "HAM 50 MHz base", "amateur", 50, 50, 12, 1.5, 5, 0, 2, -120, 60000, 10, 1000, [
-    "Amateur 6 m base profile. Requires appropriate licence."
-  ], "limited_for_beyond_line_of_sight"),
+  builtin(
+    "cb_27_handheld",
+    "CB 27 MHz handheld",
+    "civil",
+    27,
+    4,
+    1.5,
+    1.5,
+    0,
+    0,
+    2,
+    -112,
+    10000,
+    10,
+    500,
+    ["Terrain LoS is only a partial indicator for 27 MHz; propagation may differ materially."],
+    "limited_for_beyond_line_of_sight"
+  ),
+  builtin(
+    "cb_27_vehicle",
+    "CB 27 MHz vehicle",
+    "civil",
+    27,
+    4,
+    2.5,
+    1.5,
+    1,
+    0,
+    2,
+    -112,
+    20000,
+    10,
+    500,
+    ["Vehicle CB estimate. Low-band propagation can exceed or underperform DEM LoS."],
+    "limited_for_beyond_line_of_sight"
+  ),
+  builtin(
+    "cb_27_base",
+    "CB 27 MHz base",
+    "civil",
+    27,
+    4,
+    10,
+    1.5,
+    2,
+    0,
+    2,
+    -112,
+    30000,
+    10,
+    500,
+    ["Base CB estimate; terrain LoS is indicative only for this band."],
+    "limited_for_beyond_line_of_sight"
+  ),
+  builtin(
+    "ham_50_mobile",
+    "HAM 50 MHz mobile",
+    "amateur",
+    50,
+    10,
+    2.5,
+    1.5,
+    1,
+    0,
+    2,
+    -120,
+    30000,
+    10,
+    500,
+    ["Amateur 6 m mobile profile. Requires appropriate licence."],
+    "limited_for_beyond_line_of_sight"
+  ),
+  builtin(
+    "ham_50_base",
+    "HAM 50 MHz base",
+    "amateur",
+    50,
+    50,
+    12,
+    1.5,
+    5,
+    0,
+    2,
+    -120,
+    60000,
+    10,
+    1000,
+    ["Amateur 6 m base profile. Requires appropriate licence."],
+    "limited_for_beyond_line_of_sight"
+  ),
   builtin("ham_70_mobile", "HAM 70 MHz mobile", "amateur", 70, 10, 2.5, 1.5, 1, 0, 2, -120, 25000, 10, 500, [
     "Amateur 4 m mobile-style profile where locally permitted."
   ]),
@@ -254,9 +322,7 @@ const BUILTIN_RADIO_PROFILES: RadioProfile[] = [
   builtin("marine_vhf_handheld", "Marine VHF handheld", "civil", 156, 5, 1.5, 1.5, 0, 0, 2, -116, 12000, 10, 500, [
     "Generic marine VHF handheld profile for legal maritime/riparian contexts."
   ]),
-  builtin("marine_vhf_vessel", "Marine VHF vessel", "civil", 156, 25, 5, 1.5, 3, 0, 2, -116, 30000, 10, 500, [
-    "Generic marine VHF vessel profile."
-  ]),
+  builtin("marine_vhf_vessel", "Marine VHF vessel", "civil", 156, 25, 5, 1.5, 3, 0, 2, -116, 30000, 10, 500, ["Generic marine VHF vessel profile."]),
   builtin("aviation_vhf_ground", "Aviation VHF ground radio", "civil", 125, 10, 3, 1000, 2, 0, 2, -107, 80000, 10, 1000, [
     "Generic airband ground-to-air planning profile. Operational use requires legal authorization."
   ]),
@@ -337,10 +403,7 @@ export class RadioPlanningService {
       contractVersion: "sim-radio-profile-catalog-v1",
       generatedAt: new Date().toISOString(),
       profiles: [...BUILTIN_RADIO_PROFILES, ...custom].sort((left, right) => left.name.localeCompare(right.name, "cs")),
-      warnings: [
-        "Military profiles are generic non-sensitive planning templates, not exact equipment configurations.",
-        RADIO_DISCLAIMER
-      ]
+      warnings: ["Military profiles are generic non-sensitive planning templates, not exact equipment configurations.", RADIO_DISCLAIMER]
     };
   }
 
@@ -350,9 +413,7 @@ export class RadioPlanningService {
       throw new RadioPlanningError(409, "CONFLICT", "Custom radio profileId conflicts with a built-in profile.");
     }
     const existing = await this.loadCustomProfiles();
-    const next = [...existing.filter((item) => item.profileId !== profile.profileId), profile].sort((left, right) =>
-      left.name.localeCompare(right.name, "cs")
-    );
+    const next = [...existing.filter((item) => item.profileId !== profile.profileId), profile].sort((left, right) => left.name.localeCompare(right.name, "cs"));
     await this.writeCustomProfiles(next);
     return profile;
   }
@@ -543,16 +604,14 @@ export class RadioPlanningService {
 
     const ranked = scored.sort((left, right) => right.score - left.score);
     const bestScore = ranked[0]?.score;
-    const selected = ranked
-      .slice(0, request.maxCandidates)
-      .map((item, index) => ({
-        ...item.feature,
-        properties: {
-          ...item.feature.properties,
-          rank: index + 1,
-          recommended: index < Math.min(3, request.maxCandidates)
-        }
-      }));
+    const selected = ranked.slice(0, request.maxCandidates).map((item, index) => ({
+      ...item.feature,
+      properties: {
+        ...item.feature.properties,
+        rank: index + 1,
+        recommended: index < Math.min(3, request.maxCandidates)
+      }
+    }));
 
     const warnings = [...terrain.warnings, ...profileWarnings(request.profile)];
     if (candidates.length >= MAX_SITE_EVALUATION_POINTS) {
@@ -671,9 +730,7 @@ export class RadioPlanningService {
       : undefined;
     const terrainPenalty = terrainProfile ? terrainPenaltyDb(terrainProfile.maxObstructionM, distanceM) : undefined;
     const txDbm = wattsToDbm(profile.txPowerW);
-    const rxPowerDbm = Math.round(
-      txDbm + profile.antennaGainDbi + profile.receiverAntennaGainDbi - profile.systemLossDb - fspl - (terrainPenalty ?? 0)
-    );
+    const rxPowerDbm = Math.round(txDbm + profile.antennaGainDbi + profile.receiverAntennaGainDbi - profile.systemLossDb - fspl - (terrainPenalty ?? 0));
     const marginDb = Math.round(rxPowerDbm - profile.receiverSensitivityDbm);
     const quality = qualityForMargin(marginDb);
     const linkStatus = linkStatusFor(quality, terrainProfile);
@@ -796,14 +853,17 @@ async function sampleTerrainProfile(
   to: RadioStation,
   terrain: TerrainContext,
   sampleStepM: number
-): Promise<{
-  lineOfSightClear: boolean;
-  maxObstructionM: number;
-  minFresnelClearanceM: number;
-  minTerrainClearanceM: number;
-  fresnelClearancePct: number;
-  samples: TerrainProfileSample[];
-} | undefined> {
+): Promise<
+  | {
+      lineOfSightClear: boolean;
+      maxObstructionM: number;
+      minFresnelClearanceM: number;
+      minTerrainClearanceM: number;
+      fresnelClearancePct: number;
+      samples: TerrainProfileSample[];
+    }
+  | undefined
+> {
   if (!terrain.sampler || terrain.demTiles.length === 0) {
     return undefined;
   }

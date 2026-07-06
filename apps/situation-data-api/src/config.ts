@@ -169,16 +169,11 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ctuNettestUrl: process.env.CTU_NETTEST_URL ?? "https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip",
     ctuStationaryMobileUrls: parseStringList(process.env.CTU_STATIONARY_MOBILE_URLS, DEFAULT_CTU_STATIONARY_MOBILE_URLS),
     ctuStationaryMobileCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CTU_STATIONARY_MOBILE_CACHE_TTL_SECONDS, 86400),
-    pidGtfsRtVehiclePositionsUrl:
-      process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
-    pidGtfsRtTripUpdatesUrl:
-      emptyToUndefined(process.env.PID_GTFS_RT_TRIP_UPDATES_URL) ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/trip_updates.pb",
+    pidGtfsRtVehiclePositionsUrl: process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
+    pidGtfsRtTripUpdatesUrl: emptyToUndefined(process.env.PID_GTFS_RT_TRIP_UPDATES_URL) ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/trip_updates.pb",
     pidGtfsStaticUrl: process.env.PID_GTFS_STATIC_URL ?? "https://data.pid.cz/PID_GTFS.zip",
     pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
-    publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(
-      process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS,
-      DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS
-    ),
+    publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS, DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS),
     publicTransitStaticGeojsonFeeds: parsePublicTransitStaticFeeds(
       process.env.PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS,
       DEFAULT_PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS
@@ -190,12 +185,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
       "https://gis.brno.cz/ags1/rest/services/Hosted/Kordis_26_polohy/FeatureServer/0/query?where=IsInactive%3D%27false%27&outFields=*&orderByFields=TimeUpdated%20DESC&f=geojson&resultRecordCount=10000",
     idsjmkVehiclePositionsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS, 20),
     spravaZeleznicTrainPositionsUrl:
-      process.env.SPRAVAZELEZNIC_TRAIN_POSITIONS_URL ??
-      "https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2",
-    spravaZeleznicTrainPositionsCacheTtlSeconds: Math.max(
-      900,
-      parseInteger(process.env.SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS, 900)
-    ),
+      process.env.SPRAVAZELEZNIC_TRAIN_POSITIONS_URL ?? "https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2",
+    spravaZeleznicTrainPositionsCacheTtlSeconds: Math.max(900, parseInteger(process.env.SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS, 900)),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
     roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
@@ -203,29 +194,21 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300),
     aviationWeatherBaseUrl: process.env.AVIATION_WEATHER_BASE_URL ?? "https://aviationweather.gov",
     aviationWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_AVIATION_WEATHER_CACHE_TTL_SECONDS, 600),
-    chmiAirQualityMetadataUrl:
-      process.env.CHMI_AIR_QUALITY_METADATA_URL ?? "https://opendata.chmi.cz/air_quality/now/metadata/metadata.json",
-    chmiAirQualityDataUrl:
-      process.env.CHMI_AIR_QUALITY_DATA_URL ?? "https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv",
+    chmiAirQualityMetadataUrl: process.env.CHMI_AIR_QUALITY_METADATA_URL ?? "https://opendata.chmi.cz/air_quality/now/metadata/metadata.json",
+    chmiAirQualityDataUrl: process.env.CHMI_AIR_QUALITY_DATA_URL ?? "https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv",
     chmiAirQualityCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS, 900),
-    chmiWeatherMetadataBaseUrl:
-      process.env.CHMI_WEATHER_METADATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/metadata/",
-    chmiWeatherDataBaseUrl:
-      process.env.CHMI_WEATHER_DATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/data/",
+    chmiWeatherMetadataBaseUrl: process.env.CHMI_WEATHER_METADATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/metadata/",
+    chmiWeatherDataBaseUrl: process.env.CHMI_WEATHER_DATA_BASE_URL ?? "https://opendata.chmi.cz/meteorology/climate/now/data/",
     chmiWeatherCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_CACHE_TTL_SECONDS, 600),
     chmiWeatherMaxStations: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS, 600),
-    chmiWeatherRadarBaseUrl:
-      process.env.CHMI_WEATHER_RADAR_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/radar/composite/",
+    chmiWeatherRadarBaseUrl: process.env.CHMI_WEATHER_RADAR_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/radar/composite/",
     chmiWeatherRadarCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_CACHE_TTL_SECONDS, 300),
     chmiWeatherRadarFrameHistoryHours: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_HISTORY_HOURS, 6),
     chmiWeatherRadarFrameMaxCount: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT, 72),
     chmiWeatherRadarFrameStoreEnabled: parseBoolean(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED, false),
-    chmiWeatherRadarFrameStoreDir: resolve(
-      process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR ?? `${dataDir}/weather-radar-frames`
-    ),
+    chmiWeatherRadarFrameStoreDir: resolve(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR ?? `${dataDir}/weather-radar-frames`),
     chmiWeatherRadarCleanCropInsetPixels: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS, 2),
-    chmiWeatherWebcamsMapUrl:
-      process.env.CHMI_WEATHER_WEBCAMS_MAP_URL ?? "https://data-provider.chmi.cz/api/kamery/data/map",
+    chmiWeatherWebcamsMapUrl: process.env.CHMI_WEATHER_WEBCAMS_MAP_URL ?? "https://data-provider.chmi.cz/api/kamery/data/map",
     chmiWeatherWebcamsDataBaseUrl: process.env.CHMI_WEATHER_WEBCAMS_DATA_BASE_URL ?? "https://data-provider.chmi.cz",
     chmiWeatherWebcamsPublicBaseUrl: process.env.CHMI_WEATHER_WEBCAMS_PUBLIC_BASE_URL ?? "https://www.chmi.cz",
     chmiWeatherWebcamsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS, 300),

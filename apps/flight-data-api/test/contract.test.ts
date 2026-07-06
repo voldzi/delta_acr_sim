@@ -548,9 +548,7 @@ describe("Flight Data API contract", () => {
       })
       .expect(202);
 
-    const response = await request(configured.app)
-      .get("/api/v1/cop/tracks?source=partner_air_tracks&bbox=14.3,50.0,14.5,50.2&limit=10")
-      .expect(200);
+    const response = await request(configured.app).get("/api/v1/cop/tracks?source=partner_air_tracks&bbox=14.3,50.0,14.5,50.2&limit=10").expect(200);
 
     expect(response.body.summary.rawObservationCount).toBe(1);
     expect(response.body.tracks[0]).toEqual(
@@ -648,9 +646,7 @@ describe("Flight Data API contract", () => {
       })
       .expect(202);
 
-    const tracks = await request(configured.app)
-      .get("/api/v1/cop/tracks?source=partner_air_tracks&bbox=14.2,49.9,14.5,50.2&limit=10")
-      .expect(200);
+    const tracks = await request(configured.app).get("/api/v1/cop/tracks?source=partner_air_tracks&bbox=14.2,49.9,14.5,50.2&limit=10").expect(200);
 
     expect(tracks.body.summary.rawObservationCount).toBe(2);
     expect(tracks.body.tracks).toEqual(
@@ -710,10 +706,7 @@ describe("Flight Data API contract", () => {
     const status = await request(configured.app).get("/api/v1/cot/tracks/status").expect(200);
     expect(status.body).toEqual(expect.objectContaining({ enabled: true, contractVersion: "sim-flight-cot-export-v1" }));
 
-    const response = await request(configured.app)
-      .get("/api/v1/cot/tracks?source=mock&limit=1")
-      .set("authorization", "Bearer cot-export-token")
-      .expect(200);
+    const response = await request(configured.app).get("/api/v1/cot/tracks?source=mock&limit=1").set("authorization", "Bearer cot-export-token").expect(200);
 
     expect(response.headers["content-type"]).toContain("application/xml");
     expect(response.text).toContain("<events");
@@ -879,10 +872,7 @@ describe("Flight Data API contract", () => {
         return { source: descriptor, fetchedAt, warnings: [], observations };
       }
     };
-    const service = new FlightAggregationService(
-      { ...config, bboxCacheGridDegrees: 1, bboxCachePaddingDegrees: 0.2 },
-      [source]
-    );
+    const service = new FlightAggregationService({ ...config, bboxCacheGridDegrees: 1, bboxCachePaddingDegrees: 0.2 }, [source]);
 
     const first = await service.getTracks({
       bbox: { west: 14.0, south: 50.0, east: 14.15, north: 50.15 },

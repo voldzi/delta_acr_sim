@@ -223,7 +223,10 @@ export function parseAipEnr51Airspaces(html: string, sourceUrl: string, loadedAt
 }
 
 function parseAirspaceRow(row: string, sourceUrl: string, loadedAt: string): AirspaceReference | undefined {
-  const cells = row.split(/<td\b[^>]*>/i).slice(1).map((cell) => cell.split(/<\/td>/i)[0] ?? cell);
+  const cells = row
+    .split(/<td\b[^>]*>/i)
+    .slice(1)
+    .map((cell) => cell.split(/<\/td>/i)[0] ?? cell);
   const header = stripHtml(cells[0]?.match(/<p[\s\S]*?<\/p>/i)?.[0] ?? cells[0] ?? "");
   const designator = header.match(/\bLK[A-Z]{1,4}\d+[A-Z]?\b/)?.[0];
   if (!designator) {
@@ -303,9 +306,7 @@ function extractCoordinatePairs(row: string): Array<[number, number]> {
 }
 
 function extractRadiusNm(row: string): number | undefined {
-  const match = row.match(
-    /<span class="SD"[^>]*>\s*([0-9]+(?:\.[0-9]+)?)\s*<\/span>\s*<span class="sdParams"[^>]*>\s*TAIRSPACE_VERTEX;VAL_RADIUS_ARC;/i
-  );
+  const match = row.match(/<span class="SD"[^>]*>\s*([0-9]+(?:\.[0-9]+)?)\s*<\/span>\s*<span class="sdParams"[^>]*>\s*TAIRSPACE_VERTEX;VAL_RADIUS_ARC;/i);
   const value = match ? Number(match[1]) : undefined;
   return value && Number.isFinite(value) && value > 0 ? value : undefined;
 }
@@ -354,11 +355,7 @@ function circlePolygon(center: [number, number], radiusNm: number): GeoJsonPolyg
     const bearing = (2 * Math.PI * index) / 64;
     const lat = Math.asin(Math.sin(latRad) * Math.cos(angularDistance) + Math.cos(latRad) * Math.sin(angularDistance) * Math.cos(bearing));
     const lon =
-      lonRad +
-      Math.atan2(
-        Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRad),
-        Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(lat)
-      );
+      lonRad + Math.atan2(Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRad), Math.cos(angularDistance) - Math.sin(latRad) * Math.sin(lat));
     ring.push([roundCoordinate(radiansToDegrees(lon)), roundCoordinate(radiansToDegrees(lat))]);
   }
   return { type: "Polygon", coordinates: [ring] };

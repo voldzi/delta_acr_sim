@@ -1,11 +1,12 @@
 {
   "name": "@csm-sim/simulator-web",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -p tsconfig.json && vite build",
+    "build:budget": "node ../../scripts/check-web-bundle.mjs dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node -e \"console.log('simulator-web: smoke tested through browser')\"",
     "preview": "vite preview --host 0.0.0.0"

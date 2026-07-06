@@ -115,13 +115,9 @@ export class ChmiWeatherRadarFrameCatalog {
     const limit = normalizeLimit(query.limit, this.config.chmiWeatherRadarFrameMaxCount);
     const materialize = this.config.chmiWeatherRadarFrameStoreEnabled || query.materialize === true;
     const allowedProducts = new Set(query.productIds?.filter(Boolean));
-    const definitions = chmiRadarProductDefinitions().filter((definition) =>
-      allowedProducts.size === 0 || allowedProducts.has(definition.productId)
-    );
+    const definitions = chmiRadarProductDefinitions().filter((definition) => allowedProducts.size === 0 || allowedProducts.has(definition.productId));
     const warnings: string[] = [];
-    const products = await Promise.all(
-      definitions.map(async (definition) => this.listProductFrames(definition, historyHours, limit, materialize, warnings))
-    );
+    const products = await Promise.all(definitions.map(async (definition) => this.listProductFrames(definition, historyHours, limit, materialize, warnings)));
 
     return {
       contractVersion: "sim-weather-radar-frames-v1",
@@ -195,14 +191,10 @@ export class ChmiWeatherRadarFrameCatalog {
         })
         .slice(0, limit);
     } catch (error) {
-      warnings.push(
-        `chmi_weather_radar frame index failed for ${definition.productId}: ${error instanceof Error ? error.message : "unknown error"}`
-      );
+      warnings.push(`chmi_weather_radar frame index failed for ${definition.productId}: ${error instanceof Error ? error.message : "unknown error"}`);
     }
 
-    const frames = await Promise.all(
-      hrefs.map((href) => this.frameFromHref(definition, indexUrl, href, materialize, warnings))
-    );
+    const frames = await Promise.all(hrefs.map((href) => this.frameFromHref(definition, indexUrl, href, materialize, warnings)));
 
     return {
       productId: definition.productId,
@@ -290,12 +282,7 @@ export class ChmiWeatherRadarFrameCatalog {
     return await this.resolveCleanMaterialization(promise, definition.productId, href, warnings);
   }
 
-  private async resolveCleanMaterialization(
-    promise: Promise<boolean>,
-    productId: string,
-    href: string,
-    warnings?: string[]
-  ): Promise<boolean> {
+  private async resolveCleanMaterialization(promise: Promise<boolean>, productId: string, href: string, warnings?: string[]): Promise<boolean> {
     try {
       return await promise;
     } catch (error) {

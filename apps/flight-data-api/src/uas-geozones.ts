@@ -204,7 +204,9 @@ export class UasGeozoneService {
             try {
               return parseUasGeozoneCollection(await requestJson<unknown>(link.url, this.config.requestTimeoutMs), link, loadedAt);
             } catch (error) {
-              warnings.push(error instanceof Error ? `UAS geozone ${link.layerId} import failed: ${error.message}` : `UAS geozone ${link.layerId} import failed.`);
+              warnings.push(
+                error instanceof Error ? `UAS geozone ${link.layerId} import failed: ${error.message}` : `UAS geozone ${link.layerId} import failed.`
+              );
               return [];
             }
           })
@@ -248,7 +250,10 @@ export function parseUasGeozoneCatalog(html: string, catalogUrl: string): UasGeo
         return undefined;
       }
       return {
-        layerId: label.replace(/\.json$/i, "").trim().toUpperCase(),
+        layerId: label
+          .replace(/\.json$/i, "")
+          .trim()
+          .toUpperCase(),
         url: new URL(href.replace(/&amp;/g, "&"), catalogUrl).toString()
       };
     })

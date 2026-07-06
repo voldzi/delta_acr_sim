@@ -76,19 +76,74 @@ const CHMI_EVENT_TAXONOMY: readonly ChmiTaxonomyEntry[] = [
   entry(["XII.1", "XII.2"], "weather.fire_danger", "weather", "fire_weather_risk", "fire_weather", "fire", "Požární nebezpečí", "Fire danger", {
     isFireWeather: true
   }),
-  entry(["XIII.1", "XIII.2", "XIII.3"], "weather.other_hazard", "weather", "other_hazard", "weather_alert", "weather-alert", "Nezařazený hydrometeorologický jev", "Unclassified weather hazard"),
+  entry(
+    ["XIII.1", "XIII.2", "XIII.3"],
+    "weather.other_hazard",
+    "weather",
+    "other_hazard",
+    "weather_alert",
+    "weather-alert",
+    "Nezařazený hydrometeorologický jev",
+    "Unclassified weather hazard"
+  ),
   entry(["REG.NO2"], "air_quality.no2.regulation", "air_quality", "air_quality_no2_regulation", "air_quality", "air-quality", "Regulace NO2", "NO2 regulation"),
-  entry(["REG.PM10"], "air_quality.pm10.regulation", "air_quality", "air_quality_pm10_regulation", "air_quality", "air-quality", "Regulace PM10", "PM10 regulation"),
+  entry(
+    ["REG.PM10"],
+    "air_quality.pm10.regulation",
+    "air_quality",
+    "air_quality_pm10_regulation",
+    "air_quality",
+    "air-quality",
+    "Regulace PM10",
+    "PM10 regulation"
+  ),
   entry(["REG.SO2"], "air_quality.so2.regulation", "air_quality", "air_quality_so2_regulation", "air_quality", "air-quality", "Regulace SO2", "SO2 regulation"),
-  entry(["SMOGSIT.NO2"], "air_quality.no2.smog", "air_quality", "air_quality_no2_smog", "air_quality", "air-quality", "Smogová situace NO2", "NO2 smog situation"),
+  entry(
+    ["SMOGSIT.NO2"],
+    "air_quality.no2.smog",
+    "air_quality",
+    "air_quality_no2_smog",
+    "air_quality",
+    "air-quality",
+    "Smogová situace NO2",
+    "NO2 smog situation"
+  ),
   entry(["SMOGSIT.O3"], "air_quality.o3.smog", "air_quality", "air_quality_o3_smog", "air_quality", "air-quality", "Smogová situace O3", "O3 smog situation"),
-  entry(["SMOGSIT.PM10"], "air_quality.pm10.smog", "air_quality", "air_quality_pm10_smog", "air_quality", "air-quality", "Smogová situace PM10", "PM10 smog situation"),
-  entry(["SMOGSIT.SO2"], "air_quality.so2.smog", "air_quality", "air_quality_so2_smog", "air_quality", "air-quality", "Smogová situace SO2", "SO2 smog situation"),
+  entry(
+    ["SMOGSIT.PM10"],
+    "air_quality.pm10.smog",
+    "air_quality",
+    "air_quality_pm10_smog",
+    "air_quality",
+    "air-quality",
+    "Smogová situace PM10",
+    "PM10 smog situation"
+  ),
+  entry(
+    ["SMOGSIT.SO2"],
+    "air_quality.so2.smog",
+    "air_quality",
+    "air_quality_so2_smog",
+    "air_quality",
+    "air-quality",
+    "Smogová situace SO2",
+    "SO2 smog situation"
+  ),
   entry(["WARN.O3"], "air_quality.o3.warning", "air_quality", "air_quality_o3_warning", "air_quality", "air-quality", "Varování O3", "O3 warning"),
-  entry(["OUTLOOK"], "weather.outlook", "weather", "weather_outlook", "weather_alert", "weather-alert", "Výhled nebezpečných jevů", "Hazardous phenomena outlook", {
-    isOutlook: true,
-    notificationEligible: false
-  }),
+  entry(
+    ["OUTLOOK"],
+    "weather.outlook",
+    "weather",
+    "weather_outlook",
+    "weather_alert",
+    "weather-alert",
+    "Výhled nebezpečných jevů",
+    "Hazardous phenomena outlook",
+    {
+      isOutlook: true,
+      notificationEligible: false
+    }
+  ),
   entry(["D.1", "D.2"], "hydro.drought", "hydrology", "drought", "drought", "drought", "Sucho", "Drought")
 ] as const;
 
@@ -196,14 +251,42 @@ function awarenessTypeClassification(parameters: ChmiParameter[] | undefined): C
   const awarenessType = chmiParameterValue(parameters, "awareness_type");
   const awarenessCode = splitParameterValue(awarenessType)[0];
   const item =
-    awarenessCode === "1" ? entry(["awareness:1"], "weather.wind.strong", "weather", "wind", "wind", "wind", "Vítr", "Wind")
-      : awarenessCode === "2" ? entry(["awareness:2"], "weather.snow_ice.hazard", "weather", "snow_ice", "ice", "ice-road", "Sníh a námrazové jevy", "Snow and ice")
-        : awarenessCode === "3" ? entry(["awareness:3"], "weather.thunderstorm.severe", "weather", "thunderstorm", "thunderstorm", "thunderstorm", "Bouřky", "Thunderstorms")
-          : awarenessCode === "5" ? entry(["awareness:5"], "weather.temperature.high", "weather", "temperature_high", "temperature", "temperature-high", "Vysoké teploty", "High temperatures")
-            : awarenessCode === "6" ? entry(["awareness:6"], "weather.temperature.low", "weather", "temperature_low", "temperature", "temperature-low", "Nízké teploty", "Low temperatures")
-              : awarenessCode === "8" ? entry(["awareness:8"], "weather.fire_danger", "weather", "fire_weather_risk", "fire_weather", "fire", "Požární nebezpečí", "Fire danger", { isFireWeather: true })
-                : awarenessCode === "10" ? entry(["awareness:10"], "weather.rain.heavy", "weather", "rain", "rain", "rain", "Déšť", "Rain")
-                  : awarenessCode === "11" ? entry(["awareness:11"], "hydro.flood.warning", "hydrology", "flood", "flood", "flood", "Povodňové jevy", "Floods")
+    awarenessCode === "1"
+      ? entry(["awareness:1"], "weather.wind.strong", "weather", "wind", "wind", "wind", "Vítr", "Wind")
+      : awarenessCode === "2"
+        ? entry(["awareness:2"], "weather.snow_ice.hazard", "weather", "snow_ice", "ice", "ice-road", "Sníh a námrazové jevy", "Snow and ice")
+        : awarenessCode === "3"
+          ? entry(["awareness:3"], "weather.thunderstorm.severe", "weather", "thunderstorm", "thunderstorm", "thunderstorm", "Bouřky", "Thunderstorms")
+          : awarenessCode === "5"
+            ? entry(
+                ["awareness:5"],
+                "weather.temperature.high",
+                "weather",
+                "temperature_high",
+                "temperature",
+                "temperature-high",
+                "Vysoké teploty",
+                "High temperatures"
+              )
+            : awarenessCode === "6"
+              ? entry(
+                  ["awareness:6"],
+                  "weather.temperature.low",
+                  "weather",
+                  "temperature_low",
+                  "temperature",
+                  "temperature-low",
+                  "Nízké teploty",
+                  "Low temperatures"
+                )
+              : awarenessCode === "8"
+                ? entry(["awareness:8"], "weather.fire_danger", "weather", "fire_weather_risk", "fire_weather", "fire", "Požární nebezpečí", "Fire danger", {
+                    isFireWeather: true
+                  })
+                : awarenessCode === "10"
+                  ? entry(["awareness:10"], "weather.rain.heavy", "weather", "rain", "rain", "rain", "Déšť", "Rain")
+                  : awarenessCode === "11"
+                    ? entry(["awareness:11"], "hydro.flood.warning", "hydrology", "flood", "flood", "flood", "Povodňové jevy", "Floods")
                     : undefined;
   if (!item) {
     return undefined;
@@ -218,21 +301,71 @@ function awarenessTypeClassification(parameters: ChmiParameter[] | undefined): C
 
 function fallbackTextClassification(event: string | undefined, headline: string | undefined): ChmiAlertClassification {
   const text = normalizeText(`${event ?? ""} ${headline ?? ""}`);
-  const item =
-    includesAny(text, ["vitr", "wind"]) ? entry(["text:wind"], "weather.wind.strong", "weather", "wind", "wind", "wind", "Vítr", "Wind")
-      : includesAny(text, ["bour", "thunder", "storm"]) ? entry(["text:storm"], "weather.thunderstorm.severe", "weather", "thunderstorm", "thunderstorm", "thunderstorm", "Bouřky", "Thunderstorms")
-        : includesAny(text, ["dest", "sraz", "rain"]) ? entry(["text:rain"], "weather.rain.heavy", "weather", "rain", "rain", "rain", "Déšť", "Rain")
-          : includesAny(text, ["dotok", "povod", "flood"]) ? entry(["text:flood"], "hydro.flood.warning", "hydrology", "flood", "flood", "flood", "Povodňové jevy", "Floods")
-            : includesAny(text, ["snih", "sneh", "snow"]) ? entry(["text:snow"], "weather.snow.hazard", "weather", "snow", "snow", "snow", "Sníh a sněhové jevy", "Snow hazards")
-              : includesAny(text, ["naled", "ledov", "namraz", "ice", "slippery"]) ? entry(["text:ice"], "weather.ice.slippery_roads", "weather", "slippery_roads", "ice", "ice-road", "Náledí a kluzké povrchy", "Slippery roads")
-                : includesAny(text, ["teplot", "hork", "heat"]) ? entry(["text:temperature"], "weather.temperature.high", "weather", "temperature_high", "temperature", "temperature-high", "Vysoké teploty", "High temperatures")
-                  : includesAny(text, ["mraz", "cold"]) ? entry(["text:cold"], "weather.temperature.low", "weather", "temperature_low", "temperature", "temperature-low", "Nízké teploty", "Low temperatures")
-                    : includesAny(text, ["pozar", "fire"]) ? entry(["text:fire"], "weather.fire_danger", "weather", "fire_weather_risk", "fire_weather", "fire", "Požární nebezpečí", "Fire danger", { isFireWeather: true })
-                      : includesAny(text, ["pm10"]) ? entry(["text:pm10"], "air_quality.pm10.smog", "air_quality", "air_quality_pm10_smog", "air_quality", "air-quality", "PM10", "PM10")
-                        : includesAny(text, ["no2", "dusicit"]) ? entry(["text:no2"], "air_quality.no2.smog", "air_quality", "air_quality_no2_smog", "air_quality", "air-quality", "NO2", "NO2")
-                          : includesAny(text, ["so2", "siricit"]) ? entry(["text:so2"], "air_quality.so2.smog", "air_quality", "air_quality_so2_smog", "air_quality", "air-quality", "SO2", "SO2")
-                            : includesAny(text, ["ozon", "ozone", "o3"]) ? entry(["text:o3"], "air_quality.o3.warning", "air_quality", "air_quality_o3_warning", "air_quality", "air-quality", "Ozon", "Ozone")
-                              : entry(["text:weather"], "weather.alert", "weather", "weather_warning", "weather_alert", "weather-alert", "Meteorologická výstraha", "Weather alert");
+  const item = includesAny(text, ["vitr", "wind"])
+    ? entry(["text:wind"], "weather.wind.strong", "weather", "wind", "wind", "wind", "Vítr", "Wind")
+    : includesAny(text, ["bour", "thunder", "storm"])
+      ? entry(["text:storm"], "weather.thunderstorm.severe", "weather", "thunderstorm", "thunderstorm", "thunderstorm", "Bouřky", "Thunderstorms")
+      : includesAny(text, ["dest", "sraz", "rain"])
+        ? entry(["text:rain"], "weather.rain.heavy", "weather", "rain", "rain", "rain", "Déšť", "Rain")
+        : includesAny(text, ["dotok", "povod", "flood"])
+          ? entry(["text:flood"], "hydro.flood.warning", "hydrology", "flood", "flood", "flood", "Povodňové jevy", "Floods")
+          : includesAny(text, ["snih", "sneh", "snow"])
+            ? entry(["text:snow"], "weather.snow.hazard", "weather", "snow", "snow", "snow", "Sníh a sněhové jevy", "Snow hazards")
+            : includesAny(text, ["naled", "ledov", "namraz", "ice", "slippery"])
+              ? entry(["text:ice"], "weather.ice.slippery_roads", "weather", "slippery_roads", "ice", "ice-road", "Náledí a kluzké povrchy", "Slippery roads")
+              : includesAny(text, ["teplot", "hork", "heat"])
+                ? entry(
+                    ["text:temperature"],
+                    "weather.temperature.high",
+                    "weather",
+                    "temperature_high",
+                    "temperature",
+                    "temperature-high",
+                    "Vysoké teploty",
+                    "High temperatures"
+                  )
+                : includesAny(text, ["mraz", "cold"])
+                  ? entry(
+                      ["text:cold"],
+                      "weather.temperature.low",
+                      "weather",
+                      "temperature_low",
+                      "temperature",
+                      "temperature-low",
+                      "Nízké teploty",
+                      "Low temperatures"
+                    )
+                  : includesAny(text, ["pozar", "fire"])
+                    ? entry(["text:fire"], "weather.fire_danger", "weather", "fire_weather_risk", "fire_weather", "fire", "Požární nebezpečí", "Fire danger", {
+                        isFireWeather: true
+                      })
+                    : includesAny(text, ["pm10"])
+                      ? entry(["text:pm10"], "air_quality.pm10.smog", "air_quality", "air_quality_pm10_smog", "air_quality", "air-quality", "PM10", "PM10")
+                      : includesAny(text, ["no2", "dusicit"])
+                        ? entry(["text:no2"], "air_quality.no2.smog", "air_quality", "air_quality_no2_smog", "air_quality", "air-quality", "NO2", "NO2")
+                        : includesAny(text, ["so2", "siricit"])
+                          ? entry(["text:so2"], "air_quality.so2.smog", "air_quality", "air_quality_so2_smog", "air_quality", "air-quality", "SO2", "SO2")
+                          : includesAny(text, ["ozon", "ozone", "o3"])
+                            ? entry(
+                                ["text:o3"],
+                                "air_quality.o3.warning",
+                                "air_quality",
+                                "air_quality_o3_warning",
+                                "air_quality",
+                                "air-quality",
+                                "Ozon",
+                                "Ozone"
+                              )
+                            : entry(
+                                ["text:weather"],
+                                "weather.alert",
+                                "weather",
+                                "weather_warning",
+                                "weather_alert",
+                                "weather-alert",
+                                "Meteorologická výstraha",
+                                "Weather alert"
+                              );
   return toClassification(item, {
     classificationBasis: "text_fallback",
     sourceSystem: "CHMI_CAP"

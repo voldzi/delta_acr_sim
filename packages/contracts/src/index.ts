@@ -2,14 +2,7 @@ export const CONTRACT_VERSION = "cop-ingest-v1";
 export const DEFAULT_SOURCE_SYSTEM_ID = "sim-air-situation-001";
 export const DEFAULT_ADAPTER_ID = "simulation-adapter";
 
-export const SIMULATION_BLOCK_IDS = [
-  "air-sim-aircraft",
-  "air-sim-uav",
-  "air-sim-missile",
-  "ground-sim-friendly",
-  "rescue-sim",
-  "report-sim"
-] as const;
+export const SIMULATION_BLOCK_IDS = ["air-sim-aircraft", "air-sim-uav", "air-sim-missile", "ground-sim-friendly", "rescue-sim", "report-sim"] as const;
 
 export type SimulationBlockId = (typeof SIMULATION_BLOCK_IDS)[number];
 
@@ -33,14 +26,7 @@ export interface ScenarioBlock {
 
 export interface FaultInjection {
   faultId?: string;
-  type:
-    | "DELAY"
-    | "DUPLICATE"
-    | "SOURCE_OUTAGE"
-    | "CONFLICT"
-    | "DEGRADED_ACCURACY"
-    | "RECONNECT_BURST"
-    | "BATCH_REPLAY";
+  type: "DELAY" | "DUPLICATE" | "SOURCE_OUTAGE" | "CONFLICT" | "DEGRADED_ACCURACY" | "RECONNECT_BURST" | "BATCH_REPLAY";
   targetBlockId: string;
   startAtSecond: number;
   durationSeconds: number;
@@ -100,15 +86,7 @@ export interface CanonicalEventEnvelope {
   };
   payload: {
     objectId: string;
-    objectType:
-      | "AIRCRAFT"
-      | "UAV"
-      | "MISSILE_TRACK"
-      | "GROUND_UNIT"
-      | "RESCUE_ASSET"
-      | "INCIDENT"
-      | "REPORT"
-      | "UNKNOWN";
+    objectType: "AIRCRAFT" | "UAV" | "MISSILE_TRACK" | "GROUND_UNIT" | "RESCUE_ASSET" | "INCIDENT" | "REPORT" | "UNKNOWN";
     affiliation?: "FRIEND" | "ASSUMED_FRIEND" | "NEUTRAL" | "UNKNOWN" | "SUSPECT" | "HOSTILE" | "PENDING";
     domain?: "AIR" | "LAND" | "SEA" | "RESCUE" | "OTHER";
     status: "ACTIVE" | "INACTIVE" | "LOST" | "STALE" | "CONFLICTED";

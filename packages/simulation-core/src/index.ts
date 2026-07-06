@@ -1,10 +1,4 @@
-import {
-  CONTRACT_VERSION,
-  DEFAULT_ADAPTER_ID,
-  type CanonicalEventEnvelope,
-  type Scenario,
-  type ScenarioBlock
-} from "@csm-sim/contracts";
+import { CONTRACT_VERSION, DEFAULT_ADAPTER_ID, type CanonicalEventEnvelope, type Scenario, type ScenarioBlock } from "@csm-sim/contracts";
 import { randomUUID } from "node:crypto";
 
 export interface GenerateOptions {
@@ -74,10 +68,7 @@ const speedProfilesByBlock: Record<string, { minMps: number; maxMps: number }> =
   "report-sim": { minMps: 0, maxMps: 0 }
 };
 
-export function generateScenarioEvents(
-  scenario: Scenario,
-  options: GenerateOptions
-): CanonicalEventEnvelope[] {
+export function generateScenarioEvents(scenario: Scenario, options: GenerateOptions): CanonicalEventEnvelope[] {
   const scenarioId = scenario.scenarioId ?? randomUUID();
   const timestamp = (options.timestamp ?? new Date()).toISOString();
   const tick = options.tick ?? 0;
@@ -185,7 +176,11 @@ function buildEventForBlock(
       verticalRateMps: movement.verticalRateMps,
       attributes: {
         syntheticPattern: profile.pattern,
-        motionModel: profile.customRoute ? "SCRIPTED_SYNTHETIC_INTERCEPT" : profile.pattern === "SHORT_LIVED_TRACK" ? "STRAIGHT_TRANSIT" : "CONTINUOUS_KINEMATIC",
+        motionModel: profile.customRoute
+          ? "SCRIPTED_SYNTHETIC_INTERCEPT"
+          : profile.pattern === "SHORT_LIVED_TRACK"
+            ? "STRAIGHT_TRANSIT"
+            : "CONTINUOUS_KINEMATIC",
         sampleIntervalSeconds: tickIntervalSeconds,
         trackAgeSeconds: Math.round(elapsedSeconds * speedMultiplier),
         tick,
@@ -335,10 +330,7 @@ function createTrackProfile(
   const surveyRows = Math.max(3, Math.round(rng.range(4, 7)));
 
   if (pattern === "LOITER") {
-    const maxRadiusForArea = Math.max(
-      MIN_LOITER_RADIUS_M,
-      Math.min(MAX_LOITER_RADIUS_M, area.widthM * 0.22, area.heightM * 0.22)
-    );
+    const maxRadiusForArea = Math.max(MIN_LOITER_RADIUS_M, Math.min(MAX_LOITER_RADIUS_M, area.widthM * 0.22, area.heightM * 0.22));
     loiterRadiusM = Math.min(loiterRadiusM, maxRadiusForArea);
     const margin = Math.max(loiterRadiusM + MIN_ROUTE_MARGIN_M, MIN_ROUTE_MARGIN_M);
     origin = randomPointWithinMargins(area, rng, margin, margin);
@@ -351,10 +343,7 @@ function createTrackProfile(
         area.heightM - origin.yM - MIN_ROUTE_MARGIN_M
       )
     );
-    loiterRadiusM = Math.max(
-      Math.min(MIN_LOITER_RADIUS_M, availableRadiusM),
-      Math.min(loiterRadiusM, availableRadiusM)
-    );
+    loiterRadiusM = Math.max(Math.min(MIN_LOITER_RADIUS_M, availableRadiusM), Math.min(loiterRadiusM, availableRadiusM));
   }
 
   if (pattern === "SURVEY") {
@@ -386,7 +375,9 @@ function createTrackProfile(
   const customRoute = buildCustomRoute(block, index, objectType, scenario.durationSeconds);
   const effectiveOrigin = customRoute ? { lat: customRoute.startLat, lon: customRoute.startLon } : originGeo;
   const effectiveHeading = customRoute?.headingDeg ?? headingDeg;
-  const effectiveSpeedMps = customRoute ? distanceBetweenGeo(customRoute.startLat, customRoute.startLon, customRoute.terminalLat, customRoute.terminalLon) / customRoute.terminalAtSeconds : speedMps;
+  const effectiveSpeedMps = customRoute
+    ? distanceBetweenGeo(customRoute.startLat, customRoute.startLon, customRoute.terminalLat, customRoute.terminalLon) / customRoute.terminalAtSeconds
+    : speedMps;
   const effectiveTtlSeconds = customRoute?.terminalAtSeconds ?? (objectType === "MISSILE_TRACK" ? Math.round(rng.range(45, 120)) : scenario.durationSeconds);
 
   return {
@@ -452,12 +443,7 @@ function isAffiliation(value: unknown): value is NonNullable<CanonicalEventEnvel
   );
 }
 
-function computeTrackPosition(
-  scenario: Scenario,
-  profile: TrackProfile,
-  elapsedSeconds: number,
-  tickIntervalSeconds: number
-): TrackPosition {
+function computeTrackPosition(scenario: Scenario, profile: TrackProfile, elapsedSeconds: number, tickIntervalSeconds: number): TrackPosition {
   if (profile.customRoute) {
     return computeCustomRoutePosition(profile, elapsedSeconds, tickIntervalSeconds);
   }
@@ -914,12 +900,7 @@ function buildCustomRoute(
   const route = disperseUkraineAirDefenseRoute(baseRoute, pairIndex, family);
   const destroyed = role === "FRIEND_INTERCEPTOR" || isDestroyedHostileIndex(pairIndex);
   const terminalAtSeconds = terminalAtSecondsForUkraineDemo(family, pairIndex, scenarioDurationSeconds);
-  const start =
-    role === "HOSTILE_INBOUND"
-      ? route.hostileStart
-      : family === "missile"
-        ? route.friendlyMissileStart
-        : route.friendlyUavStart;
+  const start = role === "HOSTILE_INBOUND" ? route.hostileStart : family === "missile" ? route.friendlyMissileStart : route.friendlyUavStart;
   const terminal = destroyed ? route.intercept : route.transitEnd;
   const friendlyIndex = hostileIndexToFriendlyIndex(pairIndex);
   const pairedObjectId =
@@ -972,10 +953,7 @@ function hostileIndexToFriendlyIndex(index: number): number | undefined {
 function terminalAtSecondsForUkraineDemo(family: "uav" | "missile", pairIndex: number, scenarioDurationSeconds: number): number {
   const routeIndex = pairIndex % UKRAINE_AIR_DEFENSE_ROUTES.length;
   const waveIndex = Math.floor(pairIndex / UKRAINE_AIR_DEFENSE_ROUTES.length);
-  const terminalAt =
-    family === "missile"
-      ? 100 + routeIndex * 12 + waveIndex * 50
-      : 1220 + routeIndex * 65 + waveIndex * 220;
+  const terminalAt = family === "missile" ? 100 + routeIndex * 12 + waveIndex * 50 : 1220 + routeIndex * 65 + waveIndex * 220;
   return Math.min(Math.max(30, scenarioDurationSeconds - 30), terminalAt);
 }
 
@@ -1006,7 +984,13 @@ function disperseUkraineAirDefenseRoute(
     laneOffsetM: Math.round(baseCrossM),
     hostileStart: shiftUkraineDemoPoint(route.hostileStart, crossTrackHeading, hostileStartCrossM, inboundHeading, hostileStartAlongM),
     friendlyUavStart: shiftUkraineDemoPoint(route.friendlyUavStart, crossTrackHeading, friendlyUavStartCrossM, inboundHeading, friendlyUavStartAlongM),
-    friendlyMissileStart: shiftUkraineDemoPoint(route.friendlyMissileStart, crossTrackHeading, friendlyMissileStartCrossM, inboundHeading, friendlyMissileStartAlongM),
+    friendlyMissileStart: shiftUkraineDemoPoint(
+      route.friendlyMissileStart,
+      crossTrackHeading,
+      friendlyMissileStartCrossM,
+      inboundHeading,
+      friendlyMissileStartAlongM
+    ),
     intercept: shiftUkraineDemoPoint(route.intercept, crossTrackHeading, terminalCrossM, inboundHeading, terminalAlongM),
     transitEnd: shiftUkraineDemoPoint(route.transitEnd, crossTrackHeading, terminalCrossM, inboundHeading, terminalAlongM)
   };

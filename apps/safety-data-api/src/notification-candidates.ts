@@ -264,13 +264,7 @@ function buildSafetyNotificationCandidate(feature: SafetyFeature, query: SafetyF
 }
 
 function notificationCandidateId(properties: SafetyFeatureProperties, providerLayerId: string): string {
-  return [
-    "sim.safety-data",
-    providerLayerId,
-    properties.featureId,
-    properties.validFrom,
-    properties.validUntil ?? "open"
-  ].join(":");
+  return ["sim.safety-data", providerLayerId, properties.featureId, properties.validFrom, properties.validUntil ?? "open"].join(":");
 }
 
 function localizedText(properties: SafetyFeatureProperties, locale: "cs" | "en", key: string, fallback: string): string {

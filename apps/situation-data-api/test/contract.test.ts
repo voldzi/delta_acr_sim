@@ -651,9 +651,7 @@ describe("Situation Data API contract", () => {
       })
     );
 
-    const response = await request(app)
-      .get("/api/v1/features?layers=weather_webcams&sources=chmi_weather_webcams&bbox=14.4,50,14.5,50.1")
-      .expect(200);
+    const response = await request(app).get("/api/v1/features?layers=weather_webcams&sources=chmi_weather_webcams&bbox=14.4,50,14.5,50.1").expect(200);
 
     expect(response.body.features).toEqual([
       expect.objectContaining({
@@ -1431,9 +1429,7 @@ describe("Situation Data API contract", () => {
     vi.stubGlobal("fetch", fetchMock);
     const weatherApp = await createApp({ ...config, enabledSources: ["open_meteo"] });
 
-    const response = await request(weatherApp.app)
-      .get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather&source=open_meteo&limit=5")
-      .expect(200);
+    const response = await request(weatherApp.app).get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather&source=open_meteo&limit=5").expect(200);
 
     expect(response.body.features).toHaveLength(1);
     expect(response.body.features[0]).toEqual(
@@ -1467,9 +1463,12 @@ describe("Situation Data API contract", () => {
         })
       })
     );
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("api.met.no/weatherapi/locationforecast/2.0/compact"), expect.objectContaining({
-      headers: expect.objectContaining({ "user-agent": "csm-sim-test/0.1 contact:test@example.invalid" })
-    }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("api.met.no/weatherapi/locationforecast/2.0/compact"),
+      expect.objectContaining({
+        headers: expect.objectContaining({ "user-agent": "csm-sim-test/0.1 contact:test@example.invalid" })
+      })
+    );
   });
 
   it("publishes SIM forecast areas with COP-ready symbols and meteogram detail", async () => {
@@ -1489,14 +1488,7 @@ describe("Situation Data API contract", () => {
             wind_gusts_10m: 12.5
           },
           hourly: {
-            time: [
-              "2026-07-01T12:00",
-              "2026-07-01T13:00",
-              "2026-07-01T14:00",
-              "2026-07-01T15:00",
-              "2026-07-01T16:00",
-              "2026-07-01T17:00"
-            ],
+            time: ["2026-07-01T12:00", "2026-07-01T13:00", "2026-07-01T14:00", "2026-07-01T15:00", "2026-07-01T16:00", "2026-07-01T17:00"],
             temperature_2m: [18.7, 19.1, 19.4, 18.9, 18.2, 17.8],
             relative_humidity_2m: [77, 76, 78, 82, 84, 86],
             precipitation: [0.8, 1.2, 3.4, 0.6, 0.2, 0],
@@ -1718,9 +1710,7 @@ describe("Situation Data API contract", () => {
     );
     const weatherApp = await createApp({ ...config, enabledSources: ["open_meteo"] });
 
-    const response = await request(weatherApp.app)
-      .get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather&source=open_meteo&limit=5")
-      .expect(200);
+    const response = await request(weatherApp.app).get("/api/v1/features?bbox=14.0,50.0,14.2,50.2&layers=weather&source=open_meteo&limit=5").expect(200);
 
     expect(response.body.warnings).toEqual([expect.stringContaining("open_meteo primary provider failed")]);
     expect(response.body.features).toHaveLength(1);
@@ -1753,7 +1743,10 @@ describe("Situation Data API contract", () => {
     expect(response.text).toContain("situation_data_cache_shared_enabled");
     expect(response.text).toContain("situation_data_cache_shared_errors");
 
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("unavailable", { status: 503 }))
+    );
     const cachedSources = await createApp({
       ...config,
       enabledSources: [
@@ -1842,7 +1835,17 @@ describe("Situation Data API contract", () => {
               id: "weather_alerts:chmi_alerts:wind-orp",
               geometry: {
                 type: "MultiPolygon",
-                coordinates: [[[[14.2, 50.0], [14.3, 50.0], [14.3, 50.1], [14.2, 50.1], [14.2, 50.0]]]]
+                coordinates: [
+                  [
+                    [
+                      [14.2, 50.0],
+                      [14.3, 50.0],
+                      [14.3, 50.1],
+                      [14.2, 50.1],
+                      [14.2, 50.0]
+                    ]
+                  ]
+                ]
               },
               properties: {
                 featureId: "weather_alerts:chmi_alerts:wind-orp",
@@ -1928,7 +1931,17 @@ describe("Situation Data API contract", () => {
               id: "fire:chmi_alerts:risk-orp",
               geometry: {
                 type: "MultiPolygon",
-                coordinates: [[[[14.2, 50.0], [14.3, 50.0], [14.3, 50.1], [14.2, 50.1], [14.2, 50.0]]]]
+                coordinates: [
+                  [
+                    [
+                      [14.2, 50.0],
+                      [14.3, 50.0],
+                      [14.3, 50.1],
+                      [14.2, 50.1],
+                      [14.2, 50.0]
+                    ]
+                  ]
+                ]
               },
               properties: {
                 featureId: "fire:chmi_alerts:risk-orp",
@@ -1971,7 +1984,17 @@ describe("Situation Data API contract", () => {
               id: "boundary_admin:admin_boundaries:CZ",
               geometry: {
                 type: "MultiPolygon",
-                coordinates: [[[[14.0, 49.9], [14.5, 49.9], [14.5, 50.3], [14.0, 50.3], [14.0, 49.9]]]]
+                coordinates: [
+                  [
+                    [
+                      [14.0, 49.9],
+                      [14.5, 49.9],
+                      [14.5, 50.3],
+                      [14.0, 50.3],
+                      [14.0, 49.9]
+                    ]
+                  ]
+                ]
               },
               properties: {
                 featureId: "boundary_admin:admin_boundaries:CZ",
@@ -2176,11 +2199,7 @@ describe("Situation Data API contract", () => {
       }
       if (url.endsWith("/airquality_1h_avg_CZ.csv")) {
         return new Response(
-          [
-            "idRegistration, startTime, idValueType, value",
-            "101, 2026-05-28T08:00:00Z, 8, 45.5",
-            "102, 2026-05-28T08:00:00Z, 148, 4"
-          ].join("\n"),
+          ["idRegistration, startTime, idValueType, value", "101, 2026-05-28T08:00:00Z, 8, 45.5", "102, 2026-05-28T08:00:00Z, 148, 4"].join("\n"),
           { status: 200, headers: { "content-type": "text/csv" } }
         );
       }
@@ -2323,9 +2342,7 @@ describe("Situation Data API contract", () => {
     const first = await request(chmiApp.app)
       .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=20&includeRaw=true")
       .expect(200);
-    const second = await request(chmiApp.app)
-      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=21")
-      .expect(200);
+    const second = await request(chmiApp.app).get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=weather&source=chmi_weather_stations&limit=21").expect(200);
 
     expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(first.body.features).toHaveLength(1);
@@ -2627,9 +2644,7 @@ describe("Situation Data API contract", () => {
     vi.stubGlobal("fetch", fetchMock);
     const chmiApp = await createApp({ ...testConfig, enabledSources: ["chmi_weather_stations"] });
 
-    const response = await request(chmiApp.app)
-      .get(`/api/v1/weather-stations/${stationId}/detail?historyHours=72&forecastHours=2`)
-      .expect(200);
+    const response = await request(chmiApp.app).get(`/api/v1/weather-stations/${stationId}/detail?historyHours=72&forecastHours=2`).expect(200);
 
     expect(response.body).toEqual(
       expect.objectContaining({
@@ -2648,12 +2663,7 @@ describe("Situation Data API contract", () => {
         copInstructions: expect.objectContaining({ renderOnly: true })
       })
     );
-    expect(response.body.charts.map((chart: { chartId: string }) => chart.chartId)).toEqual([
-      "temperature",
-      "precipitation",
-      "wind",
-      "humidity_cloud"
-    ]);
+    expect(response.body.charts.map((chart: { chartId: string }) => chart.chartId)).toEqual(["temperature", "precipitation", "wind", "humidity_cloud"]);
     expect(response.body.charts[0].series.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -2669,7 +2679,10 @@ describe("Situation Data API contract", () => {
         "/merge1h/png/": radarIndex(["pacz2gmaps3.merge.20260604.2110.60.png", "pacz2gmaps3.merge.20260604.2120.60.png"]),
         "/merge1h/hdf5/": radarIndex(["T_PASV23_C_OKPR_20260604211000.hdf", "T_PASV23_C_OKPR_20260604212000.hdf"]),
         "/fct_maxz/png/": radarIndex(["pacz2gmaps3.fct_z_max.20260604.2115.ft60s10.tar", "pacz2gmaps3.fct_z_max.20260604.2120.ft60s10.tar"]),
-        "/fct_pseudocappi2km/png/": radarIndex(["pacz2gmaps3.fct_z_cappi020.20260604.2115.ft60s10.tar", "pacz2gmaps3.fct_z_cappi020.20260604.2120.ft60s10.tar"]),
+        "/fct_pseudocappi2km/png/": radarIndex([
+          "pacz2gmaps3.fct_z_cappi020.20260604.2115.ft60s10.tar",
+          "pacz2gmaps3.fct_z_cappi020.20260604.2120.ft60s10.tar"
+        ]),
         "/maxz/png_masked/": radarIndex(["pacz2gmaps3.z_max3d.20260604.2115.0.png", "pacz2gmaps3.z_max3d.20260604.2120.0.png"]),
         "/echotop/hdf5/": radarIndex(["T_PADV23_C_OKPR_20260604211500.hdf", "T_PADV23_C_OKPR_20260604212000.hdf"])
       };
@@ -2854,8 +2867,7 @@ describe("Situation Data API contract", () => {
               routeShortName: "136",
               tripId: "trip-136-1",
               vehicleId: "service-3-pid-veh-1",
-              detailUrl:
-                "/situation-data/api/v1/transit/vehicles/traffic%3Apid_gtfs_rt%3Aservice-3-pid-veh-1?source=pid_gtfs_rt"
+              detailUrl: "/situation-data/api/v1/transit/vehicles/traffic%3Apid_gtfs_rt%3Aservice-3-pid-veh-1?source=pid_gtfs_rt"
             }),
             raw: expect.any(Object)
           })
@@ -2950,12 +2962,9 @@ describe("Situation Data API contract", () => {
       "routes.txt": strToU8("route_id,route_short_name,route_long_name,route_type\nL136,136,Sidliste Dablice - Sidliste Repy,3\n"),
       "trips.txt": strToU8("route_id,service_id,trip_id,trip_headsign,direction_id,shape_id\nL136,WK,trip-136-1,Sidliste Repy,0,shape-136\n"),
       "stops.txt": strToU8(
-        [
-          "stop_id,stop_name,stop_lat,stop_lon",
-          "stop-1,Sidliste Dablice,50.128,14.486",
-          "stop-2,Stepnicna,50.12,14.45",
-          "stop-3,Ladvi,50.125,14.469"
-        ].join("\n") + "\n"
+        ["stop_id,stop_name,stop_lat,stop_lon", "stop-1,Sidliste Dablice,50.128,14.486", "stop-2,Stepnicna,50.12,14.45", "stop-3,Ladvi,50.125,14.469"].join(
+          "\n"
+        ) + "\n"
       ),
       "stop_times.txt": strToU8(
         [
@@ -2966,12 +2975,9 @@ describe("Situation Data API contract", () => {
         ].join("\n") + "\n"
       ),
       "shapes.txt": strToU8(
-        [
-          "shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence",
-          "shape-136,50.128,14.486,1",
-          "shape-136,50.12,14.45,2",
-          "shape-136,50.125,14.469,3"
-        ].join("\n") + "\n"
+        ["shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence", "shape-136,50.128,14.486,1", "shape-136,50.12,14.45,2", "shape-136,50.125,14.469,3"].join(
+          "\n"
+        ) + "\n"
       )
     });
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
@@ -3198,7 +3204,9 @@ describe("Situation Data API contract", () => {
           "T1,08:05:00,08:05:00,P1,2,0,0,1"
         ].join("\n")
       ),
-      "calendar.txt": strToU8(["service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date", "S1,1,1,1,1,1,1,1,20260101,20261231"].join("\n")),
+      "calendar.txt": strToU8(
+        ["service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date", "S1,1,1,1,1,1,1,1,20260101,20261231"].join("\n")
+      ),
       "shapes.txt": strToU8(["shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence", "SH1,50.6593,14.0447,1", "SH1,50.0832,14.4355,2"].join("\n")),
       "stops.txt": strToU8(
         [
@@ -3244,9 +3252,7 @@ describe("Situation Data API contract", () => {
         { systemId: "test_gtfs", label: "Test GTFS", url: "https://example.test/transit/test_gtfs.zip" },
         { systemId: "test_gtfs_b", label: "Test GTFS B", url: "https://example.test/transit/test_gtfs_b.zip" }
       ],
-      publicTransitStaticGeojsonFeeds: [
-        { systemId: "test_geojson", label: "Test GeoJSON", url: "https://example.test/transit/test_geojson.zip" }
-      ]
+      publicTransitStaticGeojsonFeeds: [{ systemId: "test_geojson", label: "Test GeoJSON", url: "https://example.test/transit/test_geojson.zip" }]
     });
 
     const first = await request(staticApp.app)
@@ -3312,9 +3318,7 @@ describe("Situation Data API contract", () => {
       })
     );
 
-    const stopDetail = await request(staticApp.app)
-      .get("/api/v1/transit/stops/test_gtfs/U1?date=2026-05-28&time=07:55:00&maxDepartures=5")
-      .expect(200);
+    const stopDetail = await request(staticApp.app).get("/api/v1/transit/stops/test_gtfs/U1?date=2026-05-28&time=07:55:00&maxDepartures=5").expect(200);
     expect(stopDetail.body).toEqual(
       expect.objectContaining({
         contractVersion: "sim-transit-stop-detail-v1",
@@ -3336,9 +3340,7 @@ describe("Situation Data API contract", () => {
       })
     );
 
-    const departures = await request(staticApp.app)
-      .get("/api/v1/transit/stops/test_gtfs/U1/departures?date=20260528&time=07:59:00")
-      .expect(200);
+    const departures = await request(staticApp.app).get("/api/v1/transit/stops/test_gtfs/U1/departures?date=20260528&time=07:59:00").expect(200);
     expect(departures.body).toEqual(
       expect.objectContaining({
         contractVersion: "sim-transit-stop-departures-v1",
@@ -3352,11 +3354,15 @@ describe("Situation Data API contract", () => {
         contractVersion: "sim-transit-route-detail-v1",
         route: expect.objectContaining({ routeId: "L1", routeShortName: "10" }),
         trips: [expect.objectContaining({ tripId: "T1", destination: "Centrum" })],
-        stops: [
-          expect.objectContaining({ stopId: "U1" }),
-          expect.objectContaining({ stopId: "P1" })
-        ],
-        routeShape: expect.objectContaining({ shapeId: "SH1", coordinates: [[14.0447, 50.6593], [14.4355, 50.0832]], truncated: false })
+        stops: [expect.objectContaining({ stopId: "U1" }), expect.objectContaining({ stopId: "P1" })],
+        routeShape: expect.objectContaining({
+          shapeId: "SH1",
+          coordinates: [
+            [14.0447, 50.6593],
+            [14.4355, 50.0832]
+          ],
+          truncated: false
+        })
       })
     );
 
@@ -3536,12 +3542,8 @@ describe("Situation Data API contract", () => {
       enabledSources: ["road_srti_lod"]
     });
 
-    const first = await request(roadApp.app)
-      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=road_srti_lod&limit=20")
-      .expect(200);
-    const second = await request(roadApp.app)
-      .get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=road_srti_lod&limit=21")
-      .expect(200);
+    const first = await request(roadApp.app).get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=road_srti_lod&limit=20").expect(200);
+    const second = await request(roadApp.app).get("/api/v1/features?bbox=14.0,49.8,14.8,50.3&layers=traffic&source=road_srti_lod&limit=21").expect(200);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(first.body.features).toHaveLength(1);
@@ -3680,7 +3682,17 @@ describe("Situation Data API contract", () => {
         source: "osm_postgis",
         geometry_geojson: {
           type: "MultiPolygon",
-          coordinates: [[[[14.1, 49.8], [14.8, 49.8], [14.8, 50.3], [14.1, 50.3], [14.1, 49.8]]]]
+          coordinates: [
+            [
+              [
+                [14.1, 49.8],
+                [14.8, 49.8],
+                [14.8, 50.3],
+                [14.1, 50.3],
+                [14.1, 49.8]
+              ]
+            ]
+          ]
         },
         tags: { "name:en": "Central Bohemian Region", "name:cs": "Středočeský kraj" },
         imported_at: "2026-05-28T08:00:00.000Z"
@@ -4565,13 +4577,15 @@ describe("Situation Data API contract", () => {
       source_revision: "model=coverage-v2-terrain",
       geometry: {
         type: "Polygon",
-        coordinates: [[
-          [14.41, 50.07],
-          [14.43, 50.07],
-          [14.43, 50.09],
-          [14.41, 50.09],
-          [14.41, 50.07]
-        ]]
+        coordinates: [
+          [
+            [14.41, 50.07],
+            [14.43, 50.07],
+            [14.43, 50.09],
+            [14.41, 50.09],
+            [14.41, 50.07]
+          ]
+        ]
       }
     });
 
@@ -4812,9 +4826,11 @@ describe("Situation Data API contract", () => {
       mobileCoverageTerrainAware: false,
       demEnabled: false
     });
-    (coverageApp.context.mobileCoverage as unknown as {
-      fetchTowerById: () => Promise<{ id: string; name: string; lon: number; lat: number; operator: string }>;
-    }).fetchTowerById = async () => ({ id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08, operator: "unknown" });
+    (
+      coverageApp.context.mobileCoverage as unknown as {
+        fetchTowerById: () => Promise<{ id: string; name: string; lon: number; lat: number; operator: string }>;
+      }
+    ).fetchTowerById = async () => ({ id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08, operator: "unknown" });
 
     const endpoint = "/api/v1/mobile-coverage/towers/node:1/viewshed?technology=4G&radiusM=1000&azimuthStepDeg=90&distanceStepM=500";
     await request(coverageApp.app).get(endpoint).expect(200);
@@ -4991,13 +5007,15 @@ describe("Situation Data API contract", () => {
             id: "coverage:mobile:4g:prepared",
             geometry: {
               type: "Polygon",
-              coordinates: [[
-                [14.41, 50.07],
-                [14.43, 50.07],
-                [14.43, 50.09],
-                [14.41, 50.09],
-                [14.41, 50.07]
-              ]]
+              coordinates: [
+                [
+                  [14.41, 50.07],
+                  [14.43, 50.07],
+                  [14.43, 50.09],
+                  [14.41, 50.09],
+                  [14.41, 50.07]
+                ]
+              ]
             },
             properties: {
               featureId: "coverage:mobile:4g:prepared",
@@ -5067,13 +5085,15 @@ describe("Situation Data API contract", () => {
               id: "coverage:mobile:4g:0-0",
               geometry: {
                 type: "Polygon",
-                coordinates: [[
-                  [14.41, 50.07],
-                  [14.43, 50.07],
-                  [14.43, 50.09],
-                  [14.41, 50.09],
-                  [14.41, 50.07]
-                ]]
+                coordinates: [
+                  [
+                    [14.41, 50.07],
+                    [14.43, 50.07],
+                    [14.43, 50.09],
+                    [14.41, 50.09],
+                    [14.41, 50.07]
+                  ]
+                ]
               },
               properties: {
                 featureId: "coverage:mobile:4g:0-0",
@@ -5230,13 +5250,15 @@ describe("Situation Data API contract", () => {
               id: "coverage:mobile:5g:runtime",
               geometry: {
                 type: "Polygon",
-                coordinates: [[
-                  [14.41, 50.07],
-                  [14.43, 50.07],
-                  [14.43, 50.09],
-                  [14.41, 50.09],
-                  [14.41, 50.07]
-                ]]
+                coordinates: [
+                  [
+                    [14.41, 50.07],
+                    [14.43, 50.07],
+                    [14.43, 50.09],
+                    [14.41, 50.09],
+                    [14.41, 50.07]
+                  ]
+                ]
               },
               properties: {
                 featureId: "coverage:mobile:5g:runtime",
@@ -5310,17 +5332,17 @@ describe("Situation Data API contract", () => {
     });
 
     expect(result.features).toHaveLength(0);
-    expect(result.warnings).toEqual(expect.arrayContaining([
-      "mobile_network_model ignored coverage polygons that were not backed by a prepared read-model.",
-      "mobile_network_model has no prepared read-model coverage cells in the requested area; no synthetic bbox polygon was generated.",
-      "CTU measurements are available only as point features in their own sources; mobile_network_model did not convert them to an area polygon."
-    ]));
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        "mobile_network_model ignored coverage polygons that were not backed by a prepared read-model.",
+        "mobile_network_model has no prepared read-model coverage cells in the requested area; no synthetic bbox polygon was generated.",
+        "CTU measurements are available only as point features in their own sources; mobile_network_model did not convert them to an area polygon."
+      ])
+    );
   });
 
   it("keeps layers represented when a low limit is requested", async () => {
-    const response = await request(app)
-      .get("/api/v1/features?layers=weather,ground,mobile,traffic&source=mock&limit=4")
-      .expect(200);
+    const response = await request(app).get("/api/v1/features?layers=weather,ground,mobile,traffic&source=mock&limit=4").expect(200);
 
     const layers = new Set(response.body.features.map((feature: { properties: { layer: string } }) => feature.properties.layer));
     expect(layers).toEqual(new Set(["weather", "ground", "mobile", "traffic"]));
@@ -5544,13 +5566,15 @@ function coverageGridFeature(x: number, y: number): SituationFeature {
     id: `coverage:mobile:4g:test-${x}-${y}`,
     geometry: {
       type: "Polygon",
-      coordinates: [[
-        [west, south],
-        [east, south],
-        [east, north],
-        [west, north],
-        [west, south]
-      ]]
+      coordinates: [
+        [
+          [west, south],
+          [east, south],
+          [east, north],
+          [west, north],
+          [west, south]
+        ]
+      ]
     },
     properties: {
       featureId: `coverage:mobile:4g:test-${x}-${y}`,
@@ -5593,10 +5617,7 @@ class InMemorySharedResponseCacheStore implements SharedResponseCacheStore {
 function encodeSpravaZeleznicTestPayload(value: unknown): string {
   const json = Buffer.from(JSON.stringify(value), "utf8");
   const now = new Date();
-  const key = Buffer.from(
-    `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}`,
-    "utf8"
-  );
+  const key = Buffer.from(`${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}`, "utf8");
   const encoded = Buffer.alloc(json.length);
   for (let index = 0; index < json.length; index += 1) {
     encoded[index] = json[index] ^ key[index % key.length];

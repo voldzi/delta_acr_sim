@@ -96,20 +96,13 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     staleAfterSeconds: parseInteger(process.env.SAFETY_DATA_STALE_AFTER_SECONDS, 3600),
     chmiAlertsCapBaseUrl: process.env.CHMI_ALERTS_CAP_BASE_URL ?? "https://opendata.chmi.cz/meteorology/weather/alerts/cap/",
     chmiOrpCodelistUrl:
-      process.env.CHMI_ORP_CODELIST_URL ??
-      "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
+      process.env.CHMI_ORP_CODELIST_URL ?? "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
     chmiHydroMetadataUrl: process.env.CHMI_HYDRO_METADATA_URL ?? "https://opendata.chmi.cz/hydrology/now/metadata/meta1.json",
     chmiHydroNowBaseUrl: process.env.CHMI_HYDRO_NOW_BASE_URL ?? "https://opendata.chmi.cz/hydrology/now/data",
     chmiHydroRecentBaseUrl: process.env.CHMI_HYDRO_RECENT_BASE_URL ?? "https://opendata.chmi.cz/hydrology/recent/data",
     chmiHydroMaxStations,
-    chmiHydroStationCacheMaxEntries: parseInteger(
-      process.env.CHMI_HYDRO_STATION_CACHE_MAX_ENTRIES,
-      Math.max(cacheMaxEntries, chmiHydroMaxStations + 128)
-    ),
-    chmiHydroCurrentSnapshotCacheTtlSeconds: parseInteger(
-      process.env.CHMI_HYDRO_CURRENT_SNAPSHOT_CACHE_TTL_SECONDS,
-      Math.max(300, cacheTtlSeconds)
-    ),
+    chmiHydroStationCacheMaxEntries: parseInteger(process.env.CHMI_HYDRO_STATION_CACHE_MAX_ENTRIES, Math.max(cacheMaxEntries, chmiHydroMaxStations + 128)),
+    chmiHydroCurrentSnapshotCacheTtlSeconds: parseInteger(process.env.CHMI_HYDRO_CURRENT_SNAPSHOT_CACHE_TTL_SECONDS, Math.max(300, cacheTtlSeconds)),
     chmiHydroDetailDefaultPastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_DEFAULT_PAST_HOURS, 168),
     chmiHydroDetailForecastHours: parseInteger(process.env.CHMI_HYDRO_DETAIL_FORECAST_HOURS, 72),
     chmiHydroDetailBackfillDays: parseInteger(process.env.CHMI_HYDRO_DETAIL_BACKFILL_DAYS, 7),
@@ -128,7 +121,8 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
     roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
-    adminBoundaryConnectionString: emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
+    adminBoundaryConnectionString:
+      emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
     adminBoundaryTable: process.env.SAFETY_DATA_ADMIN_BOUNDARY_TABLE ?? "public.osm_admin_boundary",
     adminBoundaryCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS, 86_400),
     corsOrigins: parseStringList(process.env.SAFETY_DATA_CORS_ORIGINS)

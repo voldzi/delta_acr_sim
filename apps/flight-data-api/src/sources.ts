@@ -227,7 +227,9 @@ class AdsbLolSource implements FlightDataSource {
 
   async fetchObservations(query: FlightQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    const area = query.bbox ? bboxToPointRadius(query.bbox) : { lat: this.config.defaultLat, lon: this.config.defaultLon, radiusNm: this.config.defaultRadiusNm };
+    const area = query.bbox
+      ? bboxToPointRadius(query.bbox)
+      : { lat: this.config.defaultLat, lon: this.config.defaultLon, radiusNm: this.config.defaultRadiusNm };
     const url = `${this.config.adsbLolBaseUrl}/v2/lat/${area.lat.toFixed(4)}/lon/${area.lon.toFixed(4)}/dist/${Math.min(250, Math.max(1, Math.ceil(area.radiusNm)))}`;
     const payload = await this.payloadCache.getOrLoad(url, () => requestJson<AdsbLolResponse>(url, this.config.requestTimeoutMs));
     const nowMs = typeof payload.now === "number" ? payload.now : Date.now();
@@ -333,9 +335,14 @@ class OpenSkySource implements FlightDataSource {
       client_id: this.config.openskyClientId,
       client_secret: this.config.openskyClientSecret
     });
-    const payload = await requestJson<{ access_token: string; expires_in?: number }>(this.config.openskyAuthUrl, this.config.requestTimeoutMs, {
-      "content-type": "application/x-www-form-urlencoded"
-    }, body);
+    const payload = await requestJson<{ access_token: string; expires_in?: number }>(
+      this.config.openskyAuthUrl,
+      this.config.requestTimeoutMs,
+      {
+        "content-type": "application/x-www-form-urlencoded"
+      },
+      body
+    );
     const expiresInMs = Number(payload.expires_in ?? 1800) * 1000;
     this.cachedToken = { value: payload.access_token, expiresAtMs: now + expiresInMs };
     return { Authorization: `Bearer ${payload.access_token}` };
@@ -391,7 +398,9 @@ class LocalAdsbSource implements FlightDataSource {
     settled.forEach((item, index) => {
       const url = this.config.localAdsbAircraftJsonUrls[index] ?? `receiver-${index + 1}`;
       if (item.status === "rejected") {
-        warnings.push(item.reason instanceof Error ? `local_adsb ${receiverLabel(url)} failed: ${item.reason.message}` : `local_adsb ${receiverLabel(url)} failed.`);
+        warnings.push(
+          item.reason instanceof Error ? `local_adsb ${receiverLabel(url)} failed: ${item.reason.message}` : `local_adsb ${receiverLabel(url)} failed.`
+        );
         return;
       }
       observations.push(
@@ -444,7 +453,9 @@ class PartnerAirTracksSource implements FlightDataSource {
       source: this.descriptor,
       fetchedAt,
       observations: this.store.fetch(query.bbox),
-      warnings: this.config.partnerAirTrackIngestToken ? [] : ["partner_air_tracks ingest endpoint is disabled until FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured."]
+      warnings: this.config.partnerAirTrackIngestToken
+        ? []
+        : ["partner_air_tracks ingest endpoint is disabled until FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured."]
     };
   }
 }
@@ -612,10 +623,7 @@ function mapReadsbAircraftResponse(
 }
 
 function readsbMeasurementFor(
-  item: Pick<
-    ReadsbAircraft,
-    "rssi" | "rssi_dbfs" | "messages" | "nic" | "nac_p" | "nac_v" | "sil" | "sda" | "rc" | "type" | "seen_pos"
-  >,
+  item: Pick<ReadsbAircraft, "rssi" | "rssi_dbfs" | "messages" | "nic" | "nac_p" | "nac_v" | "sil" | "sda" | "rc" | "type" | "seen_pos">,
   fallbackProtocol: FlightObservationMeasurementQuality["sourceProtocol"],
   receiverId?: string
 ): FlightObservationMeasurementQuality | undefined {
@@ -633,7 +641,9 @@ function readsbMeasurementFor(
     rcM: optionalNumber(item.rc),
     horizontalAccuracyM: optionalNumber(item.rc)
   };
-  const cleaned = Object.fromEntries(Object.entries(measurement).filter(([, value]) => value !== undefined && value !== null && value !== "")) as FlightObservationMeasurementQuality;
+  const cleaned = Object.fromEntries(
+    Object.entries(measurement).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ) as FlightObservationMeasurementQuality;
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 
@@ -665,9 +675,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   const earthRadiusKm = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 

@@ -238,7 +238,7 @@ def build_document
     "openapi" => "3.1.0",
     "info" => {
       "title" => "CSM SIM Composite API",
-      "version" => "0.1.0",
+      "version" => "1.0.0",
       "description" => "JSON-first composite OpenAPI contract for CSM SIM REST API surfaces.",
       "license" => {
         "name" => "Proprietary - CSM SIM pilot",

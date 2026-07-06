@@ -1,4 +1,5 @@
 import type { ApiConfig } from "./config.js";
+import { fetchProviderJson } from "./provider-http.js";
 
 export interface ProviderDashboardOptions {
   includeDetails: boolean;
@@ -58,7 +59,10 @@ export async function buildProviderDashboardDetails(config: ApiConfig, options: 
       const specs = providerSpecs(endpoint.key, options);
       const settled = await Promise.allSettled(
         specs.map(async (spec) => {
-          const { latencyMs, payload } = await fetchProviderJson(`${endpoint.baseUrl}${spec.path}`, config.operationsProviderTimeoutMs ?? 1500);
+          const { latencyMs, payload } = await fetchProviderJson(`${endpoint.baseUrl}${spec.path}`, {
+            maxBytes: config.operationsProviderMaxResponseBytes ?? 1024 * 1024,
+            timeoutMs: config.operationsProviderTimeoutMs ?? 1500
+          });
           spec.assign(section, payload, latencyMs);
         })
       );
@@ -107,11 +111,7 @@ function providerSpecs(endpointKey: ProviderEndpoint["key"], options: ProviderDa
 
   switch (endpointKey) {
     case "flightData":
-      specs.push(
-        assignSpec("sources", "/api/v1/sources"),
-        assignSpec("config", "/api/v1/config"),
-        assignSpec("tracks", "/api/v1/aircraft/positions?limit=8")
-      );
+      specs.push(assignSpec("sources", "/api/v1/sources"), assignSpec("config", "/api/v1/config"), assignSpec("tracks", "/api/v1/aircraft/positions?limit=8"));
       break;
     case "situationData":
     case "safetyData":
@@ -123,11 +123,7 @@ function providerSpecs(endpointKey: ProviderEndpoint["key"], options: ProviderDa
       );
       break;
     case "takGateway":
-      specs.push(
-        assignSpec("layers", "/api/v1/layers"),
-        assignSpec("sources", "/api/v1/sources"),
-        assignSpec("config", "/api/v1/config")
-      );
+      specs.push(assignSpec("layers", "/api/v1/layers"), assignSpec("sources", "/api/v1/sources"), assignSpec("config", "/api/v1/config"));
       break;
   }
   return specs;
@@ -140,19 +136,6 @@ function assignSpec(key: "config" | "features" | "layers" | "sources" | "tracks"
     },
     label: key,
     path
-  };
-}
-
-async function fetchProviderJson(url: string, timeoutMs: number): Promise<{ latencyMs: number; payload: unknown }> {
-  const startedAt = Date.now();
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-  const latencyMs = Date.now() - startedAt;
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
-  return {
-    latencyMs,
-    payload: await response.json()
   };
 }
 

@@ -137,7 +137,8 @@ export class PartnerAirTrackStore {
       ? Date.parse(normalizeTimestamp(record.expiresAt) as string)
       : now.getTime() + Math.max(5, this.options.ttlSeconds) * 1000;
     const sourceRecordId = `partner_air_tracks:${sourceKind}:${record.sensorId ?? payload.sensorId ?? "unknown"}:${key.kind}:${key.value}`;
-    const objectType = record.objectType ?? (sourceKind === "remote_id" || sourceKind === "u_space" || record.remoteId || record.uasRegistration ? "UAV" : "UNKNOWN");
+    const objectType =
+      record.objectType ?? (sourceKind === "remote_id" || sourceKind === "u_space" || record.remoteId || record.uasRegistration ? "UAV" : "UNKNOWN");
     const category = cleanString(record.category) ?? (objectType === "UAV" ? "B6" : undefined);
     return {
       expiresAtMs,
@@ -195,7 +196,9 @@ export class PartnerAirTrackStore {
     if (this.observations.size <= maxRecords) {
       return;
     }
-    const sorted = Array.from(this.observations.entries()).sort(([, left], [, right]) => Date.parse(left.observation.seenAt) - Date.parse(right.observation.seenAt));
+    const sorted = Array.from(this.observations.entries()).sort(
+      ([, left], [, right]) => Date.parse(left.observation.seenAt) - Date.parse(right.observation.seenAt)
+    );
     for (const [key] of sorted.slice(0, this.observations.size - maxRecords)) {
       this.observations.delete(key);
     }
@@ -219,7 +222,9 @@ function measurementFor(payload: PartnerAirTrackIngestPayload, record: PartnerAi
     headingAccuracyDeg: finiteNumber(record.headingAccuracyDeg) ?? record.measurement?.headingAccuracyDeg,
     receiverDistanceM: finiteNumber(record.receiverDistanceM) ?? record.measurement?.receiverDistanceM
   };
-  const cleaned = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== undefined && value !== null && value !== "")) as FlightObservationMeasurementQuality;
+  const cleaned = Object.fromEntries(
+    Object.entries(merged).filter(([, value]) => value !== undefined && value !== null && value !== "")
+  ) as FlightObservationMeasurementQuality;
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 
@@ -285,7 +290,11 @@ function cleanString(value: string | undefined | null): string | undefined {
 }
 
 function cleanKey(value: string | undefined | null): string | undefined {
-  const cleaned = value?.trim().toLowerCase().replace(/[^a-z0-9_.:-]+/g, "-").replace(/^-+|-+$/g, "");
+  const cleaned = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return cleaned ? cleaned.slice(0, 96) : undefined;
 }
 

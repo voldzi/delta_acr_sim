@@ -287,7 +287,9 @@ export class ChmiWeatherWebcamCatalog {
     };
   }
 
-  async listFeatures(query: Required<Pick<ChmiWeatherWebcamCatalogQuery, "bbox" | "limit" | "includeRaw">> & Pick<ChmiWeatherWebcamCatalogQuery, "layers">): Promise<{
+  async listFeatures(
+    query: Required<Pick<ChmiWeatherWebcamCatalogQuery, "bbox" | "limit" | "includeRaw">> & Pick<ChmiWeatherWebcamCatalogQuery, "layers">
+  ): Promise<{
     fetchedAt: string;
     features: SituationFeature[];
     warnings: string[];
@@ -297,10 +299,7 @@ export class ChmiWeatherWebcamCatalog {
     return {
       fetchedAt,
       features: locations.map((location) => this.locationFeature(location, fetchedAt, query.includeRaw, layerForCameraLocation(location))),
-      warnings: [
-        ...this.lastLocationWarnings,
-        ...(locations.length === 0 ? ["chmi_weather_webcams returned no camera locations in the requested bbox."] : [])
-      ]
+      warnings: [...this.lastLocationWarnings, ...(locations.length === 0 ? ["chmi_weather_webcams returned no camera locations in the requested bbox."] : [])]
     };
   }
 
@@ -526,9 +525,7 @@ export class ChmiWeatherWebcamCatalog {
             ? "Bod turistické webkamery s ověřeným originálním provozovatelem; náhled je dostupný jen pokud jej originální zdroj poskytuje přes SIM."
             : "Bod veřejné webkamery pro vizuální kontrolu aktuální situace; náhled se načítá až v detailu.",
           summaryLocalized: {
-            cs: isOutdoorWebcam
-              ? "Turistická webkamera z ověřeného originálního zdroje."
-              : "Bod veřejné webkamery pro vizuální kontrolu aktuální situace.",
+            cs: isOutdoorWebcam ? "Turistická webkamera z ověřeného originálního zdroje." : "Bod veřejné webkamery pro vizuální kontrolu aktuální situace.",
             en: isOutdoorWebcam ? "Outdoor webcam from a verified origin source." : "Public webcam point for visual current-situation context."
           },
           notices: [
@@ -591,7 +588,8 @@ export class ChmiWeatherWebcamCatalog {
       originAuthority: location.authority,
       originCategory: location.category,
       attribution: location.attribution,
-      snapshotAvailable: location.detailMode === "chmi_point" ? true : (location.cameras ?? []).some((camera) => camera.snapshotAvailable ?? Boolean(camera.directImageUrl))
+      snapshotAvailable:
+        location.detailMode === "chmi_point" ? true : (location.cameras ?? []).some((camera) => camera.snapshotAvailable ?? Boolean(camera.directImageUrl))
     };
   }
 
@@ -729,7 +727,10 @@ function normalizeOstravaAsmxLocations(payload: OstravaAsmxCameraPayload, feed: 
         return undefined;
       }
       return {
-        locationId: `${stableId(feed.sourceId)}_${stableId(point.ID ?? title)}_${coordinateToken(lon as number)}_${coordinateToken(lat as number)}`.slice(0, 160),
+        locationId: `${stableId(feed.sourceId)}_${stableId(point.ID ?? title)}_${coordinateToken(lon as number)}_${coordinateToken(lat as number)}`.slice(
+          0,
+          160
+        ),
         label: title,
         lon: lon as number,
         lat: lat as number,
@@ -767,9 +768,7 @@ function normalizeStaticCameraLocations(payload: StaticCameraFeedPayload, feed: 
         return undefined;
       }
       const label = location.label?.trim() || `Veřejná kamera ${round(lat, 5)}, ${round(lon, 5)}`;
-      const locationId = stableId(
-        location.locationId ?? `${sourceId}_${label}_${coordinateToken(lon)}_${coordinateToken(lat)}`
-      ).slice(0, 160);
+      const locationId = stableId(location.locationId ?? `${sourceId}_${label}_${coordinateToken(lon)}_${coordinateToken(lat)}`).slice(0, 160);
       const cameras = normalizeStaticCameras(location.cameras ?? [], sourceId, locationId);
       if (cameras.length === 0) {
         return undefined;
@@ -1015,7 +1014,11 @@ function validImageContentType(value: string | undefined): string | undefined {
 }
 
 function stableId(value: string): string {
-  const normalized = value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").replace(/_+/g, "_").slice(0, 96);
+  const normalized = value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 96);
   return normalized.length > 0 ? normalized : "camera";
 }
 
@@ -1023,7 +1026,7 @@ function decodeBase64Image(value: string | undefined): Buffer {
   if (!value) {
     return Buffer.alloc(0);
   }
-  const raw = value.includes(",") ? value.split(",").pop() ?? "" : value;
+  const raw = value.includes(",") ? (value.split(",").pop() ?? "") : value;
   return Buffer.from(raw.trim(), "base64");
 }
 

@@ -346,10 +346,7 @@ async function authenticateOidcToken(token: string, config: ApiConfig): Promise<
   if (!subjectId || roles.length === 0) {
     return undefined;
   }
-  const actor = decoded.payload.preferred_username?.trim()
-    || decoded.payload.email?.trim()
-    || decoded.payload.name?.trim()
-    || subjectId;
+  const actor = decoded.payload.preferred_username?.trim() || decoded.payload.email?.trim() || decoded.payload.name?.trim() || subjectId;
   return {
     actor,
     authMode: "oidc",
@@ -426,10 +423,7 @@ function matchesAllowedClient(payload: JwtPayload, config: ApiConfig): boolean {
 
 function tokenRoles(payload: JwtPayload, config: ApiConfig): string[] {
   const clientId = config.apiOidcClientId?.trim();
-  return Array.from(new Set([
-    ...(payload.realm_access?.roles ?? []),
-    ...(clientId ? payload.resource_access?.[clientId]?.roles ?? [] : [])
-  ]));
+  return Array.from(new Set([...(payload.realm_access?.roles ?? []), ...(clientId ? (payload.resource_access?.[clientId]?.roles ?? []) : [])]));
 }
 
 function mapOidcRoles(roles: string[]): SimRole[] {

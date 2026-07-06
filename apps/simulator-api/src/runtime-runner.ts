@@ -246,7 +246,11 @@ export class RuntimeRunner {
       elapsedSeconds: Math.round(elapsedSeconds * this.speedMultiplier),
       speedMultiplier: this.speedMultiplier,
       tickIntervalSeconds: this.tickIntervalSeconds,
-      activeObjects: countActiveScenarioObjects(scenario, { elapsedSeconds, speedMultiplier: this.speedMultiplier, tickIntervalSeconds: this.tickIntervalSeconds }),
+      activeObjects: countActiveScenarioObjects(scenario, {
+        elapsedSeconds,
+        speedMultiplier: this.speedMultiplier,
+        tickIntervalSeconds: this.tickIntervalSeconds
+      }),
       lastTickAt: new Date().toISOString()
     };
   }

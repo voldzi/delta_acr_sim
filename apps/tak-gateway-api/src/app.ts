@@ -235,7 +235,7 @@ function isDebugAuthorized(req: Request, context: TakGatewayAppContext): boolean
   const header = req.headers.authorization;
   return Boolean(
     (context.config.readToken && header === `Bearer ${context.config.readToken}`) ||
-      (context.config.ingestToken && header === `Bearer ${context.config.ingestToken}`)
+    (context.config.ingestToken && header === `Bearer ${context.config.ingestToken}`)
   );
 }
 
@@ -247,10 +247,7 @@ function isAuthorized(req: Request, context: TakGatewayAppContext): boolean {
   return header === `Bearer ${context.config.ingestToken}`;
 }
 
-function parseTakQuery(
-  raw: Record<string, unknown>,
-  config: TakGatewayConfig
-): { ok: true; value: TakQuery } | { ok: false; error: string } {
+function parseTakQuery(raw: Record<string, unknown>, config: TakGatewayConfig): { ok: true; value: TakQuery } | { ok: false; error: string } {
   const bbox = parseBbox(raw.bbox, config.defaultBbox);
   if (!bbox.ok) {
     return { ok: false, error: bbox.error };

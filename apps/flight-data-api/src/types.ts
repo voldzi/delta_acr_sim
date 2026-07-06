@@ -289,7 +289,13 @@ export interface FlightItinerary {
     scheduledDeparture: { status: "unavailable"; reason: string };
     actualDeparture: { status: "unavailable"; reason: string };
     scheduledArrival: { status: "unavailable"; reason: string };
-    estimatedArrival: { status: "estimated" | "unavailable"; value?: string; basis?: "current_position_groundspeed_great_circle"; confidence: number; reason?: string };
+    estimatedArrival: {
+      status: "estimated" | "unavailable";
+      value?: string;
+      basis?: "current_position_groundspeed_great_circle";
+      confidence: number;
+      reason?: string;
+    };
   };
   quality: {
     routeMatch: "callsign_exact";

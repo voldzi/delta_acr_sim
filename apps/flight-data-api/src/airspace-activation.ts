@@ -322,9 +322,7 @@ function findGeozoneMatches(normalized: string, index: Map<string, Array<{ ident
   if (exact && exact.length > 0) {
     return exact;
   }
-  const prefixMatches = [...index.entries()]
-    .filter(([key]) => key.startsWith(normalized))
-    .flatMap(([, values]) => values);
+  const prefixMatches = [...index.entries()].filter(([key]) => key.startsWith(normalized)).flatMap(([, values]) => values);
   return prefixMatches.length > 0 ? prefixMatches : [];
 }
 

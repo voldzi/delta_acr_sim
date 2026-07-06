@@ -741,9 +741,13 @@ export async function loadDashboard(options: { includeDetails?: boolean; include
     includeDetails ? api<{ items: Scenario[] }>("/api/v1/scenarios") : Promise.resolve({ items: [] }),
     includeDetails ? api<RuntimeStatus>("/api/v1/runtime/status") : Promise.resolve(operationsSummary.runtime),
     includeDetails ? api<PublisherStatus>("/api/v1/runtime/publisher") : Promise.resolve(operationsSummary.publisher),
-    includeDetails && operatorTokenConfigured ? api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20") : Promise.resolve({ items: [], totalCount: 0 }),
+    includeDetails && operatorTokenConfigured
+      ? api<{ items: QueueItem[]; totalCount?: number }>("/api/v1/publisher/queue?limit=20")
+      : Promise.resolve({ items: [], totalCount: 0 }),
     includeDetails ? api<{ blocks: ScenarioBlock[] }>("/api/v1/runtime/blocks") : Promise.resolve({ blocks: [] }),
-    includeDetails ? api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers") : Promise.resolve({ providers: [] }),
+    includeDetails
+      ? api<{ providers: Array<{ id: string; enabled: boolean; external: boolean; healthy: boolean }> }>("/api/v1/ai/providers")
+      : Promise.resolve({ providers: [] }),
     includeDetails || includeObservabilityDetails
       ? api<ProviderDashboardDetails>(`/api/v1/operations/provider-details?${providerDetailsQuery.toString()}`)
       : Promise.resolve(emptyProviderDashboardDetails())
@@ -751,18 +755,28 @@ export async function loadDashboard(options: { includeDetails?: boolean; include
 
   const warnings: string[] = operationsSummaryWarning ? [`operations summary: ${operationsSummaryWarning}`] : [];
   const scenarios = unwrapDashboardResult(results[0], { items: [] }, "scenarios", warnings);
-  const runtime = unwrapDashboardResult(results[1], {
-    state: "UNAVAILABLE",
-    generatedEvents: 0,
-    publishedEvents: 0,
-    queuedEvents: 0
-  }, "runtime", warnings);
-  const publisher = unwrapDashboardResult(results[2], {
-    mode: "DRY_RUN",
-    queueSize: 0,
-    deadLetterSize: 0,
-    publishingEnabled: false
-  }, "publisher", warnings);
+  const runtime = unwrapDashboardResult(
+    results[1],
+    {
+      state: "UNAVAILABLE",
+      generatedEvents: 0,
+      publishedEvents: 0,
+      queuedEvents: 0
+    },
+    "runtime",
+    warnings
+  );
+  const publisher = unwrapDashboardResult(
+    results[2],
+    {
+      mode: "DRY_RUN",
+      queueSize: 0,
+      deadLetterSize: 0,
+      publishingEnabled: false
+    },
+    "publisher",
+    warnings
+  );
   const queue = unwrapDashboardResult(results[3], { items: [], totalCount: 0 }, "publisher queue", warnings);
   const blocks = unwrapDashboardResult(results[4], { blocks: [] }, "runtime blocks", warnings);
   const providers = unwrapDashboardResult(results[5], { providers: [] }, "AI providers", warnings);
@@ -793,8 +807,7 @@ export async function loadDashboard(options: { includeDetails?: boolean; include
   const takConfig = providerDetails.takGateway?.config ?? emptyTakGatewayConfig();
   const takFeatures = providerDetails.takGateway?.features ?? emptyTakFeatureResponse;
   const flightDataObservability = providerDetails.flightData?.observability ?? timedObservabilityFromOperations(operationsSummary, "flight-data-api");
-  const situationDataObservability =
-    providerDetails.situationData?.observability ?? timedObservabilityFromOperations(operationsSummary, "situation-data-api");
+  const situationDataObservability = providerDetails.situationData?.observability ?? timedObservabilityFromOperations(operationsSummary, "situation-data-api");
   const safetyDataObservability = providerDetails.safetyData?.observability ?? timedObservabilityFromOperations(operationsSummary, "safety-data-api");
   const takGatewayObservability = providerDetails.takGateway?.observability ?? timedObservabilityFromOperations(operationsSummary, "tak-gateway-api");
 

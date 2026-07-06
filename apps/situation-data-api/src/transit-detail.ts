@@ -300,9 +300,7 @@ export class TransitDetailService {
   }
 
   private async getSpravaZeleznicTrainDetail(featureId: string): Promise<TransitVehicleDetail | undefined> {
-    const trains = await this.spravaZeleznicTrainFeedCache.getOrLoad("spravazeleznic_train_positions", () =>
-      fetchSpravaZeleznicTrainFeatures(this.config)
-    );
+    const trains = await this.spravaZeleznicTrainFeedCache.getOrLoad("spravazeleznic_train_positions", () => fetchSpravaZeleznicTrainFeatures(this.config));
     const generatedAt = new Date().toISOString();
     const train = findSpravaZeleznicTrain(trains, featureId);
     if (!train) {
@@ -316,8 +314,10 @@ export class TransitDetailService {
     record: IdsjmkVehicleRecord | SpravaZeleznicTrainFeature,
     observedAt: string
   ): TransitVehicleHistoryPoint[] {
-    const point = source === "idsjmk" ? idsjmkHistoryPoint(record as IdsjmkVehicleRecord, observedAt) : trainHistoryPoint(record as SpravaZeleznicTrainFeature, observedAt);
-    const vehicleId = source === "idsjmk" ? idsjmkVehicleId(record as IdsjmkVehicleRecord, observedAt) : spravaZeleznicTrainId(record as SpravaZeleznicTrainFeature);
+    const point =
+      source === "idsjmk" ? idsjmkHistoryPoint(record as IdsjmkVehicleRecord, observedAt) : trainHistoryPoint(record as SpravaZeleznicTrainFeature, observedAt);
+    const vehicleId =
+      source === "idsjmk" ? idsjmkVehicleId(record as IdsjmkVehicleRecord, observedAt) : spravaZeleznicTrainId(record as SpravaZeleznicTrainFeature);
     if (!point || !vehicleId) {
       return [];
     }
@@ -382,12 +382,12 @@ function buildPidVehicleDetail(
   );
   const qualityWarnings = [...warnings];
   if (!tripUpdate && delaySeconds === undefined) {
-    qualityWarnings.push("PID GTFS-RT trip update is unavailable for this vehicle; delay is unavailable unless SIM can estimate it from current stop schedule.");
+    qualityWarnings.push(
+      "PID GTFS-RT trip update is unavailable for this vehicle; delay is unavailable unless SIM can estimate it from current stop schedule."
+    );
   }
   const shape =
-    options.includeShape && staticModel && staticTrip?.shapeId
-      ? findShapeForTrip(staticModel, staticTrip.shapeId, options.maxShapePoints)
-      : undefined;
+    options.includeShape && staticModel && staticTrip?.shapeId ? findShapeForTrip(staticModel, staticTrip.shapeId, options.maxShapePoints) : undefined;
 
   return {
     contractVersion: "sim-transit-vehicle-detail-v1",
@@ -491,7 +491,16 @@ function buildIdsjmkVehicleDetail(
     "RouteId"
   ]);
   const tripId = stringFromRecord(record, ["tripId", "TripId", "trip_id", "course", "Course", "routeId", "RouteId"]);
-  const destination = stringFromRecord(record, ["destination", "Destination", "headsign", "Headsign", "tripHeadsign", "TripHeadsign", "FinalStopID", "finalstopid"]);
+  const destination = stringFromRecord(record, [
+    "destination",
+    "Destination",
+    "headsign",
+    "Headsign",
+    "tripHeadsign",
+    "TripHeadsign",
+    "FinalStopID",
+    "finalstopid"
+  ]);
   const operator = stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]) ?? "IDS JMK";
   const headingDeg = numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "azimuth", "Azimuth"]);
   const speedMps = numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"]);
@@ -716,15 +725,39 @@ function trainHistoryPoint(train: SpravaZeleznicTrainFeature, observedAt: string
 function idsjmkVehicleId(record: IdsjmkVehicleRecord, observedAt: string): string | undefined {
   const position = idsjmkVehicleLonLat(record);
   return (
-    stringFromRecord(record, ["vehicleId", "VehicleId", "vehicle_id", "globalid", "GlobalID", "id", "Id", "ID", "objectId", "OBJECTID", "vehicle", "Vehicle"]) ??
-    (position ? stableToken(`${position.lon}:${position.lat}:${observedAt}`) : undefined)
+    stringFromRecord(record, [
+      "vehicleId",
+      "VehicleId",
+      "vehicle_id",
+      "globalid",
+      "GlobalID",
+      "id",
+      "Id",
+      "ID",
+      "objectId",
+      "OBJECTID",
+      "vehicle",
+      "Vehicle"
+    ]) ?? (position ? stableToken(`${position.lon}:${position.lat}:${observedAt}`) : undefined)
   );
 }
 
 function idsjmkObservedAt(record: IdsjmkVehicleRecord, sourceObservedAt: string): string {
   return (
     parseTimestamp(
-      recordValue(record, ["lastUpdate", "LastUpdate", "lastupdate", "TimeUpdated", "last_update", "timestamp", "Timestamp", "time", "Time", "updatedAt", "UpdatedAt"])
+      recordValue(record, [
+        "lastUpdate",
+        "LastUpdate",
+        "lastupdate",
+        "TimeUpdated",
+        "last_update",
+        "timestamp",
+        "Timestamp",
+        "time",
+        "Time",
+        "updatedAt",
+        "UpdatedAt"
+      ])
     ) ?? sourceObservedAt
   );
 }
@@ -804,10 +837,7 @@ function appendHistoryPoint(
   maxPoints: number
 ): TransitVehicleHistoryPoint[] {
   const duplicate = existing.some(
-    (item) =>
-      item.observedAt === point.observedAt &&
-      item.position?.lat === point.position?.lat &&
-      item.position?.lon === point.position?.lon
+    (item) => item.observedAt === point.observedAt && item.position?.lat === point.position?.lat && item.position?.lon === point.position?.lon
   );
   const withPoint = duplicate ? existing : [...existing, point];
   const cutoff = Date.parse(point.observedAt) - windowSeconds * 1000;
@@ -852,8 +882,7 @@ function buildPrediction(
       const stopDelay = departureDelay ?? arrivalDelay ?? tripUpdateDelay;
       return {
         ...stopTime,
-        predictedArrival:
-          stopTimeEventIso(stopUpdate?.arrival) ?? gtfsServiceTimeToIso(startDate, stopTime.scheduledArrival, arrivalDelay ?? stopDelay),
+        predictedArrival: stopTimeEventIso(stopUpdate?.arrival) ?? gtfsServiceTimeToIso(startDate, stopTime.scheduledArrival, arrivalDelay ?? stopDelay),
         predictedDeparture:
           stopTimeEventIso(stopUpdate?.departure) ?? gtfsServiceTimeToIso(startDate, stopTime.scheduledDeparture, departureDelay ?? stopDelay),
         delaySeconds: stopDelay,
@@ -908,11 +937,7 @@ function tripUpdateDelaySeconds(
       ? (tripUpdate.stopTimeUpdate ?? []).find((update) => optionalNumber(update.stopSequence) === currentStopSequence)
       : undefined;
   const stopUpdate = currentUpdate ?? (stopId ? (tripUpdate.stopTimeUpdate ?? []).find((update) => optionalString(update.stopId) === stopId) : undefined);
-  return (
-    optionalNumber(stopUpdate?.departure?.delay) ??
-    optionalNumber(stopUpdate?.arrival?.delay) ??
-    optionalNumber(tripUpdate.delay)
-  );
+  return optionalNumber(stopUpdate?.departure?.delay) ?? optionalNumber(stopUpdate?.arrival?.delay) ?? optionalNumber(tripUpdate.delay);
 }
 
 function tripUpdateDelaySecondsFromStops(stopTimes: TransitVehiclePredictionStop[]): number | undefined {
@@ -931,9 +956,7 @@ function stopTimeEventIso(event: transit_realtime.TripUpdate.IStopTimeEvent | nu
   return timestamp && timestamp > 0 ? new Date(timestamp * 1000).toISOString() : undefined;
 }
 
-function stopTimeScheduleRelationship(
-  value: transit_realtime.TripUpdate.StopTimeUpdate.ScheduleRelationship | null | undefined
-): string | undefined {
+function stopTimeScheduleRelationship(value: transit_realtime.TripUpdate.StopTimeUpdate.ScheduleRelationship | null | undefined): string | undefined {
   switch (value) {
     case gtfsRealtime.transit_realtime.TripUpdate.StopTimeUpdate.ScheduleRelationship.SKIPPED:
       return "skipped";
@@ -1038,10 +1061,7 @@ function findPidVehicleEntity(feed: transit_realtime.FeedMessage, featureId: str
   return undefined;
 }
 
-function findPidTripUpdate(
-  feed: transit_realtime.FeedMessage,
-  vehicleEntity: transit_realtime.IFeedEntity
-): transit_realtime.ITripUpdate | undefined {
+function findPidTripUpdate(feed: transit_realtime.FeedMessage, vehicleEntity: transit_realtime.IFeedEntity): transit_realtime.ITripUpdate | undefined {
   const vehicle = vehicleEntity.vehicle;
   const tripId = optionalString(vehicle?.trip?.tripId);
   const routeId = optionalString(vehicle?.trip?.routeId);
@@ -1056,10 +1076,7 @@ function findPidTripUpdate(
   return exactTripMatch ?? vehicleMatch ?? tripIdMatch;
 }
 
-function tripMatches(
-  update: transit_realtime.ITripUpdate,
-  trip: { tripId?: string; routeId?: string; startDate?: string; startTime?: string }
-): boolean {
+function tripMatches(update: transit_realtime.ITripUpdate, trip: { tripId?: string; routeId?: string; startDate?: string; startTime?: string }): boolean {
   if (trip.tripId && optionalString(update.trip?.tripId) !== trip.tripId) {
     return false;
   }
@@ -1163,7 +1180,11 @@ function findStopTimesForTrip(model: PidStaticModel, tripId: string, limit: numb
   return stopTimes.sort((left, right) => left.stopSequence - right.stopSequence).slice(0, limit);
 }
 
-function findShapeForTrip(model: PidStaticModel, shapeId: string, limit: number): { shapeId: string; points: GtfsShapePoint[]; truncated: boolean } | undefined {
+function findShapeForTrip(
+  model: PidStaticModel,
+  shapeId: string,
+  limit: number
+): { shapeId: string; points: GtfsShapePoint[]; truncated: boolean } | undefined {
   if (!model.shapesText || !model.shapesHeaders) {
     return undefined;
   }
@@ -1192,7 +1213,7 @@ function findShapeForTrip(model: PidStaticModel, shapeId: string, limit: number)
     points.push({
       lat,
       lon,
-      sequence: indexes.shape_pt_sequence !== undefined ? optionalNumber(fields[indexes.shape_pt_sequence]) ?? matchedCount : matchedCount
+      sequence: indexes.shape_pt_sequence !== undefined ? (optionalNumber(fields[indexes.shape_pt_sequence]) ?? matchedCount) : matchedCount
     });
   });
   if (points.length === 0) {
@@ -1250,9 +1271,9 @@ function parseCsvLine(line: string): string[] {
   let quoted = false;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
-    if (char === "\"") {
-      if (quoted && line[index + 1] === "\"") {
-        field += "\"";
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        field += '"';
         index += 1;
       } else {
         quoted = !quoted;
@@ -1447,9 +1468,7 @@ function stopRelation(stopSequence: number, currentStopSequence: number | undefi
   return "future";
 }
 
-function relationFromVehicleStatus(
-  value: transit_realtime.VehiclePosition.VehicleStopStatus | null | undefined
-): TransitStopRelation | undefined {
+function relationFromVehicleStatus(value: transit_realtime.VehiclePosition.VehicleStopStatus | null | undefined): TransitStopRelation | undefined {
   switch (value) {
     case gtfsRealtime.transit_realtime.VehiclePosition.VehicleStopStatus.STOPPED_AT:
       return "current";
@@ -1593,7 +1612,10 @@ function emptyToUndefined(value: string | undefined): string | undefined {
 }
 
 function stableToken(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 96);
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .slice(0, 96);
 }
 
 function errorMessage(error: unknown): string {

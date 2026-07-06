@@ -3,15 +3,7 @@ import { canonicalizeBboxForCache, formatBboxKey } from "./bbox-cache.js";
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { SituationDataSource, SourceCacheStats } from "./sources.js";
-import type {
-  BoundingBox,
-  SituationDataLicense,
-  SituationFeature,
-  SituationQuery,
-  SourceDescriptor,
-  SourceFetchResult,
-  SourceHealthStatus
-} from "./types.js";
+import type { BoundingBox, SituationDataLicense, SituationFeature, SituationQuery, SourceDescriptor, SourceFetchResult, SourceHealthStatus } from "./types.js";
 
 export const COMMUNITY_CONTEXT_LICENSE: SituationDataLicense = {
   name: "OpenStreetMap ODbL 1.0 + CSM SIM normalized community context",

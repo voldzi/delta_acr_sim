@@ -145,9 +145,7 @@ export class ChmiWeatherStationDetailService {
       throw new Error("CHMI weather metadata index did not contain meta1 files.");
     }
     const metadataUrl = joinUrl(this.config.chmiWeatherMetadataBaseUrl, metadataHref);
-    const metadata = await this.metadataCache.getOrLoad(metadataUrl, () =>
-      requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs)
-    );
+    const metadata = await this.metadataCache.getOrLoad(metadataUrl, () => requestJson<ChmiDataCollectionPayload>(metadataUrl, this.config.requestTimeoutMs));
     const station = chmiWeatherStationsFromMetadata(metadata).find((item) => item.stationId === normalizedStationId);
     if (!station) {
       return undefined;
@@ -166,22 +164,26 @@ export class ChmiWeatherStationDetailService {
       historyHours
     );
     const forecast = await this.loadForecast(station, forecastHours).catch(() => []);
-    const currentObserved = [...history].reverse().find(
-      (point) =>
-        point.temperatureC !== undefined
-        || point.windSpeedMps !== undefined
-        || point.windGustMps !== undefined
-        || point.relativeHumidityPercent !== undefined
-        || point.precipitation10mMm !== undefined
-    );
-    const hourlyCurrent = [...history].reverse().find(
-      (point) =>
-        point.presentWeatherCode !== undefined
-        || point.cloudCoverOctas !== undefined
-        || point.visibilityCode !== undefined
-        || point.precipitation1hMm !== undefined
-        || point.sunshineDuration1hTenths !== undefined
-    );
+    const currentObserved = [...history]
+      .reverse()
+      .find(
+        (point) =>
+          point.temperatureC !== undefined ||
+          point.windSpeedMps !== undefined ||
+          point.windGustMps !== undefined ||
+          point.relativeHumidityPercent !== undefined ||
+          point.precipitation10mMm !== undefined
+      );
+    const hourlyCurrent = [...history]
+      .reverse()
+      .find(
+        (point) =>
+          point.presentWeatherCode !== undefined ||
+          point.cloudCoverOctas !== undefined ||
+          point.visibilityCode !== undefined ||
+          point.precipitation1hMm !== undefined ||
+          point.sunshineDuration1hTenths !== undefined
+      );
     const current = compactObject({
       ...(hourlyCurrent ?? {}),
       ...(currentObserved ?? {}),
@@ -483,7 +485,11 @@ function chartSeries(
   return data.length > 0 ? { seriesId, label, source, unit, style, points: data } : undefined;
 }
 
-function weatherDisplay(station: ChmiWeatherStationMetadata, presentation: ReturnType<typeof chmiWeatherPresentation>, severity: WeatherDetailSeverity): Record<string, unknown> {
+function weatherDisplay(
+  station: ChmiWeatherStationMetadata,
+  presentation: ReturnType<typeof chmiWeatherPresentation>,
+  severity: WeatherDetailSeverity
+): Record<string, unknown> {
   return compactObject({
     contractVersion: "sim-cop-weather-display-v1",
     renderer: "weather_station_detail_v1",
@@ -511,12 +517,12 @@ function weatherSeverity(windSpeedMps: number | undefined, precipitationMm: numb
     return "critical";
   }
   if (
-    symbolKey === "rain"
-    || symbolKey === "snow"
-    || symbolKey === "fog"
-    || symbolKey === "wind"
-    || (windSpeedMps !== undefined && windSpeedMps >= 10)
-    || (precipitationMm !== undefined && precipitationMm >= 2)
+    symbolKey === "rain" ||
+    symbolKey === "snow" ||
+    symbolKey === "fog" ||
+    symbolKey === "wind" ||
+    (windSpeedMps !== undefined && windSpeedMps >= 10) ||
+    (precipitationMm !== undefined && precipitationMm >= 2)
   ) {
     return "warning";
   }
@@ -714,7 +720,10 @@ function compactObject(values: Record<string, unknown>): Record<string, unknown>
 }
 
 function stableToken(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 96);
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .slice(0, 96);
 }
 
 function joinUrl(baseUrl: string, path: string): string {

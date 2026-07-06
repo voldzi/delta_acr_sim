@@ -4,13 +4,7 @@ import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry } from "./types.js";
 
-export type RoutingProfileId =
-  | "car"
-  | "emergency_vehicle"
-  | "large_emergency_vehicle"
-  | "offroad_4x4"
-  | "walking"
-  | "evacuation_walking";
+export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "evacuation_walking";
 
 export type RoutingAvoid = "flood" | "fire" | "road_closure" | "unpaved" | "tunnel" | "bridge";
 export type RoutingQualityMode = "osm_graph" | "direct_fallback";
@@ -401,17 +395,7 @@ const HIGHWAYS_BY_PROFILE: Record<RoutingProfileId, string[]> = {
     "unclassified",
     "residential"
   ],
-  offroad_4x4: [
-    "primary",
-    "secondary",
-    "tertiary",
-    "unclassified",
-    "residential",
-    "living_street",
-    "service",
-    "track",
-    "path"
-  ],
+  offroad_4x4: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path"],
   walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian", "steps"],
   evacuation_walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian"]
 };
@@ -503,7 +487,9 @@ export class RoutingService {
     return this.nearestAccessCache.getOrLoad(`nearest:${stablePayload(request)}`, () => this.computeNearestAccessResponse(request));
   }
 
-  private async computeRouteResponse(request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest): Promise<RoutingRouteResponse> {
+  private async computeRouteResponse(
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+  ): Promise<RoutingRouteResponse> {
     const generatedAt = new Date().toISOString();
     const profile = getRoutingProfile(request.profileId);
     const warnings: string[] = [];
@@ -558,13 +544,7 @@ export class RoutingService {
     return this.routeResponse(generatedAt, profile, request, routes, warnings);
   }
 
-  private routeResponse(
-    generatedAt: string,
-    profile: RoutingProfile,
-    request: unknown,
-    routes: RoutingRoute[],
-    warnings: string[]
-  ): RoutingRouteResponse {
+  private routeResponse(generatedAt: string, profile: RoutingProfile, request: unknown, routes: RoutingRoute[], warnings: string[]): RoutingRouteResponse {
     return {
       contractVersion: "sim-routing-route-v1",
       generatedAt,
@@ -646,7 +626,15 @@ export class RoutingService {
     const warnings: string[] = [];
     if (!this.config.osmPostgisConnectionString) {
       warnings.push("OSM PostGIS is not configured; nearest access point is unavailable.");
-      return { contractVersion: "sim-routing-nearest-access-v1", generatedAt, source: routingSource(generatedAt), query: publicQuery(request), profile, features: [], warnings };
+      return {
+        contractVersion: "sim-routing-nearest-access-v1",
+        generatedAt,
+        source: routingSource(generatedAt),
+        query: publicQuery(request),
+        profile,
+        features: [],
+        warnings
+      };
     }
     const table = quoteQualifiedIdentifier(this.config.routingOsmRoadsTable, "ROUTING_OSM_ROADS_TABLE");
     const highways = HIGHWAYS_BY_PROFILE[profile.profileId];
@@ -688,7 +676,15 @@ export class RoutingService {
     const row = result.rows[0];
     if (!row) {
       warnings.push("No routable access geometry was found within the requested radius.");
-      return { contractVersion: "sim-routing-nearest-access-v1", generatedAt, source: routingSource(generatedAt), query: publicQuery(request), profile, features: [], warnings };
+      return {
+        contractVersion: "sim-routing-nearest-access-v1",
+        generatedAt,
+        source: routingSource(generatedAt),
+        query: publicQuery(request),
+        profile,
+        features: [],
+        warnings
+      };
     }
     const lon = Number(row.lon);
     const lat = Number(row.lat);
@@ -974,13 +970,12 @@ function roadLineStrings(value: unknown): Array<Array<[number, number]>> {
 }
 
 function normalizeLineString(coordinates: Array<[number, number]>): Array<[number, number]> {
-  return coordinates.filter(
-    (coordinate): coordinate is [number, number] =>
-      Array.isArray(coordinate) &&
-      coordinate.length >= 2 &&
-      Number.isFinite(Number(coordinate[0])) &&
-      Number.isFinite(Number(coordinate[1]))
-  ).map((coordinate) => [Number(coordinate[0]), Number(coordinate[1])]);
+  return coordinates
+    .filter(
+      (coordinate): coordinate is [number, number] =>
+        Array.isArray(coordinate) && coordinate.length >= 2 && Number.isFinite(Number(coordinate[0])) && Number.isFinite(Number(coordinate[1]))
+    )
+    .map((coordinate) => [Number(coordinate[0]), Number(coordinate[1])]);
 }
 
 function shortestPath(graph: RoadGraph, fromNode: string, toNode: string, penalizedEdges = new Set<string>(), penaltyMultiplier = 1): PathResult | undefined {
@@ -1166,7 +1161,13 @@ function directFallbackRoute(profile: RoutingProfile, from: RoutingCoordinate, t
     profileId: profile.profileId,
     rank,
     status: "partial",
-    geometry: { type: "LineString", coordinates: [[from.lon, from.lat], [to.lon, to.lat]] },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [from.lon, from.lat],
+        [to.lon, to.lat]
+      ]
+    },
     distanceM: Math.round(distanceM),
     durationSeconds: Math.round(durationSeconds),
     snap: {
@@ -1184,7 +1185,13 @@ function directFallbackRoute(profile: RoutingProfile, from: RoutingCoordinate, t
         },
         distanceM: Math.round(distanceM),
         durationSeconds: Math.round(durationSeconds),
-        geometry: { type: "LineString", coordinates: [[from.lon, from.lat], [to.lon, to.lat]] }
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [from.lon, from.lat],
+            [to.lon, to.lat]
+          ]
+        }
       }
     ],
     warnings: [reason],
@@ -1450,7 +1457,7 @@ function bearingDegrees(from: [number, number], to: [number, number]): number {
   const dLon = ((to[0] - from[0]) * Math.PI) / 180;
   const y = Math.sin(dLon) * Math.cos(lat2);
   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
 function destinationPoint(origin: RoutingCoordinate, distanceM: number, bearingDeg: number): [number, number] {
@@ -1460,8 +1467,7 @@ function destinationPoint(origin: RoutingCoordinate, distanceM: number, bearingD
   const lat1 = (origin.lat * Math.PI) / 180;
   const lon1 = (origin.lon * Math.PI) / 180;
   const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDistance) + Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing));
-  const lon2 =
-    lon1 + Math.atan2(Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1), Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2));
+  const lon2 = lon1 + Math.atan2(Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1), Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2));
   return [(((lon2 * 180) / Math.PI + 540) % 360) - 180, (lat2 * 180) / Math.PI];
 }
 
@@ -1515,7 +1521,10 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function quoteQualifiedIdentifier(value: string, label = "ROUTING_OSM_ROADS_TABLE"): string {
-  const parts = value.split(".").map((part) => part.trim()).filter((part) => part.length > 0);
+  const parts = value
+    .split(".")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
   if (parts.length === 0 || parts.length > 2 || parts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))) {
     throw new Error(`Invalid ${label} identifier.`);
   }

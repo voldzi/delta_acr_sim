@@ -305,11 +305,7 @@ function limitBalancedByLayer(features: SafetyFeature[], layers: SafetyLayerId[]
   return selected;
 }
 
-function deduplicateFeatures(
-  features: SafetyFeature[],
-  sourcePriorityById: Map<SafetyDataSourceId, number>,
-  staleAfterSeconds: number
-): SafetyFeature[] {
+function deduplicateFeatures(features: SafetyFeature[], sourcePriorityById: Map<SafetyDataSourceId, number>, staleAfterSeconds: number): SafetyFeature[] {
   const grouped = new Map<string, SafetyFeature>();
 
   for (const feature of features) {
@@ -332,11 +328,7 @@ function deduplicateFeatures(
   });
 }
 
-function compareFeaturePriority(
-  a: SafetyFeature,
-  b: SafetyFeature,
-  sourcePriorityById: Map<SafetyDataSourceId, number>
-): number {
+function compareFeaturePriority(a: SafetyFeature, b: SafetyFeature, sourcePriorityById: Map<SafetyDataSourceId, number>): number {
   const priorityDelta = (sourcePriorityById.get(b.properties.sourceId) ?? 0) - (sourcePriorityById.get(a.properties.sourceId) ?? 0);
   if (priorityDelta !== 0) {
     return priorityDelta;

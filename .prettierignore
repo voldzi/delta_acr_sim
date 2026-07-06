@@ -1,0 +1,11 @@
+node_modules
+.mcp.json
+dist
+**/dist
+coverage
+data
+playwright-report
+test-results
+openapi/openapi.json
+docs/archive/openapi-yaml/
+apps/simulator-web/public/docs/sim-bts-live-openapi.json

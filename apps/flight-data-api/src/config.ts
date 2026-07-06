@@ -75,8 +75,7 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     staleAfterSeconds: parseInteger(process.env.FLIGHT_DATA_STALE_AFTER_SECONDS, 120),
     adsbLolBaseUrl: process.env.ADSB_LOL_BASE_URL ?? "https://api.adsb.lol",
     openskyBaseUrl: process.env.OPENSKY_BASE_URL ?? "https://opensky-network.org/api",
-    openskyAuthUrl:
-      process.env.OPENSKY_AUTH_URL ?? "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
+    openskyAuthUrl: process.env.OPENSKY_AUTH_URL ?? "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
     openskyAccessToken: emptyToUndefined(process.env.OPENSKY_ACCESS_TOKEN),
     openskyClientId: emptyToUndefined(process.env.OPENSKY_CLIENT_ID),
     openskyClientSecret: emptyToUndefined(process.env.OPENSKY_CLIENT_SECRET),

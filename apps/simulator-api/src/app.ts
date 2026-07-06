@@ -248,7 +248,14 @@ function registerPublisherRoutes(app: Express, context: AppContext): void {
 
   app.post("/api/v1/publisher/test-connection", async (req, res) => {
     if (req.body && Object.keys(req.body).length > 0 && !context.validators.publisherConfig(req.body)) {
-      return problem(req, res, 400, "VALIDATION_ERROR", "Publisher config does not match schema.", context.validators.issues(context.validators.publisherConfig));
+      return problem(
+        req,
+        res,
+        400,
+        "VALIDATION_ERROR",
+        "Publisher config does not match schema.",
+        context.validators.issues(context.validators.publisherConfig)
+      );
     }
     res.json(await context.publisher.testConnection());
   });
@@ -423,15 +430,17 @@ function registerHealthRoutes(app: Express, context: AppContext): void {
 
   app.get("/metrics", (_req, res) => {
     const publisherStatus = context.publisher.status();
-    res.type("text/plain").send(
-      [
-        `sim_generated_events_total ${context.store.data.runtime.generatedEvents}`,
-        `sim_publisher_queue_size ${publisherStatus.queueSize}`,
-        `sim_publisher_dead_letter_size ${publisherStatus.deadLetterSize}`,
-        `sim_ai_requests_total ${context.store.data.drafts.length}`,
-        `sim_ai_rejections_total ${context.store.data.drafts.filter((draft) => !draft.policyCheck.allowed).length}`
-      ].join("\n") + "\n"
-    );
+    res
+      .type("text/plain")
+      .send(
+        [
+          `sim_generated_events_total ${context.store.data.runtime.generatedEvents}`,
+          `sim_publisher_queue_size ${publisherStatus.queueSize}`,
+          `sim_publisher_dead_letter_size ${publisherStatus.deadLetterSize}`,
+          `sim_ai_requests_total ${context.store.data.drafts.length}`,
+          `sim_ai_rejections_total ${context.store.data.drafts.filter((draft) => !draft.policyCheck.allowed).length}`
+        ].join("\n") + "\n"
+      );
   });
 }
 
@@ -446,7 +455,14 @@ function registerMockCopRoutes(app: Express, context: AppContext): void {
       return problem(req, res, 400, "VALIDATION_ERROR", "Unsupported contract version.");
     }
     if (!context.validators.canonicalEvent(req.body)) {
-      return problem(req, res, 422, "VALIDATION_ERROR", "Payload does not match canonical event schema.", context.validators.issues(context.validators.canonicalEvent));
+      return problem(
+        req,
+        res,
+        422,
+        "VALIDATION_ERROR",
+        "Payload does not match canonical event schema.",
+        context.validators.issues(context.validators.canonicalEvent)
+      );
     }
     const event = req.body as CanonicalEventEnvelope;
     res.json({

@@ -11,6 +11,9 @@ importers:
       '@types/node':
         specifier: ^24.13.2
         version: 24.13.2
+      prettier:
+        specifier: ^3.9.4
+        version: 3.9.4
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1472,6 +1475,11 @@ packages:
     resolution: {integrity: sha512-ESF23V4SKG6lVSGZgYNpbsiaAkdab6ZgOxe52p7+Kid3W3u3bxR4Vfd/o21dmN7jSt0IwgZ4v5MUd26FEtXE9w==}
     engines: {node: '>= 0.8.0'}
 
+  prettier@3.9.4:
+    resolution: {integrity: sha512-yWG/o/4oJfo036EKAfK6ACAoDOfHeRHx4tuxkfBZiauURiaSmYwlpOr5LQqKtIkRD2z1PLteme2WoxEnj4tHTg==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   proj4@2.20.9:
     resolution: {integrity: sha512-GLBGqXaTcdWnppre3o1sMmy4DcMGSGq/ng+9k2MTNddarRK6SveINqlqYzi3xEXuy06ljY1TTrC6H9C4f360IQ==}
     peerDependencies:
@@ -2818,6 +2826,8 @@ snapshots:
       xtend: 4.0.2
 
   prelude-ls@1.1.2: {}
+
+  prettier@3.9.4: {}
 
   proj4@2.20.9(geotiff@3.0.5):
     dependencies:

@@ -111,10 +111,7 @@ function findEventNodes(value: unknown): unknown[] {
   return [];
 }
 
-function normalizeEvent(
-  raw: unknown,
-  receivedAt: string
-): { ok: true; value: TakCotEvent } | { ok: false; error: string } {
+function normalizeEvent(raw: unknown, receivedAt: string): { ok: true; value: TakCotEvent } | { ok: false; error: string } {
   if (!isRecord(raw)) {
     return { ok: false, error: "event is not an object." };
   }

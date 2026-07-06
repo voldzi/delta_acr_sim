@@ -146,7 +146,17 @@ export class OsmPostgisSource implements SituationDataSource {
       enabled: config.enabledSources.includes("osm_postgis"),
       mode: "live",
       priority: 62,
-      layers: ["ground", "mobile", "boundary_country", "boundary_region", "boundary_district", "boundary_orp", "place_settlements", "trail_routes", "trail_poi"],
+      layers: [
+        "ground",
+        "mobile",
+        "boundary_country",
+        "boundary_region",
+        "boundary_district",
+        "boundary_orp",
+        "place_settlements",
+        "trail_routes",
+        "trail_poi"
+      ],
       license: OSM_POSTGIS_LICENSE,
       baseUrl: publicPostgisBaseUrl(config.osmPostgisConnectionString),
       updateCadenceSeconds: config.osmPostgisCacheTtlSeconds
@@ -376,14 +386,7 @@ export class OsmPostgisSource implements SituationDataSource {
       order by admin_level, name nulls last, osm_id
       limit $6
     `;
-    const result = await pool.query<OsmAdminBoundaryRow>(sql, [
-      bbox.west,
-      bbox.south,
-      bbox.east,
-      bbox.north,
-      adminLevels,
-      Math.max(1, Math.min(5000, limit))
-    ]);
+    const result = await pool.query<OsmAdminBoundaryRow>(sql, [bbox.west, bbox.south, bbox.east, bbox.north, adminLevels, Math.max(1, Math.min(5000, limit))]);
     return result.rows;
   }
 
@@ -1018,11 +1021,7 @@ function isOsmTrailLayer(value: SituationLayerId): value is OsmTrailLayer {
 
 function isOsmAdminBoundaryLayer(value: SituationLayerId): value is OsmAdminBoundaryLayer {
   return (
-    value === "boundary_country" ||
-    value === "boundary_region" ||
-    value === "boundary_district" ||
-    value === "boundary_orp" ||
-    value === "place_settlements"
+    value === "boundary_country" || value === "boundary_region" || value === "boundary_district" || value === "boundary_orp" || value === "place_settlements"
   );
 }
 
@@ -1159,7 +1158,14 @@ function isMultiPolygonCoordinates(value: unknown): value is Array<Array<Array<[
 }
 
 function isLonLat(value: unknown): value is [number, number] {
-  return Array.isArray(value) && value.length >= 2 && typeof value[0] === "number" && typeof value[1] === "number" && Number.isFinite(value[0]) && Number.isFinite(value[1]);
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    typeof value[0] === "number" &&
+    typeof value[1] === "number" &&
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1])
+  );
 }
 
 function isFeatureEnvelopeInBbox(feature: SituationFeature, bbox: BoundingBox): boolean {
@@ -1394,11 +1400,17 @@ function formatKilometers(value: number): string {
 }
 
 function stableBoundaryToken(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
+  return value
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 120);
 }
 
 function quoteQualifiedIdentifier(value: string, label = "OSM_POSTGIS_TABLE"): string {
-  const parts = value.split(".").map((part) => part.trim()).filter((part) => part.length > 0);
+  const parts = value
+    .split(".")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
   if (parts.length === 0 || parts.length > 2 || parts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))) {
     throw new Error(`Invalid ${label} identifier.`);
   }

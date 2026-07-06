@@ -508,11 +508,7 @@ function deduplicateFeatures(
   });
 }
 
-function compareFeaturePriority(
-  a: SituationFeature,
-  b: SituationFeature,
-  sourcePriorityById: Map<SituationDataSourceId, number>
-): number {
+function compareFeaturePriority(a: SituationFeature, b: SituationFeature, sourcePriorityById: Map<SituationDataSourceId, number>): number {
   const priorityDelta = (sourcePriorityById.get(b.properties.sourceId) ?? 0) - (sourcePriorityById.get(a.properties.sourceId) ?? 0);
   if (priorityDelta !== 0) {
     return priorityDelta;

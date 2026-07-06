@@ -38,17 +38,7 @@ import {
   X,
   Zap
 } from "lucide-react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   acceptAiDraft,
   addConnectivityFault,
@@ -69,16 +59,7 @@ import {
   testPublisher,
   ukraineAirDefenseDemoScenario
 } from "./api";
-import {
-  beginLogin,
-  createInitialAuthSession,
-  endSession,
-  initializeAuth,
-  isOidcEnabled,
-  readAuthConfig,
-  type AuthSession,
-  type SimRole
-} from "./auth";
+import { beginLogin, createInitialAuthSession, endSession, initializeAuth, isOidcEnabled, readAuthConfig, type AuthSession, type SimRole } from "./auth";
 import type {
   AiDraft,
   DashboardObservability,
@@ -540,6 +521,8 @@ export function App() {
   });
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
   const [activeSection, setActiveSection] = useState<AppSection>("overview");
+  const selectedScenarioIdRef = useRef(selectedScenarioId);
+  const activeSectionRef = useRef(activeSection);
   const [aiPrompt, setAiPrompt] = useState("Create a 15 minute synthetic air situation latency test with aircraft, UAV and missile tracks.");
   const [draft, setDraft] = useState<AiDraft | null>(null);
   const [notice, setNotice] = useState<NoticeState>(() => createNotice("Ready for continuous synthetic movement."));
@@ -550,7 +533,9 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [lastRefreshAt, setLastRefreshAt] = useState<string>();
-  const [apiTokenConfigured, setApiTokenConfigured] = useState(() => Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
+  const [apiTokenConfigured, setApiTokenConfigured] = useState(
+    () => Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken())
+  );
   const [manualTokenConfigured, setManualTokenConfigured] = useState(() => manualTokenLoginAllowed && hasSimApiToken());
   const [apiTokenInput, setApiTokenInput] = useState("");
   const [mobileNetworkInfoOpen, setMobileNetworkInfoOpen] = useState(false);
@@ -579,10 +564,7 @@ export function App() {
     [data.runtime, data.scenarios]
   );
   const displayedBlocks = selectedScenario?.blocks ?? data.blocks;
-  const totalObjects = useMemo(
-    () => displayedBlocks.reduce((sum, block) => sum + (block.enabled ? block.objectCount : 0), 0),
-    [displayedBlocks]
-  );
+  const totalObjects = useMemo(() => displayedBlocks.reduce((sum, block) => sum + (block.enabled ? block.objectCount : 0), 0), [displayedBlocks]);
   const affiliationSummary = useMemo(() => summarizeAffiliations(displayedBlocks), [displayedBlocks]);
   const simulationClock = formatDuration(data.runtime.elapsedSeconds ?? 0);
   const isRunning = data.runtime.state === "RUNNING";
@@ -596,7 +578,7 @@ export function App() {
   const selectedScenarioIsRuntime = selectedScenario ? isRuntimeScenario(selectedScenario, data.runtime) : false;
   const otherScenarioIsActive = Boolean(!selectedScenarioIsRuntime && data.runtime.scenarioId && (isRunning || isPaused));
   const tokenAccessReady = manualTokenLoginAllowed && apiTokenConfigured && (!oidcEnabled || authSession.status !== "authenticated");
-  const authenticatedRoles = authSession.status === "authenticated" ? authSession.roles ?? [] : [];
+  const authenticatedRoles = authSession.status === "authenticated" ? (authSession.roles ?? []) : [];
   const hasViewerRole = roleAllows(authenticatedRoles, "SIM_VIEWER");
   const hasOperatorRole = roleAllows(authenticatedRoles, "SIM_OPERATOR");
   const hasAdminRole = roleAllows(authenticatedRoles, "SIM_ADMIN");
@@ -611,20 +593,16 @@ export function App() {
   const protectedSectionNoticeSource = oidcEnabled
     ? "Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details."
     : "Enter a valid SIM API token to access scenario control and source details.";
-  const operatorAuthRequiredNoticeSource = oidcEnabled
-    ? "Login with Keycloak using csm-sim-operator or csm-sim-admin role."
-    : operatorTokenRequiredNotice;
+  const operatorAuthRequiredNoticeSource = oidcEnabled ? "Login with Keycloak using csm-sim-operator or csm-sim-admin role." : operatorTokenRequiredNotice;
   const protectedSectionNotice = tr(protectedSectionNoticeSource);
   const operatorAuthRequiredNotice = tr(operatorAuthRequiredNoticeSource);
   const renderedNotice = renderNotice(notice, tr);
   const noticeIsWarning = /required|invalid|failed|degraded|missing|error|vyžad|neplat|selhal|zhorš|chyb|varov/i.test(renderedNotice);
   const activePublishFailure = isAfter(data.publisher.lastFailureAt, data.publisher.lastSuccessAt);
   const flightDataTone: Tone = data.flightData.health.status === "ok" ? (data.flightData.tracks.warnings.length > 0 ? "warn" : "safe") : "danger";
-  const situationDataTone: Tone =
-    data.situationData.health.status === "ok" ? (data.situationData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const situationDataTone: Tone = data.situationData.health.status === "ok" ? (data.situationData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
   const osmPostgisHealth = data.situationData.health.sourceHealth?.find((source) => source.sourceId === "osm_postgis");
-  const safetyDataTone: Tone =
-    data.safetyData.health.status === "ok" ? (data.safetyData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
+  const safetyDataTone: Tone = data.safetyData.health.status === "ok" ? (data.safetyData.features.warnings.length > 0 ? "warn" : "safe") : "danger";
   const takGatewayTone: Tone =
     data.takGateway.health.status === "ok"
       ? data.takGateway.features.warnings.length > 0 || data.takGateway.health.staleEvents > 0
@@ -633,9 +611,7 @@ export function App() {
       : "danger";
   const operatorActionDisabled = loading || !canManageScenarios || !apiTokenConfigured;
   const elevatedSafetyCount =
-    data.safetyData.features.summary.advisoryCount +
-    data.safetyData.features.summary.warningCount +
-    data.safetyData.features.summary.criticalCount;
+    data.safetyData.features.summary.advisoryCount + data.safetyData.features.summary.warningCount + data.safetyData.features.summary.criticalCount;
   const safetyLastResult = data.observability.safetyData.payload.lastResult;
   const safetyGeneratedAgeSeconds = safetyLastResult?.generatedAgeSeconds ?? secondsSinceIso(data.safetyData.features.generatedAt);
   const safetyLayerCounts = {
@@ -648,7 +624,9 @@ export function App() {
   };
   const safetyResponseWarningCount = safetyLastResult?.responseWarningCount ?? data.safetyData.features.warnings.length;
   const safetySourceCacheSummary = summarizeCacheObservability((data.observability.safetyData.payload.sourceCaches ?? []).map((item) => item.cache));
-  const safetySourceCacheChannels: Array<{ label: string; value: string; detail: string; load: number; tone: Tone }> = (data.observability.safetyData.payload.sourceCaches ?? []).map((item) => {
+  const safetySourceCacheChannels: Array<{ label: string; value: string; detail: string; load: number; tone: Tone }> = (
+    data.observability.safetyData.payload.sourceCaches ?? []
+  ).map((item) => {
     const source = data.safetyData.sources.find((candidate) => candidate.sourceId === item.sourceId);
     return {
       label: source?.label ?? item.sourceId,
@@ -715,8 +693,7 @@ export function App() {
   ]);
   const effectiveCacheHitRate = Math.max(aggregateCacheSummary.hitRate, sourceCacheSummary.hitRate);
   const sharedCache = data.observability.situationData.payload.sharedCache;
-  const sharedCacheTone: Tone =
-    sharedCache?.enabled && sharedCache.available && sharedCache.errors === 0 ? "safe" : sharedCache?.enabled ? "warn" : "neutral";
+  const sharedCacheTone: Tone = sharedCache?.enabled && sharedCache.available && sharedCache.errors === 0 ? "safe" : sharedCache?.enabled ? "warn" : "neutral";
   const sharedCacheValue = sharedCache?.enabled ? (sharedCache.available ? tr("available") : tr("degraded")) : tr("local only");
   const observabilityLatencies = [
     data.observability.flightData.latencyMs,
@@ -756,7 +733,9 @@ export function App() {
     {
       label: "Shared cache",
       value: sharedCacheValue,
-      detail: sharedCache ? `${formatPercentValue(sharedCache.hitRate)} ${tr("hit-rate")}, ${sharedCache.writes.toLocaleString(numberLocale)} ${tr("writes")}` : tr("no shared cache configured"),
+      detail: sharedCache
+        ? `${formatPercentValue(sharedCache.hitRate)} ${tr("hit-rate")}, ${sharedCache.writes.toLocaleString(numberLocale)} ${tr("writes")}`
+        : tr("no shared cache configured"),
       load: sharedCache?.enabled ? (sharedCache.available ? 92 : 45) : 28,
       tone: sharedCacheTone
     }
@@ -827,7 +806,10 @@ export function App() {
       label: "Stale-if-error",
       value: `${Math.max(data.flightData.config.staleIfErrorSeconds, data.situationData.config.staleIfErrorSeconds, data.safetyData.config.staleIfErrorSeconds).toLocaleString(numberLocale)}s`,
       detail: "continues serving cached data during upstream outage",
-      load: boundedPercent(Math.max(data.flightData.config.staleIfErrorSeconds, data.situationData.config.staleIfErrorSeconds, data.safetyData.config.staleIfErrorSeconds), 1800),
+      load: boundedPercent(
+        Math.max(data.flightData.config.staleIfErrorSeconds, data.situationData.config.staleIfErrorSeconds, data.safetyData.config.staleIfErrorSeconds),
+        1800
+      ),
       tone: "safe"
     },
     {
@@ -944,29 +926,43 @@ export function App() {
     ? localizedOperatorText(uiLanguage, activeOperationAlert.title, activeOperationAlert.localized?.title)
     : tr("Provider output is ready for COP server-side consumption.");
 
-  const refresh = useCallback(async (preferredScenarioId?: string) => {
-    if (!canReadDashboard) {
-      return;
-    }
-    const includeDetails = protectedSectionsUnlocked && activeSection !== "overview";
-    const next = await loadDashboard({ includeDetails, includeObservabilityDetails: true });
-    setData(next);
-    setLastRefreshAt(new Date().toISOString());
-    if (next.warnings.length > 0) {
-      const warning = next.warnings[0];
-      setNotice(warning ? createNotice("Dashboard degraded: {warning}", { warning }) : createNotice("Dashboard degraded."));
-    }
-    const nextSelection = preferredScenarioId || selectedScenarioId || next.runtime.scenarioId;
-    if (nextSelection && next.scenarios.some((scenario) => scenario.scenarioId === nextSelection)) {
-      setSelectedScenarioId(nextSelection);
-    } else if (next.scenarios[0]?.scenarioId) {
-      setSelectedScenarioId(next.scenarios[0].scenarioId);
-    }
-  }, [activeSection, canReadDashboard, protectedSectionsUnlocked, selectedScenarioId, tr]);
+  const refresh = useCallback(
+    async (preferredScenarioId?: string) => {
+      if (!canReadDashboard) {
+        return;
+      }
+      const includeDetails = protectedSectionsUnlocked && activeSectionRef.current !== "overview";
+      const next = await loadDashboard({ includeDetails, includeObservabilityDetails: true });
+      setData(next);
+      setLastRefreshAt(new Date().toISOString());
+      if (next.warnings.length > 0) {
+        const warning = next.warnings[0];
+        setNotice(warning ? createNotice("Dashboard degraded: {warning}", { warning }) : createNotice("Dashboard degraded."));
+      }
+      const nextSelection = preferredScenarioId || selectedScenarioIdRef.current || next.runtime.scenarioId;
+      if (nextSelection && next.scenarios.some((scenario) => scenario.scenarioId === nextSelection)) {
+        setSelectedScenarioId(nextSelection);
+      } else if (next.scenarios[0]?.scenarioId) {
+        setSelectedScenarioId(next.scenarios[0].scenarioId);
+      }
+    },
+    [canReadDashboard, protectedSectionsUnlocked]
+  );
 
   useEffect(() => {
     document.documentElement.lang = uiLanguage;
   }, [uiLanguage]);
+
+  useEffect(() => {
+    activeSectionRef.current = activeSection;
+    if (canReadDashboard && activeSection !== "overview") {
+      void refresh().catch((error) => setNotice(noticeFromError(error, "Dashboard load failed.")));
+    }
+  }, [activeSection, canReadDashboard, refresh]);
+
+  useEffect(() => {
+    selectedScenarioIdRef.current = selectedScenarioId;
+  }, [selectedScenarioId]);
 
   useEffect(() => {
     const now = Date.now();
@@ -1139,7 +1135,9 @@ export function App() {
     clearSimApiToken();
     setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
     setManualTokenConfigured(false);
-    setNotice(createNotice(authConfig.publicReadEnabled ? "SIM fallback token cleared. Read-only monitoring remains available." : "SIM fallback token cleared."));
+    setNotice(
+      createNotice(authConfig.publicReadEnabled ? "SIM fallback token cleared. Read-only monitoring remains available." : "SIM fallback token cleared.")
+    );
     await refresh().catch(() => undefined);
   }
 
@@ -1198,839 +1196,1151 @@ export function App() {
   return (
     <UiLanguageContext.Provider value={uiLanguage}>
       <NumberLocaleContext.Provider value={numberLocale}>
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">SIM</div>
-          <div>
-            <strong>CSM SIM</strong>
-            <span>{tr("Data provider pilot")}</span>
-          </div>
-        </div>
-
-        <nav className="nav-list" aria-label={tr("Primary")}>
-          <NavButton section="overview" activeSection={visibleSection} onSelect={selectSection} icon={<Gauge size={17} />} label="Overview" />
-          <NavButton section="scenario" activeSection={visibleSection} onSelect={selectSection} icon={<Activity size={17} />} label="Scenario" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-          <NavButton section="flight-data" activeSection={visibleSection} onSelect={selectSection} icon={<Plane size={17} />} label="Flight data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-          <NavButton section="situation-data" activeSection={visibleSection} onSelect={selectSection} icon={<Layers3 size={17} />} label="Situation data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-          <NavButton section="tak-gateway" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="TAK gateway" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-          <NavButton section="publisher" activeSection={visibleSection} onSelect={selectSection} icon={<RadioTower size={17} />} label="Publisher" locked={!canAdministerPublisher} lockReason="Publisher administration requires csm-sim-admin role." />
-          <NavButton section="ai" activeSection={visibleSection} onSelect={selectSection} icon={<Bot size={17} />} label="AI Assistant" locked={!canUseAiAssistant} lockReason="AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role." />
-          <NavButton section="safety" activeSection={visibleSection} onSelect={selectSection} icon={<ShieldAlert size={17} />} label="Safety data" locked={!protectedSectionsUnlocked} lockReason={protectedSectionNotice} />
-        </nav>
-
-        <div className={`safety-panel ${canReadDashboard ? "ready" : "locked"}`}>
-          {canReadDashboard ? <ShieldCheck size={18} /> : <LockKeyhole size={18} />}
-          <div>
-            <strong>{canReadDashboard ? tr("Safety gate active") : tr("Keycloak gate")}</strong>
-            <span>{canReadDashboard ? tr("Only synthetic payloads are accepted by the CSM publisher.") : tr("SIM requires assigned Keycloak roles for internet access.")}</span>
-          </div>
-        </div>
-      </aside>
-
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">{activeSectionMeta.kicker}</p>
-            <h1>{activeSectionMeta.title}</h1>
-            <p>{activeSectionMeta.description}</p>
-          </div>
-          <div className="topbar-actions">
-            <div className="language-switch" aria-label={tr("Language")}>
-              <button type="button" className={uiLanguage === "cs" ? "selected" : ""} aria-pressed={uiLanguage === "cs"} onClick={() => changeUiLanguage("cs")}>
-                CS
-              </button>
-              <button type="button" className={uiLanguage === "en" ? "selected" : ""} aria-pressed={uiLanguage === "en"} onClick={() => changeUiLanguage("en")}>
-                EN
-              </button>
-            </div>
-            {showTopbarOidcAction ? (
-              authSession.status === "authenticated" ? (
-                <button type="button" className="token-button operator-button" onClick={logoutFromKeycloak}>
-                  <LogOut size={15} /> {authSession.profile?.username ?? "Keycloak"}
-                </button>
-              ) : (
-                <button type="button" className="token-button operator-button primary-auth" disabled={authSession.status === "authenticating"} onClick={() => void loginWithKeycloak()}>
-                  <KeyRound size={15} /> {authSession.status === "authenticating" ? tr("Signing in") : tr("Keycloak login")}
-                </button>
-              )
-            ) : null}
-            {manualTokenLoginAllowed && manualTokenConfigured ? (
-              <button type="button" className="token-button" onClick={() => void forgetApiToken()}>
-                <LogOut size={15} /> {tr("Fallback token")}
-              </button>
-            ) : null}
-            {manualTokenLoginAllowed && !manualTokenConfigured && authSession.status !== "authenticated" ? (
-              <form className="api-auth-form" onSubmit={(event) => void saveApiToken(event)}>
-                <input
-                  type="password"
-                  value={apiTokenInput}
-                  placeholder={oidcEnabled ? tr("Fallback SIM token") : tr("SIM API token")}
-                  aria-label={oidcEnabled ? tr("Fallback SIM token") : tr("SIM API token")}
-                  autoComplete="off"
-                  onChange={(event) => setApiTokenInput(event.target.value)}
-                />
-                <button type="submit" disabled={!apiTokenInput.trim()}>
-                  <KeyRound size={15} /> {tr("Auth")}
-                </button>
-              </form>
-            ) : null}
-            <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
-              {tr("COP display")} <ExternalLink size={15} />
-            </a>
-            <StatusPill label={authRoleSummary} tone={canReadDashboard ? "safe" : "warn"} />
-            <StatusPill label={data.publisher.mode} tone={publisherTone} />
-            <StatusPill label={data.runtime.state} tone={runtimeTone} />
-          </div>
-        </header>
-
-        <div className={`notice notice-global ${noticeIsWarning ? "warn" : ""}`} role="status">
-          {noticeIsWarning ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{renderedNotice}</span>
-        </div>
-
-        {!canReadDashboard ? (
-          <LoginGate
-            authSession={authSession}
-            oidcEnabled={oidcEnabled}
-            onLogin={() => void loginWithKeycloak()}
-            onLogout={logoutFromKeycloak}
-          />
-        ) : null}
-
-        {canReadDashboard && visibleSection === "overview" ? (
-          <>
-            <section id="dashboard" className={`operations-command ${operationsTone}`} aria-label="SIM operations command center">
-              <div className="operations-command-main">
-                <div>
-                  <span className="ops-kicker">{tr("Operations center")}</span>
-                  <h2>{tr(operationsStatusTitle(data.operations.status))}</h2>
-                  <p>
-                    {tr("Read-only management snapshot for COP-facing feeds, provider health, cache posture and scenario runtime.")}
-                  </p>
-                </div>
-                <div className="operations-status-stack">
-                  <StatusPill label={data.operations.status} tone={operationsTone} />
-                  <StatusPill label={`${tr("summary")} ${formatTime(data.operations.generatedAt)}`} tone="neutral" />
-                  <StatusPill label={`${tr("refresh")} ${formatTime(lastRefreshAt)}`} tone="neutral" />
-                </div>
-              </div>
-
-              <div className="operations-metrics">
-                <OperationsMetricCard icon={<ShieldAlert />} label="Active alerts" value={`${operationsCriticalCount}/${operationsWarningCount}/${operationsNoticeCount}`} detail="critical / warning / notice" tone={operationsCriticalCount > 0 ? "danger" : operationsWarningCount > 0 ? "warn" : operationsNoticeCount > 0 ? "neutral" : "safe"} />
-                <OperationsMetricCard icon={<Server />} label="Services OK" value={`${operationsHealthyServices}/${operationsReadinessServiceCount}`} detail={operationsServicesOkDetail} tone={operationsHealthyServices === operationsReadinessServiceCount ? "safe" : operationsHealthyServices > 0 ? "warn" : "danger"} />
-                <OperationsMetricCard icon={<Database />} label="Data objects" value={operationsDataObjects.toLocaleString(numberLocale)} detail="latest provider inventory" tone="active" />
-                <OperationsMetricCard icon={<TimerReset />} label="Cache hit-rate" value={formatPercentValue(operationsCache.hitRate)} detail={`${operationsCache.errors} ${tr("cache errors")}`} tone={operationsCache.errors > 0 ? "warn" : operationsCache.hitRate >= 0.75 ? "safe" : "neutral"} />
-                <OperationsMetricCard icon={<Cpu />} label="Slowest probe" value={formatLatencyMs(Math.max(...operationsRollupServices.map((service) => service.latencyMs), 0))} detail={`${tr("oldest import")} ${operationsFreshness.value}`} tone={operationsFreshness.tone} />
-              </div>
-            </section>
-
-            <section className="operations-layout" aria-label={tr("Operations workbench")}>
-              <section className="ops-panel alert-inbox">
-                <PanelTitle icon={<AlertTriangle />} title="Alert inbox" subtitle={`${operationsCriticalCount} ${tr("critical")} · ${operationsWarningCount} ${tr("warning")} · ${operationsNoticeCount} ${tr("notice")}`} />
-                {data.operations.alerts.length > 0 ? (
-                  <div className="alert-list">
-                    {data.operations.alerts.slice(0, 6).map((alert) => (
-                      <OperationsAlertRow key={`${alert.code}-${alert.serviceId ?? "sim"}`} alert={alert} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty-state calm">
-                    <CheckCircle2 size={18} />
-                    <span>{tr("No active operational alerts.")}</span>
-                  </div>
-                )}
-              </section>
-
-              <section className="ops-panel service-matrix">
-                <PanelTitle icon={<Network />} title="Provider services" subtitle="Health, freshness and cache posture without heavy feature preview payloads." />
-                <div className="service-table" role="table" aria-label="Provider services">
-                  <div className="service-row service-head" role="row">
-                    <span>{tr("Service")}</span>
-                    <span>{tr("Status")}</span>
-                    <span>{tr("Latency")}</span>
-                    <span>{tr("Objects")}</span>
-                    <span>{tr("Cache")}</span>
-                    <span>{tr("Freshness")}</span>
-                    <span>{tr("Detail")}</span>
-                  </div>
-                  {data.operations.services.map((service) => (
-                    <OperationsServiceRow key={service.serviceId} service={service} observability={operationsObservabilityByService[service.serviceId]} />
-                  ))}
-                  {data.operations.services.length === 0 ? <div className="empty-state">{tr("Operations summary is not available.")}</div> : null}
-                </div>
-              </section>
-            </section>
-
-            <section className="operations-layout secondary" aria-label={tr("Runtime and feed readiness")}>
-              <section className="ops-panel readiness-panel">
-                <PanelTitle icon={<ShieldCheck />} title="Runtime and publisher" subtitle={`Runtime ${data.operations.runtime.state} · publisher ${data.operations.publisher.mode}`} />
-                <div className="readiness-list compact">
-                  <ReadinessItem icon={<CirclePlay />} label="Runtime" value={data.operations.runtime.state} detail={`${data.operations.runtime.tick ?? 0} ${tr("ticks")}, ${formatDuration(data.operations.runtime.elapsedSeconds ?? 0)} ${tr("elapsed")}`} tone={runtimeStateTone(data.operations.runtime.state)} />
-                  <ReadinessItem icon={<RadioTower />} label="Publisher" value={data.operations.publisher.mode} detail={data.operations.publisher.publishingEnabled ? "adapter enabled" : "adapter stopped"} tone={publisherTone} />
-                  <ReadinessItem icon={<Database />} label="Queue" value={`${data.operations.publisher.queueSize} ${tr("active")}`} detail={formatDeadLetterCount(data.operations.publisher.deadLetterSize, numberLocale, tr)} tone={queueTone} />
-                  <ReadinessItem icon={<Layers3 />} label="Scenarios" value={`${data.operations.scenarios.total}`} detail={`${data.operations.scenarios.active} ${tr("active")}, ${data.operations.scenarios.draft} ${tr("draft")}`} tone={data.operations.scenarios.active > 0 ? "active" : "neutral"} />
-                  <ReadinessItem icon={<ShieldCheck />} label="Operational check" value={operationalCheckStatus} detail={operationalCheckDetail} tone={operationalCheckTone} />
-                </div>
-              </section>
-
-              <section className="ops-panel feed-readiness-panel">
-                <PanelTitle icon={<Signal />} title="COP data plane" subtitle={activeOperationAlertTitle} />
-                <div className="feed-signal-grid">
-                  <FeedSignal label="Flight" service={data.operations.services.find((service) => service.serviceId === "flight-data-api")} icon={<Plane />} />
-                  <FeedSignal label="Situation" service={data.operations.services.find((service) => service.serviceId === "situation-data-api")} icon={<Layers3 />} />
-                  <FeedSignal label="Safety" service={data.operations.services.find((service) => service.serviceId === "safety-data-api")} icon={<ShieldAlert />} />
-                  <FeedSignal label="TAK" service={data.operations.services.find((service) => service.serviceId === "tak-gateway-api")} icon={<RadioTower />} />
-                </div>
-                <MobileNetworkStatusPanel onOpen={() => setMobileNetworkInfoOpen(true)} />
-              </section>
-            </section>
-          </>
-        ) : null}
-
-        <section className="section-layout">
-          {visibleSection === "scenario" ? (
-          <section id="scenario" className="panel scenario-panel">
-            <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COP display validation." />
-
-            <div className="scenario-toolbar">
+        <main className="app-shell">
+          <aside className="sidebar">
+            <div className="brand">
+              <div className="brand-mark">SIM</div>
               <div>
-                <strong>{tr("Scenario library")}</strong>
-                <span>{data.scenarios.length.toLocaleString(numberLocale)} {tr("prepared scenarios")}</span>
+                <strong>CSM SIM</strong>
+                <span>{tr("Data provider pilot")}</span>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  requireOperatorToken() &&
-                  runAction("Demo scenario created.", async () => {
-                    const created = await createScenario(demoScenario);
-                    setSelectedScenarioId(created.scenarioId);
-                    return created.scenarioId;
-                  })
-                }
-                disabled={operatorActionDisabled}
-                title={apiTokenConfigured ? tr("Create demo scenario") : operatorAuthRequiredNotice}
-              >
-                <Plus size={16} /> Demo
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  requireOperatorToken() &&
-                  runAction("High-density demo scenario created.", async () => {
-                    const created = await createScenario(denseDemoScenario);
-                    setSelectedScenarioId(created.scenarioId);
-                    return created.scenarioId;
-                  })
-                }
-                disabled={operatorActionDisabled}
-                title={apiTokenConfigured ? tr("Create high-density demo scenario") : operatorAuthRequiredNotice}
-              >
-                <Database size={16} /> 300 tracks
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  requireOperatorToken() &&
-                  runAction("Ukraine air-defense demo scenario created.", async () => {
-                    const created = await createScenario(ukraineAirDefenseDemoScenario);
-                    setSelectedScenarioId(created.scenarioId);
-                    return created.scenarioId;
-                  })
-                }
-                disabled={operatorActionDisabled}
-                title={apiTokenConfigured ? tr("Create Ukraine demo scenario") : operatorAuthRequiredNotice}
-              >
-                <ShieldAlert size={16} /> Ukraine demo
-              </button>
             </div>
 
-            <div className="scenario-picker" aria-label={tr("Scenario library")}>
-              {scenarioList.length === 0 ? <div className="empty-state">{tr("Create the demo scenario to start the pilot runtime.")}</div> : null}
-              {scenarioList.map((scenario) => (
-                <ScenarioCard
-                  key={scenario.scenarioId}
-                  scenario={scenario}
-                  runtime={data.runtime}
-                  selected={scenario.scenarioId === selectedScenario?.scenarioId}
-                  onSelect={() => scenario.scenarioId && setSelectedScenarioId(scenario.scenarioId)}
-                />
-              ))}
-            </div>
+            <nav className="nav-list" aria-label={tr("Primary")}>
+              <NavButton section="overview" activeSection={visibleSection} onSelect={selectSection} icon={<Gauge size={17} />} label="Overview" />
+              <NavButton
+                section="scenario"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<Activity size={17} />}
+                label="Scenario"
+                locked={!protectedSectionsUnlocked}
+                lockReason={protectedSectionNotice}
+              />
+              <NavButton
+                section="flight-data"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<Plane size={17} />}
+                label="Flight data"
+                locked={!protectedSectionsUnlocked}
+                lockReason={protectedSectionNotice}
+              />
+              <NavButton
+                section="situation-data"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<Layers3 size={17} />}
+                label="Situation data"
+                locked={!protectedSectionsUnlocked}
+                lockReason={protectedSectionNotice}
+              />
+              <NavButton
+                section="tak-gateway"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<RadioTower size={17} />}
+                label="TAK gateway"
+                locked={!protectedSectionsUnlocked}
+                lockReason={protectedSectionNotice}
+              />
+              <NavButton
+                section="publisher"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<RadioTower size={17} />}
+                label="Publisher"
+                locked={!canAdministerPublisher}
+                lockReason="Publisher administration requires csm-sim-admin role."
+              />
+              <NavButton
+                section="ai"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<Bot size={17} />}
+                label="AI Assistant"
+                locked={!canUseAiAssistant}
+                lockReason="AI Assistant requires csm-sim-ai-user, csm-sim-ai-admin or csm-sim-admin role."
+              />
+              <NavButton
+                section="safety"
+                activeSection={visibleSection}
+                onSelect={selectSection}
+                icon={<ShieldAlert size={17} />}
+                label="Safety data"
+                locked={!protectedSectionsUnlocked}
+                lockReason={protectedSectionNotice}
+              />
+            </nav>
 
-            {selectedScenario ? (
-              <div className="scenario-summary">
-                <SummaryItem label="Status" value={selectedScenarioState} />
-                <SummaryItem label="Duration" value={`${Math.round(selectedScenario.durationSeconds / 60)} min`} />
-                <SummaryItem label="Objects" value={totalObjects.toLocaleString(numberLocale)} />
-                <SummaryItem label="Seed" value={selectedScenario.seed.toString()} />
-                <SummaryItem label="Tick" value={(data.runtime.tick ?? 0).toString()} />
-                <SummaryItem label="Speed" value={`${effectiveSpeedMultiplier}x`} />
-                <SummaryItem label="Update" value={`${data.runtime.tickIntervalSeconds ?? 1}s`} />
-                <SummaryItem label="Last tick" value={formatTime(data.runtime.lastTickAt)} />
+            <div className={`safety-panel ${canReadDashboard ? "ready" : "locked"}`}>
+              {canReadDashboard ? <ShieldCheck size={18} /> : <LockKeyhole size={18} />}
+              <div>
+                <strong>{canReadDashboard ? tr("Safety gate active") : tr("Keycloak gate")}</strong>
+                <span>
+                  {canReadDashboard
+                    ? tr("Only synthetic payloads are accepted by the CSM publisher.")
+                    : tr("SIM requires assigned Keycloak roles for internet access.")}
+                </span>
               </div>
-            ) : (
-              <div className="empty-state">{tr("Create the demo scenario to start the pilot runtime.")}</div>
-            )}
+            </div>
+          </aside>
 
-            <div className="runtime-options" aria-label={tr("Runtime speed")}>
-              <span>{tr("Runtime speed")}</span>
-              <div className="segmented">
-                {[1, 5, 10].map((value) => (
+          <section className="workspace">
+            <header className="topbar">
+              <div>
+                <p className="eyebrow">{activeSectionMeta.kicker}</p>
+                <h1>{activeSectionMeta.title}</h1>
+                <p>{activeSectionMeta.description}</p>
+              </div>
+              <div className="topbar-actions">
+                <div className="language-switch" aria-label={tr("Language")}>
                   <button
-                    key={value}
                     type="button"
-                    className={effectiveSpeedMultiplier === value ? "selected" : ""}
-                    disabled={isRunning}
-                    onClick={() => setSpeedMultiplier(value)}
+                    className={uiLanguage === "cs" ? "selected" : ""}
+                    aria-pressed={uiLanguage === "cs"}
+                    onClick={() => changeUiLanguage("cs")}
                   >
-                    {value}x
+                    CS
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {selectedScenario ? (
-              <div className="runtime-command-bar">
-                <div>
-                  <strong>{tr(runtimeCommandTitle(selectedScenario, data.runtime))}</strong>
-                  <span>{tr(runtimeCommandDetail(selectedScenario, data.runtime))}</span>
+                  <button
+                    type="button"
+                    className={uiLanguage === "en" ? "selected" : ""}
+                    aria-pressed={uiLanguage === "en"}
+                    onClick={() => changeUiLanguage("en")}
+                  >
+                    EN
+                  </button>
                 </div>
-                <div className="button-strip runtime-actions">
-                  {!apiTokenConfigured ? <span className="command-note">{tr("Operator token required for runtime control.")}</span> : null}
-                  {otherScenarioIsActive ? <span className="command-note">{tr("Select the active scenario to control the running runtime.")}</span> : null}
-                  {!isRunning && !isPaused ? (
-                    <ActionButton
-                      icon={<Play />}
-                      label="Start"
-                      disabled={operatorActionDisabled}
-                      title={apiTokenConfigured ? tr("Start selected scenario") : operatorAuthRequiredNotice}
-                      onClick={() =>
-                        selectedScenario.scenarioId &&
-                        requireOperatorToken() &&
-                        runAction("Scenario started. Moving tracks are published every second.", () =>
-                          runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
-                        )
-                      }
+                {showTopbarOidcAction ? (
+                  authSession.status === "authenticated" ? (
+                    <button type="button" className="token-button operator-button" onClick={logoutFromKeycloak}>
+                      <LogOut size={15} /> {authSession.profile?.username ?? "Keycloak"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="token-button operator-button primary-auth"
+                      disabled={authSession.status === "authenticating"}
+                      onClick={() => void loginWithKeycloak()}
+                    >
+                      <KeyRound size={15} /> {authSession.status === "authenticating" ? tr("Signing in") : tr("Keycloak login")}
+                    </button>
+                  )
+                ) : null}
+                {manualTokenLoginAllowed && manualTokenConfigured ? (
+                  <button type="button" className="token-button" onClick={() => void forgetApiToken()}>
+                    <LogOut size={15} /> {tr("Fallback token")}
+                  </button>
+                ) : null}
+                {manualTokenLoginAllowed && !manualTokenConfigured && authSession.status !== "authenticated" ? (
+                  <form className="api-auth-form" onSubmit={(event) => void saveApiToken(event)}>
+                    <input
+                      type="password"
+                      value={apiTokenInput}
+                      placeholder={oidcEnabled ? tr("Fallback SIM token") : tr("SIM API token")}
+                      aria-label={oidcEnabled ? tr("Fallback SIM token") : tr("SIM API token")}
+                      autoComplete="off"
+                      onChange={(event) => setApiTokenInput(event.target.value)}
                     />
-                  ) : null}
-                  {selectedScenarioIsRuntime && isRunning ? (
-                    <>
-                      <ActionButton
-                        icon={<Pause />}
-                        label="Pause"
-                        disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? tr("Pause active scenario") : operatorAuthRequiredNotice}
-                        onClick={() =>
-                          selectedScenario.scenarioId &&
-                          requireOperatorToken() &&
-                          runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))
-                        }
-                      />
-                      <ActionButton
-                        icon={<Square />}
-                        label="Stop"
-                        disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? tr("Stop active scenario") : operatorAuthRequiredNotice}
-                        onClick={() =>
-                          selectedScenario.scenarioId &&
-                          requireOperatorToken() &&
-                          runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
-                        }
-                      />
-                      <ActionButton
-                        icon={<Zap />}
-                        label="Fault"
-                        disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? tr("Add connectivity fault") : operatorAuthRequiredNotice}
-                        onClick={() =>
-                          selectedScenario.scenarioId &&
-                          requireOperatorToken() &&
-                          runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
-                        }
-                      />
-                    </>
-                  ) : null}
-                  {selectedScenarioIsRuntime && isPaused ? (
-                    <>
-                      <ActionButton
-                        icon={<Play />}
-                        label="Resume"
-                        disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? tr("Resume active scenario") : operatorAuthRequiredNotice}
-                        onClick={() =>
-                          selectedScenario.scenarioId &&
-                          requireOperatorToken() &&
-                          runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))
-                        }
-                      />
-                      <ActionButton
-                        icon={<Square />}
-                        label="Stop"
-                        disabled={operatorActionDisabled}
-                        title={apiTokenConfigured ? tr("Stop active scenario") : operatorAuthRequiredNotice}
-                        onClick={() =>
-                          selectedScenario.scenarioId &&
-                          requireOperatorToken() &&
-                          runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
-                        }
-                      />
-                    </>
-                  ) : null}
-                </div>
+                    <button type="submit" disabled={!apiTokenInput.trim()}>
+                      <KeyRound size={15} /> {tr("Auth")}
+                    </button>
+                  </form>
+                ) : null}
+                <a className="external-link" href={copDisplayUrl} target="_blank" rel="noreferrer">
+                  {tr("COP display")} <ExternalLink size={15} />
+                </a>
+                <StatusPill label={authRoleSummary} tone={canReadDashboard ? "safe" : "warn"} />
+                <StatusPill label={data.publisher.mode} tone={publisherTone} />
+                <StatusPill label={data.runtime.state} tone={runtimeTone} />
               </div>
-            ) : null}
+            </header>
 
-            {selectedScenario ? (
-              <details className="advanced-controls">
-                <summary>{tr("Advanced controls")}</summary>
-                <div className="button-strip compact">
-                  <ActionButton
-                    icon={<RotateCcw />}
-                    label="Step"
-                    disabled={operatorActionDisabled || isRunning}
-                    title={apiTokenConfigured ? tr("Generate one deterministic step") : operatorAuthRequiredNotice}
-                    onClick={() =>
-                      selectedScenario.scenarioId &&
-                      requireOperatorToken() &&
-                      runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))
-                    }
-                  />
-                  <ActionButton
-                    icon={<Zap />}
-                    label="Fault"
-                    disabled={operatorActionDisabled || otherScenarioIsActive}
-                    title={apiTokenConfigured ? tr("Add connectivity fault") : operatorAuthRequiredNotice}
-                    onClick={() =>
-                      selectedScenario.scenarioId &&
-                      requireOperatorToken() &&
-                      runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
-                    }
-                  />
-                </div>
-              </details>
-            ) : null}
-
-            <div id="manifest" className="section-head">
-              <div>
-                <strong>{tr("Scenario manifest")}</strong>
-                <span>{displayedBlocks.filter((block) => block.enabled).length} {tr("enabled blocks")}</span>
-              </div>
-              <StatusPill label={`${totalObjects} ${tr("tracks")}`} tone="active" />
-            </div>
-
-            <div className="manifest-table" role="table" aria-label={tr("Scenario manifest")}>
-              <div className="manifest-row manifest-head" role="row">
-                <span>{tr("Block")}</span>
-                <span>{tr("Count")}</span>
-                <span>{tr("Movement")}</span>
-                <span>{tr("Rate")}</span>
-                <span>{tr("Affiliation")}</span>
-              </div>
-              {displayedBlocks.map((block) => (
-                <div key={block.blockId} className="manifest-row" role="row">
-                  <strong>{block.blockId}</strong>
-                  <span>{block.objectCount}</span>
-                  <span>{block.patterns?.join(", ") ?? "DIRECT"}</span>
-                  <span>{formatRate(block.updateRateHz)}</span>
-                  <span>{formatAffiliations(block)}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-          ) : null}
-
-          {visibleSection === "flight-data" ? (
-          <section id="flight-data" className="panel flight-data-panel">
-            <PanelTitle icon={<Plane />} title="Flight Data source" subtitle="Aggregated public or licensed flight tracks prepared for COP." />
-
-            <div className="publisher-status">
-              <StatusPill label={data.flightData.health.status} tone={flightDataTone} />
-              <StatusPill label={data.flightData.tracks.contractVersion} tone="active" />
-              <StatusPill
-                label={`${data.flightData.tracks.warnings.length} ${tr("warnings")}`}
-                tone={data.flightData.tracks.warnings.length > 0 ? "warn" : "neutral"}
-              />
-            </div>
-
-            <div className="publisher-stats flight-stats">
-              <PublisherStat label="Raw observations" value={data.flightData.tracks.summary.rawObservationCount.toLocaleString(numberLocale)} tone="neutral" />
-              <PublisherStat label="Deduplicated tracks" value={data.flightData.tracks.summary.deduplicatedTrackCount.toLocaleString(numberLocale)} tone="safe" />
-              <PublisherStat label="Stale tracks" value={data.flightData.tracks.summary.staleTrackCount.toLocaleString(numberLocale)} tone={data.flightData.tracks.summary.staleTrackCount > 0 ? "warn" : "neutral"} />
-              <PublisherStat label="Dropped positions" value={data.flightData.tracks.summary.droppedWithoutPositionCount.toLocaleString(numberLocale)} tone={data.flightData.tracks.summary.droppedWithoutPositionCount > 0 ? "danger" : "neutral"} />
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration from /srv/sim .env." />
-                <div className="settings-grid">
-                  <SummaryItem label="Enabled sources" value={data.flightData.config.enabledSources.join(", ") || "-"} />
-                  <SummaryItem label="Default area" value={`${formatCoordinate(data.flightData.config.defaultArea.lat)}, ${formatCoordinate(data.flightData.config.defaultArea.lon)}`} />
-                  <SummaryItem label="Radius" value={`${data.flightData.config.defaultArea.radiusNm} NM`} />
-                  <SummaryItem label="Cache TTL" value={`${data.flightData.config.cacheTtlSeconds}s`} />
-                  <SummaryItem label="Stale fallback" value={`${data.flightData.config.staleIfErrorSeconds}s`} />
-                  <SummaryItem label="Cache entries" value={`${data.flightData.config.cacheMaxEntries}`} />
-                  <SummaryItem label="Stale after" value={`${data.flightData.config.staleAfterSeconds}s`} />
-                  <SummaryItem label="Timeout" value={`${data.flightData.config.requestTimeoutMs} ms`} />
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License and production suitability are visible before COP consumption." />
-                <div className="source-list">
-                  {data.flightData.sources.map((source) => (
-                    <FlightSourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.flightData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
-                  ))}
-                  {data.flightData.sources.length === 0 ? <div className="empty-state">{tr("Flight source metadata is not available.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            <div className="section-head compact-head">
-              <div>
-                <strong>{tr("Flight track preview")}</strong>
-                <span>{data.flightData.tracks.tracks.length} {tr("shown from latest aggregate response")}</span>
-              </div>
-              <StatusPill label={formatTime(data.flightData.tracks.source.generatedAt)} tone="neutral" />
-            </div>
-
-            <div className="flight-track-list">
-              {data.flightData.tracks.tracks.map((track) => (
-                <FlightTrackRow key={track.trackId} track={track} />
-              ))}
-              {data.flightData.tracks.tracks.length === 0 ? <div className="empty-state">{tr("No flight tracks are available from the configured sources.")}</div> : null}
-            </div>
-
-            {data.flightData.tracks.warnings.length > 0 ? (
-              <div className="notice warn">
-                <AlertTriangle size={16} />
-                <span>{data.flightData.tracks.warnings.join(" ")}</span>
-              </div>
-            ) : null}
-          </section>
-          ) : null}
-
-          {visibleSection === "situation-data" ? (
-          <section id="situation-data" className="panel situation-data-panel">
-            <PanelTitle icon={<Layers3 />} title="Situation Data source" subtitle="Aggregated public context layers prepared for the COP map." />
-
-            <div className="publisher-status">
-              <StatusPill label={data.situationData.health.status} tone={situationDataTone} />
-              <StatusPill label={data.situationData.features.contractVersion} tone="active" />
-              <StatusPill
-                label={`${data.situationData.features.summary.warningCount} ${tr("warnings")}`}
-                tone={data.situationData.features.summary.warningCount > 0 ? "warn" : "neutral"}
-              />
-            </div>
-
-            <div className="publisher-stats situation-stats">
-              <PublisherStat label="Features" value={data.situationData.features.summary.featureCount.toLocaleString(numberLocale)} tone="safe" />
-              <PublisherStat label="Sources" value={data.situationData.features.summary.sourceCount.toLocaleString(numberLocale)} tone="neutral" />
-              <PublisherStat label="Stale" value={data.situationData.features.summary.staleFeatureCount.toLocaleString(numberLocale)} tone={data.situationData.features.summary.staleFeatureCount > 0 ? "warn" : "neutral"} />
-              <PublisherStat label="Layers" value={data.situationData.layers.length.toLocaleString(numberLocale)} tone="active" />
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration for public situation layers." />
-                <div className="settings-grid">
-                  <SummaryItem label="Enabled sources" value={data.situationData.config.enabledSources.join(", ") || "-"} />
-                  <SummaryItem label="Default bbox" value={formatBbox(data.situationData.config.defaultBbox)} />
-                  <SummaryItem label="Cache TTL" value={`${data.situationData.config.cacheTtlSeconds}s`} />
-                  <SummaryItem label="Stale fallback" value={`${data.situationData.config.staleIfErrorSeconds}s`} />
-                  <SummaryItem label="Cache entries" value={`${data.situationData.config.cacheMaxEntries}`} />
-                  <SummaryItem
-                    label="Shared cache"
-                    value={`${data.situationData.config.sharedCache.backend} ${data.situationData.config.sharedCache.enabled ? tr("enabled") : tr("local only")}`}
-                  />
-                  <SummaryItem label="BBox padding" value={`${data.situationData.config.bboxCachePaddingDegrees} deg`} />
-                  <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
-                  <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
-                  <SummaryItem label="Source TTLs" value={formatSituationSourceTtls(data.situationData.config.sourceCacheTtlSeconds)} />
-                  <SummaryItem label="OSM backend" value={osmPostgisHealth?.backend ?? data.situationData.config.providers.find((provider) => provider.sourceId === "osm_postgis")?.backend ?? "-"} />
-                  <SummaryItem label="OSM objects" value={typeof osmPostgisHealth?.objectCount === "number" ? osmPostgisHealth.objectCount.toLocaleString(numberLocale) : "-"} />
-                  <SummaryItem label="OSM import age" value={formatImportAge(osmPostgisHealth?.lastImportAgeSeconds)} />
-                  <SummaryItem label="Query limit" value={`${data.situationData.features.query.limit || 0}`} />
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can toggle these layers independently from flight tracks." />
-                <div className="layer-list">
-                  {data.situationData.layers.map((layer) => (
-                    <SituationLayerRow key={layer.layerId} layer={layer} count={countSituationLayer(data.situationData.features.features, layer.layerId)} />
-                  ))}
-                  {data.situationData.layers.length === 0 ? <div className="empty-state">{tr("Situation layer metadata is not available.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License, mode and source coverage for situation data." />
-                <div className="source-list">
-                  {data.situationData.sources.map((source) => (
-                    <SituationSourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.situationData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
-                  ))}
-                  {data.situationData.sources.length === 0 ? <div className="empty-state">{tr("Situation source metadata is not available.")}</div> : null}
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<CloudSun />} title="Provider feature preview" subtitle="GeoJSON features returned by /situation-data/api/v1/features." />
-                <div className="situation-feature-list">
-                  {data.situationData.features.features.map((feature) => (
-                    <SituationFeatureRow key={feature.id} feature={feature} />
-                  ))}
-                  {data.situationData.features.features.length === 0 ? <div className="empty-state">{tr("No situation features are available from the configured sources.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            {data.situationData.features.warnings.length > 0 ? (
-              <div className="notice warn">
-                <AlertTriangle size={16} />
-                <span>{data.situationData.features.warnings.join(" ")}</span>
-              </div>
-            ) : null}
-          </section>
-          ) : null}
-
-          {visibleSection === "tak-gateway" ? (
-          <section id="tak-gateway" className="panel situation-data-panel">
-            <PanelTitle icon={<RadioTower />} title="TAK Gateway" subtitle="Cursor-on-Target ingest and normalized COP feature projection for ARDOS/TAK partner data." />
-
-            <div className="publisher-status">
-              <StatusPill label={data.takGateway.health.status} tone={takGatewayTone} />
-              <StatusPill label={data.takGateway.features.contractVersion} tone="active" />
-              <StatusPill label={data.takGateway.health.ingestAuthConfigured ? "ingest protected" : "ingest open"} tone={data.takGateway.health.ingestAuthConfigured ? "safe" : "danger"} />
-              <StatusPill
-                label={`${data.takGateway.features.warnings.length} ${tr("warnings")}`}
-                tone={data.takGateway.features.warnings.length > 0 ? "warn" : "neutral"}
-              />
-            </div>
-
-            <div className="publisher-stats situation-stats">
-              <PublisherStat label="Current events" value={data.takGateway.health.currentEvents.toLocaleString(numberLocale)} tone="safe" />
-              <PublisherStat label="Provider features" value={data.takGateway.features.summary.featureCount.toLocaleString(numberLocale)} tone="active" />
-              <PublisherStat label="Stale" value={data.takGateway.health.staleEvents.toLocaleString(numberLocale)} tone={data.takGateway.health.staleEvents > 0 ? "warn" : "neutral"} />
-              <PublisherStat label="Last ingest" value={formatTime(data.takGateway.health.lastIngestAt)} tone={data.takGateway.health.lastIngestAt ? "safe" : "neutral"} />
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime settings for CoT retention and COP projection." />
-                <div className="settings-grid">
-                  <SummaryItem label="Source label" value={data.takGateway.config.sourceLabel || "-"} />
-                  <SummaryItem label="Default bbox" value={formatBbox(data.takGateway.config.defaultBbox)} />
-                  <SummaryItem label="Stale after" value={`${data.takGateway.config.staleAfterSeconds}s`} />
-                  <SummaryItem label="Retention" value={`${data.takGateway.config.retentionSeconds}s`} />
-                  <SummaryItem label="Max events" value={`${data.takGateway.config.maxEvents}`} />
-                  <SummaryItem label="Raw CoT exposure" value={data.takGateway.config.exposeRaw ? "enabled" : "disabled"} />
-                  <SummaryItem label="Ingest auth" value={data.takGateway.config.ingestAuthConfigured ? "configured" : "missing"} />
-                  <SummaryItem label="Read mode" value={data.takGateway.config.publicRead ? "public" : "token"} />
-                  <SummaryItem label="Read auth" value={data.takGateway.config.readAuthConfigured ? "configured" : "missing"} />
-                  <SummaryItem label="Query limit" value={`${data.takGateway.features.query.limit || 0}`} />
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can render TAK Gateway layers independently from public open-data sources." />
-                <div className="layer-list">
-                  {data.takGateway.layers.map((layer) => (
-                    <TakLayerRow key={layer.layerId} layer={layer} count={countTakLayer(data.takGateway.features.features, layer.layerId)} />
-                  ))}
-                  {data.takGateway.layers.length === 0 ? <div className="empty-state">{tr("TAK Gateway layer metadata is not available.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Database />} title="Partner source" subtitle="TAK/ARDOS data is partner-provided and requires COP-side authorization." />
-                <div className="source-list">
-                  {data.takGateway.sources.map((source) => (
-                    <TakSourceRow key={source.sourceId} source={source} />
-                  ))}
-                  {data.takGateway.sources.length === 0 ? <div className="empty-state">{tr("TAK Gateway source metadata is not available.")}</div> : null}
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<RadioTower />} title="Provider feature preview" subtitle="GeoJSON features returned by /tak-gateway/api/v1/features." />
-                <div className="situation-feature-list">
-                  {data.takGateway.features.features.map((feature) => (
-                    <TakFeatureRow key={feature.id} feature={feature} />
-                  ))}
-                  {data.takGateway.features.features.length === 0 ? <div className="empty-state">{tr("No TAK/CoT events have been ingested yet.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            {data.takGateway.features.warnings.length > 0 ? (
-              <div className="notice warn">
-                <AlertTriangle size={16} />
-                <span>{data.takGateway.features.warnings.join(" ")}</span>
-              </div>
-            ) : null}
-          </section>
-          ) : null}
-
-          {visibleSection === "publisher" ? (
-          <section id="publisher" className="panel publisher-panel">
-            <PanelTitle icon={<RadioTower />} title="COP publisher" subtitle="Delivery state and recent canonical events." />
-            <div className="publisher-status">
-              <StatusPill label={data.publisher.publishingEnabled ? "publishing enabled" : "publishing stopped"} tone={data.publisher.publishingEnabled ? "safe" : "danger"} />
-              <StatusPill label={formatDeadLetterCount(data.publisher.deadLetterSize, numberLocale, tr)} tone={data.publisher.deadLetterSize > 0 ? "danger" : "neutral"} />
-            </div>
-
-            <div className="publisher-stats">
-              <PublisherStat label="Queue" value={data.publisher.queueSize.toLocaleString(numberLocale)} tone={queueTone} />
-              <PublisherStat label="Retained" value={data.queueTotalCount.toLocaleString(numberLocale)} tone="neutral" />
-              <PublisherStat label="Success" value={formatTime(data.publisher.lastSuccessAt)} tone="safe" />
-            </div>
-
-            <div className="button-strip compact">
-              <button type="button" onClick={() => runAction("Publisher connection checked.", testPublisher)} disabled={loading || !canAdministerPublisher}>
-                <FlaskConical size={16} /> {tr("Test connection")}
-              </button>
-              <button type="button" onClick={() => runAction("Queue cleared.", clearQueue)} disabled={loading || !canAdministerPublisher || data.queueTotalCount === 0}>
-                <Trash2 size={16} /> {tr("Clear queue")}
-              </button>
-            </div>
-
-            <div className="section-head compact-head">
-              <div>
-                <strong>{tr("Recent event flow")}</strong>
-                <span>{data.queue.length} {tr("shown from")} {data.queueTotalCount} {tr("retained")}</span>
-              </div>
-            </div>
-
-            <div className="queue-list">
-              {data.queue.map((item) => (
-                <QueueRow key={item.queueId} item={item} />
-              ))}
-              {data.queue.length === 0 ? <div className="empty-state">{tr("No queued events yet.")}</div> : null}
-            </div>
-          </section>
-          ) : null}
-
-          {visibleSection === "ai" ? (
-          <section id="ai" className="panel ai-panel">
-            <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
-            <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
-            <div className="button-strip compact">
-              <button type="button" disabled={loading || !canUseAiAssistant} onClick={() => runAction("AI draft generated.", async () => setDraft(await createAiDraft(aiPrompt)))}>
-                <Bot size={16} /> {tr("Generate draft")}
-              </button>
-              <button type="button" disabled={!draft || !draft.policyCheck.allowed || loading || !canUseAiAssistant} onClick={() => draft && runAction("AI draft accepted as scenario.", () => acceptAiDraft(draft.draftId))}>
-                <ShieldCheck size={16} /> {tr("Accept draft")}
-              </button>
-            </div>
-            {draft ? (
-              <div className="draft-box">
-                <div className="draft-head">
-                  <strong>{draft.title}</strong>
-                  <StatusPill label={draft.policyCheck.allowed ? "allowed" : "rejected"} tone={draft.policyCheck.allowed ? "safe" : "danger"} />
-                </div>
-                <p>{draft.explanation}</p>
-                <small>{draft.policyCheck.reasons.join(" ")}</small>
-              </div>
-            ) : (
-              <div className="empty-state">{tr("Generate a draft to validate the AI guardrail path.")}</div>
-            )}
-          </section>
-          ) : null}
-
-          {visibleSection === "safety" ? (
-          <section id="safety-data" className="panel safety-data-panel">
-            <PanelTitle icon={<ShieldAlert />} title="Safety Data source" subtitle="Official public warnings and hydrological observations prepared for COP map layers." />
-
-            <div className="publisher-status">
-              <StatusPill label={data.safetyData.health.status} tone={safetyDataTone} />
-              <StatusPill label={data.safetyData.features.contractVersion} tone="active" />
-              <StatusPill
-                label={`${elevatedSafetyCount} ${tr("elevated")}`}
-                tone={data.safetyData.features.summary.criticalCount > 0 ? "danger" : elevatedSafetyCount > 0 ? "warn" : "neutral"}
-              />
-            </div>
-
-            <div className="publisher-stats safety-stats">
-              <PublisherStat label="Features" value={data.safetyData.features.summary.featureCount.toLocaleString(numberLocale)} tone="safe" />
-              <PublisherStat label="Advisory" value={data.safetyData.features.summary.advisoryCount.toLocaleString(numberLocale)} tone={data.safetyData.features.summary.advisoryCount > 0 ? "warn" : "neutral"} />
-              <PublisherStat label="Warnings" value={data.safetyData.features.summary.warningCount.toLocaleString(numberLocale)} tone={data.safetyData.features.summary.warningCount > 0 ? "warn" : "neutral"} />
-              <PublisherStat label="Critical" value={data.safetyData.features.summary.criticalCount.toLocaleString(numberLocale)} tone={data.safetyData.features.summary.criticalCount > 0 ? "danger" : "neutral"} />
-              <PublisherStat label="Stale" value={data.safetyData.features.summary.staleFeatureCount.toLocaleString(numberLocale)} tone={data.safetyData.features.summary.staleFeatureCount > 0 ? "warn" : "neutral"} />
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration for public safety feeds." />
-                <div className="settings-grid">
-                  <SummaryItem label="Enabled sources" value={data.safetyData.config.enabledSources.join(", ") || "-"} />
-                  <SummaryItem label="Default bbox" value={formatBbox(data.safetyData.config.defaultBbox)} />
-                  <SummaryItem label="Cache TTL" value={`${data.safetyData.config.cacheTtlSeconds}s`} />
-                  <SummaryItem label="Stale fallback" value={`${data.safetyData.config.staleIfErrorSeconds}s`} />
-                  <SummaryItem label="Cache entries" value={`${data.safetyData.config.cacheMaxEntries}`} />
-                  <SummaryItem label="Stale after" value={`${data.safetyData.config.staleAfterSeconds}s`} />
-                  <SummaryItem label="Timeout" value={`${data.safetyData.config.requestTimeoutMs} ms`} />
-                  <SummaryItem label="Hydro station cap" value={`${data.safetyData.config.hydroMaxStations}`} />
-                  <SummaryItem label="Source hit-rate" value={formatPercentValue(safetySourceCacheSummary.hitRate)} />
-                  <SummaryItem label="Last result age" value={formatImportAge(safetyGeneratedAgeSeconds)} />
-                  <SummaryItem label="Quality signals" value={`${safetyResponseWarningCount}`} />
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can ingest these layers through /safety-data or projected situation-data." />
-                <div className="layer-list">
-                  {data.safetyData.layers.map((layer) => (
-                    <SafetyLayerRow key={layer.layerId} layer={layer} count={countSafetyLayer(data.safetyData.features.features, layer.layerId)} />
-                  ))}
-                  {data.safetyData.layers.length === 0 ? <div className="empty-state">{tr("Safety layer metadata is not available.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            <div className="flight-grid">
-              <section className="inline-panel">
-                <PanelTitle icon={<Database />} title="Provider registry" subtitle="License, cadence and production suitability for safety data." />
-                <div className="source-list">
-                  {data.safetyData.sources.map((source) => (
-                    <SafetySourceRow key={source.sourceId} source={source} authConfigured={Boolean(data.safetyData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)} />
-                  ))}
-                  {data.safetyData.sources.length === 0 ? <div className="empty-state">{tr("Safety source metadata is not available.")}</div> : null}
-                </div>
-              </section>
-
-              <section className="inline-panel">
-                <PanelTitle icon={<ShieldCheck />} title="Provider feature preview" subtitle="GeoJSON features returned by /safety-data/api/v1/features." />
-                <div className="situation-feature-list">
-                  {data.safetyData.features.features.map((feature) => (
-                    <SafetyFeatureRow key={feature.id} feature={feature} />
-                  ))}
-                  {data.safetyData.features.features.length === 0 ? <div className="empty-state">{tr("No safety features are available from the configured sources.")}</div> : null}
-                </div>
-              </section>
-            </div>
-
-            {data.safetyData.features.warnings.length > 0 ? (
-              <div className="notice warn">
-                <AlertTriangle size={16} />
-                <span>{data.safetyData.features.warnings.join(" ")}</span>
-              </div>
-            ) : null}
-
-            <div className="notice">
-              <CirclePause size={16} />
+            <div className={`notice notice-global ${noticeIsWarning ? "warn" : ""}`} role="status">
+              {noticeIsWarning ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
               <span>{renderedNotice}</span>
             </div>
+
+            {!canReadDashboard ? (
+              <LoginGate authSession={authSession} oidcEnabled={oidcEnabled} onLogin={() => void loginWithKeycloak()} onLogout={logoutFromKeycloak} />
+            ) : null}
+
+            {canReadDashboard && visibleSection === "overview" ? (
+              <>
+                <section id="dashboard" className={`operations-command ${operationsTone}`} aria-label="SIM operations command center">
+                  <div className="operations-command-main">
+                    <div>
+                      <span className="ops-kicker">{tr("Operations center")}</span>
+                      <h2>{tr(operationsStatusTitle(data.operations.status))}</h2>
+                      <p>{tr("Read-only management snapshot for COP-facing feeds, provider health, cache posture and scenario runtime.")}</p>
+                    </div>
+                    <div className="operations-status-stack">
+                      <StatusPill label={data.operations.status} tone={operationsTone} />
+                      <StatusPill label={`${tr("summary")} ${formatTime(data.operations.generatedAt)}`} tone="neutral" />
+                      <StatusPill label={`${tr("refresh")} ${formatTime(lastRefreshAt)}`} tone="neutral" />
+                    </div>
+                  </div>
+
+                  <div className="operations-metrics">
+                    <OperationsMetricCard
+                      icon={<ShieldAlert />}
+                      label="Active alerts"
+                      value={`${operationsCriticalCount}/${operationsWarningCount}/${operationsNoticeCount}`}
+                      detail="critical / warning / notice"
+                      tone={operationsCriticalCount > 0 ? "danger" : operationsWarningCount > 0 ? "warn" : operationsNoticeCount > 0 ? "neutral" : "safe"}
+                    />
+                    <OperationsMetricCard
+                      icon={<Server />}
+                      label="Services OK"
+                      value={`${operationsHealthyServices}/${operationsReadinessServiceCount}`}
+                      detail={operationsServicesOkDetail}
+                      tone={operationsHealthyServices === operationsReadinessServiceCount ? "safe" : operationsHealthyServices > 0 ? "warn" : "danger"}
+                    />
+                    <OperationsMetricCard
+                      icon={<Database />}
+                      label="Data objects"
+                      value={operationsDataObjects.toLocaleString(numberLocale)}
+                      detail="latest provider inventory"
+                      tone="active"
+                    />
+                    <OperationsMetricCard
+                      icon={<TimerReset />}
+                      label="Cache hit-rate"
+                      value={formatPercentValue(operationsCache.hitRate)}
+                      detail={`${operationsCache.errors} ${tr("cache errors")}`}
+                      tone={operationsCache.errors > 0 ? "warn" : operationsCache.hitRate >= 0.75 ? "safe" : "neutral"}
+                    />
+                    <OperationsMetricCard
+                      icon={<Cpu />}
+                      label="Slowest probe"
+                      value={formatLatencyMs(Math.max(...operationsRollupServices.map((service) => service.latencyMs), 0))}
+                      detail={`${tr("oldest import")} ${operationsFreshness.value}`}
+                      tone={operationsFreshness.tone}
+                    />
+                  </div>
+                </section>
+
+                <section className="operations-layout" aria-label={tr("Operations workbench")}>
+                  <section className="ops-panel alert-inbox">
+                    <PanelTitle
+                      icon={<AlertTriangle />}
+                      title="Alert inbox"
+                      subtitle={`${operationsCriticalCount} ${tr("critical")} · ${operationsWarningCount} ${tr("warning")} · ${operationsNoticeCount} ${tr("notice")}`}
+                    />
+                    {data.operations.alerts.length > 0 ? (
+                      <div className="alert-list">
+                        {data.operations.alerts.slice(0, 6).map((alert) => (
+                          <OperationsAlertRow key={`${alert.code}-${alert.serviceId ?? "sim"}`} alert={alert} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="empty-state calm">
+                        <CheckCircle2 size={18} />
+                        <span>{tr("No active operational alerts.")}</span>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="ops-panel service-matrix">
+                    <PanelTitle
+                      icon={<Network />}
+                      title="Provider services"
+                      subtitle="Health, freshness and cache posture without heavy feature preview payloads."
+                    />
+                    <div className="service-table" role="table" aria-label="Provider services">
+                      <div className="service-row service-head" role="row">
+                        <span>{tr("Service")}</span>
+                        <span>{tr("Status")}</span>
+                        <span>{tr("Latency")}</span>
+                        <span>{tr("Objects")}</span>
+                        <span>{tr("Cache")}</span>
+                        <span>{tr("Freshness")}</span>
+                        <span>{tr("Detail")}</span>
+                      </div>
+                      {data.operations.services.map((service) => (
+                        <OperationsServiceRow key={service.serviceId} service={service} observability={operationsObservabilityByService[service.serviceId]} />
+                      ))}
+                      {data.operations.services.length === 0 ? <div className="empty-state">{tr("Operations summary is not available.")}</div> : null}
+                    </div>
+                  </section>
+                </section>
+
+                <section className="operations-layout secondary" aria-label={tr("Runtime and feed readiness")}>
+                  <section className="ops-panel readiness-panel">
+                    <PanelTitle
+                      icon={<ShieldCheck />}
+                      title="Runtime and publisher"
+                      subtitle={`Runtime ${data.operations.runtime.state} · publisher ${data.operations.publisher.mode}`}
+                    />
+                    <div className="readiness-list compact">
+                      <ReadinessItem
+                        icon={<CirclePlay />}
+                        label="Runtime"
+                        value={data.operations.runtime.state}
+                        detail={`${data.operations.runtime.tick ?? 0} ${tr("ticks")}, ${formatDuration(data.operations.runtime.elapsedSeconds ?? 0)} ${tr("elapsed")}`}
+                        tone={runtimeStateTone(data.operations.runtime.state)}
+                      />
+                      <ReadinessItem
+                        icon={<RadioTower />}
+                        label="Publisher"
+                        value={data.operations.publisher.mode}
+                        detail={data.operations.publisher.publishingEnabled ? "adapter enabled" : "adapter stopped"}
+                        tone={publisherTone}
+                      />
+                      <ReadinessItem
+                        icon={<Database />}
+                        label="Queue"
+                        value={`${data.operations.publisher.queueSize} ${tr("active")}`}
+                        detail={formatDeadLetterCount(data.operations.publisher.deadLetterSize, numberLocale, tr)}
+                        tone={queueTone}
+                      />
+                      <ReadinessItem
+                        icon={<Layers3 />}
+                        label="Scenarios"
+                        value={`${data.operations.scenarios.total}`}
+                        detail={`${data.operations.scenarios.active} ${tr("active")}, ${data.operations.scenarios.draft} ${tr("draft")}`}
+                        tone={data.operations.scenarios.active > 0 ? "active" : "neutral"}
+                      />
+                      <ReadinessItem
+                        icon={<ShieldCheck />}
+                        label="Operational check"
+                        value={operationalCheckStatus}
+                        detail={operationalCheckDetail}
+                        tone={operationalCheckTone}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="ops-panel feed-readiness-panel">
+                    <PanelTitle icon={<Signal />} title="COP data plane" subtitle={activeOperationAlertTitle} />
+                    <div className="feed-signal-grid">
+                      <FeedSignal
+                        label="Flight"
+                        service={data.operations.services.find((service) => service.serviceId === "flight-data-api")}
+                        icon={<Plane />}
+                      />
+                      <FeedSignal
+                        label="Situation"
+                        service={data.operations.services.find((service) => service.serviceId === "situation-data-api")}
+                        icon={<Layers3 />}
+                      />
+                      <FeedSignal
+                        label="Safety"
+                        service={data.operations.services.find((service) => service.serviceId === "safety-data-api")}
+                        icon={<ShieldAlert />}
+                      />
+                      <FeedSignal
+                        label="TAK"
+                        service={data.operations.services.find((service) => service.serviceId === "tak-gateway-api")}
+                        icon={<RadioTower />}
+                      />
+                    </div>
+                    <MobileNetworkStatusPanel onOpen={() => setMobileNetworkInfoOpen(true)} />
+                  </section>
+                </section>
+              </>
+            ) : null}
+
+            <section className="section-layout">
+              {visibleSection === "scenario" ? (
+                <section id="scenario" className="panel scenario-panel">
+                  <PanelTitle icon={<CirclePlay />} title="Scenario execution" subtitle="Deterministic moving tracks for COP display validation." />
+
+                  <div className="scenario-toolbar">
+                    <div>
+                      <strong>{tr("Scenario library")}</strong>
+                      <span>
+                        {data.scenarios.length.toLocaleString(numberLocale)} {tr("prepared scenarios")}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        requireOperatorToken() &&
+                        runAction("Demo scenario created.", async () => {
+                          const created = await createScenario(demoScenario);
+                          setSelectedScenarioId(created.scenarioId);
+                          return created.scenarioId;
+                        })
+                      }
+                      disabled={operatorActionDisabled}
+                      title={apiTokenConfigured ? tr("Create demo scenario") : operatorAuthRequiredNotice}
+                    >
+                      <Plus size={16} /> Demo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        requireOperatorToken() &&
+                        runAction("High-density demo scenario created.", async () => {
+                          const created = await createScenario(denseDemoScenario);
+                          setSelectedScenarioId(created.scenarioId);
+                          return created.scenarioId;
+                        })
+                      }
+                      disabled={operatorActionDisabled}
+                      title={apiTokenConfigured ? tr("Create high-density demo scenario") : operatorAuthRequiredNotice}
+                    >
+                      <Database size={16} /> 300 tracks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        requireOperatorToken() &&
+                        runAction("Ukraine air-defense demo scenario created.", async () => {
+                          const created = await createScenario(ukraineAirDefenseDemoScenario);
+                          setSelectedScenarioId(created.scenarioId);
+                          return created.scenarioId;
+                        })
+                      }
+                      disabled={operatorActionDisabled}
+                      title={apiTokenConfigured ? tr("Create Ukraine demo scenario") : operatorAuthRequiredNotice}
+                    >
+                      <ShieldAlert size={16} /> Ukraine demo
+                    </button>
+                  </div>
+
+                  <div className="scenario-picker" aria-label={tr("Scenario library")}>
+                    {scenarioList.length === 0 ? <div className="empty-state">{tr("Create the demo scenario to start the pilot runtime.")}</div> : null}
+                    {scenarioList.map((scenario) => (
+                      <ScenarioCard
+                        key={scenario.scenarioId}
+                        scenario={scenario}
+                        runtime={data.runtime}
+                        selected={scenario.scenarioId === selectedScenario?.scenarioId}
+                        onSelect={() => scenario.scenarioId && setSelectedScenarioId(scenario.scenarioId)}
+                      />
+                    ))}
+                  </div>
+
+                  {selectedScenario ? (
+                    <div className="scenario-summary">
+                      <SummaryItem label="Status" value={selectedScenarioState} />
+                      <SummaryItem label="Duration" value={`${Math.round(selectedScenario.durationSeconds / 60)} min`} />
+                      <SummaryItem label="Objects" value={totalObjects.toLocaleString(numberLocale)} />
+                      <SummaryItem label="Seed" value={selectedScenario.seed.toString()} />
+                      <SummaryItem label="Tick" value={(data.runtime.tick ?? 0).toString()} />
+                      <SummaryItem label="Speed" value={`${effectiveSpeedMultiplier}x`} />
+                      <SummaryItem label="Update" value={`${data.runtime.tickIntervalSeconds ?? 1}s`} />
+                      <SummaryItem label="Last tick" value={formatTime(data.runtime.lastTickAt)} />
+                    </div>
+                  ) : (
+                    <div className="empty-state">{tr("Create the demo scenario to start the pilot runtime.")}</div>
+                  )}
+
+                  <div className="runtime-options" aria-label={tr("Runtime speed")}>
+                    <span>{tr("Runtime speed")}</span>
+                    <div className="segmented">
+                      {[1, 5, 10].map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={effectiveSpeedMultiplier === value ? "selected" : ""}
+                          disabled={isRunning}
+                          onClick={() => setSpeedMultiplier(value)}
+                        >
+                          {value}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {selectedScenario ? (
+                    <div className="runtime-command-bar">
+                      <div>
+                        <strong>{tr(runtimeCommandTitle(selectedScenario, data.runtime))}</strong>
+                        <span>{tr(runtimeCommandDetail(selectedScenario, data.runtime))}</span>
+                      </div>
+                      <div className="button-strip runtime-actions">
+                        {!apiTokenConfigured ? <span className="command-note">{tr("Operator token required for runtime control.")}</span> : null}
+                        {otherScenarioIsActive ? (
+                          <span className="command-note">{tr("Select the active scenario to control the running runtime.")}</span>
+                        ) : null}
+                        {!isRunning && !isPaused ? (
+                          <ActionButton
+                            icon={<Play />}
+                            label="Start"
+                            disabled={operatorActionDisabled}
+                            title={apiTokenConfigured ? tr("Start selected scenario") : operatorAuthRequiredNotice}
+                            onClick={() =>
+                              selectedScenario.scenarioId &&
+                              requireOperatorToken() &&
+                              runAction("Scenario started. Moving tracks are published every second.", () =>
+                                runtimeAction(selectedScenario.scenarioId!, "start", { speedMultiplier, tickIntervalSeconds: 1 })
+                              )
+                            }
+                          />
+                        ) : null}
+                        {selectedScenarioIsRuntime && isRunning ? (
+                          <>
+                            <ActionButton
+                              icon={<Pause />}
+                              label="Pause"
+                              disabled={operatorActionDisabled}
+                              title={apiTokenConfigured ? tr("Pause active scenario") : operatorAuthRequiredNotice}
+                              onClick={() =>
+                                selectedScenario.scenarioId &&
+                                requireOperatorToken() &&
+                                runAction("Scenario paused.", () => runtimeAction(selectedScenario.scenarioId!, "pause"))
+                              }
+                            />
+                            <ActionButton
+                              icon={<Square />}
+                              label="Stop"
+                              disabled={operatorActionDisabled}
+                              title={apiTokenConfigured ? tr("Stop active scenario") : operatorAuthRequiredNotice}
+                              onClick={() =>
+                                selectedScenario.scenarioId &&
+                                requireOperatorToken() &&
+                                runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
+                              }
+                            />
+                            <ActionButton
+                              icon={<Zap />}
+                              label="Fault"
+                              disabled={operatorActionDisabled}
+                              title={apiTokenConfigured ? tr("Add connectivity fault") : operatorAuthRequiredNotice}
+                              onClick={() =>
+                                selectedScenario.scenarioId &&
+                                requireOperatorToken() &&
+                                runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
+                              }
+                            />
+                          </>
+                        ) : null}
+                        {selectedScenarioIsRuntime && isPaused ? (
+                          <>
+                            <ActionButton
+                              icon={<Play />}
+                              label="Resume"
+                              disabled={operatorActionDisabled}
+                              title={apiTokenConfigured ? tr("Resume active scenario") : operatorAuthRequiredNotice}
+                              onClick={() =>
+                                selectedScenario.scenarioId &&
+                                requireOperatorToken() &&
+                                runAction("Scenario resumed.", () => runtimeAction(selectedScenario.scenarioId!, "resume"))
+                              }
+                            />
+                            <ActionButton
+                              icon={<Square />}
+                              label="Stop"
+                              disabled={operatorActionDisabled}
+                              title={apiTokenConfigured ? tr("Stop active scenario") : operatorAuthRequiredNotice}
+                              onClick={() =>
+                                selectedScenario.scenarioId &&
+                                requireOperatorToken() &&
+                                runAction("Scenario stopped.", () => runtimeAction(selectedScenario.scenarioId!, "stop"))
+                              }
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {selectedScenario ? (
+                    <details className="advanced-controls">
+                      <summary>{tr("Advanced controls")}</summary>
+                      <div className="button-strip compact">
+                        <ActionButton
+                          icon={<RotateCcw />}
+                          label="Step"
+                          disabled={operatorActionDisabled || isRunning}
+                          title={apiTokenConfigured ? tr("Generate one deterministic step") : operatorAuthRequiredNotice}
+                          onClick={() =>
+                            selectedScenario.scenarioId &&
+                            requireOperatorToken() &&
+                            runAction("One deterministic movement step generated.", () => runtimeAction(selectedScenario.scenarioId!, "step"))
+                          }
+                        />
+                        <ActionButton
+                          icon={<Zap />}
+                          label="Fault"
+                          disabled={operatorActionDisabled || otherScenarioIsActive}
+                          title={apiTokenConfigured ? tr("Add connectivity fault") : operatorAuthRequiredNotice}
+                          onClick={() =>
+                            selectedScenario.scenarioId &&
+                            requireOperatorToken() &&
+                            runAction("Connectivity fault added.", () => addConnectivityFault(selectedScenario.scenarioId!))
+                          }
+                        />
+                      </div>
+                    </details>
+                  ) : null}
+
+                  <div id="manifest" className="section-head">
+                    <div>
+                      <strong>{tr("Scenario manifest")}</strong>
+                      <span>
+                        {displayedBlocks.filter((block) => block.enabled).length} {tr("enabled blocks")}
+                      </span>
+                    </div>
+                    <StatusPill label={`${totalObjects} ${tr("tracks")}`} tone="active" />
+                  </div>
+
+                  <div className="manifest-table" role="table" aria-label={tr("Scenario manifest")}>
+                    <div className="manifest-row manifest-head" role="row">
+                      <span>{tr("Block")}</span>
+                      <span>{tr("Count")}</span>
+                      <span>{tr("Movement")}</span>
+                      <span>{tr("Rate")}</span>
+                      <span>{tr("Affiliation")}</span>
+                    </div>
+                    {displayedBlocks.map((block) => (
+                      <div key={block.blockId} className="manifest-row" role="row">
+                        <strong>{block.blockId}</strong>
+                        <span>{block.objectCount}</span>
+                        <span>{block.patterns?.join(", ") ?? "DIRECT"}</span>
+                        <span>{formatRate(block.updateRateHz)}</span>
+                        <span>{formatAffiliations(block)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {visibleSection === "flight-data" ? (
+                <section id="flight-data" className="panel flight-data-panel">
+                  <PanelTitle icon={<Plane />} title="Flight Data source" subtitle="Aggregated public or licensed flight tracks prepared for COP." />
+
+                  <div className="publisher-status">
+                    <StatusPill label={data.flightData.health.status} tone={flightDataTone} />
+                    <StatusPill label={data.flightData.tracks.contractVersion} tone="active" />
+                    <StatusPill
+                      label={`${data.flightData.tracks.warnings.length} ${tr("warnings")}`}
+                      tone={data.flightData.tracks.warnings.length > 0 ? "warn" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="publisher-stats flight-stats">
+                    <PublisherStat
+                      label="Raw observations"
+                      value={data.flightData.tracks.summary.rawObservationCount.toLocaleString(numberLocale)}
+                      tone="neutral"
+                    />
+                    <PublisherStat
+                      label="Deduplicated tracks"
+                      value={data.flightData.tracks.summary.deduplicatedTrackCount.toLocaleString(numberLocale)}
+                      tone="safe"
+                    />
+                    <PublisherStat
+                      label="Stale tracks"
+                      value={data.flightData.tracks.summary.staleTrackCount.toLocaleString(numberLocale)}
+                      tone={data.flightData.tracks.summary.staleTrackCount > 0 ? "warn" : "neutral"}
+                    />
+                    <PublisherStat
+                      label="Dropped positions"
+                      value={data.flightData.tracks.summary.droppedWithoutPositionCount.toLocaleString(numberLocale)}
+                      tone={data.flightData.tracks.summary.droppedWithoutPositionCount > 0 ? "danger" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration from /srv/sim .env." />
+                      <div className="settings-grid">
+                        <SummaryItem label="Enabled sources" value={data.flightData.config.enabledSources.join(", ") || "-"} />
+                        <SummaryItem
+                          label="Default area"
+                          value={`${formatCoordinate(data.flightData.config.defaultArea.lat)}, ${formatCoordinate(data.flightData.config.defaultArea.lon)}`}
+                        />
+                        <SummaryItem label="Radius" value={`${data.flightData.config.defaultArea.radiusNm} NM`} />
+                        <SummaryItem label="Cache TTL" value={`${data.flightData.config.cacheTtlSeconds}s`} />
+                        <SummaryItem label="Stale fallback" value={`${data.flightData.config.staleIfErrorSeconds}s`} />
+                        <SummaryItem label="Cache entries" value={`${data.flightData.config.cacheMaxEntries}`} />
+                        <SummaryItem label="Stale after" value={`${data.flightData.config.staleAfterSeconds}s`} />
+                        <SummaryItem label="Timeout" value={`${data.flightData.config.requestTimeoutMs} ms`} />
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<Database />}
+                        title="Provider registry"
+                        subtitle="License and production suitability are visible before COP consumption."
+                      />
+                      <div className="source-list">
+                        {data.flightData.sources.map((source) => (
+                          <FlightSourceRow
+                            key={source.sourceId}
+                            source={source}
+                            authConfigured={Boolean(data.flightData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)}
+                          />
+                        ))}
+                        {data.flightData.sources.length === 0 ? <div className="empty-state">{tr("Flight source metadata is not available.")}</div> : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="section-head compact-head">
+                    <div>
+                      <strong>{tr("Flight track preview")}</strong>
+                      <span>
+                        {data.flightData.tracks.tracks.length} {tr("shown from latest aggregate response")}
+                      </span>
+                    </div>
+                    <StatusPill label={formatTime(data.flightData.tracks.source.generatedAt)} tone="neutral" />
+                  </div>
+
+                  <div className="flight-track-list">
+                    {data.flightData.tracks.tracks.map((track) => (
+                      <FlightTrackRow key={track.trackId} track={track} />
+                    ))}
+                    {data.flightData.tracks.tracks.length === 0 ? (
+                      <div className="empty-state">{tr("No flight tracks are available from the configured sources.")}</div>
+                    ) : null}
+                  </div>
+
+                  {data.flightData.tracks.warnings.length > 0 ? (
+                    <div className="notice warn">
+                      <AlertTriangle size={16} />
+                      <span>{data.flightData.tracks.warnings.join(" ")}</span>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {visibleSection === "situation-data" ? (
+                <section id="situation-data" className="panel situation-data-panel">
+                  <PanelTitle icon={<Layers3 />} title="Situation Data source" subtitle="Aggregated public context layers prepared for the COP map." />
+
+                  <div className="publisher-status">
+                    <StatusPill label={data.situationData.health.status} tone={situationDataTone} />
+                    <StatusPill label={data.situationData.features.contractVersion} tone="active" />
+                    <StatusPill
+                      label={`${data.situationData.features.summary.warningCount} ${tr("warnings")}`}
+                      tone={data.situationData.features.summary.warningCount > 0 ? "warn" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="publisher-stats situation-stats">
+                    <PublisherStat label="Features" value={data.situationData.features.summary.featureCount.toLocaleString(numberLocale)} tone="safe" />
+                    <PublisherStat label="Sources" value={data.situationData.features.summary.sourceCount.toLocaleString(numberLocale)} tone="neutral" />
+                    <PublisherStat
+                      label="Stale"
+                      value={data.situationData.features.summary.staleFeatureCount.toLocaleString(numberLocale)}
+                      tone={data.situationData.features.summary.staleFeatureCount > 0 ? "warn" : "neutral"}
+                    />
+                    <PublisherStat label="Layers" value={data.situationData.layers.length.toLocaleString(numberLocale)} tone="active" />
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration for public situation layers." />
+                      <div className="settings-grid">
+                        <SummaryItem label="Enabled sources" value={data.situationData.config.enabledSources.join(", ") || "-"} />
+                        <SummaryItem label="Default bbox" value={formatBbox(data.situationData.config.defaultBbox)} />
+                        <SummaryItem label="Cache TTL" value={`${data.situationData.config.cacheTtlSeconds}s`} />
+                        <SummaryItem label="Stale fallback" value={`${data.situationData.config.staleIfErrorSeconds}s`} />
+                        <SummaryItem label="Cache entries" value={`${data.situationData.config.cacheMaxEntries}`} />
+                        <SummaryItem
+                          label="Shared cache"
+                          value={`${data.situationData.config.sharedCache.backend} ${data.situationData.config.sharedCache.enabled ? tr("enabled") : tr("local only")}`}
+                        />
+                        <SummaryItem label="BBox padding" value={`${data.situationData.config.bboxCachePaddingDegrees} deg`} />
+                        <SummaryItem label="Stale after" value={`${data.situationData.config.staleAfterSeconds}s`} />
+                        <SummaryItem label="Timeout" value={`${data.situationData.config.requestTimeoutMs} ms`} />
+                        <SummaryItem label="Source TTLs" value={formatSituationSourceTtls(data.situationData.config.sourceCacheTtlSeconds)} />
+                        <SummaryItem
+                          label="OSM backend"
+                          value={
+                            osmPostgisHealth?.backend ??
+                            data.situationData.config.providers.find((provider) => provider.sourceId === "osm_postgis")?.backend ??
+                            "-"
+                          }
+                        />
+                        <SummaryItem
+                          label="OSM objects"
+                          value={typeof osmPostgisHealth?.objectCount === "number" ? osmPostgisHealth.objectCount.toLocaleString(numberLocale) : "-"}
+                        />
+                        <SummaryItem label="OSM import age" value={formatImportAge(osmPostgisHealth?.lastImportAgeSeconds)} />
+                        <SummaryItem label="Query limit" value={`${data.situationData.features.query.limit || 0}`} />
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle icon={<MapPinned />} title="Layer registry" subtitle="COP can toggle these layers independently from flight tracks." />
+                      <div className="layer-list">
+                        {data.situationData.layers.map((layer) => (
+                          <SituationLayerRow
+                            key={layer.layerId}
+                            layer={layer}
+                            count={countSituationLayer(data.situationData.features.features, layer.layerId)}
+                          />
+                        ))}
+                        {data.situationData.layers.length === 0 ? <div className="empty-state">{tr("Situation layer metadata is not available.")}</div> : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle icon={<Database />} title="Provider registry" subtitle="License, mode and source coverage for situation data." />
+                      <div className="source-list">
+                        {data.situationData.sources.map((source) => (
+                          <SituationSourceRow
+                            key={source.sourceId}
+                            source={source}
+                            authConfigured={Boolean(
+                              data.situationData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured
+                            )}
+                          />
+                        ))}
+                        {data.situationData.sources.length === 0 ? (
+                          <div className="empty-state">{tr("Situation source metadata is not available.")}</div>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<CloudSun />}
+                        title="Provider feature preview"
+                        subtitle="GeoJSON features returned by /situation-data/api/v1/features."
+                      />
+                      <div className="situation-feature-list">
+                        {data.situationData.features.features.map((feature) => (
+                          <SituationFeatureRow key={feature.id} feature={feature} />
+                        ))}
+                        {data.situationData.features.features.length === 0 ? (
+                          <div className="empty-state">{tr("No situation features are available from the configured sources.")}</div>
+                        ) : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  {data.situationData.features.warnings.length > 0 ? (
+                    <div className="notice warn">
+                      <AlertTriangle size={16} />
+                      <span>{data.situationData.features.warnings.join(" ")}</span>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {visibleSection === "tak-gateway" ? (
+                <section id="tak-gateway" className="panel situation-data-panel">
+                  <PanelTitle
+                    icon={<RadioTower />}
+                    title="TAK Gateway"
+                    subtitle="Cursor-on-Target ingest and normalized COP feature projection for ARDOS/TAK partner data."
+                  />
+
+                  <div className="publisher-status">
+                    <StatusPill label={data.takGateway.health.status} tone={takGatewayTone} />
+                    <StatusPill label={data.takGateway.features.contractVersion} tone="active" />
+                    <StatusPill
+                      label={data.takGateway.health.ingestAuthConfigured ? "ingest protected" : "ingest open"}
+                      tone={data.takGateway.health.ingestAuthConfigured ? "safe" : "danger"}
+                    />
+                    <StatusPill
+                      label={`${data.takGateway.features.warnings.length} ${tr("warnings")}`}
+                      tone={data.takGateway.features.warnings.length > 0 ? "warn" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="publisher-stats situation-stats">
+                    <PublisherStat label="Current events" value={data.takGateway.health.currentEvents.toLocaleString(numberLocale)} tone="safe" />
+                    <PublisherStat label="Provider features" value={data.takGateway.features.summary.featureCount.toLocaleString(numberLocale)} tone="active" />
+                    <PublisherStat
+                      label="Stale"
+                      value={data.takGateway.health.staleEvents.toLocaleString(numberLocale)}
+                      tone={data.takGateway.health.staleEvents > 0 ? "warn" : "neutral"}
+                    />
+                    <PublisherStat
+                      label="Last ingest"
+                      value={formatTime(data.takGateway.health.lastIngestAt)}
+                      tone={data.takGateway.health.lastIngestAt ? "safe" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime settings for CoT retention and COP projection." />
+                      <div className="settings-grid">
+                        <SummaryItem label="Source label" value={data.takGateway.config.sourceLabel || "-"} />
+                        <SummaryItem label="Default bbox" value={formatBbox(data.takGateway.config.defaultBbox)} />
+                        <SummaryItem label="Stale after" value={`${data.takGateway.config.staleAfterSeconds}s`} />
+                        <SummaryItem label="Retention" value={`${data.takGateway.config.retentionSeconds}s`} />
+                        <SummaryItem label="Max events" value={`${data.takGateway.config.maxEvents}`} />
+                        <SummaryItem label="Raw CoT exposure" value={data.takGateway.config.exposeRaw ? "enabled" : "disabled"} />
+                        <SummaryItem label="Ingest auth" value={data.takGateway.config.ingestAuthConfigured ? "configured" : "missing"} />
+                        <SummaryItem label="Read mode" value={data.takGateway.config.publicRead ? "public" : "token"} />
+                        <SummaryItem label="Read auth" value={data.takGateway.config.readAuthConfigured ? "configured" : "missing"} />
+                        <SummaryItem label="Query limit" value={`${data.takGateway.features.query.limit || 0}`} />
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<MapPinned />}
+                        title="Layer registry"
+                        subtitle="COP can render TAK Gateway layers independently from public open-data sources."
+                      />
+                      <div className="layer-list">
+                        {data.takGateway.layers.map((layer) => (
+                          <TakLayerRow key={layer.layerId} layer={layer} count={countTakLayer(data.takGateway.features.features, layer.layerId)} />
+                        ))}
+                        {data.takGateway.layers.length === 0 ? <div className="empty-state">{tr("TAK Gateway layer metadata is not available.")}</div> : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<Database />}
+                        title="Partner source"
+                        subtitle="TAK/ARDOS data is partner-provided and requires COP-side authorization."
+                      />
+                      <div className="source-list">
+                        {data.takGateway.sources.map((source) => (
+                          <TakSourceRow key={source.sourceId} source={source} />
+                        ))}
+                        {data.takGateway.sources.length === 0 ? <div className="empty-state">{tr("TAK Gateway source metadata is not available.")}</div> : null}
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<RadioTower />}
+                        title="Provider feature preview"
+                        subtitle="GeoJSON features returned by /tak-gateway/api/v1/features."
+                      />
+                      <div className="situation-feature-list">
+                        {data.takGateway.features.features.map((feature) => (
+                          <TakFeatureRow key={feature.id} feature={feature} />
+                        ))}
+                        {data.takGateway.features.features.length === 0 ? (
+                          <div className="empty-state">{tr("No TAK/CoT events have been ingested yet.")}</div>
+                        ) : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  {data.takGateway.features.warnings.length > 0 ? (
+                    <div className="notice warn">
+                      <AlertTriangle size={16} />
+                      <span>{data.takGateway.features.warnings.join(" ")}</span>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {visibleSection === "publisher" ? (
+                <section id="publisher" className="panel publisher-panel">
+                  <PanelTitle icon={<RadioTower />} title="COP publisher" subtitle="Delivery state and recent canonical events." />
+                  <div className="publisher-status">
+                    <StatusPill
+                      label={data.publisher.publishingEnabled ? "publishing enabled" : "publishing stopped"}
+                      tone={data.publisher.publishingEnabled ? "safe" : "danger"}
+                    />
+                    <StatusPill
+                      label={formatDeadLetterCount(data.publisher.deadLetterSize, numberLocale, tr)}
+                      tone={data.publisher.deadLetterSize > 0 ? "danger" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="publisher-stats">
+                    <PublisherStat label="Queue" value={data.publisher.queueSize.toLocaleString(numberLocale)} tone={queueTone} />
+                    <PublisherStat label="Retained" value={data.queueTotalCount.toLocaleString(numberLocale)} tone="neutral" />
+                    <PublisherStat label="Success" value={formatTime(data.publisher.lastSuccessAt)} tone="safe" />
+                  </div>
+
+                  <div className="button-strip compact">
+                    <button
+                      type="button"
+                      onClick={() => runAction("Publisher connection checked.", testPublisher)}
+                      disabled={loading || !canAdministerPublisher}
+                    >
+                      <FlaskConical size={16} /> {tr("Test connection")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runAction("Queue cleared.", clearQueue)}
+                      disabled={loading || !canAdministerPublisher || data.queueTotalCount === 0}
+                    >
+                      <Trash2 size={16} /> {tr("Clear queue")}
+                    </button>
+                  </div>
+
+                  <div className="section-head compact-head">
+                    <div>
+                      <strong>{tr("Recent event flow")}</strong>
+                      <span>
+                        {data.queue.length} {tr("shown from")} {data.queueTotalCount} {tr("retained")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="queue-list">
+                    {data.queue.map((item) => (
+                      <QueueRow key={item.queueId} item={item} />
+                    ))}
+                    {data.queue.length === 0 ? <div className="empty-state">{tr("No queued events yet.")}</div> : null}
+                  </div>
+                </section>
+              ) : null}
+
+              {visibleSection === "ai" ? (
+                <section id="ai" className="panel ai-panel">
+                  <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
+                  <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
+                  <div className="button-strip compact">
+                    <button
+                      type="button"
+                      disabled={loading || !canUseAiAssistant}
+                      onClick={() => runAction("AI draft generated.", async () => setDraft(await createAiDraft(aiPrompt)))}
+                    >
+                      <Bot size={16} /> {tr("Generate draft")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!draft || !draft.policyCheck.allowed || loading || !canUseAiAssistant}
+                      onClick={() => draft && runAction("AI draft accepted as scenario.", () => acceptAiDraft(draft.draftId))}
+                    >
+                      <ShieldCheck size={16} /> {tr("Accept draft")}
+                    </button>
+                  </div>
+                  {draft ? (
+                    <div className="draft-box">
+                      <div className="draft-head">
+                        <strong>{draft.title}</strong>
+                        <StatusPill label={draft.policyCheck.allowed ? "allowed" : "rejected"} tone={draft.policyCheck.allowed ? "safe" : "danger"} />
+                      </div>
+                      <p>{draft.explanation}</p>
+                      <small>{draft.policyCheck.reasons.join(" ")}</small>
+                    </div>
+                  ) : (
+                    <div className="empty-state">{tr("Generate a draft to validate the AI guardrail path.")}</div>
+                  )}
+                </section>
+              ) : null}
+
+              {visibleSection === "safety" ? (
+                <section id="safety-data" className="panel safety-data-panel">
+                  <PanelTitle
+                    icon={<ShieldAlert />}
+                    title="Safety Data source"
+                    subtitle="Official public warnings and hydrological observations prepared for COP map layers."
+                  />
+
+                  <div className="publisher-status">
+                    <StatusPill label={data.safetyData.health.status} tone={safetyDataTone} />
+                    <StatusPill label={data.safetyData.features.contractVersion} tone="active" />
+                    <StatusPill
+                      label={`${elevatedSafetyCount} ${tr("elevated")}`}
+                      tone={data.safetyData.features.summary.criticalCount > 0 ? "danger" : elevatedSafetyCount > 0 ? "warn" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="publisher-stats safety-stats">
+                    <PublisherStat label="Features" value={data.safetyData.features.summary.featureCount.toLocaleString(numberLocale)} tone="safe" />
+                    <PublisherStat
+                      label="Advisory"
+                      value={data.safetyData.features.summary.advisoryCount.toLocaleString(numberLocale)}
+                      tone={data.safetyData.features.summary.advisoryCount > 0 ? "warn" : "neutral"}
+                    />
+                    <PublisherStat
+                      label="Warnings"
+                      value={data.safetyData.features.summary.warningCount.toLocaleString(numberLocale)}
+                      tone={data.safetyData.features.summary.warningCount > 0 ? "warn" : "neutral"}
+                    />
+                    <PublisherStat
+                      label="Critical"
+                      value={data.safetyData.features.summary.criticalCount.toLocaleString(numberLocale)}
+                      tone={data.safetyData.features.summary.criticalCount > 0 ? "danger" : "neutral"}
+                    />
+                    <PublisherStat
+                      label="Stale"
+                      value={data.safetyData.features.summary.staleFeatureCount.toLocaleString(numberLocale)}
+                      tone={data.safetyData.features.summary.staleFeatureCount > 0 ? "warn" : "neutral"}
+                    />
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle icon={<Settings2 />} title="Current settings" subtitle="Read-only runtime configuration for public safety feeds." />
+                      <div className="settings-grid">
+                        <SummaryItem label="Enabled sources" value={data.safetyData.config.enabledSources.join(", ") || "-"} />
+                        <SummaryItem label="Default bbox" value={formatBbox(data.safetyData.config.defaultBbox)} />
+                        <SummaryItem label="Cache TTL" value={`${data.safetyData.config.cacheTtlSeconds}s`} />
+                        <SummaryItem label="Stale fallback" value={`${data.safetyData.config.staleIfErrorSeconds}s`} />
+                        <SummaryItem label="Cache entries" value={`${data.safetyData.config.cacheMaxEntries}`} />
+                        <SummaryItem label="Stale after" value={`${data.safetyData.config.staleAfterSeconds}s`} />
+                        <SummaryItem label="Timeout" value={`${data.safetyData.config.requestTimeoutMs} ms`} />
+                        <SummaryItem label="Hydro station cap" value={`${data.safetyData.config.hydroMaxStations}`} />
+                        <SummaryItem label="Source hit-rate" value={formatPercentValue(safetySourceCacheSummary.hitRate)} />
+                        <SummaryItem label="Last result age" value={formatImportAge(safetyGeneratedAgeSeconds)} />
+                        <SummaryItem label="Quality signals" value={`${safetyResponseWarningCount}`} />
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<MapPinned />}
+                        title="Layer registry"
+                        subtitle="COP can ingest these layers through /safety-data or projected situation-data."
+                      />
+                      <div className="layer-list">
+                        {data.safetyData.layers.map((layer) => (
+                          <SafetyLayerRow key={layer.layerId} layer={layer} count={countSafetyLayer(data.safetyData.features.features, layer.layerId)} />
+                        ))}
+                        {data.safetyData.layers.length === 0 ? <div className="empty-state">{tr("Safety layer metadata is not available.")}</div> : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="flight-grid">
+                    <section className="inline-panel">
+                      <PanelTitle icon={<Database />} title="Provider registry" subtitle="License, cadence and production suitability for safety data." />
+                      <div className="source-list">
+                        {data.safetyData.sources.map((source) => (
+                          <SafetySourceRow
+                            key={source.sourceId}
+                            source={source}
+                            authConfigured={Boolean(data.safetyData.config.providers.find((provider) => provider.sourceId === source.sourceId)?.authConfigured)}
+                          />
+                        ))}
+                        {data.safetyData.sources.length === 0 ? <div className="empty-state">{tr("Safety source metadata is not available.")}</div> : null}
+                      </div>
+                    </section>
+
+                    <section className="inline-panel">
+                      <PanelTitle
+                        icon={<ShieldCheck />}
+                        title="Provider feature preview"
+                        subtitle="GeoJSON features returned by /safety-data/api/v1/features."
+                      />
+                      <div className="situation-feature-list">
+                        {data.safetyData.features.features.map((feature) => (
+                          <SafetyFeatureRow key={feature.id} feature={feature} />
+                        ))}
+                        {data.safetyData.features.features.length === 0 ? (
+                          <div className="empty-state">{tr("No safety features are available from the configured sources.")}</div>
+                        ) : null}
+                      </div>
+                    </section>
+                  </div>
+
+                  {data.safetyData.features.warnings.length > 0 ? (
+                    <div className="notice warn">
+                      <AlertTriangle size={16} />
+                      <span>{data.safetyData.features.warnings.join(" ")}</span>
+                    </div>
+                  ) : null}
+
+                  <div className="notice">
+                    <CirclePause size={16} />
+                    <span>{renderedNotice}</span>
+                  </div>
+                </section>
+              ) : null}
+            </section>
           </section>
-          ) : null}
-        </section>
-      </section>
-      {mobileNetworkInfoOpen ? <MobileNetworkInfoDialog onClose={() => setMobileNetworkInfoOpen(false)} /> : null}
-    </main>
+          {mobileNetworkInfoOpen ? <MobileNetworkInfoDialog onClose={() => setMobileNetworkInfoOpen(false)} /> : null}
+        </main>
       </NumberLocaleContext.Provider>
     </UiLanguageContext.Provider>
   );
@@ -2152,14 +2462,18 @@ function LoginGate({
         <div className="login-gate-copy">
           <span>{tr("Internet access protected")}</span>
           <h2>{authenticatedWithoutRole ? tr("Keycloak account does not grant SIM console access") : tr("Sign in to CSM SIM")}</h2>
-          <p>
-            {tr("SIM is an operational provider console. Internet access requires Keycloak authentication and an assigned SIM role.")}
-          </p>
+          <p>{tr("SIM is an operational provider console. Internet access requires Keycloak authentication and an assigned SIM role.")}</p>
         </div>
         <div className="login-benefit-list">
-          <span><ShieldCheck size={15} /> {tr("csm-sim-viewer opens operational overview and provider details.")}</span>
-          <span><Activity size={15} /> {tr("csm-sim-operator enables scenario runtime controls.")}</span>
-          <span><Settings2 size={15} /> {tr("csm-sim-admin enables publisher administration.")}</span>
+          <span>
+            <ShieldCheck size={15} /> {tr("csm-sim-viewer opens operational overview and provider details.")}
+          </span>
+          <span>
+            <Activity size={15} /> {tr("csm-sim-operator enables scenario runtime controls.")}
+          </span>
+          <span>
+            <Settings2 size={15} /> {tr("csm-sim-admin enables publisher administration.")}
+          </span>
         </div>
         {authenticatedWithoutRole ? (
           <div className="login-required-note">
@@ -2282,17 +2596,29 @@ function MobileNetworkInfoDialog({ onClose }: { onClose: () => void }) {
           <div className="bts-info-card warn">
             <span>{tr("Current state")}</span>
             <strong>{tr("Modelled estimate")}</strong>
-            <p>{tr("SIM does not receive an authorized live BTS/NOC operator status feed. Current mobile layers are estimates from public measurements, DEM, line-of-sight and infrastructure hints.")}</p>
+            <p>
+              {tr(
+                "SIM does not receive an authorized live BTS/NOC operator status feed. Current mobile layers are estimates from public measurements, DEM, line-of-sight and infrastructure hints."
+              )}
+            </p>
           </div>
           <div className="bts-info-card active">
             <span>{tr("COP can display now")}</span>
             <strong>{tr("Coverage and line-of-sight estimate")}</strong>
-            <p>{tr("COP may show signal quality, technology, estimated coverage, terrain assumptions and a visible data-quality notice. It must not present this as confirmed BTS outage or operator state.")}</p>
+            <p>
+              {tr(
+                "COP may show signal quality, technology, estimated coverage, terrain assumptions and a visible data-quality notice. It must not present this as confirmed BTS outage or operator state."
+              )}
+            </p>
           </div>
           <div className="bts-info-card neutral">
             <span>{tr("Future live feed")}</span>
             <strong>{tr("Operator/NOC OpenAPI contract")}</strong>
-            <p>{tr("The proposed contract accepts site/cell id, operator, technology, observed status, confidence, outage reason and validity time. When connected, SIM can replace estimates with authoritative live status.")}</p>
+            <p>
+              {tr(
+                "The proposed contract accepts site/cell id, operator, technology, observed status, confidence, outage reason and validity time. When connected, SIM can replace estimates with authoritative live status."
+              )}
+            </p>
           </div>
         </div>
 
@@ -2300,7 +2626,9 @@ function MobileNetworkInfoDialog({ onClose }: { onClose: () => void }) {
           <a className="external-link" href="/docs/sim-bts-live-openapi.json" download>
             <Download size={15} /> {tr("Download OpenAPI")}
           </a>
-          <button type="button" onClick={onClose}>{tr("Close")}</button>
+          <button type="button" onClick={onClose}>
+            {tr("Close")}
+          </button>
         </div>
       </section>
     </div>
@@ -2334,7 +2662,9 @@ function OperationsServiceRow({ service, observability }: { service: OperationsS
         <StatusPill label={service.status} tone={operationsStatusTone(service.status)} />
         <span>{formatLatencyMs(service.latencyMs)}</span>
         <span>{typeof service.objectCount === "number" ? service.objectCount.toLocaleString(numberLocale) : "-"}</span>
-        <span className={`service-cache-summary ${cacheTone}`}>{cache ? `${formatPercentValue(cache.hitRate ?? 0)} · ${tr(cache.state ?? "cache")}` : "-"}</span>
+        <span className={`service-cache-summary ${cacheTone}`}>
+          {cache ? `${formatPercentValue(cache.hitRate ?? 0)} · ${tr(cache.state ?? "cache")}` : "-"}
+        </span>
         <span>{freshnessLabel(service)}</span>
         <span className="service-detail-trigger">
           <Info size={14} /> {tr("Detail")}
@@ -2546,17 +2876,25 @@ function ReadinessItem({ icon, label, value, detail, tone }: { icon: ReactNode; 
 
 function FeedSignal({ icon, label, service }: { icon: ReactNode; label: string; service?: OperationsSummaryService }) {
   const isFuture = service?.productionReadiness === false;
-  const tone = isFuture ? "neutral" : service?.status === "ok" && (service.qualityWarningCount ?? 0) > 0 ? "warn" : operationsStatusTone(service?.status ?? "unknown");
+  const tone = isFuture
+    ? "neutral"
+    : service?.status === "ok" && (service.qualityWarningCount ?? 0) > 0
+      ? "warn"
+      : operationsStatusTone(service?.status ?? "unknown");
   const tr = useUiText();
   const qualityDetail = service && service.qualityWarningCount > 0 ? ` · ${service.qualityWarningCount} ${tr("notice")}` : "";
-  const statusLabel = isFuture ? "future" : service?.status ?? "unknown";
+  const statusLabel = isFuture ? "future" : (service?.status ?? "unknown");
   const diagnosticDetail = isFuture && service ? ` · ${tr("diagnostic")} ${tr(service.status)}` : "";
   return (
     <div className={`feed-signal ${tone}`}>
       <div>{icon}</div>
       <span>{tr(label)}</span>
       <strong>{tr(statusLabel)}</strong>
-      <small>{service ? `${service.enabledSources.length} ${tr("feeds")} · ${formatLatencyMs(service.latencyMs)}${qualityDetail}${diagnosticDetail}` : tr("not reported")}</small>
+      <small>
+        {service
+          ? `${service.enabledSources.length} ${tr("feeds")} · ${formatLatencyMs(service.latencyMs)}${qualityDetail}${diagnosticDetail}`
+          : tr("not reported")}
+      </small>
     </div>
   );
 }
@@ -2661,13 +2999,18 @@ function FlightTrackRow({ track }: { track: FlightDataTrack }) {
         </span>
       </div>
       <div className="flight-track-metrics">
-        <span>{formatCoordinate(track.lat)}, {formatCoordinate(track.lon)}</span>
+        <span>
+          {formatCoordinate(track.lat)}, {formatCoordinate(track.lon)}
+        </span>
         <span>{formatAltitude(track.altitudeM)}</span>
         <span>{formatMotion(track.speedMps, track.headingDeg)}</span>
         <span>{formatTime(track.lastSeenAt)}</span>
       </div>
       <div className="flight-track-tags">
-        <StatusPill label={`${track.deduplication.mergedRecordCount} ${tr("merged")}`} tone={track.deduplication.mergedRecordCount > 1 ? "active" : "neutral"} />
+        <StatusPill
+          label={`${track.deduplication.mergedRecordCount} ${tr("merged")}`}
+          tone={track.deduplication.mergedRecordCount > 1 ? "active" : "neutral"}
+        />
         <StatusPill label={track.quality.stale ? "stale" : "current"} tone={track.quality.stale ? "warn" : "safe"} />
       </div>
     </div>
@@ -2880,17 +3223,7 @@ function StatusPill({ label, tone }: { label: string; tone: Tone }) {
   return <span className={`status-pill ${tone}`}>{tr(label)}</span>;
 }
 
-function ScenarioCard({
-  scenario,
-  runtime,
-  selected,
-  onSelect
-}: {
-  scenario: Scenario;
-  runtime: RuntimeStatus;
-  selected: boolean;
-  onSelect: () => void;
-}) {
+function ScenarioCard({ scenario, runtime, selected, onSelect }: { scenario: Scenario; runtime: RuntimeStatus; selected: boolean; onSelect: () => void }) {
   const state = scenarioDisplayState(scenario, runtime);
   const active = isActiveRuntimeScenario(scenario, runtime);
   const objectCount = countScenarioObjects(scenario);
@@ -2908,28 +3241,20 @@ function ScenarioCard({
         <StatusPill label={state} tone={runtimeStateTone(state)} />
       </span>
       <span className="scenario-card-meta">
-        <span>{objectCount.toLocaleString(numberLocale)} {tr("tracks")}</span>
+        <span>
+          {objectCount.toLocaleString(numberLocale)} {tr("tracks")}
+        </span>
         <span>{formatScenarioDuration(scenario.durationSeconds)}</span>
-        <span>{tr("seed")} {scenario.seed}</span>
+        <span>
+          {tr("seed")} {scenario.seed}
+        </span>
         <span>{scenario.scenarioId?.slice(0, 8) ?? tr("new")}</span>
       </span>
     </button>
   );
 }
 
-function ActionButton({
-  icon,
-  label,
-  disabled,
-  title,
-  onClick
-}: {
-  icon: ReactNode;
-  label: string;
-  disabled: boolean;
-  title?: string;
-  onClick: () => void;
-}) {
+function ActionButton({ icon, label, disabled, title, onClick }: { icon: ReactNode; label: string; disabled: boolean; title?: string; onClick: () => void }) {
   const tr = useUiText();
   return (
     <button type="button" disabled={disabled} title={title} onClick={onClick}>
@@ -2969,7 +3294,9 @@ function QueueRow({ item }: { item: QueueItem }) {
         <span>{formatGeo(item.event.geo)}</span>
         <span>{formatMotion(item.event.payload.speedMps, item.event.payload.headingDeg)}</span>
         <span>{formatTime(item.updatedAt)}</span>
-        <span>{item.attempts} {tr("attempts")}</span>
+        <span>
+          {item.attempts} {tr("attempts")}
+        </span>
       </div>
       {item.lastError ? <small className="queue-error">{item.lastError}</small> : null}
     </div>
@@ -3384,7 +3711,13 @@ function secondsSinceIso(value: string | undefined): number {
   return Number.isFinite(timestamp) ? Math.max(0, Math.round((Date.now() - timestamp) / 1000)) : -1;
 }
 
-function summarizeCacheObservability(caches: Array<CacheObservability | undefined>): { hits: number; misses: number; requests: number; hitRate: number; errors: number } {
+function summarizeCacheObservability(caches: Array<CacheObservability | undefined>): {
+  hits: number;
+  misses: number;
+  requests: number;
+  hitRate: number;
+  errors: number;
+} {
   const totals = caches.reduce(
     (summary, cache) => {
       if (!cache) {

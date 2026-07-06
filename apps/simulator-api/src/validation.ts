@@ -45,11 +45,20 @@ export function createValidators(schemaDir: string): Validators {
     ajv.addSchema(schema);
   }
 
-  const scenario = ajv.getSchema("https://example.local/sim/scenario.schema.json") ?? ajv.compile(JSON.parse(readFileSync(join(schemaDir, "scenario.schema.json"), "utf8")));
-  const fault = ajv.getSchema("https://example.local/sim/fault-injection.schema.json") ?? ajv.compile(JSON.parse(readFileSync(join(schemaDir, "fault-injection.schema.json"), "utf8")));
-  const publisherConfig = ajv.getSchema("https://example.local/sim/publisher-config.schema.json") ?? ajv.compile(JSON.parse(readFileSync(join(schemaDir, "publisher-config.schema.json"), "utf8")));
-  const canonicalEvent = ajv.getSchema("https://example.local/sim/canonical-event-envelope.schema.json") ?? ajv.compile(JSON.parse(readFileSync(join(schemaDir, "canonical-event-envelope.schema.json"), "utf8")));
-  const aiDraft = ajv.getSchema("https://example.local/sim/ai-scenario-draft.schema.json") ?? ajv.compile(JSON.parse(readFileSync(join(schemaDir, "ai-scenario-draft.schema.json"), "utf8")));
+  const scenario =
+    ajv.getSchema("https://example.local/sim/scenario.schema.json") ?? ajv.compile(JSON.parse(readFileSync(join(schemaDir, "scenario.schema.json"), "utf8")));
+  const fault =
+    ajv.getSchema("https://example.local/sim/fault-injection.schema.json") ??
+    ajv.compile(JSON.parse(readFileSync(join(schemaDir, "fault-injection.schema.json"), "utf8")));
+  const publisherConfig =
+    ajv.getSchema("https://example.local/sim/publisher-config.schema.json") ??
+    ajv.compile(JSON.parse(readFileSync(join(schemaDir, "publisher-config.schema.json"), "utf8")));
+  const canonicalEvent =
+    ajv.getSchema("https://example.local/sim/canonical-event-envelope.schema.json") ??
+    ajv.compile(JSON.parse(readFileSync(join(schemaDir, "canonical-event-envelope.schema.json"), "utf8")));
+  const aiDraft =
+    ajv.getSchema("https://example.local/sim/ai-scenario-draft.schema.json") ??
+    ajv.compile(JSON.parse(readFileSync(join(schemaDir, "ai-scenario-draft.schema.json"), "utf8")));
 
   return {
     scenario,

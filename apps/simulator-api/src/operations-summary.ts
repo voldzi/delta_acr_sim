@@ -1,6 +1,7 @@
 import type { PublisherMode, Scenario } from "@csm-sim/contracts";
 import { readFile } from "node:fs/promises";
 import type { ApiConfig } from "./config.js";
+import { fetchProviderJson } from "./provider-http.js";
 import type { JsonStore } from "./store.js";
 
 type OperationsStatus = "ok" | "degraded" | "critical" | "unknown";
@@ -202,18 +203,46 @@ export async function buildOperationsSummary(context: OperationsSummaryContext):
 
 function providerEndpoints(config: ApiConfig): ProviderEndpoint[] {
   return [
-    { baseUrl: config.operationsFlightDataBaseUrl ?? "http://127.0.0.1:4010", label: "Flight Data", lifecycle: "production", productionReadiness: true, serviceId: "flight-data-api" },
-    { baseUrl: config.operationsSituationDataBaseUrl ?? "http://127.0.0.1:4020", label: "Situation Data", lifecycle: "production", productionReadiness: true, serviceId: "situation-data-api" },
-    { baseUrl: config.operationsSafetyDataBaseUrl ?? "http://127.0.0.1:4030", label: "Safety Data", lifecycle: "production", productionReadiness: true, serviceId: "safety-data-api" },
-    { baseUrl: config.operationsTakGatewayBaseUrl ?? "http://127.0.0.1:4040", label: "TAK Gateway", lifecycle: "future", productionReadiness: false, serviceId: "tak-gateway-api" }
+    {
+      baseUrl: config.operationsFlightDataBaseUrl ?? "http://127.0.0.1:4010",
+      label: "Flight Data",
+      lifecycle: "production",
+      productionReadiness: true,
+      serviceId: "flight-data-api"
+    },
+    {
+      baseUrl: config.operationsSituationDataBaseUrl ?? "http://127.0.0.1:4020",
+      label: "Situation Data",
+      lifecycle: "production",
+      productionReadiness: true,
+      serviceId: "situation-data-api"
+    },
+    {
+      baseUrl: config.operationsSafetyDataBaseUrl ?? "http://127.0.0.1:4030",
+      label: "Safety Data",
+      lifecycle: "production",
+      productionReadiness: true,
+      serviceId: "safety-data-api"
+    },
+    {
+      baseUrl: config.operationsTakGatewayBaseUrl ?? "http://127.0.0.1:4040",
+      label: "TAK Gateway",
+      lifecycle: "future",
+      productionReadiness: false,
+      serviceId: "tak-gateway-api"
+    }
   ];
 }
 
 async function fetchProviderSummary(endpoint: ProviderEndpoint, config: ApiConfig): Promise<ProviderFetchResult> {
   const startedAt = Date.now();
+  const providerJsonOptions = {
+    maxBytes: config.operationsProviderMaxResponseBytes ?? 1024 * 1024,
+    timeoutMs: config.operationsProviderTimeoutMs ?? 1500
+  };
   const [health, observability] = await Promise.allSettled([
-    fetchJson(`${endpoint.baseUrl}/health/ready`, config.operationsProviderTimeoutMs ?? 1500),
-    fetchJson(`${endpoint.baseUrl}/api/v1/observability`, config.operationsProviderTimeoutMs ?? 1500)
+    fetchProviderJson(`${endpoint.baseUrl}/health/ready`, providerJsonOptions).then((result) => result.payload as Record<string, unknown>),
+    fetchProviderJson(`${endpoint.baseUrl}/api/v1/observability`, providerJsonOptions).then((result) => result.payload as Record<string, unknown>)
   ]);
   const latencyMs = Date.now() - startedAt;
   const healthError = health.status === "rejected" ? errorMessage(health.reason) : undefined;
@@ -227,14 +256,6 @@ async function fetchProviderSummary(endpoint: ProviderEndpoint, config: ApiConfi
       observability: observability.status === "fulfilled" ? observability.value : undefined
     }
   };
-}
-
-async function fetchJson(url: string, timeoutMs: number): Promise<Record<string, unknown>> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
-  }
-  return (await response.json()) as Record<string, unknown>;
 }
 
 function serviceSummaryFromProviderResult(result: ProviderFetchResult): ServiceSummary {
@@ -262,7 +283,9 @@ function serviceSummaryFromProviderResult(result: ProviderFetchResult): ServiceS
   const status = result.error
     ? "critical"
     : healthStatus && healthStatus !== "ok"
-      ? result.endpoint.serviceId === "tak-gateway-api" ? "degraded" : "critical"
+      ? result.endpoint.serviceId === "tak-gateway-api"
+        ? "degraded"
+        : "critical"
       : observabilityStatus && observabilityStatus !== "ok"
         ? "degraded"
         : warnings.length > 0
@@ -317,10 +340,7 @@ interface MergedSourceHealth {
   warnings: string[];
 }
 
-function mergedSourceHealth(
-  health: Record<string, unknown> | undefined,
-  observability: Record<string, unknown> | undefined
-): MergedSourceHealth[] {
+function mergedSourceHealth(health: Record<string, unknown> | undefined, observability: Record<string, unknown> | undefined): MergedSourceHealth[] {
   const sources = new Map<string, MergedSourceHealth>();
   const mergeRecord = (record: Record<string, unknown>) => {
     const sourceId = stringValue(record.sourceId) ?? "source";
@@ -348,9 +368,12 @@ function sourceQualityWarning(sourceId: string, warningCount: number, messages: 
       actionCs: "Použijte vrstvu jako situační odhad. Pro potvrzení reálného výpadku je nutné připojit autorizovaný BTS/NOC feed operátora.",
       actionEn: "Use the layer as situational estimate. Connect an authorized operator BTS/NOC feed to confirm real outages.",
       code: "source_quality_mobile_network_inferred",
-      detailCs: "mobile_network_model kombinuje veřejná měření, model pokrytí, DEM a infrastrukturní indicie. SIM zatím nemá autorizovaný live BTS/NOC stav od operátorů.",
-      detailEn: "mobile_network_model combines public measurements, coverage modelling, DEM and infrastructure hints. SIM does not yet have an authorized live BTS/NOC operator status feed.",
-      impactCs: "COP může zobrazit kvalitu a dostupnost signálu jako odhad. Nesmí to být interpretováno jako potvrzený výpadek BTS nebo aktuální stav operátora.",
+      detailCs:
+        "mobile_network_model kombinuje veřejná měření, model pokrytí, DEM a infrastrukturní indicie. SIM zatím nemá autorizovaný live BTS/NOC stav od operátorů.",
+      detailEn:
+        "mobile_network_model combines public measurements, coverage modelling, DEM and infrastructure hints. SIM does not yet have an authorized live BTS/NOC operator status feed.",
+      impactCs:
+        "COP může zobrazit kvalitu a dostupnost signálu jako odhad. Nesmí to být interpretováno jako potvrzený výpadek BTS nebo aktuální stav operátora.",
       impactEn: "COP can display signal quality and availability as an estimate. It must not be interpreted as confirmed BTS outage or current operator state.",
       messages,
       sourceId,
@@ -624,8 +647,10 @@ function serviceAlerts(service: ServiceSummary): OperationsAlert[] {
   if ((service.dataFreshness?.degradedSourceCount ?? 0) > 0 && (service.dataFreshness?.oldestImportAgeSeconds ?? 0) > 7 * 24 * 60 * 60) {
     alerts.push({
       ...alertMessage({
-        actionCs: "Ověřte plán importu a dostupnost zdroje. Pokud je zdroj historický z principu, měl by být uveden jako datové upozornění, ne technická porucha.",
-        actionEn: "Verify import schedule and source availability. If the source is historical by design, it should be represented as a data-quality notice, not a technical failure.",
+        actionCs:
+          "Ověřte plán importu a dostupnost zdroje. Pokud je zdroj historický z principu, měl by být uveden jako datové upozornění, ne technická porucha.",
+        actionEn:
+          "Verify import schedule and source availability. If the source is historical by design, it should be represented as a data-quality notice, not a technical failure.",
         detailCs: `Nejstarší import je starý ${service.dataFreshness?.oldestImportAgeSeconds} sekund.`,
         detailEn: `Oldest import age is ${service.dataFreshness?.oldestImportAgeSeconds} seconds.`,
         impactCs: `${serviceLabelCs(service)} může obsahovat zastaralá data ze zdrojů, které měly být obnoveny.`,

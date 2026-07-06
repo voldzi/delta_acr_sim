@@ -45,7 +45,17 @@ export async function createApp(config: FlightDataConfig): Promise<{ app: Expres
   const airspaces = new AirspaceReferenceService(config);
   const uasGeozones = new UasGeozoneService(config);
   const airspaceActivations = new AirspaceActivationService(config, uasGeozones);
-  const context: FlightDataAppContext = { config, aggregation, routeEnrichment, referenceData, airspaces, uasGeozones, airspaceActivations, partnerAirTracks, sensorNodes };
+  const context: FlightDataAppContext = {
+    config,
+    aggregation,
+    routeEnrichment,
+    referenceData,
+    airspaces,
+    uasGeozones,
+    airspaceActivations,
+    partnerAirTracks,
+    sensorNodes
+  };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-flight-data-api"));
@@ -95,17 +105,19 @@ function registerHealthRoutes(app: Express, context: FlightDataAppContext): void
     const uasGeozoneCache = context.uasGeozones.cacheStats();
     const airspaceActivationCache = context.airspaceActivations.cacheStats();
     const routeEnrichmentCache = context.routeEnrichment.cacheStats();
-    const sourceCacheLines = context.aggregation.sourceCacheStats().flatMap((sourceCache) => [
-      `flight_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
-      `flight_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
-      `flight_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
-      `flight_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
-      `flight_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
-      `flight_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
-      `flight_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
-      `flight_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
-      `flight_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
-    ]);
+    const sourceCacheLines = context.aggregation
+      .sourceCacheStats()
+      .flatMap((sourceCache) => [
+        `flight_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
+        `flight_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
+        `flight_data_source_cache_hits{source="${sourceCache.sourceId}"} ${sourceCache.hits}`,
+        `flight_data_source_cache_misses{source="${sourceCache.sourceId}"} ${sourceCache.misses}`,
+        `flight_data_source_cache_coalesced_hits{source="${sourceCache.sourceId}"} ${sourceCache.coalescedHits}`,
+        `flight_data_source_cache_stale_hits{source="${sourceCache.sourceId}"} ${sourceCache.staleHits}`,
+        `flight_data_source_cache_refreshes{source="${sourceCache.sourceId}"} ${sourceCache.refreshes}`,
+        `flight_data_source_cache_errors{source="${sourceCache.sourceId}"} ${sourceCache.errors}`,
+        `flight_data_source_cache_evictions{source="${sourceCache.sourceId}"} ${sourceCache.evictions}`
+      ]);
     res
       .type("text/plain")
       .send(
@@ -225,7 +237,13 @@ function registerIngestRoutes(app: Express, context: FlightDataAppContext): void
 
   app.get("/api/v1/ingest/sensor-nodes", (req, res) => {
     if (!context.config.sensorNodeIngestToken) {
-      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "COP Sensor Node ingest is disabled until FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN or FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured.");
+      return problem(
+        req,
+        res,
+        503,
+        "SOURCE_UNAVAILABLE",
+        "COP Sensor Node ingest is disabled until FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN or FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured."
+      );
     }
     if (!hasBearerToken(req.headers.authorization, context.config.sensorNodeIngestToken)) {
       return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid COP Sensor Node ingest bearer token.");
@@ -240,7 +258,13 @@ function registerIngestRoutes(app: Express, context: FlightDataAppContext): void
 
   app.post("/api/v1/ingest/sensor-observations", (req, res) => {
     if (!context.config.sensorNodeIngestToken) {
-      return problem(req, res, 503, "SOURCE_UNAVAILABLE", "COP Sensor Node ingest is disabled until FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN or FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured.");
+      return problem(
+        req,
+        res,
+        503,
+        "SOURCE_UNAVAILABLE",
+        "COP Sensor Node ingest is disabled until FLIGHT_DATA_SENSOR_NODE_INGEST_TOKEN or FLIGHT_DATA_PARTNER_INGEST_TOKEN is configured."
+      );
     }
     if (!hasBearerToken(req.headers.authorization, context.config.sensorNodeIngestToken)) {
       return problem(req, res, 401, "UNAUTHORIZED", "Missing or invalid COP Sensor Node ingest bearer token.");
@@ -501,7 +525,10 @@ function parseSources(value: unknown, fallback: FlightDataSourceId[]): FlightDat
     .filter((item): item is FlightDataSourceId => allowed.has(item as FlightDataSourceId));
 }
 
-function parseAirspaceTypes(value: unknown): { ok: true; value?: Array<"prohibited" | "restricted" | "danger" | "temporary_reserved" | "temporary_segregated" | "other"> } | { ok: false; error: string } {
+function parseAirspaceTypes(
+  value: unknown
+):
+  { ok: true; value?: Array<"prohibited" | "restricted" | "danger" | "temporary_reserved" | "temporary_segregated" | "other"> } | { ok: false; error: string } {
   const raw = asString(value);
   if (!raw) {
     return { ok: true, value: undefined };

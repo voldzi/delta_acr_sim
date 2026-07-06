@@ -10,12 +10,7 @@ interface SpatialLimitOptions {
   score?: (feature: SituationFeature) => number;
 }
 
-export function spatiallyLimitFeatures(
-  features: SituationFeature[],
-  limit: number,
-  bbox: BoundingBox,
-  options: SpatialLimitOptions = {}
-): SituationFeature[] {
+export function spatiallyLimitFeatures(features: SituationFeature[], limit: number, bbox: BoundingBox, options: SpatialLimitOptions = {}): SituationFeature[] {
   const maxFeatures = Math.max(0, Math.floor(limit));
   if (maxFeatures === 0 || features.length === 0) {
     return [];

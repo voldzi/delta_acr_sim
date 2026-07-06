@@ -4,14 +4,7 @@ import { writeFile } from "node:fs/promises";
 
 const DEFAULT_ROOT_URL = "https://www.webcamlive.cz/cs/webkamery/ceska-republika/2";
 const WEBCAMLIVE_HOST = "www.webcamlive.cz";
-const IGNORED_EXTERNAL_HOSTS = new Set([
-  "pagead2.googlesyndication.com",
-  "toplist.cz",
-  "www.q-comp.cz",
-  "www.bjsw.cz",
-  "www.yr.no",
-  "vjs.zencdn.net"
-]);
+const IGNORED_EXTERNAL_HOSTS = new Set(["pagead2.googlesyndication.com", "toplist.cz", "www.q-comp.cz", "www.bjsw.cz", "www.yr.no", "vjs.zencdn.net"]);
 
 const args = parseArgs(process.argv.slice(2));
 const rootUrl = args.rootUrl ?? DEFAULT_ROOT_URL;
@@ -58,9 +51,9 @@ for (const candidate of detailCandidates) {
   }
 }
 
-const auditedCandidates = [...candidates.values()].map(classifyCandidate).sort((a, b) =>
-  String(a.webcamliveCameraId ?? a.webcamliveUrl).localeCompare(String(b.webcamliveCameraId ?? b.webcamliveUrl))
-);
+const auditedCandidates = [...candidates.values()]
+  .map(classifyCandidate)
+  .sort((a, b) => String(a.webcamliveCameraId ?? a.webcamliveUrl).localeCompare(String(b.webcamliveCameraId ?? b.webcamliveUrl)));
 
 const report = {
   generatedAt: new Date().toISOString(),
@@ -72,8 +65,7 @@ const report = {
   },
   policy: {
     runtimeSourceAllowed: false,
-    note:
-      "WebCamLive is treated as a discovery aid only. SIM production camera feeds must use verified origin URLs, attribution and permission in PUBLIC_CAMERA_FEEDS kind=static_json."
+    note: "WebCamLive is treated as a discovery aid only. SIM production camera feeds must use verified origin URLs, attribution and permission in PUBLIC_CAMERA_FEEDS kind=static_json."
   },
   regionPagesDiscovered: regionLinks.length,
   regionsAudited: regionReports,
@@ -245,7 +237,8 @@ function extractMarkers(html) {
 
 function extractCards(html) {
   const cards = [];
-  const pattern = /<a\s+class=["']block["']\s+href=["'](https:\/\/www\.webcamlive\.cz\/cs\/webkamera\/[^"']+)["']>\s*<img\s+src=["']([^"']+)["']\s+alt=["']([^"']*)["'][\s\S]*?<h3>\s*<a[^>]*>(.*?)<\/a>\s*<\/h3>/gims;
+  const pattern =
+    /<a\s+class=["']block["']\s+href=["'](https:\/\/www\.webcamlive\.cz\/cs\/webkamera\/[^"']+)["']>\s*<img\s+src=["']([^"']+)["']\s+alt=["']([^"']*)["'][\s\S]*?<h3>\s*<a[^>]*>(.*?)<\/a>\s*<\/h3>/gims;
   let match;
   while ((match = pattern.exec(html))) {
     const [, href, thumbnailUrl, alt, label] = match;
@@ -375,7 +368,11 @@ function plainText(value) {
 }
 
 function stableId(value) {
-  const normalized = value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").replace(/_+/g, "_").slice(0, 96);
+  const normalized = value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 96);
   return normalized.length > 0 ? normalized : "camera";
 }
 

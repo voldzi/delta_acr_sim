@@ -84,11 +84,7 @@ const OPEN_METEO_LICENSE: SituationDataLicense = {
   attribution: "Weather data by Open-Meteo.com",
   commercialUse: "requires_license",
   operationalUse: "allowed_with_obligations",
-  notes: [
-    "Free API is limited to non-commercial use.",
-    "Data is provided under CC BY 4.0 conditions.",
-    "Commercial use requires a paid Open-Meteo API plan."
-  ]
+  notes: ["Free API is limited to non-commercial use.", "Data is provided under CC BY 4.0 conditions.", "Commercial use requires a paid Open-Meteo API plan."]
 };
 
 const MET_NORWAY_LICENSE: SituationDataLicense = {
@@ -610,9 +606,7 @@ class OpenMeteoSource implements SituationDataSource {
   }
 
   cacheStats(): SourceCacheStats[] {
-    return [
-      aggregateCacheStatsFor("open_meteo", [this.payloadCache, this.metNorwayCache])
-    ];
+    return [aggregateCacheStatsFor("open_meteo", [this.payloadCache, this.metNorwayCache])];
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -628,16 +622,9 @@ class OpenMeteoSource implements SituationDataSource {
     openMeteoUrl.searchParams.set("longitude", weatherPoint.lon.toFixed(5));
     openMeteoUrl.searchParams.set(
       "current",
-      [
-        "temperature_2m",
-        "relative_humidity_2m",
-        "precipitation",
-        "weather_code",
-        "cloud_cover",
-        "wind_speed_10m",
-        "wind_direction_10m",
-        "wind_gusts_10m"
-      ].join(",")
+      ["temperature_2m", "relative_humidity_2m", "precipitation", "weather_code", "cloud_cover", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"].join(
+        ","
+      )
     );
     openMeteoUrl.searchParams.set("wind_speed_unit", "ms");
     openMeteoUrl.searchParams.set("timezone", "UTC");
@@ -667,7 +654,9 @@ class OpenMeteoSource implements SituationDataSource {
       const failures = [
         openMeteoResult.status === "rejected" ? `Open-Meteo: ${errorMessage(openMeteoResult.reason)}` : undefined,
         metNorwayResult.status === "rejected" ? `MET Norway: ${errorMessage(metNorwayResult.reason)}` : undefined
-      ].filter(Boolean).join("; ");
+      ]
+        .filter(Boolean)
+        .join("; ");
       throw new Error(`No current weather provider returned usable data${failures ? ` (${failures})` : ""}.`);
     }
     const observedAt = primary.observedAt ?? fetchedAt;
@@ -676,13 +665,14 @@ class OpenMeteoSource implements SituationDataSource {
     const weatherCode = primary.weatherCode;
     const severity = weatherSeverity(windSpeedMps, precipitationMm, weatherCode);
     const warnings = [
-      openMeteoResult.status === "rejected" ? `open_meteo primary provider failed; using MET Norway fallback when available: ${errorMessage(openMeteoResult.reason)}` : undefined,
+      openMeteoResult.status === "rejected"
+        ? `open_meteo primary provider failed; using MET Norway fallback when available: ${errorMessage(openMeteoResult.reason)}`
+        : undefined,
       metNorwayResult.status === "rejected" ? `MET Norway corroborating forecast unavailable: ${errorMessage(metNorwayResult.reason)}` : undefined
     ].filter((warning): warning is string => Boolean(warning));
-    const sourceInputs = [
-      openMeteoPayload ? "open_meteo_current" : undefined,
-      metNorwayCurrent ? "met_norway_locationforecast" : undefined
-    ].filter((value): value is string => Boolean(value));
+    const sourceInputs = [openMeteoPayload ? "open_meteo_current" : undefined, metNorwayCurrent ? "met_norway_locationforecast" : undefined].filter(
+      (value): value is string => Boolean(value)
+    );
 
     const feature = makePointFeature({
       id: `weather:open_meteo:${weatherPoint.lat.toFixed(4)}:${weatherPoint.lon.toFixed(4)}`,
@@ -725,13 +715,15 @@ class OpenMeteoSource implements SituationDataSource {
         },
         weatherCorroboration: compactProviderProperties({
           providers: sourceInputs,
-          metNorway: metNorwayCurrent ? {
-            observedAt: metNorwayCurrent.observedAt,
-            temperatureC: metNorwayCurrent.temperatureC,
-            precipitationMm: metNorwayCurrent.precipitationMm,
-            windSpeedMps: metNorwayCurrent.windSpeedMps,
-            symbolCode: metNorwayCurrent.symbolCode
-          } : undefined,
+          metNorway: metNorwayCurrent
+            ? {
+                observedAt: metNorwayCurrent.observedAt,
+                temperatureC: metNorwayCurrent.temperatureC,
+                precipitationMm: metNorwayCurrent.precipitationMm,
+                windSpeedMps: metNorwayCurrent.windSpeedMps,
+                symbolCode: metNorwayCurrent.symbolCode
+              }
+            : undefined,
           fallbackUsed: primary.provider === "met_norway"
         }),
         licenses: {
@@ -873,14 +865,7 @@ class ChmiWeatherStationsSource implements SituationDataSource {
       enabled: config.enabledSources.includes("chmi_weather_stations"),
       mode: "live",
       priority: 83,
-      layers: [
-        "weather",
-        "weather_temperature_grid",
-        "weather_wind_field",
-        "weather_precipitation_grid",
-        "weather_humidity_grid",
-        "weather_pressure_grid"
-      ],
+      layers: ["weather", "weather_temperature_grid", "weather_wind_field", "weather_precipitation_grid", "weather_humidity_grid", "weather_pressure_grid"],
       license: CHMI_OPEN_DATA_LICENSE,
       baseUrl: config.chmiWeatherDataBaseUrl,
       updateCadenceSeconds: config.chmiWeatherCacheTtlSeconds
@@ -888,20 +873,15 @@ class ChmiWeatherStationsSource implements SituationDataSource {
   }
 
   cacheStats(): SourceCacheStats[] {
-    return [
-      aggregateCacheStatsFor("chmi_weather_stations", [
-        this.metadataIndexCache,
-        this.dataIndexCache,
-        this.metadataCache,
-        this.stationFileCache
-      ])
-    ];
+    return [aggregateCacheStatsFor("chmi_weather_stations", [this.metadataIndexCache, this.dataIndexCache, this.metadataCache, this.stationFileCache])];
   }
 
   async healthStatus(): Promise<SourceHealthStatus> {
     try {
       const [metadataIndex, dataIndex] = await Promise.all([
-        this.metadataIndexCache.getOrLoad("chmi_weather_metadata_index", () => requestText(this.config.chmiWeatherMetadataBaseUrl, this.config.requestTimeoutMs)),
+        this.metadataIndexCache.getOrLoad("chmi_weather_metadata_index", () =>
+          requestText(this.config.chmiWeatherMetadataBaseUrl, this.config.requestTimeoutMs)
+        ),
         this.dataIndexCache.getOrLoad("chmi_weather_data_index", () => requestText(this.config.chmiWeatherDataBaseUrl, this.config.requestTimeoutMs))
       ]);
       const metadataHref = latestHrefFromIndex(metadataIndex, /^meta1-\d{8}\.json$/);
@@ -985,7 +965,9 @@ class ChmiWeatherStationsSource implements SituationDataSource {
         const payload = await this.stationFileCache.getOrLoad(url, () => requestJson<ChmiDataCollectionPayload>(url, this.config.requestTimeoutMs));
         const hourlyUrl = hourlyFile ? joinUrl(this.config.chmiWeatherDataBaseUrl, hourlyFile.href) : undefined;
         const hourlyPayload = hourlyUrl
-          ? await this.stationFileCache.getOrLoad(hourlyUrl, () => requestJson<ChmiDataCollectionPayload>(hourlyUrl, this.config.requestTimeoutMs)).catch(() => undefined)
+          ? await this.stationFileCache
+              .getOrLoad(hourlyUrl, () => requestJson<ChmiDataCollectionPayload>(hourlyUrl, this.config.requestTimeoutMs))
+              .catch(() => undefined)
           : undefined;
         const pointFeature = mapChmiWeatherStationFeature(station, payload, hourlyPayload, query, fetchedAt);
         const gridFeatures = pointFeature
@@ -1097,7 +1079,9 @@ export class ChmiWeatherRadarSource implements SituationDataSource {
       definitions.map(async (definition) => {
         const [asset, hdfAsset] = await Promise.all([
           this.resolveLatestAsset(definition.indexPath, definition.filePattern),
-          definition.hdfIndexPath && definition.hdfFilePattern ? this.resolveLatestAsset(definition.hdfIndexPath, definition.hdfFilePattern) : Promise.resolve(undefined)
+          definition.hdfIndexPath && definition.hdfFilePattern
+            ? this.resolveLatestAsset(definition.hdfIndexPath, definition.hdfFilePattern)
+            : Promise.resolve(undefined)
         ]);
         return { definition, asset, hdfAsset };
       })
@@ -1154,10 +1138,7 @@ class ChmiWeatherWebcamsSource implements SituationDataSource {
   async healthStatus(): Promise<SourceHealthStatus> {
     try {
       const locations = await this.catalog.listLocations();
-      const warnings = [
-        ...this.catalog.locationWarnings(),
-        ...(locations.length === 0 ? ["chmi_weather_webcams returned no public camera locations."] : [])
-      ];
+      const warnings = [...this.catalog.locationWarnings(), ...(locations.length === 0 ? ["chmi_weather_webcams returned no public camera locations."] : [])];
       return {
         sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
         status: warnings.length === 0 ? "ok" : "degraded",
@@ -1541,12 +1522,12 @@ export class MobileNetworkSource implements SituationDataSource {
       query.limit,
       query.bbox
     ).map((feature) => ({
-        ...feature,
-        properties: {
-          ...feature.properties,
-          raw: query.includeRaw ? feature.properties.raw : undefined
-        }
-      }));
+      ...feature,
+      properties: {
+        ...feature.properties,
+        raw: query.includeRaw ? feature.properties.raw : undefined
+      }
+    }));
 
     return {
       source: this.descriptor,
@@ -1598,9 +1579,7 @@ export class MobileNetworkSource implements SituationDataSource {
     ];
 
     const coverageFeatures =
-      coverageSettled.status === "fulfilled"
-        ? coverageSettled.value.features.filter((feature) => feature.geometry.type === "Polygon")
-        : [];
+      coverageSettled.status === "fulfilled" ? coverageSettled.value.features.filter((feature) => feature.geometry.type === "Polygon") : [];
     if (coverageSettled.status === "fulfilled") {
       warnings.push(...coverageSettled.value.warnings.map((warning) => `coverage: ${warning}`));
     } else {
@@ -1608,9 +1587,7 @@ export class MobileNetworkSource implements SituationDataSource {
     }
 
     const measurements =
-      measurementSettled.status === "fulfilled"
-        ? measurementSettled.value.features.filter((feature) => feature.geometry.type === "Point")
-        : [];
+      measurementSettled.status === "fulfilled" ? measurementSettled.value.features.filter((feature) => feature.geometry.type === "Point") : [];
     if (measurementSettled.status === "fulfilled") {
       warnings.push(...measurementSettled.value.warnings.map((warning) => `ctu_nettest: ${warning}`));
     } else {
@@ -1631,8 +1608,8 @@ export class MobileNetworkSource implements SituationDataSource {
       );
     }
 
-    const readModelCoverage = coverageFeatures.filter((feature) =>
-      feature.properties.readModel === true && featureIntersectsBboxByEnvelope(feature, CZECHIA_DATA_ENVELOPE)
+    const readModelCoverage = coverageFeatures.filter(
+      (feature) => feature.properties.readModel === true && featureIntersectsBboxByEnvelope(feature, CZECHIA_DATA_ENVELOPE)
     );
     const selectedCoverage = selectCoverageFeatures(readModelCoverage, technologies);
     const combinedMeasurements = [...measurements, ...stationaryMeasurements];
@@ -1649,7 +1626,9 @@ export class MobileNetworkSource implements SituationDataSource {
     if (selectedCoverage.length === 0) {
       warnings.push("mobile_network_model has no prepared read-model coverage cells in the requested area; no synthetic bbox polygon was generated.");
       if (combinedMeasurements.length > 0) {
-        warnings.push("CTU measurements are available only as point features in their own sources; mobile_network_model did not convert them to an area polygon.");
+        warnings.push(
+          "CTU measurements are available only as point features in their own sources; mobile_network_model did not convert them to an area polygon."
+        );
       }
     }
     warnings.push("mobile_network_model does not contain authorized real-time BTS/NOC status; area status is inferred.");
@@ -1769,7 +1748,6 @@ export class MobileNetworkSource implements SituationDataSource {
       }
     };
   }
-
 }
 
 class PidGtfsRtSource implements SituationDataSource {
@@ -2151,9 +2129,7 @@ class ArdosPartnerSource implements SituationDataSource {
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
-    const layers = query.layers.filter((layer): layer is "ground" | "mobile" | "traffic" =>
-      layer === "ground" || layer === "mobile" || layer === "traffic"
-    );
+    const layers = query.layers.filter((layer): layer is "ground" | "mobile" | "traffic" => layer === "ground" || layer === "mobile" || layer === "traffic");
     if (layers.length === 0) {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
@@ -2237,9 +2213,7 @@ interface FeatureInput {
 }
 
 function makePointFeature(input: FeatureInput): SituationFeature {
-  const coordinates: [number, number] = input.preserveCoordinatePrecision
-    ? [input.lon, input.lat]
-    : [round(input.lon, 6), round(input.lat, 6)];
+  const coordinates: [number, number] = input.preserveCoordinatePrecision ? [input.lon, input.lat] : [round(input.lon, 6), round(input.lat, 6)];
 
   return {
     type: "Feature",
@@ -2542,14 +2516,10 @@ function summarizeMeasurements(measurements: SituationFeature[]): MeasurementSta
   const download = measurements.map((feature) => numericMetric(feature, "downloadMbps")).filter(isFiniteNumber);
   const upload = measurements.map((feature) => numericMetric(feature, "uploadMbps")).filter(isFiniteNumber);
   const latency = measurements.map((feature) => numericMetric(feature, "latencyMs")).filter(isFiniteNumber);
-  const signal = measurements
-    .map((feature) => numericMetric(feature, "lteRsrpDbm") ?? numericMetric(feature, "signalStrengthDbm"))
-    .filter(isFiniteNumber);
+  const signal = measurements.map((feature) => numericMetric(feature, "lteRsrpDbm") ?? numericMetric(feature, "signalStrengthDbm")).filter(isFiniteNumber);
   const averageConfidence =
     measurements.length > 0 ? round(measurements.reduce((sum, feature) => sum + feature.properties.confidence, 0) / measurements.length, 2) : 0;
-  const lastMeasuredAt = measurements
-    .map((feature) => feature.properties.observedAt)
-    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+  const lastMeasuredAt = measurements.map((feature) => feature.properties.observedAt).sort((a, b) => Date.parse(b) - Date.parse(a))[0];
   const medianDownloadMbps = median(download);
   const medianUploadMbps = median(upload);
   const medianLatencyMs = median(latency);
@@ -2742,9 +2712,7 @@ function aggregateMobileNetworkFeatures(features: SituationFeature[], generatedA
 
     const representative =
       [...group].sort(
-        (a, b) =>
-          qualityRank(b.properties.quality) - qualityRank(a.properties.quality) ||
-          (b.properties.confidence ?? 0) - (a.properties.confidence ?? 0)
+        (a, b) => qualityRank(b.properties.quality) - qualityRank(a.properties.quality) || (b.properties.confidence ?? 0) - (a.properties.confidence ?? 0)
       )[0] ?? group[0];
     if (!representative) {
       return [];
@@ -2752,9 +2720,14 @@ function aggregateMobileNetworkFeatures(features: SituationFeature[], generatedA
 
     const technology = networkTechnology(representative.properties.technology);
     const quality = representative.properties.quality ?? "unknown";
-    const status = representative.properties.status ?? statusForMobileQuality(quality, { count: 0, ctuNettestCount: 0, ctuStationaryCount: 0, averageConfidence: 0, severity: "info" });
+    const status =
+      representative.properties.status ??
+      statusForMobileQuality(quality, { count: 0, ctuNettestCount: 0, ctuStationaryCount: 0, averageConfidence: 0, severity: "info" });
     const dataQuality = aggregateMobileNetworkDataQuality(group);
-    const confidence = round(average(group.map((feature) => feature.properties.confidence).filter(isFiniteNumber)) ?? representative.properties.confidence ?? 0.25, 2);
+    const confidence = round(
+      average(group.map((feature) => feature.properties.confidence).filter(isFiniteNumber)) ?? representative.properties.confidence ?? 0.25,
+      2
+    );
     const signalDbm = average(group.map((feature) => feature.properties.estimatedSignalDbm).filter(isFiniteNumber));
     const measurementCount = sumNumericMetrics(group, "measurementCount");
     const cellCount = group.length;
@@ -2869,9 +2842,7 @@ function mobileNetworkAggregateSummary(
   measurementCount: number
 ): string {
   const measurementText =
-    measurementCount > 0
-      ? `Zahrnuje ${measurementCount} veřejných měření ČTÚ.`
-      : "V dané agregované ploše nejsou dostupná veřejná měření ČTÚ.";
+    measurementCount > 0 ? `Zahrnuje ${measurementCount} veřejných měření ČTÚ.` : "V dané agregované ploše nejsou dostupná veřejná měření ČTÚ.";
   return `${technology} mobilní síť: ${mobileNetworkStatusLabel(status, quality)}; agregováno z ${cellCount} modelových buněk. ${measurementText}`;
 }
 
@@ -2893,8 +2864,7 @@ function mobileNetworkDisplay(options: {
     visible: true,
     label: `${options.technology} ${mobileNetworkStatusLabel(options.status, options.quality)}`,
     subtitle: options.summary,
-    primaryValue:
-      typeof options.estimatedSignalDbm === "number" ? `${options.estimatedSignalDbm} dBm` : mobileNetworkQualityLabel(options.quality),
+    primaryValue: typeof options.estimatedSignalDbm === "number" ? `${options.estimatedSignalDbm} dBm` : mobileNetworkQualityLabel(options.quality),
     secondaryValue: `${Math.round(options.confidence * 100)} % confidence`,
     tertiaryValue: `${options.measurementCount} CTU measurements`,
     status: options.status,
@@ -3165,7 +3135,12 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
   });
 }
 
-function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQuery, sourceObservedAt: string, refreshSeconds: number): SituationFeature | undefined {
+function mapIdsjmkVehiclePosition(
+  record: IdsjmkVehicleRecord,
+  query: SituationQuery,
+  sourceObservedAt: string,
+  refreshSeconds: number
+): SituationFeature | undefined {
   if (isTruthyRecordValue(record, ["isinactive", "IsInactive", "isInactive"])) {
     return undefined;
   }
@@ -3176,12 +3151,35 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
 
   const observedAt =
     parseTimestamp(
-      recordValue(record, ["lastUpdate", "LastUpdate", "lastupdate", "TimeUpdated", "last_update", "timestamp", "Timestamp", "time", "Time", "updatedAt", "UpdatedAt"])
-    ) ??
-    sourceObservedAt;
+      recordValue(record, [
+        "lastUpdate",
+        "LastUpdate",
+        "lastupdate",
+        "TimeUpdated",
+        "last_update",
+        "timestamp",
+        "Timestamp",
+        "time",
+        "Time",
+        "updatedAt",
+        "UpdatedAt"
+      ])
+    ) ?? sourceObservedAt;
   const vehicleId =
-    stringFromRecord(record, ["vehicleId", "VehicleId", "vehicle_id", "globalid", "GlobalID", "id", "Id", "ID", "objectId", "OBJECTID", "vehicle", "Vehicle"]) ??
-    stableToken(`${position.lon}:${position.lat}:${observedAt}`);
+    stringFromRecord(record, [
+      "vehicleId",
+      "VehicleId",
+      "vehicle_id",
+      "globalid",
+      "GlobalID",
+      "id",
+      "Id",
+      "ID",
+      "objectId",
+      "OBJECTID",
+      "vehicle",
+      "Vehicle"
+    ]) ?? stableToken(`${position.lon}:${position.lat}:${observedAt}`);
   const line = stringFromRecord(record, [
     "line",
     "Line",
@@ -3202,7 +3200,16 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
   const speedMps = numberFromRecord(record, ["speed", "Speed", "speedMps", "SpeedMps", "velocity", "Velocity"]);
   const headingDeg = numberFromRecord(record, ["bearing", "Bearing", "heading", "Heading", "course", "Course", "azimuth", "Azimuth"]);
   const delaySeconds = numberFromRecord(record, ["delay", "Delay", "delaySeconds", "DelaySeconds"]);
-  const destination = stringFromRecord(record, ["destination", "Destination", "headsign", "Headsign", "tripHeadsign", "TripHeadsign", "FinalStopID", "finalstopid"]);
+  const destination = stringFromRecord(record, [
+    "destination",
+    "Destination",
+    "headsign",
+    "Headsign",
+    "tripHeadsign",
+    "TripHeadsign",
+    "FinalStopID",
+    "finalstopid"
+  ]);
   const operator = stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]) ?? "IDS JMK";
   const routeId = stringFromRecord(record, ["routeId", "RouteId", "route_id"]);
   const featureId = `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}`;
@@ -3274,7 +3281,12 @@ function mapIdsjmkVehiclePosition(record: IdsjmkVehicleRecord, query: SituationQ
   });
 }
 
-function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: SituationQuery, observedAt: string, refreshSeconds: number): SituationFeature | undefined {
+function mapPublicTransitStaticStop(
+  stop: PublicTransitStaticStop,
+  query: SituationQuery,
+  observedAt: string,
+  refreshSeconds: number
+): SituationFeature | undefined {
   if (!isPointInBbox(stop.lon, stop.lat, query.bbox)) {
     return undefined;
   }
@@ -3340,7 +3352,12 @@ function mapPublicTransitStaticStop(stop: PublicTransitStaticStop, query: Situat
   });
 }
 
-function mapSpravaZeleznicTrainFeature(feature: SpravaZeleznicTrainFeature, query: SituationQuery, fetchedAt: string, refreshSeconds: number): SituationFeature | undefined {
+function mapSpravaZeleznicTrainFeature(
+  feature: SpravaZeleznicTrainFeature,
+  query: SituationQuery,
+  fetchedAt: string,
+  refreshSeconds: number
+): SituationFeature | undefined {
   const position = spravaZeleznicTrainLonLat(feature.geometry?.coordinates);
   if (!position || !isPointInBbox(position.lon, position.lat, query.bbox)) {
     return undefined;
@@ -3485,7 +3502,7 @@ function mapRoadSrtiLodFeature(event: RoadSrtiLodEvent, query: SituationQuery, f
     }),
     transportMode: "road",
     operator: "NDIC/ŘSD",
-    raw: query.includeRaw ? event.raw ?? event : undefined
+    raw: query.includeRaw ? (event.raw ?? event) : undefined
   });
 }
 
@@ -3688,28 +3705,28 @@ export function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): Ch
   const hasMeasuredPrecipitation = input.precipitation10mMm !== undefined && input.precipitation10mMm >= 0.05;
   const hasHourlyPrecipitation = input.precipitation1hMm !== undefined && input.precipitation1hMm >= 0.1;
   const hasStrongSunshine =
-    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 540)
-    || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 8);
+    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 540) ||
+    (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 8);
   const hasModerateSunshine =
-    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 180)
-    || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 3);
+    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds >= 180) ||
+    (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths >= 3);
   const hasWeakSunshine =
-    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds > 0)
-    || (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths > 0);
+    (input.sunshineDurationSeconds !== undefined && input.sunshineDurationSeconds > 0) ||
+    (input.sunshineDuration1hTenths !== undefined && input.sunshineDuration1hTenths > 0);
   const presentWeather = presentWeatherCodePresentation(input.presentWeatherCode);
   const hasLikelyFog =
-    !hasMeasuredPrecipitation
-    && !hasHourlyPrecipitation
-    && input.relativeHumidityPercent !== undefined
-    && input.relativeHumidityPercent >= 98
-    && (input.windSpeedMps === undefined || input.windSpeedMps < 1.5)
-    && (input.sunshineDurationSeconds === undefined || input.sunshineDurationSeconds === 0);
+    !hasMeasuredPrecipitation &&
+    !hasHourlyPrecipitation &&
+    input.relativeHumidityPercent !== undefined &&
+    input.relativeHumidityPercent >= 98 &&
+    (input.windSpeedMps === undefined || input.windSpeedMps < 1.5) &&
+    (input.sunshineDurationSeconds === undefined || input.sunshineDurationSeconds === 0);
   const hasLowVisibilityFog =
-    !hasMeasuredPrecipitation
-    && !hasHourlyPrecipitation
-    && input.visibilityCode !== undefined
-    && input.visibilityCode <= 20
-    && (input.relativeHumidityPercent === undefined || input.relativeHumidityPercent >= 90);
+    !hasMeasuredPrecipitation &&
+    !hasHourlyPrecipitation &&
+    input.visibilityCode !== undefined &&
+    input.visibilityCode <= 20 &&
+    (input.relativeHumidityPercent === undefined || input.relativeHumidityPercent >= 90);
   const hasStrongWind = strongestWindMps >= 10;
 
   let symbolKey: ChmiWeatherPresentation["symbolKey"] = "measurement";
@@ -3741,13 +3758,10 @@ export function chmiWeatherPresentation(input: ChmiWeatherPresentationInput): Ch
     conditionMode = "measured";
     confidence = snowLikely ? 0.74 : 0.8;
     authoritativeCondition = false;
-    sourceInputs = [
-      hasMeasuredPrecipitation ? "chmi_10m:SRA10M" : "chmi_1h:SRA1H",
-      input.temperatureC !== undefined ? "chmi_10m:T" : undefined
-    ].filter((value): value is string => Boolean(value));
-    note = snowLikely
-      ? "Precipitation is measured; snow/rain phase is inferred from air temperature."
-      : "Precipitation is measured by the CHMI station feed.";
+    sourceInputs = [hasMeasuredPrecipitation ? "chmi_10m:SRA10M" : "chmi_1h:SRA1H", input.temperatureC !== undefined ? "chmi_10m:T" : undefined].filter(
+      (value): value is string => Boolean(value)
+    );
+    note = snowLikely ? "Precipitation is measured; snow/rain phase is inferred from air temperature." : "Precipitation is measured by the CHMI station feed.";
   } else if (hasLowVisibilityFog || hasLikelyFog) {
     symbolKey = "fog";
     conditionLabel = hasLowVisibilityFog ? "pravděpodobná mlha / nízká dohlednost" : "pravděpodobná mlha";
@@ -3877,36 +3891,34 @@ function sunshineSourceInputs(input: ChmiWeatherPresentationInput): string[] {
 
 function chmiWeatherDisplay(station: ChmiWeatherStation, presentation: ChmiWeatherPresentation, severity: SituationSeverity): Record<string, unknown> {
   const detailUrl = `/api/v1/weather-stations/${encodeURIComponent(station.stationId)}/detail`;
-  return compactProviderProperties({
-    contractVersion: "sim-cop-weather-display-v1",
-    renderer: "weather_station_marker_v1",
-    iconKey: presentation.symbolKey,
-    iconSet: "weather-symbol-v1",
-    title: station.name,
-    label: presentation.mapLabel,
-    subtitle: presentation.detailSummary,
-    badgeLabel: presentation.conditionLabel,
-    badgeLabelEn: presentation.conditionLabelEn,
-    badgeTone: chmiWeatherDisplayTone(presentation.symbolKey, presentation.conditionMode, severity),
-    primaryValue: presentation.primaryValue,
-    secondaryValue: presentation.secondaryValue,
-    tertiaryValue: presentation.tertiaryValue,
-    conditionMode: presentation.conditionMode,
-    confidence: presentation.confidence,
-    confidencePercent: Math.round(presentation.confidence * 100),
-    authoritativeCondition: presentation.authoritativeCondition,
-    sourceInputs: presentation.sourceInputs,
-    detailUrl,
-    chartUrl: detailUrl,
-    interaction: "open_detail"
-  }) ?? {};
+  return (
+    compactProviderProperties({
+      contractVersion: "sim-cop-weather-display-v1",
+      renderer: "weather_station_marker_v1",
+      iconKey: presentation.symbolKey,
+      iconSet: "weather-symbol-v1",
+      title: station.name,
+      label: presentation.mapLabel,
+      subtitle: presentation.detailSummary,
+      badgeLabel: presentation.conditionLabel,
+      badgeLabelEn: presentation.conditionLabelEn,
+      badgeTone: chmiWeatherDisplayTone(presentation.symbolKey, presentation.conditionMode, severity),
+      primaryValue: presentation.primaryValue,
+      secondaryValue: presentation.secondaryValue,
+      tertiaryValue: presentation.tertiaryValue,
+      conditionMode: presentation.conditionMode,
+      confidence: presentation.confidence,
+      confidencePercent: Math.round(presentation.confidence * 100),
+      authoritativeCondition: presentation.authoritativeCondition,
+      sourceInputs: presentation.sourceInputs,
+      detailUrl,
+      chartUrl: detailUrl,
+      interaction: "open_detail"
+    }) ?? {}
+  );
 }
 
-function chmiWeatherDisplayTone(
-  symbolKey: ChmiWeatherPresentation["symbolKey"],
-  conditionMode: ChmiWeatherConditionMode,
-  severity: SituationSeverity
-): string {
+function chmiWeatherDisplayTone(symbolKey: ChmiWeatherPresentation["symbolKey"], conditionMode: ChmiWeatherConditionMode, severity: SituationSeverity): string {
   if (severity === "critical" || symbolKey === "storm") {
     return "critical";
   }
@@ -4043,7 +4055,9 @@ function mapChmiWeatherStationFeature(
   const precipitation1hMm = hourlyObservations.get("SRA1H")?.value;
   const sunshineDuration1hTenths = hourlyObservations.get("SSV1H")?.value;
   const severity = weatherSeverity(windGustMps ?? windSpeedMps, precipitation10mMm, undefined);
-  const qualityValues = Array.from(observations.values()).map((observation) => observation.quality).filter(isFiniteNumber);
+  const qualityValues = Array.from(observations.values())
+    .map((observation) => observation.quality)
+    .filter(isFiniteNumber);
   const qualityCode = qualityValues.length > 0 ? Math.max(...qualityValues) : undefined;
   const weatherPresentation = chmiWeatherPresentation({
     stationName: station.name,
@@ -4375,7 +4389,7 @@ function mapChmiAirQualityGridFeature(
     resolutionDegrees: normalizeGridResolutionDegrees(resolutionDegrees),
     resolutionM: approximateGridResolutionM(normalizeGridResolutionDegrees(resolutionDegrees)),
     sourceRevision: observedAt,
-    valueMetric: aggregate.airQualityIndex !== undefined ? "airQualityIndex" : dominant ?? "pollutantValue",
+    valueMetric: aggregate.airQualityIndex !== undefined ? "airQualityIndex" : (dominant ?? "pollutantValue"),
     value,
     unit: aggregate.airQualityIndex !== undefined ? "AQI" : undefined,
     severity,
@@ -4764,9 +4778,7 @@ function dateTokenToIso(value: string): string | undefined {
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00.000Z`;
 }
 
-function latestChmiRadarProductTimestamp(
-  products: Array<{ asset?: ChmiRadarAsset; hdfAsset?: ChmiRadarAsset }>
-): string | undefined {
+function latestChmiRadarProductTimestamp(products: Array<{ asset?: ChmiRadarAsset; hdfAsset?: ChmiRadarAsset }>): string | undefined {
   return products
     .flatMap((product) => [product.asset?.observedAt, product.hdfAsset?.observedAt])
     .filter((value): value is string => Boolean(value))
@@ -5360,7 +5372,10 @@ function mapSafetyProjectionFeature(
     urgency: optionalString(feature.properties.urgency),
     certainty: optionalString(feature.properties.certainty),
     affectedAreas: feature.properties.affectedAreas?.slice(0, 4).join("; "),
-    geocodes: feature.properties.geocodes?.slice(0, 6).map((geocode) => `${geocode.scheme}:${geocode.value}`).join("; ")
+    geocodes: feature.properties.geocodes
+      ?.slice(0, 6)
+      .map((geocode) => `${geocode.scheme}:${geocode.value}`)
+      .join("; ")
   });
   const providerProperties = compactProviderProperties({
     nativeFeatureId: feature.properties.featureId,
@@ -5535,7 +5550,8 @@ function mapAviationWeatherFeature(metar: AviationMetar, taf: AviationTaf | unde
   if (!icaoId || lat === undefined || lon === undefined) {
     return undefined;
   }
-  const observedAt = parseAviationTime(metar.reportTime) ?? epochSecondsToIso(metar.obsTime) ?? parseAviationTime(metar.receiptTime) ?? new Date().toISOString();
+  const observedAt =
+    parseAviationTime(metar.reportTime) ?? epochSecondsToIso(metar.obsTime) ?? parseAviationTime(metar.receiptTime) ?? new Date().toISOString();
   const validUntil = taf?.validTimeTo ? epochSecondsToIso(taf.validTimeTo) : addSeconds(observedAt, 90 * 60);
   const flightCategory = optionalString(metar.fltCat)?.toUpperCase();
   const severity = aviationWeatherSeverity(flightCategory, taf);
@@ -5589,7 +5605,8 @@ function mapArdosPartnerFeature(feature: ArdosPartnerFeature, includeRaw: boolea
     return undefined;
   }
   const observedAt = parseAviationTime(properties.observedAt) ?? new Date().toISOString();
-  const sourceFeatureId = optionalString(properties.featureId) ?? optionalString(feature.id) ?? stableToken(`${layer}:${properties.category ?? "feature"}:${observedAt}`);
+  const sourceFeatureId =
+    optionalString(properties.featureId) ?? optionalString(feature.id) ?? stableToken(`${layer}:${properties.category ?? "feature"}:${observedAt}`);
   const id = `ardos_partner:${sourceFeatureId}`;
 
   return {
@@ -5961,9 +5978,7 @@ function parseDelimitedRows(text: string, delimiter: string): string[][] {
 
 function detectDelimiter(headerLine: string): string {
   const candidates = [",", ";", "\t"];
-  return candidates
-    .map((delimiter) => ({ delimiter, count: headerLine.split(delimiter).length }))
-    .sort((a, b) => b.count - a.count)[0]?.delimiter ?? ",";
+  return candidates.map((delimiter) => ({ delimiter, count: headerLine.split(delimiter).length })).sort((a, b) => b.count - a.count)[0]?.delimiter ?? ",";
 }
 
 function overpassQuery(bbox: BoundingBox): string {
@@ -6633,13 +6648,7 @@ function ctuAccessTechnology(record: Record<string, string>): string {
 function ctuStationaryMetadataFromUrl(url: string): Pick<CtuStationaryMobileRecord, "operator" | "technology"> {
   const normalized = url.toLowerCase();
   const technology: MobileCoverageTechnology = normalized.includes("/2g_") || normalized.includes("2g_") ? "2G" : "4G";
-  const operator = normalized.includes("_tm_")
-    ? "T-Mobile"
-    : normalized.includes("_vf_")
-      ? "Vodafone"
-      : normalized.includes("_o2_")
-        ? "O2"
-        : "unknown";
+  const operator = normalized.includes("_tm_") ? "T-Mobile" : normalized.includes("_vf_") ? "Vodafone" : normalized.includes("_o2_") ? "O2" : "unknown";
   return { operator, technology };
 }
 
@@ -6825,7 +6834,10 @@ function longToNumber(value: unknown): number | undefined {
 }
 
 function stableToken(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 96);
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]/g, "_")
+    .slice(0, 96);
 }
 
 function trimTrailingSlash(value: string): string {
@@ -6841,7 +6853,12 @@ function formatAviationWeatherBbox(bbox: BoundingBox): string {
 }
 
 function normalizeIcaoId(value: string | undefined): string {
-  return value?.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") ?? "";
+  return (
+    value
+      ?.trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "") ?? ""
+  );
 }
 
 function epochSecondsToIso(value: number | undefined): string | undefined {
@@ -6911,8 +6928,7 @@ function compactMetrics(values: Record<string, number | undefined>): Record<stri
 
 function compactMixedMetrics(values: Record<string, number | string | boolean | undefined>): Record<string, number | string | boolean> | undefined {
   const entries = Object.entries(values).filter(
-    (entry): entry is [string, number | string | boolean] =>
-      typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
+    (entry): entry is [string, number | string | boolean] => typeof entry[1] === "number" || typeof entry[1] === "string" || typeof entry[1] === "boolean"
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
@@ -6939,7 +6955,10 @@ function compactProviderProperties(values: Record<string, unknown>): Record<stri
 }
 
 function formatCompactNumber(value: number, precision: number): string {
-  return round(value, precision).toFixed(precision).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  return round(value, precision)
+    .toFixed(precision)
+    .replace(/\.0+$/, "")
+    .replace(/(\.\d*?)0+$/, "$1");
 }
 
 function round(value: number, precision: number): number {

@@ -257,7 +257,9 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         selectableInMap: true,
         feedsLayerIds: ["safety.weather_alerts", "safety.fire"],
         feedsCatalogLayerIds: ["public.safety.weather_alerts", "public.safety.fire"],
-        notes: ["Primary public weather warning source; CISORP areas are resolved to local/PostGIS administrative polygons when available. Fire-danger warnings are also projected into the public.safety.fire layer as risk features."]
+        notes: [
+          "Primary public weather warning source; CISORP areas are resolved to local/PostGIS administrative polygons when available. Fire-danger warnings are also projected into the public.safety.fire layer as risk features."
+        ]
       };
     case "chmi_hydro":
       return {
@@ -266,7 +268,9 @@ function sourceRole(sourceId: SafetyDataSourceId) {
         selectableInMap: true,
         feedsLayerIds: ["safety.flood"],
         feedsCatalogLayerIds: ["public.safety.flood"],
-        notes: ["Hydrological station source with water-level/discharge SPA classification, local JSONL timeline history, forecast series, detailUrl and catchment metadata; missing current station data is handled with negative cache."]
+        notes: [
+          "Hydrological station source with water-level/discharge SPA classification, local JSONL timeline history, forecast series, detailUrl and catchment metadata; missing current station data is handled with negative cache."
+        ]
       };
     case "nasa_firms":
       return {
