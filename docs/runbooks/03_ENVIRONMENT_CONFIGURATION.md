@@ -478,8 +478,55 @@ AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 `PUBLIC_CAMERA_FEEDS` rozšiřuje kompatibilní source `chmi_weather_webcams` o
 další přímé origin zdroje. Položky odděluj čárkou, pole uvnitř položky znakem
 `|` ve tvaru `sourceId|label|category|authority|providerPageUrl|kind|url`.
-Podporované `kind` jsou `arcgis_lavdis`, `arcgis_ostrava` a `ostrava_asmx`.
-SIM tyto zdroje cacheuje server-side a COP dál používá pouze endpointy SIM.
+Podporované `kind` jsou `arcgis_lavdis`, `arcgis_ostrava`, `ostrava_asmx` a
+`static_json`. SIM tyto zdroje cacheuje server-side a COP dál používá pouze
+endpointy SIM.
+
+`static_json` je určený pro kurátorované seznamy ověřených origin kamer,
+například po ručním auditu agregátorů typu WebCamLive. URL musí vracet JSON:
+
+```json
+{
+  "sourceId": "verified_city_webcams",
+  "label": "Verified city webcams",
+  "authority": "Origin authority",
+  "attribution": "Required origin attribution",
+  "providerPageUrl": "https://origin.example/",
+  "category": "city",
+  "locations": [
+    {
+      "locationId": "city_square",
+      "label": "City square",
+      "lon": 14.42076,
+      "lat": 50.08804,
+      "providerPageUrl": "https://origin.example/camera",
+      "sourceDataUrl": "https://origin.example/camera",
+      "cameras": [
+        {
+          "cameraId": "main",
+          "name": "Main view",
+          "providerUrl": "https://origin.example/camera",
+          "directImageUrl": "https://origin.example/camera/latest.jpg",
+          "contentType": "image/jpeg"
+        }
+      ]
+    }
+  ]
+}
+```
+
+SIM nepoužívá WebCamLive jako produkční runtime feed. Pro dohledání kandidátů
+slouží auditní skript:
+
+```bash
+node scripts/discover-webcamlive-origin-cameras.mjs \
+  --region-url https://www.webcamlive.cz/cs/webkamery/ostrava/48 \
+  --detail-limit 20 \
+  --output docs/archive/webcamlive-ostrava-camera-audit.json
+```
+
+Výstup skriptu je podklad k ověření licence, atribuce a přímé origin URL.
+Do `PUBLIC_CAMERA_FEEDS` se vkládá až ověřený `static_json` feed.
 
 `public.weather.current` zustava pro COP stejnou vrstvou
 `layers=weather&source=open_meteo`. SIM ji server-side obohacuje zdrojem

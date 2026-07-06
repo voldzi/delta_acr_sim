@@ -15,6 +15,7 @@ SIM má poskytovat COM doplňkové vrstvy, které rozšiřují vzdušný obraz o
 | `traffic` | IDS JMK / Brno Open Data vehicle positions | implementováno jako volitelný zdroj `idsjmk_vehicle_positions`; zdrojová cache 20 s, COM nesmí volat upstream přímo | podmínky otevřených dat IDS JMK / Brno; endpoint může vyžadovat úpravu URL podle aktuální distribuce |
 | `traffic` | Správa železnic mapa provozu vlaků | implementováno jako volitelný zdroj `spravazeleznic_trains`; SIM dekóduje mapový payload, převádí S-JTSK do WGS84 a drží jednu server-side cache pro celý feed | dohodnuté maximum načítání 1x za 15 minut; COM/COP nesmí volat upstream přímo a používá pouze normalizovaný GeoJSON ze SIM |
 | `traffic` | NDIC/ŘSD SRTI Linked Open Data | implementováno jako `road_srti_lod`; SIM dotazuje SPARQL endpoint po TTL a bbox filtruje nad cache | dopravní události jako veřejný kontext, nutná atribuce ŘSD/NDIC a respektování provozních limitů endpointu |
+| `weather_webcams` | ČHMÚ webkamery, SPS/LAVDIS, městské a dopravní origin feedy | implementováno jako kompatibilní source `chmi_weather_webcams`; podporuje přímé API feedy a kurátorovaný `static_json` feed ověřených origin kamer | pouze vizuální situační kontext; SIM nesmí používat agregátor jako produkční runtime zdroj, WebCamLive slouží jen jako auditní/discovery pomůcka pro dohledání originů |
 | `ground/mobile/traffic` | ARDOS partner feed | implementováno jako vypnutý `ardos_partner` konektor | Není open-data; vyžaduje partnerskou dohodu, token, datovou minimalizaci a oprávnění uživatele v COM |
 | `mobile` | OpenCellID, M-Lab | kandidáti pro další rozšíření | OpenCellID CC BY-SA 4.0; M-Lab CC0 |
 | `traffic` | JSDI/NDIC/DATEX II | kandidát pro dopravní incidenty po potvrzení licence a způsobu přístupu | podmínky je nutné ověřit pro konkrétní distribuci a způsob odběru |
@@ -29,7 +30,7 @@ Veřejný real-time zdroj stavu BTS nebo aktuálních výpadků mobilních oper�
 - M-Lab/ČTÚ-NetTest jako měření výkonu sítě,
 - vlastní měřicí body, routery, modemy nebo telefony hlásící RSRP/RSRQ/SINR, latency a packet loss.
 
-## Zdroje ověřené k 2026-05-20
+## Zdroje ověřené k 2026-07-06
 
 - Open-Meteo Terms: https://open-meteo.com/en/terms
 - Open-Meteo API docs: https://open-meteo.com/en/docs
@@ -44,6 +45,9 @@ Veřejný real-time zdroj stavu BTS nebo aktuálních výpadků mobilních oper�
 - TamTam Research SRTI LOD SPARQL endpoint: https://lod.tamtamresearch.com/sparql/
 - TamTam Research LOD documentation: https://lod.tamtamresearch.com/docs/
 - NOAA AWC Data API: https://aviationweather.gov/data/api/
+- ČHMÚ webkamery: https://www.chmi.cz/namerena-data/webkamery
+- LAVDIS / Státní plavební správa: https://www.lavdis.cz/
+- WebCamLive katalog kamer: https://www.webcamlive.cz/web-kamery-ceska-republika-2
 - ARDOS / ARDOS partner network: https://radioklub.mo.gov.cz/ardos
 - OpenCellID licence: https://wiki.opencellid.org/wiki/Licensing:
 - M-Lab FAQ/licence: https://www.measurementlab.net/frequently-asked-questions/

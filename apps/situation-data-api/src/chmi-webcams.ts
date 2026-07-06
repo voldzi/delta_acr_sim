@@ -159,8 +159,40 @@ interface PublicCameraFeedConfig {
   category: string;
   authority: string;
   providerPageUrl: string;
-  kind: "arcgis_lavdis" | "arcgis_ostrava" | "ostrava_asmx";
+  kind: "arcgis_lavdis" | "arcgis_ostrava" | "ostrava_asmx" | "static_json";
   url: string;
+}
+
+interface StaticCameraFeedPayload {
+  sourceId?: string;
+  label?: string;
+  authority?: string;
+  attribution?: string;
+  providerPageUrl?: string;
+  category?: string;
+  locations?: StaticCameraFeedLocation[];
+}
+
+interface StaticCameraFeedLocation {
+  locationId?: string;
+  label?: string;
+  lon?: number;
+  lat?: number;
+  sourceDataUrl?: string;
+  providerPageUrl?: string;
+  authority?: string;
+  attribution?: string;
+  category?: string;
+  cameras?: StaticCameraFeedCamera[];
+}
+
+interface StaticCameraFeedCamera {
+  cameraId?: string;
+  name?: string;
+  providerUrl?: string;
+  directImageUrl?: string;
+  contentType?: string;
+  snapshotAvailable?: boolean;
 }
 
 interface ArcgisCameraFeatureCollection {
@@ -377,6 +409,10 @@ export class ChmiWeatherWebcamCatalog {
     if (feed.kind === "arcgis_ostrava") {
       const payload = await requestJson<ArcgisCameraFeatureCollection>(feed.url, this.config.requestTimeoutMs);
       return normalizeOstravaArcgisLocations(payload, feed);
+    }
+    if (feed.kind === "static_json") {
+      const payload = await requestJson<StaticCameraFeedPayload>(feed.url, this.config.requestTimeoutMs);
+      return normalizeStaticCameraLocations(payload, feed);
     }
     const payload = await requestJsonPost<OstravaAsmxCameraPayload>(feed.url, this.config.requestTimeoutMs);
     return normalizeOstravaAsmxLocations(payload, feed);
@@ -697,6 +733,79 @@ function normalizeOstravaAsmxLocations(payload: OstravaAsmxCameraPayload, feed: 
     .sort((a, b) => a.locationId.localeCompare(b.locationId));
 }
 
+function normalizeStaticCameraLocations(payload: StaticCameraFeedPayload, feed: PublicCameraFeedConfig): ChmiWeatherWebcamLocation[] {
+  const sourceId = stableId(payload.sourceId ?? feed.sourceId).toLowerCase();
+  const sourceName = payload.label?.trim() || feed.label;
+  const authority = payload.authority?.trim() || feed.authority;
+  const attribution = payload.attribution?.trim() || authority;
+  const providerPageUrl = validUrl(payload.providerPageUrl) ?? feed.providerPageUrl;
+  const category = stableId(payload.category ?? feed.category).toLowerCase();
+  return (payload.locations ?? [])
+    .map((location, locationIndex): ChmiWeatherWebcamLocation | undefined => {
+      if (!Number.isFinite(location.lon) || !Number.isFinite(location.lat)) {
+        return undefined;
+      }
+      const lon = location.lon as number;
+      const lat = location.lat as number;
+      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
+        return undefined;
+      }
+      const label = location.label?.trim() || `Veřejná kamera ${round(lat, 5)}, ${round(lon, 5)}`;
+      const locationId = stableId(
+        location.locationId ?? `${sourceId}_${label}_${coordinateToken(lon)}_${coordinateToken(lat)}`
+      ).slice(0, 160);
+      const cameras = normalizeStaticCameras(location.cameras ?? [], sourceId, locationId);
+      if (cameras.length === 0) {
+        return undefined;
+      }
+      return {
+        locationId,
+        label,
+        lon,
+        lat,
+        sourceDataUrl: validUrl(location.sourceDataUrl) ?? feed.url,
+        sourceId,
+        sourceName,
+        sourceNameEn: sourceName,
+        authority: location.authority?.trim() || authority,
+        attribution: location.attribution?.trim() || attribution,
+        providerPageUrl: validUrl(location.providerPageUrl) ?? providerPageUrl,
+        category: stableId(location.category ?? category).toLowerCase(),
+        detailMode: "inline_cameras",
+        cameras
+      };
+    })
+    .filter((item): item is ChmiWeatherWebcamLocation => Boolean(item))
+    .sort((a, b) => a.locationId.localeCompare(b.locationId));
+}
+
+function normalizeStaticCameras(cameras: StaticCameraFeedCamera[], sourceId: string, locationId: string): ResolvedCamera[] {
+  const usedIds = new Map<string, number>();
+  return cameras
+    .map((camera, index): ResolvedCamera | undefined => {
+      const directImageUrl = validUrl(camera.directImageUrl);
+      const providerUrl = validUrl(camera.providerUrl) ?? directImageUrl;
+      if (!providerUrl && !directImageUrl) {
+        return undefined;
+      }
+      const baseId = stableCameraId([sourceId, locationId, camera.cameraId ?? camera.name ?? `camera-${index + 1}`]);
+      const count = usedIds.get(baseId) ?? 0;
+      usedIds.set(baseId, count + 1);
+      const cameraId = count === 0 ? baseId : `${baseId}-${count + 1}`;
+      const snapshotAvailable = camera.snapshotAvailable ?? Boolean(directImageUrl);
+      return {
+        cameraId,
+        name: camera.name?.trim() || `Veřejná kamera ${index + 1}`,
+        providerUrl,
+        snapshotUrl: "",
+        directImageUrl: snapshotAvailable ? directImageUrl : undefined,
+        contentType: validImageContentType(camera.contentType),
+        snapshotAvailable
+      };
+    })
+    .filter((item): item is ResolvedCamera => Boolean(item));
+}
+
 function lonLatFromDataUrl(value: string): { lon: number; lat: number } | undefined {
   try {
     const url = new URL(value);
@@ -718,7 +827,7 @@ function parsePublicCameraFeeds(values: string[]): PublicCameraFeedConfig[] {
       if (!sourceId || !label || !category || !authority || !providerPageUrl || !kind || !url) {
         return undefined;
       }
-      if (kind !== "arcgis_lavdis" && kind !== "arcgis_ostrava" && kind !== "ostrava_asmx") {
+      if (kind !== "arcgis_lavdis" && kind !== "arcgis_ostrava" && kind !== "ostrava_asmx" && kind !== "static_json") {
         return undefined;
       }
       try {
@@ -855,6 +964,23 @@ function absoluteUrl(value: string, baseUrl: string): string {
   } catch {
     return value;
   }
+}
+
+function validUrl(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validImageContentType(value: string | undefined): string | undefined {
+  const normalized = value?.split(";")[0]?.trim().toLowerCase();
+  return normalized?.startsWith("image/") ? normalized : undefined;
 }
 
 function stableId(value: string): string {

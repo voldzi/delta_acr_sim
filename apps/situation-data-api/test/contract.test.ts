@@ -469,6 +469,107 @@ describe("Situation Data API contract", () => {
     expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   });
 
+  it("accepts curated static origin camera feeds without exposing image payloads in feature streams", async () => {
+    const feedUrl = "https://camera-origin.example.test/public-webcams.json";
+    const snapshotUrl = "https://camera-origin.example.test/ostrava/slezska/latest.jpg";
+    config.enabledSources = ["chmi_weather_webcams"];
+    config.publicCameraFeeds = [
+      [
+        "curated_public_webcams",
+        "Kurátorované origin webkamery",
+        "city",
+        "Ověřený origin provozovatel",
+        "https://camera-origin.example.test/",
+        "static_json",
+        feedUrl
+      ].join("|")
+    ];
+    ({ app } = await createApp(config));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === feedUrl) {
+          return jsonResponse({
+            sourceId: "webcamlive_origin_review",
+            label: "Ověřené origin kamery z WebCamLive auditu",
+            authority: "Statutární město Ostrava",
+            attribution: "Statutární město Ostrava; origin ověřen přes WebCamLive audit",
+            providerPageUrl: "https://www.ostrava.cz/",
+            category: "city",
+            locations: [
+              {
+                locationId: "ostrava_slezska_ostrava",
+                label: "Ostrava - Slezská Ostrava",
+                lon: 18.29291,
+                lat: 49.83928,
+                providerPageUrl: "https://miksa.cz/",
+                sourceDataUrl: "https://miksa.cz/",
+                cameras: [
+                  {
+                    cameraId: "slezska_ostrava",
+                    name: "Slezská Ostrava",
+                    providerUrl: "https://miksa.cz/",
+                    directImageUrl: snapshotUrl,
+                    contentType: "image/jpeg"
+                  }
+                ]
+              }
+            ]
+          });
+        }
+        if (url === snapshotUrl) {
+          return new Response(Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]), {
+            status: 200,
+            headers: { "content-type": "image/jpeg", "content-length": "4" }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+
+    const response = await request(app)
+      .get("/api/v1/features?layers=weather_webcams&sources=chmi_weather_webcams&bbox=18.2,49.8,18.4,49.9&includeRaw=false")
+      .expect(200);
+
+    expect(response.body.features).toEqual([
+      expect.objectContaining({
+        id: "weather_webcam:ostrava_slezska_ostrava",
+        geometry: { type: "Point", coordinates: [18.29291, 49.83928] },
+        properties: expect.objectContaining({
+          sourceId: "chmi_weather_webcams",
+          iconHint: "camera",
+          providerProperties: expect.objectContaining({
+            camera: expect.objectContaining({
+              originSourceId: "webcamlive_origin_review",
+              originAuthority: "Statutární město Ostrava",
+              snapshotAvailable: true,
+              imagePayloadInFeatureStream: false
+            })
+          })
+        })
+      })
+    ]);
+    expect(JSON.stringify(response.body.features)).not.toContain(snapshotUrl);
+    expect(response.body.features[0].properties.raw).toBeUndefined();
+
+    const detailUrl = response.body.features[0].properties.providerProperties.camera.detailUrl;
+    const detail = await request(app).get(detailUrl).expect(200);
+    expect(detail.body.cameras).toEqual([
+      expect.objectContaining({
+        cameraId: "webcamlive_origin_review-ostrava_slezska_ostrava-slezska_ostrava",
+        name: "Slezská Ostrava",
+        snapshotAvailable: true,
+        contentType: "image/jpeg"
+      })
+    ]);
+    expect(JSON.stringify(detail.body)).not.toContain(snapshotUrl);
+
+    const snapshot = await request(app).get(detail.body.cameras[0].snapshotUrl).expect(200);
+    expect(snapshot.headers["content-type"]).toContain("image/jpeg");
+    expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  });
+
   it("projects CHMI weather cameras as clickable COP feature points", async () => {
     config.enabledSources = ["chmi_weather_webcams"];
     ({ app } = await createApp(config));

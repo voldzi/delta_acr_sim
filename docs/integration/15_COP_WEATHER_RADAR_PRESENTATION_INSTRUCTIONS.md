@@ -44,6 +44,11 @@ The source id remains `chmi_weather_webcams` for compatibility with existing
 COP layer wiring. The payload is now multi-origin: ČHMÚ, LAVDIS/SPS and
 configured city/traffic camera feeds can appear in the same layer. SIM must
 use direct origin feeds only; aggregator pages are not runtime data sources.
+For broader camera coverage, SIM supports a server-side `PUBLIC_CAMERA_FEEDS`
+entry with `kind=static_json`; this feed must contain only cameras whose origin
+provider, attribution and direct snapshot/stream URL were verified outside COP.
+WebCamLive can be used as a discovery/audit aid, but not as the production
+source unless the origin has been verified and entered into the curated feed.
 
 Each webcam feature must be treated as its own layer, not as a weather-station
 observation:
