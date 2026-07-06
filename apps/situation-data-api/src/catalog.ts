@@ -1305,6 +1305,50 @@ function buildTrailProviderLayers(config: SituationDataConfig): ProviderCatalogL
         cacheTtlSeconds: config.osmPostgisCacheTtlSeconds
       },
       legal: commonLegal
+    },
+    {
+      providerLayerId: "outdoor.verified_origin_webcams",
+      recommendedCatalogLayerId: "public.outdoor.webcams",
+      label: "Turistické webkamery",
+      labelLocalized: { cs: "Turistické webkamery", en: "Outdoor webcams" },
+      description:
+        "Kurátorované turistické a městské webkamery z ověřených originálních webů provozovatelů; SIM nepoužívá agregátorové obrazové proxy jako runtime zdroj.",
+      descriptionLocalized: {
+        cs: "Kurátorované turistické a městské webkamery z ověřených originálních webů provozovatelů.",
+        en: "Curated tourism and city webcams from verified origin provider websites."
+      },
+      categoryPath: ["outdoor", "webcams"],
+      categories: ["outdoor_webcam", "tourism", "camera"],
+      role: "reference",
+      audience: "public",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 8,
+      maxZoom: 18,
+      refreshSeconds: config.chmiWeatherWebcamsCacheTtlSeconds,
+      cacheTtlSeconds: config.chmiWeatherWebcamsCacheTtlSeconds,
+      styleProfile: "outdoor-webcam-point-v1",
+      sourceIds: ["chmi_weather_webcams"],
+      query: query(["outdoor_webcams"], ["chmi_weather_webcams"], ["outdoor_webcam"]),
+      legend: { profile: "outdoor-webcam-point-v1" },
+      delivery: {
+        mode: "features",
+        geometryRole: "feature_geometry"
+      },
+      readModel: {
+        refreshedBy: "apps/situation-data-api/data/curated-outdoor-webcams-cz.json",
+        cacheTtlSeconds: config.chmiWeatherWebcamsCacheTtlSeconds
+      },
+      legal: {
+        attribution: "Jednotliví původní provozovatelé kamer uvedení u každého bodu",
+        notes: [
+          "WebCamLive byl použit pouze jako discovery/audit katalog; SIM produkčně nepoužívá jeho obrazovou proxy.",
+          "COP musí v detailu zobrazit providerProperties.camera.attribution a providerPageUrl.",
+          "Pokud providerProperties.camera.snapshotAvailable=false, COP nemá volat snapshot endpoint a má nabídnout otevření originální stránky provozovatele."
+        ]
+      }
     }
   ];
 }
@@ -1735,10 +1779,11 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         audience: "public",
         selectableInMap: true,
         visibleInDiagnostics: true,
-        feedsLayerIds: ["weather.chmi_webcams"],
-        feedsCatalogLayerIds: ["public.weather.webcams"],
+        feedsLayerIds: ["weather.chmi_webcams", "outdoor.verified_origin_webcams"],
+        feedsCatalogLayerIds: ["public.weather.webcams", "public.outdoor.webcams"],
         notes: [
           "Public origin webcam locations and on-demand snapshots are fetched server-side by SIM.",
+          "Curated Czech outdoor webcams are published separately as public.outdoor.webcams and do not use WebCamLive image proxy at runtime.",
           "COP should open a custom camera preview window on feature click and must keep the supplied origin attribution visible.",
           "Not a warning source; use only as visual situation context."
         ]

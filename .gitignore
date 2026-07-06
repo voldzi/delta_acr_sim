@@ -6,6 +6,8 @@ coverage/
 .env
 .env.local
 data/
+!apps/situation-data-api/data/
+!apps/situation-data-api/data/curated-outdoor-webcams-cz.json
 *.log
 playwright-report/
 test-results/

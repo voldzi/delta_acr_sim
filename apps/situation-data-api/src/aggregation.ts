@@ -156,6 +156,9 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
     return "air_quality.chmi_station_observations";
   }
   if (sourceId === "chmi_weather_webcams") {
+    if (layer === "outdoor_webcams") {
+      return "outdoor.verified_origin_webcams";
+    }
     return "weather.chmi_webcams";
   }
   if (sourceId === "chmi_weather_radar") {
@@ -265,6 +268,8 @@ function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: st
       return "public.weather.observations";
     case "weather.chmi_webcams":
       return "public.weather.webcams";
+    case "outdoor.verified_origin_webcams":
+      return "public.outdoor.webcams";
     case "weather.temperature_grid":
       return "public.weather.temperature_grid";
     case "weather.wind_field":

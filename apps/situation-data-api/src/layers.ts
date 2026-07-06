@@ -18,6 +18,14 @@ export const LAYERS: LayerDescriptor[] = [
     expectedCadenceSeconds: 300
   },
   {
+    layerId: "outdoor_webcams",
+    label: "Outdoor webcams",
+    description: "Curated tourism and outdoor webcam points with verified origin provider links and SIM-mediated snapshot detail when available.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 21600
+  },
+  {
     layerId: "weather_forecast_area",
     label: "Weather forecast areas",
     description: "SIM-normalized forecast polygons with ready-to-render weather symbols, risk summaries and meteogram detail URLs.",

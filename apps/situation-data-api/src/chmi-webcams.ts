@@ -1,9 +1,12 @@
+import { readFile } from "node:fs/promises";
+
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type { BoundingBox, SituationDataLicense, SituationFeature } from "./types.js";
+import type { BoundingBox, SituationDataLicense, SituationFeature, SituationLayerId } from "./types.js";
 
 export const CHMI_WEATHER_WEBCAMS_SOURCE_ID = "chmi_weather_webcams" as const;
 export const CHMI_WEATHER_WEBCAMS_LAYER_ID = "weather_webcams" as const;
+export const OUTDOOR_WEBCAMS_LAYER_ID = "outdoor_webcams" as const;
 export const CHMI_WEATHER_WEBCAMS_CONTRACT_VERSION = "sim-weather-cameras-v1" as const;
 
 export const CHMI_WEBCAMS_LICENSE: SituationDataLicense = {
@@ -23,6 +26,7 @@ export interface ChmiWeatherWebcamCatalogQuery {
   bbox?: BoundingBox;
   limit?: number;
   includeRaw?: boolean;
+  layers?: SituationLayerId[];
 }
 
 export interface ChmiWeatherWebcamCatalogResponse {
@@ -283,16 +287,16 @@ export class ChmiWeatherWebcamCatalog {
     };
   }
 
-  async listFeatures(query: Required<Pick<ChmiWeatherWebcamCatalogQuery, "bbox" | "limit" | "includeRaw">>): Promise<{
+  async listFeatures(query: Required<Pick<ChmiWeatherWebcamCatalogQuery, "bbox" | "limit" | "includeRaw">> & Pick<ChmiWeatherWebcamCatalogQuery, "layers">): Promise<{
     fetchedAt: string;
     features: SituationFeature[];
     warnings: string[];
   }> {
     const fetchedAt = new Date().toISOString();
-    const locations = this.filterLocations(await this.resolveLocations(), query);
+    const locations = this.filterLocationsByLayers(this.filterLocations(await this.resolveLocations(), query), query.layers);
     return {
       fetchedAt,
-      features: locations.map((location) => this.locationFeature(location, fetchedAt, query.includeRaw)),
+      features: locations.map((location) => this.locationFeature(location, fetchedAt, query.includeRaw, layerForCameraLocation(location))),
       warnings: [
         ...this.lastLocationWarnings,
         ...(locations.length === 0 ? ["chmi_weather_webcams returned no camera locations in the requested bbox."] : [])
@@ -411,7 +415,7 @@ export class ChmiWeatherWebcamCatalog {
       return normalizeOstravaArcgisLocations(payload, feed);
     }
     if (feed.kind === "static_json") {
-      const payload = await requestJson<StaticCameraFeedPayload>(feed.url, this.config.requestTimeoutMs);
+      const payload = await requestStaticCameraJson(feed.url, this.config.requestTimeoutMs);
       return normalizeStaticCameraLocations(payload, feed);
     }
     const payload = await requestJsonPost<OstravaAsmxCameraPayload>(feed.url, this.config.requestTimeoutMs);
@@ -455,21 +459,27 @@ export class ChmiWeatherWebcamCatalog {
       .slice(0, Math.max(1, Math.min(query.limit ?? 250, 1000)));
   }
 
-  private locationFeature(location: ChmiWeatherWebcamLocation, fetchedAt: string, includeRaw: boolean): SituationFeature {
+  private filterLocationsByLayers(locations: ChmiWeatherWebcamLocation[], layers: SituationLayerId[] | undefined): ChmiWeatherWebcamLocation[] {
+    const requestedLayers = new Set(layers ?? [CHMI_WEATHER_WEBCAMS_LAYER_ID]);
+    return locations.filter((location) => requestedLayers.has(layerForCameraLocation(location)));
+  }
+
+  private locationFeature(location: ChmiWeatherWebcamLocation, fetchedAt: string, includeRaw: boolean, layerId: SituationLayerId): SituationFeature {
     const summary = this.locationSummary(location);
     const validUntil = addSecondsIso(fetchedAt, Math.max(600, this.config.chmiWeatherWebcamsCacheTtlSeconds * 2));
+    const isOutdoorWebcam = layerId === OUTDOOR_WEBCAMS_LAYER_ID;
     return stripRawIfNeeded(
       {
         type: "Feature",
-        id: `weather_webcam:${location.locationId}`,
+        id: `${isOutdoorWebcam ? "outdoor_webcam" : "weather_webcam"}:${location.locationId}`,
         geometry: {
           type: "Point",
           coordinates: [round(location.lon, 6), round(location.lat, 6)]
         },
         properties: {
-          featureId: `weather_webcam:${location.locationId}`,
-          layer: CHMI_WEATHER_WEBCAMS_LAYER_ID,
-          category: "weather_webcam",
+          featureId: `${isOutdoorWebcam ? "outdoor_webcam" : "weather_webcam"}:${location.locationId}`,
+          layer: layerId,
+          category: isOutdoorWebcam ? "outdoor_webcam" : "weather_webcam",
           label: summary.label,
           labelLocalized: {
             cs: summary.label,
@@ -498,6 +508,7 @@ export class ChmiWeatherWebcamCatalog {
             sourceSystem: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
             originSourceSystem: location.sourceId,
             originCategory: location.category,
+            presentationGroup: isOutdoorWebcam ? "outdoor" : "weather",
             renderAs: "point_with_detail_snapshot",
             snapshotMode: "on_demand",
             imagePayloadInFeatureStream: "false",
@@ -511,17 +522,21 @@ export class ChmiWeatherWebcamCatalog {
             `${location.sourceName} lists public camera locations for visual situational context.`,
             "SIM fetches camera snapshots only on detail demand and keeps a short server-side cache."
           ],
-          summary: "Bod veřejné webkamery pro vizuální kontrolu aktuální situace; náhled se načítá až v detailu.",
+          summary: isOutdoorWebcam
+            ? "Bod turistické webkamery s ověřeným originálním provozovatelem; náhled je dostupný jen pokud jej originální zdroj poskytuje přes SIM."
+            : "Bod veřejné webkamery pro vizuální kontrolu aktuální situace; náhled se načítá až v detailu.",
           summaryLocalized: {
-            cs: "Bod veřejné webkamery pro vizuální kontrolu aktuální situace.",
-            en: "Public webcam point for visual current-situation context."
+            cs: isOutdoorWebcam
+              ? "Turistická webkamera z ověřeného originálního zdroje."
+              : "Bod veřejné webkamery pro vizuální kontrolu aktuální situace.",
+            en: isOutdoorWebcam ? "Outdoor webcam from a verified origin source." : "Public webcam point for visual current-situation context."
           },
           notices: [
             "COP should open a custom camera preview window on click and load the snapshot through SIM.",
             "Do not use webcam imagery as an automated warning or alert source.",
             "The feature stream intentionally does not contain the base64 image payload."
           ],
-          styleHint: "weather-webcam-point-v1",
+          styleHint: isOutdoorWebcam ? "outdoor-webcam-point-v1" : "weather-webcam-point-v1",
           iconHint: "camera",
           sourceRevision: location.sourceDataUrl,
           readModel: true,
@@ -537,6 +552,7 @@ export class ChmiWeatherWebcamCatalog {
               originSourceName: location.sourceName,
               originAuthority: location.authority,
               originCategory: location.category,
+              presentationGroup: isOutdoorWebcam ? "outdoor" : "weather",
               attribution: location.attribution,
               snapshotAvailable: summary.snapshotAvailable,
               camerasKnownAfterDetail: true,
@@ -838,13 +854,28 @@ function parsePublicCameraFeeds(values: string[]): PublicCameraFeedConfig[] {
           authority,
           providerPageUrl: new URL(providerPageUrl).toString(),
           kind,
-          url: new URL(url).toString()
+          url: normalizeFeedUrl(url)
         } satisfies PublicCameraFeedConfig;
       } catch {
         return undefined;
       }
     })
     .filter((item): item is PublicCameraFeedConfig => Boolean(item));
+}
+
+function normalizeFeedUrl(value: string): string {
+  if (value.startsWith("builtin:")) {
+    return value;
+  }
+  return new URL(value).toString();
+}
+
+function layerForCameraLocation(location: ChmiWeatherWebcamLocation): SituationLayerId {
+  return isOutdoorCameraCategory(location.category) ? OUTDOOR_WEBCAMS_LAYER_ID : CHMI_WEATHER_WEBCAMS_LAYER_ID;
+}
+
+function isOutdoorCameraCategory(category: string): boolean {
+  return ["outdoor", "outdoor_webcam", "tourism", "tourism_webcam", "scenic", "trail", "ski"].includes(category);
 }
 
 function lonLatFromArcgisFeature(feature: ArcgisCameraFeature): { lon: number; lat: number } | undefined {
@@ -1070,6 +1101,15 @@ async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
     throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
   }
   return (await response.json()) as T;
+}
+
+async function requestStaticCameraJson(url: string, timeoutMs: number): Promise<StaticCameraFeedPayload> {
+  if (url === "builtin:curated_outdoor_webcams_cz") {
+    const fileUrl = new URL("../data/curated-outdoor-webcams-cz.json", import.meta.url);
+    const content = await readFile(fileUrl, "utf8");
+    return JSON.parse(content) as StaticCameraFeedPayload;
+  }
+  return requestJson<StaticCameraFeedPayload>(url, timeoutMs);
 }
 
 async function requestJsonPost<T>(url: string, timeoutMs: number): Promise<T> {

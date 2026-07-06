@@ -17,6 +17,7 @@ export type SituationLayerId =
   | "place_settlements"
   | "trail_routes"
   | "trail_poi"
+  | "outdoor_webcams"
   | "community_places"
   | "community_reports"
   | "air_quality"

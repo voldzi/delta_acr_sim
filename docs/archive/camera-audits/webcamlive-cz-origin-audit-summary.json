@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-07-06T09:57:04.228Z",
+  "totalCandidates": 469,
+  "withNonAggregatorOrigin": 290,
+  "reachableOrigin": 267,
+  "productionFeedLocations": 267,
+  "skipped": {
+    "noNonAggregatorOrigin": 179,
+    "originUnreachable": 23
+  },
+  "notes": [
+    "WebCamLive was used only for discovery and origin-link audit.",
+    "Production feed contains origin provider pages only and no WebCamLive image URLs.",
+    "Direct snapshots are disabled until a direct origin image or stream URL is verified per camera."
+  ]
+}

@@ -480,7 +480,8 @@ další přímé origin zdroje. Položky odděluj čárkou, pole uvnitř položk
 `|` ve tvaru `sourceId|label|category|authority|providerPageUrl|kind|url`.
 Podporované `kind` jsou `arcgis_lavdis`, `arcgis_ostrava`, `ostrava_asmx` a
 `static_json`. SIM tyto zdroje cacheuje server-side a COP dál používá pouze
-endpointy SIM.
+endpointy SIM. `static_json` může být externí URL, nebo vestavěný feed
+`builtin:curated_outdoor_webcams_cz`.
 
 `static_json` je určený pro kurátorované seznamy ověřených origin kamer,
 například po ručním auditu agregátorů typu WebCamLive. URL musí vracet JSON:
@@ -527,6 +528,15 @@ node scripts/discover-webcamlive-origin-cameras.mjs \
 
 Výstup skriptu je podklad k ověření licence, atribuce a přímé origin URL.
 Do `PUBLIC_CAMERA_FEEDS` se vkládá až ověřený `static_json` feed.
+
+Vestavěný feed `builtin:curated_outdoor_webcams_cz` vznikl auditem českého
+katalogu WebCamLive dne 2026-07-06. WebCamLive je použitý pouze jako discovery
+katalog, nikoli jako runtime obrazový zdroj. Do feedu jsou zařazené jen body,
+kde byl dohledán dostupný neagregátorový originální web provozovatele. Přímý
+snapshot je u těchto kamer vypnutý (`snapshotAvailable=false`), dokud není pro
+konkrétní kameru ověřená přímá originální image/stream URL. COP je má řadit do
+Turistika / Outdoor přes vrstvu `public.outdoor.webcams` a při chybějícím
+snapshotu nabídnout otevření originální stránky provozovatele.
 
 `public.weather.current` zustava pro COP stejnou vrstvou
 `layers=weather&source=open_meteo`. SIM ji server-side obohacuje zdrojem

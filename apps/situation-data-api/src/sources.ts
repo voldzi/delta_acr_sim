@@ -1135,7 +1135,7 @@ class ChmiWeatherWebcamsSource implements SituationDataSource {
       enabled: config.enabledSources.includes(CHMI_WEATHER_WEBCAMS_SOURCE_ID),
       mode: "live",
       priority: 82,
-      layers: ["weather_webcams"],
+      layers: ["weather_webcams", "outdoor_webcams"],
       license: CHMI_WEBCAMS_LICENSE,
       baseUrl: config.chmiWeatherWebcamsMapUrl,
       updateCadenceSeconds: config.chmiWeatherWebcamsCacheTtlSeconds
@@ -1177,13 +1177,14 @@ class ChmiWeatherWebcamsSource implements SituationDataSource {
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
-    if (!query.layers.includes("weather_webcams")) {
+    if (!query.layers.includes("weather_webcams") && !query.layers.includes("outdoor_webcams")) {
       return { source: this.descriptor, fetchedAt: new Date().toISOString(), features: [], warnings: [] };
     }
     const result = await this.catalog.listFeatures({
       bbox: query.bbox,
       limit: query.limit,
-      includeRaw: query.includeRaw
+      includeRaw: query.includeRaw,
+      layers: query.layers
     });
     return {
       source: this.descriptor,

@@ -41,12 +41,17 @@ SIM publishes public origin webcams as the catalog layer
 feature layer `weather_webcams`.
 
 The source id remains `chmi_weather_webcams` for compatibility with existing
-COP layer wiring. The payload is now multi-origin: ČHMÚ, LAVDIS/SPS and
-configured city/traffic camera feeds can appear in the same layer. SIM must
-use direct origin feeds only; aggregator pages are not runtime data sources.
+COP layer wiring. The payload is multi-origin, but presentation is split by
+feature layer:
+
+- weather camera context: `weather_webcams` / `public.weather.webcams`,
+- tourism and outdoor origin cameras: `outdoor_webcams` / `public.outdoor.webcams`.
+
+SIM must use direct origin feeds only; aggregator pages are not runtime data sources.
 For broader camera coverage, SIM supports a server-side `PUBLIC_CAMERA_FEEDS`
 entry with `kind=static_json`; this feed must contain only cameras whose origin
-provider, attribution and direct snapshot/stream URL were verified outside COP.
+provider and attribution were verified outside COP. A direct snapshot/stream URL
+is optional and is exposed only when it is verified from the origin provider.
 WebCamLive can be used as a discovery/audit aid, but not as the production
 source unless the origin has been verified and entered into the curated feed.
 
@@ -58,12 +63,25 @@ observation:
 - `properties.providerLayerId = "weather.chmi_webcams"`
 - `properties.sourceId = "chmi_weather_webcams"`
 
+For tourism/outdoor cameras COP should use:
+
+- `properties.layer = "outdoor_webcams"`
+- `properties.layerId = "public.outdoor.webcams"`
+- `properties.providerLayerId = "outdoor.verified_origin_webcams"`
+- `properties.sourceId = "chmi_weather_webcams"`
+- `properties.providerProperties.camera.presentationGroup = "outdoor"`
+
 COP should render webcam features as selectable point icons. The feature stream
 does not contain image payloads. On click, COP should open its own camera
 preview window and use one of these SIM-provided URLs:
 
 - `properties.providerProperties.camera.detailUrl`
 - `properties.providerProperties.camera.snapshotUrl`
+
+When `properties.providerProperties.camera.snapshotAvailable=false`, COP should
+not call the snapshot endpoint. It should show that automatic preview is not
+available and offer the origin provider page from
+`properties.providerProperties.camera.providerPageUrl`.
 
 The detail endpoint returns contract `sim-weather-cameras-v1`:
 

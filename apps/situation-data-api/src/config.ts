@@ -376,6 +376,15 @@ const DEFAULT_PUBLIC_CAMERA_FEEDS = [
     "http://kamery.ostrava.cz/",
     "ostrava_asmx",
     "http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery"
+  ].join("|"),
+  [
+    "cz_verified_origin_webcams",
+    "Ověřené turistické webkamery ČR",
+    "outdoor_webcam",
+    "Jednotliví veřejní provozovatelé kamer v ČR",
+    "https://www.webcamlive.cz/webkamery/ceska-republika/2",
+    "static_json",
+    "builtin:curated_outdoor_webcams_cz"
   ].join("|")
 ];
 

@@ -179,6 +179,19 @@ Praktické civilní body z OSM, které se dají použít v běžném provozu i p
 
 Typické kategorie jsou WC, pitná voda, sprchy, nabíjení, AED, lékárny, přístřeší, knihovny, úřady a komunitní centra. Provider musí u těchto bodů rozlišit `sourceAuthority=reference` a `communityStatus=reference_only`, aby COP neprezentoval OSM referenci jako ověřený aktuální stav.
 
+Turistické webkamery patří do stejné větve:
+
+- COM layer: `public.outdoor.webcams`
+- provider layer: `outdoor.verified_origin_webcams`
+- source: `chmi_weather_webcams`
+- provider query: `layers=outdoor_webcams&source=chmi_weather_webcams`
+- style: `outdoor-webcam-point-v1`
+
+Tyto body vznikají z kurátorovaného origin-only feedu. WebCamLive smí sloužit
+jen jako discovery/audit katalog; COP nesmí používat WebCamLive obrazové URL.
+Když SIM pošle `providerProperties.camera.snapshotAvailable=false`, COP nabídne
+originální stránku provozovatele místo automatického náhledu.
+
 Uživatelská komunitní hlášení, fotky a návrhy změn jsou samostatný navazující produkt. Katalog může rezervovat `public.outdoor.community_reports`, ale dokud není zajištěna identita, moderace, retence a anti-abuse, má být `selectable=false` a běžným uživatelům nezapnutelné.
 
 ## Doporučená katalogová ID
@@ -196,6 +209,7 @@ SIM používá nebo doporučuje tato stabilní COM layer ID:
 - `public.place.settlements`
 - `public.trails.routes`
 - `public.trails.poi`
+- `public.outdoor.webcams`
 - `public.outdoor.community_places`
 - `public.outdoor.community_reports`
 - `public.weather.current`

@@ -223,7 +223,7 @@ Každá feature musí mít tyto normalizované vlastnosti:
 | `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
 | `providerId` | string | identifikátor providera, např. `sim.situation-data` |
 | `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_forecast_area`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `weather_webcams`, `air_quality_grid` | mapová vrstva |
+| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi`, `outdoor_webcams`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_forecast_area`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `weather_webcams`, `air_quality_grid` | mapová vrstva |
 | `category` | string | detailnější typ objektu |
 | `label` | string | lidsky čitelný název |
 | `labelLocalized` | object, optional | lokalizované názvy, typicky `cs` a `en` |
@@ -283,6 +283,23 @@ Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
 | `categoryLabelLocalized` | object | český a anglický název kategorie |
 | `openingHours`, `website`, `wheelchair`, `access` | string, optional | veřejné OSM atributy pro detail |
 | `mayDisplayContact` | boolean | vždy `false`; SIM nepublikuje přímé kontaktní údaje z OSM jako běžný mapový detail |
+
+`outdoor_webcams` je samostatná vrstva pro Turistika / Outdoor:
+
+| Vrstva | COM layer | Zdroj | Popis |
+| --- | --- | --- | --- |
+| `outdoor_webcams` | `public.outdoor.webcams` | `chmi_weather_webcams` | Kurátorované turistické a městské webkamery z ověřených originálních webů provozovatelů. |
+
+Feature má `properties.category="outdoor_webcam"`,
+`properties.styleHint="outdoor-webcam-point-v1"` a
+`properties.providerProperties.camera.presentationGroup="outdoor"`. Stejně jako
+u počasových kamer se obraz neposílá ve feature streamu. COP má detail načítat
+přes `providerProperties.camera.detailUrl`. Pokud
+`providerProperties.camera.snapshotAvailable=false`, COP nemá volat snapshot
+endpoint; má zobrazit informaci, že automatický náhled není ověřený, a nabídnout
+otevření `providerProperties.camera.providerPageUrl` / `providerPageUrl`
+originálního provozovatele. WebCamLive smí být v SIM pouze auditní discovery
+zdroj, ne runtime obrazová proxy.
 
 ## Emergency routing support
 
@@ -416,6 +433,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo. |
 | `chmi_weather_stations` | `weather` | Měřené meteorologické stanice ČHMÚ z `meteorology/climate/now`: teplota, vlhkost, tlak, vítr, srážky a sluneční svit. COM používá katalogovou vrstvu `public.weather.observations`. |
 | `chmi_weather_radar` | `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk` | Radarové kompozity ČHMÚ z `meteorology/weather/radar/composite`: aktuální MAX_Z, PseudoCAPPI 2 km, MERGE 1h a nowcast archivy. COM používá katalogové vrstvy `public.weather.radar_reflectivity`, `public.weather.radar_precipitation`, `public.weather.radar_nowcast`, `public.safety.thunderstorm_risk`. Neobsahuje raw polohy blesků. |
+| `chmi_weather_webcams` | `weather_webcams`, `outdoor_webcams` | Veřejné kamery. Počasové kamery zůstávají ve vrstvě `public.weather.webcams`; kurátorované turistické/origin kamery jsou ve vrstvě `public.outdoor.webcams`. |
 | `chmi_air_quality` | `air_quality` | Měřené imisní stanice ČHMÚ z `air_quality/now`: index kvality ovzduší a hlavní polutanty. COM používá katalogovou vrstvu `public.safety.air_quality`. |
 | `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
 | `ctu_stationary_mobile` | `mobile` | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav. |

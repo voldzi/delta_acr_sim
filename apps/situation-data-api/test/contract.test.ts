@@ -167,6 +167,7 @@ describe("Situation Data API contract", () => {
         expect.objectContaining({ layerId: "weather_radar_reflectivity", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_thunderstorm_risk", defaultVisible: false }),
         expect.objectContaining({ layerId: "weather_webcams", defaultVisible: false }),
+        expect.objectContaining({ layerId: "outdoor_webcams", defaultVisible: false }),
         expect.objectContaining({ layerId: "air_quality_grid", defaultVisible: false }),
         expect.objectContaining({ layerId: "community_places", defaultVisible: false }),
         expect.objectContaining({ layerId: "community_reports", defaultVisible: false })
@@ -269,7 +270,7 @@ describe("Situation Data API contract", () => {
         }),
         expect.objectContaining({
           sourceId: "chmi_weather_webcams",
-          layers: expect.arrayContaining(["weather_webcams"])
+          layers: expect.arrayContaining(["weather_webcams", "outdoor_webcams"])
         }),
         expect.objectContaining({
           sourceId: "ardos_partner",
@@ -570,6 +571,62 @@ describe("Situation Data API contract", () => {
     expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   });
 
+  it("publishes bundled verified origin webcams as outdoor context, not weather", async () => {
+    config.enabledSources = ["chmi_weather_webcams"];
+    config.publicCameraFeeds = [
+      [
+        "cz_verified_origin_webcams",
+        "Ověřené turistické webkamery ČR",
+        "outdoor_webcam",
+        "Jednotliví veřejní provozovatelé kamer v ČR",
+        "https://www.webcamlive.cz/webkamery/ceska-republika/2",
+        "static_json",
+        "builtin:curated_outdoor_webcams_cz"
+      ].join("|")
+    ];
+    ({ app } = await createApp(config));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === config.chmiWeatherWebcamsMapUrl) {
+          return jsonResponse({ type: "FeatureCollection", features: [] });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+
+    const outdoor = await request(app)
+      .get("/api/v1/features?layers=outdoor_webcams&sources=chmi_weather_webcams&bbox=12,48,19.2,51.2&limit=500&includeRaw=false")
+      .expect(200);
+
+    expect(outdoor.body.features.length).toBeGreaterThan(200);
+    expect(outdoor.body.features[0]).toEqual(
+      expect.objectContaining({
+        id: expect.stringMatching(/^outdoor_webcam:/),
+        properties: expect.objectContaining({
+          layer: "outdoor_webcams",
+          category: "outdoor_webcam",
+          styleHint: "outdoor-webcam-point-v1",
+          providerProperties: expect.objectContaining({
+            camera: expect.objectContaining({
+              originCategory: "outdoor_webcam",
+              presentationGroup: "outdoor",
+              snapshotAvailable: false,
+              imagePayloadInFeatureStream: false
+            })
+          })
+        })
+      })
+    );
+    expect(JSON.stringify(outdoor.body.features)).not.toContain("camera_image.php");
+    expect(JSON.stringify(outdoor.body.features)).not.toContain("outputCache");
+
+    const weather = await request(app)
+      .get("/api/v1/features?layers=weather_webcams&sources=chmi_weather_webcams&bbox=12,48,19.2,51.2&limit=500&includeRaw=false")
+      .expect(200);
+    expect(weather.body.features).toHaveLength(0);
+  });
+
   it("projects CHMI weather cameras as clickable COP feature points", async () => {
     config.enabledSources = ["chmi_weather_webcams"];
     ({ app } = await createApp(config));
@@ -828,6 +885,23 @@ describe("Situation Data API contract", () => {
           })
         }),
         expect.objectContaining({
+          providerLayerId: "outdoor.verified_origin_webcams",
+          recommendedCatalogLayerId: "public.outdoor.webcams",
+          role: "reference",
+          audience: "public",
+          kind: "vector_features",
+          selectable: true,
+          sourceIds: ["chmi_weather_webcams"],
+          query: expect.objectContaining({
+            providerLayerIds: ["outdoor_webcams"],
+            providerSourceIds: ["chmi_weather_webcams"],
+            categoryFilter: ["outdoor_webcam"]
+          }),
+          legal: expect.objectContaining({
+            notes: expect.arrayContaining([expect.stringContaining("WebCamLive")])
+          })
+        }),
+        expect.objectContaining({
           providerLayerId: "weather.temperature_grid",
           recommendedCatalogLayerId: "public.weather.temperature_grid",
           kind: "grid_field",
@@ -1037,8 +1111,8 @@ describe("Situation Data API contract", () => {
           sourceId: "chmi_weather_webcams",
           sourceRole: "final",
           selectableInMap: true,
-          feedsLayerIds: ["weather.chmi_webcams"],
-          feedsCatalogLayerIds: ["public.weather.webcams"]
+          feedsLayerIds: ["weather.chmi_webcams", "outdoor.verified_origin_webcams"],
+          feedsCatalogLayerIds: ["public.weather.webcams", "public.outdoor.webcams"]
         }),
         expect.objectContaining({
           sourceId: "chmi_air_quality",
