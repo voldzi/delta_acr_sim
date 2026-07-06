@@ -142,6 +142,7 @@
 - `CHMI_WEATHER_WEBCAMS_MAP_URL`
 - `CHMI_WEATHER_WEBCAMS_DATA_BASE_URL`
 - `CHMI_WEATHER_WEBCAMS_PUBLIC_BASE_URL`
+- `PUBLIC_CAMERA_FEEDS`
 - `ARDOS_PARTNER_BASE_URL`
 - `ARDOS_PARTNER_TOKEN`
 - `SITUATION_DATA_CORS_ORIGINS`
@@ -409,6 +410,7 @@ SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=false
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
 SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
 SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS=300
+PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000,ostrava_traffic_cameras|Dopravní kamery Ostrava|traffic|Statutární město Ostrava|http://kamery.ostrava.cz/|ostrava_asmx|http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery
 SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900
 SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=600
 CHMI_WEATHER_METADATA_BASE_URL=https://opendata.chmi.cz/meteorology/climate/now/metadata/
@@ -417,6 +419,7 @@ CHMI_WEATHER_RADAR_BASE_URL=https://opendata.chmi.cz/meteorology/weather/radar/c
 CHMI_WEATHER_WEBCAMS_MAP_URL=https://data-provider.chmi.cz/api/kamery/data/map
 CHMI_WEATHER_WEBCAMS_DATA_BASE_URL=https://data-provider.chmi.cz
 CHMI_WEATHER_WEBCAMS_PUBLIC_BASE_URL=https://www.chmi.cz
+PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000,ostrava_traffic_cameras|Dopravní kamery Ostrava|traffic|Statutární město Ostrava|http://kamery.ostrava.cz/|ostrava_asmx|http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery
 CHMI_AIR_QUALITY_METADATA_URL=https://opendata.chmi.cz/air_quality/now/metadata/metadata.json
 CHMI_AIR_QUALITY_DATA_URL=https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv
 IDSJMK_VEHICLE_POSITIONS_URL=https://gis.brno.cz/ags1/rest/services/Hosted/Kordis_26_polohy/FeatureServer/0/query?where=IsInactive%3D%27false%27&outFields=*&orderByFields=TimeUpdated%20DESC&f=geojson&resultRecordCount=10000
@@ -471,6 +474,12 @@ SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS=21600
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ```
+
+`PUBLIC_CAMERA_FEEDS` rozšiřuje kompatibilní source `chmi_weather_webcams` o
+další přímé origin zdroje. Položky odděluj čárkou, pole uvnitř položky znakem
+`|` ve tvaru `sourceId|label|category|authority|providerPageUrl|kind|url`.
+Podporované `kind` jsou `arcgis_lavdis`, `arcgis_ostrava` a `ostrava_asmx`.
+SIM tyto zdroje cacheuje server-side a COP dál používá pouze endpointy SIM.
 
 `public.weather.current` zustava pro COP stejnou vrstvou
 `layers=weather&source=open_meteo`. SIM ji server-side obohacuje zdrojem

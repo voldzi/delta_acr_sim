@@ -34,11 +34,16 @@ The current point feature carries normalized metrics such as `temperatureC`,
 `relativeHumidityPercent`, `precipitationMm`, `cloudCoverPercent`,
 `windSpeedMps`, `windDirectionDeg`, `windGustMps` and `weatherCode`.
 
-## CHMI Webcam Preview Layer
+## Public Webcam Preview Layer
 
-SIM publishes ČHMÚ weather cameras as the catalog layer
+SIM publishes public origin webcams as the catalog layer
 `public.weather.webcams` backed by provider layer `weather.chmi_webcams` and
 feature layer `weather_webcams`.
+
+The source id remains `chmi_weather_webcams` for compatibility with existing
+COP layer wiring. The payload is now multi-origin: ČHMÚ, LAVDIS/SPS and
+configured city/traffic camera feeds can appear in the same layer. SIM must
+use direct origin feeds only; aggregator pages are not runtime data sources.
 
 Each webcam feature must be treated as its own layer, not as a weather-station
 observation:
@@ -74,9 +79,11 @@ The detail response contains a `cameras[]` array. Each item has:
 - optional `providerUrl`
 - `snapshotUrl`
 - `contentType`
+- `snapshotAvailable`
 
-For the actual image, render `snapshotUrl` as an image source. SIM decodes the
-ČHMÚ base64 payload server-side and responds with `image/gif`, `image/png` or
+For the actual image, render `snapshotUrl` as an image source when
+`snapshotAvailable !== false`. SIM decodes ČHMÚ base64 images or fetches direct
+origin snapshots server-side and responds with `image/gif`, `image/png` or
 `image/jpeg` when available:
 
 ```http
@@ -87,10 +94,11 @@ If a location has multiple cameras, COP should show them as tabs or a compact
 selector inside the same preview window. If `cameraId` is omitted, SIM returns
 the first camera for that location.
 
-COP must keep attribution visible in the preview window:
-`Český hydrometeorologický ústav`. Treat webcam imagery as visual weather
-context only. Do not convert camera availability or image content into a user
-facing warning, incident or automatic alert.
+COP must keep the supplied origin attribution visible in the preview window.
+Use `properties.providerProperties.camera.attribution` or the detail response
+location `attribution`. Treat webcam imagery as visual situation context only.
+Do not convert camera availability or image content into a user facing warning,
+incident or automatic alert.
 
 ## Radar Overlay Rendering
 

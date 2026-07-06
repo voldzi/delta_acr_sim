@@ -199,12 +199,12 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
     {
       providerLayerId: "weather.chmi_webcams",
       recommendedCatalogLayerId: "public.weather.webcams",
-      label: "Webkamery ČHMÚ",
-      labelLocalized: { cs: "Webkamery ČHMÚ", en: "CHMI webcams" },
-      description: "Bodová vrstva veřejných webkamer ČHMÚ s náhledem snímku načítaným přes SIM až po kliknutí v COP.",
+      label: "Veřejné webkamery",
+      labelLocalized: { cs: "Veřejné webkamery", en: "Public webcams" },
+      description: "Bodová vrstva veřejných webkamer z přímých origin zdrojů s náhledem snímku načítaným přes SIM až po kliknutí v COP.",
       descriptionLocalized: {
-        cs: "Bodová vrstva veřejných webkamer ČHMÚ s náhledem snímku načítaným přes SIM až po kliknutí v COP.",
-        en: "Point layer of CHMI public webcams with on-demand snapshot previews served by SIM."
+        cs: "Bodová vrstva veřejných webkamer z přímých origin zdrojů s náhledem snímku načítaným přes SIM až po kliknutí v COP.",
+        en: "Point layer of public origin webcams with on-demand snapshot previews served by SIM."
       },
       categoryPath: ["weather", "webcams"],
       categories: ["weather", "webcam"],
@@ -228,11 +228,12 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
         cacheTtlSeconds: config.chmiWeatherWebcamsCacheTtlSeconds
       },
       legal: {
-        attribution: "Český hydrometeorologický ústav",
+        attribution: "Původní veřejný zdroj uvedený u každé kamery",
         notes: [
-          "COP must show ČHMÚ attribution in the camera preview window.",
+          "COP must show the origin attribution supplied in providerProperties.camera.attribution in the camera preview window.",
           "Feature payloads do not contain image data; COP opens /api/v1/weather-cameras/{locationId} or the supplied snapshot URL on click.",
-          "Webcam imagery is visual weather context only and must not be promoted as an automated warning source."
+          "Webcam imagery is visual situation context only and must not be promoted as an automated warning source.",
+          "SIM aggregates only direct origin feeds; aggregator pages are not scraped as runtime sources."
         ]
       }
     },
@@ -1737,9 +1738,9 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsLayerIds: ["weather.chmi_webcams"],
         feedsCatalogLayerIds: ["public.weather.webcams"],
         notes: [
-          "ČHMÚ public webcam locations and on-demand snapshots are fetched server-side by SIM.",
-          "COP should open a custom camera preview window on feature click and must keep CHMI attribution visible.",
-          "Not a warning source; use only as visual weather context."
+          "Public origin webcam locations and on-demand snapshots are fetched server-side by SIM.",
+          "COP should open a custom camera preview window on feature click and must keep the supplied origin attribution visible.",
+          "Not a warning source; use only as visual situation context."
         ]
       };
     case "chmi_air_quality":
@@ -2018,7 +2019,7 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
     return "chmi-opendata";
   }
   if (sourceId === "chmi_weather_webcams") {
-    return "chmi-data-provider";
+    return "multi-origin-public-camera-feeds";
   }
   return undefined;
 }

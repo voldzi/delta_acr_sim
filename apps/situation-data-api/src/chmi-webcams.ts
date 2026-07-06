@@ -7,14 +7,14 @@ export const CHMI_WEATHER_WEBCAMS_LAYER_ID = "weather_webcams" as const;
 export const CHMI_WEATHER_WEBCAMS_CONTRACT_VERSION = "sim-weather-cameras-v1" as const;
 
 export const CHMI_WEBCAMS_LICENSE: SituationDataLicense = {
-  name: "ČHMÚ webové kamery",
+  name: "Veřejné webové kamery přes SIM",
   url: "https://www.chmi.cz/namerena-data/webkamery",
-  attribution: "Český hydrometeorologický ústav",
+  attribution: "Český hydrometeorologický ústav; Státní plavební správa; Statutární město Ostrava",
   commercialUse: "unknown",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "Webcam imagery is fetched and cached server-side by SIM for COP preview only.",
-    "Keep CHMI attribution visible in COP camera detail windows.",
+    "Webcam imagery is fetched from original public source systems and cached server-side by SIM for COP preview only.",
+    "Keep the per-camera origin attribution visible in COP camera detail windows.",
     "Use as visual weather context only; webcam imagery is not an official warning or emergency instruction feed."
   ]
 };
@@ -51,6 +51,12 @@ export interface ChmiWeatherWebcamLocationSummary {
   snapshotUrl: string;
   providerPageUrl: string;
   camerasKnownAfterDetail: boolean;
+  originSourceId?: string;
+  originSourceName?: string;
+  originAuthority?: string;
+  originCategory?: string;
+  attribution?: string;
+  snapshotAvailable?: boolean;
 }
 
 export interface ChmiWeatherWebcamDetailResponse {
@@ -69,6 +75,7 @@ export interface ChmiWeatherWebcamCameraDetail {
   providerUrl?: string;
   snapshotUrl: string;
   contentType?: string;
+  snapshotAvailable?: boolean;
 }
 
 export interface ChmiWeatherWebcamSnapshotAsset {
@@ -109,10 +116,20 @@ interface ChmiWebcamPointItem {
 
 interface ChmiWeatherWebcamLocation {
   locationId: string;
+  label: string;
   lon: number;
   lat: number;
   sourceDataUrl: string;
   sourceIcon?: string;
+  sourceId: string;
+  sourceName: string;
+  sourceNameEn?: string;
+  authority: string;
+  attribution: string;
+  providerPageUrl: string;
+  category: string;
+  detailMode: "chmi_point" | "inline_cameras";
+  cameras?: ResolvedCamera[];
 }
 
 interface ResolvedCamera {
@@ -122,6 +139,8 @@ interface ResolvedCamera {
   snapshotUrl: string;
   contentType?: string;
   imageBase64?: string;
+  directImageUrl?: string;
+  snapshotAvailable?: boolean;
 }
 
 interface ResolvedDetail {
@@ -129,9 +148,53 @@ interface ResolvedDetail {
   cameras: ResolvedCamera[];
 }
 
+interface DirectSnapshotCacheEntry {
+  bodyBase64: string;
+  contentType: string;
+}
+
+interface PublicCameraFeedConfig {
+  sourceId: string;
+  label: string;
+  category: string;
+  authority: string;
+  providerPageUrl: string;
+  kind: "arcgis_lavdis" | "arcgis_ostrava" | "ostrava_asmx";
+  url: string;
+}
+
+interface ArcgisCameraFeatureCollection {
+  features?: ArcgisCameraFeature[];
+}
+
+interface ArcgisCameraFeature {
+  id?: string | number;
+  geometry?: {
+    type?: string;
+    coordinates?: unknown[];
+  };
+  properties?: Record<string, unknown>;
+}
+
+interface OstravaAsmxCameraPayload {
+  d?: {
+    Points?: OstravaAsmxCameraPoint[];
+  };
+}
+
+interface OstravaAsmxCameraPoint {
+  ID?: string;
+  Title?: string;
+  Latitude?: number;
+  Longitude?: number;
+  Content?: string;
+}
+
 export class ChmiWeatherWebcamCatalog {
   private readonly mapCache: ManagedResponseCache<ChmiWeatherWebcamLocation[]>;
   private readonly detailCache: ManagedResponseCache<ChmiWebcamPointPayload>;
+  private readonly directSnapshotCache: ManagedResponseCache<DirectSnapshotCacheEntry>;
+  private lastLocationWarnings: string[] = [];
 
   constructor(private readonly config: SituationDataConfig) {
     const ttlSeconds = Math.max(60, config.chmiWeatherWebcamsCacheTtlSeconds);
@@ -145,15 +208,24 @@ export class ChmiWeatherWebcamCatalog {
       staleIfErrorMs: Math.max(ttlSeconds, config.staleIfErrorSeconds, 1800) * 1000,
       maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 512))
     });
+    this.directSnapshotCache = new ManagedResponseCache<DirectSnapshotCacheEntry>({
+      ttlMs: ttlSeconds * 1000,
+      staleIfErrorMs: Math.max(ttlSeconds, config.staleIfErrorSeconds, 1800) * 1000,
+      maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 256))
+    });
   }
 
   cacheStats(): ManagedResponseCacheStats[] {
-    return [this.mapCache.stats(), this.detailCache.stats()];
+    return [this.mapCache.stats(), this.detailCache.stats(), this.directSnapshotCache.stats()];
   }
 
   async listLocations(): Promise<ChmiWeatherWebcamLocationSummary[]> {
     const locations = await this.resolveLocations();
     return locations.map((location) => this.locationSummary(location));
+  }
+
+  locationWarnings(): string[] {
+    return [...this.lastLocationWarnings];
   }
 
   async listCatalog(query: ChmiWeatherWebcamCatalogQuery = {}): Promise<ChmiWeatherWebcamCatalogResponse> {
@@ -172,7 +244,10 @@ export class ChmiWeatherWebcamCatalog {
         snapshotEndpoint: "/api/v1/weather-cameras/{locationId}/snapshot"
       },
       locations: locations.map((location) => this.locationSummary(location)),
-      warnings: locations.length === 0 ? ["chmi_weather_webcams returned no camera locations for the requested query."] : []
+      warnings: [
+        ...this.lastLocationWarnings,
+        ...(locations.length === 0 ? ["chmi_weather_webcams returned no camera locations for the requested query."] : [])
+      ]
     };
   }
 
@@ -186,7 +261,10 @@ export class ChmiWeatherWebcamCatalog {
     return {
       fetchedAt,
       features: locations.map((location) => this.locationFeature(location, fetchedAt, query.includeRaw)),
-      warnings: locations.length === 0 ? ["chmi_weather_webcams returned no camera locations in the requested bbox."] : []
+      warnings: [
+        ...this.lastLocationWarnings,
+        ...(locations.length === 0 ? ["chmi_weather_webcams returned no camera locations in the requested bbox."] : [])
+      ]
     };
   }
 
@@ -202,8 +280,8 @@ export class ChmiWeatherWebcamCatalog {
       sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
       generatedAt,
       location: this.locationSummary(resolved.location),
-      cameras: resolved.cameras.map(({ imageBase64: _imageBase64, ...camera }) => camera),
-      warnings: resolved.cameras.length === 0 ? ["CHMI camera detail did not include any image records."] : []
+      cameras: resolved.cameras.map((camera) => this.cameraDetail(resolved.location, camera)),
+      warnings: resolved.cameras.length === 0 ? [`${resolved.location.sourceName} camera detail did not include any image records.`] : []
     };
   }
 
@@ -214,7 +292,19 @@ export class ChmiWeatherWebcamCatalog {
     }
     const camera = cameraId ? resolved.cameras.find((item) => item.cameraId === cameraId) : resolved.cameras[0];
     if (!camera?.imageBase64) {
-      return undefined;
+      if (!camera?.directImageUrl) {
+        return undefined;
+      }
+      const directImageUrl = camera.directImageUrl;
+      const direct = await this.directSnapshotCache.getOrLoad(directImageUrl, () => requestImage(directImageUrl, this.config.requestTimeoutMs));
+      return {
+        locationId,
+        cameraId: camera.cameraId,
+        name: camera.name,
+        contentType: direct.contentType,
+        body: Buffer.from(direct.bodyBase64, "base64"),
+        cacheSeconds: Math.max(60, this.config.chmiWeatherWebcamsCacheTtlSeconds)
+      };
     }
     const body = decodeBase64Image(camera.imageBase64);
     if (!body || body.length === 0) {
@@ -231,9 +321,26 @@ export class ChmiWeatherWebcamCatalog {
   }
 
   private async resolveLocations(): Promise<ChmiWeatherWebcamLocation[]> {
-    return this.mapCache.getOrLoad(this.config.chmiWeatherWebcamsMapUrl, async () => {
-      const payload = await requestJson<ChmiWebcamMapPayload>(this.config.chmiWeatherWebcamsMapUrl, this.config.requestTimeoutMs);
-      return normalizeLocations(payload, this.config);
+    return this.mapCache.getOrLoad("public-weather-webcam-locations-v2", async () => {
+      const configuredFeeds = parsePublicCameraFeeds(this.config.publicCameraFeeds);
+      const tasks = [
+        { label: "ČHMÚ webkamery", load: () => this.loadChmiLocations() },
+        ...configuredFeeds.map((feed) => ({ label: feed.label, load: () => this.loadPublicCameraFeed(feed) }))
+      ];
+      const loaded = await Promise.allSettled(tasks.map((task) => task.load()));
+      const warnings = loaded.flatMap((result, index) =>
+        result.status === "rejected"
+          ? [`${tasks[index]?.label ?? "public camera feed"} failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`]
+          : []
+      );
+      const locations = loaded
+        .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+        .sort((a, b) => a.locationId.localeCompare(b.locationId));
+      this.lastLocationWarnings = warnings;
+      if (locations.length === 0 && warnings.length > 0) {
+        throw new Error(warnings.join("; "));
+      }
+      return locations;
     });
   }
 
@@ -242,12 +349,47 @@ export class ChmiWeatherWebcamCatalog {
     if (!location) {
       return undefined;
     }
+    if (location.detailMode === "inline_cameras") {
+      return {
+        location,
+        cameras: location.cameras ?? []
+      };
+    }
     const payload = await this.detailCache.getOrLoad(location.sourceDataUrl, () =>
       requestJson<ChmiWebcamPointPayload>(location.sourceDataUrl, this.config.requestTimeoutMs)
     );
     return {
       location,
       cameras: this.resolveCameras(location, payload)
+    };
+  }
+
+  private async loadChmiLocations(): Promise<ChmiWeatherWebcamLocation[]> {
+    const payload = await requestJson<ChmiWebcamMapPayload>(this.config.chmiWeatherWebcamsMapUrl, this.config.requestTimeoutMs);
+    return normalizeChmiLocations(payload, this.config);
+  }
+
+  private async loadPublicCameraFeed(feed: PublicCameraFeedConfig): Promise<ChmiWeatherWebcamLocation[]> {
+    if (feed.kind === "arcgis_lavdis") {
+      const payload = await requestJson<ArcgisCameraFeatureCollection>(feed.url, this.config.requestTimeoutMs);
+      return normalizeLavdisArcgisLocations(payload, feed);
+    }
+    if (feed.kind === "arcgis_ostrava") {
+      const payload = await requestJson<ArcgisCameraFeatureCollection>(feed.url, this.config.requestTimeoutMs);
+      return normalizeOstravaArcgisLocations(payload, feed);
+    }
+    const payload = await requestJsonPost<OstravaAsmxCameraPayload>(feed.url, this.config.requestTimeoutMs);
+    return normalizeOstravaAsmxLocations(payload, feed);
+  }
+
+  private cameraDetail(location: ChmiWeatherWebcamLocation, camera: ResolvedCamera): ChmiWeatherWebcamCameraDetail {
+    return {
+      cameraId: camera.cameraId,
+      name: camera.name,
+      providerUrl: camera.providerUrl,
+      snapshotUrl: this.snapshotUrl(location.locationId, camera.cameraId),
+      contentType: camera.contentType,
+      snapshotAvailable: camera.snapshotAvailable ?? Boolean(camera.imageBase64 || camera.directImageUrl)
     };
   }
 
@@ -265,7 +407,8 @@ export class ChmiWeatherWebcamCatalog {
         providerUrl: item.url ? absoluteUrl(item.url, this.config.chmiWeatherWebcamsPublicBaseUrl) : undefined,
         snapshotUrl: this.snapshotUrl(location.locationId, cameraId),
         contentType: image ? imageContentType(decodeBase64Image(image)) : undefined,
-        imageBase64: image
+        imageBase64: image,
+        snapshotAvailable: Boolean(image)
       };
     });
   }
@@ -293,12 +436,12 @@ export class ChmiWeatherWebcamCatalog {
           category: "weather_webcam",
           label: summary.label,
           labelLocalized: {
-            cs: "ČHMÚ webkamera",
-            en: "CHMI webcam"
+            cs: summary.label,
+            en: location.sourceNameEn ?? summary.label
           },
           sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
           source: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
-          sourceName: "ČHMÚ webkamery",
+          sourceName: location.sourceName,
           observedAt: fetchedAt,
           validUntil,
           updatedAt: fetchedAt,
@@ -307,8 +450,8 @@ export class ChmiWeatherWebcamCatalog {
           severity: "info",
           license: {
             name: CHMI_WEBCAMS_LICENSE.name,
-            attribution: CHMI_WEBCAMS_LICENSE.attribution,
-            url: CHMI_WEBCAMS_LICENSE.url
+            attribution: location.attribution,
+            url: location.providerPageUrl
           },
           metrics: {
             updateCadenceSeconds: this.config.chmiWeatherWebcamsCacheTtlSeconds,
@@ -317,6 +460,8 @@ export class ChmiWeatherWebcamCatalog {
           },
           tags: compactTags({
             sourceSystem: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
+            originSourceSystem: location.sourceId,
+            originCategory: location.category,
             renderAs: "point_with_detail_snapshot",
             snapshotMode: "on_demand",
             imagePayloadInFeatureStream: "false",
@@ -327,13 +472,13 @@ export class ChmiWeatherWebcamCatalog {
             geometryRole: "feature_geometry"
           },
           basis: [
-            "ČHMÚ public webcam map lists high-resolution weather cameras and states that images are refreshed every 5-10 minutes.",
+            `${location.sourceName} lists public camera locations for visual situational context.`,
             "SIM fetches camera snapshots only on detail demand and keeps a short server-side cache."
           ],
-          summary: "Bod webkamery pro vizuální kontrolu aktuálního počasí; náhled se načítá až v detailu.",
+          summary: "Bod veřejné webkamery pro vizuální kontrolu aktuální situace; náhled se načítá až v detailu.",
           summaryLocalized: {
-            cs: "Bod webkamery pro vizuální kontrolu aktuálního počasí.",
-            en: "Webcam point for visual current-weather context."
+            cs: "Bod veřejné webkamery pro vizuální kontrolu aktuální situace.",
+            en: "Public webcam point for visual current-situation context."
           },
           notices: [
             "COP should open a custom camera preview window on click and load the snapshot through SIM.",
@@ -352,6 +497,12 @@ export class ChmiWeatherWebcamCatalog {
               snapshotUrl: summary.snapshotUrl,
               sourceDataUrl: summary.sourceDataUrl,
               providerPageUrl: summary.providerPageUrl,
+              originSourceId: location.sourceId,
+              originSourceName: location.sourceName,
+              originAuthority: location.authority,
+              originCategory: location.category,
+              attribution: location.attribution,
+              snapshotAvailable: summary.snapshotAvailable,
               camerasKnownAfterDetail: true,
               contentMode: "on_demand_snapshot",
               imagePayloadInFeatureStream: false,
@@ -361,10 +512,10 @@ export class ChmiWeatherWebcamCatalog {
               onClick: "open_custom_camera_preview",
               previewEndpoint: summary.detailUrl,
               primaryImageEndpoint: summary.snapshotUrl,
-              attributionRequired: CHMI_WEBCAMS_LICENSE.attribution
+              attributionRequired: location.attribution
             }
           }),
-          disclaimer: "Webkamera je pouze vizuální situační kontext; nenahrazuje oficiální výstrahy ČHMÚ ani pokyny krizových orgánů.",
+          disclaimer: "Webkamera je pouze vizuální situační kontext; nenahrazuje oficiální výstrahy ani pokyny krizových orgánů.",
           raw: includeRaw ? { location } : undefined
         }
       },
@@ -375,14 +526,20 @@ export class ChmiWeatherWebcamCatalog {
   private locationSummary(location: ChmiWeatherWebcamLocation): ChmiWeatherWebcamLocationSummary {
     return {
       locationId: location.locationId,
-      label: `ČHMÚ webkamera ${round(location.lat, 5)}, ${round(location.lon, 5)}`,
+      label: location.label,
       lon: round(location.lon, 6),
       lat: round(location.lat, 6),
       sourceDataUrl: location.sourceDataUrl,
       detailUrl: `/api/v1/weather-cameras/${encodeURIComponent(location.locationId)}`,
       snapshotUrl: this.snapshotUrl(location.locationId),
-      providerPageUrl: absoluteUrl("/namerena-data/webkamery", this.config.chmiWeatherWebcamsPublicBaseUrl),
-      camerasKnownAfterDetail: true
+      providerPageUrl: location.providerPageUrl,
+      camerasKnownAfterDetail: true,
+      originSourceId: location.sourceId,
+      originSourceName: location.sourceName,
+      originAuthority: location.authority,
+      originCategory: location.category,
+      attribution: location.attribution,
+      snapshotAvailable: location.detailMode === "chmi_point" ? true : (location.cameras ?? []).some((camera) => camera.snapshotAvailable ?? Boolean(camera.directImageUrl))
     };
   }
 
@@ -392,7 +549,7 @@ export class ChmiWeatherWebcamCatalog {
   }
 }
 
-function normalizeLocations(payload: ChmiWebcamMapPayload, config: SituationDataConfig): ChmiWeatherWebcamLocation[] {
+function normalizeChmiLocations(payload: ChmiWebcamMapPayload, config: SituationDataConfig): ChmiWeatherWebcamLocation[] {
   const locations = new Map<string, ChmiWeatherWebcamLocation>();
   for (const feature of payload.features ?? []) {
     const sourceDataUrl = feature.properties?.dataUrl;
@@ -408,14 +565,136 @@ function normalizeLocations(payload: ChmiWebcamMapPayload, config: SituationData
     if (!locations.has(locationId)) {
       locations.set(locationId, {
         locationId,
+        label: `ČHMÚ webkamera ${round(lonLat.lat, 5)}, ${round(lonLat.lon, 5)}`,
         lon: lonLat.lon,
         lat: lonLat.lat,
         sourceDataUrl: absoluteDataUrl,
-        sourceIcon: feature.properties?.icon
+        sourceIcon: feature.properties?.icon,
+        sourceId: "chmi_webcams",
+        sourceName: "ČHMÚ webkamery",
+        sourceNameEn: "CHMI webcams",
+        authority: "Český hydrometeorologický ústav",
+        attribution: "Český hydrometeorologický ústav",
+        providerPageUrl: absoluteUrl("/namerena-data/webkamery", config.chmiWeatherWebcamsPublicBaseUrl),
+        category: "weather",
+        detailMode: "chmi_point"
       });
     }
   }
   return [...locations.values()].sort((a, b) => a.locationId.localeCompare(b.locationId));
+}
+
+function normalizeLavdisArcgisLocations(payload: ArcgisCameraFeatureCollection, feed: PublicCameraFeedConfig): ChmiWeatherWebcamLocation[] {
+  const locations = new Map<string, ChmiWeatherWebcamLocation>();
+  for (const feature of payload.features ?? []) {
+    const lonLat = lonLatFromArcgisFeature(feature);
+    const directImageUrl = stringProperty(feature.properties, "kamera_link");
+    if (!lonLat || !directImageUrl) {
+      continue;
+    }
+    const locationName = stringProperty(feature.properties, "nazev_lok") ?? `LAVDIS kamera ${round(lonLat.lat, 5)}, ${round(lonLat.lon, 5)}`;
+    const cameraName = stringProperty(feature.properties, "nazev_kam") ?? "kamera";
+    const locationId = `${stableId(feed.sourceId)}_${stableId(locationName)}_${coordinateToken(lonLat.lon)}_${coordinateToken(lonLat.lat)}`.slice(0, 160);
+    const location =
+      locations.get(locationId) ??
+      ({
+        locationId,
+        label: locationName,
+        lon: lonLat.lon,
+        lat: lonLat.lat,
+        sourceDataUrl: feed.url,
+        sourceId: feed.sourceId,
+        sourceName: feed.label,
+        sourceNameEn: feed.label,
+        authority: feed.authority,
+        attribution: feed.authority,
+        providerPageUrl: feed.providerPageUrl,
+        category: feed.category,
+        detailMode: "inline_cameras",
+        cameras: []
+      } satisfies ChmiWeatherWebcamLocation);
+    location.cameras?.push({
+      cameraId: stableCameraId([feed.sourceId, feature.id, cameraName, directImageUrl]),
+      name: `${locationName} ${cameraName}`.trim(),
+      providerUrl: directImageUrl,
+      snapshotUrl: "",
+      directImageUrl,
+      snapshotAvailable: true
+    });
+    locations.set(locationId, location);
+  }
+  return [...locations.values()].sort((a, b) => a.locationId.localeCompare(b.locationId));
+}
+
+function normalizeOstravaArcgisLocations(payload: ArcgisCameraFeatureCollection, feed: PublicCameraFeedConfig): ChmiWeatherWebcamLocation[] {
+  return (payload.features ?? [])
+    .map((feature): ChmiWeatherWebcamLocation | undefined => {
+      const lonLat = lonLatFromArcgisFeature(feature);
+      if (!lonLat) {
+        return undefined;
+      }
+      const objectId = stringProperty(feature.properties, "OBJECTID") ?? String(feature.id ?? `${lonLat.lon},${lonLat.lat}`);
+      const cameras = [
+        ostravaArcgisCamera(feed, objectId, stringProperty(feature.properties, "kamera1"), stringProperty(feature.properties, "smer1")),
+        ostravaArcgisCamera(feed, objectId, stringProperty(feature.properties, "kamera2"), stringProperty(feature.properties, "smer2"))
+      ].filter((camera): camera is ResolvedCamera => Boolean(camera));
+      if (cameras.length === 0) {
+        return undefined;
+      }
+      const label = `Ostrava dopravní kamera ${objectId}`;
+      return {
+        locationId: `${stableId(feed.sourceId)}_${stableId(objectId)}_${coordinateToken(lonLat.lon)}_${coordinateToken(lonLat.lat)}`.slice(0, 160),
+        label,
+        lon: lonLat.lon,
+        lat: lonLat.lat,
+        sourceDataUrl: feed.url,
+        sourceId: feed.sourceId,
+        sourceName: feed.label,
+        sourceNameEn: "Ostrava traffic cameras",
+        authority: feed.authority,
+        attribution: feed.authority,
+        providerPageUrl: feed.providerPageUrl,
+        category: feed.category,
+        detailMode: "inline_cameras",
+        cameras
+      };
+    })
+    .filter((item): item is ChmiWeatherWebcamLocation => Boolean(item))
+    .sort((a, b) => a.locationId.localeCompare(b.locationId));
+}
+
+function normalizeOstravaAsmxLocations(payload: OstravaAsmxCameraPayload, feed: PublicCameraFeedConfig): ChmiWeatherWebcamLocation[] {
+  return (payload.d?.Points ?? [])
+    .map((point): ChmiWeatherWebcamLocation | undefined => {
+      const lon = point.Longitude;
+      const lat = point.Latitude;
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+        return undefined;
+      }
+      const title = plainText(point.Title) || ostravaTitleFromContent(point.Content) || `Ostrava kamera ${point.ID ?? ""}`.trim();
+      const cameras = ostravaCamerasFromContent(feed, point.Content ?? "");
+      if (cameras.length === 0) {
+        return undefined;
+      }
+      return {
+        locationId: `${stableId(feed.sourceId)}_${stableId(point.ID ?? title)}_${coordinateToken(lon as number)}_${coordinateToken(lat as number)}`.slice(0, 160),
+        label: title,
+        lon: lon as number,
+        lat: lat as number,
+        sourceDataUrl: feed.url,
+        sourceId: feed.sourceId,
+        sourceName: feed.label,
+        sourceNameEn: "Ostrava traffic cameras",
+        authority: feed.authority,
+        attribution: feed.authority,
+        providerPageUrl: feed.providerPageUrl,
+        category: feed.category,
+        detailMode: "inline_cameras",
+        cameras
+      };
+    })
+    .filter((item): item is ChmiWeatherWebcamLocation => Boolean(item))
+    .sort((a, b) => a.locationId.localeCompare(b.locationId));
 }
 
 function lonLatFromDataUrl(value: string): { lon: number; lat: number } | undefined {
@@ -430,6 +709,128 @@ function lonLatFromDataUrl(value: string): { lon: number; lat: number } | undefi
   } catch {
     return undefined;
   }
+}
+
+function parsePublicCameraFeeds(values: string[]): PublicCameraFeedConfig[] {
+  return values
+    .map((value) => {
+      const [sourceId, label, category, authority, providerPageUrl, kind, url] = value.split("|").map((part) => part.trim());
+      if (!sourceId || !label || !category || !authority || !providerPageUrl || !kind || !url) {
+        return undefined;
+      }
+      if (kind !== "arcgis_lavdis" && kind !== "arcgis_ostrava" && kind !== "ostrava_asmx") {
+        return undefined;
+      }
+      try {
+        return {
+          sourceId: stableId(sourceId).toLowerCase(),
+          label,
+          category: stableId(category).toLowerCase(),
+          authority,
+          providerPageUrl: new URL(providerPageUrl).toString(),
+          kind,
+          url: new URL(url).toString()
+        } satisfies PublicCameraFeedConfig;
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((item): item is PublicCameraFeedConfig => Boolean(item));
+}
+
+function lonLatFromArcgisFeature(feature: ArcgisCameraFeature): { lon: number; lat: number } | undefined {
+  if (feature.geometry?.type !== "Point") {
+    return undefined;
+  }
+  const [lon, lat] = feature.geometry.coordinates ?? [];
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    return undefined;
+  }
+  const parsedLon = lon as number;
+  const parsedLat = lat as number;
+  if (parsedLon < -180 || parsedLon > 180 || parsedLat < -90 || parsedLat > 90) {
+    return undefined;
+  }
+  return { lon: parsedLon, lat: parsedLat };
+}
+
+function stringProperty(properties: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = properties?.[key];
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return undefined;
+}
+
+function stableCameraId(parts: Array<string | number | undefined>): string {
+  return stableId(parts.filter((part): part is string | number => part !== undefined && part !== "").join("-"));
+}
+
+function ostravaArcgisCamera(
+  feed: PublicCameraFeedConfig,
+  objectId: string,
+  camera: string | undefined,
+  direction: string | undefined
+): ResolvedCamera | undefined {
+  if (!camera) {
+    return undefined;
+  }
+  return {
+    cameraId: stableCameraId([feed.sourceId, objectId, camera]),
+    name: direction ? `${direction} (${camera})` : camera,
+    providerUrl: feed.providerPageUrl,
+    snapshotUrl: "",
+    snapshotAvailable: false
+  };
+}
+
+function ostravaCamerasFromContent(feed: PublicCameraFeedConfig, content: string): ResolvedCamera[] {
+  const cameras: ResolvedCamera[] = [];
+  const camShowPattern = /CamShow\('([^']*)'\s*,\s*([01])\s*,\s*new Array\((.*?)\)\)/g;
+  let groupMatch: RegExpExecArray | null;
+  while ((groupMatch = camShowPattern.exec(content))) {
+    const [, locationLabel, cameraType, body] = groupMatch;
+    const camBePattern = /CamBe\('([^']*)'\s*,\s*'([^']*)'\s*,\s*'[^']*'\s*,\s*'([^']*)'\)/g;
+    let cameraMatch: RegExpExecArray | null;
+    while ((cameraMatch = camBePattern.exec(body ?? ""))) {
+      const [, direction, cameraId, quality] = cameraMatch;
+      cameras.push({
+        cameraId: stableCameraId([feed.sourceId, locationLabel, cameraType, direction, cameraId]),
+        name: [direction, locationLabel].filter(Boolean).join(" - "),
+        providerUrl: feed.providerPageUrl,
+        snapshotUrl: "",
+        snapshotAvailable: false
+      });
+    }
+  }
+  return cameras;
+}
+
+function plainText(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const text = value
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;?/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 0 ? text : undefined;
+}
+
+function ostravaTitleFromContent(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const match = /class=["']bubNad["'][^>]*>(.*?)<\/td>/i.exec(value);
+  return plainText(match?.[1]);
 }
 
 function locationIdFor(lon: number, lat: number): string {
@@ -543,4 +944,51 @@ async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
     throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
   }
   return (await response.json()) as T;
+}
+
+async function requestJsonPost<T>(url: string, timeoutMs: number): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      accept: "application/json,*/*",
+      "content-type": "application/json; charset=utf-8",
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    body: "{}",
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  return (await response.json()) as T;
+}
+
+async function requestImage(url: string, timeoutMs: number): Promise<DirectSnapshotCacheEntry> {
+  const response = await fetch(url, {
+    headers: {
+      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+  }
+  const declaredType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
+    throw new Error(`Camera snapshot from ${new URL(url).hostname} is too large.`);
+  }
+  const body = Buffer.from(await response.arrayBuffer());
+  if (body.length > 5_000_000) {
+    throw new Error(`Camera snapshot from ${new URL(url).hostname} is too large.`);
+  }
+  const contentType = declaredType?.startsWith("image/") ? declaredType : imageContentType(body);
+  if (!contentType.startsWith("image/")) {
+    throw new Error(`Camera snapshot from ${new URL(url).hostname} is not an image.`);
+  }
+  return {
+    contentType,
+    bodyBase64: body.toString("base64")
+  };
 }

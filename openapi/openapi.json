@@ -4223,8 +4223,8 @@
     },
     "/situation-data/api/v1/weather-cameras": {
       "get": {
-        "summary": "Return CHMI weather camera locations",
-        "description": "Lists CHMI public webcam locations normalized by SIM. Image payloads are intentionally omitted; COP should request detail or snapshot endpoints on click.",
+        "summary": "Return public weather/context camera locations",
+        "description": "Lists public origin webcam locations normalized by SIM. Image payloads are intentionally omitted; COP should request detail or snapshot endpoints on click.",
         "parameters": [
           {
             "name": "bbox",
@@ -4250,7 +4250,7 @@
         ],
         "responses": {
           "200": {
-            "description": "CHMI weather camera catalog",
+            "description": "Public weather/context camera catalog",
             "content": {
               "application/json": {
                 "schema": {
@@ -4274,8 +4274,8 @@
     },
     "/situation-data/api/v1/weather-cameras/{locationId}": {
       "get": {
-        "summary": "Return CHMI weather camera detail",
-        "description": "Returns camera choices for one CHMI webcam location. The response contains snapshot URLs but not the base64 image payload.",
+        "summary": "Return public weather/context camera detail",
+        "description": "Returns camera choices for one public webcam location. The response contains snapshot URLs but not embedded image payloads.",
         "parameters": [
           {
             "name": "locationId",
@@ -4289,7 +4289,7 @@
         ],
         "responses": {
           "200": {
-            "description": "CHMI weather camera detail",
+            "description": "Public weather/context camera detail",
             "content": {
               "application/json": {
                 "schema": {
@@ -4313,8 +4313,8 @@
     },
     "/situation-data/api/v1/weather-cameras/{locationId}/snapshot": {
       "get": {
-        "summary": "Return a CHMI weather camera snapshot image",
-        "description": "Decodes the selected CHMI base64 webcam image server-side and returns it as an image response for COP preview windows.",
+        "summary": "Return a public weather/context camera snapshot image",
+        "description": "Fetches or decodes the selected public webcam image server-side and returns it as an image response for COP preview windows.",
         "parameters": [
           {
             "name": "locationId",
@@ -9500,6 +9500,30 @@
           "camerasKnownAfterDetail": {
             "type": "boolean",
             "example": true
+          },
+          "originSourceId": {
+            "type": "string",
+            "example": "sps_lavdis_cameras"
+          },
+          "originSourceName": {
+            "type": "string",
+            "example": "Státní plavební správa / LAVDIS kamery"
+          },
+          "originAuthority": {
+            "type": "string",
+            "example": "Státní plavební správa"
+          },
+          "originCategory": {
+            "type": "string",
+            "example": "waterway"
+          },
+          "attribution": {
+            "type": "string",
+            "example": "Státní plavební správa"
+          },
+          "snapshotAvailable": {
+            "type": "boolean",
+            "example": true
           }
         },
         "additionalProperties": false
@@ -9531,6 +9555,10 @@
           "contentType": {
             "type": "string",
             "example": "image/gif"
+          },
+          "snapshotAvailable": {
+            "type": "boolean",
+            "example": true
           }
         },
         "additionalProperties": false

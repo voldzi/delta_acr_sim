@@ -468,7 +468,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         res,
         502,
         "UPSTREAM_ERROR",
-        error instanceof Error ? `CHMI weather camera catalog fetch failed: ${error.message}` : "CHMI weather camera catalog fetch failed."
+        error instanceof Error ? `Public weather camera catalog fetch failed: ${error.message}` : "Public weather camera catalog fetch failed."
       );
     }
   });
@@ -486,7 +486,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         res,
         502,
         "UPSTREAM_ERROR",
-        error instanceof Error ? `CHMI weather camera detail fetch failed: ${error.message}` : "CHMI weather camera detail fetch failed."
+        error instanceof Error ? `Public weather camera detail fetch failed: ${error.message}` : "Public weather camera detail fetch failed."
       );
     }
   });
@@ -508,7 +508,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         res,
         502,
         "UPSTREAM_ERROR",
-        error instanceof Error ? `CHMI weather camera snapshot fetch failed: ${error.message}` : "CHMI weather camera snapshot fetch failed."
+        error instanceof Error ? `Public weather camera snapshot fetch failed: ${error.message}` : "Public weather camera snapshot fetch failed."
       );
     }
   });
@@ -1444,7 +1444,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "chmi_air_quality", baseUrl: config.chmiAirQualityDataUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "chmi_weather_stations", baseUrl: config.chmiWeatherDataBaseUrl, authConfigured: true, backend: "chmi-opendata" },
       { sourceId: "chmi_weather_radar", baseUrl: config.chmiWeatherRadarBaseUrl, authConfigured: true, backend: "chmi-opendata" },
-      { sourceId: "chmi_weather_webcams", baseUrl: config.chmiWeatherWebcamsMapUrl, authConfigured: true, backend: "chmi-data-provider" },
+      { sourceId: "chmi_weather_webcams", baseUrl: config.chmiWeatherWebcamsMapUrl, authConfigured: true, backend: "multi-origin-public-camera-feeds" },
       { sourceId: "ardos_partner", baseUrl: config.ardosPartnerBaseUrl, authConfigured: Boolean(config.ardosPartnerBaseUrl && config.ardosPartnerToken) }
     ]
   };

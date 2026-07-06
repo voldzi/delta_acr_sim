@@ -90,6 +90,7 @@ export interface SituationDataConfig {
   chmiWeatherWebcamsDataBaseUrl: string;
   chmiWeatherWebcamsPublicBaseUrl: string;
   chmiWeatherWebcamsCacheTtlSeconds: number;
+  publicCameraFeeds: string[];
   ardosPartnerBaseUrl?: string;
   ardosPartnerToken?: string;
   ardosPartnerCacheTtlSeconds: number;
@@ -228,6 +229,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     chmiWeatherWebcamsDataBaseUrl: process.env.CHMI_WEATHER_WEBCAMS_DATA_BASE_URL ?? "https://data-provider.chmi.cz",
     chmiWeatherWebcamsPublicBaseUrl: process.env.CHMI_WEATHER_WEBCAMS_PUBLIC_BASE_URL ?? "https://www.chmi.cz",
     chmiWeatherWebcamsCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS, 300),
+    publicCameraFeeds: parseStringList(process.env.PUBLIC_CAMERA_FEEDS, DEFAULT_PUBLIC_CAMERA_FEEDS),
     ardosPartnerBaseUrl: emptyToUndefined(process.env.ARDOS_PARTNER_BASE_URL),
     ardosPartnerToken: emptyToUndefined(process.env.ARDOS_PARTNER_TOKEN),
     ardosPartnerCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS, 15),
@@ -354,6 +356,27 @@ const DEFAULT_PUBLIC_TRANSIT_STATIC_GEOJSON_FEEDS: PublicTransitStaticFeedConfig
     label: "DPO Ostrava zastávky MHD GeoJSON",
     url: "https://mapy.ostrava.cz/opendata/data/opendata/zastavky_MHD_WGS84_gjson.zip"
   }
+];
+
+const DEFAULT_PUBLIC_CAMERA_FEEDS = [
+  [
+    "sps_lavdis_cameras",
+    "Státní plavební správa / LAVDIS kamery",
+    "waterway",
+    "Státní plavební správa",
+    "https://www.lavdis.cz/",
+    "arcgis_lavdis",
+    "https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000"
+  ].join("|"),
+  [
+    "ostrava_traffic_cameras",
+    "Dopravní kamery Ostrava",
+    "traffic",
+    "Statutární město Ostrava",
+    "http://kamery.ostrava.cz/",
+    "ostrava_asmx",
+    "http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery"
+  ].join("|")
 ];
 
 function parseBbox(value: string | undefined): BoundingBox | undefined {

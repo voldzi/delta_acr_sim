@@ -1131,7 +1131,7 @@ class ChmiWeatherWebcamsSource implements SituationDataSource {
     this.catalog = new ChmiWeatherWebcamCatalog(config);
     this.descriptor = {
       sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
-      label: "CHMI weather webcams",
+      label: "Public weather and context webcams",
       enabled: config.enabledSources.includes(CHMI_WEATHER_WEBCAMS_SOURCE_ID),
       mode: "live",
       priority: 82,
@@ -1154,11 +1154,14 @@ class ChmiWeatherWebcamsSource implements SituationDataSource {
   async healthStatus(): Promise<SourceHealthStatus> {
     try {
       const locations = await this.catalog.listLocations();
-      const warnings = locations.length === 0 ? ["chmi_weather_webcams returned no camera locations."] : [];
+      const warnings = [
+        ...this.catalog.locationWarnings(),
+        ...(locations.length === 0 ? ["chmi_weather_webcams returned no public camera locations."] : [])
+      ];
       return {
         sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
         status: warnings.length === 0 ? "ok" : "degraded",
-        backend: "chmi-data-provider",
+        backend: "multi-origin-public-camera-feeds",
         objectCount: locations.length,
         lastImportAt: new Date().toISOString(),
         warnings
@@ -1167,8 +1170,8 @@ class ChmiWeatherWebcamsSource implements SituationDataSource {
       return {
         sourceId: CHMI_WEATHER_WEBCAMS_SOURCE_ID,
         status: "degraded",
-        backend: "chmi-data-provider",
-        warnings: [error instanceof Error ? error.message : "Unknown chmi_weather_webcams health check failure."]
+        backend: "multi-origin-public-camera-feeds",
+        warnings: [error instanceof Error ? error.message : "Unknown public camera feed health check failure."]
       };
     }
   }

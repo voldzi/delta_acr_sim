@@ -119,6 +119,7 @@ describe("Situation Data API contract", () => {
       chmiWeatherWebcamsDataBaseUrl: "https://data-provider.chmi.cz",
       chmiWeatherWebcamsPublicBaseUrl: "https://www.chmi.cz",
       chmiWeatherWebcamsCacheTtlSeconds: 300,
+      publicCameraFeeds: [],
       ardosPartnerBaseUrl: undefined,
       ardosPartnerToken: undefined,
       ardosPartnerCacheTtlSeconds: 15,
@@ -384,6 +385,88 @@ describe("Situation Data API contract", () => {
     expect(snapshot.headers["content-type"]).toContain("image/gif");
     expect(snapshot.headers["x-sim-camera-id"]).toBe("praha_libus-praha-libus");
     expect(snapshot.body.length).toBeGreaterThan(0);
+  });
+
+  it("aggregates direct origin public camera feeds behind the weather camera contract", async () => {
+    const feedUrl = "https://geoportal.example.test/arcgis/rest/services/kamery/MapServer/0/query?f=geojson";
+    const snapshotUrl = "https://www.lavdis.example.test/public/files/cameras/Lovosice_kamera_1/last_photo.jpg";
+    config.publicCameraFeeds = [
+      [
+        "sps_lavdis_cameras",
+        "Státní plavební správa / LAVDIS kamery",
+        "waterway",
+        "Státní plavební správa",
+        "https://www.lavdis.cz/",
+        "arcgis_lavdis",
+        feedUrl
+      ].join("|")
+    ];
+    ({ app } = await createApp(config));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === feedUrl) {
+          return jsonResponse({
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                id: 1,
+                geometry: { type: "Point", coordinates: [14.073064592573621, 50.514826112597] },
+                properties: {
+                  OBJECTID: 1,
+                  nazev_lok: "Lovosice",
+                  nazev_kam: "kamera1",
+                  kamera_link: snapshotUrl
+                }
+              },
+              {
+                type: "Feature",
+                id: 2,
+                geometry: { type: "Point", coordinates: [14.073064592573621, 50.514826112597] },
+                properties: {
+                  OBJECTID: 2,
+                  nazev_lok: "Lovosice",
+                  nazev_kam: "kamera2",
+                  kamera_link: "https://www.lavdis.example.test/public/files/cameras/Lovosice_kamera_2/last_photo.jpg"
+                }
+              }
+            ]
+          });
+        }
+        if (url === snapshotUrl) {
+          return new Response(Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]), {
+            status: 200,
+            headers: { "content-type": "image/jpeg", "content-length": "4" }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+
+    const catalog = await request(app).get("/api/v1/weather-cameras?bbox=14,50.4,14.2,50.6").expect(200);
+    expect(catalog.body.locations).toEqual([
+      expect.objectContaining({
+        label: "Lovosice",
+        originSourceId: "sps_lavdis_cameras",
+        originAuthority: "Státní plavební správa",
+        snapshotAvailable: true
+      })
+    ]);
+
+    const detail = await request(app).get(catalog.body.locations[0].detailUrl).expect(200);
+    expect(detail.body.cameras).toHaveLength(2);
+    expect(detail.body.cameras[0]).toEqual(
+      expect.objectContaining({
+        name: "Lovosice kamera1",
+        snapshotAvailable: true
+      })
+    );
+
+    const snapshot = await request(app).get(detail.body.cameras[0].snapshotUrl).expect(200);
+    expect(snapshot.headers["content-type"]).toContain("image/jpeg");
+    expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   });
 
   it("projects CHMI weather cameras as clickable COP feature points", async () => {
@@ -1115,7 +1198,7 @@ describe("Situation Data API contract", () => {
           expect.objectContaining({ sourceId: "chmi_air_quality", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "chmi_weather_stations", authConfigured: true, backend: "chmi-opendata" }),
           expect.objectContaining({ sourceId: "chmi_weather_radar", authConfigured: true, backend: "chmi-opendata" }),
-          expect.objectContaining({ sourceId: "chmi_weather_webcams", authConfigured: true, backend: "chmi-data-provider" }),
+          expect.objectContaining({ sourceId: "chmi_weather_webcams", authConfigured: true, backend: "multi-origin-public-camera-feeds" }),
           expect.objectContaining({ sourceId: "ardos_partner", authConfigured: false })
         ])
       })
