@@ -571,6 +571,237 @@ describe("Situation Data API contract", () => {
     expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   });
 
+  it("discovers direct snapshots from curated outdoor origin pages on demand", async () => {
+    const feedUrl = "https://camera-origin.example.test/public-webcams.json";
+    const providerPageUrl = "https://camera-origin.example.test/skalka/webkamera";
+    const snapshotUrl = "https://camera-origin.example.test/skalka/webcam-current.jpg";
+    config.enabledSources = ["chmi_weather_webcams"];
+    config.publicCameraFeeds = [
+      [
+        "curated_outdoor_webcams",
+        "Kurátorované turistické webkamery",
+        "outdoor_webcam",
+        "Ověřený origin provozovatel",
+        "https://camera-origin.example.test/",
+        "static_json",
+        feedUrl
+      ].join("|")
+    ];
+    ({ app } = await createApp(config));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === feedUrl) {
+          return jsonResponse({
+            sourceId: "webcamlive_origin_review",
+            label: "Ověřené turistické kamery",
+            authority: "Obec Skalka",
+            attribution: "Obec Skalka",
+            providerPageUrl: "https://camera-origin.example.test/",
+            category: "outdoor_webcam",
+            locations: [
+              {
+                locationId: "skalka_rozhledna",
+                label: "Skalka - rozhledna",
+                lon: 15.1,
+                lat: 49.8,
+                providerPageUrl,
+                sourceDataUrl: providerPageUrl,
+                cameras: [
+                  {
+                    cameraId: "rozhledna",
+                    name: "Rozhledna",
+                    providerUrl: providerPageUrl,
+                    snapshotAvailable: false
+                  }
+                ]
+              }
+            ]
+          });
+        }
+        if (url === providerPageUrl) {
+          return new Response(`<html><body><img class="webkamera aktualni" src="${snapshotUrl}" alt="webkamera rozhledna"></body></html>`, {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" }
+          });
+        }
+        if (url === snapshotUrl) {
+          return new Response(Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]), {
+            status: 200,
+            headers: { "content-type": "image/jpeg", "content-length": "4" }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      })
+    );
+
+    const response = await request(app)
+      .get("/api/v1/features?layers=outdoor_webcams&sources=chmi_weather_webcams&bbox=15,49.7,15.2,49.9&includeRaw=false")
+      .expect(200);
+
+    expect(response.body.features[0].properties.providerProperties.camera).toEqual(
+      expect.objectContaining({
+        snapshotAvailable: true,
+        snapshotAvailability: "origin_page_discovery",
+        snapshotDiscoveryMode: "origin_page_html_candidates"
+      })
+    );
+    expect(JSON.stringify(response.body.features)).not.toContain(snapshotUrl);
+
+    const detailUrl = response.body.features[0].properties.providerProperties.camera.detailUrl;
+    const detail = await request(app).get(detailUrl).expect(200);
+    expect(detail.body.cameras[0]).toEqual(
+      expect.objectContaining({
+        name: "Rozhledna",
+        snapshotAvailable: true,
+        snapshotAvailability: "origin_page_discovery"
+      })
+    );
+
+    const snapshot = await request(app).get(detail.body.cameras[0].snapshotUrl).expect(200);
+    expect(snapshot.headers["content-type"]).toContain("image/jpeg");
+    expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  });
+
+  it("does not fetch private origin page URLs from curated outdoor camera feeds", async () => {
+    const feedUrl = "https://camera-origin.example.test/public-webcams.json";
+    const privateProviderPageUrl = "http://127.0.0.1:18080/internal-camera";
+    config.enabledSources = ["chmi_weather_webcams"];
+    config.publicCameraFeeds = [
+      [
+        "curated_outdoor_webcams",
+        "Kurátorované turistické webkamery",
+        "outdoor_webcam",
+        "Ověřený origin provozovatel",
+        "https://camera-origin.example.test/",
+        "static_json",
+        feedUrl
+      ].join("|")
+    ];
+    ({ app } = await createApp(config));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === feedUrl) {
+        return jsonResponse({
+          sourceId: "webcamlive_origin_review",
+          label: "Ověřené turistické kamery",
+          authority: "Obec Skalka",
+          attribution: "Obec Skalka",
+          providerPageUrl: "https://camera-origin.example.test/",
+          category: "outdoor_webcam",
+          locations: [
+            {
+              locationId: "skalka_internal",
+              label: "Skalka - interní",
+              lon: 15.1,
+              lat: 49.8,
+              providerPageUrl: privateProviderPageUrl,
+              sourceDataUrl: privateProviderPageUrl,
+              cameras: [
+                {
+                  cameraId: "internal",
+                  name: "Internal",
+                  providerUrl: privateProviderPageUrl,
+                  snapshotAvailable: false
+                }
+              ]
+            }
+          ]
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await request(app)
+      .get("/api/v1/features?layers=outdoor_webcams&sources=chmi_weather_webcams&bbox=15,49.7,15.2,49.9&includeRaw=false")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(0);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(privateProviderPageUrl);
+  });
+
+  it("filters private image candidates during origin page snapshot discovery", async () => {
+    const feedUrl = "https://camera-origin.example.test/public-webcams.json";
+    const providerPageUrl = "https://camera-origin.example.test/skalka/webkamera";
+    const privateSnapshotUrl = "http://169.254.169.254/latest/meta-data/webcam-current.jpg";
+    const publicSnapshotUrl = "https://camera-origin.example.test/skalka/webcam-current.jpg";
+    config.enabledSources = ["chmi_weather_webcams"];
+    config.publicCameraFeeds = [
+      [
+        "curated_outdoor_webcams",
+        "Kurátorované turistické webkamery",
+        "outdoor_webcam",
+        "Ověřený origin provozovatel",
+        "https://camera-origin.example.test/",
+        "static_json",
+        feedUrl
+      ].join("|")
+    ];
+    ({ app } = await createApp(config));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === feedUrl) {
+        return jsonResponse({
+          sourceId: "webcamlive_origin_review",
+          label: "Ověřené turistické kamery",
+          authority: "Obec Skalka",
+          attribution: "Obec Skalka",
+          providerPageUrl: "https://camera-origin.example.test/",
+          category: "outdoor_webcam",
+          locations: [
+            {
+              locationId: "skalka_rozhledna",
+              label: "Skalka - rozhledna",
+              lon: 15.1,
+              lat: 49.8,
+              providerPageUrl,
+              sourceDataUrl: providerPageUrl,
+              cameras: [
+                {
+                  cameraId: "rozhledna",
+                  name: "Rozhledna",
+                  providerUrl: providerPageUrl,
+                  snapshotAvailable: false
+                }
+              ]
+            }
+          ]
+        });
+      }
+      if (url === providerPageUrl) {
+        return new Response(
+          `<html><body><img class="webkamera aktualni" src="${privateSnapshotUrl}"><img class="webkamera aktualni" src="${publicSnapshotUrl}"></body></html>`,
+          {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" }
+          }
+        );
+      }
+      if (url === publicSnapshotUrl) {
+        return new Response(Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]), {
+          status: 200,
+          headers: { "content-type": "image/jpeg", "content-length": "4" }
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await request(app)
+      .get("/api/v1/features?layers=outdoor_webcams&sources=chmi_weather_webcams&bbox=15,49.7,15.2,49.9&includeRaw=false")
+      .expect(200);
+    const detail = await request(app).get(response.body.features[0].properties.providerProperties.camera.detailUrl).expect(200);
+
+    const snapshot = await request(app).get(detail.body.cameras[0].snapshotUrl).expect(200);
+
+    expect(snapshot.headers["content-type"]).toContain("image/jpeg");
+    expect(snapshot.body).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain(privateSnapshotUrl);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toContain(publicSnapshotUrl);
+  });
+
   it("publishes bundled verified origin webcams as outdoor context, not weather", async () => {
     config.enabledSources = ["chmi_weather_webcams"];
     config.publicCameraFeeds = [
@@ -611,7 +842,8 @@ describe("Situation Data API contract", () => {
             camera: expect.objectContaining({
               originCategory: "outdoor_webcam",
               presentationGroup: "outdoor",
-              snapshotAvailable: false,
+              snapshotAvailable: true,
+              snapshotAvailability: "origin_page_discovery",
               imagePayloadInFeatureStream: false
             })
           })

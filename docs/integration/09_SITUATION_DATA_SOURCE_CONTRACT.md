@@ -78,27 +78,27 @@ Kompatibilní interní alias je dostupný také jako `/api/v1/search-data/*`.
 
 Kontrakt odpovědí:
 
-| Pole | Význam |
-| --- | --- |
-| `contractVersion` | vždy `sim-search-source-v1` |
-| `providerId` | vždy `sim.search-data` |
-| `providerEntityId` | stabilní SIM identifikátor entity pro detail a deduplikaci |
-| `entityType` | autoritativní typ entity, ne jazykově odvozený text |
-| `sourceSystem` | původní zdroj/read-model, např. `osm_reference`, `weather_forecast`, `chmi_weather_radar`, `chmi_alerts`, `chmi_hydro`, `safety_data` |
-| `sourceEntityId` | identifikátor objektu v původním zdroji |
-| `sourceAuthority` | `official`, `internal_verified`, `partner_verified`, `reference`, `community_verified`, `community_unverified`, `modelled` nebo `unknown` |
-| `dataQuality` | `official_observed`, `official_warning`, `verified_reference`, `reference`, `modelled`, `mixed` nebo `unknown` |
-| `title`, `summary`, `searchableText`, `aliases` | normalizovaný text pro UI, indexaci a RAG grounding |
-| `localized.cs`, `localized.en` | lokalizované texty pro COP UI a AI kontext |
-| `geometry`, `centroid` | GeoJSON geometrie ve WGS84 a bod pro řazení/vzdálenosti |
-| `address` | správní/adresní zařazení, pokud je ve zdroji dostupné |
-| `status`, `severity`, `confidence` | stav, závažnost a důvěra normalizované entity |
-| `layerIds`, `tags` | doporučené napojení na COP vrstvy a vyhledávací tagy |
-| `metrics` | strojově čitelné hodnoty, např. závažnost, pravděpodobnost, voda, průtok, srážky, vítr, radar/nowcast stav |
-| `classification`, `handling`, `visibility`, `allowedUse` | pravidla klasifikace, zobrazitelnosti a povoleného použití |
-| `positionQuality` | přesnost polohy: `exact`, `centroid`, `approximate` nebo `unknown` |
-| `providerProperties` | omezené provider-native hodnoty pro audit a detail |
-| `deleted` | v1 vrací aktuální živý/read-model stav; tombstones jsou označený follow-up |
+| Pole                                                     | Význam                                                                                                                                    |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `contractVersion`                                        | vždy `sim-search-source-v1`                                                                                                               |
+| `providerId`                                             | vždy `sim.search-data`                                                                                                                    |
+| `providerEntityId`                                       | stabilní SIM identifikátor entity pro detail a deduplikaci                                                                                |
+| `entityType`                                             | autoritativní typ entity, ne jazykově odvozený text                                                                                       |
+| `sourceSystem`                                           | původní zdroj/read-model, např. `osm_reference`, `weather_forecast`, `chmi_weather_radar`, `chmi_alerts`, `chmi_hydro`, `safety_data`     |
+| `sourceEntityId`                                         | identifikátor objektu v původním zdroji                                                                                                   |
+| `sourceAuthority`                                        | `official`, `internal_verified`, `partner_verified`, `reference`, `community_verified`, `community_unverified`, `modelled` nebo `unknown` |
+| `dataQuality`                                            | `official_observed`, `official_warning`, `verified_reference`, `reference`, `modelled`, `mixed` nebo `unknown`                            |
+| `title`, `summary`, `searchableText`, `aliases`          | normalizovaný text pro UI, indexaci a RAG grounding                                                                                       |
+| `localized.cs`, `localized.en`                           | lokalizované texty pro COP UI a AI kontext                                                                                                |
+| `geometry`, `centroid`                                   | GeoJSON geometrie ve WGS84 a bod pro řazení/vzdálenosti                                                                                   |
+| `address`                                                | správní/adresní zařazení, pokud je ve zdroji dostupné                                                                                     |
+| `status`, `severity`, `confidence`                       | stav, závažnost a důvěra normalizované entity                                                                                             |
+| `layerIds`, `tags`                                       | doporučené napojení na COP vrstvy a vyhledávací tagy                                                                                      |
+| `metrics`                                                | strojově čitelné hodnoty, např. závažnost, pravděpodobnost, voda, průtok, srážky, vítr, radar/nowcast stav                                |
+| `classification`, `handling`, `visibility`, `allowedUse` | pravidla klasifikace, zobrazitelnosti a povoleného použití                                                                                |
+| `positionQuality`                                        | přesnost polohy: `exact`, `centroid`, `approximate` nebo `unknown`                                                                        |
+| `providerProperties`                                     | omezené provider-native hodnoty pro audit a detail                                                                                        |
+| `deleted`                                                | v1 vrací aktuální živý/read-model stav; tombstones jsou označený follow-up                                                                |
 
 Podporované `entityType` hodnoty v první produkční verzi:
 
@@ -217,79 +217,79 @@ Klíčová pravidla katalogu:
 
 Každá feature musí mít tyto normalizované vlastnosti:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `featureId` | string | stabilní identifikátor v rámci zdroje |
-| `layerId` | string | doporučené COM katalogové ID, např. `public.mobile.network` |
-| `providerId` | string | identifikátor providera, např. `sim.situation-data` |
-| `providerLayerId` | string | lokální vrstva providera, např. `mobile_network` |
-| `layer` | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi`, `outdoor_webcams`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_forecast_area`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `weather_webcams`, `air_quality_grid` | mapová vrstva |
-| `category` | string | detailnější typ objektu |
-| `label` | string | lidsky čitelný název |
-| `labelLocalized` | object, optional | lokalizované názvy, typicky `cs` a `en` |
-| `summaryLocalized` | object, optional | lokalizovaný stručný popis pro detail v COM |
-| `sourceId` | string | poskytovatel v SIM registry |
-| `sourceName` | string, optional | lidsky čitelný název zdroje/read-modelu |
-| `observedAt` | ISO datetime | čas pozorování nebo publikace |
-| `validFrom` | ISO datetime, optional | začátek platnosti, pokud zdroj poskytuje |
-| `validUntil` | ISO datetime, optional | konec platnosti, pokud zdroj poskytuje |
-| `updatedAt` | ISO datetime, optional | čas poslední aktualizace read-modelu nebo upstream objektu |
-| `confidence` | number 0-1 | kvalita / důvěra agregátu |
-| `stale` | boolean | zda je objekt starší než prahová hodnota |
-| `severity` | `info`, `advisory`, `warning`, `critical` | priorita pro vizualizaci |
-| `license` | object | licence a atribuce zdroje |
-| `metrics` | object | číselné metriky vrstvy |
-| `providerProperties` | object | provider-native hodnoty pro detail a audit |
-| `raw` | object, optional | omezený původní payload pro ladění |
+| Pole                 | Typ                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Popis                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `featureId`          | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | stabilní identifikátor v rámci zdroje                       |
+| `layerId`            | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | doporučené COM katalogové ID, např. `public.mobile.network` |
+| `providerId`         | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | identifikátor providera, např. `sim.situation-data`         |
+| `providerLayerId`    | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | lokální vrstva providera, např. `mobile_network`            |
+| `layer`              | `weather`, `ground`, `mobile`, `mobile_network`, `mobile_coverage`, `traffic`, `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi`, `outdoor_webcams`, `air_quality`, `weather_temperature_grid`, `weather_wind_field`, `weather_precipitation_grid`, `weather_humidity_grid`, `weather_pressure_grid`, `weather_forecast_area`, `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`, `weather_webcams`, `air_quality_grid` | mapová vrstva                                               |
+| `category`           | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | detailnější typ objektu                                     |
+| `label`              | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | lidsky čitelný název                                        |
+| `labelLocalized`     | object, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | lokalizované názvy, typicky `cs` a `en`                     |
+| `summaryLocalized`   | object, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | lokalizovaný stručný popis pro detail v COM                 |
+| `sourceId`           | string                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | poskytovatel v SIM registry                                 |
+| `sourceName`         | string, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | lidsky čitelný název zdroje/read-modelu                     |
+| `observedAt`         | ISO datetime                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | čas pozorování nebo publikace                               |
+| `validFrom`          | ISO datetime, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | začátek platnosti, pokud zdroj poskytuje                    |
+| `validUntil`         | ISO datetime, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | konec platnosti, pokud zdroj poskytuje                      |
+| `updatedAt`          | ISO datetime, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | čas poslední aktualizace read-modelu nebo upstream objektu  |
+| `confidence`         | number 0-1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | kvalita / důvěra agregátu                                   |
+| `stale`              | boolean                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | zda je objekt starší než prahová hodnota                    |
+| `severity`           | `info`, `advisory`, `warning`, `critical`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | priorita pro vizualizaci                                    |
+| `license`            | object                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | licence a atribuce zdroje                                   |
+| `metrics`            | object                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | číselné metriky vrstvy                                      |
+| `providerProperties` | object                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | provider-native hodnoty pro detail a audit                  |
+| `raw`                | object, optional                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | omezený původní payload pro ladění                          |
 
 Boundary features ve vrstvách `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp` a `place_settlements` navíc nesou:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `adminLevel` | number | OSM/RUIAN-like správní úroveň, aktuálně 2/4/6/7/8 podle read-modelu |
-| `name` | string | název území |
-| `code` | string | kód území, typicky ISO/ref/OSM fallback |
-| `countryCode` | string | ISO alpha-2, pro ČR `CZ` |
-| `areaName` | string | název pro detail mapy |
-| `styleHint` | string | doporučený style profile, např. `boundary-region-v1` |
-| `iconHint` | string | `boundary` nebo `place` |
-| `readModel` | boolean | `true`, jde o lokální PostGIS read-model |
-| `sourceRevision` | string | revize/import timestamp read-modelu |
+| Pole             | Typ     | Popis                                                               |
+| ---------------- | ------- | ------------------------------------------------------------------- |
+| `adminLevel`     | number  | OSM/RUIAN-like správní úroveň, aktuálně 2/4/6/7/8 podle read-modelu |
+| `name`           | string  | název území                                                         |
+| `code`           | string  | kód území, typicky ISO/ref/OSM fallback                             |
+| `countryCode`    | string  | ISO alpha-2, pro ČR `CZ`                                            |
+| `areaName`       | string  | název pro detail mapy                                               |
+| `styleHint`      | string  | doporučený style profile, např. `boundary-region-v1`                |
+| `iconHint`       | string  | `boundary` nebo `place`                                             |
+| `readModel`      | boolean | `true`, jde o lokální PostGIS read-model                            |
+| `sourceRevision` | string  | revize/import timestamp read-modelu                                 |
 
 Trail features z `osm_postgis` jsou oddělené od krizových vrstev:
 
-| Vrstva | Geometrie | Popis |
-| --- | --- | --- |
-| `trail_routes` | `LineString` / `MultiLineString` | pěší, turistické, cyklo a MTB trasy z OSM relation/line read-modelu |
-| `trail_poi` | `Point` | ubytování, přístřešky, voda, občerstvení, doprava, servis/půjčovny a outdoor nouzové body; ne IZS stanice |
+| Vrstva         | Geometrie                        | Popis                                                                                                     |
+| -------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `trail_routes` | `LineString` / `MultiLineString` | pěší, turistické, cyklo a MTB trasy z OSM relation/line read-modelu                                       |
+| `trail_poi`    | `Point`                          | ubytování, přístřešky, voda, občerstvení, doprava, servis/půjčovny a outdoor nouzové body; ne IZS stanice |
 
 `trail_routes` navíc posílá `properties.providerProperties.trail`:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `contractVersion` | string | `sim-osm-trail-route-v1` |
-| `mode` | string | `hiking`, `walking`, `bicycle`, `mtb` |
-| `routeMode` | string | původní OSM `route`, např. `hiking`, `foot`, `bicycle`, `mtb` |
-| `network` | string | OSM síť, např. `nwn`, `rwn`, `lwn`, `ncn`, `rcn`, `lcn` |
-| `ref`, `operator`, `osmcSymbol` | string, optional | značení a provozovatel, pokud jsou dostupné |
-| `lengthKm`, `segmentCount` | number, optional | délka a počet segmentů v materializovaném read-modelu |
-| `geometryDetail` | string | `full` nebo `generalized`; pro detailní turistickou navigaci preferovat `full` |
-| `simplificationDegrees`, `generalizationM` | number | použitá geometrická generalizace; pokud je `generalizationM > 0`, COP má při přiblížení vyžádat čerstvá data pro aktuální bbox a nepoužívat starší přehledovou cache |
+| Pole                                       | Typ              | Popis                                                                                                                                                                |
+| ------------------------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contractVersion`                          | string           | `sim-osm-trail-route-v1`                                                                                                                                             |
+| `mode`                                     | string           | `hiking`, `walking`, `bicycle`, `mtb`                                                                                                                                |
+| `routeMode`                                | string           | původní OSM `route`, např. `hiking`, `foot`, `bicycle`, `mtb`                                                                                                        |
+| `network`                                  | string           | OSM síť, např. `nwn`, `rwn`, `lwn`, `ncn`, `rcn`, `lcn`                                                                                                              |
+| `ref`, `operator`, `osmcSymbol`            | string, optional | značení a provozovatel, pokud jsou dostupné                                                                                                                          |
+| `lengthKm`, `segmentCount`                 | number, optional | délka a počet segmentů v materializovaném read-modelu                                                                                                                |
+| `geometryDetail`                           | string           | `full` nebo `generalized`; pro detailní turistickou navigaci preferovat `full`                                                                                       |
+| `simplificationDegrees`, `generalizationM` | number           | použitá geometrická generalizace; pokud je `generalizationM > 0`, COP má při přiblížení vyžádat čerstvá data pro aktuální bbox a nepoužívat starší přehledovou cache |
 
 `trail_poi` navíc posílá `properties.providerProperties.trailPoi`:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `contractVersion` | string | `sim-osm-trail-poi-v1` |
-| `category` | string | `sleep`, `camp`, `shelter`, `water`, `food`, `repair`, `rental`, `transport`, `emergency`; `emergency` znamená outdoor nouzový bod, defibrilátor, nouzový telefon nebo záchranný bod, ne `police`/`fire_station` |
-| `categoryLabelLocalized` | object | český a anglický název kategorie |
-| `openingHours`, `website`, `wheelchair`, `access` | string, optional | veřejné OSM atributy pro detail |
-| `mayDisplayContact` | boolean | vždy `false`; SIM nepublikuje přímé kontaktní údaje z OSM jako běžný mapový detail |
+| Pole                                              | Typ              | Popis                                                                                                                                                                                                            |
+| ------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contractVersion`                                 | string           | `sim-osm-trail-poi-v1`                                                                                                                                                                                           |
+| `category`                                        | string           | `sleep`, `camp`, `shelter`, `water`, `food`, `repair`, `rental`, `transport`, `emergency`; `emergency` znamená outdoor nouzový bod, defibrilátor, nouzový telefon nebo záchranný bod, ne `police`/`fire_station` |
+| `categoryLabelLocalized`                          | object           | český a anglický název kategorie                                                                                                                                                                                 |
+| `openingHours`, `website`, `wheelchair`, `access` | string, optional | veřejné OSM atributy pro detail                                                                                                                                                                                  |
+| `mayDisplayContact`                               | boolean          | vždy `false`; SIM nepublikuje přímé kontaktní údaje z OSM jako běžný mapový detail                                                                                                                               |
 
 `outdoor_webcams` je samostatná vrstva pro Turistika / Outdoor:
 
-| Vrstva | COM layer | Zdroj | Popis |
-| --- | --- | --- | --- |
+| Vrstva            | COM layer                | Zdroj                  | Popis                                                                                    |
+| ----------------- | ------------------------ | ---------------------- | ---------------------------------------------------------------------------------------- |
 | `outdoor_webcams` | `public.outdoor.webcams` | `chmi_weather_webcams` | Kurátorované turistické a městské webkamery z ověřených originálních webů provozovatelů. |
 
 Feature má `properties.category="outdoor_webcam"`,
@@ -297,11 +297,14 @@ Feature má `properties.category="outdoor_webcam"`,
 `properties.providerProperties.camera.presentationGroup="outdoor"`. Stejně jako
 u počasových kamer se obraz neposílá ve feature streamu. COP má detail načítat
 přes `providerProperties.camera.detailUrl`. Pokud
-`providerProperties.camera.snapshotAvailable=false`, COP nemá volat snapshot
-endpoint; má zobrazit informaci, že automatický náhled není ověřený, a nabídnout
-otevření `providerProperties.camera.providerPageUrl` / `providerPageUrl`
-originálního provozovatele. WebCamLive smí být v SIM pouze auditní discovery
-zdroj, ne runtime obrazová proxy.
+`providerProperties.camera.snapshotAvailable=true`, COP smí zobrazit
+`snapshotUrl`; volitelné `snapshotAvailability="origin_page_discovery"` znamená,
+že SIM hledá a validuje obraz až po kliknutí na originální stránce
+provozovatele. Pokud snapshot endpoint vrátí HTTP 404, COP má nabídnout otevření
+`providerProperties.camera.providerPageUrl` / `providerPageUrl` originálního
+provozovatele. Pokud `snapshotAvailable=false`, COP snapshot endpoint nevolá.
+WebCamLive smí být v SIM pouze auditní discovery zdroj, ne runtime obrazová
+proxy.
 
 ## Emergency routing support
 
@@ -323,14 +326,14 @@ POST /situation-data/api/v1/routing/nearest-access
 `GET /routing/profiles` vrací kontrakt `sim-routing-profile-catalog-v1` s
 profily:
 
-| `profileId` | Použití |
-| --- | --- |
-| `car` | běžné osobní vozidlo |
-| `emergency_vehicle` | zásahové vozidlo, výchozí pro COP emergency route |
+| `profileId`               | Použití                                               |
+| ------------------------- | ----------------------------------------------------- |
+| `car`                     | běžné osobní vozidlo                                  |
+| `emergency_vehicle`       | zásahové vozidlo, výchozí pro COP emergency route     |
 | `large_emergency_vehicle` | velké zásahové vozidlo s konzervativnější volbou cest |
-| `offroad_4x4` | terénní vozidlo, využívá i track/service cesty |
-| `walking` | běžná pěší trasa |
-| `evacuation_walking` | pomalejší pěší evakuační profil |
+| `offroad_4x4`             | terénní vozidlo, využívá i track/service cesty        |
+| `walking`                 | běžná pěší trasa                                      |
+| `evacuation_walking`      | pomalejší pěší evakuační profil                       |
 
 Minimální požadavek na trasu:
 
@@ -346,13 +349,13 @@ Minimální požadavek na trasu:
 
 Odpověď `sim-routing-route-v1` obsahuje:
 
-| Pole | Popis |
-| --- | --- |
-| `routes[]` | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků a kvality |
-| `features[]` | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1` |
-| `routes[].quality.mode` | `osm_graph`, pokud SIM použil OSM graph; `direct_fallback`, pokud není routovací graf dostupný |
-| `routes[].quality.confidence` | modelová důvěra; COP ji má zobrazit v detailu |
-| `warnings[]` | důvody degradace nebo omezení výpočtu |
+| Pole                          | Popis                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `routes[]`                    | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků a kvality                                    |
+| `features[]`                  | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1` |
+| `routes[].quality.mode`       | `osm_graph`, pokud SIM použil OSM graph; `direct_fallback`, pokud není routovací graf dostupný                            |
+| `routes[].quality.confidence` | modelová důvěra; COP ji má zobrazit v detailu                                                                             |
+| `warnings[]`                  | důvody degradace nebo omezení výpočtu                                                                                     |
 
 `POST /routing/alternatives` má stejný vstup jako `/routing/route`, ale vrací
 1-3 varianty. `POST /routing/isochrone` přijímá `origin`,
@@ -371,36 +374,36 @@ fallback geometrii s `quality.mode=direct_fallback`, aby COP mohl jasně ukázat
 
 Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `transportMode` | string | normalizovaný mód, např. `bus`, `tram`, `train`, `metro`, `trolleybus`, `road` |
-| `routeShortName` | string | krátké označení linky/trasy |
-| `destination` | string | cílová stanice/směr, pokud zdroj poskytuje |
-| `delaySeconds` | number | zpoždění v sekundách |
-| `vehicleId` | string | stabilní identifikátor vozidla ve zdroji |
-| `tripId` | string | identifikátor jízdy/spoje ve zdroji |
-| `occupancyStatus` | string | normalizovaný GTFS occupancy status |
-| `occupancyPercent` | number | procentuální obsazenost, pokud zdroj poskytuje |
-| `operator` | string | dopravce nebo systém, např. `PID`, `IDS JMK`, `NDIC/ŘSD` |
-| `headingDeg` | number | směr pohybu ve stupních |
-| `speedMps` | number | rychlost v m/s |
+| Pole               | Typ    | Popis                                                                          |
+| ------------------ | ------ | ------------------------------------------------------------------------------ |
+| `transportMode`    | string | normalizovaný mód, např. `bus`, `tram`, `train`, `metro`, `trolleybus`, `road` |
+| `routeShortName`   | string | krátké označení linky/trasy                                                    |
+| `destination`      | string | cílová stanice/směr, pokud zdroj poskytuje                                     |
+| `delaySeconds`     | number | zpoždění v sekundách                                                           |
+| `vehicleId`        | string | stabilní identifikátor vozidla ve zdroji                                       |
+| `tripId`           | string | identifikátor jízdy/spoje ve zdroji                                            |
+| `occupancyStatus`  | string | normalizovaný GTFS occupancy status                                            |
+| `occupancyPercent` | number | procentuální obsazenost, pokud zdroj poskytuje                                 |
+| `operator`         | string | dopravce nebo systém, např. `PID`, `IDS JMK`, `NDIC/ŘSD`                       |
+| `headingDeg`       | number | směr pohybu ve stupních                                                        |
+| `speedMps`         | number | rychlost v m/s                                                                 |
 
 COM má pro civilní UI používat tato plochá pole v `properties`. Provider-specific PID/GTFS/IDS JMK/SRTI data jsou určena pouze pro detail, audit a diagnostiku v `providerProperties`; COM nemá parsovat raw provider payload jako běžný zdroj významu.
 
 Coverage features ve vrstvě `mobile_coverage` navíc nesou:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `operator` | string | zatím `unknown`; připraveno pro pozdější operátorské vstupy |
-| `technology` | `2G`, `4G`, `5G` | modelovaná technologie |
-| `quality` | `good`, `fair`, `weak`, `none`, `unknown` | normalizovaná kvalita odhadu |
-| `estimatedSignalDbm` | number | orientační odhad RSSI/RSRP v dBm podle fáze modelu |
-| `modelVersion` | string | verze modelu, např. `coverage-v1` |
-| `generatedAt` | ISO datetime | čas výpočtu cached výsledku |
-| `resolutionM` | number | efektivní grid/polygon rozlišení v metrech |
-| `demSource` | string | použitý DEM zdroj nebo `not-used-phase-1` |
-| `assumptions` | object | použitý výškový/path-loss/terrain režim |
-| `disclaimer` | string | upozornění, že nejde o garantované pokrytí operátora |
+| Pole                 | Typ                                       | Popis                                                       |
+| -------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `operator`           | string                                    | zatím `unknown`; připraveno pro pozdější operátorské vstupy |
+| `technology`         | `2G`, `4G`, `5G`                          | modelovaná technologie                                      |
+| `quality`            | `good`, `fair`, `weak`, `none`, `unknown` | normalizovaná kvalita odhadu                                |
+| `estimatedSignalDbm` | number                                    | orientační odhad RSSI/RSRP v dBm podle fáze modelu          |
+| `modelVersion`       | string                                    | verze modelu, např. `coverage-v1`                           |
+| `generatedAt`        | ISO datetime                              | čas výpočtu cached výsledku                                 |
+| `resolutionM`        | number                                    | efektivní grid/polygon rozlišení v metrech                  |
+| `demSource`          | string                                    | použitý DEM zdroj nebo `not-used-phase-1`                   |
+| `assumptions`        | object                                    | použitý výškový/path-loss/terrain režim                     |
+| `disclaimer`         | string                                    | upozornění, že nejde o garantované pokrytí operátora        |
 
 Pro vykreslení `mobile_coverage` má COP použít `properties.providerProperties.display`:
 `renderer=mobile_coverage_grid_cell_v1`, `style.fillColor`, `style.fillOpacity`,
@@ -413,43 +416,43 @@ diagnostiky/ladění.
 
 Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 
-| Pole | Typ | Popis |
-| --- | --- | --- |
-| `operator` | `aggregate`, `unknown` | `aggregate` znamená souhrnný odhad bez operátorských stavových dat |
-| `technology` | `2G`, `4G`, `5G`, `mixed`, `unknown` | dominantní / filtrovaná technologie výsledku |
-| `quality` | `good`, `fair`, `weak`, `none`, `unknown` | normalizovaný závěr pro COM |
-| `status` | `ok`, `weak_signal`, `degraded_possible`, `outage_reported`, `unknown` | stavový závěr; bez partnerského feedu nejde o potvrzený výpadek BTS |
-| `basis` | string[] | vstupy, ze kterých byl závěr složen, např. `CTU_NETTEST_MEASUREMENT`, `INFERRED_COVERAGE`, `NO_OPERATOR_BTS_STATUS` |
-| `summary` | string | krátké české shrnutí pro detail v COM |
-| `notices` | string[] | bezpečnostní a kvalitativní poznámky k interpretaci |
-| `estimatedSignalDbm` | number | orientační odhad podle modelu a měření |
-| `modelVersion` | string | verze sjednocujícího modelu |
-| `disclaimer` | string | upozornění, že nejde o garantované pokrytí ani potvrzený stav konkrétní BTS |
+| Pole                 | Typ                                                                    | Popis                                                                                                               |
+| -------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `operator`           | `aggregate`, `unknown`                                                 | `aggregate` znamená souhrnný odhad bez operátorských stavových dat                                                  |
+| `technology`         | `2G`, `4G`, `5G`, `mixed`, `unknown`                                   | dominantní / filtrovaná technologie výsledku                                                                        |
+| `quality`            | `good`, `fair`, `weak`, `none`, `unknown`                              | normalizovaný závěr pro COM                                                                                         |
+| `status`             | `ok`, `weak_signal`, `degraded_possible`, `outage_reported`, `unknown` | stavový závěr; bez partnerského feedu nejde o potvrzený výpadek BTS                                                 |
+| `basis`              | string[]                                                               | vstupy, ze kterých byl závěr složen, např. `CTU_NETTEST_MEASUREMENT`, `INFERRED_COVERAGE`, `NO_OPERATOR_BTS_STATUS` |
+| `summary`            | string                                                                 | krátké české shrnutí pro detail v COM                                                                               |
+| `notices`            | string[]                                                               | bezpečnostní a kvalitativní poznámky k interpretaci                                                                 |
+| `estimatedSignalDbm` | number                                                                 | orientační odhad podle modelu a měření                                                                              |
+| `modelVersion`       | string                                                                 | verze sjednocujícího modelu                                                                                         |
+| `disclaimer`         | string                                                                 | upozornění, že nejde o garantované pokrytí ani potvrzený stav konkrétní BTS                                         |
 
 ## Podporované zdroje
 
-| Source | Vrstvy | Popis |
-| --- | --- | --- |
-| `open_meteo` | `weather` | Obecné počasí u středu bbox, silně cacheované podle weather gridu. |
-| `weather_forecast` | `weather_forecast_area` | SIM-normalizované plošné předpovědi z modelových zdrojů: polygon, symbol, riziko, hlavní metriky a detailní meteogram endpoint. COP používá katalogovou vrstvu `public.weather.forecast_area`. |
-| `aviation_weather` | `weather` | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo. |
-| `chmi_weather_stations` | `weather` | Měřené meteorologické stanice ČHMÚ z `meteorology/climate/now`: teplota, vlhkost, tlak, vítr, srážky a sluneční svit. COM používá katalogovou vrstvu `public.weather.observations`. |
-| `chmi_weather_radar` | `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk` | Radarové kompozity ČHMÚ z `meteorology/weather/radar/composite`: aktuální MAX_Z, PseudoCAPPI 2 km, MERGE 1h a nowcast archivy. COM používá katalogové vrstvy `public.weather.radar_reflectivity`, `public.weather.radar_precipitation`, `public.weather.radar_nowcast`, `public.safety.thunderstorm_risk`. Neobsahuje raw polohy blesků. |
-| `chmi_weather_webcams` | `weather_webcams`, `outdoor_webcams` | Veřejné kamery. Počasové kamery zůstávají ve vrstvě `public.weather.webcams`; kurátorované turistické/origin kamery jsou ve vrstvě `public.outdoor.webcams`. |
-| `chmi_air_quality` | `air_quality` | Měřené imisní stanice ČHMÚ z `air_quality/now`: index kvality ovzduší a hlavní polutanty. COM používá katalogovou vrstvu `public.safety.air_quality`. |
-| `ctu_nettest` | `mobile` | ČTÚ NetTest otevřený export mobilních měření. |
-| `ctu_stationary_mobile` | `mobile` | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav. |
-| `mobile_coverage_model` | `mobile_coverage` | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`. |
-| `mobile_network_model` | `mobile_network` | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření, stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`. |
-| `community_context` | `community_places` | Praktický komunitní/outdoor kontext z lokálního OSM/PostGIS read-modelu: WC, voda, sprchy, nabíjení, AED, lékárny, přístřeší, knihovny, úřady a podobné civilní body. |
-| `pid_gtfs_rt` | `traffic` | PID/Golemio GTFS-RT vozidla pro dopravní kontext. |
-| `idsjmk_vehicle_positions` | `traffic` | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features. |
-| `spravazeleznic_trains` | `traffic` | Volitelný zdroj aktuálních poloh vlaků z veřejné mapy Správy železnic. SIM drží jednu server-side cache položku s minimálním TTL 900 s a do COP posílá normalizovaný GeoJSON ve WGS84. |
-| `road_srti_lod` | `traffic` | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď. |
-| `safety_data` | `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin` | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry. |
-| `ardos_partner` | `ground`, `mobile`, `traffic` | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`. |
-| `osm_postgis` | `ground`, `mobile`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache. |
-| `osm_overpass` | `ground`, `mobile` | Jen omezený vývoj/pilot; veřejný Overpass nesmí být runtime backend pro tisíce uživatelů. |
+| Source                     | Vrstvy                                                                                                                                           | Popis                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `open_meteo`               | `weather`                                                                                                                                        | Obecné počasí u středu bbox, silně cacheované podle weather gridu.                                                                                                                                                                                                                                                                       |
+| `weather_forecast`         | `weather_forecast_area`                                                                                                                          | SIM-normalizované plošné předpovědi z modelových zdrojů: polygon, symbol, riziko, hlavní metriky a detailní meteogram endpoint. COP používá katalogovou vrstvu `public.weather.forecast_area`.                                                                                                                                           |
+| `aviation_weather`         | `weather`                                                                                                                                        | NOAA AWC METAR/TAF pro letiště v bbox. SIM dotazuje AWC cacheovaně; COM AWC nevolá přímo.                                                                                                                                                                                                                                                |
+| `chmi_weather_stations`    | `weather`                                                                                                                                        | Měřené meteorologické stanice ČHMÚ z `meteorology/climate/now`: teplota, vlhkost, tlak, vítr, srážky a sluneční svit. COM používá katalogovou vrstvu `public.weather.observations`.                                                                                                                                                      |
+| `chmi_weather_radar`       | `weather_radar_reflectivity`, `weather_radar_precipitation`, `weather_radar_nowcast`, `weather_thunderstorm_risk`                                | Radarové kompozity ČHMÚ z `meteorology/weather/radar/composite`: aktuální MAX_Z, PseudoCAPPI 2 km, MERGE 1h a nowcast archivy. COM používá katalogové vrstvy `public.weather.radar_reflectivity`, `public.weather.radar_precipitation`, `public.weather.radar_nowcast`, `public.safety.thunderstorm_risk`. Neobsahuje raw polohy blesků. |
+| `chmi_weather_webcams`     | `weather_webcams`, `outdoor_webcams`                                                                                                             | Veřejné kamery. Počasové kamery zůstávají ve vrstvě `public.weather.webcams`; kurátorované turistické/origin kamery jsou ve vrstvě `public.outdoor.webcams`.                                                                                                                                                                             |
+| `chmi_air_quality`         | `air_quality`                                                                                                                                    | Měřené imisní stanice ČHMÚ z `air_quality/now`: index kvality ovzduší a hlavní polutanty. COM používá katalogovou vrstvu `public.safety.air_quality`.                                                                                                                                                                                    |
+| `ctu_nettest`              | `mobile`                                                                                                                                         | ČTÚ NetTest otevřený export mobilních měření.                                                                                                                                                                                                                                                                                            |
+| `ctu_stationary_mobile`    | `mobile`                                                                                                                                         | Oficiální stacionární měření mobilního signálu ČTÚ 2G/4G po operátorech. Historický diagnostický vstup, ne aktuální BTS stav.                                                                                                                                                                                                            |
+| `mobile_coverage_model`    | `mobile_coverage`                                                                                                                                | SIM odhad mobilního pokrytí nad importovanými OSM věžemi. Publikuje polygonový grid s kvalitou `good/fair/weak/none/unknown`.                                                                                                                                                                                                            |
+| `mobile_network_model`     | `mobile_network`                                                                                                                                 | Sjednocený výstup pro COM. Kombinuje modelované coverage, ČTÚ NetTest měření, stacionární měření ČTÚ a dostupné infrastrukturní indicie do jednoho závěru s `quality`, `status`, `confidence`, `basis` a `summary`.                                                                                                                      |
+| `community_context`        | `community_places`                                                                                                                               | Praktický komunitní/outdoor kontext z lokálního OSM/PostGIS read-modelu: WC, voda, sprchy, nabíjení, AED, lékárny, přístřeší, knihovny, úřady a podobné civilní body.                                                                                                                                                                    |
+| `pid_gtfs_rt`              | `traffic`                                                                                                                                        | PID/Golemio GTFS-RT vozidla pro dopravní kontext.                                                                                                                                                                                                                                                                                        |
+| `idsjmk_vehicle_positions` | `traffic`                                                                                                                                        | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features.                                                                                                                                                                                                                      |
+| `spravazeleznic_trains`    | `traffic`                                                                                                                                        | Volitelný zdroj aktuálních poloh vlaků z veřejné mapy Správy železnic. SIM drží jednu server-side cache položku s minimálním TTL 900 s a do COP posílá normalizovaný GeoJSON ve WGS84.                                                                                                                                                   |
+| `road_srti_lod`            | `traffic`                                                                                                                                        | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď.                                                                                                                                                                                              |
+| `safety_data`              | `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`                                                                                  | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry.                                                                                                                                                                         |
+| `ardos_partner`            | `ground`, `mobile`, `traffic`                                                                                                                    | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`.                                                                                                                                                                                                                                             |
+| `osm_postgis`              | `ground`, `mobile`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache.                                                                                                                                                                        |
+| `osm_overpass`             | `ground`, `mobile`                                                                                                                               | Jen omezený vývoj/pilot; veřejný Overpass nesmí být runtime backend pro tisíce uživatelů.                                                                                                                                                                                                                                                |
 
 ## OpenStreetMap PostGIS
 
@@ -516,20 +519,20 @@ municipal_office, pharmacy, defibrillator, shelter, assembly_point
 
 Každá feature nese `providerProperties.community`:
 
-| Pole | Význam |
-| --- | --- |
-| `contractVersion` | `sim-community-context-v1` |
-| `placeId` | stabilní SIM identifikátor bodu |
-| `sourceAuthority` | nyní `reference`; nejde o potvrzený aktuální stav |
-| `communityStatus` | nyní `reference_only` |
-| `category`, `rawCategory`, `categoryGroup` | normalizace pro ikony, filtry a detail |
-| `categoryLabelLocalized.cs/en` | hotové texty pro COP UI |
-| `openingHours`, `access`, `wheelchair`, `fee`, `payment`, `website` | veřejně zobrazitelné hodnoty z OSM, pokud existují |
-| `canAcceptContributions` | `true`; COP může nabídnout nahlášení stavu, fotku nebo návrh změny |
-| `acceptedContributionTypes` | `photo`, `review`, `status_report`, `proposed_edit` |
-| `proofOfVisitRecommended` | doporučení pro budoucí ověření návštěvy |
-| `moderationRequired` | uživatelský obsah musí projít moderací před publikací jako ověřený |
-| `mayDisplayContact` | `false`; SIM nepředává osobní kontakty z OSM do veřejného detailu |
+| Pole                                                                | Význam                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `contractVersion`                                                   | `sim-community-context-v1`                                         |
+| `placeId`                                                           | stabilní SIM identifikátor bodu                                    |
+| `sourceAuthority`                                                   | nyní `reference`; nejde o potvrzený aktuální stav                  |
+| `communityStatus`                                                   | nyní `reference_only`                                              |
+| `category`, `rawCategory`, `categoryGroup`                          | normalizace pro ikony, filtry a detail                             |
+| `categoryLabelLocalized.cs/en`                                      | hotové texty pro COP UI                                            |
+| `openingHours`, `access`, `wheelchair`, `fee`, `payment`, `website` | veřejně zobrazitelné hodnoty z OSM, pokud existují                 |
+| `canAcceptContributions`                                            | `true`; COP může nabídnout nahlášení stavu, fotku nebo návrh změny |
+| `acceptedContributionTypes`                                         | `photo`, `review`, `status_report`, `proposed_edit`                |
+| `proofOfVisitRecommended`                                           | doporučení pro budoucí ověření návštěvy                            |
+| `moderationRequired`                                                | uživatelský obsah musí projít moderací před publikací jako ověřený |
+| `mayDisplayContact`                                                 | `false`; SIM nepředává osobní kontakty z OSM do veřejného detailu  |
 
 COP má pro první fázi zobrazit tyto body jako referenční civilní kontext a v detailu jasně uvést, že dostupnost není ověřený aktuální stav. Uživatelské fotky, recenze, hlášení a návrhy změn jsou budoucí navazující workflow: COP řeší formuláře, Keycloak identitu, fotky, Proof-of-Visit, anti-abuse a moderaci; SIM bude po schválení publikovat normalizovaný výstup jako `community_reports` nebo aktualizovaný komunitní stav.
 
@@ -667,7 +670,7 @@ Radarové features jsou polygonové metadata pro raster overlay, ne vektorová b
         "contentType": "image/png",
         "projection": "EPSG:3857",
         "boundsWgs84": [11.267, 48.047, 19.624, 51.458],
-        "sourceBoundsWgs84": [11.267, 48.047, 20.770, 52.167],
+        "sourceBoundsWgs84": [11.267, 48.047, 20.77, 52.167],
         "dataBoundsWgs84": [11.267, 48.047, 19.624, 51.458],
         "renderMode": "clean_image_overlay",
         "sourceImageMayContainFrame": true,
@@ -749,19 +752,19 @@ Poznámka k bleskům: SIM aktuálně nezveřejňuje polohy blesků. Čistý veř
 
 Katalog SIM nově nabízí plošné environment vrstvy pro civilní mapu:
 
-| Katalogové ID | Provider layer | Typ | Vstup |
-| --- | --- | --- | --- |
-| `public.weather.temperature_grid` | `weather.temperature_grid` | `grid_field` | ČHMÚ měřené stanice |
-| `public.weather.wind_field` | `weather.wind_field` | `vector_field` | ČHMÚ měřené stanice |
-| `public.weather.precipitation_grid` | `weather.precipitation_grid` | `grid_field` | ČHMÚ měřené stanice |
-| `public.weather.humidity_grid` | `weather.humidity_grid` | `grid_field` | ČHMÚ měřené stanice |
-| `public.weather.pressure_grid` | `weather.pressure_grid` | `grid_field` | ČHMÚ měřené stanice |
-| `public.weather.forecast_area` | `weather.forecast_area` | `vector_features` | SIM předpovědní agregát nad Open-Meteo s MET Norway fallbackem |
-| `public.weather.radar_reflectivity` | `weather.radar_reflectivity` | `raster_overlay` | ČHMÚ radar MAX_Z |
-| `public.weather.radar_precipitation` | `weather.radar_precipitation` | `raster_overlay` | ČHMÚ PseudoCAPPI/MERGE |
-| `public.weather.radar_nowcast` | `weather.radar_nowcast` | `raster_overlay` | ČHMÚ COTREC nowcast |
-| `public.safety.thunderstorm_risk` | `weather.thunderstorm_risk` | `raster_overlay` | ČHMÚ MAX_Z masked/EchoTop, bez raw blesků |
-| `public.safety.air_quality_grid` | `air_quality.grid` | `grid_field` | ČHMÚ imisní stanice |
+| Katalogové ID                        | Provider layer                | Typ               | Vstup                                                          |
+| ------------------------------------ | ----------------------------- | ----------------- | -------------------------------------------------------------- |
+| `public.weather.temperature_grid`    | `weather.temperature_grid`    | `grid_field`      | ČHMÚ měřené stanice                                            |
+| `public.weather.wind_field`          | `weather.wind_field`          | `vector_field`    | ČHMÚ měřené stanice                                            |
+| `public.weather.precipitation_grid`  | `weather.precipitation_grid`  | `grid_field`      | ČHMÚ měřené stanice                                            |
+| `public.weather.humidity_grid`       | `weather.humidity_grid`       | `grid_field`      | ČHMÚ měřené stanice                                            |
+| `public.weather.pressure_grid`       | `weather.pressure_grid`       | `grid_field`      | ČHMÚ měřené stanice                                            |
+| `public.weather.forecast_area`       | `weather.forecast_area`       | `vector_features` | SIM předpovědní agregát nad Open-Meteo s MET Norway fallbackem |
+| `public.weather.radar_reflectivity`  | `weather.radar_reflectivity`  | `raster_overlay`  | ČHMÚ radar MAX_Z                                               |
+| `public.weather.radar_precipitation` | `weather.radar_precipitation` | `raster_overlay`  | ČHMÚ PseudoCAPPI/MERGE                                         |
+| `public.weather.radar_nowcast`       | `weather.radar_nowcast`       | `raster_overlay`  | ČHMÚ COTREC nowcast                                            |
+| `public.safety.thunderstorm_risk`    | `weather.thunderstorm_risk`   | `raster_overlay`  | ČHMÚ MAX_Z masked/EchoTop, bez raw blesků                      |
+| `public.safety.air_quality_grid`     | `air_quality.grid`            | `grid_field`      | ČHMÚ imisní stanice                                            |
 
 V aktuální fázi SIM vrací grid jako GeoJSON features nad stabilní WGS84 buňkou. Hodnota buňky je odvozena z nejbližší měřené stanice uvnitř výřezu; nejde o meteorologický numerický model ani právně závaznou interpolaci. Feature proto nese `rendering.mode=grid_field`, `rendering.geometryRole=grid_cell`, `tags.renderAs=grid_field`, `providerProperties.valueMetric` a `metrics.value`. Srážkový grid je jednotkově `mm/10min`, protože vychází z metriky ČHMÚ `precipitation10mMm`. Materializované tile endpointy jsou další výkonová fáze pro velmi vysoký provoz.
 

@@ -1837,6 +1837,10 @@ components:
         snapshotAvailable:
           type: boolean
           example: true
+        snapshotAvailability:
+          type: string
+          enum: [direct, embedded, origin_page_discovery, unavailable]
+          example: origin_page_discovery
       additionalProperties: false
     WeatherCamera:
       type: object
@@ -1860,6 +1864,10 @@ components:
         snapshotAvailable:
           type: boolean
           example: true
+        snapshotAvailability:
+          type: string
+          enum: [direct, embedded, origin_page_discovery, unavailable]
+          example: direct
       additionalProperties: false
     WeatherCameraCatalog:
       type: object

@@ -518,6 +518,13 @@ například po ručním auditu agregátorů typu WebCamLive. URL musí vracet JS
 }
 ```
 
+`PUBLIC_CAMERA_FEEDS`, `providerUrl` a `directImageUrl` musí být veřejné HTTP(S)
+URL bez vložených credentials. SIM odmítá `localhost`, `.local` a privátní nebo
+rezervované IP adresy v URL hostu a při origin discovery nefollowuje redirecty;
+feed musí obsahovat konečnou veřejnou origin URL. Ruční kurace a egress pravidla
+produkční sítě zůstávají povinná ochrana proti DNS rebindingu a licenčně
+nevhodným zdrojům.
+
 SIM nepoužívá WebCamLive jako produkční runtime feed. Pro dohledání kandidátů
 slouží auditní skript:
 
@@ -534,11 +541,14 @@ Do `PUBLIC_CAMERA_FEEDS` se vkládá až ověřený `static_json` feed.
 Vestavěný feed `builtin:curated_outdoor_webcams_cz` vznikl auditem českého
 katalogu WebCamLive dne 2026-07-06. WebCamLive je použitý pouze jako discovery
 katalog, nikoli jako runtime obrazový zdroj. Do feedu jsou zařazené jen body,
-kde byl dohledán dostupný neagregátorový originální web provozovatele. Přímý
-snapshot je u těchto kamer vypnutý (`snapshotAvailable=false`), dokud není pro
-konkrétní kameru ověřená přímá originální image/stream URL. COP je má řadit do
-Turistika / Outdoor přes vrstvu `public.outdoor.webcams` a při chybějícím
-snapshotu nabídnout otevření originální stránky provozovatele.
+kde byl dohledán dostupný neagregátorový originální web provozovatele. U kamer
+bez uloženého `directImageUrl` SIM nově používá server-side
+`origin_page_discovery`: na detail/snapshot požadavek krátce zkontroluje
+originální stránku, vybere jen kandidáty vypadající jako webcam/snapshot/live
+obrázek, ověří odpověď jako skutečný obrázek a vrátí ji přes vlastní snapshot
+endpoint. COP je má řadit do Turistika / Outdoor přes vrstvu
+`public.outdoor.webcams`; pokud snapshot endpoint vrátí 404, má nabídnout
+otevření originální stránky provozovatele.
 
 `public.weather.current` zustava pro COP stejnou vrstvou
 `layers=weather&source=open_meteo`. SIM ji server-side obohacuje zdrojem

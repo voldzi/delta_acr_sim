@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { isIP } from "node:net";
 
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
@@ -8,6 +9,8 @@ export const CHMI_WEATHER_WEBCAMS_SOURCE_ID = "chmi_weather_webcams" as const;
 export const CHMI_WEATHER_WEBCAMS_LAYER_ID = "weather_webcams" as const;
 export const OUTDOOR_WEBCAMS_LAYER_ID = "outdoor_webcams" as const;
 export const CHMI_WEATHER_WEBCAMS_CONTRACT_VERSION = "sim-weather-cameras-v1" as const;
+
+type CameraSnapshotAvailability = "direct" | "embedded" | "origin_page_discovery" | "unavailable";
 
 export const CHMI_WEBCAMS_LICENSE: SituationDataLicense = {
   name: "Veřejné webové kamery přes SIM",
@@ -61,6 +64,7 @@ export interface ChmiWeatherWebcamLocationSummary {
   originCategory?: string;
   attribution?: string;
   snapshotAvailable?: boolean;
+  snapshotAvailability?: CameraSnapshotAvailability;
 }
 
 export interface ChmiWeatherWebcamDetailResponse {
@@ -80,6 +84,7 @@ export interface ChmiWeatherWebcamCameraDetail {
   snapshotUrl: string;
   contentType?: string;
   snapshotAvailable?: boolean;
+  snapshotAvailability?: CameraSnapshotAvailability;
 }
 
 export interface ChmiWeatherWebcamSnapshotAsset {
@@ -144,6 +149,7 @@ interface ResolvedCamera {
   contentType?: string;
   imageBase64?: string;
   directImageUrl?: string;
+  originSnapshotDiscovery?: boolean;
   snapshotAvailable?: boolean;
 }
 
@@ -155,6 +161,13 @@ interface ResolvedDetail {
 interface DirectSnapshotCacheEntry {
   bodyBase64: string;
   contentType: string;
+}
+
+interface OriginSnapshotDiscoveryEntry {
+  directImageUrl?: string;
+  bodyBase64?: string;
+  contentType?: string;
+  unavailableReason?: string;
 }
 
 interface PublicCameraFeedConfig {
@@ -230,6 +243,7 @@ export class ChmiWeatherWebcamCatalog {
   private readonly mapCache: ManagedResponseCache<ChmiWeatherWebcamLocation[]>;
   private readonly detailCache: ManagedResponseCache<ChmiWebcamPointPayload>;
   private readonly directSnapshotCache: ManagedResponseCache<DirectSnapshotCacheEntry>;
+  private readonly originSnapshotDiscoveryCache: ManagedResponseCache<OriginSnapshotDiscoveryEntry>;
   private lastLocationWarnings: string[] = [];
 
   constructor(private readonly config: SituationDataConfig) {
@@ -249,10 +263,15 @@ export class ChmiWeatherWebcamCatalog {
       staleIfErrorMs: Math.max(ttlSeconds, config.staleIfErrorSeconds, 1800) * 1000,
       maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 256))
     });
+    this.originSnapshotDiscoveryCache = new ManagedResponseCache<OriginSnapshotDiscoveryEntry>({
+      ttlMs: ttlSeconds * 1000,
+      staleIfErrorMs: Math.max(ttlSeconds, config.staleIfErrorSeconds, 1800) * 1000,
+      maxEntries: Math.max(64, Math.min(config.cacheMaxEntries, 256))
+    });
   }
 
   cacheStats(): ManagedResponseCacheStats[] {
-    return [this.mapCache.stats(), this.detailCache.stats(), this.directSnapshotCache.stats()];
+    return [this.mapCache.stats(), this.detailCache.stats(), this.directSnapshotCache.stats(), this.originSnapshotDiscoveryCache.stats()];
   }
 
   async listLocations(): Promise<ChmiWeatherWebcamLocationSummary[]> {
@@ -328,6 +347,28 @@ export class ChmiWeatherWebcamCatalog {
     const camera = cameraId ? resolved.cameras.find((item) => item.cameraId === cameraId) : resolved.cameras[0];
     if (!camera?.imageBase64) {
       if (!camera?.directImageUrl) {
+        if (!camera?.originSnapshotDiscovery) {
+          return undefined;
+        }
+        if (!camera?.providerUrl) {
+          return undefined;
+        }
+        const discovered = await this.originSnapshotDiscoveryCache.getOrLoad(camera.providerUrl, () =>
+          discoverOriginSnapshot(camera.providerUrl as string, this.config.requestTimeoutMs)
+        );
+        if (!discovered.bodyBase64 || !discovered.contentType) {
+          return undefined;
+        }
+        return {
+          locationId,
+          cameraId: camera.cameraId,
+          name: camera.name,
+          contentType: discovered.contentType,
+          body: Buffer.from(discovered.bodyBase64, "base64"),
+          cacheSeconds: Math.max(60, this.config.chmiWeatherWebcamsCacheTtlSeconds)
+        };
+      }
+      if (!camera.directImageUrl) {
         return undefined;
       }
       const directImageUrl = camera.directImageUrl;
@@ -428,7 +469,8 @@ export class ChmiWeatherWebcamCatalog {
       providerUrl: camera.providerUrl,
       snapshotUrl: this.snapshotUrl(location.locationId, camera.cameraId),
       contentType: camera.contentType,
-      snapshotAvailable: camera.snapshotAvailable ?? Boolean(camera.imageBase64 || camera.directImageUrl)
+      snapshotAvailable: cameraSnapshotAvailable(camera),
+      snapshotAvailability: cameraSnapshotAvailability(camera)
     };
   }
 
@@ -510,6 +552,7 @@ export class ChmiWeatherWebcamCatalog {
             presentationGroup: isOutdoorWebcam ? "outdoor" : "weather",
             renderAs: "point_with_detail_snapshot",
             snapshotMode: "on_demand",
+            snapshotAvailability: summary.snapshotAvailability,
             imagePayloadInFeatureStream: "false",
             warningSignal: "false"
           }),
@@ -552,6 +595,8 @@ export class ChmiWeatherWebcamCatalog {
               presentationGroup: isOutdoorWebcam ? "outdoor" : "weather",
               attribution: location.attribution,
               snapshotAvailable: summary.snapshotAvailable,
+              snapshotAvailability: summary.snapshotAvailability,
+              snapshotDiscoveryMode: summary.snapshotAvailability === "origin_page_discovery" ? "origin_page_html_candidates" : undefined,
               camerasKnownAfterDetail: true,
               contentMode: "on_demand_snapshot",
               imagePayloadInFeatureStream: false,
@@ -588,8 +633,8 @@ export class ChmiWeatherWebcamCatalog {
       originAuthority: location.authority,
       originCategory: location.category,
       attribution: location.attribution,
-      snapshotAvailable:
-        location.detailMode === "chmi_point" ? true : (location.cameras ?? []).some((camera) => camera.snapshotAvailable ?? Boolean(camera.directImageUrl))
+      snapshotAvailable: locationSnapshotAvailable(location),
+      snapshotAvailability: locationSnapshotAvailability(location)
     };
   }
 
@@ -798,8 +843,8 @@ function normalizeStaticCameras(cameras: StaticCameraFeedCamera[], sourceId: str
   const usedIds = new Map<string, number>();
   return cameras
     .map((camera, index): ResolvedCamera | undefined => {
-      const directImageUrl = validUrl(camera.directImageUrl);
-      const providerUrl = validUrl(camera.providerUrl) ?? directImageUrl;
+      const directImageUrl = validRuntimeFetchUrl(camera.directImageUrl);
+      const providerUrl = validRuntimeFetchUrl(camera.providerUrl) ?? directImageUrl;
       if (!providerUrl && !directImageUrl) {
         return undefined;
       }
@@ -814,11 +859,50 @@ function normalizeStaticCameras(cameras: StaticCameraFeedCamera[], sourceId: str
         providerUrl,
         snapshotUrl: "",
         directImageUrl: snapshotAvailable ? directImageUrl : undefined,
+        originSnapshotDiscovery: !directImageUrl && Boolean(providerUrl),
         contentType: validImageContentType(camera.contentType),
-        snapshotAvailable
+        snapshotAvailable: snapshotAvailable || (!directImageUrl && Boolean(providerUrl))
       };
     })
     .filter((item): item is ResolvedCamera => Boolean(item));
+}
+
+function cameraSnapshotAvailability(camera: ResolvedCamera): CameraSnapshotAvailability {
+  if (camera.imageBase64) {
+    return "embedded";
+  }
+  if (camera.directImageUrl) {
+    return "direct";
+  }
+  if (camera.originSnapshotDiscovery && camera.providerUrl) {
+    return "origin_page_discovery";
+  }
+  return "unavailable";
+}
+
+function cameraSnapshotAvailable(camera: ResolvedCamera): boolean {
+  return cameraSnapshotAvailability(camera) !== "unavailable";
+}
+
+function locationSnapshotAvailability(location: ChmiWeatherWebcamLocation): CameraSnapshotAvailability {
+  if (location.detailMode === "chmi_point") {
+    return "embedded";
+  }
+  const availabilities = (location.cameras ?? []).map((camera) => cameraSnapshotAvailability(camera));
+  if (availabilities.includes("direct")) {
+    return "direct";
+  }
+  if (availabilities.includes("embedded")) {
+    return "embedded";
+  }
+  if (availabilities.includes("origin_page_discovery")) {
+    return "origin_page_discovery";
+  }
+  return "unavailable";
+}
+
+function locationSnapshotAvailable(location: ChmiWeatherWebcamLocation): boolean {
+  return locationSnapshotAvailability(location) !== "unavailable";
 }
 
 function lonLatFromDataUrl(value: string): { lon: number; lat: number } | undefined {
@@ -866,7 +950,11 @@ function normalizeFeedUrl(value: string): string {
   if (value.startsWith("builtin:")) {
     return value;
   }
-  return new URL(value).toString();
+  const url = validRuntimeFetchUrl(new URL(value).toString());
+  if (!url) {
+    throw new Error("PUBLIC_CAMERA_FEEDS URL must be public HTTP(S).");
+  }
+  return url;
 }
 
 function layerForCameraLocation(location: ChmiWeatherWebcamLocation): SituationLayerId {
@@ -1008,6 +1096,84 @@ function validUrl(value: string | undefined): string | undefined {
   }
 }
 
+function validRuntimeFetchUrl(value: string | undefined): string | undefined {
+  const candidate = validUrl(value);
+  if (!candidate) {
+    return undefined;
+  }
+  try {
+    const url = new URL(candidate);
+    if (url.username || url.password || isBlockedRuntimeFetchHost(url.hostname)) {
+      return undefined;
+    }
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function assertRuntimeFetchUrl(value: string, label: string): string {
+  const url = validRuntimeFetchUrl(value);
+  if (!url) {
+    throw new Error(`${label} must be a public HTTP(S) URL.`);
+  }
+  return url;
+}
+
+function isBlockedRuntimeFetchHost(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "").toLowerCase();
+  if (
+    !normalized ||
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".local") ||
+    normalized === "metadata.google.internal"
+  ) {
+    return true;
+  }
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) {
+    return isBlockedIpv4(normalized);
+  }
+  if (ipVersion === 6) {
+    return isBlockedIpv6(normalized);
+  }
+  return false;
+}
+
+function isBlockedIpv4(value: string): boolean {
+  const parts = value.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return true;
+  }
+  const [first = 0, second = 0, third = 0] = parts;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 0 && (third === 0 || third === 2)) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19 || (second === 51 && third === 100))) ||
+    (first === 203 && second === 0 && third === 113) ||
+    first >= 224
+  );
+}
+
+function isBlockedIpv6(value: string): boolean {
+  const compact = value.toLowerCase();
+  return (
+    compact === "::" ||
+    compact === "::1" ||
+    compact.startsWith("0:0:0:0:0:0:0:") ||
+    compact.startsWith("fc") ||
+    compact.startsWith("fd") ||
+    /^fe[89ab]/.test(compact)
+  );
+}
+
 function validImageContentType(value: string | undefined): string | undefined {
   const normalized = value?.split(";")[0]?.trim().toLowerCase();
   return normalized?.startsWith("image/") ? normalized : undefined;
@@ -1092,6 +1258,207 @@ function stripRawIfNeeded(feature: SituationFeature, includeRaw: boolean): Situa
   return { ...feature, properties };
 }
 
+interface OriginImageCandidate {
+  url: string;
+  score: number;
+}
+
+async function discoverOriginSnapshot(pageUrl: string, timeoutMs: number): Promise<OriginSnapshotDiscoveryEntry> {
+  try {
+    const html = await requestHtml(pageUrl, timeoutMs);
+    const candidates = extractOriginImageCandidates(html, pageUrl).slice(0, 8);
+    for (const candidate of candidates) {
+      try {
+        const image = await requestImage(candidate.url, Math.max(1000, Math.min(timeoutMs, 3000)));
+        return {
+          directImageUrl: candidate.url,
+          bodyBase64: image.bodyBase64,
+          contentType: image.contentType
+        };
+      } catch {
+        // Try the next candidate. Discovery is best-effort and must not break camera detail.
+      }
+    }
+    return {
+      unavailableReason:
+        candidates.length === 0 ? "No origin image candidates were found on the provider page." : "Origin image candidates did not return valid images."
+    };
+  } catch (error) {
+    return {
+      unavailableReason: error instanceof Error ? error.message : "Origin provider page could not be inspected."
+    };
+  }
+}
+
+function extractOriginImageCandidates(html: string, pageUrl: string): OriginImageCandidate[] {
+  const candidates: OriginImageCandidate[] = [];
+  const add = (value: string | undefined, baseScore: number, context: string) => {
+    const candidateUrl = validOriginSnapshotCandidateUrl(value, pageUrl);
+    if (!candidateUrl) {
+      return;
+    }
+    const score = scoreOriginImageCandidate(candidateUrl, context, baseScore);
+    if (score < 75) {
+      return;
+    }
+    candidates.push({ url: candidateUrl, score });
+  };
+
+  for (const tag of html.matchAll(/<meta\s+([^>]+)>/gim)) {
+    const attrs = parseHtmlAttributes(tag[1] ?? "");
+    const key = `${attrs.property ?? ""} ${attrs.name ?? ""}`.toLowerCase();
+    if (/\b(?:og:image|twitter:image|image)\b/.test(key)) {
+      add(attrs.content, 45, `${key} ${attrs.content ?? ""}`);
+    }
+  }
+
+  for (const tag of html.matchAll(/<link\s+([^>]+)>/gim)) {
+    const attrs = parseHtmlAttributes(tag[1] ?? "");
+    const rel = attrs.rel?.toLowerCase() ?? "";
+    if (rel.includes("image_src")) {
+      add(attrs.href, 45, `${rel} ${attrs.href ?? ""}`);
+    }
+  }
+
+  for (const tag of html.matchAll(/<(img|source)\s+([^>]+)>/gim)) {
+    const tagName = tag[1]?.toLowerCase() ?? "img";
+    const attrs = parseHtmlAttributes(tag[2] ?? "");
+    const context = Object.entries(attrs)
+      .filter(([key]) => key !== "src" && key !== "srcset")
+      .map(([key, value]) => `${key}=${value}`)
+      .join(" ");
+    for (const key of ["src", "data-src", "data-original", "data-lazy-src", "data-url", "data-full", "data-image"]) {
+      add(attrs[key], tagName === "img" ? 55 : 45, context);
+    }
+    for (const url of parseSrcSet(attrs.srcset)) {
+      add(url, tagName === "img" ? 55 : 45, context);
+    }
+  }
+
+  for (const match of html.matchAll(/https?:\\?\/\\?\/[^"'<>\\\s]+?\.(?:jpe?g|png|webp|gif)(?:\?[^"'<>\\\s]*)?/gim)) {
+    add(match[0], 35, match[0]);
+  }
+
+  return dedupeBy(candidates, (candidate) => candidate.url).sort((a, b) => b.score - a.score);
+}
+
+function parseHtmlAttributes(value: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  for (const match of value.matchAll(/([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
+    const key = match[1]?.toLowerCase();
+    const rawValue = match[2] ?? match[3] ?? match[4];
+    if (key && rawValue !== undefined) {
+      attrs[key] = decodeHtml(rawValue);
+    }
+  }
+  return attrs;
+}
+
+function parseSrcSet(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((part) => part.trim().split(/\s+/)[0])
+    .filter((part): part is string => Boolean(part));
+}
+
+function validOriginSnapshotCandidateUrl(value: string | undefined, pageUrl: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = decodeHtml(value).replace(/\\\//g, "/").trim();
+  if (!normalized || normalized.startsWith("data:") || normalized.startsWith("blob:")) {
+    return undefined;
+  }
+  const candidate = validRuntimeFetchUrl(absoluteUrl(normalized, pageUrl));
+  if (!candidate) {
+    return undefined;
+  }
+  try {
+    const url = new URL(candidate);
+    if (url.hostname === "webcamlive.cz" || url.hostname.endsWith(".webcamlive.cz")) {
+      return undefined;
+    }
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function scoreOriginImageCandidate(url: string, context: string, baseScore: number): number {
+  const haystack = `${safeDecodeUri(url)} ${context}`.toLowerCase();
+  let score = baseScore;
+  if (/\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i.test(url)) {
+    score += 12;
+  }
+  if (/(webcam|webkamera|kamera|camera|snapshot|snap|mjpg|live|current|aktual|latest|cam\b|kamera_)/i.test(haystack)) {
+    score += 45;
+  }
+  if (/(meteo|weather|ski|sjezdov|lanov|hotel|obec|radnice|namesti|n[aá]m[eě]st[ií]|trail|tourist|turist)/i.test(haystack)) {
+    score += 10;
+  }
+  if (/(logo|favicon|apple-touch-icon|sprite|placeholder|blank|avatar|banner|advert|reklam|facebook|instagram|youtube|mapy|mapbox|google)/i.test(haystack)) {
+    score -= 80;
+  }
+  return score;
+}
+
+function dedupeBy<T>(items: T[], keyFor: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+  for (const item of items) {
+    const key = keyFor(item);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
+function safeDecodeUri(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => String.fromCharCode(Number.parseInt(code, 16)));
+}
+
+async function requestHtml(url: string, timeoutMs: number): Promise<string> {
+  const safeUrl = assertRuntimeFetchUrl(url, "Camera origin page");
+  const response = await fetch(safeUrl, {
+    headers: {
+      accept: "text/html,application/xhtml+xml,*/*;q=0.8",
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} from ${new URL(safeUrl).hostname}`);
+  }
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > 2_000_000) {
+    throw new Error(`Provider page from ${new URL(safeUrl).hostname} is too large for camera discovery.`);
+  }
+  const html = await response.text();
+  return html.length > 2_000_000 ? html.slice(0, 2_000_000) : html;
+}
+
 async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
   const response = await fetch(url, {
     headers: {
@@ -1133,28 +1500,30 @@ async function requestJsonPost<T>(url: string, timeoutMs: number): Promise<T> {
 }
 
 async function requestImage(url: string, timeoutMs: number): Promise<DirectSnapshotCacheEntry> {
-  const response = await fetch(url, {
+  const safeUrl = assertRuntimeFetchUrl(url, "Camera snapshot");
+  const response = await fetch(safeUrl, {
     headers: {
       accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       "user-agent": "csm-sim-situation-data/0.1"
     },
+    redirect: "error",
     signal: AbortSignal.timeout(timeoutMs)
   });
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
+    throw new Error(`HTTP ${response.status} from ${new URL(safeUrl).hostname}`);
   }
   const declaredType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
-    throw new Error(`Camera snapshot from ${new URL(url).hostname} is too large.`);
+    throw new Error(`Camera snapshot from ${new URL(safeUrl).hostname} is too large.`);
   }
   const body = Buffer.from(await response.arrayBuffer());
   if (body.length > 5_000_000) {
-    throw new Error(`Camera snapshot from ${new URL(url).hostname} is too large.`);
+    throw new Error(`Camera snapshot from ${new URL(safeUrl).hostname} is too large.`);
   }
   const contentType = declaredType?.startsWith("image/") ? declaredType : imageContentType(body);
   if (!contentType.startsWith("image/")) {
-    throw new Error(`Camera snapshot from ${new URL(url).hostname} is not an image.`);
+    throw new Error(`Camera snapshot from ${new URL(safeUrl).hostname} is not an image.`);
   }
   return {
     contentType,

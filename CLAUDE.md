@@ -70,10 +70,17 @@ docker.home.cz
 
 ## Permissions
 
+- The agent is the SIM application owner for maintenance, deployment, and
+  repository synchronization tasks governed by these instructions.
 - `git push` is allowed when the change has been intentionally prepared and the
   task requires publishing or syncing the branch.
 - `ssh docker.home.cz` is allowed when the task requires access to the pilot
   deployment host.
+- On `docker.home.cz`, use the `github-sim` SSH alias for SIM GitHub access
+  when repository operations on the pilot host require it. Verified
+  2026-07-08: `ssh -T git@github-sim` authenticates as
+  `voldzi/delta_acr_sim` and reports that GitHub does not provide shell access;
+  that success response exits with status 1.
 - Do not manipulate VPN, VLAN, firewall, or network segmentation.
 - If sudo is needed, provide the command for the user to run.
 

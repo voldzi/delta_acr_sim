@@ -9525,6 +9525,16 @@
           "snapshotAvailable": {
             "type": "boolean",
             "example": true
+          },
+          "snapshotAvailability": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "embedded",
+              "origin_page_discovery",
+              "unavailable"
+            ],
+            "example": "origin_page_discovery"
           }
         },
         "additionalProperties": false
@@ -9560,6 +9570,16 @@
           "snapshotAvailable": {
             "type": "boolean",
             "example": true
+          },
+          "snapshotAvailability": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "embedded",
+              "origin_page_discovery",
+              "unavailable"
+            ],
+            "example": "direct"
           }
         },
         "additionalProperties": false

@@ -1347,6 +1347,7 @@ function buildTrailProviderLayers(config: SituationDataConfig): ProviderCatalogL
         notes: [
           "WebCamLive byl použit pouze jako discovery/audit katalog; SIM produkčně nepoužívá jeho obrazovou proxy.",
           "COP musí v detailu zobrazit providerProperties.camera.attribution a providerPageUrl.",
+          "Pokud providerProperties.camera.snapshotAvailable=true, COP smí použít snapshot endpoint; u origin_page_discovery musí počítat s fallbackem na originální stránku při HTTP 404.",
           "Pokud providerProperties.camera.snapshotAvailable=false, COP nemá volat snapshot endpoint a má nabídnout otevření originální stránky provozovatele."
         ]
       }

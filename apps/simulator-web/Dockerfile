@@ -14,10 +14,11 @@ ENV VITE_SIM_OIDC_SCOPE=$VITE_SIM_OIDC_SCOPE
 ENV VITE_SIM_PUBLIC_READ_ENABLED=$VITE_SIM_PUBLIC_READ_ENABLED
 ENV VITE_SIM_ALLOW_TOKEN_LOGIN=$VITE_SIM_ALLOW_TOKEN_LOGIN
 WORKDIR /app
-RUN corepack enable
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json ./
+COPY .corepack-pnpm-10.33.0.tgz /tmp/corepack-pnpm-10.33.0.tgz
+RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm /tmp/corepack-pnpm-10.33.0.tgz
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/simulator-web ./apps/simulator-web
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/simulator-web build
 
 FROM nginx:1.29-alpine AS runtime

@@ -73,13 +73,7 @@ Příklad `notificationPolicy`:
   "eligible": true,
   "audienceDecisionOwner": "cop",
   "deliveryOwner": "csm-messaging",
-  "deduplicationKeyFields": [
-    "providerId",
-    "providerLayerId",
-    "featureId",
-    "validFrom",
-    "validUntil"
-  ],
+  "deduplicationKeyFields": ["providerId", "providerLayerId", "featureId", "validFrom", "validUntil"],
   "recommendedNotificationTypes": ["safety.alert"],
   "minimumSeverityForUserPush": "advisory",
   "technicalWarningsPolicy": "never_push_to_public_users"
@@ -189,7 +183,12 @@ Turistické webkamery patří do stejné větve:
 
 Tyto body vznikají z kurátorovaného origin-only feedu. WebCamLive smí sloužit
 jen jako discovery/audit katalog; COP nesmí používat WebCamLive obrazové URL.
-Když SIM pošle `providerProperties.camera.snapshotAvailable=false`, COP nabídne
+Když SIM pošle `providerProperties.camera.snapshotAvailable=true`, COP může
+zobrazit `snapshotUrl` přes SIM. Hodnota
+`providerProperties.camera.snapshotAvailability="origin_page_discovery"` znamená,
+že SIM dohledává a validuje obrázek z originální stránky až po kliknutí; při
+HTTP 404 má COP nabídnout originální stránku provozovatele. Když SIM pošle
+`snapshotAvailable=false`, COP snapshot endpoint nevolá a rovnou nabídne
 originální stránku provozovatele místo automatického náhledu.
 
 Uživatelská komunitní hlášení, fotky a návrhy změn jsou samostatný navazující produkt. Katalog může rezervovat `public.outdoor.community_reports`, ale dokud není zajištěna identita, moderace, retence a anti-abuse, má být `selectable=false` a běžným uživatelům nezapnutelné.

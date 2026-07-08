@@ -51,7 +51,10 @@ SIM must use direct origin feeds only; aggregator pages are not runtime data sou
 For broader camera coverage, SIM supports a server-side `PUBLIC_CAMERA_FEEDS`
 entry with `kind=static_json`; this feed must contain only cameras whose origin
 provider and attribution were verified outside COP. A direct snapshot/stream URL
-is optional and is exposed only when it is verified from the origin provider.
+is optional. When the curated record has only an origin provider page, SIM can
+use `origin_page_discovery`: it inspects that page on demand, selects likely
+webcam/snapshot/live image candidates, validates the image server-side, caches
+it briefly, and serves it through the SIM snapshot endpoint.
 WebCamLive can be used as a discovery/audit aid, but not as the production
 source unless the origin has been verified and entered into the curated feed.
 
@@ -83,6 +86,19 @@ not call the snapshot endpoint. It should show that automatic preview is not
 available and offer the origin provider page from
 `properties.providerProperties.camera.providerPageUrl`.
 
+When `properties.providerProperties.camera.snapshotAvailable=true`, COP should
+render the SIM `snapshotUrl` in the custom preview window. Optional
+`snapshotAvailability` values:
+
+- `embedded`: ČHMÚ detail contained the image payload.
+- `direct`: the curated source has a direct origin image URL.
+- `origin_page_discovery`: SIM will inspect the origin provider page on demand
+  and return a validated image through the snapshot endpoint.
+
+For `origin_page_discovery`, COP should keep the origin page as a fallback. If
+the snapshot request returns HTTP 404 or a non-image error, keep the detail
+window open and offer `providerPageUrl`.
+
 The detail endpoint returns contract `sim-weather-cameras-v1`:
 
 ```http
@@ -103,10 +119,12 @@ The detail response contains a `cameras[]` array. Each item has:
 - `snapshotUrl`
 - `contentType`
 - `snapshotAvailable`
+- `snapshotAvailability`
 
 For the actual image, render `snapshotUrl` as an image source when
 `snapshotAvailable !== false`. SIM decodes ČHMÚ base64 images or fetches direct
-origin snapshots server-side and responds with `image/gif`, `image/png` or
+origin snapshots server-side, including on-demand origin-page discovery for
+curated outdoor cameras, and responds with `image/gif`, `image/png` or
 `image/jpeg` when available:
 
 ```http
