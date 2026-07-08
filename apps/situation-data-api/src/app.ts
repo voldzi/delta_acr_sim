@@ -1361,8 +1361,15 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       radioPlanning: config.radioPlanningCacheTtlSeconds
     },
     routing: {
-      enabled: Boolean(config.osmPostgisConnectionString),
-      backend: config.osmPostgisConnectionString ? "osm-postgis-graph" : "unconfigured",
+      enabled: Boolean(config.valhallaBaseUrl || config.osmPostgisConnectionString),
+      backend:
+        config.valhallaBaseUrl && config.routingEngine !== "osm_postgis"
+          ? "valhalla"
+          : config.osmPostgisConnectionString
+            ? "osm-postgis-graph"
+            : "unconfigured",
+      configuredEngine: config.routingEngine,
+      valhallaConfigured: Boolean(config.valhallaBaseUrl),
       graphTable: config.routingOsmRoadsTable,
       maxGraphEdges: config.routingMaxGraphEdges,
       maxSearchRadiusM: config.routingMaxSearchRadiusM,

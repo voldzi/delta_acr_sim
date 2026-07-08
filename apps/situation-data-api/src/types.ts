@@ -296,7 +296,9 @@ export interface SituationDataPublicConfig {
   };
   routing: {
     enabled: boolean;
-    backend: "osm-postgis-graph" | "unconfigured";
+    backend: "valhalla" | "osm-postgis-graph" | "unconfigured";
+    configuredEngine?: "auto" | "valhalla" | "osm_postgis";
+    valhallaConfigured?: boolean;
     graphTable: string;
     maxGraphEdges: number;
     maxSearchRadiusM: number;

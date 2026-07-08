@@ -363,13 +363,18 @@ Odpověď `sim-routing-route-v1` obsahuje:
 /routing/nearest-access` přijímá `point`, `profileId` a volitelný `radiusM`,
 vrací nejbližší routovatelný přístupový bod.
 
-První produkční model je `osm-postgis-graph-v1`: SIM skládá lokální graf z
-`public.osm_roads`, respektuje profil, základní access tagy, one-way směr a
-volitelné vyhýbání `unpaved`, `tunnel`, `bridge`. `flood`, `fire` a
-`road_closure` jsou zatím v kontraktu vedeny jako plánovací preference; jako
-tvrdé překážky se zapnou po normalizaci hazardních geometrií do routovacího
-grafu. Pokud `OSM_POSTGIS_DATABASE_URL` není dostupný, SIM vrátí přímou
-fallback geometrii s `quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
+Preferovaný produkční backend je Valhalla (`ROUTING_ENGINE=auto|valhalla` s
+`VALHALLA_BASE_URL`), která vrací `quality.mode=engine_route` a
+`source.backend=valhalla`. `docker compose --profile routing up -d valhalla`
+připraví self-hosted Valhalla službu nad `VALHALLA_TILE_URLS`; SIM ji začne
+používat po nastavení `VALHALLA_BASE_URL=http://valhalla:8002`. Pokud není
+dostupná, SIM umí použít první lokální model `osm-postgis-graph-v1`: skládá
+lokální graf z `public.osm_roads`, respektuje profil, základní access tagy,
+one-way směr a volitelné vyhýbání `unpaved`, `tunnel`, `bridge`. `flood`,
+`fire` a `road_closure` jsou zatím v kontraktu vedeny jako plánovací preference;
+jako tvrdé překážky se zapnou po normalizaci hazardních geometrií do routovacího
+grafu. Pokud žádný routovací backend není dostupný, SIM vrátí přímou fallback geometrii s
+`quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
 že nejde o trasu po komunikacích.
 
 Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:

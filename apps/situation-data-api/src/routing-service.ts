@@ -7,7 +7,7 @@ import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry } 
 export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "evacuation_walking";
 
 export type RoutingAvoid = "flood" | "fire" | "road_closure" | "unpaved" | "tunnel" | "bridge";
-export type RoutingQualityMode = "osm_graph" | "direct_fallback";
+export type RoutingQualityMode = "engine_route" | "osm_graph" | "direct_fallback";
 
 export interface RoutingProfile {
   profileId: RoutingProfileId;
@@ -97,6 +97,7 @@ export interface RoutingRoute {
     graphEdgesScanned: number;
     graphEdgesUsed: number;
     routingModelVersion: string;
+    engine?: "valhalla" | "osm-postgis-graph";
     fallbackReason?: string;
   };
 }
@@ -176,13 +177,16 @@ interface RoutingSource {
   sourceId: "routing_model";
   sourceType: "MODELLED_ROUTING";
   generatedAt: string;
-  backend: "osm-postgis-graph";
+  backend: "valhalla" | "osm-postgis-graph";
 }
 
 interface RoutingBackendStatus {
   enabled: boolean;
-  backend: "osm-postgis-graph" | "unconfigured";
+  backend: "valhalla" | "osm-postgis-graph" | "unconfigured";
+  configuredEngine: "auto" | "valhalla" | "osm_postgis";
+  valhallaConfigured: boolean;
   osmPostgisConfigured: boolean;
+  valhallaBaseUrl?: string;
   graphTable: string;
   maxGraphEdges: number;
   cacheTtlSeconds: number;
@@ -258,7 +262,48 @@ interface DijkstraState {
   cost: number;
 }
 
+interface ValhallaRouteResponse {
+  trip?: {
+    status?: number;
+    status_message?: string;
+    summary?: {
+      time?: number;
+      length?: number;
+    };
+    locations?: Array<Record<string, unknown>>;
+    legs?: ValhallaLeg[];
+    warnings?: Array<{ text?: string; code?: number } | string>;
+  };
+  alternates?: Array<{ trip?: ValhallaRouteResponse["trip"] }>;
+  error?: string;
+  error_code?: number;
+  status?: number;
+  status_message?: string;
+}
+
+interface ValhallaLeg {
+  shape?: string;
+  summary?: {
+    time?: number;
+    length?: number;
+  };
+  maneuvers?: ValhallaManeuver[];
+}
+
+interface ValhallaManeuver {
+  instruction?: string;
+  length?: number;
+  time?: number;
+  begin_shape_index?: number;
+  end_shape_index?: number;
+  street_names?: string[];
+  begin_street_names?: string[];
+  travel_mode?: string;
+  travel_type?: string;
+}
+
 const ROUTING_MODEL_VERSION = "osm-postgis-graph-v1";
+const VALHALLA_ROUTING_MODEL_VERSION = "valhalla-v1";
 
 const ROUTING_PROFILES: RoutingProfile[] = [
   {
@@ -452,9 +497,7 @@ export class RoutingService {
       generatedAt: new Date().toISOString(),
       profiles: ROUTING_PROFILES,
       backend: this.backendStatus(),
-      warnings: this.config.osmPostgisConnectionString
-        ? []
-        : ["OSM_POSTGIS_DATABASE_URL is not configured. Routing endpoints will return direct fallback geometry."]
+      warnings: this.backendWarnings()
     };
   }
 
@@ -494,10 +537,27 @@ export class RoutingService {
     const profile = getRoutingProfile(request.profileId);
     const warnings: string[] = [];
     const routes: RoutingRoute[] = [];
+    if (this.shouldUseValhalla()) {
+      try {
+        const valhallaResponse = await this.computeValhallaRouteResponse(generatedAt, profile, request);
+        if (valhallaResponse.routes.length > 0) {
+          return valhallaResponse;
+        }
+        warnings.push("Valhalla returned no route candidates; falling back to local OSM/PostGIS routing.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Valhalla routing failed.";
+        if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
+          warnings.push(`Valhalla routing failed: ${message}`);
+          routes.push(directFallbackRoute(profile, request.from, request.to, 1, "Valhalla routing failed.", "valhalla"));
+          return this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla");
+        }
+        warnings.push(`Valhalla routing failed: ${message}; falling back to local OSM/PostGIS routing.`);
+      }
+    }
     if (!this.config.osmPostgisConnectionString) {
       warnings.push("OSM PostGIS is not configured; returning a direct fallback line.");
       const fallback = directFallbackRoute(profile, request.from, request.to, 1, "OSM_POSTGIS_DATABASE_URL is not configured.");
-      return this.routeResponse(generatedAt, profile, request, [fallback], warnings);
+      return this.routeResponse(generatedAt, profile, request, [fallback], warnings, this.shouldUseValhalla() ? "valhalla" : "osm-postgis-graph");
     }
 
     try {
@@ -544,17 +604,38 @@ export class RoutingService {
     return this.routeResponse(generatedAt, profile, request, routes, warnings);
   }
 
-  private routeResponse(generatedAt: string, profile: RoutingProfile, request: unknown, routes: RoutingRoute[], warnings: string[]): RoutingRouteResponse {
+  private routeResponse(
+    generatedAt: string,
+    profile: RoutingProfile,
+    request: unknown,
+    routes: RoutingRoute[],
+    warnings: string[],
+    backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph"
+  ): RoutingRouteResponse {
     return {
       contractVersion: "sim-routing-route-v1",
       generatedAt,
-      source: routingSource(generatedAt),
+      source: routingSource(generatedAt, backend),
       query: publicQuery(request),
       profile,
       routes,
       features: routes.map((route) => routeFeature(route)),
       warnings
     };
+  }
+
+  private shouldUseValhalla(): boolean {
+    return Boolean(this.config.valhallaBaseUrl && this.config.routingEngine !== "osm_postgis");
+  }
+
+  private async computeValhallaRouteResponse(
+    generatedAt: string,
+    profile: RoutingProfile,
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+  ): Promise<RoutingRouteResponse> {
+    const response = await requestValhallaRoute(this.config, profile, request);
+    const routes = valhallaRoutes(profile, request, response, request.alternatives);
+    return this.routeResponse(generatedAt, profile, request, routes, valhallaWarnings(response), "valhalla");
   }
 
   private async computeIsochroneResponse(
@@ -849,19 +930,41 @@ export class RoutingService {
   }
 
   private backendStatus(): RoutingBackendStatus {
+    const valhallaEnabled = this.shouldUseValhalla();
     return {
-      enabled: Boolean(this.config.osmPostgisConnectionString),
-      backend: this.config.osmPostgisConnectionString ? "osm-postgis-graph" : "unconfigured",
+      enabled: Boolean(valhallaEnabled || this.config.osmPostgisConnectionString),
+      backend: valhallaEnabled ? "valhalla" : this.config.osmPostgisConnectionString ? "osm-postgis-graph" : "unconfigured",
+      configuredEngine: this.config.routingEngine,
+      valhallaConfigured: Boolean(this.config.valhallaBaseUrl),
       osmPostgisConfigured: Boolean(this.config.osmPostgisConnectionString),
+      valhallaBaseUrl: this.config.valhallaBaseUrl,
       graphTable: this.config.routingOsmRoadsTable,
       maxGraphEdges: this.config.routingMaxGraphEdges,
       cacheTtlSeconds: this.config.routingCacheTtlSeconds,
       limitations: [
-        "Initial SIM routing uses a local in-process graph built from OSM road geometries.",
-        "It does not yet use pgRouting, OSRM or Valhalla turn restrictions.",
+        valhallaEnabled
+          ? "Primary route and alternative-route calculation uses Valhalla when available; SIM preserves the COP routing response contract."
+          : "Initial SIM routing uses a local in-process graph built from OSM road geometries.",
+        valhallaEnabled
+          ? "Isochrone and nearest-access endpoints still use the local OSM/PostGIS model until Valhalla parity is wired for those operations."
+          : "It does not yet use pgRouting, OSRM or Valhalla turn restrictions.",
         "Live closures and hazards are reported as avoid preferences in the contract, not hard constraints until source geometries are normalized into the graph."
       ]
     };
+  }
+
+  private backendWarnings(): string[] {
+    const warnings: string[] = [];
+    if (this.config.routingEngine === "valhalla" && !this.config.valhallaBaseUrl) {
+      warnings.push("ROUTING_ENGINE=valhalla is configured, but VALHALLA_BASE_URL is missing.");
+    }
+    if (!this.shouldUseValhalla() && !this.config.osmPostgisConnectionString) {
+      warnings.push("No routing backend is configured. Routing endpoints will return direct fallback geometry.");
+    }
+    if (this.shouldUseValhalla() && !this.config.osmPostgisConnectionString) {
+      warnings.push("OSM PostGIS fallback is not configured. If Valhalla fails, route endpoints can degrade to direct fallback geometry.");
+    }
+    return warnings;
   }
 }
 
@@ -1112,7 +1215,8 @@ function buildRouteFromPath(
       confidence: path.edges.length > 0 ? 0.74 : 0.4,
       graphEdgesScanned,
       graphEdgesUsed: path.edges.length,
-      routingModelVersion: ROUTING_MODEL_VERSION
+      routingModelVersion: ROUTING_MODEL_VERSION,
+      engine: "osm-postgis-graph"
     }
   };
 }
@@ -1153,7 +1257,14 @@ function sameRoad(left: GraphEdge, right: GraphEdge): boolean {
   return left.roadName === right.roadName && left.roadRef === right.roadRef && left.highway === right.highway;
 }
 
-function directFallbackRoute(profile: RoutingProfile, from: RoutingCoordinate, to: RoutingCoordinate, rank: number, reason: string): RoutingRoute {
+function directFallbackRoute(
+  profile: RoutingProfile,
+  from: RoutingCoordinate,
+  to: RoutingCoordinate,
+  rank: number,
+  reason: string,
+  engine: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph"
+): RoutingRoute {
   const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
   const durationSeconds = (distanceM / Math.max(1, profile.defaultSpeedKph * 1000)) * 3600;
   return {
@@ -1200,7 +1311,8 @@ function directFallbackRoute(profile: RoutingProfile, from: RoutingCoordinate, t
       confidence: 0.18,
       graphEdgesScanned: 0,
       graphEdgesUsed: 0,
-      routingModelVersion: ROUTING_MODEL_VERSION,
+      routingModelVersion: engine === "valhalla" ? VALHALLA_ROUTING_MODEL_VERSION : ROUTING_MODEL_VERSION,
+      engine,
       fallbackReason: reason
     }
   };
@@ -1222,6 +1334,268 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
     }
   };
+}
+
+async function requestValhallaRoute(
+  config: SituationDataConfig,
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+): Promise<ValhallaRouteResponse> {
+  const baseUrl = config.valhallaBaseUrl;
+  if (!baseUrl) {
+    throw new Error("VALHALLA_BASE_URL is not configured.");
+  }
+  const payload = {
+    locations: [
+      { lat: request.from.lat, lon: request.from.lon, name: request.from.label, type: "break" },
+      { lat: request.to.lat, lon: request.to.lon, name: request.to.label, type: "break" }
+    ],
+    costing: valhallaCosting(profile.profileId),
+    costing_options: valhallaCostingOptions(profile, request.avoid),
+    alternates: Math.max(0, Math.min(2, request.alternatives - 1)),
+    units: "kilometers",
+    language: "cs-CZ",
+    directions_options: {
+      units: "kilometers",
+      language: "cs-CZ"
+    }
+  };
+  const url = new URL("/route", withTrailingSlash(baseUrl));
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json; charset=utf-8",
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(config.requestTimeoutMs)
+  });
+  const body = (await response.json().catch(() => ({}))) as ValhallaRouteResponse;
+  if (!response.ok) {
+    throw new Error(body.error ?? body.status_message ?? `HTTP ${response.status} from Valhalla.`);
+  }
+  if (body.error || body.status_message === "No route found") {
+    throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
+  }
+  return body;
+}
+
+function valhallaRoutes(
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingRouteRequest, "from" | "to">> & RoutingRouteRequest,
+  response: ValhallaRouteResponse,
+  requestedAlternatives: number
+): RoutingRoute[] {
+  const trips = [response.trip, ...(response.alternates ?? []).map((alternate) => alternate.trip)].filter(
+    (trip): trip is NonNullable<ValhallaRouteResponse["trip"]> => Boolean(trip)
+  );
+  return trips
+    .slice(0, Math.max(1, Math.min(3, requestedAlternatives)))
+    .map((trip, index) => valhallaRoute(profile, request, trip, index + 1))
+    .filter((route): route is RoutingRoute => Boolean(route));
+}
+
+function valhallaRoute(
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingRouteRequest, "from" | "to">> & RoutingRouteRequest,
+  trip: NonNullable<ValhallaRouteResponse["trip"]>,
+  rank: number
+): RoutingRoute | undefined {
+  const legShapes = (trip.legs ?? []).map((leg) => decodeValhallaPolyline6(leg.shape)).filter((coordinates) => coordinates.length >= 2);
+  const coordinates = dedupeConsecutiveCoordinates(legShapes.flat());
+  if (coordinates.length < 2) {
+    return undefined;
+  }
+  const summary = trip.summary;
+  const distanceM = metersFromKilometers(summary?.length) ?? Math.round(polylineDistanceM(coordinates));
+  const durationSeconds = Number.isFinite(Number(summary?.time))
+    ? Math.round(Number(summary?.time))
+    : estimatedDurationSeconds(distanceM, profile.defaultSpeedKph);
+  return {
+    routeId: `routing:${profile.profileId}:valhalla:${stablePayload({ from: request.from, to: request.to, rank })}`,
+    profileId: profile.profileId,
+    rank,
+    status: "ok",
+    geometry: { type: "LineString", coordinates },
+    distanceM,
+    durationSeconds,
+    snap: valhallaSnap(request, trip),
+    steps: valhallaSteps(trip.legs ?? [], coordinates),
+    warnings: [],
+    quality: {
+      mode: "engine_route",
+      confidence: 0.9,
+      graphEdgesScanned: 0,
+      graphEdgesUsed: Math.max(0, coordinates.length - 1),
+      routingModelVersion: VALHALLA_ROUTING_MODEL_VERSION,
+      engine: "valhalla"
+    }
+  };
+}
+
+function valhallaCosting(profileId: RoutingProfileId): string {
+  switch (profileId) {
+    case "walking":
+    case "evacuation_walking":
+      return "pedestrian";
+    case "large_emergency_vehicle":
+      return "truck";
+    case "offroad_4x4":
+    case "emergency_vehicle":
+    case "car":
+    default:
+      return "auto";
+  }
+}
+
+function valhallaCostingOptions(profile: RoutingProfile, avoid: RoutingAvoid[]): Record<string, Record<string, boolean | number>> {
+  const options: Record<string, Record<string, boolean | number>> = {};
+  const costing = valhallaCosting(profile.profileId);
+  const base: Record<string, boolean | number> = {};
+  if (avoid.includes("bridge")) {
+    base.exclude_bridges = true;
+  }
+  if (avoid.includes("tunnel")) {
+    base.exclude_tunnels = true;
+  }
+  if (profile.profileId === "evacuation_walking") {
+    base.walking_speed = 3.8;
+  } else if (profile.profileId === "walking") {
+    base.walking_speed = 4.8;
+  }
+  if (profile.profileId === "large_emergency_vehicle") {
+    base.use_tracks = 0;
+  }
+  if (Object.keys(base).length > 0) {
+    options[costing] = base;
+  }
+  return options;
+}
+
+function valhallaSnap(
+  request: Required<Pick<RoutingRouteRequest, "from" | "to">> & RoutingRouteRequest,
+  trip: NonNullable<ValhallaRouteResponse["trip"]>
+): RoutingRoute["snap"] {
+  const first = coordinateFromValhallaLocation(trip.locations?.[0]) ?? request.from;
+  const last = coordinateFromValhallaLocation(trip.locations?.[trip.locations.length - 1]) ?? request.to;
+  const fromCoordinate = { lon: roundCoord(first.lon), lat: roundCoord(first.lat) };
+  const toCoordinate = { lon: roundCoord(last.lon), lat: roundCoord(last.lat) };
+  return {
+    fromDistanceM: Math.round(haversineMeters([request.from.lon, request.from.lat], [fromCoordinate.lon, fromCoordinate.lat])),
+    toDistanceM: Math.round(haversineMeters([request.to.lon, request.to.lat], [toCoordinate.lon, toCoordinate.lat])),
+    from: fromCoordinate,
+    to: toCoordinate
+  };
+}
+
+function coordinateFromValhallaLocation(value: Record<string, unknown> | undefined): RoutingCoordinate | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const lon = Number(value.lon);
+  const lat = Number(value.lat);
+  return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat } : undefined;
+}
+
+function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, number]>): RoutingStep[] {
+  const steps: RoutingStep[] = [];
+  for (const leg of legs) {
+    const coordinates = decodeValhallaPolyline6(leg.shape);
+    for (const maneuver of leg.maneuvers ?? []) {
+      const begin = Math.max(0, Math.min(coordinates.length - 1, Number(maneuver.begin_shape_index) || 0));
+      const end = Math.max(begin + 1, Math.min(coordinates.length, (Number(maneuver.end_shape_index) || begin) + 1));
+      const stepCoordinates = coordinates.slice(begin, end);
+      if (stepCoordinates.length < 2) {
+        continue;
+      }
+      const roadName = cleanString(maneuver.street_names?.[0] ?? maneuver.begin_street_names?.[0]);
+      steps.push({
+        index: steps.length,
+        instructionLocalized: {
+          cs: cleanString(maneuver.instruction) ?? "Pokračujte po trase.",
+          en: cleanString(maneuver.instruction) ?? "Continue on the route."
+        },
+        distanceM: metersFromKilometers(maneuver.length) ?? Math.round(polylineDistanceM(stepCoordinates)),
+        durationSeconds: Number.isFinite(Number(maneuver.time)) ? Math.round(Number(maneuver.time)) : 0,
+        roadName,
+        highway: cleanString(maneuver.travel_type ?? maneuver.travel_mode),
+        geometry: { type: "LineString", coordinates: stepCoordinates }
+      });
+    }
+  }
+  if (steps.length > 0) {
+    return steps;
+  }
+  return [
+    {
+      index: 0,
+      instructionLocalized: { cs: "Pokračujte po trase.", en: "Continue on the route." },
+      distanceM: Math.round(polylineDistanceM(routeCoordinates)),
+      durationSeconds: 0,
+      geometry: { type: "LineString", coordinates: routeCoordinates }
+    }
+  ];
+}
+
+function valhallaWarnings(response: ValhallaRouteResponse): string[] {
+  return (response.trip?.warnings ?? []).flatMap((warning) => {
+    if (typeof warning === "string") {
+      return [warning];
+    }
+    return warning.text ? [warning.text] : [];
+  });
+}
+
+function decodeValhallaPolyline6(value: string | undefined): Array<[number, number]> {
+  if (!value) {
+    return [];
+  }
+  const coordinates: Array<[number, number]> = [];
+  let index = 0;
+  let lat = 0;
+  let lon = 0;
+  while (index < value.length) {
+    const latResult = decodePolylineChunk(value, index);
+    index = latResult.nextIndex;
+    const lonResult = decodePolylineChunk(value, index);
+    index = lonResult.nextIndex;
+    lat += latResult.delta;
+    lon += lonResult.delta;
+    coordinates.push([roundCoord(lon / 1e6), roundCoord(lat / 1e6)]);
+  }
+  return coordinates;
+}
+
+function decodePolylineChunk(value: string, startIndex: number): { delta: number; nextIndex: number } {
+  let result = 0;
+  let shift = 0;
+  let index = startIndex;
+  let byte = 0;
+  do {
+    byte = value.charCodeAt(index) - 63;
+    index += 1;
+    result |= (byte & 0x1f) << shift;
+    shift += 5;
+  } while (byte >= 0x20 && index <= value.length);
+  return { delta: result & 1 ? ~(result >> 1) : result >> 1, nextIndex: index };
+}
+
+function metersFromKilometers(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.round(parsed * 1000) : undefined;
+}
+
+function polylineDistanceM(coordinates: Array<[number, number]>): number {
+  let distanceM = 0;
+  for (let index = 1; index < coordinates.length; index += 1) {
+    distanceM += haversineMeters(coordinates[index - 1]!, coordinates[index]!);
+  }
+  return distanceM;
+}
+
+function estimatedDurationSeconds(distanceM: number, speedKph: number): number {
+  return Math.round((distanceM / Math.max(1, speedKph * 1000)) * 3600);
 }
 
 function directIsochroneResponse(
@@ -1294,17 +1668,21 @@ function circlePolygon(origin: RoutingCoordinate, radiusM: number): PolygonGeome
   return { type: "Polygon", coordinates: [coordinates] };
 }
 
-function routingSource(generatedAt: string): RoutingSource {
+function routingSource(generatedAt: string, backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph"): RoutingSource {
   return {
     sourceId: "routing_model",
     sourceType: "MODELLED_ROUTING",
     generatedAt,
-    backend: "osm-postgis-graph"
+    backend
   };
 }
 
 function publicQuery(value: unknown): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function withTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value : `${value}/`;
 }
 
 function routeSearchBbox(from: RoutingCoordinate, to: RoutingCoordinate, profile: RoutingProfile, maxSearchRadiusM: number): BoundingBox {

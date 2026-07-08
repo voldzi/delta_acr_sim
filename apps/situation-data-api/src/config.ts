@@ -99,6 +99,8 @@ export interface SituationDataConfig {
   searchDataMaxLimit: number;
   routingCacheTtlSeconds: number;
   routingCacheMaxEntries: number;
+  routingEngine: "auto" | "valhalla" | "osm_postgis";
+  valhallaBaseUrl?: string;
   routingOsmRoadsTable: string;
   routingMaxGraphEdges: number;
   routingMaxSearchRadiusM: number;
@@ -221,6 +223,8 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     searchDataMaxLimit: parseInteger(process.env.SEARCH_DATA_MAX_LIMIT, 5000),
     routingCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS, 300),
     routingCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES, 512),
+    routingEngine: parseRoutingEngine(process.env.ROUTING_ENGINE),
+    valhallaBaseUrl: emptyToUndefined(process.env.VALHALLA_BASE_URL),
     routingOsmRoadsTable: process.env.ROUTING_OSM_ROADS_TABLE ?? "public.osm_roads",
     routingMaxGraphEdges: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_GRAPH_EDGES, 45000),
     routingMaxSearchRadiusM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M, 160000),
@@ -236,6 +240,14 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     demSeaweedfsPrefix: trimSlashes(process.env.DEM_SEAWEEDFS_PREFIX ?? "copernicus-glo30/2021"),
     corsOrigins: parseStringList(process.env.SITUATION_DATA_CORS_ORIGINS)
   };
+}
+
+function parseRoutingEngine(value: string | undefined): "auto" | "valhalla" | "osm_postgis" {
+  const normalized = value?.trim().toLowerCase().replace(/-/g, "_");
+  if (normalized === "valhalla" || normalized === "osm_postgis" || normalized === "auto") {
+    return normalized;
+  }
+  return "auto";
 }
 
 function parseSourceList(value: string | undefined): SituationDataSourceId[] {

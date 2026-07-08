@@ -3918,15 +3918,22 @@ components:
             type: string
     RoutingBackendStatus:
       type: object
-      required: [enabled, backend, osmPostgisConfigured, graphTable, maxGraphEdges, cacheTtlSeconds, limitations]
+      required: [enabled, backend, configuredEngine, valhallaConfigured, osmPostgisConfigured, graphTable, maxGraphEdges, cacheTtlSeconds, limitations]
       properties:
         enabled:
           type: boolean
         backend:
           type: string
-          enum: [osm-postgis-graph, unconfigured]
+          enum: [valhalla, osm-postgis-graph, unconfigured]
+        configuredEngine:
+          type: string
+          enum: [auto, valhalla, osm_postgis]
+        valhallaConfigured:
+          type: boolean
         osmPostgisConfigured:
           type: boolean
+        valhallaBaseUrl:
+          type: string
         graphTable:
           type: string
           example: public.osm_roads
@@ -4032,7 +4039,7 @@ components:
           format: date-time
         backend:
           type: string
-          const: osm-postgis-graph
+          enum: [valhalla, osm-postgis-graph]
     RoutingFeature:
       type: object
       required: [type, id, geometry, properties]
@@ -4091,7 +4098,7 @@ components:
           properties:
             mode:
               type: string
-              enum: [osm_graph, direct_fallback]
+              enum: [engine_route, osm_graph, direct_fallback]
             confidence:
               type: number
             graphEdgesScanned:
@@ -4100,6 +4107,9 @@ components:
               type: integer
             routingModelVersion:
               type: string
+            engine:
+              type: string
+              enum: [valhalla, osm-postgis-graph]
             fallbackReason:
               type: string
     RoutingRouteResponse:

@@ -218,6 +218,8 @@ services:
       OSM_POSTGIS_DATABASE_URL: ${OSM_POSTGIS_DATABASE_URL:-}
       OSM_POSTGIS_TABLE: ${OSM_POSTGIS_TABLE:-public.osm_poi}
       OSM_POSTGIS_ADMIN_BOUNDARY_TABLE: ${OSM_POSTGIS_ADMIN_BOUNDARY_TABLE:-public.osm_admin_boundary}
+      ROUTING_ENGINE: ${ROUTING_ENGINE:-auto}
+      VALHALLA_BASE_URL: ${VALHALLA_BASE_URL:-}
       OVERPASS_BASE_URL: ${OVERPASS_BASE_URL:-https://overpass-api.de/api/interpreter}
       OVERPASS_MAX_BBOX_DEGREES: ${OVERPASS_MAX_BBOX_DEGREES:-1.6}
       CTU_NETTEST_URL: ${CTU_NETTEST_URL:-https://nettest.ctu.gov.cz/RMBTStatisticServer/export/nettest-opendata_hours-048.zip}
@@ -246,6 +248,25 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  valhalla:
+    profiles: ["routing"]
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:3.5.1
+    container_name: csm-sim-valhalla
+    environment:
+      tile_urls: ${VALHALLA_TILE_URLS:-https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf}
+      use_tiles_ignore_pbf: ${VALHALLA_USE_TILES_IGNORE_PBF:-True}
+      force_rebuild: ${VALHALLA_FORCE_REBUILD:-False}
+      build_admins: ${VALHALLA_BUILD_ADMINS:-True}
+      build_time_zones: ${VALHALLA_BUILD_TIME_ZONES:-True}
+      build_elevation: ${VALHALLA_BUILD_ELEVATION:-False}
+    volumes:
+      - valhalla-data:/custom_files
+    expose:
+      - "8002"
+    ports:
+      - "${VALHALLA_PORT:-8002}:8002"
+    restart: unless-stopped
 
   osm-postgis:
     profiles: ["osm"]
@@ -410,3 +431,4 @@ volumes:
   safety-data:
   tak-gateway-data:
   osm-postgis-data:
+  valhalla-data:

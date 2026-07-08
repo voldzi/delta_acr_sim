@@ -13090,6 +13090,8 @@
         "required": [
           "enabled",
           "backend",
+          "configuredEngine",
+          "valhallaConfigured",
           "osmPostgisConfigured",
           "graphTable",
           "maxGraphEdges",
@@ -13103,12 +13105,27 @@
           "backend": {
             "type": "string",
             "enum": [
+              "valhalla",
               "osm-postgis-graph",
               "unconfigured"
             ]
           },
+          "configuredEngine": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "valhalla",
+              "osm_postgis"
+            ]
+          },
+          "valhallaConfigured": {
+            "type": "boolean"
+          },
           "osmPostgisConfigured": {
             "type": "boolean"
+          },
+          "valhallaBaseUrl": {
+            "type": "string"
           },
           "graphTable": {
             "type": "string",
@@ -13278,7 +13295,10 @@
           },
           "backend": {
             "type": "string",
-            "const": "osm-postgis-graph"
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph"
+            ]
           }
         }
       },
@@ -13396,6 +13416,7 @@
               "mode": {
                 "type": "string",
                 "enum": [
+                  "engine_route",
                   "osm_graph",
                   "direct_fallback"
                 ]
@@ -13411,6 +13432,13 @@
               },
               "routingModelVersion": {
                 "type": "string"
+              },
+              "engine": {
+                "type": "string",
+                "enum": [
+                  "valhalla",
+                  "osm-postgis-graph"
+                ]
               },
               "fallbackReason": {
                 "type": "string"

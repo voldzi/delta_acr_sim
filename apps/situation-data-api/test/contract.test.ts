@@ -128,6 +128,8 @@ describe("Situation Data API contract", () => {
       searchDataMaxLimit: 5000,
       routingCacheTtlSeconds: 300,
       routingCacheMaxEntries: 512,
+      routingEngine: "auto",
+      valhallaBaseUrl: undefined,
       routingOsmRoadsTable: "public.osm_roads",
       routingMaxGraphEdges: 45000,
       routingMaxSearchRadiusM: 160000,
@@ -1567,14 +1569,16 @@ describe("Situation Data API contract", () => {
           routing: 300,
           radioPlanning: 900
         },
-        routing: {
+        routing: expect.objectContaining({
           enabled: false,
           backend: "unconfigured",
+          configuredEngine: "auto",
+          valhallaConfigured: false,
           graphTable: "public.osm_roads",
           maxGraphEdges: 45000,
           maxSearchRadiusM: 160000,
           maxSnapDistanceM: 2500
-        },
+        }),
         searchData: {
           enabled: true,
           contractVersion: "sim-search-source-v1",
@@ -4437,6 +4441,93 @@ describe("Situation Data API contract", () => {
     );
     const metrics = await request(app).get("/metrics").expect(200);
     expect(metrics.text).toContain('situation_data_routing_cache_hits{operation="route"} 1');
+  });
+
+  it("uses Valhalla as the primary navigation backend when configured", async () => {
+    const fetchMock = vi.fn(async (_url: URL | string, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body ?? "{}"));
+      expect(payload.costing).toBe("pedestrian");
+      expect(payload.locations).toEqual([
+        expect.objectContaining({ lat: 50.08, lon: 14.42, type: "break" }),
+        expect.objectContaining({ lat: 50.1, lon: 14.45, type: "break" })
+      ]);
+      return new Response(
+        JSON.stringify({
+          trip: {
+            status: 0,
+            summary: { length: 3.6, time: 2400 },
+            locations: [
+              { lat: 50.0801, lon: 14.4201 },
+              { lat: 50.0999, lon: 14.4499 }
+            ],
+            legs: [
+              {
+                shape: "_oso~A_acoZowH_pRoh\\_af@",
+                maneuvers: [
+                  {
+                    instruction: "Pokračujte po testovací trase.",
+                    length: 3.6,
+                    time: 2400,
+                    begin_shape_index: 0,
+                    end_shape_index: 2,
+                    street_names: ["Testovací"]
+                  }
+                ]
+              }
+            ]
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const valhallaApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test"
+      })
+    ).app;
+
+    const catalog = await request(valhallaApp).get("/api/v1/routing/profiles").expect(200);
+    expect(catalog.body.backend).toEqual(expect.objectContaining({ backend: "valhalla", configuredEngine: "valhalla", valhallaConfigured: true }));
+
+    const route = await request(valhallaApp)
+      .post("/api/v1/routing/route")
+      .send({
+        profileId: "walking",
+        from: { lon: 14.42, lat: 50.08 },
+        to: { lon: 14.45, lat: 50.1 }
+      })
+      .expect(200);
+    expect(route.body).toEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ backend: "valhalla" }),
+        profile: expect.objectContaining({ profileId: "walking" }),
+        routes: [
+          expect.objectContaining({
+            status: "ok",
+            distanceM: 3600,
+            durationSeconds: 2400,
+            geometry: expect.objectContaining({
+              type: "LineString",
+              coordinates: [
+                [14.42, 50.08],
+                [14.43, 50.085],
+                [14.45, 50.1]
+              ]
+            }),
+            steps: [
+              expect.objectContaining({
+                instructionLocalized: expect.objectContaining({ cs: "Pokračujte po testovací trase." }),
+                roadName: "Testovací"
+              })
+            ],
+            quality: expect.objectContaining({ mode: "engine_route", engine: "valhalla", routingModelVersion: "valhalla-v1" })
+          })
+        ]
+      })
+    );
   });
 
   it("exposes normalized search-data provider contract for COP AI indexing", async () => {
