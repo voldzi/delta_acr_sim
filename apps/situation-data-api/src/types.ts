@@ -299,6 +299,13 @@ export interface SituationDataPublicConfig {
     backend: "valhalla" | "osm-postgis-graph" | "unconfigured";
     configuredEngine?: "auto" | "valhalla" | "osm_postgis";
     valhallaConfigured?: boolean;
+    osmPostgisConfigured?: boolean;
+    operationBackends?: {
+      route: "valhalla" | "osm-postgis-graph" | "unconfigured";
+      alternatives: "valhalla" | "osm-postgis-graph" | "unconfigured";
+      isochrone: "valhalla" | "osm-postgis-graph" | "unconfigured";
+      nearestAccess: "valhalla" | "osm-postgis-graph" | "unconfigured";
+    };
     graphTable: string;
     maxGraphEdges: number;
     maxSearchRadiusM: number;

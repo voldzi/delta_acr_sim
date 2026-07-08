@@ -308,10 +308,10 @@ proxy.
 
 ## Emergency routing support
 
-SIM poskytuje pro COP server-side routovací výpočet nad lokálním OSM/PostGIS
-read-modelem. COP má ovládat zadání a vykreslit vrácené GeoJSON features;
-algoritmus routingu, snap na komunikace, cache, limity a kvalitu výpočtu řeší
-SIM.
+SIM poskytuje pro COP server-side routovací výpočet nad Valhalla enginem s
+lokálním OSM/PostGIS fallbackem. COP má ovládat zadání a vykreslit vrácené
+GeoJSON features; algoritmus routingu, snap na komunikace, cache, limity,
+stav backendu a kvalitu výpočtu řeší SIM.
 
 Endpointy:
 
@@ -323,8 +323,13 @@ POST /situation-data/api/v1/routing/isochrone
 POST /situation-data/api/v1/routing/nearest-access
 ```
 
-`GET /routing/profiles` vrací kontrakt `sim-routing-profile-catalog-v1` s
-profily:
+`GET /routing/profiles` vrací kontrakt `sim-routing-profile-catalog-v1`,
+profily a `backend.operationBackends`. V produkci má COP očekávat
+`operationBackends.route=valhalla`, `alternatives=valhalla`,
+`isochrone=valhalla` a `nearestAccess=valhalla`; pokud backend degraduje,
+SIM vrátí ve stejném kontraktu fallback nebo prázdný výsledek s varováním.
+
+Profily:
 
 | `profileId`               | Použití                                               |
 | ------------------------- | ----------------------------------------------------- |
@@ -349,13 +354,14 @@ Minimální požadavek na trasu:
 
 Odpověď `sim-routing-route-v1` obsahuje:
 
-| Pole                          | Popis                                                                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `routes[]`                    | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků a kvality                                    |
-| `features[]`                  | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1` |
-| `routes[].quality.mode`       | `osm_graph`, pokud SIM použil OSM graph; `direct_fallback`, pokud není routovací graf dostupný                            |
-| `routes[].quality.confidence` | modelová důvěra; COP ji má zobrazit v detailu                                                                             |
-| `warnings[]`                  | důvody degradace nebo omezení výpočtu                                                                                     |
+| Pole                          | Popis                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `routes[]`                    | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků a kvality                                                            |
+| `features[]`                  | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1`                         |
+| `routes[].quality.mode`       | `engine_route`, pokud SIM použil Valhalla; `osm_graph`, pokud SIM použil lokální OSM graph; `direct_fallback`, pokud není routovací graf dostupný |
+| `routes[].quality.engine`     | `valhalla` nebo `osm-postgis-graph`; COP má tuto hodnotu zobrazit v diagnostice/detailu trasy                                                     |
+| `routes[].quality.confidence` | modelová důvěra; COP ji má zobrazit v detailu                                                                                                     |
+| `warnings[]`                  | důvody degradace nebo omezení výpočtu                                                                                                             |
 
 `POST /routing/alternatives` má stejný vstup jako `/routing/route`, ale vrací
 1-3 varianty. `POST /routing/isochrone` přijímá `origin`,
@@ -365,17 +371,27 @@ vrací nejbližší routovatelný přístupový bod.
 
 Preferovaný produkční backend je Valhalla (`ROUTING_ENGINE=auto|valhalla` s
 `VALHALLA_BASE_URL`), která vrací `quality.mode=engine_route` a
-`source.backend=valhalla`. `docker compose --profile routing up -d valhalla`
-připraví self-hosted Valhalla službu nad `VALHALLA_TILE_URLS`; SIM ji začne
-používat po nastavení `VALHALLA_BASE_URL=http://valhalla:8002`. Pokud není
-dostupná, SIM umí použít první lokální model `osm-postgis-graph-v1`: skládá
-lokální graf z `public.osm_roads`, respektuje profil, základní access tagy,
-one-way směr a volitelné vyhýbání `unpaved`, `tunnel`, `bridge`. `flood`,
-`fire` a `road_closure` jsou zatím v kontraktu vedeny jako plánovací preference;
-jako tvrdé překážky se zapnou po normalizaci hazardních geometrií do routovacího
-grafu. Pokud žádný routovací backend není dostupný, SIM vrátí přímou fallback geometrii s
-`quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
+`source.backend=valhalla` pro `/route` i `/alternatives`. Stejný backend SIM
+používá pro `/isochrone` přes Valhalla isochrone API a pro
+`/nearest-access` přes Valhalla locate API. Produkční pilot používá samostatný
+server `valhalla.home.cz` dostupný pro SIM jako
+`http://valhalla.home.cz:8002`; lokální Docker profil zůstává vývojová varianta
+pro menší instalace.
+
+Pokud Valhalla není dostupná a je nakonfigurovaný OSM/PostGIS, SIM použije
+lokální model `osm-postgis-graph-v1`: skládá lokální graf z `public.osm_roads`,
+respektuje profil, základní access tagy, one-way směr a volitelné vyhýbání
+`unpaved`, `tunnel`, `bridge`. `flood`, `fire` a `road_closure` jsou zatím v
+kontraktu vedeny jako plánovací preference; jako tvrdé překážky se zapnou až po
+normalizaci hazardních geometrií do routovacího grafu nebo Valhalla restriction
+pipeline. Pokud žádný routovací backend není dostupný, SIM vrátí přímou
+fallback geometrii s `quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
 že nejde o trasu po komunikacích.
+
+COP má pro stav navigace číst `GET /situation-data/health/ready` a
+`GET /situation-data/api/v1/observability`. Pole `routing.status=ok` /
+`routingBackend.status=ok` znamená plně použitelný routing; hodnota `degraded`
+znamená zobrazit výsledky s výstrahou a neslibovat přesné navigační instrukce.
 
 Traffic features ve vrstvě `traffic` navíc nesou stabilní civilní atributy, pokud je zdroj poskytuje:
 

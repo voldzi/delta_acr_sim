@@ -732,7 +732,7 @@ paths:
   /routing/route:
     post:
       summary: Build a route between two WGS84 points
-      description: Computes a server-side emergency route for COP using the local OSM/PostGIS graph when available. If the graph is unavailable, SIM returns a clearly marked direct_fallback geometry.
+      description: Computes a server-side emergency route for COP using Valhalla when configured, with local OSM/PostGIS graph fallback. If no graph backend is available, SIM returns a clearly marked direct_fallback geometry.
       requestBody:
         required: true
         content:
@@ -773,6 +773,7 @@ paths:
   /routing/isochrone:
     post:
       summary: Build a travel-time reach polygon from one origin
+      description: Computes a travel-time or travel-distance reach polygon using Valhalla isochrone when configured, with local OSM/PostGIS or direct fallback degradation.
       requestBody:
         required: true
         content:
@@ -793,6 +794,7 @@ paths:
   /routing/nearest-access:
     post:
       summary: Find nearest routable access point for a WGS84 point
+      description: Finds the nearest routable access point using Valhalla locate when configured, with local OSM/PostGIS fallback where available.
       requestBody:
         required: true
         content:
@@ -1689,6 +1691,7 @@ components:
           staleAfterSeconds,
           requestTimeoutMs,
           sourceCacheTtlSeconds,
+          routing,
           weatherRadarFrames,
           providers
         ]
@@ -1713,7 +1716,7 @@ components:
           type: integer
         sourceCacheTtlSeconds:
           type: object
-          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, pidGtfsRt, pidGtfsStatic, publicTransitStatic, idsjmkVehiclePositions, spravaZeleznicTrains, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner, radioPlanning]
+          required: [openMeteo, mobileNetwork, mobileCoverage, osmPostgis, osmOverpass, ctuStationaryMobile, pidGtfsRt, pidGtfsStatic, publicTransitStatic, idsjmkVehiclePositions, spravaZeleznicTrains, roadSrtiLod, safetyData, aviationWeather, chmiAirQuality, chmiWeatherStations, chmiWeatherRadar, chmiWeatherWebcams, ardosPartner, routing, radioPlanning]
           properties:
             openMeteo:
               type: integer
@@ -1753,7 +1756,36 @@ components:
               type: integer
             ardosPartner:
               type: integer
+            routing:
+              type: integer
             radioPlanning:
+              type: integer
+        routing:
+          type: object
+          required: [enabled, backend, configuredEngine, valhallaConfigured, osmPostgisConfigured, operationBackends, graphTable, maxGraphEdges, maxSearchRadiusM, maxSnapDistanceM]
+          properties:
+            enabled:
+              type: boolean
+            backend:
+              type: string
+              enum: [valhalla, osm-postgis-graph, unconfigured]
+            configuredEngine:
+              type: string
+              enum: [auto, valhalla, osm_postgis]
+            valhallaConfigured:
+              type: boolean
+            osmPostgisConfigured:
+              type: boolean
+            operationBackends:
+              $ref: "#/components/schemas/RoutingOperationBackends"
+            graphTable:
+              type: string
+              example: public.osm_roads
+            maxGraphEdges:
+              type: integer
+            maxSearchRadiusM:
+              type: integer
+            maxSnapDistanceM:
               type: integer
         weatherRadarFrames:
           type: object
@@ -3918,7 +3950,7 @@ components:
             type: string
     RoutingBackendStatus:
       type: object
-      required: [enabled, backend, configuredEngine, valhallaConfigured, osmPostgisConfigured, graphTable, maxGraphEdges, cacheTtlSeconds, limitations]
+      required: [enabled, backend, configuredEngine, valhallaConfigured, osmPostgisConfigured, operationBackends, graphTable, maxGraphEdges, cacheTtlSeconds, limitations]
       properties:
         enabled:
           type: boolean
@@ -3934,6 +3966,8 @@ components:
           type: boolean
         valhallaBaseUrl:
           type: string
+        operationBackends:
+          $ref: "#/components/schemas/RoutingOperationBackends"
         graphTable:
           type: string
           example: public.osm_roads
@@ -3945,6 +3979,22 @@ components:
           type: array
           items:
             type: string
+    RoutingOperationBackends:
+      type: object
+      required: [route, alternatives, isochrone, nearestAccess]
+      properties:
+        route:
+          type: string
+          enum: [valhalla, osm-postgis-graph, unconfigured]
+        alternatives:
+          type: string
+          enum: [valhalla, osm-postgis-graph, unconfigured]
+        isochrone:
+          type: string
+          enum: [valhalla, osm-postgis-graph, unconfigured]
+        nearestAccess:
+          type: string
+          enum: [valhalla, osm-postgis-graph, unconfigured]
     RoutingProfileCatalog:
       type: object
       required: [contractVersion, generatedAt, profiles, backend, warnings]

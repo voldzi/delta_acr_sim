@@ -159,13 +159,15 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
   app.get("/health/ready", async (_req, res) => {
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const dem = await context.demCatalog.status();
+    const routing = await context.routing.healthStatus();
     const degraded = sourceHealth.some((source) => source.status === "degraded");
     res.json({
-      status: degraded || dem.status === "degraded" ? "degraded" : "ok",
+      status: degraded || dem.status === "degraded" || routing.status === "degraded" ? "degraded" : "ok",
       timestamp: new Date().toISOString(),
       enabledSources: context.config.enabledSources,
       sourceHealth,
-      dem
+      dem,
+      routing
     });
   });
 
@@ -173,6 +175,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
     const cache = context.aggregation.cacheStats();
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const dem = await context.demCatalog.status();
+    const routingHealth = await context.routing.healthStatus();
     const sourceCacheLines = sourceCacheStats(context).flatMap((sourceCache) => [
       `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -247,6 +250,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           ...sourceCacheLines,
           ...radioPlanningCacheLines,
           ...routingCacheLines,
+          ...routingBackendMetricLines(routingHealth),
           ...searchDataCacheLines,
           ...sourceHealthLines,
           ...demMetricLines(dem)
@@ -280,10 +284,12 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
     const cache = context.aggregation.cacheStats();
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const dem = await context.demCatalog.status();
+    const routingBackend = await context.routing.healthStatus();
     res.json({
       serviceId: "situation-data-api",
       generatedAt: new Date().toISOString(),
-      status: sourceHealth.some((source) => source.status === "degraded") || dem.status === "degraded" ? "degraded" : "ok",
+      status:
+        sourceHealth.some((source) => source.status === "degraded") || dem.status === "degraded" || routingBackend.status === "degraded" ? "degraded" : "ok",
       cache: cacheTelemetry(cache, context.config.cacheMaxEntries),
       sharedCache: {
         enabled: cache.sharedEnabled,
@@ -308,6 +314,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         operation: cacheStats.operation,
         cache: cacheTelemetry(cacheStats, context.config.routingCacheMaxEntries)
       })),
+      routingBackend,
       dataFreshness: sourceFreshness(sourceHealth),
       environmentGrid: environmentGridTelemetry(context.config, sourceHealth),
       boundaryReadModel: boundaryReadModelTelemetry(context.config, sourceHealth),
@@ -1370,6 +1377,8 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
             : "unconfigured",
       configuredEngine: config.routingEngine,
       valhallaConfigured: Boolean(config.valhallaBaseUrl),
+      osmPostgisConfigured: Boolean(config.osmPostgisConnectionString),
+      operationBackends: routingOperationBackends(config),
       graphTable: config.routingOsmRoadsTable,
       maxGraphEdges: config.routingMaxGraphEdges,
       maxSearchRadiusM: config.routingMaxSearchRadiusM,
@@ -1584,6 +1593,30 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
     }
   }
   return lines;
+}
+
+function routingBackendMetricLines(status: Awaited<ReturnType<RoutingService["healthStatus"]>>): string[] {
+  const backend = escapeLabel(status.backend);
+  const configuredEngine = escapeLabel(status.configuredEngine);
+  const labels = `backend="${backend}",configured_engine="${configuredEngine}",valhalla_configured="${status.valhallaConfigured ? "true" : "false"}",osm_postgis_configured="${status.osmPostgisConfigured ? "true" : "false"}"`;
+  return [
+    `situation_data_routing_backend_health{${labels}} ${status.status === "ok" ? 1 : 0}`,
+    `situation_data_routing_backend_info{${labels}} 1`,
+    `situation_data_routing_backend_warnings{backend="${backend}",configured_engine="${configuredEngine}"} ${status.warnings.length}`
+  ];
+}
+
+function routingOperationBackends(
+  config: SituationDataConfig
+): Record<"route" | "alternatives" | "isochrone" | "nearestAccess", "valhalla" | "osm-postgis-graph" | "unconfigured"> {
+  const backend =
+    config.valhallaBaseUrl && config.routingEngine !== "osm_postgis" ? "valhalla" : config.osmPostgisConnectionString ? "osm-postgis-graph" : "unconfigured";
+  return {
+    route: backend,
+    alternatives: backend,
+    isochrone: backend,
+    nearestAccess: backend
+  };
 }
 
 interface CacheStatsLike {

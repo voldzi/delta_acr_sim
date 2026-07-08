@@ -3889,7 +3889,7 @@
     "/situation-data/api/v1/routing/route": {
       "post": {
         "summary": "Build a route between two WGS84 points",
-        "description": "Computes a server-side emergency route for COP using the local OSM/PostGIS graph when available. If the graph is unavailable, SIM returns a clearly marked direct_fallback geometry.",
+        "description": "Computes a server-side emergency route for COP using Valhalla when configured, with local OSM/PostGIS graph fallback. If no graph backend is available, SIM returns a clearly marked direct_fallback geometry.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3964,6 +3964,7 @@
     "/situation-data/api/v1/routing/isochrone": {
       "post": {
         "summary": "Build a travel-time reach polygon from one origin",
+        "description": "Computes a travel-time or travel-distance reach polygon using Valhalla isochrone when configured, with local OSM/PostGIS or direct fallback degradation.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4001,6 +4002,7 @@
     "/situation-data/api/v1/routing/nearest-access": {
       "post": {
         "summary": "Find nearest routable access point for a WGS84 point",
+        "description": "Finds the nearest routable access point using Valhalla locate when configured, with local OSM/PostGIS fallback where available.",
         "requestBody": {
           "required": true,
           "content": {
@@ -9273,6 +9275,7 @@
           "staleAfterSeconds",
           "requestTimeoutMs",
           "sourceCacheTtlSeconds",
+          "routing",
           "weatherRadarFrames",
           "providers"
         ],
@@ -9326,6 +9329,7 @@
               "chmiWeatherRadar",
               "chmiWeatherWebcams",
               "ardosPartner",
+              "routing",
               "radioPlanning"
             ],
             "properties": {
@@ -9386,7 +9390,68 @@
               "ardosPartner": {
                 "type": "integer"
               },
+              "routing": {
+                "type": "integer"
+              },
               "radioPlanning": {
+                "type": "integer"
+              }
+            }
+          },
+          "routing": {
+            "type": "object",
+            "required": [
+              "enabled",
+              "backend",
+              "configuredEngine",
+              "valhallaConfigured",
+              "osmPostgisConfigured",
+              "operationBackends",
+              "graphTable",
+              "maxGraphEdges",
+              "maxSearchRadiusM",
+              "maxSnapDistanceM"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "backend": {
+                "type": "string",
+                "enum": [
+                  "valhalla",
+                  "osm-postgis-graph",
+                  "unconfigured"
+                ]
+              },
+              "configuredEngine": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "valhalla",
+                  "osm_postgis"
+                ]
+              },
+              "valhallaConfigured": {
+                "type": "boolean"
+              },
+              "osmPostgisConfigured": {
+                "type": "boolean"
+              },
+              "operationBackends": {
+                "$ref": "#/components/schemas/SituationDataRoutingOperationBackends"
+              },
+              "graphTable": {
+                "type": "string",
+                "example": "public.osm_roads"
+              },
+              "maxGraphEdges": {
+                "type": "integer"
+              },
+              "maxSearchRadiusM": {
+                "type": "integer"
+              },
+              "maxSnapDistanceM": {
                 "type": "integer"
               }
             }
@@ -13093,6 +13158,7 @@
           "configuredEngine",
           "valhallaConfigured",
           "osmPostgisConfigured",
+          "operationBackends",
           "graphTable",
           "maxGraphEdges",
           "cacheTtlSeconds",
@@ -13127,6 +13193,9 @@
           "valhallaBaseUrl": {
             "type": "string"
           },
+          "operationBackends": {
+            "$ref": "#/components/schemas/SituationDataRoutingOperationBackends"
+          },
           "graphTable": {
             "type": "string",
             "example": "public.osm_roads"
@@ -13142,6 +13211,49 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "SituationDataRoutingOperationBackends": {
+        "type": "object",
+        "required": [
+          "route",
+          "alternatives",
+          "isochrone",
+          "nearestAccess"
+        ],
+        "properties": {
+          "route": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph",
+              "unconfigured"
+            ]
+          },
+          "alternatives": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph",
+              "unconfigured"
+            ]
+          },
+          "isochrone": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph",
+              "unconfigured"
+            ]
+          },
+          "nearestAccess": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph",
+              "unconfigured"
+            ]
           }
         }
       },

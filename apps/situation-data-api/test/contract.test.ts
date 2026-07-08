@@ -4444,41 +4444,107 @@ describe("Situation Data API contract", () => {
   });
 
   it("uses Valhalla as the primary navigation backend when configured", async () => {
-    const fetchMock = vi.fn(async (_url: URL | string, init?: RequestInit) => {
-      const payload = JSON.parse(String(init?.body ?? "{}"));
-      expect(payload.costing).toBe("pedestrian");
-      expect(payload.locations).toEqual([
-        expect.objectContaining({ lat: 50.08, lon: 14.42, type: "break" }),
-        expect.objectContaining({ lat: 50.1, lon: 14.45, type: "break" })
-      ]);
-      return new Response(
-        JSON.stringify({
-          trip: {
-            status: 0,
-            summary: { length: 3.6, time: 2400 },
-            locations: [
-              { lat: 50.0801, lon: 14.4201 },
-              { lat: 50.0999, lon: 14.4499 }
-            ],
-            legs: [
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      const payload = init?.body ? JSON.parse(String(init.body)) : {};
+      if (path === "/status") {
+        return new Response(JSON.stringify({ version: "test-valhalla", available_actions: ["route", "isochrone", "locate", "status"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      if (path === "/route") {
+        expect(payload.costing).toBe("pedestrian");
+        expect(payload.locations).toEqual([
+          expect.objectContaining({ lat: 50.08, lon: 14.42, type: "break" }),
+          expect.objectContaining({ lat: 50.1, lon: 14.45, type: "break" })
+        ]);
+        return new Response(
+          JSON.stringify({
+            trip: {
+              status: 0,
+              summary: { length: 3.6, time: 2400 },
+              locations: [
+                { lat: 50.0801, lon: 14.4201 },
+                { lat: 50.0999, lon: 14.4499 }
+              ],
+              legs: [
+                {
+                  shape: "_oso~A_acoZowH_pRoh\\_af@",
+                  maneuvers: [
+                    {
+                      instruction: "Pokračujte po testovací trase.",
+                      length: 3.6,
+                      time: 2400,
+                      begin_shape_index: 0,
+                      end_shape_index: 2,
+                      street_names: ["Testovací"]
+                    }
+                  ]
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (path === "/isochrone") {
+        expect(payload.costing).toBe("pedestrian");
+        expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42 })]);
+        return new Response(
+          JSON.stringify({
+            type: "FeatureCollection",
+            features: [
               {
-                shape: "_oso~A_acoZowH_pRoh\\_af@",
-                maneuvers: [
-                  {
-                    instruction: "Pokračujte po testovací trase.",
-                    length: 3.6,
-                    time: 2400,
-                    begin_shape_index: 0,
-                    end_shape_index: 2,
-                    street_names: ["Testovací"]
-                  }
-                ]
+                type: "Feature",
+                properties: { contour: 10, color: "#3b82f6" },
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [
+                    [
+                      [14.42, 50.08],
+                      [14.43, 50.08],
+                      [14.43, 50.09],
+                      [14.42, 50.09],
+                      [14.42, 50.08]
+                    ]
+                  ]
+                }
               }
             ]
-          }
-        }),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (path === "/locate") {
+        expect(payload.costing).toBe("pedestrian");
+        expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42, radius: 1500 })]);
+        return new Response(
+          JSON.stringify([
+            {
+              input_lat: 50.08,
+              input_lon: 14.42,
+              edges: [
+                {
+                  correlated_lat: 50.0802,
+                  correlated_lon: 14.4203,
+                  distance: 22.4,
+                  use: "residential",
+                  edge_info: {
+                    way_id: 123456,
+                    names: ["Testovací"]
+                  }
+                }
+              ]
+            }
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({ error: `Unhandled Valhalla test path ${path}` }), {
+        status: 500,
+        headers: { "content-type": "application/json" }
+      });
     });
     vi.stubGlobal("fetch", fetchMock);
     const valhallaApp = (
@@ -4490,7 +4556,19 @@ describe("Situation Data API contract", () => {
     ).app;
 
     const catalog = await request(valhallaApp).get("/api/v1/routing/profiles").expect(200);
-    expect(catalog.body.backend).toEqual(expect.objectContaining({ backend: "valhalla", configuredEngine: "valhalla", valhallaConfigured: true }));
+    expect(catalog.body.backend).toEqual(
+      expect.objectContaining({
+        backend: "valhalla",
+        configuredEngine: "valhalla",
+        valhallaConfigured: true,
+        operationBackends: {
+          route: "valhalla",
+          alternatives: "valhalla",
+          isochrone: "valhalla",
+          nearestAccess: "valhalla"
+        }
+      })
+    );
 
     const route = await request(valhallaApp)
       .post("/api/v1/routing/route")
@@ -4528,6 +4606,65 @@ describe("Situation Data API contract", () => {
         ]
       })
     );
+
+    const isochrone = await request(valhallaApp)
+      .post("/api/v1/routing/isochrone")
+      .send({
+        profileId: "walking",
+        origin: { lon: 14.42, lat: 50.08 },
+        maxTravelTimeMinutes: 10
+      })
+      .expect(200);
+    expect(isochrone.body).toEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ backend: "valhalla" }),
+        summary: expect.objectContaining({ maxTravelTimeMinutes: 10, maxDistanceM: 800, reachedNodeCount: 1 }),
+        features: [
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "Polygon" }),
+            properties: expect.objectContaining({ mode: "engine_route", engine: "valhalla", contourMinutes: 10 })
+          })
+        ]
+      })
+    );
+
+    const nearest = await request(valhallaApp)
+      .post("/api/v1/routing/nearest-access")
+      .send({
+        profileId: "walking",
+        point: { lon: 14.42, lat: 50.08 }
+      })
+      .expect(200);
+    expect(nearest.body).toEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ backend: "valhalla" }),
+        accessPoint: expect.objectContaining({ lon: 14.4203, lat: 50.0802, distanceM: 22, osmId: 123456, roadName: "Testovací" }),
+        features: [
+          expect.objectContaining({
+            geometry: expect.objectContaining({ type: "Point", coordinates: [14.4203, 50.0802] }),
+            properties: expect.objectContaining({ mode: "engine_route", engine: "valhalla", styleHint: "routing-nearest-access-v1" })
+          })
+        ]
+      })
+    );
+
+    const health = await request(valhallaApp).get("/health/ready").expect(200);
+    expect(health.body.routing).toEqual(
+      expect.objectContaining({
+        status: "ok",
+        backend: "valhalla",
+        valhallaVersion: "test-valhalla",
+        valhallaActions: expect.arrayContaining(["route", "isochrone", "locate"])
+      })
+    );
+
+    const observability = await request(valhallaApp).get("/api/v1/observability").expect(200);
+    expect(observability.body.routingBackend).toEqual(expect.objectContaining({ status: "ok", backend: "valhalla", valhallaVersion: "test-valhalla" }));
+
+    const metrics = await request(valhallaApp).get("/metrics").expect(200);
+    expect(metrics.text).toContain('situation_data_routing_backend_health{backend="valhalla",configured_engine="valhalla"');
+    expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="isochrone"} 1');
+    expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="nearest_access"} 1');
   });
 
   it("exposes normalized search-data provider contract for COP AI indexing", async () => {

@@ -449,7 +449,7 @@ SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES=512
 SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS=300
 SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES=512
 ROUTING_ENGINE=auto
-VALHALLA_BASE_URL=
+VALHALLA_BASE_URL=http://valhalla.home.cz:8002
 VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf
 VALHALLA_USE_TILES_IGNORE_PBF=True
 VALHALLA_FORCE_REBUILD=False
@@ -494,6 +494,14 @@ SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS=21600
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ```
+
+`ROUTING_ENGINE=auto` znamená: použij Valhalla, pokud je
+`VALHALLA_BASE_URL` nastavené a `/status` odpovídá; jinak použij lokální
+OSM/PostGIS fallback, pokud je nakonfigurovaný. Produkční pilot SIM používá
+samostatný server `valhalla.home.cz:8002`, protože routing tiles a build jsou
+oddělené od aplikačního Docker hostu. Docker Compose Valhalla profil zůstává
+vývojová varianta; pro produkci nemá COP ani prohlížeč volat Valhalla přímo,
+ale pouze routovací endpointy SIM.
 
 `PUBLIC_CAMERA_FEEDS` rozšiřuje kompatibilní source `chmi_weather_webcams` o
 další přímé origin zdroje. Položky odděluj čárkou, pole uvnitř položky znakem

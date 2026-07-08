@@ -163,6 +163,20 @@ export interface RoutingCacheStats extends ManagedResponseCacheStats {
   operation: "route" | "isochrone" | "nearest_access";
 }
 
+export interface RoutingBackendHealth {
+  status: "ok" | "degraded" | "disabled";
+  backend: "valhalla" | "osm-postgis-graph" | "unconfigured";
+  configuredEngine: "auto" | "valhalla" | "osm_postgis";
+  valhallaConfigured: boolean;
+  osmPostgisConfigured: boolean;
+  valhallaBaseUrl?: string;
+  valhallaVersion?: string;
+  valhallaActions?: string[];
+  warnings: string[];
+}
+
+type RoutingOperationBackend = "valhalla" | "osm-postgis-graph" | "unconfigured";
+
 export class RoutingError extends Error {
   constructor(
     readonly status: number,
@@ -187,6 +201,12 @@ interface RoutingBackendStatus {
   valhallaConfigured: boolean;
   osmPostgisConfigured: boolean;
   valhallaBaseUrl?: string;
+  operationBackends: {
+    route: RoutingOperationBackend;
+    alternatives: RoutingOperationBackend;
+    isochrone: RoutingOperationBackend;
+    nearestAccess: RoutingOperationBackend;
+  };
   graphTable: string;
   maxGraphEdges: number;
   cacheTtlSeconds: number;
@@ -278,6 +298,55 @@ interface ValhallaRouteResponse {
   error?: string;
   error_code?: number;
   status?: number;
+  status_message?: string;
+}
+
+interface ValhallaIsochroneResponse {
+  type?: "FeatureCollection";
+  features?: ValhallaGeoJsonFeature[];
+  warnings?: Array<{ text?: string; code?: number } | string>;
+  error?: string;
+  error_code?: number;
+  status?: number;
+  status_message?: string;
+}
+
+interface ValhallaGeoJsonFeature {
+  type?: "Feature";
+  geometry?: {
+    type?: "Polygon" | "MultiPolygon" | "LineString" | string;
+    coordinates?: unknown;
+  };
+  properties?: Record<string, unknown>;
+}
+
+interface ValhallaLocateLocation {
+  input_lat?: number;
+  input_lon?: number;
+  edges?: ValhallaLocateEdge[];
+  warnings?: Array<{ text?: string; code?: number } | string>;
+}
+
+interface ValhallaLocateEdge {
+  correlated_lat?: number;
+  correlated_lon?: number;
+  distance?: number;
+  way_id?: number;
+  names?: string[];
+  use?: string;
+  road_class?: string;
+  edge_info?: {
+    way_id?: number;
+    names?: string[];
+    shape?: string;
+    speed_limit?: number;
+  };
+}
+
+interface ValhallaStatusResponse {
+  version?: string;
+  available_actions?: string[];
+  error?: string;
   status_message?: string;
 }
 
@@ -509,6 +578,41 @@ export class RoutingService {
     ];
   }
 
+  backendSummary(): RoutingBackendHealth {
+    const status = this.backendStatus();
+    return {
+      status: status.enabled ? "ok" : "disabled",
+      backend: status.backend,
+      configuredEngine: status.configuredEngine,
+      valhallaConfigured: status.valhallaConfigured,
+      osmPostgisConfigured: status.osmPostgisConfigured,
+      valhallaBaseUrl: status.valhallaBaseUrl,
+      warnings: this.backendWarnings()
+    };
+  }
+
+  async healthStatus(): Promise<RoutingBackendHealth> {
+    const summary = this.backendSummary();
+    if (!this.shouldUseValhalla()) {
+      return summary;
+    }
+    try {
+      const response = await requestValhallaStatus(this.config);
+      return {
+        ...summary,
+        status: "ok",
+        valhallaVersion: cleanString(response.version),
+        valhallaActions: Array.isArray(response.available_actions) ? response.available_actions.flatMap((action) => cleanString(action) ?? []) : []
+      };
+    } catch (error) {
+      return {
+        ...summary,
+        status: "degraded",
+        warnings: [...summary.warnings, error instanceof Error ? `Valhalla status failed: ${error.message}` : "Valhalla status failed."]
+      };
+    }
+  }
+
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     const request = this.normalizeRouteRequest(raw, 1);
     return this.routeCache.getOrLoad(`route:${stablePayload(request)}`, () => this.computeRouteResponse(request));
@@ -645,9 +749,26 @@ export class RoutingService {
     const profile = getRoutingProfile(request.profileId);
     const warnings: string[] = [];
     const maxDistanceM = request.maxDistanceM ?? (profile.defaultSpeedKph * 1000 * request.maxTravelTimeMinutes) / 60;
+    if (this.shouldUseValhalla()) {
+      try {
+        const response = await requestValhallaIsochrone(this.config, profile, request);
+        const valhallaResponse = valhallaIsochroneResponse(generatedAt, profile, request, response, maxDistanceM, valhallaWarnings(response));
+        if (valhallaResponse.features.length > 0) {
+          return valhallaResponse;
+        }
+        warnings.push("Valhalla returned no isochrone polygons; falling back to local OSM/PostGIS routing.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Valhalla isochrone failed.";
+        if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
+          warnings.push(`Valhalla isochrone failed: ${message}`);
+          return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings, "valhalla");
+        }
+        warnings.push(`Valhalla isochrone failed: ${message}; falling back to local OSM/PostGIS routing.`);
+      }
+    }
     if (!this.config.osmPostgisConnectionString) {
       warnings.push("OSM PostGIS is not configured; returning circular direct-distance isochrone.");
-      return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings);
+      return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings, this.shouldUseValhalla() ? "valhalla" : "osm-postgis-graph");
     }
     try {
       const bbox = bboxAroundPoint(request.origin, Math.min(maxDistanceM * 1.25, profile.maxSearchRadiusM, this.config.routingMaxSearchRadiusM));
@@ -705,17 +826,26 @@ export class RoutingService {
     const generatedAt = new Date().toISOString();
     const profile = getRoutingProfile(request.profileId);
     const warnings: string[] = [];
+    if (this.shouldUseValhalla()) {
+      try {
+        const response = await requestValhallaLocate(this.config, profile, request);
+        const valhallaResponse = valhallaNearestAccessResponse(generatedAt, profile, request, response, warnings);
+        if (valhallaResponse.accessPoint) {
+          return valhallaResponse;
+        }
+        warnings.push("Valhalla returned no routable access candidate; falling back to local OSM/PostGIS routing.");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Valhalla locate failed.";
+        if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
+          warnings.push(`Valhalla locate failed: ${message}`);
+          return emptyNearestAccessResponse(generatedAt, profile, request, warnings, "valhalla");
+        }
+        warnings.push(`Valhalla locate failed: ${message}; falling back to local OSM/PostGIS routing.`);
+      }
+    }
     if (!this.config.osmPostgisConnectionString) {
       warnings.push("OSM PostGIS is not configured; nearest access point is unavailable.");
-      return {
-        contractVersion: "sim-routing-nearest-access-v1",
-        generatedAt,
-        source: routingSource(generatedAt),
-        query: publicQuery(request),
-        profile,
-        features: [],
-        warnings
-      };
+      return emptyNearestAccessResponse(generatedAt, profile, request, warnings, this.shouldUseValhalla() ? "valhalla" : "osm-postgis-graph");
     }
     const table = quoteQualifiedIdentifier(this.config.routingOsmRoadsTable, "ROUTING_OSM_ROADS_TABLE");
     const highways = HIGHWAYS_BY_PROFILE[profile.profileId];
@@ -757,15 +887,7 @@ export class RoutingService {
     const row = result.rows[0];
     if (!row) {
       warnings.push("No routable access geometry was found within the requested radius.");
-      return {
-        contractVersion: "sim-routing-nearest-access-v1",
-        generatedAt,
-        source: routingSource(generatedAt),
-        query: publicQuery(request),
-        profile,
-        features: [],
-        warnings
-      };
+      return emptyNearestAccessResponse(generatedAt, profile, request, warnings);
     }
     const lon = Number(row.lon);
     const lat = Number(row.lat);
@@ -938,15 +1060,16 @@ export class RoutingService {
       valhallaConfigured: Boolean(this.config.valhallaBaseUrl),
       osmPostgisConfigured: Boolean(this.config.osmPostgisConnectionString),
       valhallaBaseUrl: this.config.valhallaBaseUrl,
+      operationBackends: operationBackends(valhallaEnabled, Boolean(this.config.osmPostgisConnectionString)),
       graphTable: this.config.routingOsmRoadsTable,
       maxGraphEdges: this.config.routingMaxGraphEdges,
       cacheTtlSeconds: this.config.routingCacheTtlSeconds,
       limitations: [
         valhallaEnabled
-          ? "Primary route and alternative-route calculation uses Valhalla when available; SIM preserves the COP routing response contract."
+          ? "Route, alternative-route, isochrone and nearest-access calculation use Valhalla when available; SIM preserves the COP routing response contract."
           : "Initial SIM routing uses a local in-process graph built from OSM road geometries.",
         valhallaEnabled
-          ? "Isochrone and nearest-access endpoints still use the local OSM/PostGIS model until Valhalla parity is wired for those operations."
+          ? "Local OSM/PostGIS remains a compatibility fallback for routing operations when configured."
           : "It does not yet use pgRouting, OSRM or Valhalla turn restrictions.",
         "Live closures and hazards are reported as avoid preferences in the contract, not hard constraints until source geometries are normalized into the graph."
       ]
@@ -1341,10 +1464,6 @@ async function requestValhallaRoute(
   profile: RoutingProfile,
   request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
 ): Promise<ValhallaRouteResponse> {
-  const baseUrl = config.valhallaBaseUrl;
-  if (!baseUrl) {
-    throw new Error("VALHALLA_BASE_URL is not configured.");
-  }
   const payload = {
     locations: [
       { lat: request.from.lat, lon: request.from.lon, name: request.from.label, type: "break" },
@@ -1360,25 +1479,77 @@ async function requestValhallaRoute(
       language: "cs-CZ"
     }
   };
-  const url = new URL("/route", withTrailingSlash(baseUrl));
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json; charset=utf-8",
-      "user-agent": "csm-sim-situation-data/0.1"
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(config.requestTimeoutMs)
-  });
-  const body = (await response.json().catch(() => ({}))) as ValhallaRouteResponse;
-  if (!response.ok) {
-    throw new Error(body.error ?? body.status_message ?? `HTTP ${response.status} from Valhalla.`);
-  }
+  const body = await requestValhallaJson<ValhallaRouteResponse>(config, "/route", payload);
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
   return body;
+}
+
+async function requestValhallaIsochrone(
+  config: SituationDataConfig,
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingIsochroneRequest, "profileId" | "origin" | "maxTravelTimeMinutes" | "avoid">> & RoutingIsochroneRequest
+): Promise<ValhallaIsochroneResponse> {
+  const contour = request.maxDistanceM
+    ? { distance: Math.round((request.maxDistanceM / 1000) * 1000) / 1000, color: "3b82f6" }
+    : { time: request.maxTravelTimeMinutes, color: "3b82f6" };
+  return requestValhallaJson<ValhallaIsochroneResponse>(config, "/isochrone", {
+    locations: [{ lat: request.origin.lat, lon: request.origin.lon, name: request.origin.label }],
+    costing: valhallaCosting(profile.profileId),
+    costing_options: valhallaCostingOptions(profile, request.avoid),
+    contours: [contour],
+    polygons: true,
+    denoise: 1,
+    generalize: 80,
+    units: "kilometers"
+  });
+}
+
+async function requestValhallaLocate(
+  config: SituationDataConfig,
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingNearestAccessRequest, "profileId" | "point" | "radiusM">> & RoutingNearestAccessRequest
+): Promise<ValhallaLocateLocation[]> {
+  return requestValhallaJson<ValhallaLocateLocation[]>(config, "/locate", {
+    verbose: true,
+    locations: [{ lat: request.point.lat, lon: request.point.lon, radius: request.radiusM }],
+    costing: valhallaCosting(profile.profileId),
+    costing_options: valhallaCostingOptions(profile, []),
+    directions_options: {
+      units: "kilometers",
+      language: "cs-CZ"
+    }
+  });
+}
+
+async function requestValhallaStatus(config: SituationDataConfig): Promise<ValhallaStatusResponse> {
+  return requestValhallaJson<ValhallaStatusResponse>(config, "/status", undefined, "GET");
+}
+
+async function requestValhallaJson<T>(config: SituationDataConfig, endpoint: string, payload?: unknown, method: "GET" | "POST" = "POST"): Promise<T> {
+  const baseUrl = config.valhallaBaseUrl;
+  if (!baseUrl) {
+    throw new Error("VALHALLA_BASE_URL is not configured.");
+  }
+  const response = await fetch(new URL(endpoint, withTrailingSlash(baseUrl)), {
+    method,
+    headers: {
+      accept: "application/json",
+      ...(payload === undefined ? {} : { "content-type": "application/json; charset=utf-8" }),
+      "user-agent": "csm-sim-situation-data/0.1"
+    },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+    signal: AbortSignal.timeout(config.requestTimeoutMs)
+  });
+  const body = (await response.json().catch(() => ({}))) as T & { error?: string; status_message?: string };
+  if (!response.ok) {
+    throw new Error(body.error ?? body.status_message ?? `HTTP ${response.status} from Valhalla.`);
+  }
+  if (body.error) {
+    throw new Error(body.error);
+  }
+  return body as T;
 }
 
 function valhallaRoutes(
@@ -1431,6 +1602,110 @@ function valhallaRoute(
       routingModelVersion: VALHALLA_ROUTING_MODEL_VERSION,
       engine: "valhalla"
     }
+  };
+}
+
+function valhallaIsochroneResponse(
+  generatedAt: string,
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingIsochroneRequest, "origin" | "maxTravelTimeMinutes">> & RoutingIsochroneRequest,
+  response: ValhallaIsochroneResponse,
+  maxDistanceM: number,
+  warnings: string[]
+): RoutingIsochroneResponse {
+  const features = (response.features ?? []).flatMap((feature, index) =>
+    polygonsFromValhallaGeometry(feature.geometry).map((polygon, polygonIndex) => {
+      const contourMinutes = numericProperty(feature.properties?.contour);
+      return {
+        type: "Feature" as const,
+        id: `routing:isochrone:valhalla:${stablePayload({ request, index, polygonIndex })}`,
+        geometry: polygon,
+        properties: {
+          profileId: profile.profileId,
+          mode: "engine_route",
+          engine: "valhalla",
+          contourMinutes: contourMinutes ?? request.maxTravelTimeMinutes,
+          maxTravelTimeMinutes: request.maxTravelTimeMinutes,
+          maxDistanceM: Math.round(maxDistanceM),
+          confidence: 0.88,
+          styleHint: "routing-isochrone-v1",
+          color: cleanString(feature.properties?.color)
+        }
+      };
+    })
+  );
+  const largestPolygon = features
+    .map((feature) => feature.geometry)
+    .sort((left, right) => (approximatePolygonAreaKm2(right.coordinates[0] ?? []) ?? 0) - (approximatePolygonAreaKm2(left.coordinates[0] ?? []) ?? 0))[0];
+  return {
+    contractVersion: "sim-routing-isochrone-v1",
+    generatedAt,
+    source: routingSource(generatedAt, "valhalla"),
+    query: publicQuery(request),
+    profile,
+    summary: {
+      maxTravelTimeMinutes: request.maxTravelTimeMinutes,
+      maxDistanceM: Math.round(maxDistanceM),
+      reachedNodeCount: features.length,
+      areaKm2: largestPolygon ? approximatePolygonAreaKm2(largestPolygon.coordinates[0] ?? []) : undefined
+    },
+    features,
+    warnings
+  };
+}
+
+function valhallaNearestAccessResponse(
+  generatedAt: string,
+  profile: RoutingProfile,
+  request: Required<Pick<RoutingNearestAccessRequest, "point" | "radiusM">> & RoutingNearestAccessRequest,
+  response: ValhallaLocateLocation[],
+  warnings: string[]
+): RoutingNearestAccessResponse {
+  const location = response[0];
+  warnings.push(...valhallaLocateWarnings(response));
+  const edge = location?.edges?.find((candidate) => Number.isFinite(Number(candidate.correlated_lon)) && Number.isFinite(Number(candidate.correlated_lat)));
+  if (!edge) {
+    return emptyNearestAccessResponse(generatedAt, profile, request, warnings, "valhalla");
+  }
+  const lon = roundCoord(Number(edge.correlated_lon));
+  const lat = roundCoord(Number(edge.correlated_lat));
+  const distanceM = Number.isFinite(Number(edge.distance))
+    ? Math.round(Number(edge.distance))
+    : Math.round(haversineMeters([request.point.lon, request.point.lat], [lon, lat]));
+  const accessPoint = {
+    lon,
+    lat,
+    distanceM,
+    osmId: optionalInteger(edge.edge_info?.way_id ?? edge.way_id),
+    roadName: cleanString(edge.names?.[0] ?? edge.edge_info?.names?.[0]),
+    highway: cleanString(edge.use ?? edge.road_class)
+  };
+  return {
+    contractVersion: "sim-routing-nearest-access-v1",
+    generatedAt,
+    source: routingSource(generatedAt, "valhalla"),
+    query: publicQuery(request),
+    profile,
+    accessPoint,
+    features: [
+      {
+        type: "Feature",
+        id: `routing:nearest-access:valhalla:${stablePayload(request)}`,
+        geometry: { type: "Point", coordinates: [lon, lat] },
+        properties: {
+          profileId: profile.profileId,
+          mode: "engine_route",
+          engine: "valhalla",
+          distanceM: accessPoint.distanceM,
+          highway: accessPoint.highway,
+          roadName: accessPoint.roadName,
+          osmId: accessPoint.osmId,
+          confidence: 0.9,
+          styleHint: "routing-nearest-access-v1"
+        }
+      }
+    ],
+    warnings
   };
 }
 
@@ -1538,13 +1813,83 @@ function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, num
   ];
 }
 
-function valhallaWarnings(response: ValhallaRouteResponse): string[] {
-  return (response.trip?.warnings ?? []).flatMap((warning) => {
+function polygonsFromValhallaGeometry(geometry: ValhallaGeoJsonFeature["geometry"]): PolygonGeometry[] {
+  if (geometry?.type === "Polygon") {
+    const polygon = polygonCoordinates(geometry.coordinates);
+    return polygon ? [{ type: "Polygon", coordinates: polygon }] : [];
+  }
+  if (geometry?.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+    return geometry.coordinates.flatMap((coordinates) => {
+      const polygon = polygonCoordinates(coordinates);
+      return polygon ? [{ type: "Polygon", coordinates: polygon }] : [];
+    });
+  }
+  return [];
+}
+
+function polygonCoordinates(value: unknown): Array<Array<[number, number]>> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const rings = value.flatMap((ring) => {
+    if (!Array.isArray(ring)) {
+      return [];
+    }
+    const coordinates = ring.flatMap((coordinate) => {
+      if (!Array.isArray(coordinate) || coordinate.length < 2) {
+        return [];
+      }
+      const lon = Number(coordinate[0]);
+      const lat = Number(coordinate[1]);
+      return Number.isFinite(lon) && Number.isFinite(lat) ? ([[roundCoord(lon), roundCoord(lat)] as [number, number]] as Array<[number, number]>) : [];
+    });
+    return coordinates.length >= 4 ? [closeLinearRing(coordinates)] : [];
+  });
+  return rings.length > 0 ? rings : undefined;
+}
+
+function closeLinearRing(coordinates: Array<[number, number]>): Array<[number, number]> {
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  if (first && last && (first[0] !== last[0] || first[1] !== last[1])) {
+    return [...coordinates, first];
+  }
+  return coordinates;
+}
+
+function valhallaWarnings(response: ValhallaRouteResponse | ValhallaIsochroneResponse): string[] {
+  const routeWarnings = (response as ValhallaRouteResponse).trip?.warnings ?? [];
+  const isochroneWarnings = (response as ValhallaIsochroneResponse).warnings ?? [];
+  return [...routeWarnings, ...isochroneWarnings].flatMap((warning) => {
     if (typeof warning === "string") {
       return [warning];
     }
     return warning.text ? [warning.text] : [];
   });
+}
+
+function operationBackends(
+  valhallaEnabled: boolean,
+  osmPostgisConfigured: boolean
+): Record<"route" | "alternatives" | "isochrone" | "nearestAccess", RoutingOperationBackend> {
+  const backend: RoutingOperationBackend = valhallaEnabled ? "valhalla" : osmPostgisConfigured ? "osm-postgis-graph" : "unconfigured";
+  return {
+    route: backend,
+    alternatives: backend,
+    isochrone: backend,
+    nearestAccess: backend
+  };
+}
+
+function valhallaLocateWarnings(response: ValhallaLocateLocation[]): string[] {
+  return response.flatMap((location) =>
+    (location.warnings ?? []).flatMap((warning) => {
+      if (typeof warning === "string") {
+        return [warning];
+      }
+      return warning.text ? [warning.text] : [];
+    })
+  );
 }
 
 function decodeValhallaPolyline6(value: string | undefined): Array<[number, number]> {
@@ -1603,13 +1948,14 @@ function directIsochroneResponse(
   profile: RoutingProfile,
   request: Required<Pick<RoutingIsochroneRequest, "origin" | "maxTravelTimeMinutes">> & RoutingIsochroneRequest,
   maxDistanceM: number,
-  warnings: string[]
+  warnings: string[],
+  backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph"
 ): RoutingIsochroneResponse {
   const polygon = circlePolygon(request.origin, maxDistanceM);
   return {
     contractVersion: "sim-routing-isochrone-v1",
     generatedAt,
-    source: routingSource(generatedAt),
+    source: routingSource(generatedAt, backend),
     query: publicQuery(request),
     profile,
     summary: {
@@ -1626,6 +1972,7 @@ function directIsochroneResponse(
         properties: {
           profileId: profile.profileId,
           mode: "direct_fallback",
+          engine: backend,
           maxTravelTimeMinutes: request.maxTravelTimeMinutes,
           maxDistanceM: Math.round(maxDistanceM),
           confidence: 0.18,
@@ -1633,6 +1980,24 @@ function directIsochroneResponse(
         }
       }
     ],
+    warnings
+  };
+}
+
+function emptyNearestAccessResponse(
+  generatedAt: string,
+  profile: RoutingProfile,
+  request: unknown,
+  warnings: string[],
+  backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph"
+): RoutingNearestAccessResponse {
+  return {
+    contractVersion: "sim-routing-nearest-access-v1",
+    generatedAt,
+    source: routingSource(generatedAt, backend),
+    query: publicQuery(request),
+    profile,
+    features: [],
     warnings
   };
 }
@@ -1892,6 +2257,11 @@ function cleanString(value: unknown): string | undefined {
 function optionalInteger(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function numericProperty(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function clamp(value: number, min: number, max: number): number {
