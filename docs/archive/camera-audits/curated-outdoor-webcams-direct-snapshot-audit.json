@@ -1,0 +1,2204 @@
+{
+  "generatedAt": "2026-07-08T19:02:28.305Z",
+  "inputPath": "apps/situation-data-api/data/curated-outdoor-webcams-cz.json",
+  "outputPath": "apps/situation-data-api/data/curated-outdoor-webcams-cz.json",
+  "dryRun": false,
+  "concurrency": 8,
+  "timeoutMs": 8000,
+  "summary": {
+    "locationsTotal": 267,
+    "inspected": 267,
+    "directAdded": 21,
+    "directKept": 0,
+    "noCandidate": 182,
+    "failed": 64
+  },
+  "results": [
+    {
+      "locationId": "cz_origin_webcam_569_18_jamka_17_360178_49_666236",
+      "label": "18. jamka",
+      "providerPageUrl": "https://www.golfolomouc.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_607_areal_kempu_17_312022_48_909247",
+      "label": "Areál kempu",
+      "providerPageUrl": "https://www.camp-straznice.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_353_areal_koupaliste_holesov_17_589353_49_335708",
+      "label": "Areál koupaliště Holešov",
+      "providerPageUrl": "https://www.koupaliste-holesov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1_areal_koupaliste_hulin_17_469525_49_319383",
+      "label": "Areál koupaliště Hulín",
+      "providerPageUrl": "http://kombyt.cz/koupaliste-a-minigolf",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_34_areal_koupaliste_hulin_sdruzene_snimky_17_469525_49_319383",
+      "label": "Areál koupaliště Hulín - sdružené snímky",
+      "providerPageUrl": "http://kombyt.cz/koupaliste-a-minigolf",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_878_areal_letiste_16_897703_48_790153",
+      "label": "Areál letiště",
+      "providerPageUrl": "https://www.aeroklubbreclav.cz/",
+      "status": "candidates_not_images",
+      "candidateCount": 1,
+      "candidates": [
+        {
+          "url": "http://www.aeroklubbreclav.cz/kamery/latest_areal.jpg?time=1537030605938",
+          "score": 112
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_456_areal_ski_klubu_17_263939_49_935831",
+      "label": "Areál ski klubu",
+      "providerPageUrl": "https://skiklubrymarov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_457_areal_ski_klubu_17_263939_49_935831",
+      "label": "Areál ski klubu",
+      "providerPageUrl": "https://skiklubrymarov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_458_areal_ski_klubu_17_263939_49_935831",
+      "label": "Areál ski klubu",
+      "providerPageUrl": "https://skiklubrymarov.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_501_autocamping_merkur_pasohlavky_16_574336_48_900964",
+      "label": "Autocamping Merkur - Pasohlávky",
+      "providerPageUrl": "http://www.obcerstvenikucera.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_657_autokemp_sec_plaz_15_646969_49_840853",
+      "label": "Autokemp Seč Pláž",
+      "providerPageUrl": "https://autokempsec.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_1019_bazen_16_608716_50_026863",
+      "label": "Bazén",
+      "providerPageUrl": "https://www.jablonneno.cz/koupaliste/ms-17152",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_919_bazen_16_059747_48_839125",
+      "label": "Bazén",
+      "providerPageUrl": "https://www.sportovisteznojmo.cz/mestska-plovarna-louka",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_931_bazen_16_874342_49_158675",
+      "label": "Bazén",
+      "providerPageUrl": "https://www.koupalisteslavkov.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_932_bazen_17_370811_48_955542",
+      "label": "Bazén",
+      "providerPageUrl": "https://www.koupaliste-veseli.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_936_bazen_12_627958_49_794981",
+      "label": "Bazén",
+      "providerPageUrl": "https://www.ceznet.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_920_bazen_16_001939_48_900325",
+      "label": "Bázén",
+      "providerPageUrl": "https://www.sportovisteznojmo.cz/koupaliste-mramotice",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_659_bazeny_13_430808_49_294389",
+      "label": "Bazény",
+      "providerPageUrl": "https://www.koupaliste-kolinec.cz/koupaliste/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_984_bazilika_nanebevzeti_panny_marie_17_69965_49_376664",
+      "label": "Bazilika Nanebevzetí Panny Marie",
+      "providerPageUrl": "https://www.hostyn.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_939_beskydy_18_483272_49_48845",
+      "label": "Beskydy",
+      "providerPageUrl": "https://dsvj.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_958_bozi_vyhlidka_12_932428_50_405361",
+      "label": "Boží vyhlídka",
+      "providerPageUrl": "https://wolfnet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1042_brdy_13_725892_49_621433",
+      "label": "Brdy",
+      "providerPageUrl": "https://www.skolamisov.cz/cs/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_674_brnenska_prehrada_16_507983_49_220758",
+      "label": "Brněnská přehrada",
+      "providerPageUrl": "https://www.brnenskaprehrada.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_682_brodsky_rybnik_16_102319_50_465011",
+      "label": "Brodský rybník",
+      "providerPageUrl": "https://www.cervenykostelec.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_170_bystrice_pod_hostynem_ulice_cs_brigady_17_676936_49_398042",
+      "label": "Bystřice pod Hostýnem, ulice Čs. brigády",
+      "providerPageUrl": "https://www.mubph.cz/clanek.php?id=4407&pageID=97c773adf7e1ca00f51e31c4da48eb72",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_189_camping_frymburk_14_170136_48_655525",
+      "label": "Camping Frymburk",
+      "providerPageUrl": "https://www.frymburk.info/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_811_celkovy_pohled_17_428464_50_256756",
+      "label": "Celkový pohled",
+      "providerPageUrl": "https://zlatehory.cz/ic/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_822_celkovy_pohled_16_411975_49_558103",
+      "label": "Celkový pohled",
+      "providerPageUrl": "https://www.ski-areal.cz/cz",
+      "status": "candidates_not_images",
+      "candidateCount": 1,
+      "candidates": [
+        {
+          "url": "http://webkamery.gc-system.cz/camera.php?img=_data/olesnice6/olesnice7.jpg",
+          "score": 92
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_582_centrum_13_633147_50_520897",
+      "label": "Centrum",
+      "providerPageUrl": "https://www.imostecko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_955_centrum_13_722667_50_105956",
+      "label": "Centrum",
+      "providerPageUrl": "https://www.unitednetworks.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_904_cervena_sjezdovka_17_140553_50_009219",
+      "label": "Červená sjezdovka",
+      "providerPageUrl": "https://klepacov.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_910_cervenovodske_sedlo_16_705639_50_032086",
+      "label": "Červenovodské sedlo",
+      "providerPageUrl": "https://www.skibukovka.cz/cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_833_dalnice_d8_lovos_14_020189_50_575136",
+      "label": "Dálnice D8, Lovoš",
+      "providerPageUrl": "https://dopravniinfo.gov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_459_detske_hriste_17_263939_49_935831",
+      "label": "Dětské hřiště",
+      "providerPageUrl": "https://skiklubrymarov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_642_detsky_park_15_549681_50_666472",
+      "label": "Dětský park",
+      "providerPageUrl": "https://www.benecko.info/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_505_detstky_venkovni_bazen_17_244406_49_598083",
+      "label": "Dětstký venkovní bazén",
+      "providerPageUrl": "https://www.bazen-olomouc.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.bazen-olomouc.cz/webcam/bazen50m000M.jpg?1783533603",
+      "contentType": "image/jpeg",
+      "bytes": 48570,
+      "score": 112,
+      "candidateCount": 5
+    },
+    {
+      "locationId": "cz_origin_webcam_855_dolni_cast_sjezdovky_18_354792_49_369072",
+      "label": "Dolní část sjezdovky",
+      "providerPageUrl": "https://www.valachy.cz/razula/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_813_dolni_hanychov_jizerske_hory_15_029761_50_751619",
+      "label": "Dolní Hanychov, Jizerské hory",
+      "providerPageUrl": "https://www.anetliberec.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_957_dolni_stanice_lanovky_12_713033_49_973792",
+      "label": "Dolní stanice lanovky",
+      "providerPageUrl": "https://www.ceznet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_643_family_arena_snowtubing_15_547417_50_666803",
+      "label": "Family aréna, snowtubing",
+      "providerPageUrl": "https://www.benecko.info/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_314_frymburk_14_170136_48_655522",
+      "label": "Frymburk",
+      "providerPageUrl": "https://www.frymburk.info/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_209_golfove_hriste_lysa_hora_smrk_18_362108_49_550364",
+      "label": "Golfové hríště, Lysá Hora, Smrk",
+      "providerPageUrl": "https://www.ostravice-golf.cz/golf",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_940_golfove_hriste_12_277803_50_166628",
+      "label": "Golfové hřiště",
+      "providerPageUrl": "https://www.gr-fl.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1008_havlickovo_namesti_16_753269_49_342469",
+      "label": "Havlíčkovo náměstí",
+      "providerPageUrl": "https://ign.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_371_hlavni_bazen_17_751672_49_4261",
+      "label": "Hlavní bazen",
+      "providerPageUrl": "https://www.osicko.cz/organizace/koupaliste/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1047_hlavni_bazen_17_871964_49_869314",
+      "label": "Hlavní bazén",
+      "providerPageUrl": "https://www.tshradec.cz/koupaliste/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_363_hlavni_bazen_17_885019_49_95145",
+      "label": "Hlavní bazén",
+      "providerPageUrl": "https://www.opava-city.cz/sportoviste/cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_532_hlavni_bazen_14_382008_50_090528",
+      "label": "Hlavní bazén",
+      "providerPageUrl": "https://www.koupalistepetynka.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_597_hlavni_bazen_divoka_reka_17_368597_49_362175",
+      "label": "Hlavní bazén, divoká řeka",
+      "providerPageUrl": "https://www.smmchropyne.cz/smm/koupaliste/provozni-doba/",
+      "status": "origin_page_failed",
+      "error": "HTTP 404 from www.smmchropyne.cz"
+    },
+    {
+      "locationId": "cz_origin_webcam_992_horni_cast_sjezdovek_13_134017_50_422714",
+      "label": "Horní část sjezdovek",
+      "providerPageUrl": "https://alsovka.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_195_horni_namesti_17_250217_49_593617",
+      "label": "Horní náměstí",
+      "providerPageUrl": "https://www.olomouc.eu/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_933_horni_namesti_15_3594_49_541233",
+      "label": "Horní náměstí",
+      "providerPageUrl": "https://infohumpolec.cz/infocentrum/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_947_horske_lazne_17_309175_50_073811",
+      "label": "Horské lázně",
+      "providerPageUrl": "https://polar.cz/kamery/11/karlova-studanka",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_943_hospital_15_8896_50_401367",
+      "label": "Hospitál",
+      "providerPageUrl": "https://www.avatech.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_405_hotel_duo_18_324294_49_414592",
+      "label": "Hotel Duo",
+      "providerPageUrl": "https://www.hotel-duo.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_866_hotel_perla_jizery_15_214258_50_787903",
+      "label": "Hotel Perla Jizery",
+      "providerPageUrl": "https://www.perlajizery.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_834_hotel_pod_zvicinou_15_7117_50_449886",
+      "label": "Hotel pod Zvičinou",
+      "providerPageUrl": "https://www.hotelpodzvicinou.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.hotelpodzvicinou.cz/Cam1/Hotel_Kamera.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 699483,
+      "score": 122,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_700_hrad_pernstejn_16_318886_49_451108",
+      "label": "Hrad Pernštejn",
+      "providerPageUrl": "http://hrad-pernstejn.eu/cs",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_434_hrad_trosky_15_1989_50_540584",
+      "label": "Hrad Trosky",
+      "providerPageUrl": "https://www.pension-jana.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_294_humpolec_z_hradu_orlik_15_382508_49_544625",
+      "label": "Humpolec z hradu Orlík",
+      "providerPageUrl": "https://infohumpolec.cz/infocentrum/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_960_husovo_namesti_14_074333_49_964264",
+      "label": "Husovo náměstí",
+      "providerPageUrl": "https://www.mesto-beroun.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_182_hvezdarna_a_planetarium_mikulase_kopernika_16_583736_49_204706",
+      "label": "Hvězdárna a planetárium Mikuláše Koperníka",
+      "providerPageUrl": "https://www.hvezdarna.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_892_chalupa_ve_strani_13_581356_49_014031",
+      "label": "Chalupa Ve Stráni",
+      "providerPageUrl": "https://www.chalupavestrani.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_570_chata_hvezda_16_266861_50_567103",
+      "label": "Chata Hvězda",
+      "providerPageUrl": "https://www.broumovskesteny.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_369_chata_slamenka_16_832497_50_150997",
+      "label": "Chata Slaměnka",
+      "providerPageUrl": "https://www.dolnimorava.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_937_chloumek_rip_14_503928_50_372853",
+      "label": "Chloumek, Říp",
+      "providerPageUrl": "http://www.rohatce.net/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_886_jaderna_elektrarna_dukovany_16_134703_49_095147",
+      "label": "Jaderná elektrárna Dukovany",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_538_jamka_1_a_18_16_530803_49_278711",
+      "label": "Jamka 1 a 18",
+      "providerPageUrl": "https://www.golfbrno.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_536_jamky_9_a_18_14_517683_49_526997",
+      "label": "Jamky 9 a 18",
+      "providerPageUrl": "https://www.cebr.cz/cs",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_874_jerabkovna_15_335278_50_823531",
+      "label": "Jeřábkovna",
+      "providerPageUrl": "https://www.hydronet.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_966_jested_liberec_14_984917_50_732739",
+      "label": "Ještěd, Liberec",
+      "providerPageUrl": "https://www.jested.cz/cs",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_845_jezero_most_13_636403_50_528431",
+      "label": "Jezero Most",
+      "providerPageUrl": "https://www.imostecko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_991_jizerska_50_start_15_143658_50_795056",
+      "label": "Jizerská 50 Start",
+      "providerPageUrl": "https://www.jizerskaops.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_979_kamenny_most_14_144664_49_3093",
+      "label": "Kamenný most",
+      "providerPageUrl": "https://www.kozlovnauplechandy.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1020_karlstejn_14_174169_49_92005",
+      "label": "Karlštejn",
+      "providerPageUrl": "https://karlstejn-golf.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_645_kite_beach_pavlov_16_678064_48_880158",
+      "label": "Kite Beach Pavlov",
+      "providerPageUrl": "https://www.mushow.cz/mushow-kitebeach/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.mushow.cz/mkb/webcam2.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 995748,
+      "score": 112,
+      "candidateCount": 5
+    },
+    {
+      "locationId": "cz_origin_webcam_186_klet_14_283633_48_865544",
+      "label": "Kleť",
+      "providerPageUrl": "https://www.teplarna-cb.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.teplarna-cb.cz/webcam/2.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 168164,
+      "score": 112,
+      "candidateCount": 3
+    },
+    {
+      "locationId": "cz_origin_webcam_902_klinovec_vrchol_12_967897_50_394875",
+      "label": "Klínovec vrchol",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_935_kolonada_12_703075_49_977669",
+      "label": "Kolonáda",
+      "providerPageUrl": "https://www.ceznet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_287_kolonada_namesti_svobody_15_780467_50_630444",
+      "label": "Kolonáda, náměstí Svobody",
+      "providerPageUrl": "https://www.janske-lazne.cz/",
+      "status": "candidates_not_images",
+      "candidateCount": 1,
+      "candidates": [
+        {
+          "url": "https://kamery.humlnet.cz/show_webcam.php?url=/images/webcams/janskelazne/2048x1536.jpg",
+          "score": 92
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_613_kopec_vancica_17_778211_49_311811",
+      "label": "Kopec Vančica",
+      "providerPageUrl": "https://www.drzkova.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1041_kostel_navstiveni_panny_marie_jizerske_hory_15_182761_50_877281",
+      "label": "Kostel Navštívení Panny Marie, Jizerské hory",
+      "providerPageUrl": "https://www.pocasi-frydlant.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "http://pocasi-frydlant.cz/webcam/webcam-foto-1.jpg?nocache=20260708210",
+      "contentType": "image/jpeg",
+      "bytes": 624258,
+      "score": 112,
+      "candidateCount": 6
+    },
+    {
+      "locationId": "cz_origin_webcam_1012_koupaci_jezero_14_358994_49_979139",
+      "label": "Koupací jezero",
+      "providerPageUrl": "https://www.southprague.net/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_672_koupaliste_17_313522_48_909992",
+      "label": "Koupaliště",
+      "providerPageUrl": "https://www.camp-straznice.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.camp-straznice.cz/vjezd/campcamp20260708_205303_0.jpeg",
+      "contentType": "image/jpeg",
+      "bytes": 79406,
+      "score": 112,
+      "candidateCount": 6
+    },
+    {
+      "locationId": "cz_origin_webcam_816_koupaliste_17_306589_49_356811",
+      "label": "Koupaliště",
+      "providerPageUrl": "https://www.technis.kojetin.cz/koupaliste",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_846_koupaliste_13_4124_50_220128",
+      "label": "Koupaliště",
+      "providerPageUrl": "https://www.podborany.net/organizace/informacni-centrum/koupaliste-a-kemp/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_879_koupaliste_16_881117_48_764125",
+      "label": "Koupaliště",
+      "providerPageUrl": "https://www.tereza-breclav.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_928_koupaliste_14_458958_48_8246",
+      "label": "Koupaliště",
+      "providerPageUrl": "https://www.velesin.cz/volny-cas-18/koupaliste/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_573_koupaliste_borek_14_506022_49_020656",
+      "label": "Koupaliště Borek",
+      "providerPageUrl": "https://www.koupalisteborek.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_956_krivoklat_13_877914_50_036019",
+      "label": "Křivoklát",
+      "providerPageUrl": "https://krivonet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_863_krizovatka_ulic_komenskeho_a_velke_novosady_17_445883_49_450731",
+      "label": "Křižovatka ulic Komenského a Velké Novosady",
+      "providerPageUrl": "https://www.prerov.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_864_krizovatka_ulic_velka_dlazka_a_polni_17_440997_49_461486",
+      "label": "Křižovatka ulic Velká Dlážka a Polní",
+      "providerPageUrl": "https://www.prerov.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1021_labska_prehrada_15_577272_50_718978",
+      "label": "Labská, Přehrada",
+      "providerPageUrl": "https://www.penzionalenka.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_651_leskovec_nad_moravici_17_570383_49_904747",
+      "label": "Leskovec nad Moravicí",
+      "providerPageUrl": "http://www.lodevevode.cz/clanek/pujcovna-lodi-v-leskovci-nad-moravici-95",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "http://kamery.mx-net.cz/nova-plan-pristaviste/current.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 212055,
+      "score": 112,
+      "candidateCount": 5
+    },
+    {
+      "locationId": "cz_origin_webcam_918_letiste_hate_16_058322_48_760983",
+      "label": "Letiště Hatě",
+      "providerPageUrl": "https://www.lkexca.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_410_letiste_vaclava_havla_praha_14_274617_50_116258",
+      "label": "Letiště Václava Havla Praha",
+      "providerPageUrl": "https://www.idnes.cz/nastaveni-souhlasu?url=https%3a%2f%2ftv.idnes.cz%2f",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1009_letiste_kojal_16_788167_49_363078",
+      "label": "Letiště, Kojál",
+      "providerPageUrl": "https://www.lkkotv.cz/articles.php",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_587_lipno_14_092497_48_731367",
+      "label": "Lipno",
+      "providerPageUrl": "https://www.lipno-windsurfing.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_351_loucna_nad_desnou_17_081014_50_074147",
+      "label": "Loučná nad Desnou",
+      "providerPageUrl": "https://www.loucna-nad-desnou.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_983_lucifer_lump_16_186219_49_633539",
+      "label": "Lucifer, Lump",
+      "providerPageUrl": "https://skiarealjimramov.cz/",
+      "status": "candidates_not_images",
+      "candidateCount": 1,
+      "candidates": [
+        {
+          "url": "https://skiarealjimramov.cz/fit=crop/mP4OjBVxXxiDnEL9/20231203_110612-mP4M65Z37jHbwPgb.jpg",
+          "score": 77
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_174_lucni_bouda_pramen_bileho_labe_15_697486_50_734656",
+      "label": "Luční bouda, pramen Bílého Labe",
+      "providerPageUrl": "https://www.lucnibouda.cz/cs/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_970_lyzarska_skola_a_detske_hriste_16_938639_50_182117",
+      "label": "Lyžařská škola a dětské hřiště",
+      "providerPageUrl": "https://skikuncice.cz/en",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_899_lyzarsky_stadion_13_619367_49_068383",
+      "label": "Lyžařský stadion",
+      "providerPageUrl": "https://www.lazadov.cz/la/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1045_machovo_jezero_borny_bezdez_14_636039_50_589506",
+      "label": "Máchovo jezero, Borný, Bezděz",
+      "providerPageUrl": "https://jmj.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_844_marina_orlik_14_184758_49_519547",
+      "label": "Marina Orlík",
+      "providerPageUrl": "https://www.marinaorlik.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1007_masarykovo_namesti_13_006267_49_753133",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.mustribro.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1011_masarykovo_namesti_16_999197_49_277528",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.eleco.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1016_masarykovo_namesti_14_771875_49_004253",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.itrebon.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.itrebon.cz/userfiles/web-ke-stazeni/webova-kamera.PNG",
+      "contentType": "image/png",
+      "bytes": 1325857,
+      "score": 112,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_127_masarykovo_namesti_16_259592_49_523633",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.bystricenp.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_378_masarykovo_namesti_17_301956_49_351831",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.kojetin.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_685_masarykovo_namesti_16_233283_50_536453",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.policenm.cz/zivot-ve-meste/turistika/policko/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_717_masarykovo_namesti_15_590136_49_396186",
+      "label": "Masarykovo náměstí",
+      "providerPageUrl": "https://www.jihlava.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_704_masarykovo_namesti_17_460561_49_068481",
+      "label": "Masarykovo Náměstí",
+      "providerPageUrl": "https://www.mesto-uh.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1003_mesto_zamek_12_943303_49_525353",
+      "label": "Město, Zámek",
+      "providerPageUrl": "https://www.unitednetworks.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1043_meteoradar_brdy_13_817803_49_658206",
+      "label": "Meteoradar Brdy",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_173_mikulov_namesti_16_638711_48_807061",
+      "label": "Mikulov, Náměstí",
+      "providerPageUrl": "https://www.mikulov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_972_milesov_13_931292_50_554608",
+      "label": "Milešov",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_535_modrava_13_500689_49_024431",
+      "label": "Modrava",
+      "providerPageUrl": "https://www.sumavanet.cz/modrava/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1014_mseno_i_15_170619_50_736997",
+      "label": "Mšeno I",
+      "providerPageUrl": "https://www.anetliberec.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_580_nabrezi_pristaviste_14_418392_49_221483",
+      "label": "Nábřeží, přístaviště",
+      "providerPageUrl": "https://www.tnv.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_903_nad_kostelem_12_723279_50_364318",
+      "label": "Nad kostelem",
+      "providerPageUrl": "http://www.skihamry.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_678_nadrazi_velke_losiny_17_042503_50_031745",
+      "label": "Nádraží Velké Losiny",
+      "providerPageUrl": "https://www.vlaki.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1013_nachod_16_191042_50_400808",
+      "label": "Náchod",
+      "providerPageUrl": "https://www.jiraskovachata.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.jiraskovachata.cz/fotky/thumbs/webcam.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 54102,
+      "score": 112,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_1039_namesti_augustina_nemejce_13_582192_49_486164",
+      "label": "Náměstí Augustina Němejce",
+      "providerPageUrl": "https://www.nepomuk.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_868_namesti_dr_e_benese_17_577719_49_333319",
+      "label": "Náměstí Dr. E. Beneše",
+      "providerPageUrl": "https://avonet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_812_namesti_dr_edvarda_benese_15_058158_50_769233",
+      "label": "Náměstí Dr. Edvarda Beneše",
+      "providerPageUrl": "https://www.anetliberec.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_123_namesti_f_l_veka_v_dobrusce_16_159858_50_292192",
+      "label": "Náměstí F. L. Věka v Dobrušce",
+      "providerPageUrl": "https://www.mestodobruska.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_702_namesti_jiriho_z_podebrad_15_632233_50_368153",
+      "label": "Náměstí Jiřího z Poděbrad",
+      "providerPageUrl": "https://infocentrum.horice.org/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_827_namesti_miru_17_46475_49_988389",
+      "label": "Náměstí Míru",
+      "providerPageUrl": "https://www.mx-net.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_828_namesti_miru_16_423017_49_348819",
+      "label": "Náměstí Míru",
+      "providerPageUrl": "https://www.tisnov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_963_namesti_miru_12_817056_50_368817",
+      "label": "Náměstí Míru",
+      "providerPageUrl": "https://www.mesto-abertamy.cz/",
+      "status": "candidates_not_images",
+      "candidateCount": 1,
+      "candidates": [
+        {
+          "url": "http://webkamery.gc-system.cz/camera.php?img=_data/abertamy/abertamy.jpg",
+          "score": 92
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_722_namesti_republiky_13_377322_49_747047",
+      "label": "Náměstí Republiky",
+      "providerPageUrl": "https://www.plzen.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_973_namesti_republiky_16_645333_49_361478",
+      "label": "Náměstí Republiky",
+      "providerPageUrl": "https://www.alfservis.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_402_namesti_svobody_13_544847_50_328333",
+      "label": "Náměstí Svobody",
+      "providerPageUrl": "https://www.mesto-zatec.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_289_namesti_svobody_hrad_buchlov_17_339169_49_085747",
+      "label": "Náměstí Svobody, Hrad Buchlov",
+      "providerPageUrl": "https://www.buchlovice.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_158_namesti_t_g_masaryka_15_610511_50_627931",
+      "label": "Náměstí T. G. Masaryka",
+      "providerPageUrl": "https://www.muvrchlabi.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_243_namesti_t_g_masaryka_17_109314_49_472142",
+      "label": "Náměstí T. G. Masaryka",
+      "providerPageUrl": "https://www.prostejov.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_865_namesti_t_g_masaryka_17_449586_49_45475",
+      "label": "Náměstí T. G. Masaryka",
+      "providerPageUrl": "https://www.prerov.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_859_namesti_zachariase_z_hradce_15_454772_49_183561",
+      "label": "Náměstí Zachariáše z Hradce",
+      "providerPageUrl": "https://www.telc.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_403_namesti_hrad_a_truba_18_117542_49_591283",
+      "label": "Náměstí, Hrad a Trůba",
+      "providerPageUrl": "https://www.stramberk.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_835_namesti_koste_sv_markety_13_554536_49_144058",
+      "label": "Náměstí, koste sv. Markéty",
+      "providerPageUrl": "https://www.kasperske-hory.info/khory/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.kasperske-hory.info/resizer/resizer.aspx?w=400&h=180&crop=2&img=/mesta/user/kh/ilustr/webcam.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 25766,
+      "score": 112,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_841_namesti_mestska_vez_16_01225_49_355247",
+      "label": "Náměstí, Městská věž",
+      "providerPageUrl": "https://www.velkemezirici.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_971_nastup_na_vlek_13_592408_50_625458",
+      "label": "Nástup na vlek",
+      "providerPageUrl": "https://www.mezibori.cz/ski-areal-mesta-mezibori",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_927_nepomuk_zelena_hora_13_579617_49_48225",
+      "label": "Nepomuk, Zelená Hora",
+      "providerPageUrl": "https://www.nepomuk.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_925_novohradske_hory_14_782453_48_790872",
+      "label": "Novohradské hory",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_860_palackeho_namesti_15_436631_49_079553",
+      "label": "Palackého náměstí",
+      "providerPageUrl": "https://www.dacice.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_961_palackeho_namesti_15_268114_49_949747",
+      "label": "Palackého náměstí",
+      "providerPageUrl": "https://nasbezdrat.net/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_625_panorama_15_878276_49_215791",
+      "label": "Panorama",
+      "providerPageUrl": "http://www.trebic.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_680_panorama_13_489753_49_2348",
+      "label": "Panorama",
+      "providerPageUrl": "https://www.mestosusice.cz/mususice/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_715_panorama_17_472794_49_066853",
+      "label": "Panorama",
+      "providerPageUrl": "https://www.mesto-uh.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_721_panorama_17_588842_49_378453",
+      "label": "Panorama",
+      "providerPageUrl": "https://www.prusinovice.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_889_panorama_16_96715_49_170911",
+      "label": "Panorama",
+      "providerPageUrl": "https://www.eleco.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_989_panorama_12_877017_50_228717",
+      "label": "Panorama",
+      "providerPageUrl": "https://www.thermal.cz/en/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_411_panorama_mnichova_hradiste_14_974617_50_522825",
+      "label": "Panorama Mnichova Hradiště",
+      "providerPageUrl": "https://www.mnhradiste.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.mnhradiste.cz/kamera/mhcam1.jpg?1783537302",
+      "contentType": "image/jpeg",
+      "bytes": 139069,
+      "score": 112,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_686_panorama_severozapad_16_074347_49_565167",
+      "label": "Panorama severozápad",
+      "providerPageUrl": "https://www.nmnm.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_980_panorama_zapad_13_442731_50_603317",
+      "label": "Panorama západ",
+      "providerPageUrl": "https://www.horasvatekateriny.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1004_panorama_hrad_13_272567_49_478922",
+      "label": "Panorama, Hrad",
+      "providerPageUrl": "https://www.unitednetworks.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1034_panorama_valdicka_brana_15_362922_50_440936",
+      "label": "Panorama, Valdická brána",
+      "providerPageUrl": "https://www.hotelrestart.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_687_parkoviste_16_034686_49_61435",
+      "label": "Parkoviště",
+      "providerPageUrl": "https://www.tristudne.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.tristudne.cz/Webcam/Thumb",
+      "contentType": "image/jpeg",
+      "bytes": 93473,
+      "score": 100,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_964_parkoviste_bezecky_areal_13_90565_50_735539",
+      "label": "Parkoviště běžecký areál",
+      "providerPageUrl": "https://www.hsadolfov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_894_pension_helena_honesova_13_555061_49_0564",
+      "label": "Pension Helena Honesová",
+      "providerPageUrl": "https://www.pensionhelenahones.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_600_plavebni_komora_petrov_17_271886_48_886433",
+      "label": "Plavební komora Petrov",
+      "providerPageUrl": "https://www.batuvkanalpetrov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_359_plaz_tobogan_12_681633_50_167361",
+      "label": "Pláž, tobogán",
+      "providerPageUrl": "https://michal-sokolov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_885_plocha_letiste_18_078789_49_929747",
+      "label": "Plocha letiště",
+      "providerPageUrl": "https://lkza.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1017_plocha_letiste_helfstyn_17_703717_49_548306",
+      "label": "Plocha letiště, Helfštýn",
+      "providerPageUrl": "https://www.aeroklubhranice.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_872_pohled_na_jeseniky_17_319922_50_296739",
+      "label": "Pohled na Jeseniky",
+      "providerPageUrl": "https://www.mikulovice.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_869_pohled_na_jihozapad_smrk_18_447519_49_545989",
+      "label": "Pohled na jihozápad, Smrk",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_877_pohled_na_krkonose_15_416922_50_693608",
+      "label": "Pohled na Krkonoše",
+      "providerPageUrl": "https://jablonec-krkonose.cz/firmy-a-sluzby/sportovni-arealy/194-ski-areal-kamenec",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_821_pohled_na_mesto_14_48545_48_967272",
+      "label": "Pohled na město",
+      "providerPageUrl": "https://www.teplarna-cb.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.teplarna-cb.cz/webcam/2.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 168164,
+      "score": 112,
+      "candidateCount": 3
+    },
+    {
+      "locationId": "cz_origin_webcam_824_pohled_na_mesto_16_404658_49_5566",
+      "label": "Pohled na město",
+      "providerPageUrl": "https://www.olesnice.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_942_pohled_na_sever_krkonose_15_693833_50_456053",
+      "label": "Pohled na sever, Krkonoše",
+      "providerPageUrl": "https://www.avatech.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_875_pohled_na_vychod_15_900367_49_199361",
+      "label": "Pohled na východ",
+      "providerPageUrl": "https://www.zmak.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1037_pojezdova_draha_c_benzinova_stanice_runway_14_096461_49_716944",
+      "label": "Pojezdová dráha C, benzinová stanice, runway",
+      "providerPageUrl": "https://www.ok-aviation.com/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_185_prazsky_hrad_karluv_most_vltava_14_413308_50_085792",
+      "label": "Pražský hrad, Karlův most, Vltava",
+      "providerPageUrl": "https://www.csvts.cz/cs/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_924_provozni_plocha_zapad_14_975528_49_150256",
+      "label": "Provozní plocha - západ",
+      "providerPageUrl": "https://www.letistejh.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_647_prehrada_15_652481_49_816008",
+      "label": "Přehrada",
+      "providerPageUrl": "https://poddrnem.com/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_518_prehrada_hraz_plaz_15_816328_48_914253",
+      "label": "Přehrada, hráz, pláž",
+      "providerPageUrl": "http://www.orgman.cz/vrancl/kamery.htm",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_298_prijezdova_cesta_k_zamku_17_504403_49_530647",
+      "label": "Příjezdová cesta k zámku",
+      "providerPageUrl": "https://obec-veselicko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_175_pristav_veseli_nad_moravou_na_batove_kanale_17_371897_48_954092",
+      "label": "Přístav Veselí nad Moravou na Baťově kanále",
+      "providerPageUrl": "https://www.veseli-nad-moravou.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_520_pristaviste_hodonin_17_143728_48_843236",
+      "label": "Přístaviště Hodonín",
+      "providerPageUrl": "https://www.pristavisteujezu.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_599_pristaviste_petrov_17_273242_48_887361",
+      "label": "Přístaviště Petrov",
+      "providerPageUrl": "https://www.batuvkanalpetrov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1028_resselovo_namesti_15_79465_49_950817",
+      "label": "Resselovo náměstí",
+      "providerPageUrl": "https://www.omegaplus.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_829_riegerova_ulice_16_424483_49_350008",
+      "label": "Riegerova ulice",
+      "providerPageUrl": "https://www.tisnov.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_1006_rozhledna_12_409275_49_743128",
+      "label": "Rozhledna",
+      "providerPageUrl": "https://www.ceznet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_836_rozhledna_polednik_13_395167_49_063747",
+      "label": "Rozhledna Poledník",
+      "providerPageUrl": "https://www.npsumava.cz/navstivte-sumavu/navstevnicka-centra/informacni-stredisko-polednik/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1005_rozhledna_panorama_12_785369_49_382886",
+      "label": "Rozhledna, Panorama",
+      "providerPageUrl": "https://www.domazlice.eu/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_944_runway_18_114569_49_693022",
+      "label": "Runway",
+      "providerPageUrl": "https://www.letiste-ostrava-mosnov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_922_rybnik_hejtman_14_939397_48_959089",
+      "label": "Rybník Hejtman",
+      "providerPageUrl": "https://www.jhcomp.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_923_rybnik_vajgar_15_020223_49_142058",
+      "label": "Rybník Vajgar",
+      "providerPageUrl": "https://www.jhcomp.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_810_rychtrovka_15_550183_50_664622",
+      "label": "Rychtrovka",
+      "providerPageUrl": "https://www.benecko.info/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_962_sazavsky_klaster_14_901976_49_875753",
+      "label": "Sázavský klášter",
+      "providerPageUrl": "https://www.daskonet.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_460_sdruzeny_snimek_17_263939_49_935831",
+      "label": "Sdružený snímek",
+      "providerPageUrl": "https://skiklubrymarov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_981_sedlo_18_264803_49_489164",
+      "label": "Sedlo",
+      "providerPageUrl": "https://www.hvfree.net/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_900_sejzdovka_jednicka_12_206253_50_233047",
+      "label": "Sejzdovka Jednička",
+      "providerPageUrl": "https://strediskoas.estranky.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_814_sidliste_kosutka_13_355811_49_776486",
+      "label": "Sídliště Košutka",
+      "providerPageUrl": "http://meteoplzen.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_342_sjezdovka_13_575003_49_015789",
+      "label": "Sjezdovka",
+      "providerPageUrl": "http://www.skikvilda.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "http://data2.isenzor.cz/K1100033/aktualni_thumb1.jpg?ver=1.1",
+      "contentType": "image/jpeg",
+      "bytes": 4117,
+      "score": 122,
+      "candidateCount": 3
+    },
+    {
+      "locationId": "cz_origin_webcam_818_sjezdovka_16_435619_50_065714",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://ski-dlouhonovice.webnode.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_830_sjezdovka_16_409394_49_510106",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.skiareal-hodonin.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.sjezdovky.cz/script/GetImage.php?folder=hodonin1&width=250&height=170&p49=0",
+      "contentType": "image/jpeg",
+      "bytes": 8206,
+      "score": 110,
+      "candidateCount": 2
+    },
+    {
+      "locationId": "cz_origin_webcam_842_sjezdovka_16_026408_49_360175",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.skivm.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_883_sjezdovka_15_085725_49_035156",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://zkopcedolu.cz/hradiste",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_884_sjezdovka_14_422172_48_769792",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.koziplan.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_887_sjezdovka_15_506156_50_492947",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.skimachovka.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_895_sjezdovka_17_252283_49_122875",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.stupava.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_901_sjezdovka_12_783939_50_360244",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://skiarealpernink.cz/cs",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://skiarealpernink.cz/sites/default/files/cam/show/8072026-webkamera-pernink-1.jpg?tok=422754332",
+      "contentType": "image/jpeg",
+      "bytes": 15844,
+      "score": 122,
+      "candidateCount": 1
+    },
+    {
+      "locationId": "cz_origin_webcam_907_sjezdovka_14_513119_49_900294",
+      "label": "Sjezdovka",
+      "providerPageUrl": "http://www.vlekychotoun.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_965_sjezdovka_16_045975_49_571633",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://skiharusak.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://image.sjezdovky.cz/script/GetImage.php?folder=nmnmsjez1&width=0&height=0&p49=0&rand=&dummy=.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 245879,
+      "score": 77,
+      "candidateCount": 3
+    },
+    {
+      "locationId": "cz_origin_webcam_968_sjezdovka_16_261328_49_703553",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.poda.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_975_sjezdovka_15_536103_50_696253",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://www.janova-hora.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_982_sjezdovka_15_433761_49_374442",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://zkopcedolu.cz/cerinek",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_995_sjezdovka_15_375622_49_676369",
+      "label": "Sjezdovka",
+      "providerPageUrl": "https://skikadlecak.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_906_sjezdovka_b_16_603525_50_119208",
+      "label": "Sjezdovka B",
+      "providerPageUrl": "https://ceskepetrovice.com/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_856_sjezdovka_horal_golf_club_horal_18_388797_49_375644",
+      "label": "Sjezdovka Horal, Golf Club Horal",
+      "providerPageUrl": "https://www.valachy.cz/razula/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_993_sjezdovka_k_snowparku_17_117089_50_099367",
+      "label": "Sjezdovka K Snowparku",
+      "providerPageUrl": "https://kouty.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_898_sjezdovka_kobyla_13_631592_49_066528",
+      "label": "Sjezdovka Kobyla",
+      "providerPageUrl": "https://www.lazadov.cz/la/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_891_sjezdovka_lopata_17_801147_48_950308",
+      "label": "Sjezdovka Lopata",
+      "providerPageUrl": "http://www.skicentrumbilekarpaty.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_873_sjezdovka_moravka_stepanka_15_3689_50_737306",
+      "label": "Sjezdovka Morávka - Štěpánka",
+      "providerPageUrl": "http://www.rejdice.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_908_sjezdovka_svitavska_16_707286_50_009622",
+      "label": "Sjezdovka Svitavská",
+      "providerPageUrl": "https://www.skibukovka.cz/cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_909_sjezdovka_trebovska_16_706122_50_009364",
+      "label": "Sjezdovka Třebovská",
+      "providerPageUrl": "https://www.skibukovka.cz/cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_953_sjezdovka_vrchol_13_452442_49_163294",
+      "label": "Sjezdovka vrchol",
+      "providerPageUrl": "https://www.la-hartmanice.com/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_831_sjezdovka_panorama_vychod_16_402525_49_508956",
+      "label": "Sjezdovka, panorama východ",
+      "providerPageUrl": "https://www.skiareal-hodonin.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.sjezdovky.cz/script/GetImage.php?folder=hodonin1&width=250&height=170&p49=0",
+      "contentType": "image/jpeg",
+      "bytes": 8199,
+      "score": 110,
+      "candidateCount": 2
+    },
+    {
+      "locationId": "cz_origin_webcam_994_sjezdovka_vernirovice_17_132883_50_050242",
+      "label": "Sjezdovka, Vernířovice",
+      "providerPageUrl": "https://chatabrnenka.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_684_ski_areal_radvanice_16_042711_50_5685",
+      "label": "Ski areál Radvanice",
+      "providerPageUrl": "https://www.vlekradvanice.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_819_slalomka_16_457397_50_228944",
+      "label": "Slalomka",
+      "providerPageUrl": "https://skiricky.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_843_slapy_nova_rabyne_lahoz_14_418814_49_810578",
+      "label": "Slapy, Nová Rabyně, Lahoz",
+      "providerPageUrl": "https://www.slapyteplota.eu/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_414_slezska_ostrava_18_299115_49_840689",
+      "label": "Slezská Ostrava",
+      "providerPageUrl": "https://miksa.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_688_sloup_16_747142_49_414936",
+      "label": "Sloup",
+      "providerPageUrl": "https://www.mestyssloup.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_867_slovan_17_395058_49_290094",
+      "label": "Slovan",
+      "providerPageUrl": "https://www.mesto-kromeriz.cz/o-meste/mesto-kromeriz/webkamery",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_990_smedava_cerny_vrch_15_274822_50_84345",
+      "label": "Směďava, Černý vrch",
+      "providerPageUrl": "https://chatasmedava.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_157_snezka_lanovka_z_pece_pod_snezkou_15_7404_50_735186",
+      "label": "Sněžka - lanovka z Pece pod Sněžkou",
+      "providerPageUrl": "http://www.snezkalanovka.cz/",
+      "status": "candidates_not_images",
+      "candidateCount": 5,
+      "candidates": [
+        {
+          "url": "http://kamery.humlnet.cz/images/webcams/snezka2/640x480.jpg",
+          "score": 112
+        },
+        {
+          "url": "http://kamery.humlnet.cz/images/webcams/snezka3/640x480.jpg",
+          "score": 112
+        },
+        {
+          "url": "http://kamery.humlnet.cz/images/webcams/snezka/640x480.jpg",
+          "score": 112
+        },
+        {
+          "url": "http://kamery.humlnet.cz/images/webcams/snezka_pomezky/640x480.jpg",
+          "score": 112
+        },
+        {
+          "url": "http://kamery.humlnet.cz/images/webcams/snezka-ld/spodni.jpg",
+          "score": 112
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_370_stezka_v_oblacich_16_831428_50_150413",
+      "label": "Stezka v oblacích",
+      "providerPageUrl": "https://www.dolnimorava.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_362_stred_mesta_14_039108_50_661044",
+      "label": "Střed města",
+      "providerPageUrl": "https://www.usti.cz/cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_705_suchy_vrch_16_689917_50_051783",
+      "label": "Suchý vrch",
+      "providerPageUrl": "http://www.suchak.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1025_svata_hora_panorama_14_017416_49_685704",
+      "label": "Svatá Hora,Panorama",
+      "providerPageUrl": "https://pribram.eu/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1032_svijany_jested_15_062425_50_562328",
+      "label": "Svijany, Ještěd",
+      "providerPageUrl": "https://www.itbusiness.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_929_serak_jesenik_17_108431_50_187672",
+      "label": "Šerák, Jeseník",
+      "providerPageUrl": "https://www.chmi.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_373_tobogan_17_752036_49_425894",
+      "label": "Tobogán",
+      "providerPageUrl": "https://www.osicko.cz/organizace/koupaliste/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_533_tobogan_14_381081_50_091019",
+      "label": "Tobogán",
+      "providerPageUrl": "https://www.koupalistepetynka.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_416_tobogan_a_skluzavky_18_141342_49_826108",
+      "label": "Tobogán a skluzavky",
+      "providerPageUrl": "https://www.sareza.cz/areal/letni-koupaliste-poruba",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://www.sareza.cz/storage/api/webcams/lkop01.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 152854,
+      "score": 112,
+      "candidateCount": 6
+    },
+    {
+      "locationId": "cz_origin_webcam_120_trojak_maruska_odpocivadlo_hm52_17_828169_49_366094",
+      "label": "Troják, Maruška - odpočivadlo HM52",
+      "providerPageUrl": "https://www.hm52.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_938_trida_miru_15_769617_50_035869",
+      "label": "Třída Míru",
+      "providerPageUrl": "https://www.kve.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_974_udoli_dolni_dvur_15_660803_50_655514",
+      "label": "Údolí Dolní Dvůr",
+      "providerPageUrl": "https://www.skifamily.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_954_udoli_uhlavy_kralovsky_hvozd_13_173869_49_231547",
+      "label": "Údolí Úhlavy, Královský Hvozd",
+      "providerPageUrl": "https://www.unitednetworks.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1026_ulice_jana_masaryka_14_896489_49_702197",
+      "label": "Ulice Jana Masaryka",
+      "providerPageUrl": "https://www.vlasimnet.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_357_ulice_meziricska_18_131267_49_459308",
+      "label": "Ulice Meziříčská",
+      "providerPageUrl": "https://www.hvfree.net/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_646_velke_darko_15_907578_49_632058",
+      "label": "Velké Dářko",
+      "providerPageUrl": "https://www.obcerstveni-darko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1015_velke_namesti_17_393092_49_297961",
+      "label": "Velké náměstí",
+      "providerPageUrl": "https://www.mesto-kromeriz.cz/o-meste/mesto-kromeriz/webkamery",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_506_velky_plavecky_bazen_13_207317_49_708517",
+      "label": "Velký plavecký bazén",
+      "providerPageUrl": "https://koupaliste.hdnyrany.com/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_504_venkovni_bazen_17_244275_49_598347",
+      "label": "Venkovní bazén",
+      "providerPageUrl": "https://www.bazen-olomouc.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_596_venkovni_bazen_13_914147_49_263378",
+      "label": "Venkovní bazén",
+      "providerPageUrl": "https://www.starz.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_690_venkovni_bazeny_17_0366_50_035933",
+      "label": "Venkovní bazény",
+      "providerPageUrl": "https://www.termaly-losiny.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_297_veselicko_park_u_zamku_17_504497_49_530672",
+      "label": "Veselíčko - park u zámku",
+      "providerPageUrl": "https://obec-veselicko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_293_veselicko_zahrada_u_zamku_17_504258_49_530511",
+      "label": "Veselíčko - zahrada u zámku",
+      "providerPageUrl": "https://obec-veselicko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_296_veselicko_zahrada_u_zamku_17_504225_49_530592",
+      "label": "Veselíčko - zahrada u zámku",
+      "providerPageUrl": "https://obec-veselicko.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_1010_vjezd_do_obce_ze_severu_16_886967_49_303667",
+      "label": "Vjezd do obce ze severu",
+      "providerPageUrl": "http://www.drvrkam.vys.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_714_vlek_mikulov_slalomovy_svah_13_716956_50_689033",
+      "label": "Vlek Mikulov, Slalomový svah",
+      "providerPageUrl": "https://www.scbournak.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://scbournak.cz/wp-content/uploads/2020/11/kamera7.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 10815,
+      "score": 112,
+      "candidateCount": 7
+    },
+    {
+      "locationId": "cz_origin_webcam_689_vnitrni_bazeny_17_036917_50_036147",
+      "label": "Vnitřní bazény",
+      "providerPageUrl": "https://www.termaly-losiny.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_579_vodni_nadrz_jesenice_12_43645_50_066172",
+      "label": "Vodní nádrž Jesenice",
+      "providerPageUrl": "http://www.surf-club.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_292_vodni_nadrz_rozkos_16_052558_50_3916",
+      "label": "Vodní nádrž Rozkoš",
+      "providerPageUrl": "https://www.rtyne.net/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_358_vodni_plocha_12_681633_50_167364",
+      "label": "Vodní plocha",
+      "providerPageUrl": "https://michal-sokolov.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_807_vrchol_bournak_pohled_na_jih_13_706939_50_685081",
+      "label": "Vrchol Bouřňák, pohled na jih",
+      "providerPageUrl": "https://www.scbournak.cz/",
+      "status": "direct_snapshot_verified",
+      "directImageUrl": "https://scbournak.cz/wp-content/uploads/2020/11/kamera7.jpg",
+      "contentType": "image/jpeg",
+      "bytes": 10815,
+      "score": 112,
+      "candidateCount": 7
+    },
+    {
+      "locationId": "cz_origin_webcam_180_vsetin_zamek_17_9983_49_340747",
+      "label": "Vsetín zámek",
+      "providerPageUrl": "https://www.mestovsetin.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_313_vstup_do_skal_piskovna_16_122819_50_615208",
+      "label": "Vstup do skal, Pískovna",
+      "providerPageUrl": "https://www.adrspasskeskaly.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_823_vystup_vlek_a_16_405653_49_558378",
+      "label": "Výstup vlek A",
+      "providerPageUrl": "https://www.ski-areal.cz/cz",
+      "status": "candidates_not_images",
+      "candidateCount": 1,
+      "candidates": [
+        {
+          "url": "http://webkamery.gc-system.cz/camera.php?img=_data/olesnice6/olesnice7.jpg",
+          "score": 92
+        }
+      ]
+    },
+    {
+      "locationId": "cz_origin_webcam_820_vystupni_stanice_zaklety_16_449397_50_233286",
+      "label": "Výstupní stanice Zakletý",
+      "providerPageUrl": "https://skiricky.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_1046_yacht_club_lodni_sporty_brno_16_509836_49_23125",
+      "label": "Yacht Club LODNÍ SPORTY BRNO",
+      "providerPageUrl": "https://www.lsbyc.cz/",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    },
+    {
+      "locationId": "cz_origin_webcam_617_zamek_holesov_hostynske_vrchy_17_582006_49_333236",
+      "label": "Zámek Holešov, Hostýnské vrchy",
+      "providerPageUrl": "https://www.raab.cz/",
+      "status": "no_image_candidates",
+      "candidateCount": 0,
+      "candidates": []
+    },
+    {
+      "locationId": "cz_origin_webcam_176_zamek_vranov_nad_dyji_15_814361_48_898358",
+      "label": "Zámek Vranov nad Dyjí",
+      "providerPageUrl": "http://www.orgman.cz/vrancl/kamery.htm",
+      "status": "origin_page_failed",
+      "error": "The operation was aborted due to timeout"
+    }
+  ]
+}

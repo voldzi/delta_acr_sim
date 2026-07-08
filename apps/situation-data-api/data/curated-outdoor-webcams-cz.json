@@ -5,12 +5,20 @@
   "attribution": "Atribuce je uvedena u každé kamery podle originálního provozovatele.",
   "providerPageUrl": "https://www.webcamlive.cz/webkamery/ceska-republika/2",
   "category": "outdoor_webcam",
-  "generatedAt": "2026-07-06T09:57:04.228Z",
+  "generatedAt": "2026-07-08T19:02:28.305Z",
   "policy": {
     "discoverySource": "WebCamLive Czech catalog, 2026-07-06 audit",
     "runtimeSourceAllowed": "origin_only",
     "imageProxyPolicy": "no_webcamlive_runtime_proxy",
-    "snapshotPolicy": "disabled_until_direct_origin_snapshot_is_verified"
+    "snapshotPolicy": "disabled_until_direct_origin_snapshot_is_verified",
+    "directSnapshotAudit": {
+      "generatedAt": "2026-07-08T19:02:28.305Z",
+      "inspected": 267,
+      "directAdded": 21,
+      "directKept": 0,
+      "noCandidate": 182,
+      "failed": 64
+    }
   },
   "locations": [
     {
@@ -969,19 +977,24 @@
       "attribution": "Plavecký station Olomouc",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:07.968Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "505",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/plavecky-stadion-olomouc/505",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.bazen-olomouc.cz/webcam/bazen50m000M.jpg?1783533603",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 48570
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Dětstký venkovní bazén",
           "providerUrl": "https://www.bazen-olomouc.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.bazen-olomouc.cz/webcam/bazen50m000M.jpg?1783533603",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -1536,19 +1549,24 @@
       "attribution": "hotelpodzvicinou.cz",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:16.190Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "834",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/zvicina/834",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.hotelpodzvicinou.cz/Cam1/Hotel_Kamera.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 699483
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Hotel pod Zvičinou",
           "providerUrl": "https://www.hotelpodzvicinou.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.hotelpodzvicinou.cz/Cam1/Hotel_Kamera.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -2049,19 +2067,24 @@
       "attribution": "místo určené pro kiteboarding",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:23.499Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "645",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/chko-palava/645",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.mushow.cz/mkb/webcam2.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 995748
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Kite Beach Pavlov",
           "providerUrl": "https://www.mushow.cz/mushow-kitebeach/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.mushow.cz/mkb/webcam2.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -2076,19 +2099,24 @@
       "attribution": "teplarna-cb.cz",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:23.738Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "186",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/klet-sumavske-podhuri/186",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.teplarna-cb.cz/webcam/2.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 168164
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Kleť",
           "providerUrl": "https://www.teplarna-cb.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.teplarna-cb.cz/webcam/2.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -2211,19 +2239,24 @@
       "attribution": "pocasi-frydlant.cz",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:26.212Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "1041",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/mesto-hejnice/1041",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "http://pocasi-frydlant.cz/webcam/webcam-foto-1.jpg?nocache=20260708210",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 624258
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Kostel Navštívení Panny Marie, Jizerské hory",
           "providerUrl": "https://www.pocasi-frydlant.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "http://pocasi-frydlant.cz/webcam/webcam-foto-1.jpg?nocache=20260708210",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -2265,19 +2298,24 @@
       "attribution": "Autokempink Strážnice",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:26.543Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "672",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/autokempink-straznice/672",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.camp-straznice.cz/vjezd/campcamp20260708_205303_0.jpeg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 79406
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Koupaliště",
           "providerUrl": "https://www.camp-straznice.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.camp-straznice.cz/vjezd/campcamp20260708_205303_0.jpeg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -2535,19 +2573,24 @@
       "attribution": "půjčovna lodí",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:26.674Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "651",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/slezska-harta/651",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "http://kamery.mx-net.cz/nova-plan-pristaviste/current.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 212055
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Leskovec nad Moravicí",
           "providerUrl": "http://www.lodevevode.cz/clanek/pujcovna-lodi-v-leskovci-nad-moravici-95",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "http://kamery.mx-net.cz/nova-plan-pristaviste/current.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -2913,19 +2956,24 @@
       "attribution": "itrebon.cz",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:28.419Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "1016",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/mesto-trebon/1016",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.itrebon.cz/userfiles/web-ke-stazeni/webova-kamera.PNG",
+        "directSnapshotContentType": "image/png",
+        "directSnapshotBytes": 1325857
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Masarykovo náměstí",
           "providerUrl": "https://www.itrebon.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.itrebon.cz/userfiles/web-ke-stazeni/webova-kamera.PNG",
+          "contentType": "image/png"
         }
       ]
     },
@@ -3318,19 +3366,24 @@
       "attribution": "Jiráskově turistické chatě",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:32.511Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "1013",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/hora-dobrosov/1013",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.jiraskovachata.cz/fotky/thumbs/webcam.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 54102
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Náchod",
           "providerUrl": "https://www.jiraskovachata.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.jiraskovachata.cz/fotky/thumbs/webcam.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -3804,19 +3857,24 @@
       "attribution": "kasperske-hory.info",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:35.902Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "835",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/mesto-kasperske-hory/835",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.kasperske-hory.info/resizer/resizer.aspx?w=400&h=180&crop=2&img=/mesta/user/kh/ilustr/webcam.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 25766
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Náměstí, koste sv. Markéty",
           "providerUrl": "https://www.kasperske-hory.info/khory/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.kasperske-hory.info/resizer/resizer.aspx?w=400&h=180&crop=2&img=/mesta/user/kh/ilustr/webcam.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -4155,19 +4213,24 @@
       "attribution": "Mnichovo Hradiště",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:42.245Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "411",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/mesto-mnichovo-hradiste/411",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.mnhradiste.cz/kamera/mhcam1.jpg?1783537302",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 139069
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Panorama Mnichova Hradiště",
           "providerUrl": "https://www.mnhradiste.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.mnhradiste.cz/kamera/mhcam1.jpg?1783537302",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -4290,19 +4353,24 @@
       "attribution": "Obec Tři Studně",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:41.348Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "687",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/obec-tri-studne/687",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.tristudne.cz/Webcam/Thumb",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 93473
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Parkoviště",
           "providerUrl": "https://www.tristudne.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.tristudne.cz/Webcam/Thumb",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -4560,19 +4628,24 @@
       "attribution": "teplarna-cb.cz",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:42.243Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "821",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/mesto-ceske-budejovice/821",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.teplarna-cb.cz/webcam/2.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 168164
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Pohled na město",
           "providerUrl": "https://www.teplarna-cb.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.teplarna-cb.cz/webcam/2.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -5289,19 +5362,24 @@
       "attribution": "Lyžařský svah",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:46.909Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "342",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/obec-kvilda/342",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "http://data2.isenzor.cz/K1100033/aktualni_thumb1.jpg?ver=1.1",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 4117
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Sjezdovka",
           "providerUrl": "http://www.skikvilda.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "http://data2.isenzor.cz/K1100033/aktualni_thumb1.jpg?ver=1.1",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -5343,19 +5421,24 @@
       "attribution": "Skiareal Hodonín u Kunštátu",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:47.466Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "830",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/skiareal-hodonin-u-kunstatu/830",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.sjezdovky.cz/script/GetImage.php?folder=hodonin1&width=250&height=170&p49=0",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 8206
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Sjezdovka",
           "providerUrl": "https://www.skiareal-hodonin.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.sjezdovky.cz/script/GetImage.php?folder=hodonin1&width=250&height=170&p49=0",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -5505,19 +5588,24 @@
       "attribution": "Ski areál Velflink Pernink",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:49.229Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "901",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/ski-areal-velflink-pernink/901",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://skiarealpernink.cz/sites/default/files/cam/show/8072026-webkamera-pernink-1.jpg?tok=422754332",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 15844
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Sjezdovka",
           "providerUrl": "https://skiarealpernink.cz/cs",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://skiarealpernink.cz/sites/default/files/cam/show/8072026-webkamera-pernink-1.jpg?tok=422754332",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -5559,19 +5647,24 @@
       "attribution": "Harusáku",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:50.080Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "965",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/ski-snowpark-harusuv-kopec---harusak/965",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://image.sjezdovky.cz/script/GetImage.php?folder=nmnmsjez1&width=0&height=0&p49=0&rand=&dummy=.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 245879
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Sjezdovka",
           "providerUrl": "https://skiharusak.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://image.sjezdovky.cz/script/GetImage.php?folder=nmnmsjez1&width=0&height=0&p49=0&rand=&dummy=.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -5937,19 +6030,24 @@
       "attribution": "Skiareal Hodonín u Kunštátu",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:01:52.676Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "831",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/skiareal-hodonin-u-kunstatu/831",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.sjezdovky.cz/script/GetImage.php?folder=hodonin1&width=250&height=170&p49=0",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 8199
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Sjezdovka, panorama východ",
           "providerUrl": "https://www.skiareal-hodonin.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.sjezdovky.cz/script/GetImage.php?folder=hodonin1&width=250&height=170&p49=0",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -6423,19 +6521,24 @@
       "attribution": "Letního koupaliště Ostrava Poruba",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:02:00.825Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "416",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/letni-koupaliste-ostrava-poruba/416",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://www.sareza.cz/storage/api/webcams/lkop01.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 152854
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Tobogán a skluzavky",
           "providerUrl": "https://www.sareza.cz/areal/letni-koupaliste-poruba",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://www.sareza.cz/storage/api/webcams/lkop01.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -6882,19 +6985,24 @@
       "attribution": "Sport Centrum Bouřňák",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:02:08.913Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "714",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/sport-centrum-bournak/714",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://scbournak.cz/wp-content/uploads/2020/11/kamera7.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 10815
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Vlek Mikulov, Slalomový svah",
           "providerUrl": "https://www.scbournak.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://scbournak.cz/wp-content/uploads/2020/11/kamera7.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },
@@ -7017,19 +7125,24 @@
       "attribution": "Sport Centrum Bouřňák",
       "category": "outdoor_webcam",
       "verification": {
-        "status": "origin_page_reachable",
-        "verifiedAt": "2026-07-06T09:57:04.228Z",
-        "discoverySource": "WebCamLive catalog used for discovery only",
+        "status": "direct_snapshot_verified",
+        "verifiedAt": "2026-07-08T19:02:09.305Z",
+        "discoverySource": "Origin provider page enrichment",
         "webcamliveCameraId": "807",
         "webcamliveUrl": "https://www.webcamlive.cz/cs/webkamera/sport-centrum-bournak/807",
-        "note": "SIM does not use WebCamLive image proxy for this curated feed. Snapshot is disabled unless a direct origin image URL is added later."
+        "note": "SIM fetches this origin image server-side for COP detail preview; WebCamLive remains discovery-only.",
+        "directSnapshotUrl": "https://scbournak.cz/wp-content/uploads/2020/11/kamera7.jpg",
+        "directSnapshotContentType": "image/jpeg",
+        "directSnapshotBytes": 10815
       },
       "cameras": [
         {
           "cameraId": "origin_page",
           "name": "Vrchol Bouřňák, pohled na jih",
           "providerUrl": "https://www.scbournak.cz/",
-          "snapshotAvailable": false
+          "snapshotAvailable": true,
+          "directImageUrl": "https://scbournak.cz/wp-content/uploads/2020/11/kamera7.jpg",
+          "contentType": "image/jpeg"
         }
       ]
     },

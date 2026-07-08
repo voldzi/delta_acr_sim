@@ -1176,7 +1176,7 @@ function isBlockedIpv6(value: string): boolean {
 
 function validImageContentType(value: string | undefined): string | undefined {
   const normalized = value?.split(";")[0]?.trim().toLowerCase();
-  return normalized?.startsWith("image/") ? normalized : undefined;
+  return normalized && validSnapshotContentType(normalized) ? normalized : undefined;
 }
 
 function stableId(value: string): string {
@@ -1205,6 +1205,9 @@ function imageContentType(body: Buffer): string {
   }
   if (body.length >= 3 && body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) {
     return "image/jpeg";
+  }
+  if (body.length >= 12 && body.toString("ascii", 8, 12) === "WEBP") {
+    return "image/webp";
   }
   return "application/octet-stream";
 }
@@ -1389,6 +1392,9 @@ function validOriginSnapshotCandidateUrl(value: string | undefined, pageUrl: str
 
 function scoreOriginImageCandidate(url: string, context: string, baseScore: number): number {
   const haystack = `${safeDecodeUri(url)} ${context}`.toLowerCase();
+  if (!hasOriginCameraUrlSignal(url)) {
+    return 0;
+  }
   let score = baseScore;
   if (/\.(?:jpe?g|png|webp|gif)(?:[?#]|$)/i.test(url)) {
     score += 12;
@@ -1399,10 +1405,39 @@ function scoreOriginImageCandidate(url: string, context: string, baseScore: numb
   if (/(meteo|weather|ski|sjezdov|lanov|hotel|obec|radnice|namesti|n[aá]m[eě]st[ií]|trail|tourist|turist)/i.test(haystack)) {
     score += 10;
   }
-  if (/(logo|favicon|apple-touch-icon|sprite|placeholder|blank|avatar|banner|advert|reklam|facebook|instagram|youtube|mapy|mapbox|google)/i.test(haystack)) {
+  if (
+    /(logo|favicon|apple-touch-icon|sprite|placeholder|blank|avatar|banner|advert|reklam|facebook|instagram|youtube|mapy|mapbox|google|galerie|gallery|slider|plak[aá]t|poster|aktuality\/20\d{2})/i.test(
+      haystack
+    )
+  ) {
     score -= 80;
   }
   return score;
+}
+
+function hasOriginCameraUrlSignal(value: string): boolean {
+  const decoded = safeDecodeUri(value).toLowerCase();
+  if (isRejectedOriginCameraImageUrl(decoded)) {
+    return false;
+  }
+  if (
+    /(?:webcam|webkamera|kamera|camera|snapshot|snap|mjpg|livecam|current|latest|axis-cgi|image\.cgi|video\.mjpg|last_photo|now\.jpe?g|getimage\.php|aktualni_thumb)/i.test(
+      decoded
+    )
+  ) {
+    return true;
+  }
+  return /20\d{6}[_-]\d{6}[^/]*\.(?:jpe?g|png|webp)(?:[?#]|$)/i.test(decoded);
+}
+
+function isRejectedOriginCameraImageUrl(value: string): boolean {
+  return /(?:\/o\/adaptive-media\/image\/|\/documents\/42501\/503062\/webkamera|stocksnap|perex\.jpe?g|webcam[_-]?icon|offer_camera|televize\.png|system_preview|second-menu-webcam|aktualni-(?:informace|otviraci)|akt_prx|ikona|icon|menu|\/wp-content\/uploads\/20\d{2}\/\d{2}\/img_|\/icons?\/|\/modules\/[^?#]*\/img\/webcam\.svg|\.svg(?:[?#]|$)|\/gallery\/|\/galerie\/|\/slider\/|\/aktuality\/20\d{2})/i.test(
+    value
+  );
+}
+
+function validSnapshotContentType(value: string): boolean {
+  return value === "image/jpeg" || value === "image/png" || value === "image/gif" || value === "image/webp";
 }
 
 function dedupeBy<T>(items: T[], keyFor: (item: T) => string): T[] {
@@ -1503,7 +1538,7 @@ async function requestImage(url: string, timeoutMs: number): Promise<DirectSnaps
   const safeUrl = assertRuntimeFetchUrl(url, "Camera snapshot");
   const response = await fetch(safeUrl, {
     headers: {
-      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      accept: "image/webp,image/png,image/jpeg,image/gif,*/*;q=0.8",
       "user-agent": "csm-sim-situation-data/0.1"
     },
     redirect: "error",
@@ -1521,9 +1556,9 @@ async function requestImage(url: string, timeoutMs: number): Promise<DirectSnaps
   if (body.length > 5_000_000) {
     throw new Error(`Camera snapshot from ${new URL(safeUrl).hostname} is too large.`);
   }
-  const contentType = declaredType?.startsWith("image/") ? declaredType : imageContentType(body);
-  if (!contentType.startsWith("image/")) {
-    throw new Error(`Camera snapshot from ${new URL(safeUrl).hostname} is not an image.`);
+  const contentType = declaredType && validSnapshotContentType(declaredType) ? declaredType : imageContentType(body);
+  if (!validSnapshotContentType(contentType)) {
+    throw new Error(`Camera snapshot from ${new URL(safeUrl).hostname} is not a supported raster image.`);
   }
   return {
     contentType,

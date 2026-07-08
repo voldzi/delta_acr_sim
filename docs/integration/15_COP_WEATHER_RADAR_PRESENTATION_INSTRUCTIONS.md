@@ -125,7 +125,7 @@ For the actual image, render `snapshotUrl` as an image source when
 `snapshotAvailable !== false`. SIM decodes ČHMÚ base64 images or fetches direct
 origin snapshots server-side, including on-demand origin-page discovery for
 curated outdoor cameras, and responds with `image/gif`, `image/png` or
-`image/jpeg` when available:
+`image/jpeg`, or `image/webp` when available:
 
 ```http
 GET /api/v1/weather-cameras/{locationId}/snapshot?cameraId={cameraId}

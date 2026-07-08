@@ -26,6 +26,7 @@
     "test:contract": "pnpm --filter @csm-sim/simulator-api test",
     "smoke:nginx-provider-cache": "bash scripts/smoke-nginx-provider-cache.sh",
     "smoke:providers": "python3 scripts/smoke-provider-gateway.py",
+    "cameras:enrich": "node scripts/enrich-curated-outdoor-webcams.mjs",
     "skeleton:validate": "bash scripts/validate-skeleton.sh",
     "openapi:build": "ruby scripts/build-openapi-json.rb",
     "openapi:check": "ruby scripts/build-openapi-json.rb --check",
