@@ -30,7 +30,7 @@
     "openapi:build": "ruby scripts/build-openapi-json.rb",
     "openapi:check": "ruby scripts/build-openapi-json.rb --check",
     "openapi:validate": "python3 -m json.tool openapi/openapi.json >/dev/null && ruby scripts/validate-openapi-json.rb openapi/openapi.json",
-    "openapi:lint": "REDOCLY_TELEMETRY=off npm exec --yes --package @redocly/cli@2.31.1 -- redocly lint openapi/openapi.json",
+    "openapi:lint": "node scripts/lint-openapi.mjs",
     "verify": "pnpm skeleton:validate && pnpm typecheck && pnpm test && pnpm build && pnpm build:budget && pnpm format:check && pnpm openapi:validate",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
@@ -40,5 +40,10 @@
     "@types/node": "^24.13.2",
     "prettier": "^3.9.4",
     "typescript": "^6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

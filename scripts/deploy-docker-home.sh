@@ -206,6 +206,16 @@ HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS_VALUE="${HZS_INCIDENTS_DETAIL_CACHE_TTL_S
 HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS_VALUE="${HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS_VALUE:-1800}"
 HZS_INCIDENTS_MAX_ACTIVE_DETAILS_VALUE="${HZS_INCIDENTS_MAX_ACTIVE_DETAILS:-$(existing_value HZS_INCIDENTS_MAX_ACTIVE_DETAILS)}"
 HZS_INCIDENTS_MAX_ACTIVE_DETAILS_VALUE="${HZS_INCIDENTS_MAX_ACTIVE_DETAILS_VALUE:-50}"
+TAK_GATEWAY_INGEST_TOKEN_VALUE="${TAK_GATEWAY_INGEST_TOKEN:-$(existing_value TAK_GATEWAY_INGEST_TOKEN)}"
+if [ -z "$TAK_GATEWAY_INGEST_TOKEN_VALUE" ] || [ "$TAK_GATEWAY_INGEST_TOKEN_VALUE" = "dev-tak-ingest-token" ]; then
+  TAK_GATEWAY_INGEST_TOKEN_VALUE="$(generate_secret)"
+fi
+TAK_GATEWAY_READ_TOKEN_VALUE="${TAK_GATEWAY_READ_TOKEN:-$(existing_value TAK_GATEWAY_READ_TOKEN)}"
+if [ -z "$TAK_GATEWAY_READ_TOKEN_VALUE" ]; then
+  TAK_GATEWAY_READ_TOKEN_VALUE="$(generate_secret)"
+fi
+TAK_GATEWAY_PUBLIC_READ_VALUE="${TAK_GATEWAY_PUBLIC_READ:-$(existing_value TAK_GATEWAY_PUBLIC_READ)}"
+TAK_GATEWAY_PUBLIC_READ_VALUE="${TAK_GATEWAY_PUBLIC_READ_VALUE:-false}"
 
 umask 077
 cat > .env <<ENV
@@ -381,9 +391,9 @@ AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ARDOS_PARTNER_BASE_URL=
 ARDOS_PARTNER_TOKEN=
 SITUATION_DATA_CORS_ORIGINS=
-TAK_GATEWAY_INGEST_TOKEN=dev-tak-ingest-token
-TAK_GATEWAY_READ_TOKEN=
-TAK_GATEWAY_PUBLIC_READ=false
+TAK_GATEWAY_INGEST_TOKEN=${TAK_GATEWAY_INGEST_TOKEN_VALUE}
+TAK_GATEWAY_READ_TOKEN=${TAK_GATEWAY_READ_TOKEN_VALUE}
+TAK_GATEWAY_PUBLIC_READ=${TAK_GATEWAY_PUBLIC_READ_VALUE}
 TAK_GATEWAY_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 TAK_GATEWAY_STALE_AFTER_SECONDS=300
 TAK_GATEWAY_RETENTION_SECONDS=3600
@@ -413,7 +423,7 @@ curl -fsS http://localhost:5020/safety-data/api/v1/taxonomy >/dev/null
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features/summary?limit=1' >/dev/null
 curl -fsS 'http://localhost:5020/safety-data/api/v1/features/summary?limit=1' >/dev/null
 curl -fsS 'http://localhost:5020/situation-data/api/v1/features?layers=weather,mobile_network,traffic,warnings,flood&limit=20' >/dev/null
-python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020 --allow-degraded-health situation --allow-degraded-health tak --quiet
+python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020 --allow-degraded-health situation --quiet
 python3 scripts/smoke-production-data-plane.py --base-url http://localhost:5020 --quiet
 test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:5020/metrics)" = "404"
 echo "SIM API admin token is stored in /srv/sim/.env as SIM_API_ADMIN_TOKEN."

@@ -1,25 +1,25 @@
 FROM node:24-alpine AS build
 ARG VITE_COP_DISPLAY_URL=https://cop.zeleznalady.cz
-ARG VITE_SIM_AUTH_MODE=token
+ARG SIM_WEB_MODE=token
 ARG VITE_SIM_OIDC_ISSUER=
 ARG VITE_SIM_OIDC_CLIENT_ID=csm-sim-web
 ARG VITE_SIM_OIDC_SCOPE="openid profile email"
 ARG VITE_SIM_PUBLIC_READ_ENABLED=false
-ARG VITE_SIM_ALLOW_TOKEN_LOGIN=false
-ENV VITE_COP_DISPLAY_URL=$VITE_COP_DISPLAY_URL
-ENV VITE_SIM_AUTH_MODE=$VITE_SIM_AUTH_MODE
-ENV VITE_SIM_OIDC_ISSUER=$VITE_SIM_OIDC_ISSUER
-ENV VITE_SIM_OIDC_CLIENT_ID=$VITE_SIM_OIDC_CLIENT_ID
-ENV VITE_SIM_OIDC_SCOPE=$VITE_SIM_OIDC_SCOPE
-ENV VITE_SIM_PUBLIC_READ_ENABLED=$VITE_SIM_PUBLIC_READ_ENABLED
-ENV VITE_SIM_ALLOW_TOKEN_LOGIN=$VITE_SIM_ALLOW_TOKEN_LOGIN
+ARG SIM_WEB_ALLOW_MANUAL_LOGIN=false
 WORKDIR /app
 COPY .corepack-pnpm-10.33.0.tgz /tmp/corepack-pnpm-10.33.0.tgz
 RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm /tmp/corepack-pnpm-10.33.0.tgz
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/simulator-web ./apps/simulator-web
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
-RUN pnpm --filter @csm-sim/simulator-web build
+RUN VITE_COP_DISPLAY_URL="$VITE_COP_DISPLAY_URL" \
+  VITE_SIM_AUTH_MODE="$SIM_WEB_MODE" \
+  VITE_SIM_OIDC_ISSUER="$VITE_SIM_OIDC_ISSUER" \
+  VITE_SIM_OIDC_CLIENT_ID="$VITE_SIM_OIDC_CLIENT_ID" \
+  VITE_SIM_OIDC_SCOPE="$VITE_SIM_OIDC_SCOPE" \
+  VITE_SIM_PUBLIC_READ_ENABLED="$VITE_SIM_PUBLIC_READ_ENABLED" \
+  VITE_SIM_ALLOW_TOKEN_LOGIN="$SIM_WEB_ALLOW_MANUAL_LOGIN" \
+  pnpm --filter @csm-sim/simulator-web build
 
 FROM nginx:1.29-alpine AS runtime
 RUN mkdir -p /etc/nginx/includes

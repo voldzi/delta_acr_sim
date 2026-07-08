@@ -19,6 +19,7 @@ COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml
 COPY --from=build /app/docs ./docs
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/simulator-api ./apps/simulator-api
+RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --prod --frozen-lockfile
 EXPOSE 4000
 CMD ["node", "apps/simulator-api/dist/index.js"]

@@ -375,12 +375,12 @@ services:
       dockerfile: apps/simulator-web/Dockerfile
       args:
         VITE_COP_DISPLAY_URL: ${VITE_COP_DISPLAY_URL:-https://cop.zeleznalady.cz}
-        VITE_SIM_AUTH_MODE: ${VITE_SIM_AUTH_MODE:-token}
+        SIM_WEB_MODE: ${VITE_SIM_AUTH_MODE:-token}
         VITE_SIM_OIDC_ISSUER: ${VITE_SIM_OIDC_ISSUER:-}
         VITE_SIM_OIDC_CLIENT_ID: ${VITE_SIM_OIDC_CLIENT_ID:-csm-sim-web}
         VITE_SIM_OIDC_SCOPE: ${VITE_SIM_OIDC_SCOPE:-openid profile email}
         VITE_SIM_PUBLIC_READ_ENABLED: ${VITE_SIM_PUBLIC_READ_ENABLED:-false}
-        VITE_SIM_ALLOW_TOKEN_LOGIN: ${VITE_SIM_ALLOW_TOKEN_LOGIN:-false}
+        SIM_WEB_ALLOW_MANUAL_LOGIN: ${VITE_SIM_ALLOW_TOKEN_LOGIN:-false}
     container_name: csm-sim-web
     depends_on:
       sim-api:

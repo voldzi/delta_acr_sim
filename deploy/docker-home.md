@@ -138,8 +138,8 @@ AVIATION_WEATHER_BASE_URL=https://aviationweather.gov
 ARDOS_PARTNER_BASE_URL=
 ARDOS_PARTNER_TOKEN=
 SITUATION_DATA_CORS_ORIGINS=
-TAK_GATEWAY_INGEST_TOKEN=dev-tak-ingest-token
-TAK_GATEWAY_READ_TOKEN=
+TAK_GATEWAY_INGEST_TOKEN=<generated-or-existing-secret>
+TAK_GATEWAY_READ_TOKEN=<generated-or-existing-secret>
 TAK_GATEWAY_PUBLIC_READ=false
 TAK_GATEWAY_DEFAULT_BBOX=11.8,48.5,19.2,51.2
 TAK_GATEWAY_STALE_AFTER_SECONDS=300
@@ -185,15 +185,16 @@ curl -fsS http://localhost:5020/docs/ >/dev/null
 Pro opakovatelný smoke test provider kontraktů používej:
 
 ```bash
-python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020 --allow-degraded-health situation --allow-degraded-health tak
+python3 scripts/smoke-provider-gateway.py --base-url http://localhost:5020 --allow-degraded-health situation
 ```
 
 Skript ověřuje health, access-control, ČHMÚ taxonomie, summary bez plné
 geometrie, detail a samostatné geometry dokumenty pro `safety-data` i
 `situation-data`. Pilotní deploy povoluje `situation` readiness `degraded`,
-protože na `docker.home.cz` zatím nejsou zapojené OSM/PostGIS zdroje. Povoluje
-také `tak` readiness `degraded`, protože pilot nemá zapnutý TAK read token ani
-public read. Samotný provider kontrakt se přesto ověřuje.
+protože na některých pilotních instalacích nemusí být zapojené OSM/PostGIS
+zdroje. TAK read token deployment skript generuje nebo zachovává v
+`/srv/sim/.env`, takže TAK readiness nemá být degradovaná kvůli chybějící read
+autentizaci.
 
 Po zapojení OSM/PostGIS, DEM a terrain-aware mobile read-modelu nastav
 periodický provozní check:
@@ -378,8 +379,8 @@ http://docker.home.cz:5020
 - `aviation_weather` stahuje NOAA AWC METAR/TAF přes SIM cache a publikuje letištní počasí ve vrstvě `weather`.
 - `ardos_partner` zapínej až po partnerské dohodě, nastavení `ARDOS_PARTNER_BASE_URL` a secretu `ARDOS_PARTNER_TOKEN`.
 - `tak-gateway-api` přijímá TAK/CoT XML přes chráněný ingest endpoint `/tak-gateway/api/v1/cot/events`; COM backend čte normalizovaný GeoJSON endpoint `/tak-gateway/api/v1/features`. Starý `/cop/features` zůstává jen jako kompatibilní alias.
-- `TAK_GATEWAY_INGEST_TOKEN` je secret; pro pilot ho změň mimo repozitář a předej jen ARDOS/TAK bridge klientovi.
-- `TAK_GATEWAY_PUBLIC_READ=false` je bezpečný výchozí režim; nastav `TAK_GATEWAY_READ_TOKEN` a předávej jej jen server-side klientovi COM.
+- `TAK_GATEWAY_INGEST_TOKEN` je secret; produkční deploy skript zachová existující hodnotu nebo vygeneruje silnou náhradu za prázdný/dev default. Předej ho jen ARDOS/TAK bridge klientovi.
+- `TAK_GATEWAY_PUBLIC_READ=false` je bezpečný výchozí režim; produkční deploy skript zachová nebo vygeneruje `TAK_GATEWAY_READ_TOKEN`. Předávej ho jen server-side klientovi COM.
 - U komerčního použití musí být vyřešená ODbL atribuce a share-alike povinnosti.
 - OpenSky nezapínej bez ověření oprávnění nebo písemné licence.
 - Perzistentní data jsou v Docker volume `sim-data`, `flight-data`, `situation-data`, `safety-data` a `tak-gateway-data`.
