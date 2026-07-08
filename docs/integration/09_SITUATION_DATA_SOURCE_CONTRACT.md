@@ -354,14 +354,18 @@ Minimální požadavek na trasu:
 
 Odpověď `sim-routing-route-v1` obsahuje:
 
-| Pole                          | Popis                                                                                                                                             |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `routes[]`                    | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků a kvality                                                            |
-| `features[]`                  | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1`                         |
-| `routes[].quality.mode`       | `engine_route`, pokud SIM použil Valhalla; `osm_graph`, pokud SIM použil lokální OSM graph; `direct_fallback`, pokud není routovací graf dostupný |
-| `routes[].quality.engine`     | `valhalla` nebo `osm-postgis-graph`; COP má tuto hodnotu zobrazit v diagnostice/detailu trasy                                                     |
-| `routes[].quality.confidence` | modelová důvěra; COP ji má zobrazit v detailu                                                                                                     |
-| `warnings[]`                  | důvody degradace nebo omezení výpočtu                                                                                                             |
+| Pole                                           | Popis                                                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `routes[]`                                     | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků, kvality a dopravního dopadu                                         |
+| `features[]`                                   | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1`                         |
+| `traffic`                                      | souhrn dopravního kontextu z NDIC/ŘSD SRTI použitého při výpočtu a vyhodnocení trasy                                                              |
+| `routes[].traffic.incidentsOnRoute[]`          | dopravní události v koridoru trasy včetně vzdálenosti od trasy a vzdálenosti po trase                                                             |
+| `routes[].traffic.delayPenaltySeconds`         | orientační penalizace ETA podle událostí v koridoru; nejde o měřenou FCD rychlost                                                                 |
+| `routes[].traffic.hardExclusionCandidateCount` | počet closure-like událostí, které by mohly znamenat tvrdou uzávěru, pokud je k dispozici přesné mapování na úsek                                 |
+| `routes[].quality.mode`                        | `engine_route`, pokud SIM použil Valhalla; `osm_graph`, pokud SIM použil lokální OSM graph; `direct_fallback`, pokud není routovací graf dostupný |
+| `routes[].quality.engine`                      | `valhalla` nebo `osm-postgis-graph`; COP má tuto hodnotu zobrazit v diagnostice/detailu trasy                                                     |
+| `routes[].quality.confidence`                  | modelová důvěra; SIM ji sníží, pokud trasa vede přes aktuální dopravní události                                                                   |
+| `warnings[]`                                   | důvody degradace nebo omezení výpočtu                                                                                                             |
 
 `POST /routing/alternatives` má stejný vstup jako `/routing/route`, ale vrací
 1-3 varianty. `POST /routing/isochrone` přijímá `origin`,
@@ -378,13 +382,25 @@ server `valhalla.home.cz` dostupný pro SIM jako
 `http://valhalla.home.cz:8002`; lokální Docker profil zůstává vývojová varianta
 pro menší instalace.
 
+SIM zároveň používá existující `traffic` zdroj `road_srti_lod` jako routing
+kontext. Při silniční trase načte aktuální NDIC/ŘSD SRTI události v okolí
+trasy, vyhodnotí je proti koridoru výsledné geometrie a vrátí je v
+`incidentsOnRoute[]`. Pokud požadavek obsahuje `avoid=["road_closure"]`, SIM u
+closure-like bodů v přímém předkoridoru pošle Valhalle `exclude_locations`; v
+odpovědi je taková událost označená `action=hard_exclusion_applied`. Protože
+SRTI LOD zatím poskytuje pro SIM převážně reprezentativní body, COP to má
+zobrazit jako dopravní ovlivnění trasy, ne jako garantovanou úsekovou uzávěru.
+Přesné tvrdé uzávěry vyžadují DATEX II lineární reference nebo mapování na
+Valhalla edge IDs.
+
 Pokud Valhalla není dostupná a je nakonfigurovaný OSM/PostGIS, SIM použije
 lokální model `osm-postgis-graph-v1`: skládá lokální graf z `public.osm_roads`,
 respektuje profil, základní access tagy, one-way směr a volitelné vyhýbání
-`unpaved`, `tunnel`, `bridge`. `flood`, `fire` a `road_closure` jsou zatím v
-kontraktu vedeny jako plánovací preference; jako tvrdé překážky se zapnou až po
-normalizaci hazardních geometrií do routovacího grafu nebo Valhalla restriction
-pipeline. Pokud žádný routovací backend není dostupný, SIM vrátí přímou
+`unpaved`, `tunnel`, `bridge` a připojí stejný SRTI dopravní kontext do
+odpovědi. `flood` a `fire` jsou zatím v kontraktu vedeny jako plánovací
+preference; jako tvrdé překážky se zapnou až po normalizaci hazardních geometrií
+do routovacího grafu nebo Valhalla restriction pipeline. Pokud žádný routovací
+backend není dostupný, SIM vrátí přímou
 fallback geometrii s `quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
 že nejde o trasu po komunikacích.
 

@@ -4667,6 +4667,120 @@ describe("Situation Data API contract", () => {
     expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="nearest_access"} 1');
   });
 
+  it("adds NDIC SRTI traffic context to Valhalla route responses", async () => {
+    const observedAt = new Date().toISOString();
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const parsedUrl = new URL(String(url));
+      const path = parsedUrl.pathname;
+      if (path === "/sparql") {
+        return new Response(
+          JSON.stringify({
+            head: { vars: ["SituationRecord", "Type", "VersionTime", "GeometryWKT"] },
+            results: {
+              bindings: [
+                {
+                  SituationRecord: { value: "https://example.test/srti/1" },
+                  Type: { value: "https://example.test/RoadClosure" },
+                  VersionTime: { value: observedAt },
+                  GeometryWKT: { value: "POINT (14.43 50.085)" }
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/sparql-results+json" } }
+        );
+      }
+      if (path === "/route") {
+        const payload = JSON.parse(String(init?.body ?? "{}"));
+        expect(payload.exclude_locations).toEqual([expect.objectContaining({ lat: 50.085, lon: 14.43 })]);
+        return new Response(
+          JSON.stringify({
+            trip: {
+              status: 0,
+              summary: { length: 3.6, time: 2400 },
+              locations: [
+                { lat: 50.0801, lon: 14.4201 },
+                { lat: 50.0999, lon: 14.4499 }
+              ],
+              legs: [
+                {
+                  shape: "_oso~A_acoZowH_pRoh\\_af@",
+                  maneuvers: [
+                    {
+                      instruction: "Pokračujte po testovací trase.",
+                      length: 3.6,
+                      time: 2400,
+                      begin_shape_index: 0,
+                      end_shape_index: 2,
+                      street_names: ["Testovací"]
+                    }
+                  ]
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({ version: "test-valhalla", available_actions: ["route", "status"] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const trafficAwareApp = (
+      await createApp({
+        ...config,
+        enabledSources: ["mock", "road_srti_lod"],
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test",
+        roadSrtiLodSparqlUrl: "https://example.test/sparql"
+      })
+    ).app;
+
+    const route = await request(trafficAwareApp)
+      .post("/api/v1/routing/route")
+      .send({
+        profileId: "car",
+        from: { lon: 14.42, lat: 50.08 },
+        to: { lon: 14.45, lat: 50.1 },
+        avoid: ["road_closure"]
+      })
+      .expect(200);
+
+    expect(route.body.traffic).toEqual(
+      expect.objectContaining({
+        trafficAware: true,
+        sourceStatus: "ok",
+        sourceIds: ["road_srti_lod"],
+        candidateCount: 1,
+        incidentCount: 1,
+        hardExclusionCandidateCount: 1,
+        hardExclusionAppliedCount: 1
+      })
+    );
+    expect(route.body.routes[0]).toEqual(
+      expect.objectContaining({
+        durationSeconds: 2580,
+        traffic: expect.objectContaining({
+          trafficAware: true,
+          incidentCount: 1,
+          delayPenaltySeconds: 180,
+          hardExclusionCandidateCount: 1,
+          incidentsOnRoute: [
+            expect.objectContaining({
+              sourceId: "road_srti_lod",
+              category: "road_obstruction",
+              action: "hard_exclusion_applied",
+              distanceFromRouteM: 0
+            })
+          ]
+        })
+      })
+    );
+    expect(route.body.features[0].properties.traffic).toEqual(expect.objectContaining({ incidentCount: 1, delayPenaltySeconds: 180 }));
+  });
+
   it("exposes normalized search-data provider contract for COP AI indexing", async () => {
     const taxonomy = await request(app).get("/search-data/api/v1/taxonomy").expect(200);
     expect(taxonomy.body).toEqual(

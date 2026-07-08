@@ -4110,9 +4110,146 @@ components:
         properties:
           type: object
           additionalProperties: true
+    RoutingTrafficIncident:
+      type: object
+      required:
+        [
+          incidentId,
+          sourceId,
+          category,
+          severity,
+          label,
+          lon,
+          lat,
+          observedAt,
+          validUntil,
+          distanceFromRouteM,
+          distanceAlongRouteM,
+          action,
+          confidence
+        ]
+      properties:
+        incidentId:
+          type: string
+        sourceId:
+          type: string
+          enum: [road_srti_lod]
+        category:
+          type: string
+          example: road_obstruction
+        severity:
+          type: string
+          enum: [info, advisory, warning, critical]
+        label:
+          type: string
+        lon:
+          type: number
+        lat:
+          type: number
+        observedAt:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        distanceFromRouteM:
+          type: integer
+        distanceAlongRouteM:
+          type: integer
+        action:
+          type: string
+          enum: [warn, soft_penalty, hard_exclusion_candidate, hard_exclusion_applied]
+        confidence:
+          type: number
+        srtiType:
+          type: string
+        srtiTypeUri:
+          type: string
+    RoutingRouteTraffic:
+      type: object
+      required:
+        [
+          trafficAware,
+          incidentCount,
+          delayPenaltySeconds,
+          hardExclusionCandidateCount,
+          softPenaltyCandidateCount,
+          incidentsOnRoute
+        ]
+      properties:
+        trafficAware:
+          type: boolean
+        incidentCount:
+          type: integer
+        highestSeverity:
+          type: string
+          enum: [info, advisory, warning, critical]
+        delayPenaltySeconds:
+          type: integer
+        hardExclusionCandidateCount:
+          type: integer
+        softPenaltyCandidateCount:
+          type: integer
+        incidentsOnRoute:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingTrafficIncident"
+    RoutingTrafficSummary:
+      type: object
+      required:
+        [
+          trafficAware,
+          sourceIds,
+          sourceStatus,
+          corridorRadiusM,
+          candidateCount,
+          incidentCount,
+          hardExclusionCandidateCount,
+          hardExclusionAppliedCount,
+          softPenaltyCandidateCount,
+          delayPenaltySeconds,
+          warnings,
+          limitations
+        ]
+      properties:
+        trafficAware:
+          type: boolean
+        sourceIds:
+          type: array
+          items:
+            type: string
+            enum: [road_srti_lod]
+        sourceStatus:
+          type: string
+          enum: [ok, disabled, degraded]
+        corridorRadiusM:
+          type: integer
+        candidateCount:
+          type: integer
+        incidentCount:
+          type: integer
+        hardExclusionCandidateCount:
+          type: integer
+        hardExclusionAppliedCount:
+          type: integer
+        softPenaltyCandidateCount:
+          type: integer
+        delayPenaltySeconds:
+          type: integer
+        highestSeverity:
+          type: string
+          enum: [info, advisory, warning, critical]
+        warnings:
+          type: array
+          items:
+            type: string
+        limitations:
+          type: array
+          items:
+            type: string
     RoutingRoute:
       type: object
-      required: [routeId, profileId, rank, status, geometry, distanceM, durationSeconds, snap, steps, warnings, quality]
+      required: [routeId, profileId, rank, status, geometry, distanceM, durationSeconds, snap, steps, warnings, traffic, quality]
       properties:
         routeId:
           type: string
@@ -4142,6 +4279,8 @@ components:
           type: array
           items:
             type: string
+        traffic:
+          $ref: "#/components/schemas/RoutingRouteTraffic"
         quality:
           type: object
           required: [mode, confidence, graphEdgesScanned, graphEdgesUsed, routingModelVersion]
@@ -4164,7 +4303,7 @@ components:
               type: string
     RoutingRouteResponse:
       type: object
-      required: [contractVersion, generatedAt, source, query, profile, routes, features, warnings]
+      required: [contractVersion, generatedAt, source, query, profile, traffic, routes, features, warnings]
       properties:
         contractVersion:
           type: string
@@ -4179,6 +4318,8 @@ components:
           additionalProperties: true
         profile:
           $ref: "#/components/schemas/RoutingProfile"
+        traffic:
+          $ref: "#/components/schemas/RoutingTrafficSummary"
         routes:
           type: array
           items:

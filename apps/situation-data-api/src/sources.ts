@@ -5142,7 +5142,7 @@ interface SpravaZeleznicTrainResponse {
   result?: unknown;
 }
 
-interface RoadSrtiLodEvent {
+export interface RoadSrtiLodEvent {
   iri: string;
   typeUri: string;
   typeLabel: string;
@@ -5843,7 +5843,7 @@ export function normalizeIdsjmkVehicles(feed: IdsjmkVehicleFeed): IdsjmkVehicleR
   return [];
 }
 
-async function fetchRoadSrtiLodEvents(config: SituationDataConfig): Promise<RoadSrtiLodEvent[]> {
+export async function fetchRoadSrtiLodEvents(config: SituationDataConfig): Promise<RoadSrtiLodEvent[]> {
   const limit = Math.max(100, Math.min(config.roadSrtiLodMaxRecords, 5000));
   const query = `
 PREFIX dtx_srti: <http://cef.uv.es/lodroadtran18/def/transporte/dtx_srti#>
@@ -6561,7 +6561,7 @@ function representativePointFromWkt(wkt: string): { lon: number; lat: number } |
   };
 }
 
-function roadSrtiLabel(value: string): string {
+export function roadSrtiLabel(value: string): string {
   const localName = decodeURIComponent(value.split(/[\/#]/).filter(Boolean).pop() ?? value);
   return localName
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -6569,7 +6569,7 @@ function roadSrtiLabel(value: string): string {
     .trim();
 }
 
-function roadSrtiCategory(typeLabel: string): string {
+export function roadSrtiCategory(typeLabel: string): string {
   const normalized = typeLabel.toLowerCase();
   if (normalized.includes("accident")) {
     return "road_accident";
@@ -6589,7 +6589,7 @@ function roadSrtiCategory(typeLabel: string): string {
   return "road_event";
 }
 
-function roadSrtiSeverity(category: string, typeLabel: string): SituationSeverity {
+export function roadSrtiSeverity(category: string, typeLabel: string): SituationSeverity {
   const normalized = typeLabel.toLowerCase();
   if (category === "road_accident" || normalized.includes("closure") || normalized.includes("blocked")) {
     return "warning";

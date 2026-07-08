@@ -2,7 +2,8 @@ import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { SituationDataConfig } from "./config.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry } from "./types.js";
+import { fetchRoadSrtiLodEvents, roadSrtiCategory, roadSrtiLabel, roadSrtiSeverity, type RoadSrtiLodEvent } from "./sources.js";
+import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry, SituationSeverity } from "./types.js";
 
 export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "evacuation_walking";
 
@@ -91,6 +92,7 @@ export interface RoutingRoute {
   };
   steps: RoutingStep[];
   warnings: string[];
+  traffic: RoutingRouteTraffic;
   quality: {
     mode: RoutingQualityMode;
     confidence: number;
@@ -100,6 +102,36 @@ export interface RoutingRoute {
     engine?: "valhalla" | "osm-postgis-graph";
     fallbackReason?: string;
   };
+}
+
+export type RoutingTrafficAction = "warn" | "soft_penalty" | "hard_exclusion_candidate" | "hard_exclusion_applied";
+
+export interface RoutingTrafficIncident {
+  incidentId: string;
+  sourceId: "road_srti_lod";
+  category: string;
+  severity: SituationSeverity;
+  label: string;
+  lon: number;
+  lat: number;
+  observedAt: string;
+  validUntil: string;
+  distanceFromRouteM: number;
+  distanceAlongRouteM: number;
+  action: RoutingTrafficAction;
+  confidence: number;
+  srtiType?: string;
+  srtiTypeUri?: string;
+}
+
+export interface RoutingRouteTraffic {
+  trafficAware: boolean;
+  incidentCount: number;
+  highestSeverity?: SituationSeverity;
+  delayPenaltySeconds: number;
+  hardExclusionCandidateCount: number;
+  softPenaltyCandidateCount: number;
+  incidentsOnRoute: RoutingTrafficIncident[];
 }
 
 export interface RoutingStep {
@@ -119,9 +151,26 @@ export interface RoutingRouteResponse {
   source: RoutingSource;
   query: Record<string, unknown>;
   profile: RoutingProfile;
+  traffic: RoutingTrafficSummary;
   routes: RoutingRoute[];
   features: RoutingFeature[];
   warnings: string[];
+}
+
+export interface RoutingTrafficSummary {
+  trafficAware: boolean;
+  sourceIds: Array<"road_srti_lod">;
+  sourceStatus: "ok" | "disabled" | "degraded";
+  corridorRadiusM: number;
+  candidateCount: number;
+  incidentCount: number;
+  hardExclusionCandidateCount: number;
+  hardExclusionAppliedCount: number;
+  softPenaltyCandidateCount: number;
+  delayPenaltySeconds: number;
+  highestSeverity?: SituationSeverity;
+  warnings: string[];
+  limitations: string[];
 }
 
 export interface RoutingIsochroneResponse {
@@ -277,6 +326,28 @@ interface SnapResult {
   distanceM: number;
 }
 
+interface RoutingTrafficEvent {
+  incidentId: string;
+  category: string;
+  severity: SituationSeverity;
+  label: string;
+  lon: number;
+  lat: number;
+  observedAt: string;
+  validUntil: string;
+  confidence: number;
+  srtiType?: string;
+  srtiTypeUri?: string;
+}
+
+interface RoutingTrafficContext {
+  sourceStatus: RoutingTrafficSummary["sourceStatus"];
+  events: RoutingTrafficEvent[];
+  hardExclusionCandidates: RoutingTrafficEvent[];
+  hardExclusionsApplied: RoutingTrafficEvent[];
+  warnings: string[];
+}
+
 interface DijkstraState {
   nodeId: string;
   cost: number;
@@ -373,6 +444,9 @@ interface ValhallaManeuver {
 
 const ROUTING_MODEL_VERSION = "osm-postgis-graph-v1";
 const VALHALLA_ROUTING_MODEL_VERSION = "valhalla-v1";
+const TRAFFIC_ROUTE_CORRIDOR_RADIUS_M = 350;
+const TRAFFIC_PRE_ROUTE_CORRIDOR_RADIUS_M = 800;
+const MAX_VALHALLA_EXCLUDE_LOCATIONS = 25;
 
 const ROUTING_PROFILES: RoutingProfile[] = [
   {
@@ -541,6 +615,7 @@ export class RoutingService {
   private readonly routeCache: ManagedResponseCache<RoutingRouteResponse>;
   private readonly isochroneCache: ManagedResponseCache<RoutingIsochroneResponse>;
   private readonly nearestAccessCache: ManagedResponseCache<RoutingNearestAccessResponse>;
+  private readonly trafficEventCache: ManagedResponseCache<RoutingTrafficEvent[]>;
 
   constructor(private readonly config: SituationDataConfig) {
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
@@ -557,6 +632,11 @@ export class RoutingService {
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
       maxEntries: config.routingCacheMaxEntries
+    });
+    this.trafficEventCache = new ManagedResponseCache<RoutingTrafficEvent[]>({
+      ttlMs: Math.max(60, config.roadSrtiLodCacheTtlSeconds) * 1000,
+      staleIfErrorMs: Math.max(config.roadSrtiLodCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
+      maxEntries: 1
     });
   }
 
@@ -641,9 +721,11 @@ export class RoutingService {
     const profile = getRoutingProfile(request.profileId);
     const warnings: string[] = [];
     const routes: RoutingRoute[] = [];
+    const trafficContext = await this.routeTrafficContext(request, profile, generatedAt);
+    warnings.push(...trafficContext.warnings);
     if (this.shouldUseValhalla()) {
       try {
-        const valhallaResponse = await this.computeValhallaRouteResponse(generatedAt, profile, request);
+        const valhallaResponse = await this.computeValhallaRouteResponse(generatedAt, profile, request, trafficContext);
         if (valhallaResponse.routes.length > 0) {
           return valhallaResponse;
         }
@@ -653,7 +735,7 @@ export class RoutingService {
         if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
           warnings.push(`Valhalla routing failed: ${message}`);
           routes.push(directFallbackRoute(profile, request.from, request.to, 1, "Valhalla routing failed.", "valhalla"));
-          return this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla");
+          return this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla", trafficContext);
         }
         warnings.push(`Valhalla routing failed: ${message}; falling back to local OSM/PostGIS routing.`);
       }
@@ -661,7 +743,15 @@ export class RoutingService {
     if (!this.config.osmPostgisConnectionString) {
       warnings.push("OSM PostGIS is not configured; returning a direct fallback line.");
       const fallback = directFallbackRoute(profile, request.from, request.to, 1, "OSM_POSTGIS_DATABASE_URL is not configured.");
-      return this.routeResponse(generatedAt, profile, request, [fallback], warnings, this.shouldUseValhalla() ? "valhalla" : "osm-postgis-graph");
+      return this.routeResponse(
+        generatedAt,
+        profile,
+        request,
+        [fallback],
+        warnings,
+        this.shouldUseValhalla() ? "valhalla" : "osm-postgis-graph",
+        trafficContext
+      );
     }
 
     try {
@@ -671,14 +761,14 @@ export class RoutingService {
       if (graph.edgeCount === 0) {
         warnings.push("No routable OSM graph edges were found in the search area; returning a direct fallback line.");
         const fallback = directFallbackRoute(profile, request.from, request.to, 1, "No routable graph edges in search area.");
-        return this.routeResponse(generatedAt, profile, request, [fallback], warnings);
+        return this.routeResponse(generatedAt, profile, request, [fallback], warnings, "osm-postgis-graph", trafficContext);
       }
       const fromSnap = nearestNode(graph, request.from);
       const toSnap = nearestNode(graph, request.to);
       if (!fromSnap || !toSnap) {
         warnings.push("Could not snap one or both route endpoints to the OSM graph; returning a direct fallback line.");
         const fallback = directFallbackRoute(profile, request.from, request.to, 1, "Endpoint snap failed.");
-        return this.routeResponse(generatedAt, profile, request, [fallback], warnings);
+        return this.routeResponse(generatedAt, profile, request, [fallback], warnings, "osm-postgis-graph", trafficContext);
       }
       if (fromSnap.distanceM > this.config.routingMaxSnapDistanceM || toSnap.distanceM > this.config.routingMaxSnapDistanceM) {
         warnings.push(`Endpoint snap distance exceeds configured threshold ${this.config.routingMaxSnapDistanceM} m; route is only indicative.`);
@@ -705,7 +795,7 @@ export class RoutingService {
       warnings.push(error instanceof Error ? `OSM graph routing failed: ${error.message}` : "OSM graph routing failed.");
       routes.push(directFallbackRoute(profile, request.from, request.to, 1, "OSM graph routing failed."));
     }
-    return this.routeResponse(generatedAt, profile, request, routes, warnings);
+    return this.routeResponse(generatedAt, profile, request, routes, warnings, "osm-postgis-graph", trafficContext);
   }
 
   private routeResponse(
@@ -714,16 +804,20 @@ export class RoutingService {
     request: unknown,
     routes: RoutingRoute[],
     warnings: string[],
-    backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph"
+    backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph",
+    trafficContext?: RoutingTrafficContext
   ): RoutingRouteResponse {
+    const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
+    const traffic = routingTrafficSummary(trafficContext, trafficRoutes);
     return {
       contractVersion: "sim-routing-route-v1",
       generatedAt,
       source: routingSource(generatedAt, backend),
       query: publicQuery(request),
       profile,
-      routes,
-      features: routes.map((route) => routeFeature(route)),
+      traffic,
+      routes: trafficRoutes,
+      features: trafficRoutes.map((route) => routeFeature(route)),
       warnings
     };
   }
@@ -735,11 +829,47 @@ export class RoutingService {
   private async computeValhallaRouteResponse(
     generatedAt: string,
     profile: RoutingProfile,
-    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
+    trafficContext?: RoutingTrafficContext
   ): Promise<RoutingRouteResponse> {
-    const response = await requestValhallaRoute(this.config, profile, request);
+    const response = await requestValhallaRoute(this.config, profile, request, trafficContext);
     const routes = valhallaRoutes(profile, request, response, request.alternatives);
-    return this.routeResponse(generatedAt, profile, request, routes, valhallaWarnings(response), "valhalla");
+    return this.routeResponse(generatedAt, profile, request, routes, valhallaWarnings(response), "valhalla", trafficContext);
+  }
+
+  private async routeTrafficContext(
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
+    profile: RoutingProfile,
+    generatedAt: string
+  ): Promise<RoutingTrafficContext> {
+    if (!this.config.enabledSources.includes("road_srti_lod") || profile.transportMode !== "road") {
+      return emptyTrafficContext("disabled");
+    }
+    try {
+      const searchBbox = routeSearchBbox(request.from, request.to, profile, this.config.routingMaxSearchRadiusM);
+      const events = (await this.trafficEventCache.getOrLoad("road_srti_lod_recent", () => loadRoutingTrafficEvents(this.config))).filter(
+        (event) => eventValidAt(event, generatedAt) && isPointInBbox(event.lon, event.lat, searchBbox)
+      );
+      const hardExclusionCandidates = request.avoid.includes("road_closure")
+        ? events.filter(
+            (event) =>
+              isHardExclusionCandidate(event) &&
+              distancePointToSegmentM([event.lon, event.lat], request.from, request.to).distanceM <= TRAFFIC_PRE_ROUTE_CORRIDOR_RADIUS_M
+          )
+        : [];
+      return {
+        sourceStatus: "ok",
+        events,
+        hardExclusionCandidates,
+        hardExclusionsApplied: this.shouldUseValhalla() ? hardExclusionCandidates.slice(0, MAX_VALHALLA_EXCLUDE_LOCATIONS) : [],
+        warnings: []
+      };
+    } catch (error) {
+      return {
+        ...emptyTrafficContext("degraded"),
+        warnings: [error instanceof Error ? `SRTI traffic context failed: ${error.message}` : "SRTI traffic context failed."]
+      };
+    }
   }
 
   private async computeIsochroneResponse(
@@ -1333,6 +1463,7 @@ function buildRouteFromPath(
     },
     steps: buildSteps(path),
     warnings,
+    traffic: emptyRouteTraffic(),
     quality: {
       mode: "osm_graph",
       confidence: path.edges.length > 0 ? 0.74 : 0.4,
@@ -1429,6 +1560,7 @@ function directFallbackRoute(
       }
     ],
     warnings: [reason],
+    traffic: emptyRouteTraffic(),
     quality: {
       mode: "direct_fallback",
       confidence: 0.18,
@@ -1453,16 +1585,259 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       distanceM: route.distanceM,
       durationSeconds: route.durationSeconds,
       quality: route.quality,
+      traffic: route.traffic,
       warnings: route.warnings,
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
     }
   };
 }
 
+async function loadRoutingTrafficEvents(config: SituationDataConfig): Promise<RoutingTrafficEvent[]> {
+  const events = await fetchRoadSrtiLodEvents(config);
+  return events.map(routingTrafficEvent);
+}
+
+function routingTrafficEvent(event: RoadSrtiLodEvent): RoutingTrafficEvent {
+  const category = roadSrtiCategory(event.typeLabel);
+  return {
+    incidentId: `traffic:road_srti_lod:${stablePayload(event.iri)}`,
+    category,
+    severity: roadSrtiSeverity(category, event.typeLabel),
+    label: `Silniční událost: ${roadSrtiLabel(event.typeLabel)}`,
+    lon: roundCoord(event.lon),
+    lat: roundCoord(event.lat),
+    observedAt: event.observedAt,
+    validUntil: addIsoSeconds(event.observedAt, 2 * 60 * 60),
+    confidence: 0.82,
+    srtiType: event.typeLabel,
+    srtiTypeUri: event.typeUri
+  };
+}
+
+function annotateRouteTraffic(route: RoutingRoute, context: RoutingTrafficContext | undefined): RoutingRoute {
+  if (!context || context.sourceStatus === "disabled") {
+    return { ...route, traffic: emptyRouteTraffic() };
+  }
+  if (context.sourceStatus === "degraded") {
+    return {
+      ...route,
+      traffic: {
+        ...emptyRouteTraffic(),
+        trafficAware: false
+      }
+    };
+  }
+  const incidents = context.events
+    .map((event) => incidentNearRoute(event, route.geometry.coordinates, context))
+    .filter((incident): incident is RoutingTrafficIncident => Boolean(incident))
+    .sort((left, right) => left.distanceAlongRouteM - right.distanceAlongRouteM)
+    .slice(0, 25);
+  const delayPenaltySeconds = incidents.reduce((sum, incident) => sum + trafficDelayPenaltySeconds(incident), 0);
+  return {
+    ...route,
+    durationSeconds: route.durationSeconds + delayPenaltySeconds,
+    warnings:
+      incidents.length > 0 ? [...route.warnings, `Route corridor contains ${incidents.length} current NDIC/ŘSD SRTI traffic event(s).`] : route.warnings,
+    traffic: {
+      trafficAware: true,
+      incidentCount: incidents.length,
+      highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
+      delayPenaltySeconds,
+      hardExclusionCandidateCount: incidents.filter(
+        (incident) => incident.action === "hard_exclusion_candidate" || incident.action === "hard_exclusion_applied"
+      ).length,
+      softPenaltyCandidateCount: incidents.filter((incident) => incident.action === "soft_penalty").length,
+      incidentsOnRoute: incidents
+    },
+    quality: {
+      ...route.quality,
+      confidence: incidents.length > 0 ? Math.max(0.5, route.quality.confidence - Math.min(0.2, incidents.length * 0.04)) : route.quality.confidence
+    }
+  };
+}
+
+function incidentNearRoute(
+  event: RoutingTrafficEvent,
+  routeCoordinates: Array<[number, number]>,
+  context: RoutingTrafficContext
+): RoutingTrafficIncident | undefined {
+  const match = nearestPointOnPolyline([event.lon, event.lat], routeCoordinates);
+  if (!match || match.distanceM > TRAFFIC_ROUTE_CORRIDOR_RADIUS_M) {
+    return undefined;
+  }
+  const applied = context.hardExclusionsApplied.some((candidate) => candidate.incidentId === event.incidentId);
+  return {
+    incidentId: event.incidentId,
+    sourceId: "road_srti_lod",
+    category: event.category,
+    severity: event.severity,
+    label: event.label,
+    lon: event.lon,
+    lat: event.lat,
+    observedAt: event.observedAt,
+    validUntil: event.validUntil,
+    distanceFromRouteM: Math.round(match.distanceM),
+    distanceAlongRouteM: Math.round(match.distanceAlongRouteM),
+    action: applied ? "hard_exclusion_applied" : trafficAction(event),
+    confidence: event.confidence,
+    srtiType: event.srtiType,
+    srtiTypeUri: event.srtiTypeUri
+  };
+}
+
+function routingTrafficSummary(context: RoutingTrafficContext | undefined, routes: RoutingRoute[]): RoutingTrafficSummary {
+  const incidents = routes.flatMap((route) => route.traffic.incidentsOnRoute);
+  const uniqueIncidentIds = new Set(incidents.map((incident) => incident.incidentId));
+  const primaryRoute = routes.find((route) => route.rank === 1) ?? routes[0];
+  return {
+    trafficAware: Boolean(context && context.sourceStatus === "ok"),
+    sourceIds: context && context.sourceStatus !== "disabled" ? ["road_srti_lod"] : [],
+    sourceStatus: context?.sourceStatus ?? "disabled",
+    corridorRadiusM: TRAFFIC_ROUTE_CORRIDOR_RADIUS_M,
+    candidateCount: context?.events.length ?? 0,
+    incidentCount: uniqueIncidentIds.size,
+    hardExclusionCandidateCount: context?.hardExclusionCandidates.length ?? 0,
+    hardExclusionAppliedCount: context?.hardExclusionsApplied.length ?? 0,
+    softPenaltyCandidateCount: incidents.filter((incident) => incident.action === "soft_penalty").length,
+    delayPenaltySeconds: primaryRoute?.traffic.delayPenaltySeconds ?? 0,
+    highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
+    warnings: context?.warnings ?? [],
+    limitations: [
+      "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+      "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+    ]
+  };
+}
+
+function rankRoutesByTrafficImpact(routes: RoutingRoute[]): RoutingRoute[] {
+  if (routes.length < 2 || routes.every((route) => route.traffic.delayPenaltySeconds === 0 && route.traffic.hardExclusionCandidateCount === 0)) {
+    return routes;
+  }
+  return [...routes].sort((left, right) => trafficRouteScore(left) - trafficRouteScore(right)).map((route, index) => ({ ...route, rank: index + 1 }));
+}
+
+function trafficRouteScore(route: RoutingRoute): number {
+  return route.durationSeconds + route.traffic.hardExclusionCandidateCount * 600;
+}
+
+function emptyRouteTraffic(): RoutingRouteTraffic {
+  return {
+    trafficAware: false,
+    incidentCount: 0,
+    delayPenaltySeconds: 0,
+    hardExclusionCandidateCount: 0,
+    softPenaltyCandidateCount: 0,
+    incidentsOnRoute: []
+  };
+}
+
+function emptyTrafficContext(sourceStatus: RoutingTrafficSummary["sourceStatus"]): RoutingTrafficContext {
+  return {
+    sourceStatus,
+    events: [],
+    hardExclusionCandidates: [],
+    hardExclusionsApplied: [],
+    warnings: []
+  };
+}
+
+function valhallaTrafficAvoidancePayload(context: RoutingTrafficContext | undefined): { exclude_locations?: Array<{ lat: number; lon: number }> } {
+  const events = context?.hardExclusionsApplied ?? [];
+  if (events.length === 0) {
+    return {};
+  }
+  return {
+    exclude_locations: events.map((event) => ({ lat: event.lat, lon: event.lon }))
+  };
+}
+
+function isHardExclusionCandidate(event: RoutingTrafficEvent): boolean {
+  const normalized = `${event.category} ${event.srtiType ?? ""}`.toLowerCase();
+  return normalized.includes("closure") || normalized.includes("blocked") || normalized.includes("obstruction");
+}
+
+function trafficAction(event: RoutingTrafficEvent): RoutingTrafficAction {
+  if (isHardExclusionCandidate(event)) {
+    return "hard_exclusion_candidate";
+  }
+  return event.severity === "warning" || event.severity === "advisory" ? "soft_penalty" : "warn";
+}
+
+function trafficDelayPenaltySeconds(incident: RoutingTrafficIncident): number {
+  if (incident.action === "hard_exclusion_candidate" || incident.action === "hard_exclusion_applied") {
+    return 180;
+  }
+  if (incident.action === "soft_penalty") {
+    return incident.severity === "warning" ? 120 : 60;
+  }
+  return 0;
+}
+
+function eventValidAt(event: RoutingTrafficEvent, isoTime: string): boolean {
+  const now = Date.parse(isoTime);
+  const validUntil = Date.parse(event.validUntil);
+  return !Number.isFinite(validUntil) || !Number.isFinite(now) || validUntil >= now;
+}
+
+function highestSeverity(values: SituationSeverity[]): SituationSeverity | undefined {
+  const order: SituationSeverity[] = ["info", "advisory", "warning", "critical"];
+  return values.sort((left, right) => order.indexOf(right) - order.indexOf(left))[0];
+}
+
+function nearestPointOnPolyline(point: [number, number], coordinates: Array<[number, number]>): { distanceM: number; distanceAlongRouteM: number } | undefined {
+  if (coordinates.length < 2) {
+    return undefined;
+  }
+  let best: { distanceM: number; distanceAlongRouteM: number } | undefined;
+  let traversedM = 0;
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const start = coordinates[index - 1]!;
+    const end = coordinates[index]!;
+    const segment = distancePointToSegmentM(point, { lon: start[0], lat: start[1] }, { lon: end[0], lat: end[1] });
+    if (!best || segment.distanceM < best.distanceM) {
+      best = { distanceM: segment.distanceM, distanceAlongRouteM: traversedM + segment.alongSegmentM };
+    }
+    traversedM += haversineMeters(start, end);
+  }
+  return best;
+}
+
+function distancePointToSegmentM(
+  point: [number, number],
+  start: Pick<RoutingCoordinate, "lon" | "lat">,
+  end: Pick<RoutingCoordinate, "lon" | "lat">
+): { distanceM: number; alongSegmentM: number } {
+  const lat = ((start.lat + end.lat + point[1]) / 3) * (Math.PI / 180);
+  const metersPerLon = 111_320 * Math.cos(lat);
+  const metersPerLat = 111_320;
+  const ax = start.lon * metersPerLon;
+  const ay = start.lat * metersPerLat;
+  const bx = end.lon * metersPerLon;
+  const by = end.lat * metersPerLat;
+  const px = point[0] * metersPerLon;
+  const py = point[1] * metersPerLat;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared > 0 ? clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1) : 0;
+  const closestX = ax + t * dx;
+  const closestY = ay + t * dy;
+  return {
+    distanceM: Math.hypot(px - closestX, py - closestY),
+    alongSegmentM: Math.sqrt(lengthSquared) * t
+  };
+}
+
+function addIsoSeconds(value: string, seconds: number): string {
+  const timestamp = Date.parse(value);
+  return new Date((Number.isFinite(timestamp) ? timestamp : Date.now()) + seconds * 1000).toISOString();
+}
+
 async function requestValhallaRoute(
   config: SituationDataConfig,
   profile: RoutingProfile,
-  request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+  request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
+  trafficContext?: RoutingTrafficContext
 ): Promise<ValhallaRouteResponse> {
   const payload = {
     locations: [
@@ -1471,6 +1846,7 @@ async function requestValhallaRoute(
     ],
     costing: valhallaCosting(profile.profileId),
     costing_options: valhallaCostingOptions(profile, request.avoid),
+    ...valhallaTrafficAvoidancePayload(trafficContext),
     alternates: Math.max(0, Math.min(2, request.alternatives - 1)),
     units: "kilometers",
     language: "cs-CZ",
@@ -1594,6 +1970,7 @@ function valhallaRoute(
     snap: valhallaSnap(request, trip),
     steps: valhallaSteps(trip.legs ?? [], coordinates),
     warnings: [],
+    traffic: emptyRouteTraffic(),
     quality: {
       mode: "engine_route",
       confidence: 0.9,
@@ -2066,6 +2443,10 @@ function routeSearchBbox(from: RoutingCoordinate, to: RoutingCoordinate, profile
 
 function bboxAroundPoint(point: RoutingCoordinate, radiusM: number): BoundingBox {
   return expandBbox({ west: point.lon, south: point.lat, east: point.lon, north: point.lat }, radiusM);
+}
+
+function isPointInBbox(lon: number, lat: number, bbox: BoundingBox): boolean {
+  return lon >= bbox.west && lon <= bbox.east && lat >= bbox.south && lat <= bbox.north;
 }
 
 function expandBbox(bbox: BoundingBox, paddingM: number): BoundingBox {
