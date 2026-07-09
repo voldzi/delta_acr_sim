@@ -348,7 +348,12 @@ Minimální požadavek na trasu:
   "from": { "lon": 14.42, "lat": 50.08, "label": "Start" },
   "to": { "lon": 14.45, "lat": 50.1, "label": "Cíl" },
   "avoid": ["flood", "road_closure"],
-  "alternatives": 2
+  "alternatives": 2,
+  "includeSteps": true,
+  "includeElevationProfile": true,
+  "includeWeatherOnRoute": true,
+  "includeHazardsOnRoute": true,
+  "includeTraffic": true
 }
 ```
 
@@ -368,6 +373,10 @@ Odpověď `sim-routing-route-v1` obsahuje:
 | `features[]`                                   | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1`                                               |
 | `traffic`                                      | souhrn dopravního kontextu z NDIC/ŘSD SRTI použitého při výpočtu a vyhodnocení trasy                                                                                    |
 | `quality`                                      | mirror kvality primární trasy pro rychlý souhrn bez procházení `routes[0]`                                                                                              |
+| `routes[].elevation`                           | souhrn výškového profilu konkrétní varianty: zdrojový stav, převýšení, ztráta výšky, minimum, maximum, počet vzorků a warningy                                          |
+| `routes[].elevationProfile[]`                  | vzorky výškového profilu konkrétní varianty: vzdálenost po trase, souřadnice, výška a volitelný sklon                                                                   |
+| `routes[].weatherOnRoute`                      | počasí v koridoru konkrétní varianty: zdrojový stav, shrnutí, segmenty/body a warningy                                                                                  |
+| `routes[].hazardsOnRoute`                      | bezpečnostní položky v koridoru konkrétní varianty: povodně, požáry, weather alerts, safety warnings a dopravní incidenty s vazbou na vzdálenost po trase               |
 | `routes[].traffic.incidentsOnRoute[]`          | dopravní události v koridoru trasy včetně vzdálenosti od trasy a vzdálenosti po trase                                                                                   |
 | `routes[].traffic.delayPenaltySeconds`         | orientační penalizace ETA podle událostí v koridoru; nejde o měřenou FCD rychlost                                                                                       |
 | `routes[].traffic.hardExclusionCandidateCount` | počet closure-like událostí, které by mohly znamenat tvrdou uzávěru, pokud je k dispozici přesné mapování na úsek                                                       |
@@ -382,6 +391,26 @@ Odpověď `sim-routing-route-v1` obsahuje:
 `maxTravelTimeMinutes` a profil, vrací polygon dosahu. `POST
 /routing/nearest-access` přijímá `point`, `profileId` a volitelný `radiusM`,
 vrací nejbližší routovatelný přístupový bod.
+
+Route analysis sekce jsou volitelné a aktivují se request flagy:
+
+- `includeElevationProfile=true`: SIM požádá Valhallu o `elevation_interval`
+  vzorky. Pokud je Valhalla nevrátí, použije lokální DEM sampler, je-li
+  nakonfigurovaný. Pokud není dostupný žádný zdroj, vrátí
+  `routes[].elevation.sourceStatus=disabled|degraded` a warning.
+- `includeWeatherOnRoute=true`: SIM načte zapnuté weather zdroje v koridoru
+  trasy, vytvoří `weatherOnRoute.summary` a segmenty s `routeDistanceM`,
+  `segmentStartM`, `segmentEndM` a metrikami počasí.
+- `includeHazardsOnRoute=true`: SIM načte safety projekce v koridoru trasy a
+  doplní také SRTI dopravní incidenty z `routes[].traffic.incidentsOnRoute[]`.
+- `includeTraffic=true`: traffic blok je kvůli kompatibilitě vracený i bez
+  flagu pro road profily; flag vyjadřuje, že COP detail chce traffic explicitně.
+
+Analytická data jsou vždy route-level. COP má porovnávat varianty podle
+`routes[]`; nesmí přebírat `weatherOnRoute`, `hazardsOnRoute` nebo
+`elevationProfile` z primární trasy na alternativy. Pokud SIM konkrétní sekci
+nemůže dodat, vrátí ji se `sourceStatus=disabled|degraded` a srozumitelným
+`warnings[]`, ne tichým vynecháním u požadované sekce.
 
 Preferovaný produkční backend je Valhalla (`ROUTING_ENGINE=auto|valhalla` s
 `VALHALLA_BASE_URL`), která vrací `quality.mode=engine_route` a

@@ -13327,6 +13327,22 @@
           "includeSteps": {
             "type": "boolean"
           },
+          "includeElevationProfile": {
+            "type": "boolean",
+            "description": "Include per-route elevation summary and sampled elevationProfile points when available."
+          },
+          "includeWeatherOnRoute": {
+            "type": "boolean",
+            "description": "Include per-route weather summary and sampled weather segments."
+          },
+          "includeHazardsOnRoute": {
+            "type": "boolean",
+            "description": "Include per-route safety hazard items from SIM safety sources and traffic incidents."
+          },
+          "includeTraffic": {
+            "type": "boolean",
+            "description": "Traffic context is returned by default for road profiles; this flag documents COP route-detail intent."
+          },
           "includeDebug": {
             "type": "boolean"
           }
@@ -13543,17 +13559,28 @@
         "type": "object",
         "required": [
           "trafficAware",
+          "sourceStatus",
           "incidentCount",
           "delayPenaltySeconds",
           "hardExclusionCandidateCount",
           "hardExclusionApplied",
           "hard_exclusion_applied",
           "softPenaltyCandidateCount",
-          "incidentsOnRoute"
+          "incidentsOnRoute",
+          "warnings",
+          "limitations"
         ],
         "properties": {
           "trafficAware": {
             "type": "boolean"
+          },
+          "sourceStatus": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "disabled",
+              "degraded"
+            ]
           },
           "incidentCount": {
             "type": "integer"
@@ -13586,6 +13613,18 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SituationDataRoutingTrafficIncident"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -13721,6 +13760,314 @@
           }
         }
       },
+      "SituationDataRoutingElevationSummary": {
+        "type": "object",
+        "required": [
+          "sourceStatus",
+          "sampleCount",
+          "warnings"
+        ],
+        "properties": {
+          "sourceStatus": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "disabled",
+              "degraded"
+            ]
+          },
+          "sourceId": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "dem"
+            ]
+          },
+          "gainM": {
+            "type": "integer"
+          },
+          "lossM": {
+            "type": "integer"
+          },
+          "minM": {
+            "type": "integer"
+          },
+          "maxM": {
+            "type": "integer"
+          },
+          "sampleCount": {
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingElevationProfilePoint": {
+        "type": "object",
+        "required": [
+          "distanceM",
+          "lon",
+          "lat",
+          "elevationM"
+        ],
+        "properties": {
+          "distanceM": {
+            "type": "integer"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "elevationM": {
+            "type": "integer"
+          },
+          "gradePct": {
+            "type": "number"
+          },
+          "sourceId": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "dem"
+            ]
+          },
+          "tileId": {
+            "type": "string"
+          }
+        }
+      },
+      "SituationDataRoutingWeatherRouteSegment": {
+        "type": "object",
+        "required": [
+          "sourceId",
+          "featureId",
+          "label",
+          "severity",
+          "lon",
+          "lat",
+          "routeDistanceM",
+          "distanceFromRouteM",
+          "segmentStartM",
+          "segmentEndM",
+          "observedAt",
+          "metrics"
+        ],
+        "properties": {
+          "sourceId": {
+            "type": "string"
+          },
+          "featureId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "advisory",
+              "warning",
+              "critical"
+            ]
+          },
+          "lon": {
+            "type": "number"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "routeDistanceM": {
+            "type": "integer"
+          },
+          "distanceFromRouteM": {
+            "type": "integer"
+          },
+          "segmentStartM": {
+            "type": "integer"
+          },
+          "segmentEndM": {
+            "type": "integer"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SituationDataRoutingWeatherOnRoute": {
+        "type": "object",
+        "required": [
+          "sourceStatus",
+          "summary",
+          "warnings",
+          "sourceIds",
+          "segments"
+        ],
+        "properties": {
+          "sourceStatus": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "disabled",
+              "degraded"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingWeatherRouteSegment"
+            }
+          }
+        }
+      },
+      "SituationDataRoutingHazardRouteItem": {
+        "type": "object",
+        "required": [
+          "hazardId",
+          "sourceId",
+          "layer",
+          "category",
+          "label",
+          "severity",
+          "lon",
+          "lat",
+          "routeDistanceM",
+          "distanceFromRouteM",
+          "segmentStartM",
+          "segmentEndM",
+          "observedAt",
+          "confidence"
+        ],
+        "properties": {
+          "hazardId": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "layer": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "hazardType": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "advisory",
+              "warning",
+              "critical"
+            ]
+          },
+          "lon": {
+            "type": "number"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "routeDistanceM": {
+            "type": "integer"
+          },
+          "distanceFromRouteM": {
+            "type": "integer"
+          },
+          "segmentStartM": {
+            "type": "integer"
+          },
+          "segmentEndM": {
+            "type": "integer"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        }
+      },
+      "SituationDataRoutingHazardsOnRoute": {
+        "type": "object",
+        "required": [
+          "sourceStatus",
+          "summary",
+          "warnings",
+          "sourceIds",
+          "items"
+        ],
+        "properties": {
+          "sourceStatus": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "disabled",
+              "degraded"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingHazardRouteItem"
+            }
+          }
+        }
+      },
       "SituationDataRoutingRoute": {
         "type": "object",
         "required": [
@@ -13787,6 +14134,21 @@
           },
           "quality": {
             "$ref": "#/components/schemas/SituationDataRoutingRouteQuality"
+          },
+          "elevation": {
+            "$ref": "#/components/schemas/SituationDataRoutingElevationSummary"
+          },
+          "elevationProfile": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingElevationProfilePoint"
+            }
+          },
+          "weatherOnRoute": {
+            "$ref": "#/components/schemas/SituationDataRoutingWeatherOnRoute"
+          },
+          "hazardsOnRoute": {
+            "$ref": "#/components/schemas/SituationDataRoutingHazardsOnRoute"
           }
         }
       },

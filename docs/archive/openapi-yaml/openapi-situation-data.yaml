@@ -4039,6 +4039,18 @@ components:
           description: Requested number of route variants including the primary route. Use 2 for primary plus one alternative, 3 for primary plus two alternatives.
         includeSteps:
           type: boolean
+        includeElevationProfile:
+          type: boolean
+          description: Include per-route elevation summary and sampled elevationProfile points when available.
+        includeWeatherOnRoute:
+          type: boolean
+          description: Include per-route weather summary and sampled weather segments.
+        includeHazardsOnRoute:
+          type: boolean
+          description: Include per-route safety hazard items from SIM safety sources and traffic incidents.
+        includeTraffic:
+          type: boolean
+          description: Traffic context is returned by default for road profiles; this flag documents COP route-detail intent.
         includeDebug:
           type: boolean
     RoutingIsochroneRequest:
@@ -4169,19 +4181,25 @@ components:
     RoutingRouteTraffic:
       type: object
       required:
-        [
-          trafficAware,
-          incidentCount,
-          delayPenaltySeconds,
-          hardExclusionCandidateCount,
+          [
+            trafficAware,
+            sourceStatus,
+            incidentCount,
+            delayPenaltySeconds,
+            hardExclusionCandidateCount,
           hardExclusionApplied,
-          hard_exclusion_applied,
-          softPenaltyCandidateCount,
-          incidentsOnRoute
-        ]
+            hard_exclusion_applied,
+            softPenaltyCandidateCount,
+            incidentsOnRoute,
+            warnings,
+            limitations
+          ]
       properties:
         trafficAware:
           type: boolean
+        sourceStatus:
+          type: string
+          enum: [ok, disabled, degraded]
         incidentCount:
           type: integer
         highestSeverity:
@@ -4201,6 +4219,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RoutingTrafficIncident"
+        warnings:
+          type: array
+          items:
+            type: string
+        limitations:
+          type: array
+          items:
+            type: string
     RoutingTrafficSummary:
       type: object
       required:
@@ -4280,6 +4306,164 @@ components:
           enum: [valhalla, osm-postgis-graph]
         fallbackReason:
           type: string
+    RoutingElevationSummary:
+      type: object
+      required: [sourceStatus, sampleCount, warnings]
+      properties:
+        sourceStatus:
+          type: string
+          enum: [ok, disabled, degraded]
+        sourceId:
+          type: string
+          enum: [valhalla, dem]
+        gainM:
+          type: integer
+        lossM:
+          type: integer
+        minM:
+          type: integer
+        maxM:
+          type: integer
+        sampleCount:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
+    RoutingElevationProfilePoint:
+      type: object
+      required: [distanceM, lon, lat, elevationM]
+      properties:
+        distanceM:
+          type: integer
+        lon:
+          type: number
+        lat:
+          type: number
+        elevationM:
+          type: integer
+        gradePct:
+          type: number
+        sourceId:
+          type: string
+          enum: [valhalla, dem]
+        tileId:
+          type: string
+    RoutingWeatherRouteSegment:
+      type: object
+      required: [sourceId, featureId, label, severity, lon, lat, routeDistanceM, distanceFromRouteM, segmentStartM, segmentEndM, observedAt, metrics]
+      properties:
+        sourceId:
+          type: string
+        featureId:
+          type: string
+        label:
+          type: string
+        severity:
+          type: string
+          enum: [info, advisory, warning, critical]
+        lon:
+          type: number
+        lat:
+          type: number
+        routeDistanceM:
+          type: integer
+        distanceFromRouteM:
+          type: integer
+        segmentStartM:
+          type: integer
+        segmentEndM:
+          type: integer
+        observedAt:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        metrics:
+          type: object
+          additionalProperties: true
+    RoutingWeatherOnRoute:
+      type: object
+      required: [sourceStatus, summary, warnings, sourceIds, segments]
+      properties:
+        sourceStatus:
+          type: string
+          enum: [ok, disabled, degraded]
+        summary:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        sourceIds:
+          type: array
+          items:
+            type: string
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingWeatherRouteSegment"
+    RoutingHazardRouteItem:
+      type: object
+      required: [hazardId, sourceId, layer, category, label, severity, lon, lat, routeDistanceM, distanceFromRouteM, segmentStartM, segmentEndM, observedAt, confidence]
+      properties:
+        hazardId:
+          type: string
+        sourceId:
+          type: string
+        layer:
+          type: string
+        category:
+          type: string
+        hazardType:
+          type: string
+        label:
+          type: string
+        severity:
+          type: string
+          enum: [info, advisory, warning, critical]
+        lon:
+          type: number
+        lat:
+          type: number
+        routeDistanceM:
+          type: integer
+        distanceFromRouteM:
+          type: integer
+        segmentStartM:
+          type: integer
+        segmentEndM:
+          type: integer
+        observedAt:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        confidence:
+          type: number
+    RoutingHazardsOnRoute:
+      type: object
+      required: [sourceStatus, summary, warnings, sourceIds, items]
+      properties:
+        sourceStatus:
+          type: string
+          enum: [ok, disabled, degraded]
+        summary:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        sourceIds:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingHazardRouteItem"
     RoutingRoute:
       type: object
       required: [routeId, profileId, rank, status, geometry, distanceM, durationSeconds, snap, steps, warnings, traffic, quality]
@@ -4316,6 +4500,16 @@ components:
           $ref: "#/components/schemas/RoutingRouteTraffic"
         quality:
           $ref: "#/components/schemas/RoutingRouteQuality"
+        elevation:
+          $ref: "#/components/schemas/RoutingElevationSummary"
+        elevationProfile:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingElevationProfilePoint"
+        weatherOnRoute:
+          $ref: "#/components/schemas/RoutingWeatherOnRoute"
+        hazardsOnRoute:
+          $ref: "#/components/schemas/RoutingHazardsOnRoute"
     RoutingRouteResponse:
       type: object
       required: [contractVersion, generatedAt, source, query, profile, traffic, quality, routes, features, warnings]

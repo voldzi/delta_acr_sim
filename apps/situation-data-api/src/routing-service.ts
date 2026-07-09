@@ -1,9 +1,27 @@
 import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { SituationDataConfig } from "./config.js";
+import { DemElevationSampler, type DemTileRef } from "./dem-elevation-sampler.js";
 import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
-import { fetchRoadSrtiLodEvents, roadSrtiCategory, roadSrtiLabel, roadSrtiSeverity, type RoadSrtiLodEvent } from "./sources.js";
-import type { BoundingBox, LineStringGeometry, PointGeometry, PolygonGeometry, SituationSeverity } from "./types.js";
+import {
+  createSituationDataSources,
+  fetchRoadSrtiLodEvents,
+  roadSrtiCategory,
+  roadSrtiLabel,
+  roadSrtiSeverity,
+  type RoadSrtiLodEvent,
+  type SituationDataSource
+} from "./sources.js";
+import type {
+  BoundingBox,
+  LineStringGeometry,
+  PointGeometry,
+  PolygonGeometry,
+  SituationDataSourceId,
+  SituationFeature,
+  SituationLayerId,
+  SituationSeverity
+} from "./types.js";
 
 export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "evacuation_walking";
 
@@ -44,6 +62,10 @@ export interface RoutingRouteRequest {
   departureTime?: string;
   alternatives?: number;
   includeSteps?: boolean;
+  includeElevationProfile?: boolean;
+  includeWeatherOnRoute?: boolean;
+  includeHazardsOnRoute?: boolean;
+  includeTraffic?: boolean;
   includeDebug?: boolean;
 }
 
@@ -94,6 +116,10 @@ export interface RoutingRoute {
   warnings: string[];
   traffic: RoutingRouteTraffic;
   quality: RoutingRouteQuality;
+  elevation?: RoutingElevationSummary;
+  elevationProfile?: RoutingElevationProfilePoint[];
+  weatherOnRoute?: RoutingWeatherOnRoute;
+  hazardsOnRoute?: RoutingHazardsOnRoute;
 }
 
 export type RoutingTrafficAction = "warn" | "soft_penalty" | "hard_exclusion_candidate" | "hard_exclusion_applied";
@@ -118,6 +144,7 @@ export interface RoutingTrafficIncident {
 
 export interface RoutingRouteTraffic {
   trafficAware: boolean;
+  sourceStatus: RoutingTrafficSummary["sourceStatus"];
   incidentCount: number;
   highestSeverity?: SituationSeverity;
   delayPenaltySeconds: number;
@@ -126,6 +153,82 @@ export interface RoutingRouteTraffic {
   hard_exclusion_applied: boolean;
   softPenaltyCandidateCount: number;
   incidentsOnRoute: RoutingTrafficIncident[];
+  warnings: string[];
+  limitations: string[];
+}
+
+export type RoutingAnalysisSourceStatus = "ok" | "disabled" | "degraded";
+
+export interface RoutingElevationSummary {
+  sourceStatus: RoutingAnalysisSourceStatus;
+  sourceId?: "valhalla" | "dem";
+  gainM?: number;
+  lossM?: number;
+  minM?: number;
+  maxM?: number;
+  sampleCount: number;
+  warnings: string[];
+}
+
+export interface RoutingElevationProfilePoint {
+  distanceM: number;
+  lon: number;
+  lat: number;
+  elevationM: number;
+  gradePct?: number;
+  sourceId?: "valhalla" | "dem";
+  tileId?: string;
+}
+
+export interface RoutingWeatherOnRoute {
+  sourceStatus: RoutingAnalysisSourceStatus;
+  summary: string;
+  warnings: string[];
+  sourceIds: SituationDataSourceId[];
+  segments: RoutingWeatherRouteSegment[];
+}
+
+export interface RoutingWeatherRouteSegment {
+  sourceId: SituationDataSourceId;
+  featureId: string;
+  label: string;
+  severity: SituationSeverity;
+  lon: number;
+  lat: number;
+  routeDistanceM: number;
+  distanceFromRouteM: number;
+  segmentStartM: number;
+  segmentEndM: number;
+  observedAt: string;
+  validUntil?: string;
+  metrics: Record<string, number | string | boolean>;
+}
+
+export interface RoutingHazardsOnRoute {
+  sourceStatus: RoutingAnalysisSourceStatus;
+  summary: string;
+  warnings: string[];
+  sourceIds: SituationDataSourceId[];
+  items: RoutingHazardRouteItem[];
+}
+
+export interface RoutingHazardRouteItem {
+  hazardId: string;
+  sourceId: SituationDataSourceId;
+  layer: SituationLayerId | "traffic";
+  category: string;
+  hazardType?: string;
+  label: string;
+  severity: SituationSeverity;
+  lon: number;
+  lat: number;
+  routeDistanceM: number;
+  distanceFromRouteM: number;
+  segmentStartM: number;
+  segmentEndM: number;
+  observedAt: string;
+  validUntil?: string;
+  confidence: number;
 }
 
 export interface RoutingRouteQuality {
@@ -355,6 +458,13 @@ interface RoutingTrafficContext {
   warnings: string[];
 }
 
+interface RoutingFeatureAnalysisContext {
+  sourceStatus: RoutingAnalysisSourceStatus;
+  sourceIds: SituationDataSourceId[];
+  features: SituationFeature[];
+  warnings: string[];
+}
+
 interface DijkstraState {
   nodeId: string;
   cost: number;
@@ -430,6 +540,8 @@ interface ValhallaStatusResponse {
 
 interface ValhallaLeg {
   shape?: string;
+  elevation?: number[];
+  elevation_interval?: number;
   summary?: {
     time?: number;
     length?: number;
@@ -465,6 +577,13 @@ const TRAFFIC_ROUTE_CORRIDOR_RADIUS_M = 350;
 const TRAFFIC_PRE_ROUTE_CORRIDOR_RADIUS_M = 800;
 const MAX_VALHALLA_EXCLUDE_LOCATIONS = 25;
 const VALHALLA_ALTERNATIVE_LINEAR_COST_FACTORS = [2, 5, 10];
+const ROUTE_ELEVATION_SAMPLE_INTERVAL_M = 250;
+const ROUTE_ELEVATION_MAX_SAMPLES = 120;
+const ROUTE_ANALYSIS_BBOX_PADDING_M = 2_000;
+const WEATHER_ROUTE_CORRIDOR_RADIUS_M = 25_000;
+const HAZARD_ROUTE_CORRIDOR_RADIUS_M = 1_000;
+const ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M = 500;
+const ROUTE_ANALYSIS_SOURCE_IDS = new Set<SituationDataSourceId>(["weather_forecast", "open_meteo", "chmi_weather_stations", "safety_data"]);
 
 const ROUTING_PROFILES: RoutingProfile[] = [
   {
@@ -634,6 +753,8 @@ export class RoutingService {
   private readonly isochroneCache: ManagedResponseCache<RoutingIsochroneResponse>;
   private readonly nearestAccessCache: ManagedResponseCache<RoutingNearestAccessResponse>;
   private readonly trafficEventCache: ManagedResponseCache<RoutingTrafficEvent[]>;
+  private readonly demElevationSampler: DemElevationSampler;
+  private readonly routeAnalysisSources: SituationDataSource[];
 
   constructor(private readonly config: SituationDataConfig) {
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
@@ -656,6 +777,8 @@ export class RoutingService {
       staleIfErrorMs: Math.max(config.roadSrtiLodCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
       maxEntries: 1
     });
+    this.demElevationSampler = new DemElevationSampler(config);
+    this.routeAnalysisSources = createSituationDataSources(config).filter((source) => ROUTE_ANALYSIS_SOURCE_IDS.has(source.descriptor.sourceId));
   }
 
   listProfiles(): RoutingProfileCatalog {
@@ -816,7 +939,7 @@ export class RoutingService {
     return this.routeResponse(generatedAt, profile, request, routes, warnings, "osm-postgis-graph", trafficContext);
   }
 
-  private routeResponse(
+  private async routeResponse(
     generatedAt: string,
     profile: RoutingProfile,
     request: unknown,
@@ -824,15 +947,16 @@ export class RoutingService {
     warnings: string[],
     backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph",
     trafficContext?: RoutingTrafficContext
-  ): RoutingRouteResponse {
+  ): Promise<RoutingRouteResponse> {
     const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
-    const primaryRoute = trafficRoutes.find((route) => route.rank === 1) ?? trafficRoutes[0];
-    const traffic = routingTrafficSummary(trafficContext, trafficRoutes);
+    const analysisRoutes = await this.annotateRouteAnalysis(trafficRoutes, request, trafficContext);
+    const primaryRoute = analysisRoutes.find((route) => route.rank === 1) ?? analysisRoutes[0];
+    const traffic = routingTrafficSummary(trafficContext, analysisRoutes);
     const responseWarnings = [...warnings];
     const requestedRouteCount = requestedRouteCountFromQuery(request);
-    if (requestedRouteCount && requestedRouteCount > trafficRoutes.length) {
+    if (requestedRouteCount && requestedRouteCount > analysisRoutes.length) {
       responseWarnings.push(
-        `Routing backend returned only ${trafficRoutes.length} of ${requestedRouteCount} requested route variant(s); no sufficiently distinct alternative path was available.`
+        `Routing backend returned only ${analysisRoutes.length} of ${requestedRouteCount} requested route variant(s); no sufficiently distinct alternative path was available.`
       );
     }
     return {
@@ -843,8 +967,8 @@ export class RoutingService {
       profile,
       traffic,
       quality: primaryRoute?.quality ?? unavailableRouteQuality(backend),
-      routes: trafficRoutes,
-      features: trafficRoutes.map((route) => routeFeature(route)),
+      routes: analysisRoutes,
+      features: analysisRoutes.map((route) => routeFeature(route)),
       warnings: responseWarnings
     };
   }
@@ -922,6 +1046,140 @@ export class RoutingService {
       );
     }
     return { routes, warnings };
+  }
+
+  private async annotateRouteAnalysis(routes: RoutingRoute[], request: unknown, trafficContext?: RoutingTrafficContext): Promise<RoutingRoute[]> {
+    const options = routeAnalysisOptions(request);
+    if (!options.includeElevationProfile && !options.includeWeatherOnRoute && !options.includeHazardsOnRoute) {
+      return routes;
+    }
+
+    const analysisBbox = routes.length > 0 ? routesAnalysisBbox(routes) : undefined;
+    const weatherContext =
+      options.includeWeatherOnRoute && analysisBbox
+        ? await this.loadRouteAnalysisFeatures(
+            ["weather_forecast", "open_meteo", "chmi_weather_stations"],
+            ["weather_forecast_area", "weather"],
+            analysisBbox,
+            24,
+            "weather"
+          )
+        : undefined;
+    const hazardContext =
+      options.includeHazardsOnRoute && analysisBbox
+        ? await this.loadRouteAnalysisFeatures(["safety_data"], ["warnings", "weather_alerts", "fire", "flood"], analysisBbox, 80, "hazards")
+        : undefined;
+
+    return Promise.all(
+      routes.map(async (route) => {
+        let analyzed = route;
+        const routeWarnings: string[] = [];
+        if (options.includeElevationProfile) {
+          const elevationAnalysis = await this.routeElevationAnalysis(analyzed);
+          analyzed = {
+            ...analyzed,
+            ascentM: elevationAnalysis.elevation.gainM ?? analyzed.ascentM,
+            descentM: elevationAnalysis.elevation.lossM ?? analyzed.descentM,
+            elevation: elevationAnalysis.elevation,
+            elevationProfile: elevationAnalysis.profile
+          };
+          routeWarnings.push(...elevationAnalysis.elevation.warnings);
+        }
+        if (options.includeWeatherOnRoute) {
+          const weatherOnRoute = routeWeatherOnRoute(analyzed, weatherContext);
+          analyzed = { ...analyzed, weatherOnRoute };
+          routeWarnings.push(...weatherOnRoute.warnings);
+        }
+        if (options.includeHazardsOnRoute) {
+          const hazardsOnRoute = routeHazardsOnRoute(analyzed, hazardContext);
+          analyzed = { ...analyzed, hazardsOnRoute };
+          routeWarnings.push(...hazardsOnRoute.warnings);
+        }
+        return routeWarnings.length > 0 ? { ...analyzed, warnings: uniqueStrings([...analyzed.warnings, ...routeWarnings]) } : analyzed;
+      })
+    );
+  }
+
+  private async routeElevationAnalysis(route: RoutingRoute): Promise<{ elevation: RoutingElevationSummary; profile: RoutingElevationProfilePoint[] }> {
+    if (route.elevationProfile && route.elevation) {
+      return { elevation: route.elevation, profile: route.elevationProfile };
+    }
+    if (!this.config.demEnabled || !this.config.demPostgisConnectionString) {
+      const warning = "Elevation profile unavailable for this route: DEM sampling is not configured and Valhalla did not return elevation values.";
+      return {
+        elevation: { sourceStatus: "disabled", sampleCount: 0, warnings: [warning] },
+        profile: []
+      };
+    }
+    try {
+      const bbox = routeGeometryBbox(route.geometry.coordinates, ROUTE_ANALYSIS_BBOX_PADDING_M);
+      const tiles = await this.demElevationSampler.tilesForBbox(bbox);
+      if (tiles.length === 0) {
+        const warning = "Elevation profile unavailable for this route: no local DEM tiles intersect the route corridor.";
+        return {
+          elevation: { sourceStatus: "degraded", sourceId: "dem", sampleCount: 0, warnings: [warning] },
+          profile: []
+        };
+      }
+      const profile = await sampleElevationProfileFromDem(route, tiles, this.demElevationSampler);
+      if (profile.length === 0) {
+        const warning = "Elevation profile unavailable for this route: DEM tiles did not contain usable samples.";
+        return {
+          elevation: { sourceStatus: "degraded", sourceId: "dem", sampleCount: 0, warnings: [warning] },
+          profile: []
+        };
+      }
+      return { elevation: elevationSummary(profile, "ok", "dem", []), profile };
+    } catch (error) {
+      const warning =
+        error instanceof Error ? `Elevation profile unavailable for this route: ${error.message}` : "Elevation profile unavailable for this route.";
+      return {
+        elevation: { sourceStatus: "degraded", sourceId: "dem", sampleCount: 0, warnings: [warning] },
+        profile: []
+      };
+    }
+  }
+
+  private async loadRouteAnalysisFeatures(
+    sourceIds: SituationDataSourceId[],
+    layers: SituationLayerId[],
+    bbox: BoundingBox,
+    limit: number,
+    label: "weather" | "hazards"
+  ): Promise<RoutingFeatureAnalysisContext> {
+    const sources = this.routeAnalysisSources.filter((source) => sourceIds.includes(source.descriptor.sourceId));
+    if (sources.length === 0) {
+      return {
+        sourceStatus: "disabled",
+        sourceIds: [],
+        features: [],
+        warnings: [`${label} route analysis unavailable: no enabled SIM source is configured.`]
+      };
+    }
+    const query = {
+      bbox,
+      layers,
+      sourceIds,
+      limit,
+      includeRaw: false
+    };
+    const results = await Promise.allSettled(sources.map((source) => source.fetchFeatures(query)));
+    const fulfilled = results.filter(
+      (result): result is PromiseFulfilledResult<Awaited<ReturnType<SituationDataSource["fetchFeatures"]>>> => result.status === "fulfilled"
+    );
+    const features = fulfilled.flatMap((result) => result.value.features).slice(0, limit);
+    const warnings = [
+      ...fulfilled.flatMap((result) => result.value.warnings),
+      ...results.flatMap((result, index) =>
+        result.status === "rejected" ? [`${sources[index]?.descriptor.sourceId ?? label} route analysis failed: ${errorMessage(result.reason)}`] : []
+      )
+    ];
+    return {
+      sourceStatus: results.some((result) => result.status === "rejected") ? "degraded" : "ok",
+      sourceIds: sources.map((source) => source.descriptor.sourceId),
+      features,
+      warnings
+    };
   }
 
   private async routeTrafficContext(
@@ -1707,6 +1965,407 @@ function unavailableRouteQuality(backend: "valhalla" | "osm-postgis-graph"): Rou
   };
 }
 
+function routeAnalysisOptions(value: unknown): {
+  includeElevationProfile: boolean;
+  includeWeatherOnRoute: boolean;
+  includeHazardsOnRoute: boolean;
+} {
+  const request = value && typeof value === "object" ? (value as RoutingRouteRequest) : {};
+  return {
+    includeElevationProfile: request.includeElevationProfile === true,
+    includeWeatherOnRoute: request.includeWeatherOnRoute === true,
+    includeHazardsOnRoute: request.includeHazardsOnRoute === true
+  };
+}
+
+function routesAnalysisBbox(routes: RoutingRoute[]): BoundingBox {
+  return expandBbox(
+    routes
+      .map((route) => rawRouteGeometryBbox(route.geometry.coordinates))
+      .reduce(
+        (bbox, next) => ({
+          west: Math.min(bbox.west, next.west),
+          south: Math.min(bbox.south, next.south),
+          east: Math.max(bbox.east, next.east),
+          north: Math.max(bbox.north, next.north)
+        }),
+        rawRouteGeometryBbox(
+          routes[0]?.geometry.coordinates ?? [
+            [0, 0],
+            [0, 0]
+          ]
+        )
+      ),
+    ROUTE_ANALYSIS_BBOX_PADDING_M
+  );
+}
+
+function routeGeometryBbox(coordinates: Array<[number, number]>, paddingM = 0): BoundingBox {
+  return expandBbox(rawRouteGeometryBbox(coordinates), paddingM);
+}
+
+function rawRouteGeometryBbox(coordinates: Array<[number, number]>): BoundingBox {
+  const lons = coordinates.map((coordinate) => coordinate[0]);
+  const lats = coordinates.map((coordinate) => coordinate[1]);
+  return {
+    west: Math.min(...lons),
+    south: Math.min(...lats),
+    east: Math.max(...lons),
+    north: Math.max(...lats)
+  };
+}
+
+async function sampleElevationProfileFromDem(route: RoutingRoute, tiles: DemTileRef[], sampler: DemElevationSampler): Promise<RoutingElevationProfilePoint[]> {
+  const samples = sampleCoordinatesAlongRoute(route.geometry.coordinates, route.distanceM, ROUTE_ELEVATION_SAMPLE_INTERVAL_M, ROUTE_ELEVATION_MAX_SAMPLES);
+  const profile: RoutingElevationProfilePoint[] = [];
+  for (const sample of samples) {
+    const elevation = await sampler.sample(sample.lon, sample.lat, tiles);
+    if (!elevation) {
+      continue;
+    }
+    profile.push({
+      distanceM: Math.round(sample.distanceM),
+      lon: roundCoord(sample.lon),
+      lat: roundCoord(sample.lat),
+      elevationM: elevation.elevationM,
+      sourceId: "dem",
+      tileId: elevation.tileId
+    });
+  }
+  return withElevationGrades(profile);
+}
+
+function valhallaElevationProfile(
+  legs: ValhallaLeg[],
+  routeCoordinates: Array<[number, number]>,
+  routeDistanceM: number
+): RoutingElevationProfilePoint[] | undefined {
+  const elevations = legs.flatMap((leg) => (Array.isArray(leg.elevation) ? leg.elevation : []));
+  if (elevations.length === 0 || routeCoordinates.length < 2) {
+    return undefined;
+  }
+  const denominator = Math.max(1, elevations.length - 1);
+  const profile = elevations.map((value, index) => {
+    const distanceM = (routeDistanceM * index) / denominator;
+    const point = interpolatePointAtDistance(routeCoordinates, distanceM) ?? {
+      lon: routeCoordinates[routeCoordinates.length - 1]![0],
+      lat: routeCoordinates[routeCoordinates.length - 1]![1]
+    };
+    return {
+      distanceM: Math.round(distanceM),
+      lon: roundCoord(point.lon),
+      lat: roundCoord(point.lat),
+      elevationM: Math.round(Number(value)),
+      sourceId: "valhalla" as const
+    };
+  });
+  return withElevationGrades(profile.filter((sample) => Number.isFinite(sample.elevationM)));
+}
+
+function sampleCoordinatesAlongRoute(
+  coordinates: Array<[number, number]>,
+  distanceM: number,
+  intervalM: number,
+  maxSamples: number
+): Array<{ distanceM: number; lon: number; lat: number }> {
+  if (coordinates.length < 2) {
+    return [];
+  }
+  const sampleCount = Math.max(2, Math.min(maxSamples, Math.floor(distanceM / Math.max(1, intervalM)) + 1));
+  const stepM = sampleCount > 1 ? distanceM / (sampleCount - 1) : distanceM;
+  return Array.from({ length: sampleCount }, (_, index) => {
+    const targetM = index === sampleCount - 1 ? distanceM : stepM * index;
+    const point = interpolatePointAtDistance(coordinates, targetM);
+    return {
+      distanceM: targetM,
+      lon: point?.lon ?? coordinates[0]![0],
+      lat: point?.lat ?? coordinates[0]![1]
+    };
+  });
+}
+
+function interpolatePointAtDistance(coordinates: Array<[number, number]>, targetDistanceM: number): { lon: number; lat: number } | undefined {
+  if (coordinates.length === 0) {
+    return undefined;
+  }
+  if (coordinates.length === 1 || targetDistanceM <= 0) {
+    return { lon: coordinates[0]![0], lat: coordinates[0]![1] };
+  }
+  let traversedM = 0;
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const start = coordinates[index - 1]!;
+    const end = coordinates[index]!;
+    const segmentM = haversineMeters(start, end);
+    if (traversedM + segmentM >= targetDistanceM) {
+      const t = segmentM > 0 ? (targetDistanceM - traversedM) / segmentM : 0;
+      return {
+        lon: start[0] + (end[0] - start[0]) * t,
+        lat: start[1] + (end[1] - start[1]) * t
+      };
+    }
+    traversedM += segmentM;
+  }
+  const last = coordinates[coordinates.length - 1]!;
+  return { lon: last[0], lat: last[1] };
+}
+
+function withElevationGrades(profile: RoutingElevationProfilePoint[]): RoutingElevationProfilePoint[] {
+  return profile.map((sample, index) => {
+    if (index === 0) {
+      return { ...sample, gradePct: 0 };
+    }
+    const previous = profile[index - 1]!;
+    const distanceDeltaM = sample.distanceM - previous.distanceM;
+    const elevationDeltaM = sample.elevationM - previous.elevationM;
+    return {
+      ...sample,
+      gradePct: distanceDeltaM > 0 ? Math.round((elevationDeltaM / distanceDeltaM) * 1000) / 10 : 0
+    };
+  });
+}
+
+function elevationSummary(
+  profile: RoutingElevationProfilePoint[],
+  sourceStatus: RoutingAnalysisSourceStatus,
+  sourceId: "valhalla" | "dem",
+  warnings: string[]
+): RoutingElevationSummary {
+  const elevations = profile.map((sample) => sample.elevationM);
+  let gainM = 0;
+  let lossM = 0;
+  for (let index = 1; index < profile.length; index += 1) {
+    const delta = profile[index]!.elevationM - profile[index - 1]!.elevationM;
+    if (delta > 0) {
+      gainM += delta;
+    } else {
+      lossM += Math.abs(delta);
+    }
+  }
+  return {
+    sourceStatus,
+    sourceId,
+    gainM: Math.round(gainM),
+    lossM: Math.round(lossM),
+    minM: elevations.length > 0 ? Math.min(...elevations) : undefined,
+    maxM: elevations.length > 0 ? Math.max(...elevations) : undefined,
+    sampleCount: profile.length,
+    warnings
+  };
+}
+
+function routeWeatherOnRoute(route: RoutingRoute, context: RoutingFeatureAnalysisContext | undefined): RoutingWeatherOnRoute {
+  if (!context) {
+    return { sourceStatus: "disabled", summary: "Počasí na trase nebylo požadováno.", warnings: [], sourceIds: [], segments: [] };
+  }
+  if (context.sourceStatus === "disabled") {
+    return {
+      sourceStatus: "disabled",
+      summary: "Počasí na trase není dostupné.",
+      warnings: context.warnings,
+      sourceIds: context.sourceIds,
+      segments: []
+    };
+  }
+  const segments = context.features
+    .flatMap((feature) => weatherSegmentForRoute(feature, route))
+    .sort((left, right) => left.routeDistanceM - right.routeDistanceM)
+    .slice(0, 20);
+  return {
+    sourceStatus: context.sourceStatus,
+    summary: weatherRouteSummary(segments),
+    warnings: context.warnings,
+    sourceIds: context.sourceIds,
+    segments
+  };
+}
+
+function weatherSegmentForRoute(feature: SituationFeature, route: RoutingRoute): RoutingWeatherRouteSegment[] {
+  const point = featureRepresentativePoint(feature);
+  if (!point) {
+    return [];
+  }
+  const match = nearestPointOnPolyline([point.lon, point.lat], route.geometry.coordinates);
+  if (!match || match.distanceM > WEATHER_ROUTE_CORRIDOR_RADIUS_M) {
+    return [];
+  }
+  return [
+    {
+      sourceId: feature.properties.sourceId,
+      featureId: feature.id,
+      label: feature.properties.label,
+      severity: feature.properties.severity,
+      lon: roundCoord(point.lon),
+      lat: roundCoord(point.lat),
+      routeDistanceM: Math.round(match.distanceAlongRouteM),
+      distanceFromRouteM: Math.round(match.distanceM),
+      segmentStartM: Math.max(0, Math.round(match.distanceAlongRouteM - ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M)),
+      segmentEndM: Math.min(route.distanceM, Math.round(match.distanceAlongRouteM + ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M)),
+      observedAt: feature.properties.observedAt,
+      validUntil: feature.properties.validUntil,
+      metrics: routeWeatherMetrics(feature.properties.metrics)
+    }
+  ];
+}
+
+function routeWeatherMetrics(metrics: Record<string, number | string | boolean> | undefined): Record<string, number | string | boolean> {
+  if (!metrics) {
+    return {};
+  }
+  const keys = [
+    "temperatureC",
+    "relativeHumidityPercent",
+    "precipitationMm",
+    "precipitationNext1hMm",
+    "precipitationNext3hMm",
+    "precipitationProbabilityNext1hPercent",
+    "precipitationProbabilityNext3hPercent",
+    "windSpeedMps",
+    "windGustMps",
+    "windDirectionDeg",
+    "cloudCoverPercent",
+    "riskScore"
+  ];
+  return Object.fromEntries(keys.flatMap((key) => (metrics[key] === undefined ? [] : [[key, metrics[key]!] as const])));
+}
+
+function weatherRouteSummary(segments: RoutingWeatherRouteSegment[]): string {
+  if (segments.length === 0) {
+    return "Bez dostupných meteorologických segmentů v koridoru trasy.";
+  }
+  const maxPrecipitation = Math.max(0, ...segments.map((segment) => Number(segment.metrics.precipitationNext3hMm ?? segment.metrics.precipitationMm ?? 0)));
+  const maxWind = Math.max(0, ...segments.map((segment) => Number(segment.metrics.windGustMps ?? segment.metrics.windSpeedMps ?? 0)));
+  const severeCount = segments.filter((segment) => segment.severity === "warning" || segment.severity === "critical").length;
+  const parts: string[] = [];
+  if (maxPrecipitation >= 0.2) {
+    parts.push(maxPrecipitation >= 5 ? "výrazné srážky na části trasy" : "srážky na části trasy");
+  }
+  if (maxWind > 0) {
+    parts.push(`vítr do ${Math.round(maxWind)} m/s`);
+  }
+  if (severeCount > 0) {
+    parts.push(`${severeCount} meteorologické výstražné segmenty`);
+  }
+  return parts.length > 0 ? capitalizeSentence(parts.join(", ")) : "Bez výrazných meteorologických rizik na trase.";
+}
+
+function routeHazardsOnRoute(route: RoutingRoute, context: RoutingFeatureAnalysisContext | undefined): RoutingHazardsOnRoute {
+  if (!context) {
+    return { sourceStatus: "disabled", summary: "Bez požadované bezpečnostní analýzy trasy.", warnings: [], sourceIds: [], items: [] };
+  }
+  const safetyItems =
+    context.sourceStatus === "disabled"
+      ? []
+      : context.features
+          .flatMap((feature) => hazardItemForRoute(feature, route))
+          .sort((left, right) => left.routeDistanceM - right.routeDistanceM)
+          .slice(0, 30);
+  const trafficItems = route.traffic.incidentsOnRoute.map((incident) => trafficIncidentHazardItem(incident, route));
+  const items = [...safetyItems, ...trafficItems].sort((left, right) => left.routeDistanceM - right.routeDistanceM).slice(0, 40);
+  const warnings = context.sourceStatus === "disabled" ? context.warnings : context.warnings;
+  return {
+    sourceStatus: context.sourceStatus,
+    summary: hazardRouteSummary(items),
+    warnings,
+    sourceIds: uniqueSourceIds([...context.sourceIds, ...(trafficItems.length > 0 ? ["road_srti_lod" as SituationDataSourceId] : [])]),
+    items
+  };
+}
+
+function hazardItemForRoute(feature: SituationFeature, route: RoutingRoute): RoutingHazardRouteItem[] {
+  const point = featureRepresentativePoint(feature);
+  if (!point) {
+    return [];
+  }
+  const match = nearestPointOnPolyline([point.lon, point.lat], route.geometry.coordinates);
+  if (!match || match.distanceM > HAZARD_ROUTE_CORRIDOR_RADIUS_M) {
+    return [];
+  }
+  return [
+    {
+      hazardId: feature.id,
+      sourceId: feature.properties.sourceId,
+      layer: feature.properties.layer,
+      category: feature.properties.category,
+      hazardType: feature.properties.hazardType,
+      label: feature.properties.label,
+      severity: feature.properties.severity,
+      lon: roundCoord(point.lon),
+      lat: roundCoord(point.lat),
+      routeDistanceM: Math.round(match.distanceAlongRouteM),
+      distanceFromRouteM: Math.round(match.distanceM),
+      segmentStartM: Math.max(0, Math.round(match.distanceAlongRouteM - ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M)),
+      segmentEndM: Math.min(route.distanceM, Math.round(match.distanceAlongRouteM + ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M)),
+      observedAt: feature.properties.observedAt,
+      validUntil: feature.properties.validUntil,
+      confidence: feature.properties.confidence
+    }
+  ];
+}
+
+function trafficIncidentHazardItem(incident: RoutingTrafficIncident, route: RoutingRoute): RoutingHazardRouteItem {
+  return {
+    hazardId: incident.incidentId,
+    sourceId: incident.sourceId,
+    layer: "traffic",
+    category: incident.category,
+    hazardType: incident.srtiType,
+    label: incident.label,
+    severity: incident.severity,
+    lon: incident.lon,
+    lat: incident.lat,
+    routeDistanceM: incident.distanceAlongRouteM,
+    distanceFromRouteM: incident.distanceFromRouteM,
+    segmentStartM: Math.max(0, incident.distanceAlongRouteM - ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M),
+    segmentEndM: Math.min(route.distanceM, incident.distanceAlongRouteM + ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M),
+    observedAt: incident.observedAt,
+    validUntil: incident.validUntil,
+    confidence: incident.confidence
+  };
+}
+
+function hazardRouteSummary(items: RoutingHazardRouteItem[]): string {
+  if (items.length === 0) {
+    return "Bez zásadních bezpečnostních překážek v koridoru trasy.";
+  }
+  const highest = highestSeverity(items.map((item) => item.severity));
+  return `${items.length} bezpečnostní položka/položek v koridoru trasy${highest ? `, nejvyšší závažnost ${highest}` : ""}.`;
+}
+
+function featureRepresentativePoint(feature: SituationFeature): { lon: number; lat: number } | undefined {
+  const coordinates = flattenGeometryCoordinates(feature.geometry);
+  if (coordinates.length === 0) {
+    return undefined;
+  }
+  const lon = coordinates.reduce((sum, coordinate) => sum + coordinate[0], 0) / coordinates.length;
+  const lat = coordinates.reduce((sum, coordinate) => sum + coordinate[1], 0) / coordinates.length;
+  return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat } : undefined;
+}
+
+function flattenGeometryCoordinates(geometry: SituationFeature["geometry"]): Array<[number, number]> {
+  if (geometry.type === "Point") {
+    return [geometry.coordinates];
+  }
+  if (geometry.type === "LineString") {
+    return geometry.coordinates;
+  }
+  if (geometry.type === "MultiLineString" || geometry.type === "Polygon") {
+    return geometry.coordinates.flat();
+  }
+  return geometry.coordinates.flat(2);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
+}
+
+function uniqueSourceIds(values: SituationDataSourceId[]): SituationDataSourceId[] {
+  return Array.from(new Set(values));
+}
+
+function capitalizeSentence(value: string): string {
+  return value.length === 0 ? value : `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
+}
+
 async function loadRoutingTrafficEvents(config: SituationDataConfig): Promise<RoutingTrafficEvent[]> {
   const events = await fetchRoadSrtiLodEvents(config);
   return events.map(routingTrafficEvent);
@@ -1731,14 +2390,15 @@ function routingTrafficEvent(event: RoadSrtiLodEvent): RoutingTrafficEvent {
 
 function annotateRouteTraffic(route: RoutingRoute, context: RoutingTrafficContext | undefined): RoutingRoute {
   if (!context || context.sourceStatus === "disabled") {
-    return { ...route, traffic: emptyRouteTraffic() };
+    return { ...route, traffic: emptyRouteTraffic("disabled") };
   }
   if (context.sourceStatus === "degraded") {
     return {
       ...route,
       traffic: {
-        ...emptyRouteTraffic(),
-        trafficAware: false
+        ...emptyRouteTraffic("degraded"),
+        trafficAware: false,
+        warnings: context.warnings
       }
     };
   }
@@ -1759,6 +2419,7 @@ function annotateRouteTraffic(route: RoutingRoute, context: RoutingTrafficContex
       incidents.length > 0 ? [...route.warnings, `Route corridor contains ${incidents.length} current NDIC/ŘSD SRTI traffic event(s).`] : route.warnings,
     traffic: {
       trafficAware: true,
+      sourceStatus: "ok",
       incidentCount: incidents.length,
       highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
       delayPenaltySeconds,
@@ -1766,7 +2427,9 @@ function annotateRouteTraffic(route: RoutingRoute, context: RoutingTrafficContex
       hardExclusionApplied,
       hard_exclusion_applied: hardExclusionApplied,
       softPenaltyCandidateCount: incidents.filter((incident) => incident.action === "soft_penalty").length,
-      incidentsOnRoute: incidents
+      incidentsOnRoute: incidents,
+      warnings: context.warnings,
+      limitations: routeTrafficLimitations()
     },
     quality: {
       ...route.quality,
@@ -1824,10 +2487,7 @@ function routingTrafficSummary(context: RoutingTrafficContext | undefined, route
     delayPenaltySeconds: primaryRoute?.traffic.delayPenaltySeconds ?? 0,
     highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
     warnings: context?.warnings ?? [],
-    limitations: [
-      "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
-      "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
-    ]
+    limitations: [...routeTrafficLimitations()]
   };
 }
 
@@ -1842,17 +2502,27 @@ function trafficRouteScore(route: RoutingRoute): number {
   return route.durationSeconds + route.traffic.hardExclusionCandidateCount * 600;
 }
 
-function emptyRouteTraffic(): RoutingRouteTraffic {
+function emptyRouteTraffic(sourceStatus: RoutingTrafficSummary["sourceStatus"] = "disabled"): RoutingRouteTraffic {
   return {
     trafficAware: false,
+    sourceStatus,
     incidentCount: 0,
     delayPenaltySeconds: 0,
     hardExclusionCandidateCount: 0,
     hardExclusionApplied: false,
     hard_exclusion_applied: false,
     softPenaltyCandidateCount: 0,
-    incidentsOnRoute: []
+    incidentsOnRoute: [],
+    warnings: [],
+    limitations: routeTrafficLimitations()
   };
+}
+
+function routeTrafficLimitations(): string[] {
+  return [
+    "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+    "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+  ];
 }
 
 function emptyTrafficContext(sourceStatus: RoutingTrafficSummary["sourceStatus"]): RoutingTrafficContext {
@@ -1974,6 +2644,7 @@ async function requestValhallaRoute(
     ...valhallaTrafficAvoidancePayload(trafficContext),
     ...valhallaLinearCostFactorsPayload(options.linearCostFactors),
     alternates: Math.max(0, Math.min(2, options.alternates ?? request.alternatives - 1)),
+    ...(request.includeElevationProfile ? { elevation_interval: ROUTE_ELEVATION_SAMPLE_INTERVAL_M } : {}),
     units: "kilometers",
     language: "cs-CZ",
     directions_options: {
@@ -2109,6 +2780,8 @@ function valhallaRoute(
   const durationSeconds = Number.isFinite(Number(summary?.time))
     ? Math.round(Number(summary?.time))
     : estimatedDurationSeconds(distanceM, profile.defaultSpeedKph);
+  const elevationProfile = request.includeElevationProfile ? valhallaElevationProfile(trip.legs ?? [], coordinates, distanceM) : undefined;
+  const elevation = elevationProfile && elevationProfile.length > 0 ? elevationSummary(elevationProfile, "ok", "valhalla", []) : undefined;
   return {
     routeId: `routing:${profile.profileId}:valhalla:${stablePayload({ from: request.from, to: request.to, rank })}`,
     profileId: profile.profileId,
@@ -2117,6 +2790,8 @@ function valhallaRoute(
     geometry: { type: "LineString", coordinates },
     distanceM,
     durationSeconds,
+    ascentM: elevation?.gainM,
+    descentM: elevation?.lossM,
     snap: valhallaSnap(request, trip),
     steps: valhallaSteps(trip.legs ?? [], coordinates),
     warnings: [],
@@ -2128,7 +2803,9 @@ function valhallaRoute(
       graphEdgesUsed: Math.max(0, coordinates.length - 1),
       routingModelVersion: VALHALLA_ROUTING_MODEL_VERSION,
       engine: "valhalla"
-    }
+    },
+    elevation,
+    elevationProfile
   };
 }
 
@@ -2783,6 +3460,10 @@ function roundCoord(value: number): number {
 
 function cleanString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function optionalInteger(value: unknown): number | undefined {

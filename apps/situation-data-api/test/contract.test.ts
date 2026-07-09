@@ -4806,6 +4806,101 @@ describe("Situation Data API contract", () => {
     expect(alternatives.body.warnings).toEqual(expect.arrayContaining([expect.stringContaining("returned only 1 of 2 requested route variant")]));
   });
 
+  it("adds requested route analysis sections for route detail panels", async () => {
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path !== "/route") {
+        return new Response(JSON.stringify({ version: "test-valhalla", available_actions: ["route", "status"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      const payload = JSON.parse(String(init?.body ?? "{}"));
+      expect(payload.elevation_interval).toBe(250);
+      return new Response(
+        JSON.stringify({
+          trip: {
+            status: 0,
+            summary: { length: 3.6, time: 2400 },
+            locations: [
+              { lat: 50.0801, lon: 14.4201 },
+              { lat: 50.0999, lon: 14.4499 }
+            ],
+            legs: [
+              {
+                shape: "_oso~A_acoZowH_pRoh\\_af@",
+                elevation: [430, 455, 440],
+                elevation_interval: 250,
+                maneuvers: [{ instruction: "Jeďte primární trasou.", length: 3.6, time: 2400 }]
+              }
+            ]
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const valhallaApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test"
+      })
+    ).app;
+
+    const route = await request(valhallaApp)
+      .post("/api/v1/routing/alternatives")
+      .send({
+        profileId: "car",
+        from: { lon: 14.42, lat: 50.08 },
+        to: { lon: 14.45, lat: 50.1 },
+        alternatives: 1,
+        includeSteps: true,
+        includeElevationProfile: true,
+        includeWeatherOnRoute: true,
+        includeHazardsOnRoute: true,
+        includeTraffic: true
+      })
+      .expect(200);
+
+    expect(route.body.routes[0]).toEqual(
+      expect.objectContaining({
+        ascentM: 25,
+        descentM: 15,
+        elevation: expect.objectContaining({
+          sourceStatus: "ok",
+          sourceId: "valhalla",
+          gainM: 25,
+          lossM: 15,
+          minM: 430,
+          maxM: 455,
+          sampleCount: 3
+        }),
+        elevationProfile: [
+          expect.objectContaining({ distanceM: 0, lon: 14.42, lat: 50.08, elevationM: 430, gradePct: 0 }),
+          expect.objectContaining({ distanceM: 1800, elevationM: 455 }),
+          expect.objectContaining({ distanceM: 3600, lon: 14.45, lat: 50.1, elevationM: 440 })
+        ],
+        weatherOnRoute: expect.objectContaining({
+          sourceStatus: "disabled",
+          segments: [],
+          warnings: expect.arrayContaining([expect.stringContaining("weather route analysis unavailable")])
+        }),
+        hazardsOnRoute: expect.objectContaining({
+          sourceStatus: "disabled",
+          items: [],
+          warnings: expect.arrayContaining([expect.stringContaining("hazards route analysis unavailable")])
+        }),
+        traffic: expect.objectContaining({
+          sourceStatus: "disabled",
+          limitations: expect.arrayContaining([expect.stringContaining("SRTI LOD events")])
+        })
+      })
+    );
+    expect(route.body.features[0].properties.traffic).toEqual(expect.objectContaining({ sourceStatus: "disabled" }));
+    expect(route.body.features[0].properties.quality).toEqual(expect.objectContaining({ mode: "engine_route", engine: "valhalla" }));
+  });
+
   it("adds NDIC SRTI traffic context to Valhalla route responses", async () => {
     const observedAt = new Date().toISOString();
     const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
