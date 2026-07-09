@@ -4816,12 +4816,20 @@ describe("Situation Data API contract", () => {
         });
       }
       const payload = JSON.parse(String(init?.body ?? "{}"));
-      expect(payload.elevation_interval).toBe(250);
+      expect(payload.elevation_interval).toBe(50);
+      expect(payload.date_time).toEqual({ type: 1, value: "2026-07-09T08:30" });
+      expect(payload.admin_crossings).toBe(true);
+      expect(payload.linear_references).toBe(true);
+      expect(payload.directions_options.turn_lanes).toBe(true);
+      expect(payload.recostings).toEqual([
+        { costing: "auto", fixed_speed: 30, name: "slow_30_kph" },
+        { costing: "auto", fixed_speed: 60, name: "fast_60_kph" }
+      ]);
       return new Response(
         JSON.stringify({
           trip: {
             status: 0,
-            summary: { length: 3.6, time: 2400 },
+            summary: { length: 3.6, time: 2400, time_slow_30_kph: 432, time_fast_60_kph: 216 },
             locations: [
               { lat: 50.0801, lon: 14.4201 },
               { lat: 50.0999, lon: 14.4499 }
@@ -4830,8 +4838,22 @@ describe("Situation Data API contract", () => {
               {
                 shape: "_oso~A_acoZowH_pRoh\\_af@",
                 elevation: [430, 455, 440],
-                elevation_interval: 250,
-                maneuvers: [{ instruction: "Jeďte primární trasou.", length: 3.6, time: 2400 }]
+                elevation_interval: 50,
+                maneuvers: [
+                  {
+                    instruction: "Jeďte primární trasou.",
+                    length: 3.6,
+                    time: 2400,
+                    begin_shape_index: 0,
+                    end_shape_index: 2,
+                    bearing_before: 91,
+                    bearing_after: 100,
+                    travel_mode: "drive",
+                    travel_type: "car",
+                    lanes: [{ directions: 2, valid: 2, active: 2 }],
+                    sign: { exit_number_elements: [{ text: "1" }] }
+                  }
+                ]
               }
             ]
           }
@@ -4854,6 +4876,7 @@ describe("Situation Data API contract", () => {
         profileId: "car",
         from: { lon: 14.42, lat: 50.08 },
         to: { lon: 14.45, lat: 50.1 },
+        departureTime: "2026-07-09T08:30:00+02:00",
         alternatives: 1,
         includeSteps: true,
         includeElevationProfile: true,
@@ -4894,7 +4917,32 @@ describe("Situation Data API contract", () => {
         traffic: expect.objectContaining({
           sourceStatus: "disabled",
           limitations: expect.arrayContaining([expect.stringContaining("SRTI LOD events")])
+        }),
+        navigation: expect.objectContaining({
+          provider: "valhalla",
+          requestedDepartureTime: "2026-07-09T08:30",
+          enhancementFlags: expect.arrayContaining(["date_time", "turn_lanes", "linear_references", "admin_crossings", "recostings"]),
+          recostings: [
+            { name: "slow_30_kph", durationSeconds: 432, status: "ok" },
+            { name: "fast_60_kph", durationSeconds: 216, status: "ok" }
+          ]
+        }),
+        quality: expect.objectContaining({
+          recostings: [
+            { name: "slow_30_kph", durationSeconds: 432, status: "ok" },
+            { name: "fast_60_kph", durationSeconds: 216, status: "ok" }
+          ]
         })
+      })
+    );
+    expect(route.body.routes[0].steps[0]).toEqual(
+      expect.objectContaining({
+        bearingBefore: 91,
+        bearingAfter: 100,
+        travelMode: "drive",
+        travelType: "car",
+        lanes: [{ directions: 2, valid: 2, active: 2 }],
+        sign: { exit_number_elements: [{ text: "1" }] }
       })
     );
     expect(route.body.features[0].properties.traffic).toEqual(expect.objectContaining({ sourceStatus: "disabled" }));

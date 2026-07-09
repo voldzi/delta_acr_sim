@@ -4306,6 +4306,41 @@ components:
           enum: [valhalla, osm-postgis-graph]
         fallbackReason:
           type: string
+        recostings:
+          type: array
+          description: Optional Valhalla route-duration recosting results for alternative speed assumptions.
+          items:
+            $ref: "#/components/schemas/RoutingRouteRecosting"
+    RoutingRouteRecosting:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+        durationSeconds:
+          type: integer
+        status:
+          type: string
+          enum: [ok, unavailable]
+    RoutingRouteNavigation:
+      type: object
+      required: [provider, enhancementFlags, recostings]
+      properties:
+        provider:
+          type: string
+          enum: [valhalla, osm-postgis-graph, direct_fallback]
+        requestedDepartureTime:
+          type: string
+          description: Local route departure time passed to Valhalla date_time when provided by COP.
+        enhancementFlags:
+          type: array
+          items:
+            type: string
+            enum: [date_time, turn_lanes, linear_references, admin_crossings, recostings, adaptive_elevation_interval]
+        recostings:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoutingRouteRecosting"
     RoutingElevationSummary:
       type: object
       required: [sourceStatus, sampleCount, warnings]
@@ -4500,6 +4535,8 @@ components:
           $ref: "#/components/schemas/RoutingRouteTraffic"
         quality:
           $ref: "#/components/schemas/RoutingRouteQuality"
+        navigation:
+          $ref: "#/components/schemas/RoutingRouteNavigation"
         elevation:
           $ref: "#/components/schemas/RoutingElevationSummary"
         elevationProfile:

@@ -13757,6 +13757,77 @@
           },
           "fallbackReason": {
             "type": "string"
+          },
+          "recostings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingRouteRecosting"
+            },
+            "description": "Optional Valhalla route-duration recosting results for alternative speed assumptions."
+          }
+        }
+      },
+      "SituationDataRoutingRouteRecosting": {
+        "type": "object",
+        "required": [
+          "name",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "durationSeconds": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unavailable"
+            ]
+          }
+        }
+      },
+      "SituationDataRoutingRouteNavigation": {
+        "type": "object",
+        "required": [
+          "provider",
+          "enhancementFlags",
+          "recostings"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph",
+              "direct_fallback"
+            ]
+          },
+          "requestedDepartureTime": {
+            "type": "string",
+            "description": "Local route departure time passed to Valhalla date_time when provided by COP."
+          },
+          "enhancementFlags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "date_time",
+                "turn_lanes",
+                "linear_references",
+                "admin_crossings",
+                "recostings",
+                "adaptive_elevation_interval"
+              ]
+            }
+          },
+          "recostings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationDataRoutingRouteRecosting"
+            }
           }
         }
       },
@@ -14134,6 +14205,9 @@
           },
           "quality": {
             "$ref": "#/components/schemas/SituationDataRoutingRouteQuality"
+          },
+          "navigation": {
+            "$ref": "#/components/schemas/SituationDataRoutingRouteNavigation"
           },
           "elevation": {
             "$ref": "#/components/schemas/SituationDataRoutingElevationSummary"

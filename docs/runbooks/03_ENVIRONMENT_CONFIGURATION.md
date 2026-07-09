@@ -450,12 +450,12 @@ SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS=300
 SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES=512
 ROUTING_ENGINE=auto
 VALHALLA_BASE_URL=http://valhalla.home.cz:8002
-VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf
+VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf https://download.geofabrik.de/europe/germany-latest.osm.pbf https://download.geofabrik.de/europe/poland-latest.osm.pbf https://download.geofabrik.de/europe/slovakia-latest.osm.pbf https://download.geofabrik.de/europe/austria-latest.osm.pbf
 VALHALLA_USE_TILES_IGNORE_PBF=True
 VALHALLA_FORCE_REBUILD=False
 VALHALLA_BUILD_ADMINS=True
 VALHALLA_BUILD_TIME_ZONES=True
-VALHALLA_BUILD_ELEVATION=False
+VALHALLA_BUILD_ELEVATION=True
 VALHALLA_PORT=8002
 SITUATION_DATA_ROUTING_MAX_GRAPH_EDGES=45000
 SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M=160000
@@ -502,6 +502,12 @@ samostatný server `valhalla.home.cz:8002`, protože routing tiles a build jsou
 oddělené od aplikačního Docker hostu. Docker Compose Valhalla profil zůstává
 vývojová varianta; pro produkci nemá COP ani prohlížeč volat Valhalla přímo,
 ale pouze routovací endpointy SIM.
+
+Produkční Valhalla mapa je stavěná z Geofabrik PBF pro ČR, Německo, Polsko,
+Slovensko a Rakousko, se zapnutými admin/time-zone daty a elevací. Konfigurace
+`/custom_files/valhalla.json` musí mít
+`service_limits.allow_hard_exclusions=true`, jinak Valhalla odmítne hard
+exclusion volby, které SIM posílá pro uzavírky a vybrané `avoid` preference.
 
 `PUBLIC_CAMERA_FEEDS` rozšiřuje kompatibilní source `chmi_weather_webcams` o
 další přímé origin zdroje. Položky odděluj čárkou, pole uvnitř položky znakem

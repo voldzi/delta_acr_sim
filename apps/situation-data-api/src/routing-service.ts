@@ -116,6 +116,7 @@ export interface RoutingRoute {
   warnings: string[];
   traffic: RoutingRouteTraffic;
   quality: RoutingRouteQuality;
+  navigation?: RoutingRouteNavigationMetadata;
   elevation?: RoutingElevationSummary;
   elevationProfile?: RoutingElevationProfilePoint[];
   weatherOnRoute?: RoutingWeatherOnRoute;
@@ -239,6 +240,20 @@ export interface RoutingRouteQuality {
   routingModelVersion: string;
   engine?: "valhalla" | "osm-postgis-graph";
   fallbackReason?: string;
+  recostings?: RoutingRouteRecosting[];
+}
+
+export interface RoutingRouteNavigationMetadata {
+  provider: "valhalla" | "osm-postgis-graph" | "direct_fallback";
+  requestedDepartureTime?: string;
+  enhancementFlags: string[];
+  recostings: RoutingRouteRecosting[];
+}
+
+export interface RoutingRouteRecosting {
+  name: string;
+  durationSeconds?: number;
+  status: "ok" | "unavailable";
 }
 
 export interface RoutingStep {
@@ -249,7 +264,19 @@ export interface RoutingStep {
   roadName?: string;
   roadRef?: string;
   highway?: string;
+  bearingBefore?: number;
+  bearingAfter?: number;
+  travelMode?: string;
+  travelType?: string;
+  lanes?: RoutingStepLane[];
+  sign?: Record<string, unknown>;
   geometry: LineStringGeometry;
+}
+
+export interface RoutingStepLane {
+  directions: number;
+  valid?: number;
+  active?: number;
 }
 
 export interface RoutingRouteResponse {
@@ -471,22 +498,25 @@ interface DijkstraState {
 }
 
 interface ValhallaRouteResponse {
-  trip?: {
-    status?: number;
-    status_message?: string;
-    summary?: {
-      time?: number;
-      length?: number;
-    };
-    locations?: Array<Record<string, unknown>>;
-    legs?: ValhallaLeg[];
-    warnings?: Array<{ text?: string; code?: number } | string>;
-  };
+  trip?: ValhallaTrip;
   alternates?: Array<{ trip?: ValhallaRouteResponse["trip"] }>;
   error?: string;
   error_code?: number;
   status?: number;
   status_message?: string;
+}
+
+interface ValhallaTrip {
+  status?: number;
+  status_message?: string;
+  summary?: {
+    time?: number;
+    length?: number;
+    [key: string]: unknown;
+  };
+  locations?: Array<Record<string, unknown>>;
+  legs?: ValhallaLeg[];
+  warnings?: Array<{ text?: string; code?: number } | string>;
 }
 
 interface ValhallaIsochroneResponse {
@@ -559,6 +589,10 @@ interface ValhallaManeuver {
   begin_street_names?: string[];
   travel_mode?: string;
   travel_type?: string;
+  bearing_before?: number;
+  bearing_after?: number;
+  lanes?: unknown[];
+  sign?: Record<string, unknown>;
 }
 
 interface ValhallaRouteRequestOptions {
@@ -577,7 +611,17 @@ const TRAFFIC_ROUTE_CORRIDOR_RADIUS_M = 350;
 const TRAFFIC_PRE_ROUTE_CORRIDOR_RADIUS_M = 800;
 const MAX_VALHALLA_EXCLUDE_LOCATIONS = 25;
 const VALHALLA_ALTERNATIVE_LINEAR_COST_FACTORS = [2, 5, 10];
-const ROUTE_ELEVATION_SAMPLE_INTERVAL_M = 250;
+const ROUTE_ELEVATION_DEFAULT_SAMPLE_INTERVAL_M = 250;
+const ROUTE_ELEVATION_MIN_SAMPLE_INTERVAL_M = 30;
+const ROUTE_ELEVATION_MAX_SAMPLE_COUNT = 240;
+const VALHALLA_NAVIGATION_ENHANCEMENT_FLAGS = [
+  "date_time",
+  "turn_lanes",
+  "linear_references",
+  "admin_crossings",
+  "recostings",
+  "adaptive_elevation_interval"
+] as const;
 const ROUTE_ELEVATION_MAX_SAMPLES = 120;
 const ROUTE_ANALYSIS_BBOX_PADDING_M = 2_000;
 const WEATHER_ROUTE_CORRIDOR_RADIUS_M = 25_000;
@@ -1409,6 +1453,7 @@ export class RoutingService {
     const profileId = parseProfileId(raw.profileId);
     const from = parseCoordinate(raw.from, "from");
     const to = parseCoordinate(raw.to, "to");
+    const departureTime = parseOptionalDepartureTime(raw.departureTime);
     const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
     const profile = getRoutingProfile(profileId);
     if (distanceM > Math.min(profile.maxSearchRadiusM, this.config.routingMaxSearchRadiusM)) {
@@ -1419,6 +1464,7 @@ export class RoutingService {
       profileId,
       from,
       to,
+      departureTime,
       avoid: parseAvoid(raw.avoid),
       alternatives: Math.max(1, Math.min(3, alternatives))
     };
@@ -1931,6 +1977,7 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       distanceM: route.distanceM,
       durationSeconds: route.durationSeconds,
       quality: route.quality,
+      navigation: route.navigation,
       traffic: route.traffic,
       warnings: route.warnings,
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
@@ -2016,7 +2063,12 @@ function rawRouteGeometryBbox(coordinates: Array<[number, number]>): BoundingBox
 }
 
 async function sampleElevationProfileFromDem(route: RoutingRoute, tiles: DemTileRef[], sampler: DemElevationSampler): Promise<RoutingElevationProfilePoint[]> {
-  const samples = sampleCoordinatesAlongRoute(route.geometry.coordinates, route.distanceM, ROUTE_ELEVATION_SAMPLE_INTERVAL_M, ROUTE_ELEVATION_MAX_SAMPLES);
+  const samples = sampleCoordinatesAlongRoute(
+    route.geometry.coordinates,
+    route.distanceM,
+    adaptiveElevationIntervalM(route.profileId, route.distanceM),
+    ROUTE_ELEVATION_MAX_SAMPLES
+  );
   const profile: RoutingElevationProfilePoint[] = [];
   for (const sample of samples) {
     const elevation = await sampler.sample(sample.lon, sample.lat, tiles);
@@ -2545,6 +2597,10 @@ function valhallaTrafficAvoidancePayload(context: RoutingTrafficContext | undefi
   };
 }
 
+function valhallaDepartureTimePayload(departureTime: string | undefined): { date_time?: { type: 1; value: string } } {
+  return departureTime ? { date_time: { type: 1, value: departureTime.slice(0, 16) } } : {};
+}
+
 function isHardExclusionCandidate(event: RoutingTrafficEvent): boolean {
   const normalized = `${event.category} ${event.srtiType ?? ""}`.toLowerCase();
   return normalized.includes("closure") || normalized.includes("blocked") || normalized.includes("obstruction");
@@ -2634,22 +2690,37 @@ async function requestValhallaRoute(
   trafficContext?: RoutingTrafficContext,
   options: ValhallaRouteRequestOptions = {}
 ): Promise<ValhallaRouteResponse> {
+  const costing = valhallaCosting(profile.profileId);
+  const recostings = valhallaRecostings(costing);
+  const departureTime = valhallaDepartureTimePayload(request.departureTime);
   const payload = {
     locations: [
       { lat: request.from.lat, lon: request.from.lon, name: request.from.label, type: "break" },
       { lat: request.to.lat, lon: request.to.lon, name: request.to.label, type: "break" }
     ],
-    costing: valhallaCosting(profile.profileId),
+    costing,
     costing_options: valhallaCostingOptions(profile, request.avoid),
     ...valhallaTrafficAvoidancePayload(trafficContext),
     ...valhallaLinearCostFactorsPayload(options.linearCostFactors),
+    ...departureTime,
+    ...(recostings.length > 0 ? { recostings } : {}),
     alternates: Math.max(0, Math.min(2, options.alternates ?? request.alternatives - 1)),
-    ...(request.includeElevationProfile ? { elevation_interval: ROUTE_ELEVATION_SAMPLE_INTERVAL_M } : {}),
+    ...(request.includeElevationProfile
+      ? {
+          elevation_interval: adaptiveElevationIntervalM(
+            profile.profileId,
+            haversineMeters([request.from.lon, request.from.lat], [request.to.lon, request.to.lat])
+          )
+        }
+      : {}),
+    admin_crossings: true,
+    linear_references: true,
     units: "kilometers",
     language: "cs-CZ",
     directions_options: {
       units: "kilometers",
-      language: "cs-CZ"
+      language: "cs-CZ",
+      turn_lanes: true
     }
   };
   const body = await requestValhallaJson<ValhallaRouteResponse>(config, "/route", payload);
@@ -2755,9 +2826,7 @@ function valhallaRoutes(
   response: ValhallaRouteResponse,
   requestedAlternatives: number
 ): RoutingRoute[] {
-  const trips = [response.trip, ...(response.alternates ?? []).map((alternate) => alternate.trip)].filter(
-    (trip): trip is NonNullable<ValhallaRouteResponse["trip"]> => Boolean(trip)
-  );
+  const trips = [response.trip, ...(response.alternates ?? []).map((alternate) => alternate.trip)].filter((trip): trip is ValhallaTrip => Boolean(trip));
   return trips
     .slice(0, Math.max(1, Math.min(3, requestedAlternatives)))
     .map((trip, index) => valhallaRoute(profile, request, trip, index + 1))
@@ -2767,7 +2836,7 @@ function valhallaRoutes(
 function valhallaRoute(
   profile: RoutingProfile,
   request: Required<Pick<RoutingRouteRequest, "from" | "to">> & RoutingRouteRequest,
-  trip: NonNullable<ValhallaRouteResponse["trip"]>,
+  trip: ValhallaTrip,
   rank: number
 ): RoutingRoute | undefined {
   const legShapes = (trip.legs ?? []).map((leg) => decodeValhallaPolyline6(leg.shape)).filter((coordinates) => coordinates.length >= 2);
@@ -2782,6 +2851,7 @@ function valhallaRoute(
     : estimatedDurationSeconds(distanceM, profile.defaultSpeedKph);
   const elevationProfile = request.includeElevationProfile ? valhallaElevationProfile(trip.legs ?? [], coordinates, distanceM) : undefined;
   const elevation = elevationProfile && elevationProfile.length > 0 ? elevationSummary(elevationProfile, "ok", "valhalla", []) : undefined;
+  const recostings = valhallaRouteRecostings(summary);
   return {
     routeId: `routing:${profile.profileId}:valhalla:${stablePayload({ from: request.from, to: request.to, rank })}`,
     profileId: profile.profileId,
@@ -2802,7 +2872,14 @@ function valhallaRoute(
       graphEdgesScanned: 0,
       graphEdgesUsed: Math.max(0, coordinates.length - 1),
       routingModelVersion: VALHALLA_ROUTING_MODEL_VERSION,
-      engine: "valhalla"
+      engine: "valhalla",
+      ...(recostings.length > 0 ? { recostings } : {})
+    },
+    navigation: {
+      provider: "valhalla",
+      requestedDepartureTime: request.departureTime,
+      enhancementFlags: [...VALHALLA_NAVIGATION_ENHANCEMENT_FLAGS],
+      recostings
     },
     elevation,
     elevationProfile
@@ -2938,18 +3015,70 @@ function valhallaCostingOptions(profile: RoutingProfile, avoid: RoutingAvoid[]):
   if (avoid.includes("tunnel")) {
     base.exclude_tunnels = true;
   }
+  if (avoid.includes("unpaved")) {
+    base.exclude_unpaved = true;
+  }
   if (profile.profileId === "evacuation_walking") {
     base.walking_speed = 3.8;
   } else if (profile.profileId === "walking") {
     base.walking_speed = 4.8;
   }
+  if (profile.profileId === "emergency_vehicle") {
+    base.maneuver_penalty = 2;
+    base.service_penalty = 5;
+  }
+  if (profile.profileId === "offroad_4x4") {
+    base.use_tracks = 0.85;
+    base.service_penalty = 1;
+  }
   if (profile.profileId === "large_emergency_vehicle") {
     base.use_tracks = 0;
+    base.height = 3.4;
+    base.width = 2.55;
+    base.length = 8.5;
+    base.axle_count = 2;
+    base.hgv_no_access_penalty = 43200;
   }
   if (Object.keys(base).length > 0) {
     options[costing] = base;
   }
   return options;
+}
+
+function valhallaRecostings(costing: string): Array<{ costing: string; fixed_speed: number; name: string }> {
+  if (costing !== "auto" && costing !== "truck") {
+    return [];
+  }
+  return [
+    { costing, fixed_speed: 30, name: "slow_30_kph" },
+    { costing, fixed_speed: 60, name: "fast_60_kph" }
+  ];
+}
+
+function valhallaRouteRecostings(summary: ValhallaTrip["summary"] | undefined): RoutingRouteRecosting[] {
+  if (!summary) {
+    return [];
+  }
+  return ["slow_30_kph", "fast_60_kph"].flatMap<RoutingRouteRecosting>((name) => {
+    const raw = summary[`time_${name}`];
+    if (raw === "none") {
+      return [{ name, status: "unavailable" as const }];
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      return [];
+    }
+    return [{ name, durationSeconds: Math.round(parsed), status: "ok" as const }];
+  });
+}
+
+function adaptiveElevationIntervalM(profileId: RoutingProfileId, distanceM: number): number {
+  if (!Number.isFinite(distanceM) || distanceM <= 0) {
+    return ROUTE_ELEVATION_DEFAULT_SAMPLE_INTERVAL_M;
+  }
+  const preferred = profileId === "walking" || profileId === "evacuation_walking" ? 30 : distanceM <= 20_000 ? 50 : 100;
+  const intervalForMaxSamples = Math.ceil(distanceM / ROUTE_ELEVATION_MAX_SAMPLE_COUNT);
+  return Math.max(ROUTE_ELEVATION_MIN_SAMPLE_INTERVAL_M, preferred, intervalForMaxSamples);
 }
 
 function valhallaSnap(
@@ -2989,6 +3118,10 @@ function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, num
         continue;
       }
       const roadName = cleanString(maneuver.street_names?.[0] ?? maneuver.begin_street_names?.[0]);
+      const bearingBefore = optionalFiniteNumber(maneuver.bearing_before);
+      const bearingAfter = optionalFiniteNumber(maneuver.bearing_after);
+      const lanes = valhallaStepLanes(maneuver.lanes);
+      const sign = maneuver.sign && typeof maneuver.sign === "object" ? maneuver.sign : undefined;
       steps.push({
         index: steps.length,
         instructionLocalized: {
@@ -2998,7 +3131,13 @@ function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, num
         distanceM: metersFromKilometers(maneuver.length) ?? Math.round(polylineDistanceM(stepCoordinates)),
         durationSeconds: Number.isFinite(Number(maneuver.time)) ? Math.round(Number(maneuver.time)) : 0,
         roadName,
+        ...(bearingBefore !== undefined ? { bearingBefore } : {}),
+        ...(bearingAfter !== undefined ? { bearingAfter } : {}),
+        ...(cleanString(maneuver.travel_mode) ? { travelMode: cleanString(maneuver.travel_mode) } : {}),
+        ...(cleanString(maneuver.travel_type) ? { travelType: cleanString(maneuver.travel_type) } : {}),
         highway: cleanString(maneuver.travel_type ?? maneuver.travel_mode),
+        ...(lanes.length > 0 ? { lanes } : {}),
+        ...(sign ? { sign } : {}),
         geometry: { type: "LineString", coordinates: stepCoordinates }
       });
     }
@@ -3015,6 +3154,31 @@ function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, num
       geometry: { type: "LineString", coordinates: routeCoordinates }
     }
   ];
+}
+
+function valhallaStepLanes(value: unknown[] | undefined): RoutingStepLane[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const directions = optionalFiniteNumber(record.directions);
+    if (directions === undefined) {
+      return [];
+    }
+    const valid = optionalFiniteNumber(record.valid);
+    const active = optionalFiniteNumber(record.active);
+    return [
+      {
+        directions: Math.round(directions),
+        ...(valid !== undefined ? { valid: Math.round(valid) } : {}),
+        ...(active !== undefined ? { active: Math.round(active) } : {})
+      }
+    ];
+  });
 }
 
 function polygonsFromValhallaGeometry(geometry: ValhallaGeoJsonFeature["geometry"]): PolygonGeometry[] {
@@ -3322,6 +3486,19 @@ function parseAvoid(value: unknown): RoutingAvoid[] {
   return raw.map((item) => String(item).trim()).filter((item): item is RoutingAvoid => allowed.has(item as RoutingAvoid));
 }
 
+function parseOptionalDepartureTime(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const text = String(value).trim();
+  const parsed = Date.parse(text);
+  if (!Number.isFinite(parsed)) {
+    throw new RoutingError(400, "VALIDATION_ERROR", "departureTime must be a valid ISO 8601 date-time.");
+  }
+  const match = text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  return match?.[1] ?? new Date(parsed).toISOString().slice(0, 16);
+}
+
 function positiveNumber(value: unknown, label: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -3469,6 +3646,11 @@ function errorMessage(error: unknown): string {
 function optionalInteger(value: unknown): number | undefined {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function numericProperty(value: unknown): number | undefined {

@@ -394,8 +394,10 @@ vrací nejbližší routovatelný přístupový bod.
 
 Route analysis sekce jsou volitelné a aktivují se request flagy:
 
-- `includeElevationProfile=true`: SIM požádá Valhallu o `elevation_interval`
-  vzorky. Pokud je Valhalla nevrátí, použije lokální DEM sampler, je-li
+- `includeElevationProfile=true`: SIM požádá Valhallu o adaptivní
+  `elevation_interval` vzorky. Krátké a pěší trasy dostanou jemnější profil,
+  dlouhé trasy mají limitovaný počet vzorků, aby COP detail zůstal rychlý.
+  Pokud Valhalla profil nevrátí, použije lokální DEM sampler, je-li
   nakonfigurovaný. Pokud není dostupný žádný zdroj, vrátí
   `routes[].elevation.sourceStatus=disabled|degraded` a warning.
 - `includeWeatherOnRoute=true`: SIM načte zapnuté weather zdroje v koridoru
@@ -419,7 +421,24 @@ používá pro `/isochrone` přes Valhalla isochrone API a pro
 `/nearest-access` přes Valhalla locate API. Produkční pilot používá samostatný
 server `valhalla.home.cz` dostupný pro SIM jako
 `http://valhalla.home.cz:8002`; lokální Docker profil zůstává vývojová varianta
-pro menší instalace.
+pro menší instalace. Pilotní Valhalla server je provozně stavěný pro ČR a
+sousední státy: Česká republika, Německo, Polsko, Slovensko a Rakousko.
+
+SIM při Valhalla `/route` volání používá pokročilé navigační parametry, pokud
+je backend podporuje:
+
+- `date_time.type=1`, pokud COP pošle `departureTime`; SIM zachová lokální
+  civilní čas requestu, aby se časové zákazy a budoucí traffic profily
+  vyhodnocovaly v lokální časové zóně trasy.
+- `directions_options.turn_lanes=true` pro lane guidance v `routes[].steps[]`.
+- `linear_references=true` a `admin_crossings=true` pro lepší diagnostiku a
+  budoucí vazbu dopravních/hazardních událostí na routovací úseky.
+- `recostings[]` pro orientační citlivost ETA na alternativní rychlostní
+  předpoklady; výsledek je v `routes[].navigation.recostings[]` a
+  `routes[].quality.recostings[]`, pokud jej Valhalla vrátí.
+- `avoid=["unpaved"|"bridge"|"tunnel"]` se propisuje do Valhalla costing
+  options; hard excludes vyžadují na Valhalla serveru
+  `service_limits.allow_hard_exclusions=true`.
 
 SIM zároveň používá existující `traffic` zdroj `road_srti_lod` jako routing
 kontext. Při silniční trase načte aktuální NDIC/ŘSD SRTI události v okolí
