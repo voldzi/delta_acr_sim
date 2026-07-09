@@ -352,20 +352,30 @@ Minimální požadavek na trasu:
 }
 ```
 
+Pole `alternatives` znamená požadovaný počet variant včetně primární trasy:
+`1` vrací pouze primární trasu, `2` primární trasu a jednu alternativu, `3`
+primární trasu a dvě alternativy. Valhalla může podle topologie sítě vrátit
+méně nativních alternativ, než je požadováno; SIM se v takovém případě pokusí
+dopočítat odlišnou variantu penalizací primární geometrie přes Valhalla
+`linear_cost_factors`. Pokud ani tak nevznikne dostatečně odlišná trasa, SIM
+vrátí méně variant a přidá explicitní zprávu do `warnings[]`.
+
 Odpověď `sim-routing-route-v1` obsahuje:
 
-| Pole                                           | Popis                                                                                                                                             |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `routes[]`                                     | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků, kvality a dopravního dopadu                                         |
-| `features[]`                                   | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1`                         |
-| `traffic`                                      | souhrn dopravního kontextu z NDIC/ŘSD SRTI použitého při výpočtu a vyhodnocení trasy                                                              |
-| `routes[].traffic.incidentsOnRoute[]`          | dopravní události v koridoru trasy včetně vzdálenosti od trasy a vzdálenosti po trase                                                             |
-| `routes[].traffic.delayPenaltySeconds`         | orientační penalizace ETA podle událostí v koridoru; nejde o měřenou FCD rychlost                                                                 |
-| `routes[].traffic.hardExclusionCandidateCount` | počet closure-like událostí, které by mohly znamenat tvrdou uzávěru, pokud je k dispozici přesné mapování na úsek                                 |
-| `routes[].quality.mode`                        | `engine_route`, pokud SIM použil Valhalla; `osm_graph`, pokud SIM použil lokální OSM graph; `direct_fallback`, pokud není routovací graf dostupný |
-| `routes[].quality.engine`                      | `valhalla` nebo `osm-postgis-graph`; COP má tuto hodnotu zobrazit v diagnostice/detailu trasy                                                     |
-| `routes[].quality.confidence`                  | modelová důvěra; SIM ji sníží, pokud trasa vede přes aktuální dopravní události                                                                   |
-| `warnings[]`                                   | důvody degradace nebo omezení výpočtu                                                                                                             |
+| Pole                                           | Popis                                                                                                                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `routes[]`                                     | strukturované varianty tras včetně vzdálenosti, ETA, snap vzdáleností, kroků, kvality a dopravního dopadu                                                               |
+| `features[]`                                   | hotové GeoJSON prvky pro mapu COP; primární trasa má `styleHint=routing-primary-v1`, alternativy `routing-alternative-v1`                                               |
+| `traffic`                                      | souhrn dopravního kontextu z NDIC/ŘSD SRTI použitého při výpočtu a vyhodnocení trasy                                                                                    |
+| `quality`                                      | mirror kvality primární trasy pro rychlý souhrn bez procházení `routes[0]`                                                                                              |
+| `routes[].traffic.incidentsOnRoute[]`          | dopravní události v koridoru trasy včetně vzdálenosti od trasy a vzdálenosti po trase                                                                                   |
+| `routes[].traffic.delayPenaltySeconds`         | orientační penalizace ETA podle událostí v koridoru; nejde o měřenou FCD rychlost                                                                                       |
+| `routes[].traffic.hardExclusionCandidateCount` | počet closure-like událostí, které by mohly znamenat tvrdou uzávěru, pokud je k dispozici přesné mapování na úsek                                                       |
+| `routes[].traffic.hardExclusionApplied`        | boolean příznak, že route obsahuje SRTI hard exclusion aplikovanou v routovacím požadavku; snake_case alias `hard_exclusion_applied` je dočasně také vracen pro klienty |
+| `routes[].quality.mode`                        | `engine_route`, pokud SIM použil Valhalla; `osm_graph`, pokud SIM použil lokální OSM graph; `direct_fallback`, pokud není routovací graf dostupný                       |
+| `routes[].quality.engine`                      | `valhalla` nebo `osm-postgis-graph`; COP má tuto hodnotu zobrazit v diagnostice/detailu trasy                                                                           |
+| `routes[].quality.confidence`                  | modelová důvěra; SIM ji sníží, pokud trasa vede přes aktuální dopravní události                                                                                         |
+| `warnings[]`                                   | důvody degradace nebo omezení výpočtu                                                                                                                                   |
 
 `POST /routing/alternatives` má stejný vstup jako `/routing/route`, ale vrací
 1-3 varianty. `POST /routing/isochrone` přijímá `origin`,

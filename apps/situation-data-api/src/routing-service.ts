@@ -93,15 +93,7 @@ export interface RoutingRoute {
   steps: RoutingStep[];
   warnings: string[];
   traffic: RoutingRouteTraffic;
-  quality: {
-    mode: RoutingQualityMode;
-    confidence: number;
-    graphEdgesScanned: number;
-    graphEdgesUsed: number;
-    routingModelVersion: string;
-    engine?: "valhalla" | "osm-postgis-graph";
-    fallbackReason?: string;
-  };
+  quality: RoutingRouteQuality;
 }
 
 export type RoutingTrafficAction = "warn" | "soft_penalty" | "hard_exclusion_candidate" | "hard_exclusion_applied";
@@ -130,8 +122,20 @@ export interface RoutingRouteTraffic {
   highestSeverity?: SituationSeverity;
   delayPenaltySeconds: number;
   hardExclusionCandidateCount: number;
+  hardExclusionApplied: boolean;
+  hard_exclusion_applied: boolean;
   softPenaltyCandidateCount: number;
   incidentsOnRoute: RoutingTrafficIncident[];
+}
+
+export interface RoutingRouteQuality {
+  mode: RoutingQualityMode;
+  confidence: number;
+  graphEdgesScanned: number;
+  graphEdgesUsed: number;
+  routingModelVersion: string;
+  engine?: "valhalla" | "osm-postgis-graph";
+  fallbackReason?: string;
 }
 
 export interface RoutingStep {
@@ -152,6 +156,7 @@ export interface RoutingRouteResponse {
   query: Record<string, unknown>;
   profile: RoutingProfile;
   traffic: RoutingTrafficSummary;
+  quality: RoutingRouteQuality;
   routes: RoutingRoute[];
   features: RoutingFeature[];
   warnings: string[];
@@ -166,6 +171,8 @@ export interface RoutingTrafficSummary {
   incidentCount: number;
   hardExclusionCandidateCount: number;
   hardExclusionAppliedCount: number;
+  hardExclusionApplied: boolean;
+  hard_exclusion_applied: boolean;
   softPenaltyCandidateCount: number;
   delayPenaltySeconds: number;
   highestSeverity?: SituationSeverity;
@@ -442,11 +449,22 @@ interface ValhallaManeuver {
   travel_type?: string;
 }
 
+interface ValhallaRouteRequestOptions {
+  alternates?: number;
+  linearCostFactors?: ValhallaLinearCostFactor[];
+}
+
+interface ValhallaLinearCostFactor {
+  coordinates: Array<[number, number]>;
+  factor: number;
+}
+
 const ROUTING_MODEL_VERSION = "osm-postgis-graph-v1";
 const VALHALLA_ROUTING_MODEL_VERSION = "valhalla-v1";
 const TRAFFIC_ROUTE_CORRIDOR_RADIUS_M = 350;
 const TRAFFIC_PRE_ROUTE_CORRIDOR_RADIUS_M = 800;
 const MAX_VALHALLA_EXCLUDE_LOCATIONS = 25;
+const VALHALLA_ALTERNATIVE_LINEAR_COST_FACTORS = [2, 5, 10];
 
 const ROUTING_PROFILES: RoutingProfile[] = [
   {
@@ -808,7 +826,15 @@ export class RoutingService {
     trafficContext?: RoutingTrafficContext
   ): RoutingRouteResponse {
     const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
+    const primaryRoute = trafficRoutes.find((route) => route.rank === 1) ?? trafficRoutes[0];
     const traffic = routingTrafficSummary(trafficContext, trafficRoutes);
+    const responseWarnings = [...warnings];
+    const requestedRouteCount = requestedRouteCountFromQuery(request);
+    if (requestedRouteCount && requestedRouteCount > trafficRoutes.length) {
+      responseWarnings.push(
+        `Routing backend returned only ${trafficRoutes.length} of ${requestedRouteCount} requested route variant(s); no sufficiently distinct alternative path was available.`
+      );
+    }
     return {
       contractVersion: "sim-routing-route-v1",
       generatedAt,
@@ -816,9 +842,10 @@ export class RoutingService {
       query: publicQuery(request),
       profile,
       traffic,
+      quality: primaryRoute?.quality ?? unavailableRouteQuality(backend),
       routes: trafficRoutes,
       features: trafficRoutes.map((route) => routeFeature(route)),
-      warnings
+      warnings: responseWarnings
     };
   }
 
@@ -833,8 +860,68 @@ export class RoutingService {
     trafficContext?: RoutingTrafficContext
   ): Promise<RoutingRouteResponse> {
     const response = await requestValhallaRoute(this.config, profile, request, trafficContext);
-    const routes = valhallaRoutes(profile, request, response, request.alternatives);
-    return this.routeResponse(generatedAt, profile, request, routes, valhallaWarnings(response), "valhalla", trafficContext);
+    const warnings = valhallaWarnings(response);
+    let routes = valhallaRoutes(profile, request, response, request.alternatives);
+    if (routes.length > 0 && routes.length < request.alternatives) {
+      const augmented = await this.computeValhallaPenaltyAlternatives(profile, request, trafficContext, routes, request.alternatives);
+      routes = augmented.routes;
+      warnings.push(...augmented.warnings);
+    }
+    return this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla", trafficContext);
+  }
+
+  private async computeValhallaPenaltyAlternatives(
+    profile: RoutingProfile,
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
+    trafficContext: RoutingTrafficContext | undefined,
+    initialRoutes: RoutingRoute[],
+    requestedRouteCount: number
+  ): Promise<{ routes: RoutingRoute[]; warnings: string[] }> {
+    const routes = [...initialRoutes];
+    const warnings: string[] = [];
+    const primaryRoute = routes.find((route) => route.rank === 1) ?? routes[0];
+    if (!primaryRoute) {
+      return { routes, warnings };
+    }
+    const seenGeometry = new Set(routes.map((route) => routeGeometryToken(route)));
+    let generatedCount = 0;
+    for (const factor of VALHALLA_ALTERNATIVE_LINEAR_COST_FACTORS) {
+      if (routes.length >= requestedRouteCount) {
+        break;
+      }
+      try {
+        const response = await requestValhallaRoute(this.config, profile, request, trafficContext, {
+          alternates: 0,
+          linearCostFactors: [{ coordinates: primaryRoute.geometry.coordinates, factor }]
+        });
+        const candidate = response.trip ? valhallaRoute(profile, request, response.trip, routes.length + 1) : undefined;
+        if (!candidate) {
+          continue;
+        }
+        const token = routeGeometryToken(candidate);
+        if (seenGeometry.has(token)) {
+          continue;
+        }
+        seenGeometry.add(token);
+        generatedCount += 1;
+        routes.push({
+          ...candidate,
+          warnings: [...candidate.warnings, `Alternative route generated by applying Valhalla linear_cost_factors=${factor} to the primary route geometry.`],
+          quality: {
+            ...candidate.quality,
+            confidence: Math.min(candidate.quality.confidence, 0.84)
+          }
+        });
+      } catch {
+        continue;
+      }
+    }
+    if (generatedCount > 0) {
+      warnings.push(
+        `Valhalla returned fewer native alternates than requested; SIM generated ${generatedCount} additional route variant(s) by penalizing the primary route geometry.`
+      );
+    }
+    return { routes, warnings };
   }
 
   private async routeTrafficContext(
@@ -1581,6 +1668,7 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
     properties: {
       profileId: route.profileId,
       rank: route.rank,
+      role: route.rank === 1 ? "primary" : "alternative",
       status: route.status,
       distanceM: route.distanceM,
       durationSeconds: route.durationSeconds,
@@ -1589,6 +1677,33 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       warnings: route.warnings,
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
     }
+  };
+}
+
+function routeGeometryToken(route: RoutingRoute): string {
+  return stablePayload(route.geometry.coordinates);
+}
+
+function requestedRouteCountFromQuery(value: unknown): number | undefined {
+  if (!value || typeof value !== "object" || !("alternatives" in value)) {
+    return undefined;
+  }
+  const parsed = Number((value as { alternatives?: unknown }).alternatives);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return Math.max(1, Math.min(3, Math.round(parsed)));
+}
+
+function unavailableRouteQuality(backend: "valhalla" | "osm-postgis-graph"): RoutingRouteQuality {
+  return {
+    mode: "direct_fallback",
+    confidence: 0,
+    graphEdgesScanned: 0,
+    graphEdgesUsed: 0,
+    routingModelVersion: backend === "valhalla" ? VALHALLA_ROUTING_MODEL_VERSION : ROUTING_MODEL_VERSION,
+    engine: backend,
+    fallbackReason: "No route candidates were returned."
   };
 }
 
@@ -1633,6 +1748,10 @@ function annotateRouteTraffic(route: RoutingRoute, context: RoutingTrafficContex
     .sort((left, right) => left.distanceAlongRouteM - right.distanceAlongRouteM)
     .slice(0, 25);
   const delayPenaltySeconds = incidents.reduce((sum, incident) => sum + trafficDelayPenaltySeconds(incident), 0);
+  const hardExclusionCandidateCount = incidents.filter(
+    (incident) => incident.action === "hard_exclusion_candidate" || incident.action === "hard_exclusion_applied"
+  ).length;
+  const hardExclusionApplied = incidents.some((incident) => incident.action === "hard_exclusion_applied");
   return {
     ...route,
     durationSeconds: route.durationSeconds + delayPenaltySeconds,
@@ -1643,9 +1762,9 @@ function annotateRouteTraffic(route: RoutingRoute, context: RoutingTrafficContex
       incidentCount: incidents.length,
       highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
       delayPenaltySeconds,
-      hardExclusionCandidateCount: incidents.filter(
-        (incident) => incident.action === "hard_exclusion_candidate" || incident.action === "hard_exclusion_applied"
-      ).length,
+      hardExclusionCandidateCount,
+      hardExclusionApplied,
+      hard_exclusion_applied: hardExclusionApplied,
       softPenaltyCandidateCount: incidents.filter((incident) => incident.action === "soft_penalty").length,
       incidentsOnRoute: incidents
     },
@@ -1689,6 +1808,7 @@ function routingTrafficSummary(context: RoutingTrafficContext | undefined, route
   const incidents = routes.flatMap((route) => route.traffic.incidentsOnRoute);
   const uniqueIncidentIds = new Set(incidents.map((incident) => incident.incidentId));
   const primaryRoute = routes.find((route) => route.rank === 1) ?? routes[0];
+  const hardExclusionApplied = Boolean(context?.hardExclusionsApplied.length) || incidents.some((incident) => incident.action === "hard_exclusion_applied");
   return {
     trafficAware: Boolean(context && context.sourceStatus === "ok"),
     sourceIds: context && context.sourceStatus !== "disabled" ? ["road_srti_lod"] : [],
@@ -1698,6 +1818,8 @@ function routingTrafficSummary(context: RoutingTrafficContext | undefined, route
     incidentCount: uniqueIncidentIds.size,
     hardExclusionCandidateCount: context?.hardExclusionCandidates.length ?? 0,
     hardExclusionAppliedCount: context?.hardExclusionsApplied.length ?? 0,
+    hardExclusionApplied,
+    hard_exclusion_applied: hardExclusionApplied,
     softPenaltyCandidateCount: incidents.filter((incident) => incident.action === "soft_penalty").length,
     delayPenaltySeconds: primaryRoute?.traffic.delayPenaltySeconds ?? 0,
     highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
@@ -1726,6 +1848,8 @@ function emptyRouteTraffic(): RoutingRouteTraffic {
     incidentCount: 0,
     delayPenaltySeconds: 0,
     hardExclusionCandidateCount: 0,
+    hardExclusionApplied: false,
+    hard_exclusion_applied: false,
     softPenaltyCandidateCount: 0,
     incidentsOnRoute: []
   };
@@ -1837,7 +1961,8 @@ async function requestValhallaRoute(
   config: SituationDataConfig,
   profile: RoutingProfile,
   request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
-  trafficContext?: RoutingTrafficContext
+  trafficContext?: RoutingTrafficContext,
+  options: ValhallaRouteRequestOptions = {}
 ): Promise<ValhallaRouteResponse> {
   const payload = {
     locations: [
@@ -1847,7 +1972,8 @@ async function requestValhallaRoute(
     costing: valhallaCosting(profile.profileId),
     costing_options: valhallaCostingOptions(profile, request.avoid),
     ...valhallaTrafficAvoidancePayload(trafficContext),
-    alternates: Math.max(0, Math.min(2, request.alternatives - 1)),
+    ...valhallaLinearCostFactorsPayload(options.linearCostFactors),
+    alternates: Math.max(0, Math.min(2, options.alternates ?? request.alternatives - 1)),
     units: "kilometers",
     language: "cs-CZ",
     directions_options: {
@@ -1860,6 +1986,30 @@ async function requestValhallaRoute(
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
   return body;
+}
+
+function valhallaLinearCostFactorsPayload(linearCostFactors: ValhallaLinearCostFactor[] | undefined): {
+  linear_cost_factors?: Array<{
+    type: "Feature";
+    geometry: { type: "LineString"; coordinates: Array<[number, number]> };
+    properties: { factor: number };
+  }>;
+} {
+  if (!linearCostFactors?.length) {
+    return {};
+  }
+  return {
+    linear_cost_factors: linearCostFactors.map((costFactor) => ({
+      type: "Feature",
+      geometry: {
+        type: "LineString",
+        coordinates: costFactor.coordinates
+      },
+      properties: {
+        factor: costFactor.factor
+      }
+    }))
+  };
 }
 
 async function requestValhallaIsochrone(

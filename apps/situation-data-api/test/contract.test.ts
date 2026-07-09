@@ -4667,6 +4667,145 @@ describe("Situation Data API contract", () => {
     expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="nearest_access"} 1');
   });
 
+  it("generates a distinct Valhalla penalty fallback when native alternatives are unavailable", async () => {
+    const routeCalls: unknown[] = [];
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path !== "/route") {
+        return new Response(JSON.stringify({ version: "test-valhalla", available_actions: ["route", "status"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      const payload = JSON.parse(String(init?.body ?? "{}"));
+      routeCalls.push(payload);
+      if (payload.linear_cost_factors) {
+        expect(payload.alternates).toBe(0);
+        expect(payload.linear_cost_factors[0]).toEqual(
+          expect.objectContaining({
+            type: "Feature",
+            geometry: expect.objectContaining({ type: "LineString" }),
+            properties: { factor: 2 }
+          })
+        );
+        return new Response(
+          JSON.stringify({
+            trip: {
+              status: 0,
+              summary: { length: 4.2, time: 2520 },
+              locations: [
+                { lat: 50.0801, lon: 14.4201 },
+                { lat: 50.0999, lon: 14.4499 }
+              ],
+              legs: [{ shape: "_oso~A_acoZoh\\oh\\owHoh\\", maneuvers: [{ instruction: "Jeďte alternativní trasou.", length: 4.2, time: 2520 }] }]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      expect(payload.alternates).toBe(1);
+      return new Response(
+        JSON.stringify({
+          trip: {
+            status: 0,
+            summary: { length: 3.6, time: 2400 },
+            locations: [
+              { lat: 50.0801, lon: 14.4201 },
+              { lat: 50.0999, lon: 14.4499 }
+            ],
+            legs: [{ shape: "_oso~A_acoZowH_pRoh\\_af@", maneuvers: [{ instruction: "Jeďte primární trasou.", length: 3.6, time: 2400 }] }]
+          },
+          alternates: []
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const valhallaApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test"
+      })
+    ).app;
+
+    const alternatives = await request(valhallaApp)
+      .post("/api/v1/routing/alternatives")
+      .send({
+        profileId: "car",
+        from: { lon: 14.42, lat: 50.08 },
+        to: { lon: 14.45, lat: 50.1 },
+        alternatives: 2
+      })
+      .expect(200);
+
+    expect(routeCalls).toHaveLength(2);
+    expect(alternatives.body.routes).toHaveLength(2);
+    expect(alternatives.body.routes.map((route: { rank: number }) => route.rank)).toEqual([1, 2]);
+    expect(alternatives.body.routes[1]).toEqual(
+      expect.objectContaining({
+        distanceM: 4200,
+        durationSeconds: 2520,
+        quality: expect.objectContaining({ mode: "engine_route", engine: "valhalla", confidence: 0.84 }),
+        warnings: expect.arrayContaining([expect.stringContaining("linear_cost_factors=2")])
+      })
+    );
+    expect(alternatives.body.quality).toEqual(expect.objectContaining({ mode: "engine_route", engine: "valhalla" }));
+    expect(alternatives.body.features[0].properties).toEqual(expect.objectContaining({ role: "primary", styleHint: "routing-primary-v1" }));
+    expect(alternatives.body.features[1].properties).toEqual(expect.objectContaining({ role: "alternative", styleHint: "routing-alternative-v1" }));
+    expect(alternatives.body.warnings).toEqual(expect.arrayContaining([expect.stringContaining("Valhalla returned fewer native alternates")]));
+  });
+
+  it("warns when Valhalla cannot produce the requested route alternatives", async () => {
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path !== "/route") {
+        return new Response(JSON.stringify({ version: "test-valhalla", available_actions: ["route", "status"] }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      const payload = JSON.parse(String(init?.body ?? "{}"));
+      expect(payload.alternates).toBe(payload.linear_cost_factors ? 0 : 1);
+      return new Response(
+        JSON.stringify({
+          trip: {
+            status: 0,
+            summary: { length: 3.6, time: 2400 },
+            locations: [
+              { lat: 50.0801, lon: 14.4201 },
+              { lat: 50.0999, lon: 14.4499 }
+            ],
+            legs: [{ shape: "_oso~A_acoZowH_pRoh\\_af@", maneuvers: [{ instruction: "Jeďte primární trasou.", length: 3.6, time: 2400 }] }]
+          },
+          alternates: []
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const valhallaApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test"
+      })
+    ).app;
+
+    const alternatives = await request(valhallaApp)
+      .post("/api/v1/routing/alternatives")
+      .send({
+        profileId: "car",
+        from: { lon: 14.42, lat: 50.08 },
+        to: { lon: 14.45, lat: 50.1 },
+        alternatives: 2
+      })
+      .expect(200);
+
+    expect(alternatives.body.routes).toHaveLength(1);
+    expect(alternatives.body.warnings).toEqual(expect.arrayContaining([expect.stringContaining("returned only 1 of 2 requested route variant")]));
+  });
+
   it("adds NDIC SRTI traffic context to Valhalla route responses", async () => {
     const observedAt = new Date().toISOString();
     const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {

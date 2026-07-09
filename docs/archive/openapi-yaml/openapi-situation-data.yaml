@@ -4036,6 +4036,7 @@ components:
           type: integer
           minimum: 1
           maximum: 3
+          description: Requested number of route variants including the primary route. Use 2 for primary plus one alternative, 3 for primary plus two alternatives.
         includeSteps:
           type: boolean
         includeDebug:
@@ -4173,6 +4174,8 @@ components:
           incidentCount,
           delayPenaltySeconds,
           hardExclusionCandidateCount,
+          hardExclusionApplied,
+          hard_exclusion_applied,
           softPenaltyCandidateCount,
           incidentsOnRoute
         ]
@@ -4188,6 +4191,10 @@ components:
           type: integer
         hardExclusionCandidateCount:
           type: integer
+        hardExclusionApplied:
+          type: boolean
+        hard_exclusion_applied:
+          type: boolean
         softPenaltyCandidateCount:
           type: integer
         incidentsOnRoute:
@@ -4206,6 +4213,8 @@ components:
           incidentCount,
           hardExclusionCandidateCount,
           hardExclusionAppliedCount,
+          hardExclusionApplied,
+          hard_exclusion_applied,
           softPenaltyCandidateCount,
           delayPenaltySeconds,
           warnings,
@@ -4232,6 +4241,10 @@ components:
           type: integer
         hardExclusionAppliedCount:
           type: integer
+        hardExclusionApplied:
+          type: boolean
+        hard_exclusion_applied:
+          type: boolean
         softPenaltyCandidateCount:
           type: integer
         delayPenaltySeconds:
@@ -4247,6 +4260,26 @@ components:
           type: array
           items:
             type: string
+    RoutingRouteQuality:
+      type: object
+      required: [mode, confidence, graphEdgesScanned, graphEdgesUsed, routingModelVersion]
+      properties:
+        mode:
+          type: string
+          enum: [engine_route, osm_graph, direct_fallback]
+        confidence:
+          type: number
+        graphEdgesScanned:
+          type: integer
+        graphEdgesUsed:
+          type: integer
+        routingModelVersion:
+          type: string
+        engine:
+          type: string
+          enum: [valhalla, osm-postgis-graph]
+        fallbackReason:
+          type: string
     RoutingRoute:
       type: object
       required: [routeId, profileId, rank, status, geometry, distanceM, durationSeconds, snap, steps, warnings, traffic, quality]
@@ -4282,28 +4315,10 @@ components:
         traffic:
           $ref: "#/components/schemas/RoutingRouteTraffic"
         quality:
-          type: object
-          required: [mode, confidence, graphEdgesScanned, graphEdgesUsed, routingModelVersion]
-          properties:
-            mode:
-              type: string
-              enum: [engine_route, osm_graph, direct_fallback]
-            confidence:
-              type: number
-            graphEdgesScanned:
-              type: integer
-            graphEdgesUsed:
-              type: integer
-            routingModelVersion:
-              type: string
-            engine:
-              type: string
-              enum: [valhalla, osm-postgis-graph]
-            fallbackReason:
-              type: string
+          $ref: "#/components/schemas/RoutingRouteQuality"
     RoutingRouteResponse:
       type: object
-      required: [contractVersion, generatedAt, source, query, profile, traffic, routes, features, warnings]
+      required: [contractVersion, generatedAt, source, query, profile, traffic, quality, routes, features, warnings]
       properties:
         contractVersion:
           type: string
@@ -4320,6 +4335,8 @@ components:
           $ref: "#/components/schemas/RoutingProfile"
         traffic:
           $ref: "#/components/schemas/RoutingTrafficSummary"
+        quality:
+          $ref: "#/components/schemas/RoutingRouteQuality"
         routes:
           type: array
           items:

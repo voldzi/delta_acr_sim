@@ -13321,7 +13321,8 @@
           "alternatives": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3
+            "maximum": 3,
+            "description": "Requested number of route variants including the primary route. Use 2 for primary plus one alternative, 3 for primary plus two alternatives."
           },
           "includeSteps": {
             "type": "boolean"
@@ -13545,6 +13546,8 @@
           "incidentCount",
           "delayPenaltySeconds",
           "hardExclusionCandidateCount",
+          "hardExclusionApplied",
+          "hard_exclusion_applied",
           "softPenaltyCandidateCount",
           "incidentsOnRoute"
         ],
@@ -13570,6 +13573,12 @@
           "hardExclusionCandidateCount": {
             "type": "integer"
           },
+          "hardExclusionApplied": {
+            "type": "boolean"
+          },
+          "hard_exclusion_applied": {
+            "type": "boolean"
+          },
           "softPenaltyCandidateCount": {
             "type": "integer"
           },
@@ -13592,6 +13601,8 @@
           "incidentCount",
           "hardExclusionCandidateCount",
           "hardExclusionAppliedCount",
+          "hardExclusionApplied",
+          "hard_exclusion_applied",
           "softPenaltyCandidateCount",
           "delayPenaltySeconds",
           "warnings",
@@ -13633,6 +13644,12 @@
           "hardExclusionAppliedCount": {
             "type": "integer"
           },
+          "hardExclusionApplied": {
+            "type": "boolean"
+          },
+          "hard_exclusion_applied": {
+            "type": "boolean"
+          },
           "softPenaltyCandidateCount": {
             "type": "integer"
           },
@@ -13659,6 +13676,48 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "SituationDataRoutingRouteQuality": {
+        "type": "object",
+        "required": [
+          "mode",
+          "confidence",
+          "graphEdgesScanned",
+          "graphEdgesUsed",
+          "routingModelVersion"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "engine_route",
+              "osm_graph",
+              "direct_fallback"
+            ]
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "graphEdgesScanned": {
+            "type": "integer"
+          },
+          "graphEdgesUsed": {
+            "type": "integer"
+          },
+          "routingModelVersion": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "valhalla",
+              "osm-postgis-graph"
+            ]
+          },
+          "fallbackReason": {
+            "type": "string"
           }
         }
       },
@@ -13727,46 +13786,7 @@
             "$ref": "#/components/schemas/SituationDataRoutingRouteTraffic"
           },
           "quality": {
-            "type": "object",
-            "required": [
-              "mode",
-              "confidence",
-              "graphEdgesScanned",
-              "graphEdgesUsed",
-              "routingModelVersion"
-            ],
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "engine_route",
-                  "osm_graph",
-                  "direct_fallback"
-                ]
-              },
-              "confidence": {
-                "type": "number"
-              },
-              "graphEdgesScanned": {
-                "type": "integer"
-              },
-              "graphEdgesUsed": {
-                "type": "integer"
-              },
-              "routingModelVersion": {
-                "type": "string"
-              },
-              "engine": {
-                "type": "string",
-                "enum": [
-                  "valhalla",
-                  "osm-postgis-graph"
-                ]
-              },
-              "fallbackReason": {
-                "type": "string"
-              }
-            }
+            "$ref": "#/components/schemas/SituationDataRoutingRouteQuality"
           }
         }
       },
@@ -13779,6 +13799,7 @@
           "query",
           "profile",
           "traffic",
+          "quality",
           "routes",
           "features",
           "warnings"
@@ -13804,6 +13825,9 @@
           },
           "traffic": {
             "$ref": "#/components/schemas/SituationDataRoutingTrafficSummary"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/SituationDataRoutingRouteQuality"
           },
           "routes": {
             "type": "array",
