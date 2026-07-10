@@ -14,6 +14,11 @@ content only when it matches that checksum. The resolved mirror is recorded in
 the source manifest because load-balanced nodes can temporarily advertise
 different valid generations.
 
+Graph build acceptance checks the materialized `.gph` tile count, then builds
+the tar archive and starts the isolated candidate. `tile_manifest.json` is not
+an output contract because Valhalla may remove that intermediate manifest during
+its cleanup stage.
+
 Install or update the host-owned files:
 
 ```bash

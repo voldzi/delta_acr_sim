@@ -25,6 +25,7 @@ RETAIN_RELEASES=${RETAIN_RELEASES:-3}
 PRESERVE_FAILED_BUILD=${PRESERVE_FAILED_BUILD:-false}
 SOURCE_DOWNLOAD_ATTEMPTS=${SOURCE_DOWNLOAD_ATTEMPTS:-6}
 SOURCE_RETRY_DELAY_SECONDS=${SOURCE_RETRY_DELAY_SECONDS:-120}
+MIN_GRAPH_TILE_FILES=${MIN_GRAPH_TILE_FILES:-200}
 
 MODE=${1:-run}
 case "${MODE}" in
@@ -503,12 +504,16 @@ prepare_elevation() {
 }
 
 build_tiles() {
+  local graph_tile_count
   log "Building complete Valhalla tile pipeline."
   docker run --rm --name valhalla-update-build --cpus "${BUILD_CPUS}" \
     --memory "${BUILD_MEMORY}" --memory-swap "${BUILD_MEMORY_SWAP}" \
     -v "${STAGE_DIR}:/custom_files" --entrypoint valhalla_build_tiles "${VALHALLA_IMAGE}" \
     -c /custom_files/valhalla.json -j "${BUILD_CPUS}" /custom_files/czech-75km.osm.pbf
-  [[ -s "${STAGE_DIR}/valhalla_tiles/tile_manifest.json" ]] || fail "Tile manifest was not created."
+  graph_tile_count=$(find "${STAGE_DIR}/valhalla_tiles" -type f -name '*.gph' | wc -l)
+  (( graph_tile_count >= MIN_GRAPH_TILE_FILES )) \
+    || fail "Only ${graph_tile_count} graph tile files were created; at least ${MIN_GRAPH_TILE_FILES} required."
+  log "Built ${graph_tile_count} graph tile files."
   log "Building Valhalla tile archive."
   docker run --rm --cpus "${BUILD_CPUS}" --memory "${BUILD_MEMORY}" --memory-swap "${BUILD_MEMORY_SWAP}" \
     -v "${STAGE_DIR}:/custom_files" --entrypoint valhalla_build_extract "${VALHALLA_IMAGE}" \
