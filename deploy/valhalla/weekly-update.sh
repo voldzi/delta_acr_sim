@@ -345,19 +345,28 @@ download_source_consistently() {
   local checksum_after="${checksum_file}.after"
   local expected_checksum
   local download_url
+  local resolved_url
   local attempt
 
   for ((attempt = 1; attempt <= SOURCE_DOWNLOAD_ATTEMPTS; attempt++)); do
     rm -f "${source_file}" "${partial_file}" "${checksum_file}" "${checksum_before}" "${checksum_after}"
     log "Downloading ${country} source generation (attempt ${attempt}/${SOURCE_DOWNLOAD_ATTEMPTS})."
+    if ! resolved_url=$(curl -fLsSI --retry 5 --retry-delay 10 --no-progress-meter \
+      -o /dev/null -w '%{url_effective}' "${source_url}"); then
+      log "WARNING: Could not resolve a ${country} Geofabrik mirror."
+      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
+      continue
+    fi
+    [[ "${resolved_url}" == https://* ]] || fail "Resolved ${country} source URL is not HTTPS: ${resolved_url}"
+    download_url=${resolved_url}
+    log "Using one mirror for ${country} PBF and checksum: ${resolved_url}"
     if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
-      -o "${checksum_before}" "${source_url}.md5"; then
+      -o "${checksum_before}" "${resolved_url}.md5"; then
       log "WARNING: Could not fetch the initial ${country} checksum."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
     expected_checksum=$(awk 'NR == 1 {print $1}' "${checksum_before}")
-    download_url="${source_url}?checksum=${expected_checksum}"
     if ! curl -fL --retry 5 --retry-delay 15 --no-progress-meter \
       -o "${partial_file}" "${download_url}"; then
       log "WARNING: Could not download the complete ${country} source."
@@ -365,7 +374,7 @@ download_source_consistently() {
       continue
     fi
     if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
-      -o "${checksum_after}" "${source_url}.md5"; then
+      -o "${checksum_after}" "${resolved_url}.md5"; then
       log "WARNING: Could not fetch the final ${country} checksum."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
@@ -381,6 +390,7 @@ download_source_consistently() {
     mv "${partial_file}" "${source_file}"
     mv "${checksum_before}" "${checksum_file}"
     rm -f "${checksum_after}"
+    DOWNLOADED_SOURCE_URL=${resolved_url}
     return 0
   done
 
@@ -407,7 +417,7 @@ download_sources() {
     timestamp=$(docker run --rm -v "${SOURCE_DIR}:/sources:ro" "${OSM_TOOLS_IMAGE}" \
       osmium fileinfo -g header.option.osmosis_replication_timestamp "/sources/${source_name}")
     sha256=$(sha256sum "${source_file}" | awk '{print $1}')
-    printf '%s\t%s\t%s\t%s\t%s\n' "${country}" "${source_url}" "${timestamp}" "${sha256}" "$(stat -c %s "${source_file}")" \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${country}" "${source_url}" "${DOWNLOADED_SOURCE_URL}" "${timestamp}" "${sha256}" "$(stat -c %s "${source_file}")" \
       >>"${WORK_DIR}/sources.manifest"
   done
 }
