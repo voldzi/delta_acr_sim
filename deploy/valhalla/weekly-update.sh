@@ -23,6 +23,8 @@ VALIDATION_TIMEOUT_SECONDS=${VALIDATION_TIMEOUT_SECONDS:-8}
 VALIDATION_SNAP_METERS=${VALIDATION_SNAP_METERS:-2500}
 RETAIN_RELEASES=${RETAIN_RELEASES:-3}
 PRESERVE_FAILED_BUILD=${PRESERVE_FAILED_BUILD:-false}
+SOURCE_DOWNLOAD_ATTEMPTS=${SOURCE_DOWNLOAD_ATTEMPTS:-6}
+SOURCE_RETRY_DELAY_SECONDS=${SOURCE_RETRY_DELAY_SECONDS:-120}
 
 MODE=${1:-run}
 case "${MODE}" in
@@ -341,32 +343,41 @@ download_source_consistently() {
   local partial_file="${source_file}.part"
   local checksum_before="${checksum_file}.before"
   local checksum_after="${checksum_file}.after"
+  local expected_checksum
+  local download_url
   local attempt
 
-  for attempt in 1 2 3; do
+  for ((attempt = 1; attempt <= SOURCE_DOWNLOAD_ATTEMPTS; attempt++)); do
     rm -f "${source_file}" "${partial_file}" "${checksum_file}" "${checksum_before}" "${checksum_after}"
-    log "Downloading ${country} source generation (attempt ${attempt}/3)."
+    log "Downloading ${country} source generation (attempt ${attempt}/${SOURCE_DOWNLOAD_ATTEMPTS})."
     if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
       -o "${checksum_before}" "${source_url}.md5"; then
       log "WARNING: Could not fetch the initial ${country} checksum."
+      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
+    expected_checksum=$(awk 'NR == 1 {print $1}' "${checksum_before}")
+    download_url="${source_url}?checksum=${expected_checksum}"
     if ! curl -fL --retry 5 --retry-delay 15 --no-progress-meter \
-      -o "${partial_file}" "${source_url}"; then
+      -o "${partial_file}" "${download_url}"; then
       log "WARNING: Could not download the complete ${country} source."
+      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
     if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
       -o "${checksum_after}" "${source_url}.md5"; then
       log "WARNING: Could not fetch the final ${country} checksum."
+      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
     if ! cmp -s "${checksum_before}" "${checksum_after}"; then
       log "WARNING: Geofabrik rotated the ${country} source during download; retrying a clean generation."
+      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
     if ! verify_source_checksum "${partial_file}" "${checksum_after}"; then
       log "WARNING: Downloaded ${country} source failed its checksum; retrying from byte zero."
+      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
     mv "${partial_file}" "${source_file}"
@@ -375,7 +386,7 @@ download_source_consistently() {
     return 0
   done
 
-  fail "Could not obtain one stable, checksum-valid generation of the ${country} source after 3 attempts."
+  fail "Could not obtain one stable, checksum-valid generation of the ${country} source after ${SOURCE_DOWNLOAD_ATTEMPTS} attempts."
 }
 
 download_sources() {
