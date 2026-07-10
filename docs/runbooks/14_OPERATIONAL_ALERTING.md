@@ -21,6 +21,10 @@ It verifies:
 - situation-data density grid output for low-zoom COP rendering,
 - repeated radio-planning `link-check` cache telemetry,
 - that public `/metrics` remains hidden by the web gateway.
+- Valhalla backend availability through Situation Data health and a functional
+  cross-border canary; host-local alerting additionally checks the weekly timer,
+  last successful release age and free disk according to
+  [15_VALHALLA_PRODUCTION.md](15_VALHALLA_PRODUCTION.md).
 
 `tak-gateway` is a future module in the current pilot. SIM still shows its
 diagnostic state, but `operations/summary` marks it with

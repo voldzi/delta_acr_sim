@@ -9,6 +9,8 @@
 - Scenario engine a simulation blocks.
 - Persistent publisher queue, retry/backoff, dry-run a mock mode.
 - AI provider abstraction, guardrails, audit a structured outputs.
+- Dedikovaný Valhalla runtime, verzovaný ČR + 75 km routing dataset, updater,
+  kandidátní validace a rollback na `valhalla.home.cz`.
 
 ## Vně SIM
 
@@ -16,6 +18,7 @@
 - NATO symbol renderer hlavní COM/COP aplikace.
 - Reálné senzory, operační zdroje, zbraňové systémy nebo targeting systémy.
 - Externí AI služby mimo explicitně nakonfigurované provider režimy.
+- Geofabrik/OSM a výškové dlaždice jako externí, rebuildovatelné datové vstupy.
 
 ## Integrační hranice
 

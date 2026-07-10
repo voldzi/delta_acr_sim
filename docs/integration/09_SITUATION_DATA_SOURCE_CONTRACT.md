@@ -421,8 +421,11 @@ používá pro `/isochrone` přes Valhalla isochrone API a pro
 `/nearest-access` přes Valhalla locate API. Produkční pilot používá samostatný
 server `valhalla.home.cz` dostupný pro SIM jako
 `http://valhalla.home.cz:8002`; lokální Docker profil zůstává vývojová varianta
-pro menší instalace. Pilotní Valhalla server je provozně stavěný pro ČR a
-sousední státy: Česká republika, Německo, Polsko, Slovensko a Rakousko.
+pro menší instalace. Pilotní server používá plné vstupy pro Českou republiku,
+Německo, Polsko, Slovensko, Rakousko a Maďarsko, ale závazný routovací rozsah je
+ČR plus 75 km, nikoli celé sousední státy. SIM posílá `radius` i stejně velký
+`search_cutoff` a odmítá endpoint nebo nearest-access snap mimo svůj limit.
+Mapová data jsou rebuildovatelný OSM/Geofabrik read-model pod ODbL.
 
 SIM při Valhalla `/route` volání používá pokročilé navigační parametry, pokud
 je backend podporuje:

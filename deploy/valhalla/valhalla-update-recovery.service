@@ -1,0 +1,17 @@
+[Unit]
+Description=Recover an interrupted Valhalla release activation
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+Before=valhalla-weekly-update.service
+RequiresMountsFor=/srv/valhalla
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/valhalla
+EnvironmentFile=-/srv/valhalla/.update.env
+ExecStart=/srv/valhalla/update-tools/weekly-update.sh recover
+TimeoutStartSec=10m
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

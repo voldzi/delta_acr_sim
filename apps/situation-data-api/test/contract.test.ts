@@ -4456,8 +4456,8 @@ describe("Situation Data API contract", () => {
       if (path === "/route") {
         expect(payload.costing).toBe("pedestrian");
         expect(payload.locations).toEqual([
-          expect.objectContaining({ lat: 50.08, lon: 14.42, type: "break" }),
-          expect.objectContaining({ lat: 50.1, lon: 14.45, type: "break" })
+          expect.objectContaining({ lat: 50.08, lon: 14.42, type: "break", radius: 2500, search_cutoff: 2500 }),
+          expect.objectContaining({ lat: 50.1, lon: 14.45, type: "break", radius: 2500, search_cutoff: 2500 })
         ]);
         return new Response(
           JSON.stringify({
@@ -4490,7 +4490,7 @@ describe("Situation Data API contract", () => {
       }
       if (path === "/isochrone") {
         expect(payload.costing).toBe("pedestrian");
-        expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42 })]);
+        expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42, radius: 2500, search_cutoff: 2500 })]);
         return new Response(
           JSON.stringify({
             type: "FeatureCollection",
@@ -4518,7 +4518,7 @@ describe("Situation Data API contract", () => {
       }
       if (path === "/locate") {
         expect(payload.costing).toBe("pedestrian");
-        expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42, radius: 1500 })]);
+        expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42, radius: 1500, search_cutoff: 1500 })]);
         return new Response(
           JSON.stringify([
             {
@@ -4638,7 +4638,7 @@ describe("Situation Data API contract", () => {
     expect(nearest.body).toEqual(
       expect.objectContaining({
         source: expect.objectContaining({ backend: "valhalla" }),
-        accessPoint: expect.objectContaining({ lon: 14.4203, lat: 50.0802, distanceM: 22, osmId: 123456, roadName: "Testovací" }),
+        accessPoint: expect.objectContaining({ lon: 14.4203, lat: 50.0802, distanceM: 31, osmId: 123456, roadName: "Testovací" }),
         features: [
           expect.objectContaining({
             geometry: expect.objectContaining({ type: "Point", coordinates: [14.4203, 50.0802] }),
@@ -4665,6 +4665,52 @@ describe("Situation Data API contract", () => {
     expect(metrics.text).toContain('situation_data_routing_backend_health{backend="valhalla",configured_engine="valhalla"');
     expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="isochrone"} 1');
     expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="nearest_access"} 1');
+  });
+
+  it("rejects Valhalla locate candidates beyond the requested hard radius", async () => {
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path !== "/locate") {
+        return new Response(JSON.stringify({ error: `Unhandled Valhalla test path ${path}` }), { status: 500 });
+      }
+      const payload = JSON.parse(String(init?.body ?? "{}"));
+      expect(payload.locations).toEqual([expect.objectContaining({ lat: 50.08, lon: 14.42, radius: 500, search_cutoff: 500 })]);
+      return new Response(
+        JSON.stringify([
+          {
+            input_lat: 50.08,
+            input_lon: 14.42,
+            edges: [
+              {
+                correlated_lat: 50.18,
+                correlated_lon: 14.62,
+                distance: 18_000,
+                edge_info: { way_id: 987654, names: ["Vzdálená komunikace"] }
+              }
+            ]
+          }
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const valhallaApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test",
+        osmPostgisConnectionString: undefined
+      })
+    ).app;
+
+    const nearest = await request(valhallaApp)
+      .post("/api/v1/routing/nearest-access")
+      .send({ profileId: "walking", point: { lon: 14.42, lat: 50.08 }, radiusM: 500 })
+      .expect(200);
+
+    expect(nearest.body.features).toEqual([]);
+    expect(nearest.body.accessPoint).toBeUndefined();
+    expect(nearest.body.warnings).toEqual(expect.arrayContaining([expect.stringContaining("exceeded the requested radius 500 m")]));
   });
 
   it("generates a distinct Valhalla penalty fallback when native alternatives are unavailable", async () => {

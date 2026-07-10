@@ -1,0 +1,12 @@
+[Unit]
+Description=Validate active Valhalla routing release
+Wants=network-online.target docker.service
+After=network-online.target docker.service valhalla-update-recovery.service
+RequiresMountsFor=/srv/valhalla
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/valhalla
+EnvironmentFile=-/srv/valhalla/.update.env
+ExecStart=/srv/valhalla/update-tools/healthcheck.sh
+TimeoutStartSec=5m

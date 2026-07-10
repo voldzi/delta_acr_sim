@@ -97,6 +97,9 @@ aktuální notice, role warningy a výsledky operátorských akcí vykreslí zno
 - shared cache state
 - import age / source freshness
 - Overview load latency
+- routing backend health/version and route/isochrone/nearest-access cache state
+- host-local Valhalla last-attempt/last-success release age, timer result and
+  source provenance; these files stay on `valhalla.home.cz` and are not public
 
 ## OpenTelemetry stav
 

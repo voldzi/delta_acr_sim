@@ -7,17 +7,17 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Standards Mapping
 
-| Standard topic | Local canonical document |
-| --- | --- |
-| README | [`../README.md`](../README.md) |
-| Architecture | [`architecture/00_INDEX.md`](architecture/00_INDEX.md) |
-| API | [`api/00_INDEX.md`](api/00_INDEX.md) and [`../openapi/openapi.json`](../openapi/openapi.json) |
-| Security | [`security/00_INDEX.md`](security/00_INDEX.md) |
-| Operations | [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md) and [`../deploy/docker-home.md`](../deploy/docker-home.md) |
-| Observability | [`application/09_OBSERVABILITY.md`](application/09_OBSERVABILITY.md) |
-| Runbook | [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md) |
-| ADRs | [`adr/00_INDEX.md`](adr/00_INDEX.md) |
-| Environment | [`../.env.example`](../.env.example) and [`runbooks/03_ENVIRONMENT_CONFIGURATION.md`](runbooks/03_ENVIRONMENT_CONFIGURATION.md) |
+| Standard topic | Local canonical document                                                                                                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| README         | [`../README.md`](../README.md)                                                                                                                                                         |
+| Architecture   | [`architecture/00_INDEX.md`](architecture/00_INDEX.md)                                                                                                                                 |
+| API            | [`api/00_INDEX.md`](api/00_INDEX.md) and [`../openapi/openapi.json`](../openapi/openapi.json)                                                                                          |
+| Security       | [`security/00_INDEX.md`](security/00_INDEX.md)                                                                                                                                         |
+| Operations     | [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md), [`runbooks/15_VALHALLA_PRODUCTION.md`](runbooks/15_VALHALLA_PRODUCTION.md), and [`../deploy/docker-home.md`](../deploy/docker-home.md) |
+| Observability  | [`application/09_OBSERVABILITY.md`](application/09_OBSERVABILITY.md)                                                                                                                   |
+| Runbook        | [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md)                                                                                                                                         |
+| ADRs           | [`adr/00_INDEX.md`](adr/00_INDEX.md)                                                                                                                                                   |
+| Environment    | [`../.env.example`](../.env.example) and [`runbooks/03_ENVIRONMENT_CONFIGURATION.md`](runbooks/03_ENVIRONMENT_CONFIGURATION.md)                                                        |
 
 ## Active Documentation Indexes
 

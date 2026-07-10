@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Valhalla map update
+
+[Timer]
+OnCalendar=Sun *-*-* 02:15:00 Europe/Prague
+RandomizedDelaySec=30m
+Persistent=true
+Unit=valhalla-weekly-update.service
+
+[Install]
+WantedBy=timers.target

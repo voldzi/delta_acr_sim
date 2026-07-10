@@ -1,0 +1,20 @@
+[Unit]
+Description=Build and activate weekly Valhalla Czech Republic + 75 km tiles
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+RequiresMountsFor=/srv/valhalla
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/valhalla
+EnvironmentFile=-/srv/valhalla/.update.env
+ExecStart=/srv/valhalla/update-tools/weekly-update.sh run
+ExecStopPost=-/usr/bin/docker rm -f valhalla-update-candidate valhalla-update-build
+KillMode=control-group
+TimeoutStartSec=48h
+TimeoutStopSec=5m
+SuccessExitStatus=75
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+UMask=0022

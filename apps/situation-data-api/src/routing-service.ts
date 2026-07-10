@@ -2693,10 +2693,25 @@ async function requestValhallaRoute(
   const costing = valhallaCosting(profile.profileId);
   const recostings = valhallaRecostings(costing);
   const departureTime = valhallaDepartureTimePayload(request.departureTime);
+  const snapLimitM = config.routingMaxSnapDistanceM;
   const payload = {
     locations: [
-      { lat: request.from.lat, lon: request.from.lon, name: request.from.label, type: "break" },
-      { lat: request.to.lat, lon: request.to.lon, name: request.to.label, type: "break" }
+      {
+        lat: request.from.lat,
+        lon: request.from.lon,
+        name: request.from.label,
+        type: "break",
+        radius: snapLimitM,
+        search_cutoff: snapLimitM
+      },
+      {
+        lat: request.to.lat,
+        lon: request.to.lon,
+        name: request.to.label,
+        type: "break",
+        radius: snapLimitM,
+        search_cutoff: snapLimitM
+      }
     ],
     costing,
     costing_options: valhallaCostingOptions(profile, request.avoid),
@@ -2727,6 +2742,7 @@ async function requestValhallaRoute(
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
+  assertValhallaRouteEndpointSnaps(body, request.from, request.to, snapLimitM);
   return body;
 }
 
@@ -2763,7 +2779,15 @@ async function requestValhallaIsochrone(
     ? { distance: Math.round((request.maxDistanceM / 1000) * 1000) / 1000, color: "3b82f6" }
     : { time: request.maxTravelTimeMinutes, color: "3b82f6" };
   return requestValhallaJson<ValhallaIsochroneResponse>(config, "/isochrone", {
-    locations: [{ lat: request.origin.lat, lon: request.origin.lon, name: request.origin.label }],
+    locations: [
+      {
+        lat: request.origin.lat,
+        lon: request.origin.lon,
+        name: request.origin.label,
+        radius: config.routingMaxSnapDistanceM,
+        search_cutoff: config.routingMaxSnapDistanceM
+      }
+    ],
     costing: valhallaCosting(profile.profileId),
     costing_options: valhallaCostingOptions(profile, request.avoid),
     contours: [contour],
@@ -2781,7 +2805,14 @@ async function requestValhallaLocate(
 ): Promise<ValhallaLocateLocation[]> {
   return requestValhallaJson<ValhallaLocateLocation[]>(config, "/locate", {
     verbose: true,
-    locations: [{ lat: request.point.lat, lon: request.point.lon, radius: request.radiusM }],
+    locations: [
+      {
+        lat: request.point.lat,
+        lon: request.point.lon,
+        radius: request.radiusM,
+        search_cutoff: request.radiusM
+      }
+    ],
     costing: valhallaCosting(profile.profileId),
     costing_options: valhallaCostingOptions(profile, []),
     directions_options: {
@@ -2944,15 +2975,24 @@ function valhallaNearestAccessResponse(
 ): RoutingNearestAccessResponse {
   const location = response[0];
   warnings.push(...valhallaLocateWarnings(response));
-  const edge = location?.edges?.find((candidate) => Number.isFinite(Number(candidate.correlated_lon)) && Number.isFinite(Number(candidate.correlated_lat)));
-  if (!edge) {
+  const candidates = (location?.edges ?? [])
+    .flatMap((candidate) => {
+      const distanceM = valhallaLocateEdgeDistanceM(request.point, candidate);
+      return distanceM === undefined ? [] : [{ candidate, distanceM }];
+    })
+    .filter(({ distanceM }) => distanceM <= request.radiusM)
+    .sort((left, right) => left.distanceM - right.distanceM);
+  const nearest = candidates[0];
+  if (!nearest) {
+    if ((location?.edges?.length ?? 0) > 0) {
+      warnings.push(`Valhalla locate candidates exceeded the requested radius ${Math.round(request.radiusM)} m and were rejected.`);
+    }
     return emptyNearestAccessResponse(generatedAt, profile, request, warnings, "valhalla");
   }
+  const edge = nearest.candidate;
   const lon = roundCoord(Number(edge.correlated_lon));
   const lat = roundCoord(Number(edge.correlated_lat));
-  const distanceM = Number.isFinite(Number(edge.distance))
-    ? Math.round(Number(edge.distance))
-    : Math.round(haversineMeters([request.point.lon, request.point.lat], [lon, lat]));
+  const distanceM = Math.round(nearest.distanceM);
   const accessPoint = {
     lon,
     lat,
@@ -2988,6 +3028,36 @@ function valhallaNearestAccessResponse(
     ],
     warnings
   };
+}
+
+function valhallaLocateEdgeDistanceM(point: RoutingCoordinate, edge: ValhallaLocateEdge): number | undefined {
+  const lon = Number(edge.correlated_lon);
+  const lat = Number(edge.correlated_lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+    return undefined;
+  }
+  const geometricDistanceM = haversineMeters([point.lon, point.lat], [lon, lat]);
+  const reportedDistanceM = Number(edge.distance);
+  return Number.isFinite(reportedDistanceM) ? Math.max(geometricDistanceM, reportedDistanceM) : geometricDistanceM;
+}
+
+function assertValhallaRouteEndpointSnaps(response: ValhallaRouteResponse, from: RoutingCoordinate, to: RoutingCoordinate, maxSnapDistanceM: number): void {
+  const legs = response.trip?.legs ?? [];
+  const decodedShapes = legs.map((leg) => decodeValhallaPolyline6(leg.shape)).filter((coordinates) => coordinates.length > 0);
+  const first = decodedShapes[0]?.[0];
+  const lastShape = decodedShapes[decodedShapes.length - 1];
+  const last = lastShape?.[lastShape.length - 1];
+  if (!first || !last) {
+    throw new Error("Valhalla route has no decodable shape for endpoint snap validation.");
+  }
+  const fromDistanceM = haversineMeters([from.lon, from.lat], first);
+  const toDistanceM = haversineMeters([to.lon, to.lat], last);
+  if (fromDistanceM > maxSnapDistanceM || toDistanceM > maxSnapDistanceM) {
+    throw new Error(
+      `Valhalla endpoint snap exceeds configured threshold ${Math.round(maxSnapDistanceM)} m ` +
+        `(from ${Math.round(fromDistanceM)} m, to ${Math.round(toDistanceM)} m).`
+    );
+  }
 }
 
 function valhallaCosting(profileId: RoutingProfileId): string {

@@ -18,6 +18,9 @@ flowchart TB
     Web --> Situation
     Web --> Safety
     Web --> TAK
+    Situation --> Valhalla["valhalla.home.cz / pinned Valhalla"]
+    Geofabrik["Geofabrik CZ, DE, PL, SK, AT, HU"] --> ValhallaBuild["staging build + validation"]
+    ValhallaBuild --> Valhalla
     API --> MockCOP["Mock COP endpoint"]
     API -. optional .-> COP["External COP ingest"]
     API -. optional .-> AI["External AI provider"]
@@ -37,3 +40,8 @@ flowchart TB
 server-to-server provider API. Backend služby se v Docker síti oslovují podle
 service names přes Docker DNS. Gateway musí přeresolvovat upstream jména za
 běhu, protože recreate backend kontejneru může změnit jeho interní IP adresu.
+
+Produkční routing je oddělený datový subsystém na `valhalla.home.cz`. Build
+probíhá mimo aktivní release, vytváří ČR + 75 km graf a přepíná jediný atomický
+`current` pointer až po úplné kandidátní validaci. Podrobnosti a rollback jsou v
+[Valhalla Production Runbook](../runbooks/15_VALHALLA_PRODUCTION.md).

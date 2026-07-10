@@ -251,7 +251,7 @@ services:
 
   valhalla:
     profiles: ["routing"]
-    image: ghcr.io/gis-ops/docker-valhalla/valhalla:3.5.1
+    image: ${VALHALLA_IMAGE:-ghcr.io/valhalla/valhalla-scripted:3.8.2@sha256:3d7a08f7e78b356ee873b61711b743ad81bcc114b0ca5731217da8bba6ba39d1}
     container_name: csm-sim-valhalla
     environment:
       tile_urls: ${VALHALLA_TILE_URLS:-https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf}
@@ -267,6 +267,12 @@ services:
     ports:
       - "${VALHALLA_PORT:-8002}:8002"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8002/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   osm-postgis:
     profiles: ["osm"]

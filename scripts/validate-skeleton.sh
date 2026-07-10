@@ -45,6 +45,11 @@ required_files=(
   docs/adr/0010_JSON_FIRST_COMPOSITE_OPENAPI.md
   openapi/openapi.json
   openapi/README.md
+  deploy/valhalla/weekly-update.sh
+  deploy/valhalla/docker-compose.yml
+  deploy/valhalla/validate-response.py
+  docs/runbooks/15_VALHALLA_PRODUCTION.md
+  docs/adr/0016_OWNED_VALHALLA_ROUTING_DATASET.md
 )
 
 for file in "${required_files[@]}"; do
@@ -68,7 +73,7 @@ fi
 
 if [[ -f "$root/docs/README.md" ]]; then
   for topic in "Architecture" "API" "Security" "Operations" "Observability" "Runbook" "ADRs" "Environment"; do
-    if grep -q "| $topic |" "$root/docs/README.md"; then
+    if grep -Eq "\|[[:space:]]*${topic}[[:space:]]*\|" "$root/docs/README.md"; then
       ok "docs/README.md maps $topic"
     else
       fail "docs/README.md does not map $topic"
@@ -103,6 +108,22 @@ if [[ -f "$root/openapi/openapi.yaml" ]]; then
     ok "openapi/openapi.yaml is marked as generated"
   else
     fail "openapi/openapi.yaml exists but is not marked as generated from openapi/openapi.json"
+  fi
+fi
+
+if [[ -f "$root/deploy/valhalla/weekly-update.sh" ]]; then
+  if bash -n "$root/deploy/valhalla/weekly-update.sh" && bash -n "$root/deploy/valhalla/install.sh"; then
+    ok "Valhalla deployment shell syntax is valid"
+  else
+    fail "Valhalla deployment shell syntax is invalid"
+  fi
+fi
+
+if [[ -f "$root/deploy/valhalla/test-tools.py" ]]; then
+  if python3 "$root/deploy/valhalla/test-tools.py" >/dev/null; then
+    ok "Valhalla deployment validators pass"
+  else
+    fail "Valhalla deployment validators failed"
   fi
 fi
 

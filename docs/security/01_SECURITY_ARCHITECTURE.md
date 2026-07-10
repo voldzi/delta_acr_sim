@@ -35,6 +35,11 @@ bbox query, detailní source endpointy, readiness, observability a partner/TAK
 endpointy zůstávají interní/VPN-only. COP frontend a mobilní klienti mají volat
 COP API, nikoli provider endpointy SIM přímo.
 
+`valhalla.home.cz:8002` patří do stejné interní/VPN-only hranice. Veřejný
+browser ani COP klient jej nesmí volat přímo. Updater má pouze odchozí přístup
+nutný pro pinované images a veřejné mapové/elevation zdroje; release manifest
+nesmí obsahovat credentials.
+
 ## Zákazy
 
 Systém nesmí obsahovat reálná operační data, secrets v repozitáři, targeting, navádění nebo bojové workflow.

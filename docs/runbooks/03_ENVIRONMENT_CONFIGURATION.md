@@ -98,6 +98,7 @@
 - `SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES`
 - `ROUTING_ENGINE`
 - `VALHALLA_BASE_URL`
+- `VALHALLA_IMAGE`
 - `VALHALLA_TILE_URLS`
 - `VALHALLA_USE_TILES_IGNORE_PBF`
 - `VALHALLA_FORCE_REBUILD`
@@ -450,7 +451,8 @@ SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS=300
 SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES=512
 ROUTING_ENGINE=auto
 VALHALLA_BASE_URL=http://valhalla.home.cz:8002
-VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf https://download.geofabrik.de/europe/germany-latest.osm.pbf https://download.geofabrik.de/europe/poland-latest.osm.pbf https://download.geofabrik.de/europe/slovakia-latest.osm.pbf https://download.geofabrik.de/europe/austria-latest.osm.pbf
+VALHALLA_IMAGE=ghcr.io/valhalla/valhalla-scripted:3.8.2@sha256:3d7a08f7e78b356ee873b61711b743ad81bcc114b0ca5731217da8bba6ba39d1
+VALHALLA_TILE_URLS=https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf
 VALHALLA_USE_TILES_IGNORE_PBF=True
 VALHALLA_FORCE_REBUILD=False
 VALHALLA_BUILD_ADMINS=True
@@ -503,8 +505,13 @@ oddělené od aplikačního Docker hostu. Docker Compose Valhalla profil zůstá
 vývojová varianta; pro produkci nemá COP ani prohlížeč volat Valhalla přímo,
 ale pouze routovací endpointy SIM.
 
-Produkční Valhalla mapa je stavěná z Geofabrik PBF pro ČR, Německo, Polsko,
-Slovensko a Rakousko, se zapnutými admin/time-zone daty a elevací. Konfigurace
+Lokální Compose profil používá `VALHALLA_TILE_URLS` jako jednoduchý vývojový
+bootstrap. Produkční host nepředává více `latest` URL přímo entrypointu.
+Verzovaný updater stahuje a kontroluje plné Geofabrik PBF pro ČR, Německo,
+Polsko, Slovensko, Rakousko a Maďarsko, deduplikuje překryvy z různých snapshotů
+a publikuje ČR + 75 km. Admin databázi staví z plných šesti vstupů a výškové
+dlaždice doplní pro celý buffered bbox. Provozní konfigurace a rollback jsou v
+[15_VALHALLA_PRODUCTION.md](15_VALHALLA_PRODUCTION.md). Konfigurace
 `/custom_files/valhalla.json` musí mít
 `service_limits.allow_hard_exclusions=true`, jinak Valhalla odmítne hard
 exclusion volby, které SIM posílá pro uzavírky a vybrané `avoid` preference.

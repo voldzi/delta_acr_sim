@@ -85,6 +85,8 @@ SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
 SITUATION_DATA_CACHE_MAX_ENTRIES=10000
 SITUATION_DATA_BBOX_CACHE_PADDING_DEGREES=0.18
+ROUTING_ENGINE=auto
+VALHALLA_BASE_URL=http://valhalla.home.cz:8002
 SITUATION_DATA_OPEN_METEO_CACHE_TTL_SECONDS=600
 SITUATION_DATA_OPEN_METEO_GRID_DEGREES=0.05
 SITUATION_DATA_OSM_POSTGIS_CACHE_TTL_SECONDS=21600
@@ -163,6 +165,10 @@ curl -fsS http://localhost:5020/situation-data/health/ready
 curl -fsS http://localhost:5020/safety-data/health/ready
 curl -fsS http://localhost:5020/tak-gateway/health/ready
 curl -fsS http://localhost:5020/situation-data/api/v1/catalog
+curl -fsS http://localhost:5020/situation-data/api/v1/routing/profiles
+curl -fsS -X POST -H 'content-type: application/json' \
+  -d '{"profileId":"car","from":{"lon":14.42076,"lat":50.08804},"to":{"lon":14.43780,"lat":50.07550}}' \
+  http://localhost:5020/situation-data/api/v1/routing/route
 curl -fsS http://localhost:5020/safety-data/api/v1/catalog
 curl -fsS http://localhost:5020/situation-data/api/v1/taxonomy
 curl -fsS http://localhost:5020/safety-data/api/v1/taxonomy

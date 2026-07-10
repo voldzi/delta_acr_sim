@@ -1,0 +1,21 @@
+services:
+  valhalla:
+    image: ${VALHALLA_IMAGE:-ghcr.io/valhalla/valhalla-scripted:3.8.2@sha256:3d7a08f7e78b356ee873b61711b743ad81bcc114b0ca5731217da8bba6ba39d1}
+    container_name: valhalla
+    restart: unless-stopped
+    entrypoint: ["valhalla_service"]
+    command: ["/custom_files/valhalla.json", "${VALHALLA_SERVER_THREADS:-4}"]
+    volumes:
+      - ./current:/custom_files:ro
+    ports:
+      - "${VALHALLA_BIND_ADDRESS:-127.0.0.1}:${VALHALLA_PORT:-8002}:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8002/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
