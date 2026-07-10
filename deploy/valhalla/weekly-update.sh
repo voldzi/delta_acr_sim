@@ -181,7 +181,7 @@ unexpected_failure() {
 
 require_commands() {
   local command
-  for command in curl docker flock python3 sha256sum; do
+  for command in cmp curl docker flock python3 sha256sum; do
     command -v "${command}" >/dev/null || fail "Required command is missing: ${command}"
   done
   docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is unavailable."
@@ -333,6 +333,51 @@ if digest != checksum:
 PY
 }
 
+download_source_consistently() {
+  local country=$1
+  local source_url=$2
+  local source_file=$3
+  local checksum_file=$4
+  local partial_file="${source_file}.part"
+  local checksum_before="${checksum_file}.before"
+  local checksum_after="${checksum_file}.after"
+  local attempt
+
+  for attempt in 1 2 3; do
+    rm -f "${source_file}" "${partial_file}" "${checksum_file}" "${checksum_before}" "${checksum_after}"
+    log "Downloading ${country} source generation (attempt ${attempt}/3)."
+    if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
+      -o "${checksum_before}" "${source_url}.md5"; then
+      log "WARNING: Could not fetch the initial ${country} checksum."
+      continue
+    fi
+    if ! curl -fL --retry 5 --retry-delay 15 --no-progress-meter \
+      -o "${partial_file}" "${source_url}"; then
+      log "WARNING: Could not download the complete ${country} source."
+      continue
+    fi
+    if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
+      -o "${checksum_after}" "${source_url}.md5"; then
+      log "WARNING: Could not fetch the final ${country} checksum."
+      continue
+    fi
+    if ! cmp -s "${checksum_before}" "${checksum_after}"; then
+      log "WARNING: Geofabrik rotated the ${country} source during download; retrying a clean generation."
+      continue
+    fi
+    if ! verify_source_checksum "${partial_file}" "${checksum_after}"; then
+      log "WARNING: Downloaded ${country} source failed its checksum; retrying from byte zero."
+      continue
+    fi
+    mv "${partial_file}" "${source_file}"
+    mv "${checksum_after}" "${checksum_file}"
+    rm -f "${checksum_before}"
+    return 0
+  done
+
+  fail "Could not obtain one stable, checksum-valid generation of the ${country} source after 3 attempts."
+}
+
 download_sources() {
   local spec
   local country
@@ -349,10 +394,7 @@ download_sources() {
     source_name=$(basename "${source_url}")
     source_file="${SOURCE_DIR}/${source_name}"
     checksum_file="${source_file}.md5"
-    log "Downloading and verifying ${country} source ${source_name}."
-    curl -fL --retry 5 --retry-delay 15 --no-progress-meter -C - -o "${source_file}" "${source_url}"
-    curl -fL --retry 5 --retry-delay 10 --no-progress-meter -o "${checksum_file}" "${source_url}.md5"
-    verify_source_checksum "${source_file}" "${checksum_file}"
+    download_source_consistently "${country}" "${source_url}" "${source_file}" "${checksum_file}"
     timestamp=$(docker run --rm -v "${SOURCE_DIR}:/sources:ro" "${OSM_TOOLS_IMAGE}" \
       osmium fileinfo -g header.option.osmosis_replication_timestamp "/sources/${source_name}")
     sha256=$(sha256sum "${source_file}" | awk '{print $1}')
