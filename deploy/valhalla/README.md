@@ -8,9 +8,10 @@ The updater downloads complete CZ, DE, PL, SK, AT and HU Geofabrik extracts,
 records their timestamps and checksums, deduplicates overlapping OSM object
 versions, builds the admin database from the full inputs, and clips the routing
 graph to the Czech Republic plus 75 km. Elevation is completed for the buffered
-bbox before graph construction. Each source generation is accepted only when
-its checksum is stable before and after transfer; rotated CDN generations are
-retried from byte zero with a checksum-keyed request.
+bbox before graph construction. Each download is keyed by the checksum selected
+before transfer and accepted only when its content matches that exact checksum.
+A post-transfer checksum is diagnostic because Geofabrik load-balanced nodes
+can temporarily advertise different valid generations.
 
 Install or update the host-owned files:
 

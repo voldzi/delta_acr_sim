@@ -370,23 +370,21 @@ download_source_consistently() {
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
-    if ! cmp -s "${checksum_before}" "${checksum_after}"; then
-      log "WARNING: Geofabrik rotated the ${country} source during download; retrying a clean generation."
+    if ! verify_source_checksum "${partial_file}" "${checksum_before}"; then
+      log "WARNING: Downloaded ${country} source did not match the checksum-keyed generation; retrying from byte zero."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
-    if ! verify_source_checksum "${partial_file}" "${checksum_after}"; then
-      log "WARNING: Downloaded ${country} source failed its checksum; retrying from byte zero."
-      (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
-      continue
+    if ! cmp -s "${checksum_before}" "${checksum_after}"; then
+      log "WARNING: Geofabrik checksum nodes disagree after the ${country} download; accepting content verified against requested generation ${expected_checksum}."
     fi
     mv "${partial_file}" "${source_file}"
-    mv "${checksum_after}" "${checksum_file}"
-    rm -f "${checksum_before}"
+    mv "${checksum_before}" "${checksum_file}"
+    rm -f "${checksum_after}"
     return 0
   done
 
-  fail "Could not obtain one stable, checksum-valid generation of the ${country} source after ${SOURCE_DOWNLOAD_ATTEMPTS} attempts."
+  fail "Could not obtain a checksum-valid generation of the ${country} source after ${SOURCE_DOWNLOAD_ATTEMPTS} attempts."
 }
 
 download_sources() {
