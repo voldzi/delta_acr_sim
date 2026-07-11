@@ -624,6 +624,7 @@ const VALHALLA_NAVIGATION_ENHANCEMENT_FLAGS = [
 ] as const;
 const ROUTE_ELEVATION_MAX_SAMPLES = 120;
 const ROUTE_ANALYSIS_BBOX_PADDING_M = 2_000;
+const ROUTE_SEARCH_BBOX_MAX_PADDING_M = 50_000;
 const WEATHER_ROUTE_CORRIDOR_RADIUS_M = 25_000;
 const HAZARD_ROUTE_CORRIDOR_RADIUS_M = 1_000;
 const ROUTE_ANALYSIS_SEGMENT_HALF_LENGTH_M = 500;
@@ -640,7 +641,7 @@ const ROUTING_PROFILES: RoutingProfile[] = [
       en: "Standard road route for a passenger car."
     },
     defaultSpeedKph: 55,
-    maxSearchRadiusM: 120_000,
+    maxSearchRadiusM: 800_000,
     supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
     notes: ["Uses local OSM road geometry. It does not yet enforce live closures as hard constraints."]
   },
@@ -654,7 +655,7 @@ const ROUTING_PROFILES: RoutingProfile[] = [
       en: "Road route for emergency response vehicles with broader service-road tolerance."
     },
     defaultSpeedKph: 65,
-    maxSearchRadiusM: 160_000,
+    maxSearchRadiusM: 800_000,
     supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
     notes: ["Operational priority is modelled as speed/penalty preference only, not as permission to ignore legal closures."]
   },
@@ -668,7 +669,7 @@ const ROUTING_PROFILES: RoutingProfile[] = [
       en: "More conservative route for large vehicles, limiting minor service and unpaved roads."
     },
     defaultSpeedKph: 48,
-    maxSearchRadiusM: 140_000,
+    maxSearchRadiusM: 800_000,
     supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
     notes: ["OSM height/width/weight limits are not fully normalized in this first model."]
   },
@@ -682,7 +683,7 @@ const ROUTING_PROFILES: RoutingProfile[] = [
       en: "Route for a field-capable vehicle using track/service roads where OSM provides them."
     },
     defaultSpeedKph: 32,
-    maxSearchRadiusM: 90_000,
+    maxSearchRadiusM: 300_000,
     supportsAvoid: ["flood", "fire", "road_closure", "tunnel", "bridge"],
     notes: ["Does not guarantee physical passability; surface, seasonal closures and private access may be incomplete."]
   },
@@ -3490,7 +3491,7 @@ function withTrailingSlash(value: string): string {
 
 function routeSearchBbox(from: RoutingCoordinate, to: RoutingCoordinate, profile: RoutingProfile, maxSearchRadiusM: number): BoundingBox {
   const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
-  const paddingM = Math.min(Math.max(2500, distanceM * 0.35), Math.min(profile.maxSearchRadiusM, maxSearchRadiusM) * 0.35);
+  const paddingM = Math.min(Math.max(2500, distanceM * 0.35), Math.min(profile.maxSearchRadiusM, maxSearchRadiusM) * 0.35, ROUTE_SEARCH_BBOX_MAX_PADDING_M);
   return expandBbox(
     {
       west: Math.min(from.lon, to.lon),

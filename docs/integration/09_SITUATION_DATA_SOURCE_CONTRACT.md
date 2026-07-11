@@ -340,6 +340,11 @@ Profily:
 | `walking`                 | běžná pěší trasa                                      |
 | `evacuation_walking`      | pomalejší pěší evakuační profil                       |
 
+Silniční profily přijímají dvojice bodů vzdálené až 800 km vzdušnou čarou,
+aby SIM podporoval vnitrostátní trasy přes celou Českou republiku. Skutečné
+pokrytí zůstává omezené aktivním Valhalla grafem; produkční graf pokrývá ČR a
+75 km přeshraniční pásmo.
+
 Minimální požadavek na trasu:
 
 ```json

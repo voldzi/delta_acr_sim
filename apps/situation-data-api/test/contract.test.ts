@@ -132,7 +132,7 @@ describe("Situation Data API contract", () => {
       valhallaBaseUrl: undefined,
       routingOsmRoadsTable: "public.osm_roads",
       routingMaxGraphEdges: 45000,
-      routingMaxSearchRadiusM: 160000,
+      routingMaxSearchRadiusM: 800000,
       routingMaxSnapDistanceM: 2500,
       radioPlanningCacheTtlSeconds: 900,
       radioPlanningCacheMaxEntries: 512,
@@ -1576,7 +1576,7 @@ describe("Situation Data API contract", () => {
           valhallaConfigured: false,
           graphTable: "public.osm_roads",
           maxGraphEdges: 45000,
-          maxSearchRadiusM: 160000,
+          maxSearchRadiusM: 800000,
           maxSnapDistanceM: 2500
         }),
         searchData: {
@@ -4412,6 +4412,22 @@ describe("Situation Data API contract", () => {
     const secondRoute = await request(app).post("/api/v1/routing/route").send(payload).expect(200);
     expect(secondRoute.body.generatedAt).toBe(route.body.generatedAt);
 
+    const nationwideRoute = await request(app)
+      .post("/api/v1/routing/route")
+      .send({
+        profileId: "car",
+        from: { lon: 12.1941, lat: 50.2239, label: "Aš" },
+        to: { lon: 18.7646, lat: 49.5767, label: "Jablunkov" }
+      })
+      .expect(200);
+    expect(nationwideRoute.body).toEqual(
+      expect.objectContaining({
+        profile: expect.objectContaining({ profileId: "car", maxSearchRadiusM: 800000 }),
+        routes: [expect.objectContaining({ distanceM: expect.any(Number) })]
+      })
+    );
+    expect(nationwideRoute.body.routes[0].distanceM).toBeGreaterThan(400000);
+
     const isochrone = await request(app)
       .post("/api/v1/routing/isochrone")
       .send({ profileId: "evacuation_walking", origin: { lon: 14.42, lat: 50.08 }, maxTravelTimeMinutes: 10 })
@@ -4437,7 +4453,7 @@ describe("Situation Data API contract", () => {
 
     const observability = await request(app).get("/api/v1/observability").expect(200);
     expect(observability.body.routingCaches).toEqual(
-      expect.arrayContaining([expect.objectContaining({ operation: "route", cache: expect.objectContaining({ hits: 1, misses: 1 }) })])
+      expect.arrayContaining([expect.objectContaining({ operation: "route", cache: expect.objectContaining({ hits: 1, misses: 2 }) })])
     );
     const metrics = await request(app).get("/metrics").expect(200);
     expect(metrics.text).toContain('situation_data_routing_cache_hits{operation="route"} 1');

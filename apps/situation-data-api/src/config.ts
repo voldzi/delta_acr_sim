@@ -227,7 +227,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     valhallaBaseUrl: emptyToUndefined(process.env.VALHALLA_BASE_URL),
     routingOsmRoadsTable: process.env.ROUTING_OSM_ROADS_TABLE ?? "public.osm_roads",
     routingMaxGraphEdges: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_GRAPH_EDGES, 45000),
-    routingMaxSearchRadiusM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M, 160000),
+    routingMaxSearchRadiusM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M, 800000),
     routingMaxSnapDistanceM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SNAP_DISTANCE_M, 2500),
     radioPlanningCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS, 900),
     radioPlanningCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES, 512),
