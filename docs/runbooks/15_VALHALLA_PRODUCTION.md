@@ -29,7 +29,9 @@ Republic plus a 75 km buffer; it is not full-country coverage of all inputs.
 `.complete` seal. A transaction file means activation was interrupted and must
 be recovered before another build. The runtime bypasses the image's build
 entrypoint and starts `valhalla_service` directly; this is required for the
-read-only `current` mount.
+read-only `current` mount. Successful runs remove their `update-work` directory
+after activated-release validation; failed release artifacts follow
+`PRESERVE_FAILED_BUILD`.
 
 ## Installation
 

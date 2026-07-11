@@ -761,6 +761,7 @@ case "${MODE}" in
     activate_release
     CURRENT_PHASE=complete
     write_state success "Release activated and validated."
+    remove_tree "${WORK_DIR}" || log "WARNING: Could not clean successful validation work ${WORK_DIR}."
     prune_releases
     ;;
   run)
@@ -768,6 +769,7 @@ case "${MODE}" in
     activate_release
     CURRENT_PHASE=complete
     write_state success "Weekly build, activation, and validation completed."
+    remove_tree "${WORK_DIR}" || log "WARNING: Could not clean successful validation work ${WORK_DIR}."
     prune_releases
     ;;
 esac

@@ -17,7 +17,9 @@ different valid generations.
 Graph build acceptance checks the materialized `.gph` tile count, then builds
 the tar archive and starts the isolated candidate. `tile_manifest.json` is not
 an output contract because Valhalla may remove that intermediate manifest during
-its cleanup stage.
+its cleanup stage. After the activated release passes the same validation
+matrix, the updater removes the successful run's transient response files from
+`update-work`.
 
 Install or update the host-owned files:
 
