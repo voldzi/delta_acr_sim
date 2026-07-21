@@ -55,6 +55,7 @@ export interface SituationDataConfig {
   ctuStationaryMobileCacheTtlSeconds: number;
   pidGtfsRtVehiclePositionsUrl: string;
   pidGtfsRtTripUpdatesUrl: string;
+  pidGtfsRtCacheTtlSeconds: number;
   pidGtfsStaticUrl: string;
   pidGtfsStaticCacheTtlSeconds: number;
   publicTransitStaticGtfsFeeds: PublicTransitStaticFeedConfig[];
@@ -173,6 +174,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     ctuStationaryMobileCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_CTU_STATIONARY_MOBILE_CACHE_TTL_SECONDS, 86400),
     pidGtfsRtVehiclePositionsUrl: process.env.PID_GTFS_RT_VEHICLE_POSITIONS_URL ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
     pidGtfsRtTripUpdatesUrl: emptyToUndefined(process.env.PID_GTFS_RT_TRIP_UPDATES_URL) ?? "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/trip_updates.pb",
+    pidGtfsRtCacheTtlSeconds: Math.max(10, parseInteger(process.env.SITUATION_DATA_PID_GTFS_RT_CACHE_TTL_SECONDS, 15)),
     pidGtfsStaticUrl: process.env.PID_GTFS_STATIC_URL ?? "https://data.pid.cz/PID_GTFS.zip",
     pidGtfsStaticCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_PID_GTFS_STATIC_CACHE_TTL_SECONDS, 6 * 60 * 60),
     publicTransitStaticGtfsFeeds: parsePublicTransitStaticFeeds(process.env.PUBLIC_TRANSIT_STATIC_GTFS_FEEDS, DEFAULT_PUBLIC_TRANSIT_STATIC_GTFS_FEEDS),
@@ -190,7 +192,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
       process.env.SPRAVAZELEZNIC_TRAIN_POSITIONS_URL ?? "https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2",
     spravaZeleznicTrainPositionsCacheTtlSeconds: Math.max(900, parseInteger(process.env.SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS, 900)),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
-    roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
+    roadSrtiLodCacheTtlSeconds: Math.max(60, parseInteger(process.env.SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 60)),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
     safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030",
     safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300),

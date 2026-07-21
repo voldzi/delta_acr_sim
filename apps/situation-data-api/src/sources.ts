@@ -1756,7 +1756,7 @@ class PidGtfsRtSource implements SituationDataSource {
 
   constructor(private readonly config: SituationDataConfig) {
     this.feedCache = new ManagedResponseCache<transit_realtime.FeedMessage>({
-      ttlMs: 20_000,
+      ttlMs: config.pidGtfsRtCacheTtlSeconds * 1000,
       staleIfErrorMs: Math.max(60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 1
     });
@@ -1769,7 +1769,7 @@ class PidGtfsRtSource implements SituationDataSource {
       layers: ["traffic"],
       license: PID_GTFS_RT_LICENSE,
       baseUrl: `${config.pidGtfsRtVehiclePositionsUrl},${config.pidGtfsRtTripUpdatesUrl}`,
-      updateCadenceSeconds: 20
+      updateCadenceSeconds: config.pidGtfsRtCacheTtlSeconds
     };
   }
 
@@ -1790,7 +1790,7 @@ class PidGtfsRtSource implements SituationDataSource {
       if (features.length >= query.limit) {
         break;
       }
-      const feature = mapPidVehiclePosition(entity, query, fetchedAt);
+      const feature = mapPidVehiclePosition(entity, query, fetchedAt, this.config.pidGtfsRtCacheTtlSeconds);
       if (feature) {
         features.push(feature);
       }
@@ -3035,7 +3035,12 @@ function publicPostgisBaseUrl(connectionString: string | undefined): string | un
   }
 }
 
-function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: SituationQuery, fetchedAt: string): SituationFeature | undefined {
+function mapPidVehiclePosition(
+  entity: transit_realtime.IFeedEntity,
+  query: SituationQuery,
+  fetchedAt: string,
+  cacheTtlSeconds: number
+): SituationFeature | undefined {
   const vehicle = entity.vehicle;
   const position = vehicle?.position;
   const lat = optionalNumber(position?.latitude);
@@ -3111,8 +3116,8 @@ function mapPidVehiclePosition(entity: transit_realtime.IFeedEntity, query: Situ
         positionKind: "vehicle_live",
         livePosition: true,
         motionExpected: true,
-        refreshSeconds: 20,
-        cacheTtlSeconds: 20,
+        refreshSeconds: cacheTtlSeconds,
+        cacheTtlSeconds,
         transportMode: mode.tag,
         routeId,
         routeShortName: routeLabel,

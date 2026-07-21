@@ -60,7 +60,7 @@ describe("Safety Data API contract", () => {
       municipalAlertFeeds: [],
       municipalAlertsCacheTtlSeconds: 300,
       roadSrtiLodSparqlUrl: "https://lod.tamtamresearch.com/sparql/",
-      roadSrtiLodCacheTtlSeconds: 300,
+      roadSrtiLodCacheTtlSeconds: 60,
       roadSrtiLodMaxRecords: 1500,
       chmiOrpCodelistUrl: "https://apl2.czso.cz/iSMS/do_cis_export?cisjaz=203&cisvaz=61_88&format=2&kodcis=65&separator=,&typdat=1",
       adminBoundaryTable: "public.osm_admin_boundary",
@@ -1293,6 +1293,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("normalizes configured municipal GeoRSS alerts into crisis warnings", async () => {
+    const recentPubDate = new Date(Date.now() - 60_000).toUTCString();
     const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:georss="http://www.georss.org/georss">
   <channel>
@@ -1301,7 +1302,7 @@ describe("Safety Data API contract", () => {
       <title>Výstraha: evakuace části obce</title>
       <description>Nařízena evakuace v okolí průmyslového areálu.</description>
       <link>https://example.test/krize/1</link>
-      <pubDate>Fri, 03 Jul 2026 08:10:00 GMT</pubDate>
+      <pubDate>${recentPubDate}</pubDate>
       <category>evakuace</category>
       <georss:point>50.0870 14.4200</georss:point>
       <guid>municipal-1</guid>
@@ -1434,6 +1435,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("filters non-warning Central Bohemian news from municipal crisis warnings", async () => {
+    const recentPubDate = new Date(Date.now() - 60_000).toUTCString();
     const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
@@ -1442,14 +1444,14 @@ describe("Safety Data API contract", () => {
       <title>Hledáme muže z Příbramska</title>
       <description>Policie žádá veřejnost o pomoc.</description>
       <link>https://example.test/pkr/aktuality/hledame-muze/</link>
-      <pubDate>Fri, 03 Jul 2026 08:10:00 GMT</pubDate>
+      <pubDate>${recentPubDate}</pubDate>
       <guid>news-1</guid>
     </item>
     <item>
       <title>Výstraha: únik nebezpečné látky</title>
       <description>Platí varování pro okolí průmyslového areálu.</description>
       <link>https://example.test/pkr/aktuality/vystraha/</link>
-      <pubDate>Fri, 03 Jul 2026 08:15:00 GMT</pubDate>
+      <pubDate>${recentPubDate}</pubDate>
       <guid>news-2</guid>
     </item>
   </channel>
@@ -1490,6 +1492,7 @@ describe("Safety Data API contract", () => {
   });
 
   it("filters local municipal RSS noise while keeping crisis-relevant notices", async () => {
+    const recentPubDate = new Date(Date.now() - 60_000).toUTCString();
     const municipalRss = `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
@@ -1497,14 +1500,14 @@ describe("Safety Data API contract", () => {
     <item>
       <title>Městský úřad Bruntál - Veřejná vyhláška o možnosti převzít písemnost</title>
       <link>https://example.test/bruntal/uredni-deska/1</link>
-      <pubDate>Fri, 03 Jul 2026 08:10:00 GMT</pubDate>
+      <pubDate>${recentPubDate}</pubDate>
       <guid>noise-1</guid>
     </item>
     <item>
       <title>Varování: porucha vodovodu a omezení provozu v části města</title>
       <description>Platí mimořádné omezení dodávky pitné vody.</description>
       <link>https://example.test/bruntal/krize/1</link>
-      <pubDate>Fri, 03 Jul 2026 08:15:00 GMT</pubDate>
+      <pubDate>${recentPubDate}</pubDate>
       <guid>alert-1</guid>
     </item>
   </channel>

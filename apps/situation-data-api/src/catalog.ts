@@ -531,8 +531,8 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       geometryTypes: ["Point", "LineString"],
       minZoom: 6,
       maxZoom: 18,
-      refreshSeconds: 20,
-      cacheTtlSeconds: 20,
+      refreshSeconds: config.pidGtfsRtCacheTtlSeconds,
+      cacheTtlSeconds: config.pidGtfsRtCacheTtlSeconds,
       styleProfile: "transit-vehicle-position-v1",
       sourceIds: ["pid_gtfs_rt"],
       query: query(["traffic"], ["pid_gtfs_rt"]),
@@ -2024,7 +2024,7 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
     case "ctu_stationary_mobile":
       return config.ctuStationaryMobileCacheTtlSeconds;
     case "pid_gtfs_rt":
-      return 20;
+      return config.pidGtfsRtCacheTtlSeconds;
     case "public_transit_static":
       return config.publicTransitStaticCacheTtlSeconds;
     case "idsjmk_vehicle_positions":

@@ -32,13 +32,13 @@ normalizovaném `providerProperties.transit`.
 Každý městský nebo regionální systém se přidává jako adaptér nad společným
 modelem.
 
-| Systém | Současný zdroj | Stav |
-| --- | --- | --- |
-| PID / Praha a Středočeský kraj | Golemio/PID GTFS-RT vehicle positions + PID statický GTFS | mapová vrstva vozidel a detail vozidla jsou implementované |
-| Veřejné statické GTFS/GeoJSON feedy | `public_transit_static` | statické zastávky jsou publikované jako samostatná referenční vrstva `public.traffic.transit_stops`; výchozí ověřená sada je PID, IDS JMK, DPMO Olomouc, PMDP Plzeň, DPMLJ Liberec/Jablonec a DPO Ostrava GeoJSON, další města se přidávají konfiguračně |
-| IDS JMK / Brno a JMK | IDS JMK vehicle positions JSON | existuje mapová vrstva vozidel a normalizovaný detail vozidla nad live feedem; úplná sekvence zastávek a tvar trasy vyžadují stabilní match na statický GTFS trip |
-| Správa železnic / celá ČR | Veřejná mapa provozu vlaků Správy železnic | existuje mapová vrstva vlaků a normalizovaný detail vlaku nad live feedem; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut |
-| Další města ČR | GTFS static + GTFS-RT, nebo proprietární open-data API | přidávat po ověření stabilní primární URL, licence a provozního limitu |
+| Systém                              | Současný zdroj                                            | Stav                                                                                                                                                                                                                                                     |
+| ----------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PID / Praha a Středočeský kraj      | Golemio/PID GTFS-RT vehicle positions + PID statický GTFS | mapová vrstva vozidel a detail vozidla jsou implementované                                                                                                                                                                                               |
+| Veřejné statické GTFS/GeoJSON feedy | `public_transit_static`                                   | statické zastávky jsou publikované jako samostatná referenční vrstva `public.traffic.transit_stops`; výchozí ověřená sada je PID, IDS JMK, DPMO Olomouc, PMDP Plzeň, DPMLJ Liberec/Jablonec a DPO Ostrava GeoJSON, další města se přidávají konfiguračně |
+| IDS JMK / Brno a JMK                | IDS JMK vehicle positions JSON                            | existuje mapová vrstva vozidel a normalizovaný detail vozidla nad live feedem; úplná sekvence zastávek a tvar trasy vyžadují stabilní match na statický GTFS trip                                                                                        |
+| Správa železnic / celá ČR           | Veřejná mapa provozu vlaků Správy železnic                | existuje mapová vrstva vlaků a normalizovaný detail vlaku nad live feedem; SIM dekóduje zdrojový formát, převádí S-JTSK do WGS84 a vynucuje minimální upstream interval 15 minut                                                                         |
+| Další města ČR                      | GTFS static + GTFS-RT, nebo proprietární open-data API    | přidávat po ověření stabilní primární URL, licence a provozního limitu                                                                                                                                                                                   |
 
 Adaptér musí do SIM dodat jednotný objekt:
 
@@ -106,11 +106,11 @@ COP nesmí odvozovat pohyb prvku jen ze sdílené katalogové vrstvy
 periodicitou. COP musí číst `providerLayerId`, `sourceId` a hlavně
 `providerProperties.transit.positionKind`.
 
-| `positionKind` | Význam | Doporučené chování COP |
-| --- | --- | --- |
-| `vehicle_live` | skutečná živá poloha vozidla, např. PID nebo IDS JMK | obnovovat daný provider podle `providerProperties.transit.refreshSeconds`, pro PID typicky 20 s; polohu po `validUntil` označit jako zastaralou nebo skrýt |
-| `vehicle_live_cached` | poloha vozidla z live veřejného feedu s provozním limitem cache, např. Správa železnic | obnovovat krokově podle `refreshSeconds`, pro Správu železnic 900 s; nečekat plynulý pohyb mezi každými dotazy |
-| `static_stop` | statická zastávka, terminál nebo referenční dopravní bod | nikdy neanimovat a nezobrazovat jako vozidlo; dotazovat až od lokálního zoomu podle katalogu |
+| `positionKind`        | Význam                                                                                 | Doporučené chování COP                                                                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vehicle_live`        | skutečná živá poloha vozidla, např. PID nebo IDS JMK                                   | obnovovat daný provider podle `providerProperties.transit.refreshSeconds`, pro PID typicky 15 s; polohu po `validUntil` označit jako zastaralou nebo skrýt |
+| `vehicle_live_cached` | poloha vozidla z live veřejného feedu s provozním limitem cache, např. Správa železnic | obnovovat krokově podle `refreshSeconds`, pro Správu železnic 900 s; nečekat plynulý pohyb mezi každými dotazy                                             |
+| `static_stop`         | statická zastávka, terminál nebo referenční dopravní bod                               | nikdy neanimovat a nezobrazovat jako vozidlo; dotazovat až od lokálního zoomu podle katalogu                                                               |
 
 Normalizovaná pole:
 
@@ -128,6 +128,10 @@ samostatné refresh cykly. Pomalý zdroj `spravazeleznic_trains` s limitem 900 s
 nesmí zpomalit `pid_gtfs_rt`. Statické zastávky `public_transit_static` patří do
 `public.traffic.transit_stops`, ne do animace vozidel.
 
+Výchozí kadence `pid_gtfs_rt` je 15 s a `idsjmk_vehicle_positions` 20 s. SIM
+publikuje tyto hodnoty v katalogu i ve feature `providerProperties`; klient je
+nemá přepisovat pomalejším společným intervalem celé dopravní vrstvy.
+
 ## Mapová feature vozidla
 
 Endpoint:
@@ -142,29 +146,29 @@ Feature vozidla je `Point`. COP kreslí bod/ikonu a číslo linky.
 
 Povinná a doporučená pole:
 
-| Pole | Význam |
-| --- | --- |
-| `properties.layerId` | `public.traffic.transit` |
-| `properties.providerLayerId` | např. `traffic.pid_gtfs_rt` |
-| `properties.category` | `public_transport_bus`, `public_transport_tram`, `public_transport_metro`, `public_transport_train`, `public_transport_trolleybus` |
-| `properties.label` | hotový krátký popisek, např. `PID tram 10` |
-| `properties.transportMode` | `bus`, `tram`, `metro`, `train`, `trolleybus` |
-| `properties.routeShortName` | číslo/linka, např. `10` |
-| `properties.destination` | cílová stanice/směr, pokud je známý |
-| `properties.vehicleId` | stabilní ID vozidla ve zdroji |
-| `properties.tripId` | trip ID, pokud je známé |
-| `properties.delaySeconds` | aktuální zpoždění; záporné číslo znamená náskok |
-| `properties.observedAt` | čas poslední zprávy o poloze |
-| `properties.validUntil` | kdy má COP považovat polohu za zastaralou |
-| `properties.confidence` | důvěra v polohu/detail |
-| `properties.headingDeg` | směr pohybu |
-| `properties.speedMps` | rychlost |
-| `properties.occupancyStatus` | normalizovaná obsazenost, pokud existuje |
-| `properties.operator` | např. `PID`, `IDS JMK` |
-| `properties.styleHint` | doporučený styl, např. `transit-vehicle-position-v1` |
-| `properties.iconHint` | doporučená ikona podle módu |
-| `providerProperties.transit.positionKind` | `vehicle_live`, `vehicle_live_cached`, nebo `static_stop` |
-| `providerProperties.transit.refreshSeconds` | interval obnovy pro konkrétní provider |
+| Pole                                        | Význam                                                                                                                             |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `properties.layerId`                        | `public.traffic.transit`                                                                                                           |
+| `properties.providerLayerId`                | např. `traffic.pid_gtfs_rt`                                                                                                        |
+| `properties.category`                       | `public_transport_bus`, `public_transport_tram`, `public_transport_metro`, `public_transport_train`, `public_transport_trolleybus` |
+| `properties.label`                          | hotový krátký popisek, např. `PID tram 10`                                                                                         |
+| `properties.transportMode`                  | `bus`, `tram`, `metro`, `train`, `trolleybus`                                                                                      |
+| `properties.routeShortName`                 | číslo/linka, např. `10`                                                                                                            |
+| `properties.destination`                    | cílová stanice/směr, pokud je známý                                                                                                |
+| `properties.vehicleId`                      | stabilní ID vozidla ve zdroji                                                                                                      |
+| `properties.tripId`                         | trip ID, pokud je známé                                                                                                            |
+| `properties.delaySeconds`                   | aktuální zpoždění; záporné číslo znamená náskok                                                                                    |
+| `properties.observedAt`                     | čas poslední zprávy o poloze                                                                                                       |
+| `properties.validUntil`                     | kdy má COP považovat polohu za zastaralou                                                                                          |
+| `properties.confidence`                     | důvěra v polohu/detail                                                                                                             |
+| `properties.headingDeg`                     | směr pohybu                                                                                                                        |
+| `properties.speedMps`                       | rychlost                                                                                                                           |
+| `properties.occupancyStatus`                | normalizovaná obsazenost, pokud existuje                                                                                           |
+| `properties.operator`                       | např. `PID`, `IDS JMK`                                                                                                             |
+| `properties.styleHint`                      | doporučený styl, např. `transit-vehicle-position-v1`                                                                               |
+| `properties.iconHint`                       | doporučená ikona podle módu                                                                                                        |
+| `providerProperties.transit.positionKind`   | `vehicle_live`, `vehicle_live_cached`, nebo `static_stop`                                                                          |
+| `providerProperties.transit.refreshSeconds` | interval obnovy pro konkrétní provider                                                                                             |
 
 `providerProperties.transit` doplňuje auditní a detailní hodnoty:
 
@@ -371,15 +375,15 @@ Odpověď:
 
 SIM normalizuje stav do těchto hodnot:
 
-| Hodnota | Význam pro COP |
-| --- | --- |
-| `on_time` | spoj jede včas; typicky tolerance do 60 s |
-| `early` | spoj jede s náskokem |
-| `delayed` | spoj je zpožděný |
-| `stopped` | vozidlo stojí v zastávce nebo mimo trasu |
+| Hodnota      | Význam pro COP                                      |
+| ------------ | --------------------------------------------------- |
+| `on_time`    | spoj jede včas; typicky tolerance do 60 s           |
+| `early`      | spoj jede s náskokem                                |
+| `delayed`    | spoj je zpožděný                                    |
+| `stopped`    | vozidlo stojí v zastávce nebo mimo trasu            |
 | `in_transit` | vozidlo jede, ale přesný vztah k zastávce není znám |
-| `stale` | poloha je zastaralá |
-| `unknown` | zdroj neposkytl dost dat |
+| `stale`      | poloha je zastaralá                                 |
+| `unknown`    | zdroj neposkytl dost dat                            |
 
 COP nemá stav odvozovat z barvy ani z upstream polí; používá normalizované
 `vehicle.status`, `delaySeconds`, `observedAt` a `quality`.

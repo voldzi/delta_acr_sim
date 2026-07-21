@@ -315,6 +315,7 @@ API používá řízenou cache:
 - limit `CHMI_HYDRO_MAX_STATIONS`.
 - NASA FIRMS zdroj drží vlastní source-level cache alespoň 10 minut a bez `NASA_FIRMS_MAP_KEY` se nedotazuje externího API.
 - `municipal_alerts` drží per-feed cache podle `MUNICIPAL_ALERTS_CACHE_TTL_SECONDS` a dotazuje jen feedy, jejichž konfigurovaný bbox protíná query bbox. Archivní položky s `validUntil`/implicitním koncem po platnosti SIM do COP nevrací jako aktivní prvky.
+- `road_srti_lod` drží source-level cache podle `SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS`; výchozí kadence je 60 s a při chybě upstreamu zůstává dostupný poslední platný snapshot přes stale-if-error.
 - Admin hranice se čtou z lokální/PostGIS materializované view s TTL `SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS`; geometrie se vybírá ze zjednodušených sloupců podle velikosti bboxu.
 - ČHMÚ CAP polygonizace drží číselník CISORP z `CHMI_ORP_CODELIST_URL` v dlouhé cache a hranice čte pouze z lokálního PostGIS read-modelu, ne z veřejného Overpass runtime.
 

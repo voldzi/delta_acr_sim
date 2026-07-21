@@ -202,12 +202,12 @@ export class TransitDetailService {
 
   constructor(private readonly config: SituationDataConfig) {
     this.pidVehicleFeedCache = new ManagedResponseCache<transit_realtime.FeedMessage>({
-      ttlMs: 20_000,
+      ttlMs: config.pidGtfsRtCacheTtlSeconds * 1000,
       staleIfErrorMs: Math.max(60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 1
     });
     this.pidTripUpdateFeedCache = new ManagedResponseCache<transit_realtime.FeedMessage>({
-      ttlMs: 20_000,
+      ttlMs: config.pidGtfsRtCacheTtlSeconds * 1000,
       staleIfErrorMs: Math.max(60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 1
     });

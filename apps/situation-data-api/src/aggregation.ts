@@ -46,7 +46,9 @@ export class SituationAggregationService {
   }
 
   async getFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
-    return this.cache.getOrLoad(cacheKeyForSituationQuery(query, this.config), () => this.fetchFeatures(query));
+    return this.cache.getOrLoad(cacheKeyForSituationQuery(query, this.config), () => this.fetchFeatures(query), {
+      ttlMs: responseCacheTtlMs(query, this.config)
+    });
   }
 
   private async fetchFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
@@ -103,6 +105,22 @@ export class SituationAggregationService {
     };
     return response;
   }
+}
+
+function responseCacheTtlMs(query: SituationQuery, config: SituationDataConfig): number {
+  const liveSourceTtlSeconds = query.sourceIds.flatMap((sourceId) => {
+    switch (sourceId) {
+      case "pid_gtfs_rt":
+        return [config.pidGtfsRtCacheTtlSeconds];
+      case "idsjmk_vehicle_positions":
+        return [config.idsjmkVehiclePositionsCacheTtlSeconds];
+      case "road_srti_lod":
+        return [config.roadSrtiLodCacheTtlSeconds];
+      default:
+        return [];
+    }
+  });
+  return Math.min(config.cacheTtlSeconds, ...liveSourceTtlSeconds) * 1000;
 }
 
 function normalizeProviderFeature(feature: SituationFeature): SituationFeature {

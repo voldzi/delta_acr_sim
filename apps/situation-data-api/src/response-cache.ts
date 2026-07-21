@@ -36,6 +36,10 @@ export interface ManagedResponseCacheStats {
   sharedErrors: number;
 }
 
+export interface ManagedResponseCacheLoadOptions {
+  ttlMs?: number;
+}
+
 interface CacheEntry<T> {
   value: T;
   expiresAtMs: number;
@@ -71,7 +75,7 @@ export class ManagedResponseCache<T> {
 
   constructor(private readonly options: ManagedResponseCacheOptions) {}
 
-  async getOrLoad(key: string, loader: () => Promise<T>): Promise<T> {
+  async getOrLoad(key: string, loader: () => Promise<T>, loadOptions: ManagedResponseCacheLoadOptions = {}): Promise<T> {
     const now = Date.now();
     const entry = this.entries.get(key);
     if (entry && entry.expiresAtMs > now) {
@@ -105,7 +109,7 @@ export class ManagedResponseCache<T> {
       .then(async (value) => {
         this.counters.refreshes += 1;
         this.lastSuccessAtMs = Date.now();
-        await this.store(key, value);
+        await this.store(key, value, loadOptions.ttlMs);
         return value;
       })
       .catch((error) => {
@@ -150,9 +154,9 @@ export class ManagedResponseCache<T> {
     return stats;
   }
 
-  private async store(key: string, value: T): Promise<void> {
+  private async store(key: string, value: T, ttlMs = this.options.ttlMs): Promise<void> {
     const now = Date.now();
-    const expiresAtMs = now + Math.max(0, this.options.ttlMs);
+    const expiresAtMs = now + Math.max(0, ttlMs);
     const staleUntilMs = expiresAtMs + Math.max(0, this.options.staleIfErrorMs);
     this.storeEntry(key, value, expiresAtMs, staleUntilMs);
     await this.writeSharedEntry(key, { value, expiresAtMs, staleUntilMs });

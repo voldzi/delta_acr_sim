@@ -1350,7 +1350,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       osmPostgis: config.osmPostgisCacheTtlSeconds,
       osmOverpass: config.overpassCacheTtlSeconds,
       ctuStationaryMobile: config.ctuStationaryMobileCacheTtlSeconds,
-      pidGtfsRt: 20,
+      pidGtfsRt: config.pidGtfsRtCacheTtlSeconds,
       pidGtfsStatic: config.pidGtfsStaticCacheTtlSeconds,
       publicTransitStatic: config.publicTransitStaticCacheTtlSeconds,
       idsjmkVehiclePositions: config.idsjmkVehiclePositionsCacheTtlSeconds,

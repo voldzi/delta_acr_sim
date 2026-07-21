@@ -72,6 +72,7 @@ describe("Situation Data API contract", () => {
       ctuStationaryMobileCacheTtlSeconds: 86400,
       pidGtfsRtVehiclePositionsUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/vehicle_positions.pb",
       pidGtfsRtTripUpdatesUrl: "https://api.golemio.cz/v2/vehiclepositions/gtfsrt/trip_updates.pb",
+      pidGtfsRtCacheTtlSeconds: 15,
       pidGtfsStaticUrl: "https://data.pid.cz/PID_GTFS.zip",
       pidGtfsStaticCacheTtlSeconds: 21600,
       publicTransitStaticGtfsFeeds: [
@@ -95,7 +96,7 @@ describe("Situation Data API contract", () => {
       spravaZeleznicTrainPositionsUrl: "https://example.test/spravazeleznic/request2.php?module=Layers%5COsVlaky&action=load2",
       spravaZeleznicTrainPositionsCacheTtlSeconds: 900,
       roadSrtiLodSparqlUrl: "https://example.test/sparql",
-      roadSrtiLodCacheTtlSeconds: 300,
+      roadSrtiLodCacheTtlSeconds: 60,
       roadSrtiLodMaxRecords: 1500,
       safetyDataBaseUrl: "http://127.0.0.1:4030",
       safetyDataCacheTtlSeconds: 300,
@@ -1553,12 +1554,12 @@ describe("Situation Data API contract", () => {
           communityContext: 21600,
           osmOverpass: 21600,
           ctuStationaryMobile: 86400,
-          pidGtfsRt: 20,
+          pidGtfsRt: 15,
           pidGtfsStatic: 21600,
           publicTransitStatic: 21600,
           idsjmkVehiclePositions: 20,
           spravaZeleznicTrains: 900,
-          roadSrtiLod: 300,
+          roadSrtiLod: 60,
           safetyData: 300,
           aviationWeather: 600,
           chmiAirQuality: 900,
@@ -3096,8 +3097,8 @@ describe("Situation Data API contract", () => {
               positionKind: "vehicle_live",
               livePosition: true,
               motionExpected: true,
-              refreshSeconds: 20,
-              cacheTtlSeconds: 20,
+              refreshSeconds: 15,
+              cacheTtlSeconds: 15,
               transportMode: "bus",
               routeId: "L136",
               routeShortName: "136",
@@ -6409,6 +6410,55 @@ describe("Situation Data API contract", () => {
 
     expect(calls).toBe(1);
     expect(service.cacheStats().hits).toBe(1);
+  });
+
+  it("expires aggregate PID responses at the live source cadence", async () => {
+    let calls = 0;
+    let now = Date.parse("2026-07-21T12:00:00.000Z");
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const descriptor: SituationDataSource["descriptor"] = {
+      sourceId: "pid_gtfs_rt",
+      label: "PID test",
+      enabled: true,
+      mode: "live",
+      priority: 75,
+      layers: ["traffic"],
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      },
+      updateCadenceSeconds: 15
+    };
+    const source: SituationDataSource = {
+      descriptor,
+      async fetchFeatures() {
+        calls += 1;
+        return { source: descriptor, fetchedAt: new Date(now).toISOString(), warnings: [], features: [] };
+      }
+    };
+    const service = new SituationAggregationService({ ...config, cacheTtlSeconds: 30, pidGtfsRtCacheTtlSeconds: 15 }, [source]);
+    const query = {
+      bbox: { west: 14.2, south: 49.9, east: 14.7, north: 50.2 },
+      layers: ["traffic" as const],
+      sourceIds: ["pid_gtfs_rt" as const],
+      limit: 10,
+      includeRaw: false
+    };
+
+    try {
+      await service.getFeatures(query);
+      now += 14_000;
+      await service.getFeatures(query);
+      now += 2_000;
+      await service.getFeatures(query);
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(calls).toBe(2);
   });
 
   it("reuses aggregate responses from a shared cache store", async () => {

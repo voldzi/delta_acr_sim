@@ -119,7 +119,7 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     municipalAlertFeeds: parseMunicipalAlertFeeds(process.env.MUNICIPAL_ALERT_FEEDS),
     municipalAlertsCacheTtlSeconds: parseInteger(process.env.MUNICIPAL_ALERTS_CACHE_TTL_SECONDS, 300),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
-    roadSrtiLodCacheTtlSeconds: parseInteger(process.env.SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 300),
+    roadSrtiLodCacheTtlSeconds: Math.max(60, parseInteger(process.env.SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 60)),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
     adminBoundaryConnectionString:
       emptyToUndefined(process.env.SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL) ?? emptyToUndefined(process.env.OSM_POSTGIS_DATABASE_URL),
