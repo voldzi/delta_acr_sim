@@ -8,6 +8,8 @@ const DEFAULT_CZECHIA_BBOX: BoundingBox = {
   east: 19.2,
   north: 51.2
 };
+const TILE_MAX_ATTEMPTS = 4;
+const TILE_RETRY_DELAY_MS = 5_000;
 
 async function main(): Promise<void> {
   const config = await loadConfig();
@@ -20,7 +22,7 @@ async function main(): Promise<void> {
 
   await source.ensureReadModelSchema();
   for (const [index, tile] of tiles.entries()) {
-    const count = await source.replaceReadModelFeatures(tile, technologies);
+    const count = await rebuildTileWithRetry(source, tile, technologies, index, tiles.length);
     written += count;
     process.stdout.write(
       JSON.stringify({
@@ -45,6 +47,42 @@ async function main(): Promise<void> {
       readModelTable: config.mobileCoverageReadModelTable
     }) + "\n"
   );
+}
+
+async function rebuildTileWithRetry(
+  source: MobileCoverageSource,
+  tile: BoundingBox,
+  technologies: MobileCoverageTechnology[],
+  index: number,
+  total: number
+): Promise<number> {
+  for (let attempt = 1; attempt <= TILE_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await source.replaceReadModelFeatures(tile, technologies);
+    } catch (error) {
+      if (attempt === TILE_MAX_ATTEMPTS) {
+        throw error;
+      }
+      process.stderr.write(
+        JSON.stringify({
+          event: "mobile_coverage_tile_retry",
+          index: index + 1,
+          total,
+          attempt,
+          maxAttempts: TILE_MAX_ATTEMPTS,
+          retryDelayMs: TILE_RETRY_DELAY_MS,
+          bbox: tile,
+          error: error instanceof Error ? error.message : String(error)
+        }) + "\n"
+      );
+      await delay(TILE_RETRY_DELAY_MS);
+    }
+  }
+  throw new Error("Mobile coverage tile rebuild exhausted retries.");
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function splitBbox(bbox: BoundingBox, step: number): BoundingBox[] {
