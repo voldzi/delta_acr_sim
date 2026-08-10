@@ -9,6 +9,11 @@ export interface PublicTransitStaticFeedConfig {
   url: string;
 }
 
+export interface GeoRoutingPrincipalConfig {
+  actor: string;
+  token: string;
+}
+
 export interface SituationDataConfig {
   port: number;
   dataDir: string;
@@ -106,6 +111,12 @@ export interface SituationDataConfig {
   routingMaxGraphEdges: number;
   routingMaxSearchRadiusM: number;
   routingMaxSnapDistanceM: number;
+  geoRoutingPrincipals: GeoRoutingPrincipalConfig[];
+  geoRoutingAudience: string;
+  geoRoutingMaxWaypoints: number;
+  geoRoutingMaxTotalDistanceM: number;
+  geoRoutingRateLimitPerMinute: number;
+  geoRoutingPrecomputeDir: string;
   radioPlanningCacheTtlSeconds: number;
   radioPlanningCacheMaxEntries: number;
   demEnabled: boolean;
@@ -231,6 +242,12 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     routingMaxGraphEdges: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_GRAPH_EDGES, 45000),
     routingMaxSearchRadiusM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M, 800000),
     routingMaxSnapDistanceM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SNAP_DISTANCE_M, 2500),
+    geoRoutingPrincipals: parseGeoRoutingPrincipals(process.env.GEO_ROUTING_SERVICE_TOKENS),
+    geoRoutingAudience: process.env.GEO_ROUTING_AUDIENCE ?? "csm-sim-geo-routing-v1",
+    geoRoutingMaxWaypoints: Math.max(2, parseInteger(process.env.GEO_ROUTING_MAX_WAYPOINTS, 25)),
+    geoRoutingMaxTotalDistanceM: Math.max(1, parseInteger(process.env.GEO_ROUTING_MAX_TOTAL_DISTANCE_M, 1_000_000)),
+    geoRoutingRateLimitPerMinute: Math.max(1, parseInteger(process.env.GEO_ROUTING_RATE_LIMIT_PER_MINUTE, 60)),
+    geoRoutingPrecomputeDir: resolve(process.env.GEO_ROUTING_PRECOMPUTE_DIR ?? `${dataDir}/geo-routing-v1/precomputed`),
     radioPlanningCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS, 900),
     radioPlanningCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES, 512),
     demEnabled: parseBoolean(process.env.DEM_ENABLED, false),
@@ -242,6 +259,19 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     demSeaweedfsPrefix: trimSlashes(process.env.DEM_SEAWEEDFS_PREFIX ?? "copernicus-glo30/2021"),
     corsOrigins: parseStringList(process.env.SITUATION_DATA_CORS_ORIGINS)
   };
+}
+
+function parseGeoRoutingPrincipals(value: string | undefined): GeoRoutingPrincipalConfig[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .flatMap((item) => {
+      const separator = item.indexOf(":");
+      const actor = separator > 0 ? item.slice(0, separator).trim() : "";
+      const token = separator > 0 ? item.slice(separator + 1).trim() : "";
+      return actor && token ? [{ actor, token }] : [];
+    });
 }
 
 function parseRoutingEngine(value: string | undefined): "auto" | "valhalla" | "osm_postgis" {

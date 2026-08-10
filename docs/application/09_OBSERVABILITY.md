@@ -98,6 +98,8 @@ aktuální notice, role warningy a výsledky operátorských akcí vykreslí zno
 - import age / source freshness
 - Overview load latency
 - routing backend health/version and route/isochrone/nearest-access cache state
+- geo-routing-v1 Valhalla dependency state and routing dataset version/build
+  timestamp in situation-data readiness; no route body or token logging
 - host-local Valhalla last-attempt/last-success release age, timer result and
   source provenance; these files stay on `valhalla.home.cz` and are not public
 

@@ -10,6 +10,9 @@
 - publisher config validace
 - AI draft validace
 - standard error model
+- `geo-routing-v1`: walking/bicycle, ordered 2+ waypoints, GeoJSON/elevation,
+  dataset metadata, invalid input, no optimization, service auth/browser
+  rejection, Valhalla degradation and publication idempotency
 
 ## Mock COP
 

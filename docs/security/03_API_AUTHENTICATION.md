@@ -24,6 +24,18 @@ konfigurace musí zůstat chráněné bearer tokenem vždy.
 
 Publisher používá bearer token jako baseline a návrhově podporuje mTLS/OIDC client credentials. `X-Source-System-Id`, `X-Contract-Version`, `X-Idempotency-Key` a `X-Correlation-Id` jsou povinné integrační hlavičky.
 
+## Internal geo-routing-v1
+
+`POST /situation-data/api/v1/geo-routing-v1/route` uses a separate opaque
+service token for each consuming backend. Tokens are configured as
+`actor:token` entries in `GEO_ROUTING_SERVICE_TOKENS`; the fixed audience is
+`csm-sim-geo-routing-v1` and the operation scope is `geo-routing:route`.
+Rate limiting and idempotency namespaces use the authenticated actor. A request
+with a browser `Origin` header is rejected even when it carries a valid token.
+The public client must call its own backend and must never call SIM or Valhalla.
+Details are in
+[19_GEO_ROUTING_V1_CONTRACT.md](../integration/19_GEO_ROUTING_V1_CONTRACT.md).
+
 ## Audit
 
 Auth selhání a změny auth konfigurace se auditují bez ukládání tajných hodnot.

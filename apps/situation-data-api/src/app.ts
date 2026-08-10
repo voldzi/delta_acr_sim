@@ -7,6 +7,7 @@ import { ChmiWeatherStationDetailService } from "./chmi-weather-station-detail.j
 import { ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
+import { registerGeoRoutingRoutes } from "./geo-routing.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
@@ -94,6 +95,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerRadioRoutes(app, context);
   registerTransitRoutes(app, context);
   registerRoutingRoutes(app, context);
+  registerGeoRoutingRoutes(app, config, routing);
   registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);
 

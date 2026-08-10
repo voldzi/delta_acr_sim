@@ -135,6 +135,12 @@ describe("Situation Data API contract", () => {
       routingMaxGraphEdges: 45000,
       routingMaxSearchRadiusM: 800000,
       routingMaxSnapDistanceM: 2500,
+      geoRoutingPrincipals: [{ actor: "cop-test", token: "test-geo-routing-token" }],
+      geoRoutingAudience: "csm-sim-geo-routing-v1",
+      geoRoutingMaxWaypoints: 25,
+      geoRoutingMaxTotalDistanceM: 1_000_000,
+      geoRoutingRateLimitPerMinute: 60,
+      geoRoutingPrecomputeDir: join(dataDir, "geo-routing-v1", "precomputed"),
       radioPlanningCacheTtlSeconds: 900,
       radioPlanningCacheMaxEntries: 512,
       demEnabled: false,
@@ -4684,6 +4690,169 @@ describe("Situation Data API contract", () => {
     expect(metrics.text).toContain('situation_data_routing_cache_misses{operation="nearest_access"} 1');
   });
 
+  it("implements authenticated ordered geo-routing-v1 with bicycle, elevation, dataset metadata and idempotent publication retries", async () => {
+    const routeRequests: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/status") {
+        return jsonResponse({ version: "test-valhalla", tileset_last_modified: 1_786_000_000, available_actions: ["route", "status"] });
+      }
+      if (path === "/route") {
+        const payload = JSON.parse(String(init?.body ?? "{}")) as {
+          costing: string;
+          locations: Array<{ lon: number; lat: number; type: string }>;
+        };
+        routeRequests.push(payload as unknown as Record<string, unknown>);
+        expect(payload.locations.every((location) => location.type === "break")).toBe(true);
+        return jsonResponse({
+          trip: {
+            status: 0,
+            summary: { length: 2.38, time: 710 },
+            locations: payload.locations,
+            legs: payload.locations.slice(1).map((location, index) => ({
+              shape: encodeValhallaPolyline6([
+                [payload.locations[index]!.lon, payload.locations[index]!.lat],
+                [location.lon, location.lat]
+              ]),
+              elevation: [100 + index * 10, 112 + index * 10],
+              elevation_interval: 30,
+              summary: { length: 0.8, time: 240 }
+            }))
+          }
+        });
+      }
+      return new Response(JSON.stringify({ error: "unhandled" }), { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const geoApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test"
+      })
+    ).app;
+    const authorization = { Authorization: "Bearer test-geo-routing-token" };
+    const walkingPayload = {
+      contractVersion: "geo-routing-v1",
+      profile: "walking",
+      locations: [
+        { longitude: 14.42, latitude: 50.08 },
+        { longitude: 14.45, latitude: 50.1 }
+      ],
+      options: { elevation: true, optimizeWaypointOrder: false }
+    };
+
+    await request(geoApp).post("/api/v1/geo-routing-v1/route").send(walkingPayload).expect(401);
+    await request(geoApp).post("/api/v1/geo-routing-v1/route").set(authorization).set("Origin", "https://browser.example").send(walkingPayload).expect(403);
+
+    const walking = await request(geoApp).post("/api/v1/geo-routing-v1/route").set(authorization).send(walkingPayload).expect(200);
+    expect(walking.body).toEqual(
+      expect.objectContaining({
+        contractVersion: "geo-routing-v1",
+        profile: "walking",
+        waypointOrder: [0, 1],
+        geometry: expect.objectContaining({ type: "LineString", coordinates: expect.any(Array) }),
+        summary: {
+          distanceM: 2380,
+          durationSeconds: 710,
+          elevationGainM: expect.any(Number),
+          elevationLossM: expect.any(Number)
+        },
+        routingDataset: {
+          version: expect.stringMatching(/^sim-routing-/),
+          builtAt: new Date(1_786_000_000 * 1000).toISOString()
+        },
+        computedAt: expect.any(String)
+      })
+    );
+    expect(walking.body.summary.elevationGainM).toBeGreaterThanOrEqual(0);
+    expect(walking.body.summary.elevationLossM).toBeGreaterThanOrEqual(0);
+    const readiness = await request(geoApp).get("/health/ready").expect(200);
+    expect(readiness.body.routing).toEqual(
+      expect.objectContaining({
+        status: "ok",
+        routingDataset: expect.objectContaining({ version: expect.stringMatching(/^sim-routing-/), builtAt: expect.any(String) })
+      })
+    );
+
+    const bicyclePayload = {
+      ...walkingPayload,
+      profile: "bicycle",
+      locations: [
+        { longitude: 17.3291, latitude: 50.1198 },
+        { longitude: 17.3358, latitude: 50.1135 },
+        { longitude: 17.3472, latitude: 50.1081 },
+        { longitude: 17.352, latitude: 50.102 }
+      ]
+    };
+    const first = await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set(authorization)
+      .set("Idempotency-Key", "publication-route-42")
+      .send(bicyclePayload)
+      .expect(200);
+    expect(first.headers["x-idempotent-replay"]).toBe("false");
+    expect(first.body.waypointOrder).toEqual([0, 1, 2, 3]);
+    expect(routeRequests.at(-1)).toEqual(expect.objectContaining({ costing: "bicycle" }));
+    expect((routeRequests.at(-1)!.locations as unknown[]).length).toBe(4);
+
+    const callsAfterFirstPublication = fetchMock.mock.calls.length;
+    const replay = await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set(authorization)
+      .set("Idempotency-Key", "publication-route-42")
+      .send(bicyclePayload)
+      .expect(200);
+    expect(replay.headers["x-idempotent-replay"]).toBe("true");
+    expect(replay.body).toEqual(first.body);
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirstPublication);
+
+    await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set(authorization)
+      .set("Idempotency-Key", "publication-route-42")
+      .send({ ...bicyclePayload, profile: "walking" })
+      .expect(409);
+    await request(geoApp).post("/api/v1/geo-routing-v1/route").set(authorization).send({ ...walkingPayload, locations: walkingPayload.locations.slice(0, 1) }).expect(400);
+    await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set(authorization)
+      .send({ ...walkingPayload, locations: [{ longitude: 181, latitude: 50 }, walkingPayload.locations[1]] })
+      .expect(400);
+    const optimization = await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set(authorization)
+      .send({ ...walkingPayload, options: { elevation: true, optimizeWaypointOrder: true } })
+      .expect(400);
+    expect(optimization.body.error).toEqual(expect.objectContaining({ code: "WAYPOINT_OPTIMIZATION_NOT_SUPPORTED", correlationId: expect.any(String) }));
+  });
+
+  it("reports degraded Valhalla through the standard geo-routing error envelope", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "upstream timeout" }), { status: 504 })));
+    const geoApp = (
+      await createApp({
+        ...config,
+        routingEngine: "valhalla",
+        valhallaBaseUrl: "http://valhalla.test"
+      })
+    ).app;
+    const response = await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set("Authorization", "Bearer test-geo-routing-token")
+      .send({
+        contractVersion: "geo-routing-v1",
+        profile: "walking",
+        locations: [
+          { longitude: 14.42, latitude: 50.08 },
+          { longitude: 14.45, latitude: 50.1 }
+        ]
+      })
+      .expect(503);
+    expect(response.body.error).toEqual(
+      expect.objectContaining({ code: "ROUTING_DEPENDENCY_UNAVAILABLE", message: expect.stringContaining("upstream timeout"), correlationId: expect.any(String) })
+    );
+  });
+
   it("rejects Valhalla locate candidates beyond the requested hard radius", async () => {
     const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const path = new URL(String(url)).pathname;
@@ -6603,4 +6772,29 @@ function jsonResponse(value: unknown): Response {
     status: 200,
     headers: { "content-type": "application/json" }
   });
+}
+
+function encodeValhallaPolyline6(coordinates: Array<[number, number]>): string {
+  let previousLat = 0;
+  let previousLon = 0;
+  let encoded = "";
+  for (const [lon, lat] of coordinates) {
+    const currentLat = Math.round(lat * 1e6);
+    const currentLon = Math.round(lon * 1e6);
+    encoded += encodePolylineDelta(currentLat - previousLat);
+    encoded += encodePolylineDelta(currentLon - previousLon);
+    previousLat = currentLat;
+    previousLon = currentLon;
+  }
+  return encoded;
+}
+
+function encodePolylineDelta(delta: number): string {
+  let value = delta < 0 ? ~(delta << 1) : delta << 1;
+  let encoded = "";
+  while (value >= 0x20) {
+    encoded += String.fromCharCode((0x20 | (value & 0x1f)) + 63);
+    value >>= 5;
+  }
+  return encoded + String.fromCharCode(value + 63);
 }

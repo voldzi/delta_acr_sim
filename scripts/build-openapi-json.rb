@@ -32,6 +32,13 @@ SPECS = [
     path_prefix: "/situation-data/api/v1"
   },
   {
+    key: "geoRouting",
+    prefix: "GeoRouting",
+    tag_prefix: "Geo Routing",
+    file: "openapi/fragments/geo-routing-v1.openapi.json",
+    path_prefix: "/situation-data/api/v1"
+  },
+  {
     key: "searchData",
     prefix: "SearchData",
     tag_prefix: "Search Data",

@@ -23,7 +23,7 @@ import type {
   SituationSeverity
 } from "./types.js";
 
-export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "evacuation_walking";
+export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "bicycle" | "evacuation_walking";
 
 export type RoutingAvoid = "flood" | "fire" | "road_closure" | "unpaved" | "tunnel" | "bridge";
 export type RoutingQualityMode = "engine_route" | "osm_graph" | "direct_fallback";
@@ -32,7 +32,7 @@ export interface RoutingProfile {
   profileId: RoutingProfileId;
   label: string;
   labelLocalized: Record<"cs" | "en", string>;
-  transportMode: "road" | "walk" | "offroad";
+  transportMode: "road" | "walk" | "bicycle" | "offroad";
   descriptionLocalized: Record<"cs" | "en", string>;
   defaultSpeedKph: number;
   maxSearchRadiusM: number;
@@ -58,6 +58,7 @@ export interface RoutingRouteRequest {
   profileId?: RoutingProfileId;
   from?: RoutingCoordinate;
   to?: RoutingCoordinate;
+  via?: RoutingCoordinate[];
   avoid?: RoutingAvoid[];
   departureTime?: string;
   alternatives?: number;
@@ -67,6 +68,16 @@ export interface RoutingRouteRequest {
   includeHazardsOnRoute?: boolean;
   includeTraffic?: boolean;
   includeDebug?: boolean;
+}
+
+export interface ExactRoutingDataset {
+  version: string;
+  builtAt: string;
+}
+
+export interface ExactRoutingResult {
+  route: RoutingRoute;
+  routingDataset: ExactRoutingDataset;
 }
 
 export interface RoutingAlternativesRequest extends RoutingRouteRequest {
@@ -358,6 +369,7 @@ export interface RoutingBackendHealth {
   valhallaBaseUrl?: string;
   valhallaVersion?: string;
   valhallaActions?: string[];
+  routingDataset?: ExactRoutingDataset;
   warnings: string[];
 }
 
@@ -563,6 +575,7 @@ interface ValhallaLocateEdge {
 
 interface ValhallaStatusResponse {
   version?: string;
+  tileset_last_modified?: number;
   available_actions?: string[];
   error?: string;
   status_message?: string;
@@ -702,6 +715,20 @@ const ROUTING_PROFILES: RoutingProfile[] = [
     notes: ["Terrain slope is not yet used as a speed penalty in this endpoint."]
   },
   {
+    profileId: "bicycle",
+    label: "Bicycle",
+    labelLocalized: { cs: "Jízdní kolo", en: "Bicycle" },
+    transportMode: "bicycle",
+    descriptionLocalized: {
+      cs: "Obecná cyklistická trasa s řízeným Valhalla bicycle costingem.",
+      en: "General bicycle route using controlled Valhalla bicycle costing."
+    },
+    defaultSpeedKph: 16,
+    maxSearchRadiusM: 800_000,
+    supportsAvoid: ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
+    notes: ["Waypoint order is preserved when the geo-routing-v1 operation is used."]
+  },
+  {
     profileId: "evacuation_walking",
     label: "Evacuation walking",
     labelLocalized: { cs: "Evakuační pěší trasa", en: "Evacuation walking" },
@@ -767,6 +794,18 @@ const HIGHWAYS_BY_PROFILE: Record<RoutingProfileId, string[]> = {
   ],
   offroad_4x4: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path"],
   walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian", "steps"],
+  bicycle: [
+    "primary",
+    "secondary",
+    "tertiary",
+    "unclassified",
+    "residential",
+    "living_street",
+    "service",
+    "track",
+    "path",
+    "cycleway"
+  ],
   evacuation_walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian"]
 };
 
@@ -864,11 +903,20 @@ export class RoutingService {
     }
     try {
       const response = await requestValhallaStatus(this.config);
+      let routingDataset: ExactRoutingDataset | undefined;
+      const warnings = [...summary.warnings];
+      try {
+        routingDataset = routingDatasetFromStatus(response);
+      } catch (error) {
+        warnings.push(error instanceof Error ? error.message : "Valhalla dataset metadata is unavailable.");
+      }
       return {
         ...summary,
         status: "ok",
         valhallaVersion: cleanString(response.version),
-        valhallaActions: Array.isArray(response.available_actions) ? response.available_actions.flatMap((action) => cleanString(action) ?? []) : []
+        valhallaActions: Array.isArray(response.available_actions) ? response.available_actions.flatMap((action) => cleanString(action) ?? []) : [],
+        ...(routingDataset ? { routingDataset } : {}),
+        warnings
       };
     } catch (error) {
       return {
@@ -882,6 +930,56 @@ export class RoutingService {
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     const request = this.normalizeRouteRequest(raw, 1);
     return this.routeCache.getOrLoad(`route:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+  }
+
+  async exactRoute(profileId: "walking" | "bicycle", locations: RoutingCoordinate[]): Promise<ExactRoutingResult> {
+    if (!this.shouldUseValhalla()) {
+      throw new RoutingError(503, "ROUTING_DEPENDENCY_UNAVAILABLE", "Valhalla is not configured for exact geo routing.");
+    }
+    if (locations.length < 2) {
+      throw new RoutingError(400, "VALIDATION_ERROR", "At least two locations are required.");
+    }
+    const profile = getRoutingProfile(profileId);
+    const request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest = {
+      profileId,
+      from: locations[0]!,
+      to: locations[locations.length - 1]!,
+      via: locations.slice(1, -1),
+      avoid: [],
+      alternatives: 1,
+      includeSteps: false,
+      includeElevationProfile: true,
+      includeWeatherOnRoute: false,
+      includeHazardsOnRoute: false,
+      includeTraffic: false
+    };
+    try {
+      const [response, status] = await Promise.all([requestValhallaRoute(this.config, profile, request), requestValhallaStatus(this.config)]);
+      const expectedLegCount = locations.length - 1;
+      if ((response.trip?.legs?.length ?? 0) !== expectedLegCount) {
+        throw new Error(`Valhalla returned ${response.trip?.legs?.length ?? 0} legs for ${locations.length} ordered locations.`);
+      }
+      const route = response.trip ? valhallaRoute(profile, request, response.trip, 1) : undefined;
+      if (!route || route.status !== "ok" || route.quality.mode !== "engine_route" || route.geometry.coordinates.length < 2) {
+        throw new Error("Valhalla returned no valid engine route geometry.");
+      }
+      if (route.elevation?.gainM === undefined || route.elevation.lossM === undefined) {
+        throw new Error("Valhalla returned no usable elevation profile.");
+      }
+      return {
+        route,
+        routingDataset: routingDatasetFromStatus(status)
+      };
+    } catch (error) {
+      if (error instanceof RoutingError) {
+        throw error;
+      }
+      throw new RoutingError(
+        503,
+        "ROUTING_DEPENDENCY_UNAVAILABLE",
+        error instanceof Error ? `Exact routing failed: ${error.message}` : "Exact routing failed because Valhalla is unavailable."
+      );
+    }
   }
 
   async alternatives(raw: RoutingAlternativesRequest): Promise<RoutingRouteResponse> {
@@ -1454,8 +1552,9 @@ export class RoutingService {
     const profileId = parseProfileId(raw.profileId);
     const from = parseCoordinate(raw.from, "from");
     const to = parseCoordinate(raw.to, "to");
+    const via = Array.isArray(raw.via) ? raw.via.map((coordinate, index) => parseCoordinate(coordinate, `via[${index}]`)) : [];
     const departureTime = parseOptionalDepartureTime(raw.departureTime);
-    const distanceM = haversineMeters([from.lon, from.lat], [to.lon, to.lat]);
+    const distanceM = orderedRouteDistanceM([from, ...via, to]);
     const profile = getRoutingProfile(profileId);
     if (distanceM > Math.min(profile.maxSearchRadiusM, this.config.routingMaxSearchRadiusM)) {
       throw new RoutingError(400, "VALIDATION_ERROR", `Route distance ${Math.round(distanceM)} m exceeds profile/search limit.`);
@@ -1465,6 +1564,7 @@ export class RoutingService {
       profileId,
       from,
       to,
+      via,
       departureTime,
       avoid: parseAvoid(raw.avoid),
       alternatives: Math.max(1, Math.min(3, alternatives))
@@ -1631,6 +1731,12 @@ function roadAllowedForProfile(row: RoadEdgeRow, profile: RoutingProfile, avoid:
   if (profile.transportMode === "walk") {
     const foot = cleanString(row.foot)?.toLowerCase();
     if (foot && ["private", "no"].includes(foot)) {
+      return false;
+    }
+  }
+  if (profile.transportMode === "bicycle") {
+    const bicycle = cleanString(row.bicycle)?.toLowerCase();
+    if (bicycle && ["private", "no"].includes(bicycle)) {
       return false;
     }
   }
@@ -2695,25 +2801,16 @@ async function requestValhallaRoute(
   const recostings = valhallaRecostings(costing);
   const departureTime = valhallaDepartureTimePayload(request.departureTime);
   const snapLimitM = config.routingMaxSnapDistanceM;
+  const orderedLocations = [request.from, ...(request.via ?? []), request.to];
   const payload = {
-    locations: [
-      {
-        lat: request.from.lat,
-        lon: request.from.lon,
-        name: request.from.label,
-        type: "break",
-        radius: snapLimitM,
-        search_cutoff: snapLimitM
-      },
-      {
-        lat: request.to.lat,
-        lon: request.to.lon,
-        name: request.to.label,
-        type: "break",
-        radius: snapLimitM,
-        search_cutoff: snapLimitM
-      }
-    ],
+    locations: orderedLocations.map((location) => ({
+      lat: location.lat,
+      lon: location.lon,
+      name: location.label,
+      type: "break",
+      radius: snapLimitM,
+      search_cutoff: snapLimitM
+    })),
     costing,
     costing_options: valhallaCostingOptions(profile, request.avoid),
     ...valhallaTrafficAvoidancePayload(trafficContext),
@@ -2725,7 +2822,7 @@ async function requestValhallaRoute(
       ? {
           elevation_interval: adaptiveElevationIntervalM(
             profile.profileId,
-            haversineMeters([request.from.lon, request.from.lat], [request.to.lon, request.to.lat])
+            orderedRouteDistanceM(orderedLocations)
           )
         }
       : {}),
@@ -2743,7 +2840,7 @@ async function requestValhallaRoute(
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
-  assertValhallaRouteEndpointSnaps(body, request.from, request.to, snapLimitM);
+  assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM);
   return body;
 }
 
@@ -2825,6 +2922,18 @@ async function requestValhallaLocate(
 
 async function requestValhallaStatus(config: SituationDataConfig): Promise<ValhallaStatusResponse> {
   return requestValhallaJson<ValhallaStatusResponse>(config, "/status", undefined, "GET");
+}
+
+function routingDatasetFromStatus(status: ValhallaStatusResponse): ExactRoutingDataset {
+  const tilesetTimestamp = Number(status.tileset_last_modified);
+  if (!Number.isFinite(tilesetTimestamp) || tilesetTimestamp <= 0) {
+    throw new Error("Valhalla status contains no routing dataset build timestamp.");
+  }
+  const builtAt = new Date(tilesetTimestamp * 1000).toISOString();
+  return {
+    version: `sim-routing-${builtAt.slice(0, 10)}-${Math.trunc(tilesetTimestamp)}`,
+    builtAt
+  };
 }
 
 async function requestValhallaJson<T>(config: SituationDataConfig, endpoint: string, payload?: unknown, method: "GET" | "POST" = "POST"): Promise<T> {
@@ -3042,22 +3151,24 @@ function valhallaLocateEdgeDistanceM(point: RoutingCoordinate, edge: ValhallaLoc
   return Number.isFinite(reportedDistanceM) ? Math.max(geometricDistanceM, reportedDistanceM) : geometricDistanceM;
 }
 
-function assertValhallaRouteEndpointSnaps(response: ValhallaRouteResponse, from: RoutingCoordinate, to: RoutingCoordinate, maxSnapDistanceM: number): void {
+function assertValhallaRouteWaypointSnaps(response: ValhallaRouteResponse, locations: RoutingCoordinate[], maxSnapDistanceM: number): void {
   const legs = response.trip?.legs ?? [];
-  const decodedShapes = legs.map((leg) => decodeValhallaPolyline6(leg.shape)).filter((coordinates) => coordinates.length > 0);
-  const first = decodedShapes[0]?.[0];
-  const lastShape = decodedShapes[decodedShapes.length - 1];
-  const last = lastShape?.[lastShape.length - 1];
-  if (!first || !last) {
-    throw new Error("Valhalla route has no decodable shape for endpoint snap validation.");
+  if (legs.length !== locations.length - 1) {
+    throw new Error(`Valhalla route leg count ${legs.length} does not preserve ${locations.length} ordered locations.`);
   }
-  const fromDistanceM = haversineMeters([from.lon, from.lat], first);
-  const toDistanceM = haversineMeters([to.lon, to.lat], last);
-  if (fromDistanceM > maxSnapDistanceM || toDistanceM > maxSnapDistanceM) {
-    throw new Error(
-      `Valhalla endpoint snap exceeds configured threshold ${Math.round(maxSnapDistanceM)} m ` +
-        `(from ${Math.round(fromDistanceM)} m, to ${Math.round(toDistanceM)} m).`
-    );
+  const decodedShapes = legs.map((leg) => decodeValhallaPolyline6(leg.shape)).filter((coordinates) => coordinates.length > 0);
+  const snapped = decodedShapes.flatMap((shape, index) => (index === 0 ? [shape[0], shape[shape.length - 1]] : [shape[shape.length - 1]])).filter(
+    (coordinate): coordinate is [number, number] => Boolean(coordinate)
+  );
+  if (snapped.length !== locations.length) {
+    throw new Error("Valhalla route has no decodable shape for waypoint snap validation.");
+  }
+  for (let index = 0; index < locations.length; index += 1) {
+    const requested = locations[index]!;
+    const distanceM = haversineMeters([requested.lon, requested.lat], snapped[index]!);
+    if (distanceM > maxSnapDistanceM) {
+      throw new Error(`Valhalla waypoint ${index} snap ${Math.round(distanceM)} m exceeds configured threshold ${Math.round(maxSnapDistanceM)} m.`);
+    }
   }
 }
 
@@ -3066,6 +3177,8 @@ function valhallaCosting(profileId: RoutingProfileId): string {
     case "walking":
     case "evacuation_walking":
       return "pedestrian";
+    case "bicycle":
+      return "bicycle";
     case "large_emergency_vehicle":
       return "truck";
     case "offroad_4x4":
@@ -3093,6 +3206,10 @@ function valhallaCostingOptions(profile: RoutingProfile, avoid: RoutingAvoid[]):
     base.walking_speed = 3.8;
   } else if (profile.profileId === "walking") {
     base.walking_speed = 4.8;
+  } else if (profile.profileId === "bicycle") {
+    base.cycling_speed = 16;
+    base.use_roads = 0.35;
+    base.use_hills = 0.45;
   }
   if (profile.profileId === "emergency_vehicle") {
     base.maneuver_penalty = 2;
@@ -3147,7 +3264,7 @@ function adaptiveElevationIntervalM(profileId: RoutingProfileId, distanceM: numb
   if (!Number.isFinite(distanceM) || distanceM <= 0) {
     return ROUTE_ELEVATION_DEFAULT_SAMPLE_INTERVAL_M;
   }
-  const preferred = profileId === "walking" || profileId === "evacuation_walking" ? 30 : distanceM <= 20_000 ? 50 : 100;
+  const preferred = profileId === "walking" || profileId === "evacuation_walking" ? 30 : profileId === "bicycle" ? 50 : distanceM <= 20_000 ? 50 : 100;
   const intervalForMaxSamples = Math.ceil(distanceM / ROUTE_ELEVATION_MAX_SAMPLE_COUNT);
   return Math.max(ROUTE_ELEVATION_MIN_SAMPLE_INTERVAL_M, preferred, intervalForMaxSamples);
 }
@@ -3591,6 +3708,13 @@ function speedForEdge(profile: RoutingProfile, highway: string | undefined, surf
     const base = highway === "steps" ? 2.5 : profile.defaultSpeedKph;
     return profile.profileId === "evacuation_walking" && (highway === "path" || highway === "track") ? Math.min(base, 3.2) : base;
   }
+  if (profile.transportMode === "bicycle") {
+    let speed = highway === "cycleway" ? 19 : highway === "track" || highway === "path" ? 12 : profile.defaultSpeedKph;
+    if (isLikelyUnpaved(surface, tracktype)) {
+      speed *= 0.7;
+    }
+    return Math.max(4, speed);
+  }
   const highwaySpeed = highway ? (BASE_SPEED_KPH_BY_HIGHWAY[highway] ?? profile.defaultSpeedKph) : profile.defaultSpeedKph;
   let speed = Math.min(highwaySpeed, profile.defaultSpeedKph * 1.35);
   if (profile.profileId === "emergency_vehicle") {
@@ -3606,6 +3730,16 @@ function speedForEdge(profile: RoutingProfile, highway: string | undefined, surf
     speed *= profile.profileId === "offroad_4x4" ? 0.8 : 0.55;
   }
   return Math.max(2, speed);
+}
+
+function orderedRouteDistanceM(locations: RoutingCoordinate[]): number {
+  let distanceM = 0;
+  for (let index = 1; index < locations.length; index += 1) {
+    const left = locations[index - 1]!;
+    const right = locations[index]!;
+    distanceM += haversineMeters([left.lon, left.lat], [right.lon, right.lat]);
+  }
+  return distanceM;
 }
 
 function isLikelyUnpaved(surface: unknown, tracktype: unknown): boolean {

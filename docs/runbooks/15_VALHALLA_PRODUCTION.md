@@ -99,7 +99,7 @@ systemctl status valhalla-weekly-update.service
 journalctl -u valhalla-weekly-update.service -n 200 --no-pager
 /srv/valhalla/update-tools/weekly-update.sh status
 docker compose -f /srv/valhalla/docker-compose.yml ps
-curl -fsS http://127.0.0.1:8002/status
+curl -fsS http://valhalla.home.cz:8002/status
 df -h /srv/valhalla
 ```
 
@@ -123,3 +123,16 @@ checksums in `sources.manifest` are the release provenance.
 Do not delete the current or immediately previous release. Do not copy secrets,
 raw partner data or public credentials into the repository. Geofabrik/OSM data
 remains subject to ODbL attribution requirements.
+
+## geo-routing-v1 dependency and rollback
+
+`situation-data-api` reads `version` and `tileset_last_modified` from Valhalla
+`/status`. The latter is returned as the geo-routing dataset version/build date
+and appears in SIM readiness. Missing dataset metadata makes exact geo routing
+fail closed with 503; the older compatibility route API is unchanged.
+
+To contain only the new operation, remove `GEO_ROUTING_SERVICE_TOKENS` from the
+SIM deployment and recreate `situation-data-api`. To roll back the operation,
+restore the previous SIM image/commit; do not change the active Valhalla release
+unless Valhalla canaries themselves fail. Technical idempotency snapshots under
+the SIM data volume can remain in place during rollback.

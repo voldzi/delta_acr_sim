@@ -13,6 +13,8 @@
 ## Konfigurační typy
 
 - COP bearer token nebo client credentials.
+- Per-backend `GEO_ROUTING_SERVICE_TOKENS`; provision and rotate each actor
+  independently and never place a real value in `.env.example` or OpenAPI.
 - mTLS certifikáty, pokud budou použity.
 - OpenAI/API provider credentials.
 - Lokální LLM runtime konfigurace bez tajných hodnot, pokud možno.
