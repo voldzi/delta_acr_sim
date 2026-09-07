@@ -18,21 +18,21 @@
     "express": "^5.2.1",
     "fflate": "^0.8.3",
     "geotiff": "^3.0.5",
-    "gtfs-realtime-bindings": "^2.0.0",
-    "pg": "^8.22.0",
+    "gtfs-realtime-bindings": "^2.2.0",
+    "pg": "^8.23.0",
     "pngjs": "^7.0.0",
-    "proj4": "^2.20.9",
-    "redis": "^6.0.1"
+    "proj4": "^2.22.0",
+    "redis": "^6.2.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^24.13.2",
-    "@types/pg": "^8.20.0",
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
     "@types/pngjs": "^6.0.5",
-    "@types/supertest": "^7.2.0",
+    "@types/supertest": "^7.2.1",
     "supertest": "^7.2.2",
-    "tsx": "^4.22.4",
-    "vitest": "^4.1.9"
+    "tsx": "^4.23.13",
+    "vitest": "^5.0.0"
   }
 }
