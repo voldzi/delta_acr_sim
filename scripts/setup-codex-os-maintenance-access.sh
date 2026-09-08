@@ -108,7 +108,7 @@ touch "${authorized_keys}"
 chown "${login_user}:$(id -gn "${login_user}")" "${authorized_keys}"
 chmod 0600 "${authorized_keys}"
 sed -i '/ codex-os-maintenance-/d' "${authorized_keys}"
-printf 'restrict,command="/usr/local/bin/codex-os-ssh" %s\n' "${public_key}" >>"${authorized_keys}"
+printf 'no-agent-forwarding,no-port-forwarding,no-X11-forwarding,command="/usr/local/bin/codex-os-ssh" %s\n' "${public_key}" >>"${authorized_keys}"
 echo 'Restricted OS maintenance access installed.'
 REMOTE_SETUP
 
