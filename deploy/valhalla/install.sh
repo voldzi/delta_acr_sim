@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 BASE_DIR=${BASE_DIR:-/srv/valhalla}
 SOURCE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-PINNED_IMAGE="ghcr.io/valhalla/valhalla-scripted:3.8.2@sha256:3d7a08f7e78b356ee873b61711b743ad81bcc114b0ca5731217da8bba6ba39d1"
+PINNED_IMAGE="ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:24ef7955899dececb94e26c6dfb89d64fabfae875f980432694b0261eb6c251b"
 START_INITIAL_UPDATE=${START_INITIAL_UPDATE:-false}
 
 if (( EUID != 0 )); then

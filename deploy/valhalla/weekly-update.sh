@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-DEFAULT_VALHALLA_IMAGE="ghcr.io/valhalla/valhalla-scripted:3.8.2@sha256:3d7a08f7e78b356ee873b61711b743ad81bcc114b0ca5731217da8bba6ba39d1"
+DEFAULT_VALHALLA_IMAGE="ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:24ef7955899dececb94e26c6dfb89d64fabfae875f980432694b0261eb6c251b"
 
 BASE_DIR=${BASE_DIR:-/srv/valhalla}
 RELEASE_ROOT=${RELEASE_ROOT:-${BASE_DIR}/releases}

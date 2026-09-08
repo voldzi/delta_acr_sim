@@ -22,7 +22,7 @@ It builds `admins.sqlite` from the deduplicated full inputs, then publishes only
 the Czech Republic plus a 75 km metric buffer. Overlapping objects are merged as
 history and collapsed to their newest version before spatial extraction.
 
-Build, candidate and production use the same pinned Valhalla 3.8.2 multi-arch
+Build, candidate and production use the same pinned Valhalla 3.8.3 multi-arch
 image digest. A release is built outside production, receives complete elevation
 coverage, and must pass hard-snap `route`, `locate`, `isochrone`, admin and
 elevation checks for all six countries. Activation changes one atomic `current`
