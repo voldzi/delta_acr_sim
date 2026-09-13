@@ -115,6 +115,7 @@ DEM_BBOX=11.8,48.5,19.2,51.2
 DEM_DATASET_ID=copernicus-glo30-cz
 DEM_POSTGIS_DATABASE_URL=
 DEM_LOCAL_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/copernicus-glo30
+SIM_WEB_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/nginx-provider
 DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
 DEM_SEAWEEDFS_ENABLED=false
 DEM_SEAWEEDFS_S3_ENDPOINT=
@@ -209,6 +210,10 @@ periodický provozní check:
 python3 scripts/production-operational-check.py --env-file .env --json
 scripts/install-production-operational-check-cron.sh
 ```
+
+Na produkčním hostu instalátor ukládá pouze obnovitelný `cron.log` do
+`/srv/x5-production/cache/csm-sim/operational-checks` a před instalací ověří
+UUID X5. Strukturovaný report a stav alertů zůstávají v zálohovaném úložišti.
 
 Check zapisuje `data/operational-checks/latest.json`, používá syslog pro
 failure/recovery události a volitelně odesílá generic JSON webhook podle

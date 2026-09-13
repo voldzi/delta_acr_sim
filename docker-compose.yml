@@ -434,6 +434,17 @@ services:
         condition: service_healthy
     ports:
       - "${SIM_WEB_PORT:-5020}:80"
+    volumes:
+      - type: bind
+        source: ${SIM_WEB_CACHE_HOST_DIR:-./data/web-cache/nginx-provider}
+        target: /var/cache/nginx/sim_provider
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health/live"]

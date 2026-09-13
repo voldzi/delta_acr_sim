@@ -87,6 +87,11 @@ cd /srv/sim
 scripts/install-production-operational-check-cron.sh
 ```
 
+Na produkčním `/srv/sim` se obnovitelný `cron.log` ukládá na X5 do
+`/srv/x5-production/cache/csm-sim/operational-checks`. Instalátor před změnou
+crontabu ověří UUID X5; report a stav deduplikace alertů zůstávají na
+zálohovaném úložišti.
+
 Default schedule:
 
 ```text

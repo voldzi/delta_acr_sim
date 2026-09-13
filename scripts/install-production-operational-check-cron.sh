@@ -3,7 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="${SIM_OPERATIONAL_ROOT:-/srv/sim}"
 SCHEDULE="${SIM_OPERATIONAL_CRON_SCHEDULE:-*/5 * * * *}"
-LOG_DIR="${SIM_OPERATIONAL_LOG_DIR:-${ROOT_DIR}/data/operational-checks}"
+if [ -n "${SIM_OPERATIONAL_LOG_DIR:-}" ]; then
+  LOG_DIR="$SIM_OPERATIONAL_LOG_DIR"
+elif [ "$ROOT_DIR" = "/srv/sim" ]; then
+  LOG_DIR="/srv/x5-production/cache/csm-sim/operational-checks"
+else
+  LOG_DIR="${ROOT_DIR}/data/operational-checks"
+fi
 PYTHON_BIN="${SIM_OPERATIONAL_PYTHON_BIN:-python3}"
 MARKER_BEGIN="# CSM SIM operational checks BEGIN"
 MARKER_END="# CSM SIM operational checks END"
@@ -24,6 +30,15 @@ fi
 if [ ! -d "$ROOT_DIR" ]; then
   echo "SIM root does not exist: $ROOT_DIR" >&2
   exit 1
+fi
+
+if [[ "$LOG_DIR" == /srv/x5-production/* ]]; then
+  expected_uuid="2f93f595-b61b-4eea-9054-7afa9b275b5b"
+  actual_uuid="$(findmnt -n -o UUID --target /srv/x5-production 2>/dev/null || true)"
+  if [ "$actual_uuid" != "$expected_uuid" ]; then
+    echo "Refusing to install operational checks: /srv/x5-production is not mounted with expected UUID $expected_uuid." >&2
+    exit 1
+  fi
 fi
 
 mkdir -p "$LOG_DIR"
