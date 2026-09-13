@@ -46,7 +46,7 @@ DEM_ENABLED=true
 DEM_BBOX=11.8,48.5,19.2,51.2
 DEM_DATASET_ID=copernicus-glo30-cz
 DEM_POSTGIS_DATABASE_URL=postgresql://sim_osm:<strong-password>@haproxy.home.cz:5000/sim_osm
-DEM_LOCAL_CACHE_HOST_DIR=./data/dem-cache/copernicus-glo30
+DEM_LOCAL_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/copernicus-glo30
 DEM_LOCAL_CACHE_DIR=/dem-cache/copernicus-glo30
 DEM_SEAWEEDFS_ENABLED=true
 DEM_SEAWEEDFS_S3_ENDPOINT=http://docker.home.cz:8335
@@ -73,6 +73,18 @@ For containers, `docker-compose.yml` mounts:
 ```text
 ${DEM_LOCAL_CACHE_HOST_DIR}:${DEM_LOCAL_CACHE_DIR}:ro
 ```
+
+On `docker.home.cz`, the local cache lives on the non-backed-up reproducible
+storage filesystem mounted at `/srv/x5-production`, expected UUID
+`2f93f595-b61b-4eea-9054-7afa9b275b5b`. The Compose bind uses
+`create_host_path: false`, and the production deploy script verifies that exact
+UUID before starting the stack. A missing or incorrectly mounted filesystem
+therefore prevents `situation-data-api` from starting with an empty cache path.
+
+The Docker volume `sim_safety-data` is deliberately excluded from this storage.
+It contains the locally accumulated append-only CHMI hydrology history, which
+cannot be fully reconstructed by the limited upstream backfill and must remain
+on backed-up storage.
 
 ## Import
 
@@ -142,5 +154,7 @@ DEM dataset or switching mobile coverage back to the non-terrain model.
 
 - DEM files are large. Do not commit them.
 - SeaweedFS is the authoritative object store; local cache is rebuildable.
+- Keep the previous local cache copy for at least seven days after a storage
+  migration. Deletion requires separate operator approval.
 - PostGIS stores metadata and future coverage cells, not the DEM raster binaries.
 - Copernicus DEM GLO-30 is a digital surface model; buildings and vegetation can influence heights. Treat it as terrain input for estimates, not an authoritative RF survey.

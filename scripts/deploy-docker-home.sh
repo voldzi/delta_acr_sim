@@ -110,7 +110,7 @@ DEM_DATASET_ID_VALUE="${DEM_DATASET_ID:-$(existing_value DEM_DATASET_ID)}"
 DEM_DATASET_ID_VALUE="${DEM_DATASET_ID_VALUE:-copernicus-glo30-cz}"
 DEM_POSTGIS_DATABASE_URL_VALUE="${DEM_POSTGIS_DATABASE_URL:-$(existing_value DEM_POSTGIS_DATABASE_URL)}"
 DEM_LOCAL_CACHE_HOST_DIR_VALUE="${DEM_LOCAL_CACHE_HOST_DIR:-$(existing_value DEM_LOCAL_CACHE_HOST_DIR)}"
-DEM_LOCAL_CACHE_HOST_DIR_VALUE="${DEM_LOCAL_CACHE_HOST_DIR_VALUE:-./data/dem-cache/copernicus-glo30}"
+DEM_LOCAL_CACHE_HOST_DIR_VALUE="${DEM_LOCAL_CACHE_HOST_DIR_VALUE:-/srv/x5-production/cache/csm-sim/copernicus-glo30}"
 DEM_LOCAL_CACHE_DIR_VALUE="${DEM_LOCAL_CACHE_DIR:-$(existing_value DEM_LOCAL_CACHE_DIR)}"
 DEM_LOCAL_CACHE_DIR_VALUE="${DEM_LOCAL_CACHE_DIR_VALUE:-/dem-cache/copernicus-glo30}"
 DEM_SEAWEEDFS_ENABLED_VALUE="${DEM_SEAWEEDFS_ENABLED:-$(existing_value DEM_SEAWEEDFS_ENABLED)}"
@@ -421,6 +421,19 @@ TAK_GATEWAY_SOURCE_LABEL=TAK/CoT gateway
 TAK_GATEWAY_CORS_ORIGINS=
 SAFETY_DATA_CORS_ORIGINS=
 ENV
+
+if [[ "$DEM_LOCAL_CACHE_HOST_DIR_VALUE" == /srv/x5-production/* ]]; then
+  expected_dem_cache_uuid="2f93f595-b61b-4eea-9054-7afa9b275b5b"
+  actual_dem_cache_uuid="$(findmnt -n -o UUID --target "$DEM_LOCAL_CACHE_HOST_DIR_VALUE" 2>/dev/null || true)"
+  if [[ "$actual_dem_cache_uuid" != "$expected_dem_cache_uuid" ]]; then
+    echo "Refusing to start situation-data-api: $DEM_LOCAL_CACHE_HOST_DIR_VALUE is not on expected filesystem UUID $expected_dem_cache_uuid." >&2
+    exit 1
+  fi
+  if [[ ! -d "$DEM_LOCAL_CACHE_HOST_DIR_VALUE" ]]; then
+    echo "Refusing to start situation-data-api: DEM cache directory does not exist: $DEM_LOCAL_CACHE_HOST_DIR_VALUE" >&2
+    exit 1
+  fi
+fi
 
 docker compose up -d --build
 docker compose ps
