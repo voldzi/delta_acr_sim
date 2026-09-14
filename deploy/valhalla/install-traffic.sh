@@ -109,7 +109,7 @@ PY
 systemctl stop valhalla-traffic-update.timer valhalla-traffic-update.service 2>/dev/null || true
 docker compose -f "${BASE_DIR}/docker-compose.yml" stop valhalla >/dev/null
 install -m 0644 "${current}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
-rm -f /run/valhalla-traffic/applied-edges.json
+rm -f /run/valhalla-traffic/applied-edges.json /run/valhalla-traffic/last-applied.json
 if ! docker compose -f "${BASE_DIR}/docker-compose.yml" up -d --force-recreate --no-deps valhalla >/dev/null; then
   capture_container_failure
   restore_install

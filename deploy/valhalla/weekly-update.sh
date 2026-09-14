@@ -615,7 +615,7 @@ recreate_production() {
 prepare_runtime_traffic() {
   local target=$1
   install -d -m 0755 /run/valhalla-traffic
-  rm -f /run/valhalla-traffic/applied-edges.json
+  rm -f /run/valhalla-traffic/applied-edges.json /run/valhalla-traffic/last-applied.json
   if [[ -s "${target}/traffic-skeleton.tar" ]]; then
     install -m 0644 "${target}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
   else

@@ -397,6 +397,7 @@ def run(config: dict[str, str]) -> int:
     if (
         path.exists()
         and archive.exists()
+        and state_path.exists()
         and revision_state.get("routingDataset") == dataset
         and revision_state.get("staticRevision") == static_revision
         and revision_state.get("dynamicRevision") == dynamic_revision

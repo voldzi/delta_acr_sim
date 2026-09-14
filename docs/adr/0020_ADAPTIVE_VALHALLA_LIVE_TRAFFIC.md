@@ -96,6 +96,9 @@ status after securely deleting its temporary token file.
 TPEG validity filtering parses the ISO 8601 offset supplied by the provider
 (normally `+02:00` in summer) before comparing timestamps in UTC; the offset is
 never discarded.
+Replacing the runtime archive invalidates both `applied-edges.json` and
+`last-applied.json`. Revision-based no-op optimization is allowed only when the
+archive, revision marker, and applied-edge state all exist together.
 
 ## Release coupling and availability
 
