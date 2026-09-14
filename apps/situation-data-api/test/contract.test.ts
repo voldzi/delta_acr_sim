@@ -3815,6 +3815,18 @@ describe("Situation Data API contract", () => {
     );
   });
 
+  it("recognizes the explicit TPEG2 source and reports missing server authentication safely", async () => {
+    const tpegApp = await createApp({ ...config, enabledSources: ["tpeg2"], tpeg2ApiToken: undefined });
+
+    const response = await request(tpegApp.app)
+      .get("/api/v1/features?bbox=12.0,48.5,19.0,51.2&layers=traffic&source=tpeg2&limit=20&includeRaw=true")
+      .expect(200);
+
+    expect(response.body.features).toHaveLength(0);
+    expect(response.body.warnings.join(" ")).toContain("server-side authentication is not configured");
+    expect(JSON.stringify(response.body)).not.toContain("TPEG2_API_TOKEN=");
+  });
+
   it("surfaces ARDOS partner configuration warnings without leaking calls", async () => {
     const ardosApp = await createApp({ ...config, enabledSources: ["ardos_partner"] });
 
