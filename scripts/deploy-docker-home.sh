@@ -231,6 +231,24 @@ if [ -z "$TPEG2_API_TOKEN_VALUE" ]; then
   echo "TPEG2_API_TOKEN must be configured before enabling the production TPEG2 source." >&2
   exit 1
 fi
+VALHALLA_TRAFFIC_CONTROL_TOKEN_VALUE="${VALHALLA_TRAFFIC_CONTROL_TOKEN:-$(existing_value VALHALLA_TRAFFIC_CONTROL_TOKEN)}"
+if [ -z "$VALHALLA_TRAFFIC_CONTROL_TOKEN_VALUE" ]; then
+  VALHALLA_TRAFFIC_CONTROL_TOKEN_VALUE="$(generate_secret)"
+fi
+VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE="${VALHALLA_TRAFFIC_CACHE_HOST_DIR:-$(existing_value VALHALLA_TRAFFIC_CACHE_HOST_DIR)}"
+VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE="${VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE:-/srv/x5-production/cache/csm-sim/valhalla-traffic}"
+if [[ "$VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE" == /srv/x5-production/* ]]; then
+  expected_x5_uuid="2f93f595-b61b-4eea-9054-7afa9b275b5b"
+  actual_x5_uuid="$(findmnt -n -o UUID --target /srv/x5-production 2>/dev/null || true)"
+  if [[ "$actual_x5_uuid" != "$expected_x5_uuid" ]]; then
+    echo "Refusing to prepare Valhalla traffic cache: /srv/x5-production is not the expected filesystem UUID $expected_x5_uuid." >&2
+    exit 1
+  fi
+  if [[ ! -d "$VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE" ]] && ! mkdir -p "$VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE"; then
+    echo "Create it once with: sudo install -d -o $(id -un) -g $(id -gn) -m 0775 '$VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE'" >&2
+    exit 1
+  fi
+fi
 
 umask 077
 cat > .env <<ENV
@@ -323,6 +341,12 @@ SITUATION_DATA_TPEG2_DYNAMIC_CACHE_TTL_SECONDS=300
 SITUATION_DATA_TPEG2_STATIC_CACHE_TTL_SECONDS=86400
 TPEG2_REQUEST_TIMEOUT_MS=120000
 TPEG2_MAX_RECORDS=50000
+VALHALLA_TRAFFIC_ENABLED=true
+VALHALLA_TRAFFIC_CONTROL_TOKEN=${VALHALLA_TRAFFIC_CONTROL_TOKEN_VALUE}
+VALHALLA_TRAFFIC_IDLE_SECONDS=900
+VALHALLA_TRAFFIC_MAX_AGE_SECONDS=1800
+VALHALLA_TRAFFIC_CACHE_HOST_DIR=${VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE}
+VALHALLA_TRAFFIC_CACHE_DIR=/valhalla-traffic-cache
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600
@@ -458,6 +482,7 @@ verify_x5_cache_path() {
 
 verify_x5_cache_path "$DEM_LOCAL_CACHE_HOST_DIR_VALUE" "situation-data-api"
 verify_x5_cache_path "$SIM_WEB_CACHE_HOST_DIR_VALUE" "sim-web"
+verify_x5_cache_path "$VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE" "situation-data-api Valhalla traffic cache"
 
 docker compose up -d --build
 docker compose ps

@@ -812,6 +812,64 @@ paths:
           $ref: "#/components/responses/Problem"
         "502":
           $ref: "#/components/responses/Problem"
+  /internal/valhalla-traffic/feed:
+    get:
+      summary: Return an activity-gated normalized TPEG2 speed feed to the owned Valhalla updater
+      description: Internal server-to-server endpoint. Returns 204 while no road-routing lease is active. Raw TPEG2 XML and provider credentials are never returned.
+      security:
+        - ValhallaTrafficBearer: []
+      parameters:
+        - name: includeStatic
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Normalized graph-mapping and speed input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValhallaTrafficFeed"
+        "204":
+          description: No active road-routing lease
+        "401":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /internal/valhalla-traffic/report:
+    post:
+      summary: Record the result of a host-local Valhalla traffic overlay update
+      security:
+        - ValhallaTrafficBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValhallaTrafficUpdateReport"
+      responses:
+        "204":
+          description: Report accepted
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+  /internal/valhalla-traffic/status:
+    get:
+      summary: Read the adaptive live-traffic coordinator state
+      security:
+        - ValhallaTrafficBearer: []
+      responses:
+        "200":
+          description: Current lease, freshness and mapping state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValhallaTrafficStatus"
+        "401":
+          $ref: "#/components/responses/Problem"
   /weather-radar/frames:
     get:
       summary: Return CHMI weather radar frame catalog metadata
@@ -1026,6 +1084,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/SituationObservability"
 components:
+  securitySchemes:
+    ValhallaTrafficBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Dedicated server-only token shared only by SIM and the owned Valhalla updater.
   parameters:
     Bbox:
       name: bbox
@@ -1107,6 +1171,105 @@ components:
                   correlationId:
                     type: string
   schemas:
+    ValhallaTrafficFeed:
+      type: object
+      required: [contractVersion, generatedAt, activeUntil, maxAgeSeconds, staticRevision, dynamicRevision, flows]
+      properties:
+        contractVersion:
+          type: string
+          const: sim-valhalla-live-traffic-feed-v1
+        generatedAt:
+          type: string
+          format: date-time
+        activeUntil:
+          type: string
+          format: date-time
+        maxAgeSeconds:
+          type: integer
+        staticRevision:
+          type: string
+        dynamicRevision:
+          type: string
+        segments:
+          type: array
+          items:
+            type: object
+            required: [messageId, coordinates]
+            additionalProperties: true
+        flows:
+          type: array
+          items:
+            type: object
+            required: [messageId, observedAt]
+            additionalProperties: true
+    ValhallaTrafficUpdateReport:
+      type: object
+      required: [routingDataset, staticRevision, dynamicRevision, status, updatedAt, mappedSegmentCount, mappedEdgeCount, appliedFlowCount, appliedEdgeCount, mappingCoveragePercent]
+      properties:
+        routingDataset:
+          type: string
+        staticRevision:
+          type: string
+        dynamicRevision:
+          type: string
+        status:
+          type: string
+          enum: [current, degraded]
+        updatedAt:
+          type: string
+          format: date-time
+        sourceObservedAt:
+          type: string
+          format: date-time
+        mappedSegmentCount:
+          type: integer
+        mappedEdgeCount:
+          type: integer
+        appliedFlowCount:
+          type: integer
+        appliedEdgeCount:
+          type: integer
+        mappingCoveragePercent:
+          type: number
+        detail:
+          type: string
+    ValhallaTrafficStatus:
+      type: object
+      required: [enabled, state]
+      properties:
+        enabled:
+          type: boolean
+        state:
+          type: string
+          enum: [disabled, idle, warming, current, stale, degraded]
+        activeUntil:
+          type: string
+          format: date-time
+        lastVehicleRequestAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        sourceObservedAt:
+          type: string
+          format: date-time
+        ageSeconds:
+          type: integer
+        routingDataset:
+          type: string
+        mappingCoveragePercent:
+          type: number
+        mappedSegmentCount:
+          type: integer
+        mappedEdgeCount:
+          type: integer
+        appliedFlowCount:
+          type: integer
+        appliedEdgeCount:
+          type: integer
+        detail:
+          type: string
     LayerId:
       type: string
       enum:
@@ -4253,7 +4416,7 @@ components:
           type: array
           items:
             type: string
-            enum: [road_srti_lod]
+            enum: [road_srti_lod, tpeg2]
         sourceStatus:
           type: string
           enum: [ok, disabled, degraded]
@@ -4286,6 +4449,8 @@ components:
           type: array
           items:
             type: string
+        liveSpeeds:
+          $ref: "#/components/schemas/ValhallaTrafficStatus"
     RoutingRouteQuality:
       type: object
       required: [mode, confidence, graphEdgesScanned, graphEdgesUsed, routingModelVersion]

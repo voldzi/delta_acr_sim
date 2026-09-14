@@ -4037,6 +4037,123 @@
         ]
       }
     },
+    "/situation-data/api/v1/internal/valhalla-traffic/feed": {
+      "get": {
+        "summary": "Return an activity-gated normalized TPEG2 speed feed to the owned Valhalla updater",
+        "description": "Internal server-to-server endpoint. Returns 204 while no road-routing lease is active. Raw TPEG2 XML and provider credentials are never returned.",
+        "security": [
+          {
+            "ValhallaTrafficBearer": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "includeStatic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Normalized graph-mapping and speed input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataValhallaTrafficFeed"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No active road-routing lease"
+          },
+          "401": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "503": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_internal_valhalla_traffic_feed",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/internal/valhalla-traffic/report": {
+      "post": {
+        "summary": "Record the result of a host-local Valhalla traffic overlay update",
+        "security": [
+          {
+            "ValhallaTrafficBearer": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SituationDataValhallaTrafficUpdateReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Report accepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          },
+          "401": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_post_situation_data_api_v1_internal_valhalla_traffic_report",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
+    "/situation-data/api/v1/internal/valhalla-traffic/status": {
+      "get": {
+        "summary": "Read the adaptive live-traffic coordinator state",
+        "security": [
+          {
+            "ValhallaTrafficBearer": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current lease, freshness and mapping state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SituationDataValhallaTrafficStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/SituationDataProblem"
+          }
+        },
+        "operationId": "situationData_get_situation_data_api_v1_internal_valhalla_traffic_status",
+        "tags": [
+          "Situation Data: Situation Data"
+        ]
+      }
+    },
     "/situation-data/api/v1/weather-radar/frames": {
       "get": {
         "summary": "Return CHMI weather radar frame catalog metadata",
@@ -8394,6 +8511,185 @@
           }
         }
       },
+      "SituationDataValhallaTrafficFeed": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "activeUntil",
+          "maxAgeSeconds",
+          "staticRevision",
+          "dynamicRevision",
+          "flows"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-valhalla-live-traffic-feed-v1"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activeUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "maxAgeSeconds": {
+            "type": "integer"
+          },
+          "staticRevision": {
+            "type": "string"
+          },
+          "dynamicRevision": {
+            "type": "string"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "messageId",
+                "coordinates"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "flows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "messageId",
+                "observedAt"
+              ],
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "SituationDataValhallaTrafficUpdateReport": {
+        "type": "object",
+        "required": [
+          "routingDataset",
+          "staticRevision",
+          "dynamicRevision",
+          "status",
+          "updatedAt",
+          "mappedSegmentCount",
+          "mappedEdgeCount",
+          "appliedFlowCount",
+          "appliedEdgeCount",
+          "mappingCoveragePercent"
+        ],
+        "properties": {
+          "routingDataset": {
+            "type": "string"
+          },
+          "staticRevision": {
+            "type": "string"
+          },
+          "dynamicRevision": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "degraded"
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mappedSegmentCount": {
+            "type": "integer"
+          },
+          "mappedEdgeCount": {
+            "type": "integer"
+          },
+          "appliedFlowCount": {
+            "type": "integer"
+          },
+          "appliedEdgeCount": {
+            "type": "integer"
+          },
+          "mappingCoveragePercent": {
+            "type": "number"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "SituationDataValhallaTrafficStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "state"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "idle",
+              "warming",
+              "current",
+              "stale",
+              "degraded"
+            ]
+          },
+          "activeUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastVehicleRequestAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sourceObservedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ageSeconds": {
+            "type": "integer"
+          },
+          "routingDataset": {
+            "type": "string"
+          },
+          "mappingCoveragePercent": {
+            "type": "number"
+          },
+          "mappedSegmentCount": {
+            "type": "integer"
+          },
+          "mappedEdgeCount": {
+            "type": "integer"
+          },
+          "appliedFlowCount": {
+            "type": "integer"
+          },
+          "appliedEdgeCount": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
       "SituationDataLayerId": {
         "type": "string",
         "enum": [
@@ -8450,7 +8746,6 @@
           "idsjmk_vehicle_positions",
           "spravazeleznic_trains",
           "road_srti_lod",
-          "tpeg2",
           "safety_data",
           "community_context",
           "aviation_weather",
@@ -13795,7 +14090,8 @@
             "items": {
               "type": "string",
               "enum": [
-                "road_srti_lod"
+                "road_srti_lod",
+                "tpeg2"
               ]
             }
           },
@@ -13854,6 +14150,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "liveSpeeds": {
+            "$ref": "#/components/schemas/SituationDataValhallaTrafficStatus"
           }
         }
       },
@@ -17489,6 +17788,12 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer"
+      },
+      "ValhallaTrafficBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Dedicated server-only token shared only by SIM and the owned Valhalla updater."
       },
       "geoRoutingServiceBearer": {
         "type": "http",

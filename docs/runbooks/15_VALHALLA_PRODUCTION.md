@@ -21,9 +21,17 @@ Republic plus a 75 km buffer; it is not full-country coverage of all inputs.
   state/{active,last-success,last-attempt,transaction}.env
   update-work/<release-id>/
   update-tools/
+  traffic-cache/openlr-edge-map-*.json.gz
   docker-compose.yml
   .env
+  .traffic.env
 ```
+
+The active live-speed overlay is deliberately outside this persistent tree at
+`/run/valhalla-traffic/traffic.tar`. It is memory-backed and restored from the
+active release's `traffic-skeleton.tar` after boot. Normalized TPEG snapshots
+are stored on the X5 cache disk of `docker.home.cz`; X5 is not mounted on this
+host.
 
 `current` is the only production pointer. Releases are immutable after their
 `.complete` seal. A transaction file means activation was interrupted and must
@@ -70,6 +78,54 @@ The normal unattended path is:
 ```bash
 sudo /srv/valhalla/update-tools/weekly-update.sh run
 ```
+
+## Adaptive TPEG2 live traffic
+
+Deploy SIM first so `/srv/sim/.env` contains a generated
+`VALHALLA_TRAFFIC_CONTROL_TOKEN` and the X5 cache directory has passed its UUID
+guard. Then copy the current `deploy/valhalla` files to the Valhalla host and
+run the traffic installer with the token supplied through a protected temporary
+file or environment; never paste it into shell history:
+
+```bash
+sudo env SIM_TRAFFIC_CONTROL_TOKEN="$(sudo cat /run/secret-token-file)" \
+  /home/voldzi/valhalla-owned-deploy/install-traffic.sh
+```
+
+The repository helper `scripts/setup-valhalla-codex-access.sh` automates the
+protected transfer and installation when rerun after the SIM deployment.
+
+The timer polls the authenticated SIM lease every minute. HTTP 204 is the normal
+idle state. A road route activates a 15-minute sliding window; within that
+window TPEG2 is refreshed no more than every 300 seconds. Initial graph mapping
+can run for an extended period at low priority and is cached by routing dataset
+and TPEG static revision.
+
+Operational checks:
+
+```bash
+systemctl status valhalla-traffic-update.timer valhalla-traffic-update.service
+journalctl -u valhalla-traffic-update.service -n 200 --no-pager
+ls -lh /run/valhalla-traffic/traffic.tar
+find /srv/valhalla/traffic-cache -maxdepth 1 -type f -name 'openlr-edge-map-*.json.gz' -ls
+```
+
+From `docker.home.cz`, use the protected internal status endpoint with the
+server-side token. The response reports state, age, graph version, map coverage
+and applied edge counts. Never expose this token or endpoint to COP browsers.
+
+Traffic failure is not a base-routing failure. If the overlay is stale beyond
+1,800 seconds, current speeds are cleared and Valhalla falls back to its normal
+speed hierarchy. Disable only the enhancement with:
+
+```bash
+sudo systemctl disable --now valhalla-traffic-update.timer
+```
+
+Then set `VALHALLA_TRAFFIC_ENABLED=false` in SIM and recreate
+`situation-data-api`. See
+[ADR 0020](../adr/0020_ADAPTIVE_VALHALLA_LIVE_TRAFFIC.md) for the full design and
+rollback rationale.
 
 ## Acceptance matrix
 

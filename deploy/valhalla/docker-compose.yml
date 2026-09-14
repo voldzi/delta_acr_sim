@@ -3,10 +3,12 @@ services:
     image: ${VALHALLA_IMAGE:-ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:24ef7955899dececb94e26c6dfb89d64fabfae875f980432694b0261eb6c251b}
     container_name: valhalla
     restart: unless-stopped
-    entrypoint: ["valhalla_service"]
+    entrypoint: ["/usr/local/bin/valhalla-runtime-entrypoint"]
     command: ["/custom_files/valhalla.json", "${VALHALLA_SERVER_THREADS:-4}"]
     volumes:
       - ./current:/custom_files:ro
+      - /run/valhalla-traffic:/traffic
+      - ./update-tools/runtime-entrypoint.sh:/usr/local/bin/valhalla-runtime-entrypoint:ro
     ports:
       - "${VALHALLA_BIND_ADDRESS:-127.0.0.1}:${VALHALLA_PORT:-8002}:8002"
     healthcheck:

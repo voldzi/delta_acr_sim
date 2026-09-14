@@ -28,6 +28,13 @@ their normal backed-up locations. High-frequency `/health/live` requests are
 excluded from the Nginx access log, and the remaining web container log is
 rotated at 10 MiB with three files retained.
 
+Normalized TPEG2 static references and the last-valid dynamic speed snapshot
+used by the adaptive Valhalla integration are stored at
+`/srv/x5-production/cache/csm-sim/valhalla-traffic`. They can be reacquired
+from the authenticated provider and contain neither the source XML nor its API
+token. The active Valhalla overlay itself is memory-backed on the separate
+Valhalla host; X5 is not shared between the hosts.
+
 The `sim_safety-data` Docker volume remains on backed-up storage. It contains
 append-only CHMI hydrology observations accumulated over time; the upstream
 detail backfill is limited and is not a complete recovery source.
@@ -38,6 +45,8 @@ mount disables automatic source-directory creation, so an absent mount cannot
 silently start `situation-data-api` against an empty directory.
 The Nginx cache bind uses the same protection for `sim-web`. The operational
 check installer also validates the UUID before placing its log on X5.
+The normalized traffic cache bind uses the same UUID check and disables Docker
+source-directory creation.
 
 During migration, the prior cache copy is retained for at least seven days and
 is removed only with separate operator approval.

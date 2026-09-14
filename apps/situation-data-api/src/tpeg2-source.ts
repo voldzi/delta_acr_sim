@@ -1,4 +1,5 @@
 import { SaxesParser } from "saxes";
+import { createHash } from "node:crypto";
 import type { SituationDataConfig } from "./config.js";
 import type {
   BoundingBox,
@@ -78,6 +79,14 @@ export interface Tpeg2EventRecord {
   unverified?: boolean;
   label: string;
   coordinates: Array<[number, number]>;
+}
+
+export interface Tpeg2TrafficSnapshot {
+  generatedAt: string;
+  staticRevision: string;
+  dynamicRevision: string;
+  segments?: Tpeg2StaticSegment[];
+  flows: Tpeg2FlowRecord[];
 }
 
 interface ConditionalFeedState<T> {
@@ -185,6 +194,8 @@ export class Tpeg2Source {
   private refreshPromise?: Promise<void>;
   private lastSuccessfulRefresh?: string;
   private lastError?: string;
+  private staticRevision?: string;
+  private dynamicRevision?: string;
 
   constructor(private readonly config: SituationDataConfig) {
     this.descriptor = {
@@ -251,6 +262,25 @@ export class Tpeg2Source {
     };
   }
 
+  async trafficSnapshot(includeStatic = false): Promise<Tpeg2TrafficSnapshot> {
+    if (!this.config.tpeg2ApiToken) {
+      throw new Error("TPEG2 source is enabled but server-side authentication is not configured");
+    }
+    await this.ensureFresh();
+    const segments = Array.from(this.staticFeed.value?.values() ?? []);
+    const flows = this.dynamicFeed.value ?? [];
+    return {
+      generatedAt: this.lastSuccessfulRefresh ?? new Date().toISOString(),
+      staticRevision:
+        this.staticRevision ??= snapshotRevision(segments.map((segment) => [segment.messageId, segment.coordinates])),
+      dynamicRevision:
+        this.dynamicRevision ??=
+          snapshotRevision(flows.map((flow) => [flow.messageId, flow.versionId, flow.observedAt, flow.validUntil, flow.averageSpeedKph])),
+      ...(includeStatic ? { segments } : {}),
+      flows
+    };
+  }
+
   private async ensureFresh(): Promise<void> {
     const maxAgeMs = this.config.tpeg2DynamicCacheTtlSeconds * 1000;
     if (this.dynamicFeed.fetchedAtMs && Date.now() - this.dynamicFeed.fetchedAtMs < maxAgeMs) {
@@ -271,6 +301,7 @@ export class Tpeg2Source {
       const staticMaxAgeMs = this.config.tpeg2StaticCacheTtlSeconds * 1000;
       if (!this.staticFeed.fetchedAtMs || Date.now() - this.staticFeed.fetchedAtMs >= staticMaxAgeMs) {
         await this.fetchConditional("/dev/tpeg/tfp-static", this.staticFeed, parseTpeg2Static);
+        this.staticRevision = undefined;
       }
       await Promise.all([
         this.fetchConditional("/dev/tpeg/tfp-dynamic", this.dynamicFeed, parseTpeg2Dynamic),
@@ -278,6 +309,7 @@ export class Tpeg2Source {
       ]);
       this.dynamicFeed.value = this.dynamicFeed.value?.slice(0, this.config.tpeg2MaxRecords);
       this.tecFeed.value = this.tecFeed.value?.slice(0, this.config.tpeg2MaxRecords);
+      this.dynamicRevision = undefined;
       this.lastSuccessfulRefresh = new Date().toISOString();
       this.lastError = undefined;
     } catch (error) {
@@ -320,6 +352,10 @@ export class Tpeg2Source {
     state.lastModified = response.headers.get("last-modified") ?? undefined;
     state.fetchedAtMs = Date.now();
   }
+}
+
+function snapshotRevision(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 function interleaveTrafficFeatures(flow: SituationFeature[], events: SituationFeature[], limit: number): SituationFeature[] {

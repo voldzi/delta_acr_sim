@@ -1,0 +1,118 @@
+# ADR 0020: Adaptive TPEG2 live-speed routing for Valhalla
+
+## Status
+
+Accepted and implemented, pending the production host installation described in
+the Valhalla runbook.
+
+## Context
+
+SIM already normalizes authenticated NDIC/CEDA TPEG2 TFP traffic speeds, while
+Valhalla 3.8.3 routes from OSM-derived base speeds. Valhalla can consume live
+speeds from a fixed-size `traffic.tar` whose tile and directed-edge identifiers
+must exactly match the active routing graph. Those edge identifiers are not
+stable across weekly routing builds.
+
+The desired pilot behavior is demand-driven: an isolated road request must not
+wait for a provider download, but continued road-routing activity should keep
+traffic no more than five minutes behind the upstream snapshot. Walking and
+bicycle requests must not activate road traffic processing.
+
+`/srv/x5-production` exists on `docker.home.cz`, not on the separate
+`valhalla.home.cz` host. It must therefore not be treated as a shared filesystem
+or as a runtime dependency of Valhalla.
+
+## Decision
+
+SIM owns a sliding road-activity lease and an authenticated internal normalized
+feed:
+
+- the first road route request activates a 15-minute lease;
+- every further road request extends the lease by 15 minutes;
+- the host-local Valhalla timer polls once per minute and receives HTTP 204 when
+  the lease is inactive;
+- while active, the existing TPEG2 source coalesces refreshes and refreshes
+  dynamic TFP no more than once per 300 seconds;
+- the route request never waits for the traffic updater; it uses the last live
+  overlay if valid, otherwise Valhalla's normal speed fallback;
+- road requests without an explicit departure time include
+  `date_time.type=0`, which is required for Valhalla to use current traffic;
+- walking and bicycle requests neither activate the lease nor enable current
+  road speeds.
+
+SIM exposes three bearer-authenticated server-to-server operations:
+
+- `GET /api/v1/internal/valhalla-traffic/feed`;
+- `POST /api/v1/internal/valhalla-traffic/report`;
+- `GET /api/v1/internal/valhalla-traffic/status`.
+
+The feed contains only normalized message identifiers, OpenLR reference
+coordinates, speed observations and validity metadata. It never contains the
+TPEG2 API token or source XML. A separate
+`VALHALLA_TRAFFIC_CONTROL_TOKEN` authenticates this channel.
+
+On `valhalla.home.cz`, `traffic-update.py` performs the following work:
+
+1. obtains the active Valhalla `tileset_last_modified` identifier;
+2. loads or builds a graph-specific OpenLR-reference-to-directed-edge map with
+   local `/trace_attributes` calls;
+3. rejects expired observations and speed values that are absent, non-finite or
+   non-positive;
+4. clears all edge values applied by the preceding snapshot;
+5. writes validated fixed-size `TrafficSpeed` records and per-tile timestamps
+   into the active memory-backed archive under `/run/valhalla-traffic`;
+6. reports mapping coverage, applied flows, applied edges and freshness back to
+   SIM.
+
+When more than one TPEG segment maps to the same directed edge, the lowest
+current speed is used. This is deliberately conservative and is observable via
+the reported counts. A maximum observation age of 1,800 seconds prevents an old
+snapshot from remaining a live-speed authority.
+
+## Storage and wear policy
+
+The storage split is intentional:
+
+| Host | Path | Meaning | Backup requirement |
+|---|---|---|---|
+| `docker.home.cz` | `/srv/x5-production/cache/csm-sim/valhalla-traffic` | normalized static and last-valid dynamic TPEG2 snapshots | none; reproducible cache |
+| `valhalla.home.cz` | `/run/valhalla-traffic/traffic.tar` | active memory-backed Valhalla overlay | none; recreated after boot |
+| `valhalla.home.cz` | `/srv/valhalla/traffic-cache/openlr-edge-map-*.json.gz` | graph-specific mapping rebuilt after map releases | none; reproducible, written approximately weekly |
+| routing release | `traffic-skeleton.tar` | empty graph-matched overlay generated with the release | retained with the reproducible release |
+
+The five-minute update path writes only to `/run`, avoiding recurring writes to
+the non-replaceable internal disk. X5 is protected by the existing UUID check
+`2f93f595-b61b-4eea-9054-7afa9b275b5b`. If X5 is absent, deployment refuses to
+start `situation-data-api` against an accidental directory on the system disk.
+
+## Release coupling and availability
+
+Every weekly Valhalla build creates a fresh traffic skeleton with
+`valhalla_build_extract --with-traffic`. Activation stops Valhalla, switches the
+routing release, copies the corresponding skeleton to `/run`, clears the old
+applied-edge list and restarts validation. Rollback performs the symmetric copy.
+Mappings are keyed by both routing dataset and TPEG static revision, so a map
+from an earlier graph cannot be applied accidentally.
+
+Traffic is an optional enhancement. A missing feed, missing X5 cache, failed
+map-match or expired observation may degrade `liveSpeeds`, but must not make the
+base Valhalla route service unavailable. The first request after idle can use a
+previous valid overlay or static speeds; subsequent requests use refreshed data
+once the asynchronous update completes.
+
+## Observability
+
+SIM readiness, observability and route traffic summaries expose the traffic
+state (`disabled`, `idle`, `warming`, `current`, `stale`, `degraded`), update
+time, source observation time, age, routing dataset, mapping coverage and
+applied record counts. Tokens, raw TPEG payloads and individual internal edge
+maps are not exposed.
+
+## Rollback
+
+1. Set `VALHALLA_TRAFFIC_ENABLED=false` and recreate `situation-data-api`.
+2. Disable `valhalla-traffic-update.timer` on `valhalla.home.cz`.
+3. Restore `valhalla.json.pre-live-traffic` for the active legacy release if a
+   complete application rollback is required.
+4. Recreate Valhalla. Base OSM routing remains valid throughout; do not roll
+   back the routing dataset solely because the traffic overlay is degraded.

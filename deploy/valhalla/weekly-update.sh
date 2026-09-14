@@ -442,6 +442,15 @@ prepare_release_layout() {
   cp "${current}/timezones.sqlite" "${STAGE_DIR}/timezones.sqlite"
   [[ ! -f "${current}/default_speeds.json" ]] || cp "${current}/default_speeds.json" "${STAGE_DIR}/default_speeds.json"
   cp -al "${current}/elevation_data" "${STAGE_DIR}/elevation_data"
+  python3 - "${STAGE_DIR}/valhalla.json" /custom_files/traffic.tar <<'PY'
+import json
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+config = json.loads(path.read_text(encoding="utf-8"))
+config.setdefault("mjolnir", {})["traffic_extract"] = sys.argv[2]
+path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+PY
 }
 
 check_capacity() {
@@ -517,8 +526,19 @@ build_tiles() {
   log "Building Valhalla tile archive."
   docker run --rm --cpus "${BUILD_CPUS}" --memory "${BUILD_MEMORY}" --memory-swap "${BUILD_MEMORY_SWAP}" \
     -v "${STAGE_DIR}:/custom_files" --entrypoint valhalla_build_extract "${VALHALLA_IMAGE}" \
-    -c /custom_files/valhalla.json -O -v
+    -c /custom_files/valhalla.json -O -t -v
   [[ -s "${STAGE_DIR}/valhalla_tiles.tar" ]] || fail "Tile archive was not created."
+  [[ -s "${STAGE_DIR}/traffic.tar" ]] || fail "Traffic archive skeleton was not created."
+  mv "${STAGE_DIR}/traffic.tar" "${STAGE_DIR}/traffic-skeleton.tar"
+  python3 - "${STAGE_DIR}/valhalla.json" /traffic/traffic.tar <<'PY'
+import json
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+config = json.loads(path.read_text(encoding="utf-8"))
+config.setdefault("mjolnir", {})["traffic_extract"] = sys.argv[2]
+path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+PY
 }
 
 write_release_manifest() {
@@ -536,6 +556,7 @@ write_release_manifest() {
     printf 'CONFIG_SHA256=%s\n' "$(sha256sum "${STAGE_DIR}/valhalla.json" | awk '{print $1}')"
     printf 'ADMINS_SHA256=%s\n' "$(sha256sum "${STAGE_DIR}/admins.sqlite" | awk '{print $1}')"
     printf 'TILE_ARCHIVE_SHA256=%s\n' "$(sha256sum "${STAGE_DIR}/valhalla_tiles.tar" | awk '{print $1}')"
+    printf 'TRAFFIC_SKELETON_SHA256=%s\n' "$(sha256sum "${STAGE_DIR}/traffic-skeleton.tar" | awk '{print $1}')"
   } >"${STAGE_DIR}/release.env"
 }
 
@@ -544,7 +565,8 @@ validate_candidate() {
   log "Starting isolated candidate release ${RELEASE_ID}."
   docker run -d --name valhalla-update-candidate --cpus 2 --memory 2g --memory-swap 3g \
     -p "127.0.0.1:${CANDIDATE_PORT}:8002" \
-    -v "${STAGE_DIR}:/custom_files:ro" --entrypoint valhalla_service "${VALHALLA_IMAGE}" \
+    -v "${STAGE_DIR}:/custom_files:ro" -v "${STAGE_DIR}/traffic-skeleton.tar:/traffic/traffic.tar:ro" \
+    --entrypoint valhalla_service "${VALHALLA_IMAGE}" \
     /custom_files/valhalla.json 2 >/dev/null
   validate_full "${base_url}" || fail "Candidate release failed the full validation matrix."
   docker rm -f valhalla-update-candidate >/dev/null
@@ -590,6 +612,17 @@ recreate_production() {
   docker compose -f "${COMPOSE_FILE}" up -d --force-recreate --no-deps valhalla >/dev/null
 }
 
+prepare_runtime_traffic() {
+  local target=$1
+  install -d -m 0755 /run/valhalla-traffic
+  rm -f /run/valhalla-traffic/applied-edges.json
+  if [[ -s "${target}/traffic-skeleton.tar" ]]; then
+    install -m 0600 "${target}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
+  else
+    rm -f /run/valhalla-traffic/traffic.tar
+  fi
+}
+
 validate_release_profile() {
   local target=$1
   local base_url=$2
@@ -610,6 +643,7 @@ rollback_to() {
   local switch_status=$?
   local restart_status=1
   if (( switch_status == 0 )); then
+    prepare_runtime_traffic "${previous}"
     recreate_production
     restart_status=$?
   fi
@@ -640,6 +674,7 @@ activate_release() {
     recreate_production >/dev/null 2>&1 || true
     fail "Could not atomically switch the current release link."
   }
+  prepare_runtime_traffic "${STAGE_DIR}"
   ACTIVATION_SWITCHED=1
   if ! recreate_production; then
     rollback_to "${previous}" "${base_url}"

@@ -51,3 +51,40 @@ and validates the previous release.
 Operational state is stored under `/srv/valhalla/state`. The timer runs every
 Sunday at 02:15 Europe/Prague with up to 30 minutes randomized delay. At least
 35 GB free disk is required by default.
+
+## Adaptive live traffic
+
+Road routing can use the internal SIM TPEG2 feed without keeping a permanent
+decoder workload running. A road request opens a sliding 15-minute activity
+lease in SIM. The host-local `valhalla-traffic-update.timer` polls the
+authenticated internal feed once per minute, applies at most one new source
+revision every five minutes and stops doing data work when the lease expires.
+Walking and bicycle requests do not activate the lease.
+
+Every weekly graph build creates a matching `traffic-skeleton.tar`. The active
+copy is materialized under `/run/valhalla-traffic/traffic.tar`, so frequent
+speed writes use volatile storage rather than the server's system disk. The
+graph-to-TPEG mapping cache is keyed by both the routing release and the TPEG
+static revision and is stored under `/srv/valhalla/traffic-cache`; it is rebuilt
+only when one of those inputs changes. Normalized source snapshots are retained
+by SIM on the X5 cache disk at
+`/srv/x5-production/cache/csm-sim/valhalla-traffic`.
+
+Install the adaptive overlay after SIM has been deployed and has generated
+`VALHALLA_TRAFFIC_CONTROL_TOKEN`:
+
+```bash
+./scripts/setup-valhalla-codex-access.sh
+```
+
+The helper transfers the updated weekly builder as well as the runtime updater,
+installs the token through a protected temporary file, validates a time-aware
+road route, and enables the minute timer. The token is never printed. Runtime
+status is available through `ssh valhalla-codex status`; detailed updater logs
+through `ssh valhalla-codex logs`.
+
+Disabling `VALHALLA_TRAFFIC_ENABLED` in SIM immediately prevents new leases.
+Stopping `valhalla-traffic-update.timer`, removing the runtime traffic archive,
+and recreating the Valhalla container restores static-speed routing. Full
+design, failure semantics, storage classification, and rollback are recorded in
+[`ADR 0020`](../../docs/adr/0020_ADAPTIVE_VALHALLA_LIVE_TRAFFIC.md).
