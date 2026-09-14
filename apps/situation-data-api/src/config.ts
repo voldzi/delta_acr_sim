@@ -74,6 +74,12 @@ export interface SituationDataConfig {
   roadSrtiLodSparqlUrl: string;
   roadSrtiLodCacheTtlSeconds: number;
   roadSrtiLodMaxRecords: number;
+  tpeg2BaseUrl: string;
+  tpeg2ApiToken?: string;
+  tpeg2DynamicCacheTtlSeconds: number;
+  tpeg2StaticCacheTtlSeconds: number;
+  tpeg2RequestTimeoutMs: number;
+  tpeg2MaxRecords: number;
   safetyDataBaseUrl: string;
   safetyDataCacheTtlSeconds: number;
   aviationWeatherBaseUrl: string;
@@ -205,6 +211,12 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
     roadSrtiLodCacheTtlSeconds: Math.max(60, parseInteger(process.env.SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 60)),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),
+    tpeg2BaseUrl: process.env.TPEG2_BASE_URL ?? "https://online.ceda.cz",
+    tpeg2ApiToken: emptyToUndefined(process.env.TPEG2_API_TOKEN),
+    tpeg2DynamicCacheTtlSeconds: Math.max(300, parseInteger(process.env.SITUATION_DATA_TPEG2_DYNAMIC_CACHE_TTL_SECONDS, 300)),
+    tpeg2StaticCacheTtlSeconds: Math.max(3600, parseInteger(process.env.SITUATION_DATA_TPEG2_STATIC_CACHE_TTL_SECONDS, 86400)),
+    tpeg2RequestTimeoutMs: Math.max(10000, parseInteger(process.env.TPEG2_REQUEST_TIMEOUT_MS, 120000)),
+    tpeg2MaxRecords: Math.max(1000, parseInteger(process.env.TPEG2_MAX_RECORDS, 50000)),
     safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030",
     safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300),
     aviationWeatherBaseUrl: process.env.AVIATION_WEATHER_BASE_URL ?? "https://aviationweather.gov",
@@ -298,6 +310,7 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "idsjmk_vehicle_positions",
     "spravazeleznic_trains",
     "road_srti_lod",
+    "tpeg2",
     "safety_data",
     "community_context",
     "aviation_weather",

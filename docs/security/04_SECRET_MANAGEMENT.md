@@ -8,6 +8,9 @@
 - Secrets se načítají přes environment nebo secret store.
 - Logy a audity ukládají pouze reference nebo hash, nikdy hodnotu secretu.
 - Rotace tokenu nesmí vyžadovat změnu kódu.
+- `TPEG2_API_TOKEN` je upstream serverový credential: smí být pouze v chráněném
+  produkčním prostředí situation-data-api. Nesmí se objevit v katalogu,
+  normalizovaných features, URL logu, chybové odpovědi ani v raw projekci.
 - Externí AI API klíče lze vypnout odstraněním konfigurace.
 
 ## Konfigurační typy

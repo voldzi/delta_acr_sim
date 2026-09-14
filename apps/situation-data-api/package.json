@@ -22,7 +22,8 @@
     "pg": "^8.23.0",
     "pngjs": "^7.0.0",
     "proj4": "^2.22.0",
-    "redis": "^6.2.1"
+    "redis": "^6.2.1",
+    "saxes": "^6.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

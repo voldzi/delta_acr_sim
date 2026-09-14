@@ -226,6 +226,11 @@ GEO_ROUTING_SERVICE_TOKENS_VALUE="${GEO_ROUTING_SERVICE_TOKENS:-$(existing_value
 if [ -z "$GEO_ROUTING_SERVICE_TOKENS_VALUE" ]; then
   GEO_ROUTING_SERVICE_TOKENS_VALUE="cop:$(generate_secret)"
 fi
+TPEG2_API_TOKEN_VALUE="${TPEG2_API_TOKEN:-$(existing_value TPEG2_API_TOKEN)}"
+if [ -z "$TPEG2_API_TOKEN_VALUE" ]; then
+  echo "TPEG2_API_TOKEN must be configured before enabling the production TPEG2 source." >&2
+  exit 1
+fi
 
 umask 077
 cat > .env <<ENV
@@ -287,7 +292,7 @@ FLIGHT_DATA_PARTNER_TRACK_PRIORITY=95
 OURAIRPORTS_ENABLED=true
 OURAIRPORTS_COUNTRIES=CZ,SK,AT,DE,PL,HU
 OURAIRPORTS_CACHE_TTL_SECONDS=86400
-SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,safety_data
+SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,chmi_weather_stations,chmi_weather_radar,chmi_weather_webcams,chmi_air_quality,osm_postgis,community_context,mobile_coverage_model,mobile_network_model,ctu_nettest,ctu_stationary_mobile,pid_gtfs_rt,public_transit_static,idsjmk_vehicle_positions,spravazeleznic_trains,road_srti_lod,tpeg2,safety_data
 SITUATION_DATA_DEFAULT_BBOX=13.85,49.65,15.35,50.45
 SITUATION_DATA_CACHE_TTL_SECONDS=30
 SITUATION_DATA_STALE_IF_ERROR_SECONDS=1800
@@ -312,6 +317,12 @@ ROAD_SRTI_LOD_SPARQL_URL=https://lod.tamtamresearch.com/sparql/
 SITUATION_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=60
 SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS=60
 ROAD_SRTI_LOD_MAX_RECORDS=1500
+TPEG2_BASE_URL=https://online.ceda.cz
+TPEG2_API_TOKEN=${TPEG2_API_TOKEN_VALUE}
+SITUATION_DATA_TPEG2_DYNAMIC_CACHE_TTL_SECONDS=300
+SITUATION_DATA_TPEG2_STATIC_CACHE_TTL_SECONDS=86400
+TPEG2_REQUEST_TIMEOUT_MS=120000
+TPEG2_MAX_RECORDS=50000
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600

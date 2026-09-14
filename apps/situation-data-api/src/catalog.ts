@@ -685,6 +685,58 @@ function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerD
       }
     },
     {
+      providerLayerId: "traffic.tpeg2.flow",
+      recommendedCatalogLayerId: "public.traffic.flow",
+      label: "Aktuální rychlost silničního provozu",
+      description: "Pětiminutová normalizovaná projekce TPEG2 Traffic Flow and Prediction bez zpřístupnění zdrojového XML.",
+      categoryPath: ["traffic", "road_flow"],
+      categories: ["traffic", "road_traffic_flow"],
+      role: "overlay",
+      audience: "authenticated",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["LineString"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: config.tpeg2DynamicCacheTtlSeconds,
+      cacheTtlSeconds: config.tpeg2DynamicCacheTtlSeconds,
+      styleProfile: "road-traffic-flow-v1",
+      sourceIds: ["tpeg2"],
+      query: query(["traffic"], ["tpeg2"], ["road_traffic_flow"]),
+      legend: { profile: "road-traffic-flow-v1" },
+      legal: {
+        attribution: "Ředitelství silnic a dálnic / NDIC; TPEG2 delivery by CEDA Maps",
+        notes: ["Pouze normalizovaná přidaná hodnota. Zdrojový TPEG/XML ani API token se klientům neposkytují."]
+      }
+    },
+    {
+      providerLayerId: "traffic.tpeg2.events",
+      recommendedCatalogLayerId: "public.traffic.road_events",
+      label: "Aktuální silniční události TPEG2",
+      description: "Normalizovaná projekce TPEG2 Traffic Event Compact s průběhem události a platností.",
+      categoryPath: ["traffic", "road_events"],
+      categories: ["traffic", "road_traffic_event"],
+      role: "overlay",
+      audience: "authenticated",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point", "LineString"],
+      minZoom: 6,
+      maxZoom: 18,
+      refreshSeconds: config.tpeg2DynamicCacheTtlSeconds,
+      cacheTtlSeconds: config.tpeg2DynamicCacheTtlSeconds,
+      styleProfile: "road-event-v1",
+      sourceIds: ["tpeg2"],
+      query: query(["traffic"], ["tpeg2"], ["road_traffic_event"]),
+      legend: { profile: "road-event-v1" },
+      legal: {
+        attribution: "Ředitelství silnic a dálnic / NDIC; TPEG2 delivery by CEDA Maps",
+        notes: ["Pouze normalizovaná přidaná hodnota. Zdrojový TPEG/XML ani API token se klientům neposkytují."]
+      }
+    },
+    {
       providerLayerId: "warnings.safety_data_projection",
       recommendedCatalogLayerId: "public.safety.warnings",
       label: "Veřejné výstrahy (kompatibilní projekce)",
@@ -1966,6 +2018,16 @@ function sourceClassification(sourceId: SituationDataSourceId): {
         feedsCatalogLayerIds: ["public.traffic.road_events"],
         notes: ["Road-event context from a cached SRTI/NDIC Linked Open Data source."]
       };
+    case "tpeg2":
+      return {
+        sourceRole: "final",
+        audience: "authenticated",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["traffic.tpeg2.flow", "traffic.tpeg2.events"],
+        feedsCatalogLayerIds: ["public.traffic.flow", "public.traffic.road_events"],
+        notes: ["Authenticated server-side TPEG2 source; only normalized features are exposed and raw XML is prohibited."]
+      };
     case "safety_data":
       return {
         sourceRole: "projection",
@@ -2033,6 +2095,8 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
       return config.spravaZeleznicTrainPositionsCacheTtlSeconds;
     case "road_srti_lod":
       return config.roadSrtiLodCacheTtlSeconds;
+    case "tpeg2":
+      return config.tpeg2DynamicCacheTtlSeconds;
     case "safety_data":
       return config.safetyDataCacheTtlSeconds;
     case "community_context":
@@ -2068,6 +2132,9 @@ function backendForSource(sourceId: SituationDataSourceId, config: SituationData
   }
   if (sourceId === "road_srti_lod") {
     return "ndic-srti-lod";
+  }
+  if (sourceId === "tpeg2") {
+    return "authenticated-tpeg2-api";
   }
   if (sourceId === "chmi_air_quality" || sourceId === "chmi_weather_stations" || sourceId === "chmi_weather_radar") {
     return "chmi-opendata";

@@ -1358,6 +1358,7 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       idsjmkVehiclePositions: config.idsjmkVehiclePositionsCacheTtlSeconds,
       spravaZeleznicTrains: config.spravaZeleznicTrainPositionsCacheTtlSeconds,
       roadSrtiLod: config.roadSrtiLodCacheTtlSeconds,
+      tpeg2: config.tpeg2DynamicCacheTtlSeconds,
       safetyData: config.safetyDataCacheTtlSeconds,
       aviationWeather: config.aviationWeatherCacheTtlSeconds,
       chmiAirQuality: config.chmiAirQualityCacheTtlSeconds,
@@ -1452,6 +1453,12 @@ function publicConfig(config: SituationDataConfig): SituationDataPublicConfig {
       { sourceId: "idsjmk_vehicle_positions", baseUrl: config.idsjmkVehiclePositionsUrl, authConfigured: true },
       { sourceId: "spravazeleznic_trains", baseUrl: config.spravaZeleznicTrainPositionsUrl, authConfigured: true, backend: "spravazeleznic-mapy" },
       { sourceId: "road_srti_lod", baseUrl: config.roadSrtiLodSparqlUrl, authConfigured: true },
+      {
+        sourceId: "tpeg2",
+        baseUrl: config.tpeg2BaseUrl,
+        authConfigured: Boolean(config.tpeg2ApiToken),
+        backend: "authenticated-tpeg2-api"
+      },
       { sourceId: "safety_data", baseUrl: config.safetyDataBaseUrl, authConfigured: true },
       {
         sourceId: "community_context",

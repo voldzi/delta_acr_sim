@@ -23,6 +23,7 @@ import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response
 import { spatiallyLimitFeatures } from "./spatial-limit.js";
 import { getPublicTransitStaticStopPayload, type PublicTransitStaticStopPayload } from "./transit-static-model.js";
 import { WeatherForecastSource } from "./weather-forecast.js";
+import { Tpeg2Source } from "./tpeg2-source.js";
 import type {
   BoundingBox,
   MobileCoverageQuality,
@@ -297,6 +298,7 @@ export function createSituationDataSources(config: SituationDataConfig): Situati
     idsjmk_vehicle_positions: new IdsjmkVehiclePositionsSource(config),
     spravazeleznic_trains: new SpravaZeleznicTrainsSource(config),
     road_srti_lod: new RoadSrtiLodSource(config),
+    tpeg2: new Tpeg2Source(config),
     safety_data: new SafetyDataProjectionSource(config),
     community_context: new CommunityContextSource(config),
     aviation_weather: new AviationWeatherSource(config),
@@ -327,6 +329,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
     new IdsjmkVehiclePositionsSource(config).descriptor,
     new SpravaZeleznicTrainsSource(config).descriptor,
     new RoadSrtiLodSource(config).descriptor,
+    new Tpeg2Source(config).descriptor,
     new SafetyDataProjectionSource(config).descriptor,
     new CommunityContextSource(config).descriptor,
     new AviationWeatherSource(config).descriptor,

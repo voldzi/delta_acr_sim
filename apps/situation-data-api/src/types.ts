@@ -48,6 +48,7 @@ export type SituationDataSourceId =
   | "idsjmk_vehicle_positions"
   | "spravazeleznic_trains"
   | "road_srti_lod"
+  | "tpeg2"
   | "safety_data"
   | "community_context"
   | "aviation_weather"
@@ -283,6 +284,7 @@ export interface SituationDataPublicConfig {
     idsjmkVehiclePositions: number;
     spravaZeleznicTrains: number;
     roadSrtiLod: number;
+    tpeg2: number;
     safetyData: number;
     aviationWeather: number;
     chmiAirQuality: number;
