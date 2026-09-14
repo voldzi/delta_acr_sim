@@ -87,6 +87,9 @@ start `situation-data-api` against an accidental directory on the system disk.
 The runtime archive is root-owned and mode `0644`: the unprivileged Valhalla
 container can map it read-only, while only the root-owned host updater can
 modify its speed records.
+Host-side installation and update probes derive their URL from
+`VALHALLA_BIND_ADDRESS` and `VALHALLA_PORT`; the deployment does not assume the
+published port is also bound to loopback.
 
 ## Release coupling and availability
 

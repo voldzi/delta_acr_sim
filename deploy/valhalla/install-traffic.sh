@@ -20,6 +20,9 @@ current=$(readlink -f "${BASE_DIR}/current")
   echo "The active Valhalla release is incomplete." >&2
   exit 1
 }
+bind_address=$(sed -n 's/^VALHALLA_BIND_ADDRESS=//p' "${BASE_DIR}/.env" | tail -1)
+port=$(sed -n 's/^VALHALLA_PORT=//p' "${BASE_DIR}/.env" | tail -1)
+VALHALLA_RUNTIME_URL=${VALHALLA_RUNTIME_URL:-http://${bind_address:-127.0.0.1}:${port:-8002}}
 
 install -d -m 0755 "${BASE_DIR}/update-tools" "${BASE_DIR}/traffic-cache" /run/valhalla-traffic
 compose_backup=$(mktemp)
@@ -59,7 +62,7 @@ trap 'rm -f -- "${traffic_env}" "${build_config:-}" "${compose_backup}" "${confi
 {
   printf 'SIM_TRAFFIC_FEED_BASE_URL=%s\n' "${SIM_TRAFFIC_FEED_BASE_URL}"
   printf 'SIM_TRAFFIC_CONTROL_TOKEN=%s\n' "${SIM_TRAFFIC_CONTROL_TOKEN}"
-  printf 'VALHALLA_URL=http://127.0.0.1:8002\n'
+  printf 'VALHALLA_URL=%s\n' "${VALHALLA_RUNTIME_URL}"
   printf 'TRAFFIC_MAPPING_CACHE_DIR=%s/traffic-cache\n' "${BASE_DIR}"
   printf 'TRAFFIC_RUNTIME_DIR=/run/valhalla-traffic\n'
   printf 'TRAFFIC_SKELETON=%s/current/traffic-skeleton.tar\n' "${BASE_DIR}"
@@ -116,7 +119,7 @@ fi
 
 ready=false
 for _ in $(seq 1 60); do
-  if curl -fsS --max-time 5 http://127.0.0.1:8002/status >/dev/null; then
+  if curl -fsS --max-time 5 "${VALHALLA_RUNTIME_URL}/status" >/dev/null; then
     ready=true
     break
   fi
@@ -131,7 +134,7 @@ fi
 
 curl -fsS --max-time 15 --get --data-urlencode \
   'json={"locations":[{"lat":50.08804,"lon":14.42076},{"lat":50.07550,"lon":14.43780}],"costing":"auto","date_time":{"type":0}}' \
-  http://127.0.0.1:8002/route -o "${BASE_DIR}/state/traffic-install-route.json"
+  "${VALHALLA_RUNTIME_URL}/route" -o "${BASE_DIR}/state/traffic-install-route.json"
 python3 "${BASE_DIR}/update-tools/validate-response.py" route "${BASE_DIR}/state/traffic-install-route.json" \
   --max-km 10 --max-snap-m 2500 --expected-admins CZ \
   --from-lat 50.08804 --from-lon 14.42076 --to-lat 50.07550 --to-lon 14.43780
