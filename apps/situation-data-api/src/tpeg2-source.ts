@@ -259,6 +259,10 @@ export class Tpeg2Source {
     this.refreshPromise ??= this.refresh().finally(() => {
       this.refreshPromise = undefined;
     });
+    if (this.staticFeed.value && this.dynamicFeed.value && this.tecFeed.value) {
+      void this.refreshPromise.catch(() => undefined);
+      return;
+    }
     await this.refreshPromise;
   }
 
