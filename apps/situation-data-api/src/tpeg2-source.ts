@@ -211,28 +211,28 @@ export class Tpeg2Source {
 
     await this.ensureFresh();
     const segments = this.staticFeed.value ?? new Map();
-    const features: SituationFeature[] = [];
+    const flowFeatures: SituationFeature[] = [];
     for (const flow of this.dynamicFeed.value ?? []) {
       const segment = segments.get(flow.messageId);
       if (!segment || !coordinatesIntersectBbox(segment.coordinates, query.bbox)) {
         continue;
       }
-      features.push(mapFlowFeature(flow, segment));
-      if (features.length >= query.limit) {
+      flowFeatures.push(mapFlowFeature(flow, segment));
+      if (flowFeatures.length >= query.limit) {
         break;
       }
     }
-    if (features.length < query.limit) {
-      for (const event of this.tecFeed.value ?? []) {
-        if (!coordinatesIntersectBbox(event.coordinates, query.bbox)) {
-          continue;
-        }
-        features.push(mapEventFeature(event));
-        if (features.length >= query.limit) {
-          break;
-        }
+    const eventFeatures: SituationFeature[] = [];
+    for (const event of this.tecFeed.value ?? []) {
+      if (!coordinatesIntersectBbox(event.coordinates, query.bbox)) {
+        continue;
+      }
+      eventFeatures.push(mapEventFeature(event));
+      if (eventFeatures.length >= query.limit) {
+        break;
       }
     }
+    const features = interleaveTrafficFeatures(flowFeatures, eventFeatures, query.limit);
     const warnings = this.lastError ? [`TPEG2 is serving the last valid snapshot: ${this.lastError}`] : [];
     return { source: this.descriptor, fetchedAt, features, warnings };
   }
@@ -316,6 +316,23 @@ export class Tpeg2Source {
     state.lastModified = response.headers.get("last-modified") ?? undefined;
     state.fetchedAtMs = Date.now();
   }
+}
+
+function interleaveTrafficFeatures(flow: SituationFeature[], events: SituationFeature[], limit: number): SituationFeature[] {
+  const result: SituationFeature[] = [];
+  let flowIndex = 0;
+  let eventIndex = 0;
+  while (result.length < limit && (flowIndex < flow.length || eventIndex < events.length)) {
+    const eventTurn = result.length > 0 && result.length % 5 === 4 && eventIndex < events.length;
+    if (!eventTurn && flowIndex < flow.length) {
+      result.push(flow[flowIndex++]!);
+    } else if (eventIndex < events.length) {
+      result.push(events[eventIndex++]!);
+    } else if (flowIndex < flow.length) {
+      result.push(flow[flowIndex++]!);
+    }
+  }
+  return result;
 }
 
 async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage) => void): Promise<void> {
