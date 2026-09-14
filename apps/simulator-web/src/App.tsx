@@ -462,6 +462,7 @@ export function App() {
           idsjmkVehiclePositions: 0,
           spravaZeleznicTrains: 0,
           roadSrtiLod: 0,
+          tpeg2: 0,
           safetyData: 0,
           aviationWeather: 0,
           chmiAirQuality: 0,
@@ -3683,7 +3684,8 @@ function formatSituationSourceTtls(ttls: SituationDataConfig["sourceCacheTtlSeco
     `GTFS stops ${ttls.publicTransitStatic}s`,
     `IDS JMK ${ttls.idsjmkVehiclePositions}s`,
     `SŽ trains ${ttls.spravaZeleznicTrains}s`,
-    `roads ${ttls.roadSrtiLod}s`
+    `roads ${ttls.roadSrtiLod}s`,
+    `TPEG2 ${ttls.tpeg2}s`
   ].join(" / ");
 }
 
