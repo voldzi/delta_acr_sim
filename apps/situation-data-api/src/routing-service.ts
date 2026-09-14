@@ -22,6 +22,7 @@ import type {
   SituationLayerId,
   SituationSeverity
 } from "./types.js";
+import type { ValhallaTrafficCoordinator, ValhallaTrafficPublicStatus } from "./valhalla-traffic-coordinator.js";
 
 export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "bicycle" | "evacuation_walking";
 
@@ -305,7 +306,7 @@ export interface RoutingRouteResponse {
 
 export interface RoutingTrafficSummary {
   trafficAware: boolean;
-  sourceIds: Array<"road_srti_lod">;
+  sourceIds: Array<"road_srti_lod" | "tpeg2">;
   sourceStatus: "ok" | "disabled" | "degraded";
   corridorRadiusM: number;
   candidateCount: number;
@@ -319,6 +320,7 @@ export interface RoutingTrafficSummary {
   highestSeverity?: SituationSeverity;
   warnings: string[];
   limitations: string[];
+  liveSpeeds?: ValhallaTrafficPublicStatus;
 }
 
 export interface RoutingIsochroneResponse {
@@ -840,7 +842,10 @@ export class RoutingService {
   private readonly demElevationSampler: DemElevationSampler;
   private readonly routeAnalysisSources: SituationDataSource[];
 
-  constructor(private readonly config: SituationDataConfig) {
+  constructor(
+    private readonly config: SituationDataConfig,
+    private readonly valhallaTraffic?: ValhallaTrafficCoordinator
+  ) {
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
@@ -929,6 +934,7 @@ export class RoutingService {
 
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     const request = this.normalizeRouteRequest(raw, 1);
+    if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     return this.routeCache.getOrLoad(`route:${stablePayload(request)}`, () => this.computeRouteResponse(request));
   }
 
@@ -985,6 +991,7 @@ export class RoutingService {
   async alternatives(raw: RoutingAlternativesRequest): Promise<RoutingRouteResponse> {
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
+    if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     return this.routeCache.getOrLoad(`alternatives:${stablePayload(request)}`, () => this.computeRouteResponse(request));
   }
 
@@ -1094,7 +1101,7 @@ export class RoutingService {
     const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
     const analysisRoutes = await this.annotateRouteAnalysis(trafficRoutes, request, trafficContext);
     const primaryRoute = analysisRoutes.find((route) => route.rank === 1) ?? analysisRoutes[0];
-    const traffic = routingTrafficSummary(trafficContext, analysisRoutes);
+    const traffic = routingTrafficSummary(trafficContext, analysisRoutes, await this.valhallaTraffic?.status());
     const responseWarnings = [...warnings];
     const requestedRouteCount = requestedRouteCountFromQuery(request);
     if (requestedRouteCount && requestedRouteCount > analysisRoutes.length) {
@@ -2626,15 +2633,23 @@ function incidentNearRoute(
   };
 }
 
-function routingTrafficSummary(context: RoutingTrafficContext | undefined, routes: RoutingRoute[]): RoutingTrafficSummary {
+function routingTrafficSummary(
+  context: RoutingTrafficContext | undefined,
+  routes: RoutingRoute[],
+  liveSpeeds?: ValhallaTrafficPublicStatus
+): RoutingTrafficSummary {
   const incidents = routes.flatMap((route) => route.traffic.incidentsOnRoute);
   const uniqueIncidentIds = new Set(incidents.map((incident) => incident.incidentId));
   const primaryRoute = routes.find((route) => route.rank === 1) ?? routes[0];
   const hardExclusionApplied = Boolean(context?.hardExclusionsApplied.length) || incidents.some((incident) => incident.action === "hard_exclusion_applied");
+  const sourceStatus = combinedTrafficSourceStatus(context?.sourceStatus ?? "disabled", liveSpeeds);
   return {
-    trafficAware: Boolean(context && context.sourceStatus === "ok"),
-    sourceIds: context && context.sourceStatus !== "disabled" ? ["road_srti_lod"] : [],
-    sourceStatus: context?.sourceStatus ?? "disabled",
+    trafficAware: Boolean(context && context.sourceStatus === "ok") || liveSpeeds?.state === "current" || liveSpeeds?.state === "stale",
+    sourceIds: [
+      ...(context && context.sourceStatus !== "disabled" ? (["road_srti_lod"] as const) : []),
+      ...(liveSpeeds?.enabled ? (["tpeg2"] as const) : [])
+    ],
+    sourceStatus,
     corridorRadiusM: TRAFFIC_ROUTE_CORRIDOR_RADIUS_M,
     candidateCount: context?.events.length ?? 0,
     incidentCount: uniqueIncidentIds.size,
@@ -2646,8 +2661,18 @@ function routingTrafficSummary(context: RoutingTrafficContext | undefined, route
     delayPenaltySeconds: primaryRoute?.traffic.delayPenaltySeconds ?? 0,
     highestSeverity: highestSeverity(incidents.map((incident) => incident.severity)),
     warnings: context?.warnings ?? [],
-    limitations: [...routeTrafficLimitations()]
+    limitations: [...routeTrafficLimitations()],
+    ...(liveSpeeds ? { liveSpeeds } : {})
   };
+}
+
+function combinedTrafficSourceStatus(
+  incidentStatus: "ok" | "disabled" | "degraded",
+  liveSpeeds?: ValhallaTrafficPublicStatus
+): "ok" | "disabled" | "degraded" {
+  if (incidentStatus === "ok" || liveSpeeds?.state === "current") return "ok";
+  if (incidentStatus !== "disabled" || liveSpeeds?.enabled) return "degraded";
+  return "disabled";
 }
 
 function rankRoutesByTrafficImpact(routes: RoutingRoute[]): RoutingRoute[] {
@@ -2704,8 +2729,12 @@ function valhallaTrafficAvoidancePayload(context: RoutingTrafficContext | undefi
   };
 }
 
-function valhallaDepartureTimePayload(departureTime: string | undefined): { date_time?: { type: 1; value: string } } {
-  return departureTime ? { date_time: { type: 1, value: departureTime.slice(0, 16) } } : {};
+export function valhallaDepartureTimePayload(
+  departureTime: string | undefined,
+  currentTrafficEnabled = false
+): { date_time?: { type: 0 } | { type: 1; value: string } } {
+  if (departureTime) return { date_time: { type: 1, value: departureTime.slice(0, 16) } };
+  return currentTrafficEnabled ? { date_time: { type: 0 } } : {};
 }
 
 function isHardExclusionCandidate(event: RoutingTrafficEvent): boolean {
@@ -2799,7 +2828,10 @@ async function requestValhallaRoute(
 ): Promise<ValhallaRouteResponse> {
   const costing = valhallaCosting(profile.profileId);
   const recostings = valhallaRecostings(costing);
-  const departureTime = valhallaDepartureTimePayload(request.departureTime);
+  const departureTime = valhallaDepartureTimePayload(
+    request.departureTime,
+    config.valhallaTrafficEnabled && profile.transportMode === "road"
+  );
   const snapLimitM = config.routingMaxSnapDistanceM;
   const orderedLocations = [request.from, ...(request.via ?? []), request.to];
   const payload = {

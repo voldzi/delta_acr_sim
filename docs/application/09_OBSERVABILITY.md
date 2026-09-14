@@ -98,6 +98,8 @@ aktuální notice, role warningy a výsledky operátorských akcí vykreslí zno
 - import age / source freshness
 - Overview load latency
 - routing backend health/version and route/isochrone/nearest-access cache state
+- adaptive Valhalla live-traffic lease/freshness, routing dataset, OpenLR
+  mapping coverage and applied TPEG2 edge counts
 - geo-routing-v1 Valhalla dependency state and routing dataset version/build
   timestamp in situation-data readiness; no route body or token logging
 - host-local Valhalla last-attempt/last-success release age, timer result and

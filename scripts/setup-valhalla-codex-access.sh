@@ -5,6 +5,7 @@ set -Eeuo pipefail
 # maintenance. The key cannot open a shell or run arbitrary sudo commands.
 
 server="${1:-valhalla.home.cz}"
+source_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../deploy/valhalla" && pwd)
 key_path="${VALHALLA_CODEX_KEY_PATH:-${HOME}/.ssh/id_ed25519_codex_valhalla}"
 ssh_alias="${VALHALLA_CODEX_SSH_ALIAS:-valhalla-codex}"
 ssh_config="${HOME}/.ssh/config"
@@ -23,8 +24,9 @@ fi
 
 public_key_b64="$(base64 <"${key_path}.pub" | tr -d '\n')"
 local_setup="$(mktemp -t valhalla-codex-setup.XXXXXX)"
+local_secret=""
 remote_setup="/tmp/valhalla-codex-setup-${UID}.sh"
-trap 'rm -f -- "${local_setup}"' EXIT
+trap 'rm -f -- "${local_setup}" ${local_secret:+"${local_secret}"}' EXIT
 
 cat >"${local_setup}" <<'REMOTE_SETUP'
 #!/usr/bin/env bash
@@ -57,6 +59,8 @@ show_state() {
   systemctl show "${service}" -p ActiveState -p SubState -p Result -p ExecMainStatus
   systemctl show valhalla-weekly-update.timer -p ActiveState -p NextElapseUSecRealtime
   systemctl show valhalla-healthcheck.service -p ActiveState -p Result -p ExecMainStatus
+  systemctl show valhalla-traffic-update.timer -p ActiveState -p NextElapseUSecRealtime 2>/dev/null || true
+  systemctl show valhalla-traffic-update.service -p ActiveState -p Result -p ExecMainStatus 2>/dev/null || true
   printf '\nlast-attempt.env\n'
   sed -n '1,80p' "${state_dir}/last-attempt.env" 2>/dev/null || true
   printf '\nlast-success.env\n'
@@ -72,6 +76,10 @@ show_state() {
     || curl -fsS --max-time 10 http://valhalla.home.cz:8002/status \
     || true
   printf '\n'
+  printf '\ntraffic-runtime\n'
+  find /run/valhalla-traffic -maxdepth 1 -type f -printf '%f %s bytes %TY-%Tm-%TdT%TH:%TM:%TS%Tz\n' 2>/dev/null | sort || true
+  printf '\ntraffic-cache\n'
+  find /srv/valhalla/traffic-cache -maxdepth 1 -type f -printf '%f %s bytes %TY-%Tm-%TdT%TH:%TM:%TS%Tz\n' 2>/dev/null | sort || true
 }
 
 prune_old_releases() {
@@ -107,7 +115,7 @@ case "${1:-status}" in
     show_state
     ;;
   logs)
-    journalctl -u valhalla-weekly-update.service -u valhalla-healthcheck.service -n 250 --no-pager
+    journalctl -u valhalla-weekly-update.service -u valhalla-healthcheck.service -u valhalla-traffic-update.service -n 250 --no-pager
     ;;
   prune-old-releases)
     prune_old_releases
@@ -204,4 +212,30 @@ echo
 echo "Testing: ssh ${ssh_alias} status"
 ssh "${ssh_alias}" status
 echo
-echo "Installed. Revoke by removing the 'codex-valhalla-maintenance' line from authorized_keys and /etc/sudoers.d/valhalla-codex-maintenance."
+echo "Installing adaptive Valhalla traffic components..."
+remote_deploy="/home/${USER}/valhalla-owned-deploy"
+ssh "${server}" "install -d -m 0755 '${remote_deploy}'"
+scp \
+  "${source_dir}/docker-compose.yml" \
+  "${source_dir}/install-traffic.sh" \
+  "${source_dir}/runtime-entrypoint.sh" \
+  "${source_dir}/traffic-update.py" \
+  "${source_dir}/weekly-update.sh" \
+  "${source_dir}/valhalla-traffic-update.service" \
+  "${source_dir}/valhalla-traffic-update.timer" \
+  "${server}:${remote_deploy}/"
+
+control_token=$(ssh docker.home.cz "sed -n 's/^VALHALLA_TRAFFIC_CONTROL_TOKEN=//p' /srv/sim/.env | tail -1")
+if [[ -z "${control_token}" ]]; then
+  echo "SIM has no VALHALLA_TRAFFIC_CONTROL_TOKEN yet; deploy SIM first and rerun this helper." >&2
+  exit 1
+fi
+local_secret=$(mktemp -t valhalla-traffic-token.XXXXXX)
+chmod 0600 "${local_secret}"
+printf '%s\n' "${control_token}" >"${local_secret}"
+unset control_token
+remote_secret="/tmp/valhalla-traffic-token-${UID}"
+scp "${local_secret}" "${server}:${remote_secret}"
+ssh -t "${server}" "chmod 0600 '${remote_secret}'; sudo bash -c 'SIM_TRAFFIC_CONTROL_TOKEN=\$(cat \"${remote_secret}\") exec \"${remote_deploy}/install-traffic.sh\"'; rm -f -- '${remote_secret}'"
+
+echo "Installed. Revoke maintenance access by removing the 'codex-valhalla-maintenance' line from authorized_keys and /etc/sudoers.d/valhalla-codex-maintenance."

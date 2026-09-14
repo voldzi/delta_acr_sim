@@ -80,6 +80,11 @@ export interface SituationDataConfig {
   tpeg2StaticCacheTtlSeconds: number;
   tpeg2RequestTimeoutMs: number;
   tpeg2MaxRecords: number;
+  valhallaTrafficEnabled: boolean;
+  valhallaTrafficControlToken?: string;
+  valhallaTrafficIdleSeconds: number;
+  valhallaTrafficMaxAgeSeconds: number;
+  valhallaTrafficCacheDir: string;
   safetyDataBaseUrl: string;
   safetyDataCacheTtlSeconds: number;
   aviationWeatherBaseUrl: string;
@@ -217,6 +222,11 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     tpeg2StaticCacheTtlSeconds: Math.max(3600, parseInteger(process.env.SITUATION_DATA_TPEG2_STATIC_CACHE_TTL_SECONDS, 86400)),
     tpeg2RequestTimeoutMs: Math.max(10000, parseInteger(process.env.TPEG2_REQUEST_TIMEOUT_MS, 120000)),
     tpeg2MaxRecords: Math.max(1000, parseInteger(process.env.TPEG2_MAX_RECORDS, 50000)),
+    valhallaTrafficEnabled: parseBoolean(process.env.VALHALLA_TRAFFIC_ENABLED, false),
+    valhallaTrafficControlToken: emptyToUndefined(process.env.VALHALLA_TRAFFIC_CONTROL_TOKEN),
+    valhallaTrafficIdleSeconds: Math.max(600, parseInteger(process.env.VALHALLA_TRAFFIC_IDLE_SECONDS, 900)),
+    valhallaTrafficMaxAgeSeconds: Math.max(600, parseInteger(process.env.VALHALLA_TRAFFIC_MAX_AGE_SECONDS, 1800)),
+    valhallaTrafficCacheDir: resolve(process.env.VALHALLA_TRAFFIC_CACHE_DIR ?? `${dataDir}/valhalla-traffic`),
     safetyDataBaseUrl: process.env.SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030",
     safetyDataCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS, 300),
     aviationWeatherBaseUrl: process.env.AVIATION_WEATHER_BASE_URL ?? "https://aviationweather.gov",

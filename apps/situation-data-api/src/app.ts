@@ -1,6 +1,6 @@
 import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import cors, { type CorsOptions } from "cors";
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { SituationAggregationService } from "./aggregation.js";
 import { buildSituationMapCatalog } from "./catalog.js";
 import { ChmiWeatherStationDetailService } from "./chmi-weather-station-detail.js";
@@ -19,6 +19,8 @@ import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
 import { TransitDetailService } from "./transit-detail.js";
 import { TransitStaticModelService } from "./transit-static-model.js";
+import { Tpeg2Source } from "./tpeg2-source.js";
+import { parseValhallaTrafficUpdateReport, ValhallaTrafficCoordinator } from "./valhalla-traffic-coordinator.js";
 import { WeatherForecastService } from "./weather-forecast.js";
 import {
   buildSituationFeatureDetail,
@@ -51,6 +53,7 @@ export interface SituationDataAppContext {
   transitDetails: TransitDetailService;
   transitStatic: TransitStaticModelService;
   routing: RoutingService;
+  valhallaTraffic: ValhallaTrafficCoordinator;
   searchData: SearchDataService;
 }
 
@@ -67,7 +70,9 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const weatherForecast = new WeatherForecastService(config);
   const transitDetails = new TransitDetailService(config);
   const transitStatic = new TransitStaticModelService(config);
-  const routing = new RoutingService(config);
+  const tpeg2Source = sources.find((source): source is Tpeg2Source => source instanceof Tpeg2Source);
+  const valhallaTraffic = new ValhallaTrafficCoordinator(config, tpeg2Source);
+  const routing = new RoutingService(config, valhallaTraffic);
   const searchData = new SearchDataService(config);
   const context: SituationDataAppContext = {
     config,
@@ -82,6 +87,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     transitDetails,
     transitStatic,
     routing,
+    valhallaTraffic,
     searchData
   };
   const app = express();
@@ -95,6 +101,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerRadioRoutes(app, context);
   registerTransitRoutes(app, context);
   registerRoutingRoutes(app, context);
+  registerValhallaTrafficRoutes(app, context);
   registerGeoRoutingRoutes(app, config, routing);
   registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);
@@ -153,6 +160,46 @@ function createCorsOptions(origins: string[] = []): CorsOptions {
   return process.env.NODE_ENV === "production" ? { origin: false } : {};
 }
 
+function registerValhallaTrafficRoutes(app: Express, context: SituationDataAppContext): void {
+  const authenticate = (req: Request, res: Response): boolean => {
+    if (context.valhallaTraffic.isAuthorized(req.get("authorization"))) return true;
+    res.set("WWW-Authenticate", "Bearer");
+    problem(req, res, 401, "UNAUTHORIZED", "Unauthorized Valhalla traffic control request.");
+    return false;
+  };
+
+  app.get("/api/v1/internal/valhalla-traffic/feed", async (req, res) => {
+    if (!authenticate(req, res)) return;
+    try {
+      const feed = await context.valhallaTraffic.feed(req.query.includeStatic === "true");
+      res.set("Cache-Control", "no-store");
+      if (!feed) {
+        res.status(204).set("Retry-After", "60").end();
+        return;
+      }
+      res.json(feed);
+    } catch (error) {
+      problem(req, res, 503, "VALHALLA_TRAFFIC_FEED_UNAVAILABLE", error instanceof Error ? error.message : "Traffic feed unavailable.");
+    }
+  });
+
+  app.post("/api/v1/internal/valhalla-traffic/report", async (req, res) => {
+    if (!authenticate(req, res)) return;
+    const report = parseValhallaTrafficUpdateReport(req.body);
+    if (!report) {
+      problem(req, res, 400, "VALIDATION_ERROR", "Invalid Valhalla traffic update report.");
+      return;
+    }
+    await context.valhallaTraffic.report(report);
+    res.status(204).end();
+  });
+
+  app.get("/api/v1/internal/valhalla-traffic/status", async (req, res) => {
+    if (!authenticate(req, res)) return;
+    res.set("Cache-Control", "no-store").json(await context.valhallaTraffic.status());
+  });
+}
+
 function registerHealthRoutes(app: Express, context: SituationDataAppContext): void {
   app.get("/health/live", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -169,7 +216,8 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       enabledSources: context.config.enabledSources,
       sourceHealth,
       dem,
-      routing
+      routing,
+      valhallaTraffic: await context.valhallaTraffic.status()
     });
   });
 
@@ -178,6 +226,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const dem = await context.demCatalog.status();
     const routingHealth = await context.routing.healthStatus();
+    const valhallaTraffic = await context.valhallaTraffic.status();
     const sourceCacheLines = sourceCacheStats(context).flatMap((sourceCache) => [
       `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -253,6 +302,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
           ...radioPlanningCacheLines,
           ...routingCacheLines,
           ...routingBackendMetricLines(routingHealth),
+          ...valhallaTrafficMetricLines(valhallaTraffic),
           ...searchDataCacheLines,
           ...sourceHealthLines,
           ...demMetricLines(dem)
@@ -317,6 +367,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         cache: cacheTelemetry(cacheStats, context.config.routingCacheMaxEntries)
       })),
       routingBackend,
+      valhallaTraffic: await context.valhallaTraffic.status(),
       dataFreshness: sourceFreshness(sourceHealth),
       environmentGrid: environmentGridTelemetry(context.config, sourceHealth),
       boundaryReadModel: boundaryReadModelTelemetry(context.config, sourceHealth),
@@ -1613,6 +1664,17 @@ function routingBackendMetricLines(status: Awaited<ReturnType<RoutingService["he
     `situation_data_routing_backend_health{${labels}} ${status.status === "ok" ? 1 : 0}`,
     `situation_data_routing_backend_info{${labels}} 1`,
     `situation_data_routing_backend_warnings{backend="${backend}",configured_engine="${configuredEngine}"} ${status.warnings.length}`
+  ];
+}
+
+function valhallaTrafficMetricLines(status: Awaited<ReturnType<ValhallaTrafficCoordinator["status"]>>): string[] {
+  const state = escapeLabel(status.state);
+  return [
+    `situation_data_valhalla_live_traffic_enabled ${status.enabled ? 1 : 0}`,
+    `situation_data_valhalla_live_traffic_state{state="${state}"} 1`,
+    `situation_data_valhalla_live_traffic_age_seconds ${status.ageSeconds ?? -1}`,
+    `situation_data_valhalla_live_traffic_mapping_coverage_percent ${status.mappingCoveragePercent ?? 0}`,
+    `situation_data_valhalla_live_traffic_applied_edges ${status.appliedEdgeCount ?? 0}`
   ];
 }
 

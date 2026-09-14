@@ -1,0 +1,20 @@
+[Unit]
+Description=Apply active SIM TPEG2 speeds to Valhalla
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/srv/valhalla/.traffic.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=/srv/valhalla/.traffic.env
+ExecStart=/usr/bin/python3 /srv/valhalla/update-tools/traffic-update.py
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=100%
+MemoryMax=2G
+TimeoutStartSec=6h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/valhalla-traffic /srv/valhalla/traffic-cache /srv/valhalla/state

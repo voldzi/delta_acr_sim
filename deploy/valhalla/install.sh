@@ -32,7 +32,10 @@ for file in \
   geojson-bbox.py \
   validate-response.py \
   validate-admins.py \
-  healthcheck.sh; do
+  healthcheck.sh \
+  traffic-update.py \
+  runtime-entrypoint.sh \
+  install-traffic.sh; do
   install -m 0755 "${SOURCE_DIR}/${file}" "${BASE_DIR}/update-tools/${file}"
 done
 for file in Dockerfile.osm-tools README.md .env.example update.env.example; do
@@ -134,6 +137,8 @@ install -m 0644 "${SOURCE_DIR}/valhalla-weekly-update.timer" /etc/systemd/system
 install -m 0644 "${SOURCE_DIR}/valhalla-update-recovery.service" /etc/systemd/system/valhalla-update-recovery.service
 install -m 0644 "${SOURCE_DIR}/valhalla-healthcheck.service" /etc/systemd/system/valhalla-healthcheck.service
 install -m 0644 "${SOURCE_DIR}/valhalla-healthcheck.timer" /etc/systemd/system/valhalla-healthcheck.timer
+install -m 0644 "${SOURCE_DIR}/valhalla-traffic-update.service" /etc/systemd/system/valhalla-traffic-update.service
+install -m 0644 "${SOURCE_DIR}/valhalla-traffic-update.timer" /etc/systemd/system/valhalla-traffic-update.timer
 
 if ! docker compose -f "${BASE_DIR}/docker-compose.yml" up -d --force-recreate --no-deps valhalla; then
   cp -a "${BASE_DIR}/docker-compose.yml.pre-owned-valhalla" "${BASE_DIR}/docker-compose.yml"

@@ -11,6 +11,11 @@
 - `TPEG2_API_TOKEN` je upstream serverový credential: smí být pouze v chráněném
   produkčním prostředí situation-data-api. Nesmí se objevit v katalogu,
   normalizovaných features, URL logu, chybové odpovědi ani v raw projekci.
+- `VALHALLA_TRAFFIC_CONTROL_TOKEN` je samostatný opaque bearer pouze pro
+  normalizovaný SIM–Valhalla traffic kanál. Na `docker.home.cz` zůstává v
+  root/user-only `.env`, na `valhalla.home.cz` v root-only
+  `/srv/valhalla/.traffic.env`. Nesmí se odvozovat z TPEG2 tokenu ani objevit v
+  argumentech procesu, logu nebo API odpovědi.
 - Externí AI API klíče lze vypnout odstraněním konfigurace.
 
 ## Konfigurační typy

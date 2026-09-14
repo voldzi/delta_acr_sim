@@ -459,6 +459,15 @@ zobrazit jako dopravní ovlivnění trasy, ne jako garantovanou úsekovou uzáv�
 Přesné tvrdé uzávěry vyžadují DATEX II lineární reference nebo mapování na
 Valhalla edge IDs.
 
+Pro silniční profily může SIM aktivovat také adaptivní TPEG2 live-speed overlay
+Valhally. První silniční dotaz prodlouží patnáctiminutovou lease a bez čekání
+spustí obnovu na pozadí; během aktivity se rychlosti obnovují nejvýše jednou za
+pět minut. Požadavek bez `departureTime` používá Valhalla `date_time.type=0`, aby
+byly current speeds zahrnuty do ceny i ETA. Stav je v
+`traffic.liveSpeeds`; pěší a cyklistické profily tento mechanismus neaktivují.
+Podrobná vazba na graf, úložiště a rollback jsou v
+[ADR 0020](../adr/0020_ADAPTIVE_VALHALLA_LIVE_TRAFFIC.md).
+
 Pokud Valhalla není dostupná a je nakonfigurovaný OSM/PostGIS, SIM použije
 lokální model `osm-postgis-graph-v1`: skládá lokální graf z `public.osm_roads`,
 respektuje profil, základní access tagy, one-way směr a volitelné vyhýbání
