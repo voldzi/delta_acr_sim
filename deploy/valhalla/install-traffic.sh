@@ -133,7 +133,7 @@ if [[ "${ready}" != true ]]; then
 fi
 
 curl -fsS --max-time 15 --get --data-urlencode \
-  'json={"locations":[{"lat":50.08804,"lon":14.42076},{"lat":50.07550,"lon":14.43780}],"costing":"auto","date_time":{"type":0}}' \
+  'json={"locations":[{"lat":50.08804,"lon":14.42076},{"lat":50.07550,"lon":14.43780}],"costing":"auto","date_time":{"type":0},"admin_crossings":true}' \
   "${VALHALLA_RUNTIME_URL}/route" -o "${BASE_DIR}/state/traffic-install-route.json"
 python3 "${BASE_DIR}/update-tools/validate-response.py" route "${BASE_DIR}/state/traffic-install-route.json" \
   --max-km 10 --max-snap-m 2500 --expected-admins CZ \
@@ -143,4 +143,5 @@ systemctl daemon-reload
 systemctl enable --now valhalla-traffic-update.timer
 systemctl reset-failed valhalla-traffic-update.service || true
 rollback_armed=false
+rm -f "${BASE_DIR}/state/traffic-install-failure.log"
 echo "Adaptive Valhalla traffic updater installed; the first road request will activate it."

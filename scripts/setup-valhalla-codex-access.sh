@@ -236,6 +236,6 @@ printf '%s\n' "${control_token}" >"${local_secret}"
 unset control_token
 remote_secret="/tmp/valhalla-traffic-token-${UID}"
 scp "${local_secret}" "${server}:${remote_secret}"
-ssh -t "${server}" "chmod 0600 '${remote_secret}'; sudo bash -c 'SIM_TRAFFIC_CONTROL_TOKEN=\$(cat \"${remote_secret}\") exec \"${remote_deploy}/install-traffic.sh\"'; rm -f -- '${remote_secret}'"
+ssh -t "${server}" "chmod 0600 '${remote_secret}' && sudo bash -c 'SIM_TRAFFIC_CONTROL_TOKEN=\$(cat \"${remote_secret}\") exec \"${remote_deploy}/install-traffic.sh\"'; result=\$?; rm -f -- '${remote_secret}'; exit \${result}"
 
 echo "Installed. Revoke maintenance access by removing the 'codex-valhalla-maintenance' line from authorized_keys and /etc/sudoers.d/valhalla-codex-maintenance."

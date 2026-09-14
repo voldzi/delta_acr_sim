@@ -90,6 +90,9 @@ modify its speed records.
 Host-side installation and update probes derive their URL from
 `VALHALLA_BIND_ADDRESS` and `VALHALLA_PORT`; the deployment does not assume the
 published port is also bound to loopback.
+The installation smoke route explicitly requests administration metadata before
+validating `CZ`, and the local transfer helper preserves the remote install exit
+status after securely deleting its temporary token file.
 
 ## Release coupling and availability
 
