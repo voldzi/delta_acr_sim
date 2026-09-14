@@ -31,6 +31,7 @@ def make_archive(path: Path, level: int, tile_id: int, edges: int) -> None:
 
 def main() -> None:
     assert traffic.graph_id_parts(graph_id(2, 807177, 210837)) == (2, 807177, 210837)
+    assert traffic.parse_iso_timestamp("2026-09-14T19:49:03+02:00") == traffic.parse_iso_timestamp("2026-09-14T17:49:03Z")
     word = traffic.traffic_word(36, 90)
     assert word & 0x7F == 18
     assert (word >> 28) & 0xFF == 255

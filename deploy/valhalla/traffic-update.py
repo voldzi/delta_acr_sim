@@ -9,8 +9,8 @@ the active graph, and updates the fixed-size traffic archive in place.
 from __future__ import annotations
 
 import argparse
-import calendar
 import concurrent.futures
+from datetime import datetime, timezone
 import fcntl
 import gzip
 import hashlib
@@ -280,7 +280,10 @@ def parse_iso_timestamp(value: Any) -> float | None:
     if not isinstance(value, str) or not value:
         return None
     try:
-        return float(calendar.timegm(time.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")))
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.timestamp()
     except ValueError:
         return None
 

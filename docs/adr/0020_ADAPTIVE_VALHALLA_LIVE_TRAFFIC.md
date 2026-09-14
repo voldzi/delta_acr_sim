@@ -93,6 +93,9 @@ published port is also bound to loopback.
 The installation smoke route explicitly requests administration metadata before
 validating `CZ`, and the local transfer helper preserves the remote install exit
 status after securely deleting its temporary token file.
+TPEG validity filtering parses the ISO 8601 offset supplied by the provider
+(normally `+02:00` in summer) before comparing timestamps in UTC; the offset is
+never discarded.
 
 ## Release coupling and availability
 
