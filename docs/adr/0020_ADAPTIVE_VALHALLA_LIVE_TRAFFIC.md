@@ -84,6 +84,9 @@ The five-minute update path writes only to `/run`, avoiding recurring writes to
 the non-replaceable internal disk. X5 is protected by the existing UUID check
 `2f93f595-b61b-4eea-9054-7afa9b275b5b`. If X5 is absent, deployment refuses to
 start `situation-data-api` against an accidental directory on the system disk.
+The runtime archive is root-owned and mode `0644`: the unprivileged Valhalla
+container can map it read-only, while only the root-owned host updater can
+modify its speed records.
 
 ## Release coupling and availability
 

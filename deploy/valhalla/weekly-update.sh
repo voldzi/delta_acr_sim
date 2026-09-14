@@ -617,7 +617,7 @@ prepare_runtime_traffic() {
   install -d -m 0755 /run/valhalla-traffic
   rm -f /run/valhalla-traffic/applied-edges.json
   if [[ -s "${target}/traffic-skeleton.tar" ]]; then
-    install -m 0600 "${target}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
+    install -m 0644 "${target}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
   else
     rm -f /run/valhalla-traffic/traffic.tar
   fi

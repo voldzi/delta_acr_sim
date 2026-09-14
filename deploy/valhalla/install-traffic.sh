@@ -33,6 +33,10 @@ restore_install() {
   rm -f /run/valhalla-traffic/traffic.tar /run/valhalla-traffic/applied-edges.json /run/valhalla-traffic/last-applied.json
   docker compose -f "${BASE_DIR}/docker-compose.yml" up -d --force-recreate --no-deps valhalla >/dev/null 2>&1 || true
 }
+capture_container_failure() {
+  docker logs --tail 250 valhalla >"${BASE_DIR}/state/traffic-install-failure.log" 2>&1 || true
+  chmod 0640 "${BASE_DIR}/state/traffic-install-failure.log" 2>/dev/null || true
+}
 rollback_armed=true
 on_error() {
   local status=$?
@@ -101,9 +105,10 @@ PY
 
 systemctl stop valhalla-traffic-update.timer valhalla-traffic-update.service 2>/dev/null || true
 docker compose -f "${BASE_DIR}/docker-compose.yml" stop valhalla >/dev/null
-install -m 0600 "${current}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
+install -m 0644 "${current}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
 rm -f /run/valhalla-traffic/applied-edges.json
 if ! docker compose -f "${BASE_DIR}/docker-compose.yml" up -d --force-recreate --no-deps valhalla >/dev/null; then
+  capture_container_failure
   restore_install
   echo "Valhalla traffic compose failed; the previous runtime was restored." >&2
   exit 1
@@ -118,6 +123,7 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 if [[ "${ready}" != true ]]; then
+  capture_container_failure
   restore_install
   echo "Valhalla did not become ready with the traffic overlay; the previous runtime was restored." >&2
   exit 1

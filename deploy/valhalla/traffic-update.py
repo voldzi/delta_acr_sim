@@ -212,7 +212,9 @@ def ensure_runtime_archive(runtime_archive: Path, skeleton: Path) -> None:
         raise RuntimeError(f"traffic skeleton does not exist: {skeleton}")
     temporary = runtime_archive.with_suffix(f".tmp-{os.getpid()}")
     shutil.copyfile(skeleton, temporary)
-    os.chmod(temporary, 0o600)
+    # Valhalla runs as an unprivileged container user and only needs read
+    # access; the root-owned host updater remains the sole writer.
+    os.chmod(temporary, 0o644)
     os.replace(temporary, runtime_archive)
 
 
