@@ -13832,6 +13832,16 @@
           },
           "includeDebug": {
             "type": "boolean"
+          },
+          "includeRoadMatch": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include versioned directional road-match evidence; never implies a routing closure."
+          },
+          "headingDeg": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 360
           }
         }
       },
@@ -14628,8 +14638,7 @@
           "steps": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": true
+              "$ref": "#/components/schemas/SituationDataRoutingStep"
             }
           },
           "warnings": {
@@ -14817,6 +14826,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "roadMatch": {
+            "$ref": "#/components/schemas/SituationDataRoadMatchEvidence"
           }
         }
       },
@@ -17778,6 +17790,117 @@
               },
               "correlationId": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "SituationDataRoutingStep": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "maneuverType": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Valhalla maneuver type; absent for providers without structured maneuvers. Unknown values must not be guessed."
+          },
+          "roundaboutExitCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "beginShapeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Zero-based maneuver start in complete route geometry, after joining legs and removing consecutive duplicate coordinates."
+          },
+          "endShapeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Inclusive end in complete route geometry; arrival may equal beginShapeIndex."
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "instructionLocalized": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "distanceM": {
+            "type": "number",
+            "minimum": 0
+          },
+          "durationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "roadName": {
+            "type": "string"
+          },
+          "geometry": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SituationDataRoadMatchEvidence": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "state",
+          "matchedAt",
+          "reason"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "sim-road-match-v1"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "ambiguous",
+              "unavailable"
+            ]
+          },
+          "matchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "routingDataset": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "candidate": {
+            "type": "object",
+            "properties": {
+              "directedEdgeId": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "headingDeg": {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 360
+              },
+              "distanceM": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 50
+              },
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "lon": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
               }
             }
           }

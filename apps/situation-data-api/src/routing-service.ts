@@ -1,3 +1,4 @@
+import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
 import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { SituationDataConfig } from "./config.js";
@@ -95,6 +96,8 @@ export interface RoutingIsochroneRequest {
 }
 
 export interface RoutingNearestAccessRequest {
+  includeRoadMatch?: boolean;
+  headingDeg?: number;
   profileId?: RoutingProfileId;
   point?: RoutingCoordinate;
   radiusM?: number;
@@ -269,6 +272,10 @@ export interface RoutingRouteRecosting {
 }
 
 export interface RoutingStep {
+  maneuverType?: number;
+  roundaboutExitCount?: number;
+  beginShapeIndex?: number;
+  endShapeIndex?: number;
   index: number;
   instructionLocalized: Record<"cs" | "en", string>;
   distanceM: number;
@@ -340,6 +347,7 @@ export interface RoutingIsochroneResponse {
 }
 
 export interface RoutingNearestAccessResponse {
+  roadMatch?: RoadMatchEvidence;
   contractVersion: "sim-routing-nearest-access-v1";
   generatedAt: string;
   source: RoutingSource;
@@ -560,6 +568,8 @@ interface ValhallaLocateLocation {
 }
 
 interface ValhallaLocateEdge {
+  edge_id?: { value?: number | string };
+  heading?: number;
   correlated_lat?: number;
   correlated_lon?: number;
   distance?: number;
@@ -595,6 +605,8 @@ interface ValhallaLeg {
 }
 
 interface ValhallaManeuver {
+  type?: number;
+  roundabout_exit_count?: number;
   instruction?: string;
   length?: number;
   time?: number;
@@ -796,18 +808,7 @@ const HIGHWAYS_BY_PROFILE: Record<RoutingProfileId, string[]> = {
   ],
   offroad_4x4: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path"],
   walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian", "steps"],
-  bicycle: [
-    "primary",
-    "secondary",
-    "tertiary",
-    "unclassified",
-    "residential",
-    "living_street",
-    "service",
-    "track",
-    "path",
-    "cycleway"
-  ],
+  bicycle: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "cycleway"],
   evacuation_walking: ["primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service", "track", "path", "footway", "pedestrian"]
 };
 
@@ -1453,8 +1454,34 @@ export class RoutingService {
     const warnings: string[] = [];
     if (this.shouldUseValhalla()) {
       try {
+        const before = request.includeRoadMatch ? await requestValhallaStatus(this.config).catch(() => undefined) : undefined;
         const response = await requestValhallaLocate(this.config, profile, request);
+        const after = request.includeRoadMatch ? await requestValhallaStatus(this.config).catch(() => undefined) : undefined;
         const valhallaResponse = valhallaNearestAccessResponse(generatedAt, profile, request, response, warnings);
+        if (request.includeRoadMatch) {
+          let dataset: string | undefined;
+          if (before && after && before.tileset_last_modified === after.tileset_last_modified) {
+            try {
+              dataset = routingDatasetFromStatus(after).version;
+            } catch {
+              /* Unverified datasets cannot identify edges. */
+            }
+          }
+          const candidates = (response[0]?.edges ?? []).flatMap((edge) => {
+            const value = edge.edge_id?.value;
+            const edgeId =
+              typeof value === "string" && /^[0-9]+$/.test(value)
+                ? value
+                : typeof value === "number" && Number.isSafeInteger(value)
+                  ? String(value)
+                  : undefined;
+            const distanceM = valhallaLocateEdgeDistanceM(request.point, edge);
+            return edgeId && distanceM !== undefined && distanceM <= request.radiusM
+              ? [{ directedEdgeId: edgeId, headingDeg: Number(edge.heading), distanceM, lat: Number(edge.correlated_lat), lon: Number(edge.correlated_lon) }]
+              : [];
+          });
+          valhallaResponse.roadMatch = selectDirectedRoadMatch(candidates, request.headingDeg, dataset, generatedAt);
+        }
         if (valhallaResponse.accessPoint) {
           return valhallaResponse;
         }
@@ -1601,6 +1628,15 @@ export class RoutingService {
     const radiusM = raw.radiusM === undefined ? 1500 : positiveNumber(raw.radiusM, "radiusM");
     if (radiusM > this.config.routingMaxSearchRadiusM) {
       throw new RoutingError(400, "VALIDATION_ERROR", "radiusM exceeds configured routing search limit.");
+    }
+    if (
+      raw.headingDeg !== undefined &&
+      (typeof raw.headingDeg !== "number" || !Number.isFinite(raw.headingDeg) || raw.headingDeg < 0 || raw.headingDeg >= 360)
+    ) {
+      throw new RoutingError(400, "VALIDATION_ERROR", "headingDeg must be a bearing in [0, 360).");
+    }
+    if (raw.includeRoadMatch !== undefined && typeof raw.includeRoadMatch !== "boolean") {
+      throw new RoutingError(400, "VALIDATION_ERROR", "includeRoadMatch must be boolean.");
     }
     return { ...raw, profileId, point, radiusM };
   }
@@ -2645,10 +2681,7 @@ function routingTrafficSummary(
   const sourceStatus = combinedTrafficSourceStatus(context?.sourceStatus ?? "disabled", liveSpeeds);
   return {
     trafficAware: Boolean(context && context.sourceStatus === "ok") || liveSpeeds?.state === "current" || liveSpeeds?.state === "stale",
-    sourceIds: [
-      ...(context && context.sourceStatus !== "disabled" ? (["road_srti_lod"] as const) : []),
-      ...(liveSpeeds?.enabled ? (["tpeg2"] as const) : [])
-    ],
+    sourceIds: [...(context && context.sourceStatus !== "disabled" ? (["road_srti_lod"] as const) : []), ...(liveSpeeds?.enabled ? (["tpeg2"] as const) : [])],
     sourceStatus,
     corridorRadiusM: TRAFFIC_ROUTE_CORRIDOR_RADIUS_M,
     candidateCount: context?.events.length ?? 0,
@@ -2666,10 +2699,7 @@ function routingTrafficSummary(
   };
 }
 
-function combinedTrafficSourceStatus(
-  incidentStatus: "ok" | "disabled" | "degraded",
-  liveSpeeds?: ValhallaTrafficPublicStatus
-): "ok" | "disabled" | "degraded" {
+function combinedTrafficSourceStatus(incidentStatus: "ok" | "disabled" | "degraded", liveSpeeds?: ValhallaTrafficPublicStatus): "ok" | "disabled" | "degraded" {
   if (incidentStatus === "ok" || liveSpeeds?.state === "current") return "ok";
   if (incidentStatus !== "disabled" || liveSpeeds?.enabled) return "degraded";
   return "disabled";
@@ -2828,10 +2858,7 @@ async function requestValhallaRoute(
 ): Promise<ValhallaRouteResponse> {
   const costing = valhallaCosting(profile.profileId);
   const recostings = valhallaRecostings(costing);
-  const departureTime = valhallaDepartureTimePayload(
-    request.departureTime,
-    config.valhallaTrafficEnabled && profile.transportMode === "road"
-  );
+  const departureTime = valhallaDepartureTimePayload(request.departureTime, config.valhallaTrafficEnabled && profile.transportMode === "road");
   const snapLimitM = config.routingMaxSnapDistanceM;
   const orderedLocations = [request.from, ...(request.via ?? []), request.to];
   const payload = {
@@ -2852,10 +2879,7 @@ async function requestValhallaRoute(
     alternates: Math.max(0, Math.min(2, options.alternates ?? request.alternatives - 1)),
     ...(request.includeElevationProfile
       ? {
-          elevation_interval: adaptiveElevationIntervalM(
-            profile.profileId,
-            orderedRouteDistanceM(orderedLocations)
-          )
+          elevation_interval: adaptiveElevationIntervalM(profile.profileId, orderedRouteDistanceM(orderedLocations))
         }
       : {}),
     admin_crossings: true,
@@ -2939,6 +2963,7 @@ async function requestValhallaLocate(
       {
         lat: request.point.lat,
         lon: request.point.lon,
+        ...(request.headingDeg === undefined ? {} : { heading: request.headingDeg, heading_tolerance: 45 }),
         radius: request.radiusM,
         search_cutoff: request.radiusM
       }
@@ -3189,9 +3214,9 @@ function assertValhallaRouteWaypointSnaps(response: ValhallaRouteResponse, locat
     throw new Error(`Valhalla route leg count ${legs.length} does not preserve ${locations.length} ordered locations.`);
   }
   const decodedShapes = legs.map((leg) => decodeValhallaPolyline6(leg.shape)).filter((coordinates) => coordinates.length > 0);
-  const snapped = decodedShapes.flatMap((shape, index) => (index === 0 ? [shape[0], shape[shape.length - 1]] : [shape[shape.length - 1]])).filter(
-    (coordinate): coordinate is [number, number] => Boolean(coordinate)
-  );
+  const snapped = decodedShapes
+    .flatMap((shape, index) => (index === 0 ? [shape[0], shape[shape.length - 1]] : [shape[shape.length - 1]]))
+    .filter((coordinate): coordinate is [number, number] => Boolean(coordinate));
   if (snapped.length !== locations.length) {
     throw new Error("Valhalla route has no decodable shape for waypoint snap validation.");
   }
@@ -3326,15 +3351,26 @@ function coordinateFromValhallaLocation(value: Record<string, unknown> | undefin
   return Number.isFinite(lon) && Number.isFinite(lat) ? { lon, lat } : undefined;
 }
 
-function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, number]>): RoutingStep[] {
+export function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, number]>): RoutingStep[] {
   const steps: RoutingStep[] = [];
+  // Match each decoded vertex sequentially into the deduplicated full geometry.
+  // Searching from the previous position preserves loops and repeated junctions.
+  let routeCursor = 0;
   for (const leg of legs) {
     const coordinates = decodeValhallaPolyline6(leg.shape);
+    const routeIndices = coordinates.map((coordinate) => {
+      while (
+        routeCursor < routeCoordinates.length - 1 &&
+        (routeCoordinates[routeCursor]?.[0] !== coordinate[0] || routeCoordinates[routeCursor]?.[1] !== coordinate[1])
+      )
+        routeCursor += 1;
+      return routeCursor;
+    });
     for (const maneuver of leg.maneuvers ?? []) {
       const begin = Math.max(0, Math.min(coordinates.length - 1, Number(maneuver.begin_shape_index) || 0));
-      const end = Math.max(begin + 1, Math.min(coordinates.length, (Number(maneuver.end_shape_index) || begin) + 1));
-      const stepCoordinates = coordinates.slice(begin, end);
-      if (stepCoordinates.length < 2) {
+      const end = Math.max(begin, Math.min(coordinates.length - 1, Number(maneuver.end_shape_index) || begin));
+      const stepCoordinates = coordinates.slice(begin, end + 1);
+      if (stepCoordinates.length < 1) {
         continue;
       }
       const roadName = cleanString(maneuver.street_names?.[0] ?? maneuver.begin_street_names?.[0]);
@@ -3344,6 +3380,12 @@ function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, num
       const sign = maneuver.sign && typeof maneuver.sign === "object" ? maneuver.sign : undefined;
       steps.push({
         index: steps.length,
+        ...(Number.isInteger(maneuver.type) && Number(maneuver.type) >= 0 ? { maneuverType: maneuver.type } : {}),
+        ...(Number.isInteger(maneuver.roundabout_exit_count) && Number(maneuver.roundabout_exit_count) > 0
+          ? { roundaboutExitCount: maneuver.roundabout_exit_count }
+          : {}),
+        beginShapeIndex: routeIndices[begin],
+        endShapeIndex: routeIndices[end],
         instructionLocalized: {
           cs: cleanString(maneuver.instruction) ?? "Pokračujte po trase.",
           en: cleanString(maneuver.instruction) ?? "Continue on the route."
@@ -3358,7 +3400,7 @@ function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[number, num
         highway: cleanString(maneuver.travel_type ?? maneuver.travel_mode),
         ...(lanes.length > 0 ? { lanes } : {}),
         ...(sign ? { sign } : {}),
-        geometry: { type: "LineString", coordinates: stepCoordinates }
+        geometry: { type: "LineString", coordinates: stepCoordinates.length === 1 ? [stepCoordinates[0]!, stepCoordinates[0]!] : stepCoordinates }
       });
     }
   }

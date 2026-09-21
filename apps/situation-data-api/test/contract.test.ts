@@ -4520,13 +4520,16 @@ describe("Situation Data API contract", () => {
                   shape: "_oso~A_acoZowH_pRoh\\_af@",
                   maneuvers: [
                     {
+                      type: 26,
+                      roundabout_exit_count: 3,
                       instruction: "Pokračujte po testovací trase.",
                       length: 3.6,
                       time: 2400,
                       begin_shape_index: 0,
                       end_shape_index: 2,
                       street_names: ["Testovací"]
-                    }
+                    },
+                    { type: 4, instruction: "Jste v cíli.", length: 0, time: 0, begin_shape_index: 2, end_shape_index: 2 }
                   ]
                 }
               ]
@@ -4645,8 +4648,13 @@ describe("Situation Data API contract", () => {
             steps: [
               expect.objectContaining({
                 instructionLocalized: expect.objectContaining({ cs: "Pokračujte po testovací trase." }),
-                roadName: "Testovací"
-              })
+                roadName: "Testovací",
+                maneuverType: 26,
+                roundaboutExitCount: 3,
+                beginShapeIndex: 0,
+                endShapeIndex: 2
+              }),
+              expect.objectContaining({ maneuverType: 4, beginShapeIndex: 2, endShapeIndex: 2, durationSeconds: 0 })
             ],
             quality: expect.objectContaining({ mode: "engine_route", engine: "valhalla", routingModelVersion: "valhalla-v1" })
           })
@@ -4837,7 +4845,11 @@ describe("Situation Data API contract", () => {
       .set("Idempotency-Key", "publication-route-42")
       .send({ ...bicyclePayload, profile: "walking" })
       .expect(409);
-    await request(geoApp).post("/api/v1/geo-routing-v1/route").set(authorization).send({ ...walkingPayload, locations: walkingPayload.locations.slice(0, 1) }).expect(400);
+    await request(geoApp)
+      .post("/api/v1/geo-routing-v1/route")
+      .set(authorization)
+      .send({ ...walkingPayload, locations: walkingPayload.locations.slice(0, 1) })
+      .expect(400);
     await request(geoApp)
       .post("/api/v1/geo-routing-v1/route")
       .set(authorization)
@@ -4852,7 +4864,10 @@ describe("Situation Data API contract", () => {
   });
 
   it("reports degraded Valhalla through the standard geo-routing error envelope", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "upstream timeout" }), { status: 504 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "upstream timeout" }), { status: 504 }))
+    );
     const geoApp = (
       await createApp({
         ...config,
@@ -4873,7 +4888,11 @@ describe("Situation Data API contract", () => {
       })
       .expect(503);
     expect(response.body.error).toEqual(
-      expect.objectContaining({ code: "ROUTING_DEPENDENCY_UNAVAILABLE", message: expect.stringContaining("upstream timeout"), correlationId: expect.any(String) })
+      expect.objectContaining({
+        code: "ROUTING_DEPENDENCY_UNAVAILABLE",
+        message: expect.stringContaining("upstream timeout"),
+        correlationId: expect.any(String)
+      })
     );
   });
 

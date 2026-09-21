@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "required": [
+    "contractVersion",
+    "state",
+    "matchedAt",
+    "reason"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "sim-road-match-v1"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "matched",
+        "ambiguous",
+        "unavailable"
+      ]
+    },
+    "matchedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "routingDataset": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "candidate": {
+      "type": "object",
+      "properties": {
+        "directedEdgeId": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "headingDeg": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        },
+        "distanceM": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lon": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    }
+  }
+}

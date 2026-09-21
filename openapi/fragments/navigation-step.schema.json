@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "maneuverType": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Valhalla maneuver type; absent for providers without structured maneuvers. Unknown values must not be guessed."
+    },
+    "roundaboutExitCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "beginShapeIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based maneuver start in complete route geometry, after joining legs and removing consecutive duplicate coordinates."
+    },
+    "endShapeIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Inclusive end in complete route geometry; arrival may equal beginShapeIndex."
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "instructionLocalized": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "distanceM": {
+      "type": "number",
+      "minimum": 0
+    },
+    "durationSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "roadName": {
+      "type": "string"
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

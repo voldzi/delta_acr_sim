@@ -1182,3 +1182,25 @@ Golemio nebo NDIC úměrně počtu uživatelů.
 - `aviation_weather` zobrazovat jako letištní počasí, ne jako tracky.
 - `ardos_partner` zobrazovat jen ve views, kde uživatel má oprávnění pro partnerská data.
 - U každého objektu zobrazovat zdroj a licenci.
+
+## Native maneuver and directed-road contract
+
+Valhalla route steps add `maneuverType`, `roundaboutExitCount` when known, and
+inclusive `beginShapeIndex`/`endShapeIndex` against the complete deduplicated
+route geometry. Joined/reversed legs keep their original order and arrival
+steps with a single shape vertex are retained. Durations are unchanged.
+
+`POST /routing/nearest-access` accepts optional `includeRoadMatch=true` and
+`headingDeg` (0 <= heading < 360). The additive `roadMatch` object uses
+`sim-road-match-v1`: state matched/ambiguous/unavailable, matchedAt, verified
+routingDataset and, only for a unique match, a candidate directedEdgeId,
+headingDeg, distanceM, lat and lon. Valhalla tile status must agree before and
+after locate. Edge IDs are meaningful only with that dataset. Candidates must
+be within 50 m and 45 degrees of reliable supplied travel direction; candidates
+within a 10 m distance margin remain ambiguous. Unknown direction remains
+ambiguous. This is observation enrichment, never permission for a route closure.
+Requests without the new flag retain the existing nearest-access behavior.
+
+The response cache is process-local and resets when situation-data-api is
+recreated. COP rejects enrichment evidence older than ten minutes. No new
+public endpoint, token or Valhalla configuration is introduced.

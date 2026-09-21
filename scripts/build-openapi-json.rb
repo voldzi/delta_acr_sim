@@ -326,6 +326,15 @@ def build_document
   add_health_path(doc, "/tak-gateway/health/live", "TAK Gateway", "takGateway_health_live")
   add_health_path(doc, "/tak-gateway/health/ready", "TAK Gateway", "takGateway_health_ready")
 
+  doc["components"]["schemas"]["SituationDataRoutingStep"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/navigation-step.schema.json")))
+  doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["steps"]["items"] = { "$ref" => "#/components/schemas/SituationDataRoutingStep" }
+
+  doc["components"]["schemas"]["SituationDataRoadMatchEvidence"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/road-match.schema.json")))
+  doc["components"]["schemas"]["SituationDataRoutingNearestAccessResponse"]["properties"]["roadMatch"] = { "$ref" => "#/components/schemas/SituationDataRoadMatchEvidence" }
+  request_properties = doc["components"]["schemas"]["SituationDataRoutingNearestAccessRequest"]["properties"]
+  request_properties["includeRoadMatch"] = { "type" => "boolean", "default" => false, "description" => "Include versioned directional road-match evidence; never implies a routing closure." }
+  request_properties["headingDeg"] = { "type" => "number", "minimum" => 0, "exclusiveMaximum" => 360 }
+
   doc["tags"].uniq! { |tag| tag["name"] }
   prune_unused_schemas(doc)
   doc

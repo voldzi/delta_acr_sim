@@ -60,3 +60,5 @@ archived in `docs/archive/openapi-yaml/`.
   rollback, or integration decisions in `docs/adr/`.
 - Update the matching mapped document when a change affects API,
   configuration, deployment, testing, security, data handling, or operations.
+
+Native routing additions: [ADR 0021](adr/0021_NATIVE_MANEUVERS_AND_ROAD_MATCH.md).
