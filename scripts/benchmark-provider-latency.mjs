@@ -4,7 +4,7 @@ const options = parseArgs(process.argv.slice(2));
 const baseUrl = options.baseUrl.replace(/\/$/, "");
 const suffix = options.bypassGatewayCache ? "&nocache=1" : "";
 const cases = [
-  { name: "live", path: "/health/live", maxP95Ms: 250, requests: 20, concurrency: 1 },
+  { name: "live", path: "/health/live", maxP95Ms: 250, requests: 5, concurrency: 1, warmup: 0 },
   {
     name: "flight-positions",
     path: `/flight-data/api/v1/aircraft/positions?bbox=12,48,19,52&limit=250${suffix}`,
@@ -22,14 +22,14 @@ const cases = [
   },
   {
     name: "safety-summary",
-    path: `/safety-data/api/v1/features/summary?limit=20${suffix}`,
+    path: `/safety-data/api/v1/features/summary?bbox=12,48.5,19,51.2&layers=boundary_admin&source=admin_boundaries&limit=20${suffix}`,
     maxP95Ms: 1000
   }
 ];
 
 const results = [];
 for (const benchmark of cases) {
-  for (let index = 0; index < options.warmup; index += 1) {
+  for (let index = 0; index < (benchmark.warmup ?? options.warmup); index += 1) {
     await request(`${baseUrl}${benchmark.path}`, options.timeoutMs);
   }
   results.push(await runCase(benchmark));

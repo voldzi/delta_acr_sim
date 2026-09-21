@@ -119,6 +119,11 @@ shows nginx cache status such as `MISS`, `HIT`, `STALE` or `UPDATING`.
 Gateway responses on these routes use `Cache-Control: private, max-age=10`
 regardless of longer upstream provider cache headers.
 
+The same gateway compresses JSON, GeoJSON, JavaScript, CSS, text and SVG
+responses larger than 1 KiB with gzip level 5. This is especially relevant for
+flight snapshots and map feature collections; COP remains the public fan-out
+layer, so browsers still must not query SIM directly.
+
 ## Radio Planning Cache
 
 Radio planning cache state is exposed through:
