@@ -174,3 +174,21 @@ the normal `staleAfterSeconds` flag still identifies old tracks.
   high number of simultaneous COP browser clients through the COP backend.
 - Add native tiled radar output if browser-side large overlay images become a
   bottleneck at high zoom.
+
+## Verified Production Baseline
+
+Last verified on `docker.home.cz` on 2026-09-21 with 100 requests per provider
+case, concurrency 20 and the nginx response cache bypassed:
+
+| Path | p95 | Errors |
+| --- | ---: | ---: |
+| flight positions | 228 ms | 0 |
+| OSM communication towers | 26 ms | 0 |
+| mobile coverage | 37 ms | 0 |
+| safety administrative boundary summary | 37 ms | 0 |
+
+The flight path measured 3,097 ms p95 before stale-while-revalidate. A sample
+flight JSON response compressed from 624,781 bytes to 49,592 bytes. All SIM
+containers were healthy with zero restarts after the benchmark, and an
+authenticated COP query for mobile-network plus communication-tower layers
+returned 40 features with `ONLINE` source health in 5 ms.
