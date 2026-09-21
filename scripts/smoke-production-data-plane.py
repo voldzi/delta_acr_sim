@@ -116,6 +116,7 @@ def require_features(
     path: str,
     expected_source_id: str | None = None,
     expected_layer_id_prefix: str | None = None,
+    allowed_warning_fragments: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     payload, response = client.json(path)
     count = feature_collection_count(payload, label)
@@ -130,7 +131,12 @@ def require_features(
         layer_id = properties.get("layerId")
         require(isinstance(layer_id, str) and layer_id.startswith(expected_layer_id_prefix), f"{label}: unexpected layerId {layer_id!r}")
     warnings = payload.get("warnings")
-    require(not warnings, f"{label}: unexpected warnings: {warnings}")
+    unexpected_warnings = [
+        warning
+        for warning in warnings or []
+        if not any(fragment in str(warning) for fragment in allowed_warning_fragments)
+    ]
+    require(not unexpected_warnings, f"{label}: unexpected warnings: {unexpected_warnings}")
     return {
         "url": response.url,
         "elapsedMs": response.elapsed_ms,
@@ -246,6 +252,7 @@ def check_situation_data(client: Client, args: argparse.Namespace) -> dict[str, 
         ),
         expected_source_id="mobile_coverage_model",
         expected_layer_id_prefix="diagnostic.mobile.coverage",
+        allowed_warning_fragments=("read-model miss; returned the fast on-demand distance model",),
     )
     mobile_network = optional_features(
         client,

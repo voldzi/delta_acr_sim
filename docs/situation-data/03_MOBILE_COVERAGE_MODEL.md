@@ -4,7 +4,7 @@
 
 SIM publishes `mobile_coverage` as a prepared diagnostic map layer for COM. COM displays and filters the layer only in technical/diagnostic contexts; it does not compute coverage, download DEM/terrain data, or query OSM directly.
 
-The current implementation is phase 2+3 foundation: a terrain-aware estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`, local Copernicus DEM GLO-30 tiles and a line-of-sight obstruction penalty. Runtime API can also read prepared coverage cells from the PostGIS read-model table `public.mobile_coverage_cells`; if the table is not available or not populated for the requested area, SIM falls back to on-demand calculation.
+The current implementation is phase 2+3 foundation: a terrain-aware estimate built from imported OpenStreetMap `communications_tower` references in `public.osm_poi`, local Copernicus DEM GLO-30 tiles and a line-of-sight obstruction penalty. Runtime API reads prepared coverage cells from the PostGIS read-model table `public.mobile_coverage_cells`. If the table is not available or not populated for the requested area, the interactive API returns a bounded distance/path-loss fallback without DEM profiling and reports a `read-model miss` warning. Terrain-aware generation remains in the offline read-model build and the explicit per-tower viewshed endpoint, so a map request cannot monopolize the Node.js event loop with raster work.
 
 `mobile_coverage` is a diagnostic layer, not the normal public mobile-network
 assessment. It is nevertheless explicitly selectable for diagnostic COP views.
