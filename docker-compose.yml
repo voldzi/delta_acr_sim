@@ -86,6 +86,7 @@ services:
       FLIGHT_DATA_STALE_AFTER_SECONDS: ${FLIGHT_DATA_STALE_AFTER_SECONDS:-120}
       FLIGHT_DATA_CORS_ORIGINS: ${FLIGHT_DATA_CORS_ORIGINS:-}
       ADSB_LOL_BASE_URL: ${ADSB_LOL_BASE_URL:-https://api.adsb.lol}
+      ADSB_LOL_USER_AGENT: "${ADSB_LOL_USER_AGENT:-CSM-SIM flight-data/0.1 (contact: https://cop.zeleznalady.cz)}"
       OPENSKY_BASE_URL: ${OPENSKY_BASE_URL:-https://opensky-network.org/api}
       OPENSKY_AUTH_URL: ${OPENSKY_AUTH_URL:-https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token}
       OPENSKY_ACCESS_TOKEN: ${OPENSKY_ACCESS_TOKEN:-}

@@ -14,6 +14,12 @@ https://sim.zeleznalady.cz/flight-data/api/v1/aircraft/positions
 
 Pilotní veřejné nasazení je nakonfigurované na `adsb_lol`, takže endpoint bez query parametru `source` vrací reálné ADS-B/open data s licencí ODbL. Lokální nebo offline test může explicitně použít `source=mock`, pokud je mock zdroj v konfiguraci povolený. Vlastní přijímače lze připojit přes `local_adsb`, který čte readsb/dump1090 `aircraft.json`. Autorizované Remote ID, U-space nebo lokální radarové zdroje lze napojit přes `partner_air_tracks`; tento zdroj je vypnutý, dokud není nastaven ingest token.
 
+SIM je jediný klient veřejného ADSB.lol API. COP ani prohlížeče zdroj nevolají
+přímo. `ADSB_LOL_USER_AGENT` musí obsahovat identifikaci služby a platný provozní
+kontakt; obecný runtime User-Agent poskytovatel odmítá. Krátkodobá prostorová
+cache, kanonizované bounding boxy a slučování souběžných missů zajišťují, že
+počet uživatelů COP se nepřekládá na stejný počet požadavků k poskytovateli.
+
 Lokální interní cesta v Docker síti:
 
 ```text
@@ -392,6 +398,7 @@ Typy letadel zůstávají zatím seedované v SIM. Úplnější aircraft type st
 
 ```bash
 FLIGHT_DATA_ENABLED_SOURCES=local_adsb,adsb_lol
+ADSB_LOL_USER_AGENT="CSM-SIM flight-data/0.1 (contact: https://cop.zeleznalady.cz)"
 LOCAL_ADSB_AIRCRAFT_JSON_URLS=http://receiver-1.home.cz/tar1090/data/aircraft.json,http://receiver-2.home.cz/readsb/data/aircraft.json
 FLIGHT_DATA_CACHE_TTL_SECONDS=5
 FLIGHT_DATA_STALE_IF_ERROR_SECONDS=60

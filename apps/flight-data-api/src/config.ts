@@ -18,6 +18,7 @@ export interface FlightDataConfig {
   cacheMaxEntries: number;
   staleAfterSeconds: number;
   adsbLolBaseUrl: string;
+  adsbLolUserAgent: string;
   openskyBaseUrl: string;
   openskyAuthUrl: string;
   openskyAccessToken?: string;
@@ -74,6 +75,9 @@ export async function loadConfig(): Promise<FlightDataConfig> {
     cacheMaxEntries: parseInteger(process.env.FLIGHT_DATA_CACHE_MAX_ENTRIES, 512),
     staleAfterSeconds: parseInteger(process.env.FLIGHT_DATA_STALE_AFTER_SECONDS, 120),
     adsbLolBaseUrl: process.env.ADSB_LOL_BASE_URL ?? "https://api.adsb.lol",
+    adsbLolUserAgent:
+      process.env.ADSB_LOL_USER_AGENT ??
+      "CSM-SIM flight-data/0.1 (contact: https://cop.zeleznalady.cz)",
     openskyBaseUrl: process.env.OPENSKY_BASE_URL ?? "https://opensky-network.org/api",
     openskyAuthUrl: process.env.OPENSKY_AUTH_URL ?? "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
     openskyAccessToken: emptyToUndefined(process.env.OPENSKY_ACCESS_TOKEN),

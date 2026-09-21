@@ -231,7 +231,12 @@ class AdsbLolSource implements FlightDataSource {
       ? bboxToPointRadius(query.bbox)
       : { lat: this.config.defaultLat, lon: this.config.defaultLon, radiusNm: this.config.defaultRadiusNm };
     const url = `${this.config.adsbLolBaseUrl}/v2/lat/${area.lat.toFixed(4)}/lon/${area.lon.toFixed(4)}/dist/${Math.min(250, Math.max(1, Math.ceil(area.radiusNm)))}`;
-    const payload = await this.payloadCache.getOrLoad(url, () => requestJson<AdsbLolResponse>(url, this.config.requestTimeoutMs));
+    const payload = await this.payloadCache.getOrLoad(url, () =>
+      requestJson<AdsbLolResponse>(url, this.config.requestTimeoutMs, {
+        accept: "application/json",
+        "user-agent": this.config.adsbLolUserAgent
+      })
+    );
     const nowMs = typeof payload.now === "number" ? payload.now : Date.now();
 
     const observations = (payload.ac ?? [])

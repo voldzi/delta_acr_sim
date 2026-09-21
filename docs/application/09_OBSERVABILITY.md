@@ -47,6 +47,12 @@ Operátor tak v přehledu vidí detail cache/source cache, `lastSuccessAt`,
 `lastErrorAt`, pressure a datová upozornění bez zbytečného zatížení mapových
 providerů.
 
+U letových dat je procesní healthcheck pouze první signál. Provoz musí sledovat
+také per-source cache počty (`hits`, `coalescedHits`, `errors`, `lastSuccessAt`,
+`lastErrorAt`) a pravidelně ověřit nenulový náhled bez upstream varování. HTTP
+403 z ADSB.lol obvykle znamená chybějící nebo příliš obecný identifikační
+`ADSB_LOL_USER_AGENT`.
+
 Tyto endpointy vrací pouze provozně bezpečný souhrn:
 
 - aggregate cache: počet entries, hits, misses, hit-rate, stale hits, refreshes, errors, evictions, pressure, `lastSuccessAt` a `lastErrorAt`,

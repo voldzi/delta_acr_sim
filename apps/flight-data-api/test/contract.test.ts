@@ -2,12 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FlightAggregationService } from "../src/aggregation.js";
 import { createApp } from "../src/app.js";
 import type { FlightDataConfig } from "../src/config.js";
 import { FlightRouteEnrichmentService } from "../src/route-enrichment.js";
-import type { FlightDataSource } from "../src/sources.js";
+import { createFlightDataSources, type FlightDataSource } from "../src/sources.js";
 
 describe("Flight Data API contract", () => {
   let dataDir: string;
@@ -31,6 +31,7 @@ describe("Flight Data API contract", () => {
       cacheMaxEntries: 128,
       staleAfterSeconds: 120,
       adsbLolBaseUrl: "https://api.adsb.lol",
+      adsbLolUserAgent: "CSM-SIM test/0.1 (contact: test@example.invalid)",
       openskyBaseUrl: "https://opensky-network.org/api",
       openskyAuthUrl: "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
       localAdsbAircraftJsonUrls: [],
@@ -66,7 +67,31 @@ describe("Flight Data API contract", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it("identifies ADSB.lol requests and coalesces concurrent source fetches", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          now: Date.now(),
+          ac: [{ hex: "4d2216", flight: "TEST123", lat: 50.1, lon: 14.4, seen: 0 }]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const source = createFlightDataSources({ ...config, enabledSources: ["adsb_lol"] })[0]!;
+    const query = { bbox: undefined, limit: 10, sourceIds: ["adsb_lol" as const], includeStale: false };
+
+    const results = await Promise.all(Array.from({ length: 8 }, () => source.fetchObservations(query)));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(results.every((result) => result.observations.length === 1)).toBe(true);
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("user-agent")).toBe(config.adsbLolUserAgent);
+    expect(source.cacheStats?.()[0]?.coalescedHits).toBe(7);
   });
 
   it("exposes health and source metadata", async () => {
