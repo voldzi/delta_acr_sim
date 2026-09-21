@@ -456,7 +456,7 @@ CHMI_AIR_QUALITY_METADATA_URL=https://opendata.chmi.cz/air_quality/now/metadata/
 CHMI_AIR_QUALITY_DATA_URL=https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv
 IDSJMK_VEHICLE_POSITIONS_URL=https://gis.brno.cz/ags1/rest/services/Hosted/Kordis_26_polohy/FeatureServer/0/query?where=IsInactive%3D%27false%27&outFields=*&orderByFields=TimeUpdated%20DESC&f=geojson&resultRecordCount=10000
 SITUATION_DATA_IDSJMK_CACHE_TTL_SECONDS=20
-SITUATION_DATA_PID_GTFS_RT_CACHE_TTL_SECONDS=15
+SITUATION_DATA_PID_GTFS_RT_CACHE_TTL_SECONDS=10
 SPRAVAZELEZNIC_TRAIN_POSITIONS_URL=https://mapy.spravazeleznic.cz/serverside/request2.php?module=Layers%5COsVlaky&action=load2
 SITUATION_DATA_SPRAVAZELEZNIC_TRAINS_CACHE_TTL_SECONDS=900
 ROAD_SRTI_LOD_SPARQL_URL=https://lod.tamtamresearch.com/sparql/

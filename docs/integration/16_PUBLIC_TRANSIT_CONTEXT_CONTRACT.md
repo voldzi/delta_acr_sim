@@ -128,7 +128,7 @@ samostatné refresh cykly. Pomalý zdroj `spravazeleznic_trains` s limitem 900 s
 nesmí zpomalit `pid_gtfs_rt`. Statické zastávky `public_transit_static` patří do
 `public.traffic.transit_stops`, ne do animace vozidel.
 
-Výchozí kadence `pid_gtfs_rt` je 15 s a `idsjmk_vehicle_positions` 20 s. SIM
+Výchozí kadence `pid_gtfs_rt` je 10 s a `idsjmk_vehicle_positions` 20 s. SIM
 publikuje tyto hodnoty v katalogu i ve feature `providerProperties`; klient je
 nemá přepisovat pomalejším společným intervalem celé dopravní vrstvy.
 
