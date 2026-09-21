@@ -16,8 +16,8 @@ map layers consumed by COP server-side adapters.
   - `search_all` when the location is unclear
   - `get_file_context` after selecting a relevant hit
 - If MCP tools are not exposed, use the CLI fallback:
-  - `"/Users/voldzi/Documents/Development/18 2026/chromadb/tools/chroma-dev.sh" search-all "<query>" --root . --repo-name csm-sim --limit 5`
-- Treat MCP transport errors such as `Transport closed` as MCP tools being unavailable for the current session. Use the documented CLI fallback (or `"/Users/voldzi/Documents/Development/18 2026/chromadb/tools/chroma-dev.sh" search-all "<query>" --root . --limit 5`); do not reindex or rebuild Chroma solely for a transport closure if CLI search works.
+  - `"/Users/voldzi/Developer/18 2026/chromadb/tools/chroma-dev.sh" search-all "<query>" --root . --repo-name csm-sim --limit 5`
+- Treat MCP transport errors such as `Transport closed` as MCP tools being unavailable for the current session. Use the documented CLI fallback (or `"/Users/voldzi/Developer/18 2026/chromadb/tools/chroma-dev.sh" search-all "<query>" --root . --limit 5`); do not reindex or rebuild Chroma solely for a transport closure if CLI search works.
 - If retrieval is unavailable or insufficient, fall back to direct repository
   inspection and state that retrieval was unavailable.
 - After meaningful repository changes, reindex with `chroma-dev reindex --root .`
