@@ -5679,6 +5679,48 @@ describe("Situation Data API contract", () => {
     expect(result.features[0].properties.raw).toBeUndefined();
   });
 
+  it("uses the fast distance model for an interactive read-model miss", async () => {
+    const source = new MobileCoverageSource({
+      ...config,
+      enabledSources: ["mobile_coverage_model"],
+      osmPostgisConnectionString: "postgresql://sim_osm:secret@example.test:5432/sim_osm",
+      osmPostgisBackend: "external-postgis",
+      mobileCoverageReadModelEnabled: true,
+      mobileCoverageTerrainAware: true,
+      demEnabled: true,
+      demPostgisConnectionString: "postgresql://sim_dem:secret@example.test:5432/sim_dem",
+      mobileCoverageResolutionM: 500,
+      mobileCoverageMaxCells: 16
+    });
+    (source as unknown as { fetchReadModelFeatures: () => Promise<{ features: []; warnings: []; hit: false }> }).fetchReadModelFeatures = async () => ({
+      features: [],
+      warnings: [],
+      hit: false
+    });
+    (source as unknown as { fetchTowers: () => Promise<Array<{ id: string; name: string; lon: number; lat: number }>> }).fetchTowers = async () => [
+      { id: "node:1", name: "Test tower", lon: 14.42, lat: 50.08 }
+    ];
+    (source as unknown as { createTerrainSampler: () => never }).createTerrainSampler = () => {
+      throw new Error("interactive fallback must not load DEM data");
+    };
+
+    const result = await source.fetchFeatures({
+      bbox: { west: 14.41, south: 50.07, east: 14.43, north: 50.09 },
+      layers: ["mobile_coverage"],
+      sourceIds: ["mobile_coverage_model"],
+      limit: 5,
+      includeRaw: false,
+      mobileCoverageTechnologies: ["4G"]
+    });
+
+    expect(result.features.length).toBeGreaterThan(0);
+    expect(result.features.length).toBeLessThanOrEqual(5);
+    expect(result.features[0].properties.assumptions).toEqual(expect.objectContaining({ terrainApplied: false }));
+    expect(result.warnings).toContain(
+      "mobile_coverage_model read-model miss; returned the fast on-demand distance model without terrain profiling."
+    );
+  });
+
   it("maps prepared mobile coverage read-model cells with display-ready styling", async () => {
     const source = new MobileCoverageSource({
       ...config,

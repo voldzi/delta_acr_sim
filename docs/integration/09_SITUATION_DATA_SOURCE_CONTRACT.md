@@ -904,6 +904,13 @@ Vrstva je modelový odhad:
 - operator: `unknown`,
 - DEM: Copernicus GLO-30 `copernicus-glo30-cz`; pokud je dostupný pro oblast, výstup nese `terrainApplied=true` a metriky `terrainPenaltyDb`, `terrainMaxObstructionM`, `terrainSamples`, `towerElevationM`, `targetElevationM`.
 
+Interaktivní mapová cesta nejprve čte připravený coverage read-model. Pokud pro
+výřez žádné platné buňky nemá, vrátí omezený distance/path-loss fallback bez
+DEM profilování a přidá warning `read-model miss`. Tím mapový dotaz nezablokuje
+event loop dlouhým rasterovým výpočtem. Terrain-aware DEM výpočet zůstává v
+offline předvýpočtu `buildCoverageForBbox` a v explicitním detailu BTS
+viewshedu; výsledky předvýpočtu se následně čtou z PostGIS read-modelu.
+
 Dotaz:
 
 ```http

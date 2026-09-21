@@ -181,6 +181,7 @@ export class MobileCoverageSource implements SituationDataSource {
   private readonly towerCountCache: ManagedResponseCache<number>;
   private readonly readModelCountCache: ManagedResponseCache<number>;
   private readonly schemaCache: ManagedResponseCache<boolean>;
+  private readonly terrainSampler?: DemElevationSampler;
   private pool?: Pool;
 
   constructor(private readonly config: SituationDataConfig) {
@@ -209,6 +210,10 @@ export class MobileCoverageSource implements SituationDataSource {
       staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
       maxEntries: 1
     });
+    this.terrainSampler =
+      config.mobileCoverageTerrainAware && config.demEnabled && config.demPostgisConnectionString
+        ? new DemElevationSampler(config)
+        : undefined;
     this.descriptor = {
       sourceId: "mobile_coverage_model",
       label: "Mobile coverage estimate model",
@@ -298,7 +303,7 @@ export class MobileCoverageSource implements SituationDataSource {
   }
 
   async buildCoverageForBbox(bbox: BoundingBox, technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES): Promise<CoveragePayload> {
-    return this.buildCoverage(bbox, technologies);
+    return this.buildCoverage(bbox, technologies, { applyTerrain: true });
   }
 
   async buildTowerViewshed(options: MobileCoverageViewshedOptions): Promise<MobileCoverageViewshedPayload | undefined> {
@@ -663,7 +668,7 @@ export class MobileCoverageSource implements SituationDataSource {
     expiresAt = addSeconds(new Date().toISOString(), Math.max(this.config.mobileCoverageReadModelMaxAgeSeconds, this.config.mobileCoverageCacheTtlSeconds))
   ): Promise<number> {
     await this.ensureReadModelSchemaCached();
-    const payload = await this.buildCoverage(bbox, technologies);
+    const payload = await this.buildCoverage(bbox, technologies, { applyTerrain: true });
     const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
     let written = 0;
     await this.getPool().query(
@@ -836,7 +841,7 @@ export class MobileCoverageSource implements SituationDataSource {
       modelVersion: this.config.mobileCoverageModelVersion,
       readModelFallback: true
     });
-    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildCoverage(cacheBbox, technologies));
+    const payload = await this.payloadCache.getOrLoad(cacheKey, () => this.buildCoverage(cacheBbox, technologies, { applyTerrain: false }));
     const features = spatiallyLimitFeatures(
       payload.features.filter((feature) => featureIntersectsBbox(feature, query.bbox)),
       query.limit,
@@ -855,6 +860,9 @@ export class MobileCoverageSource implements SituationDataSource {
       features,
       warnings: [
         ...payload.warnings,
+        ...(this.config.mobileCoverageTerrainAware
+          ? ["mobile_coverage_model read-model miss; returned the fast on-demand distance model without terrain profiling."]
+          : []),
         ...(payload.towerCount > 0 ? [] : ["mobile_coverage_model has no communications_tower references in the requested area; features are marked unknown."])
       ]
     };
@@ -1112,17 +1120,21 @@ export class MobileCoverageSource implements SituationDataSource {
     };
   }
 
-  private async buildCoverage(bbox: BoundingBox, technologies: MobileCoverageTechnology[]): Promise<CoveragePayload> {
+  private async buildCoverage(
+    bbox: BoundingBox,
+    technologies: MobileCoverageTechnology[],
+    options: { applyTerrain: boolean }
+  ): Promise<CoveragePayload> {
     const generatedAt = new Date().toISOString();
     const maxCells = Math.max(1, Math.floor(this.config.mobileCoverageMaxCells / Math.max(1, technologies.length)));
     const maxFeatures = Math.max(1, this.config.mobileCoverageMaxCells);
     const grid = buildGrid(bbox, this.config.mobileCoverageResolutionM, maxCells);
     const towers = await this.fetchTowers(expandBboxByMeters(bbox, 30_000), 10_000);
-    const terrainSampler = this.createTerrainSampler();
+    const terrainSampler = options.applyTerrain ? this.createTerrainSampler() : undefined;
     const demTiles = terrainSampler ? await terrainSampler.tilesForBbox(expandBboxByMeters(bbox, 30_000)) : [];
     const terrainApplied = Boolean(terrainSampler && demTiles.length > 0);
     const warnings =
-      this.config.mobileCoverageTerrainAware && !terrainApplied
+      options.applyTerrain && this.config.mobileCoverageTerrainAware && !terrainApplied
         ? ["mobile_coverage_model terrain-aware mode is enabled but DEM tiles are not available for the requested area."]
         : [];
     const features: SituationFeature[] = [];
@@ -1312,10 +1324,7 @@ export class MobileCoverageSource implements SituationDataSource {
   }
 
   private createTerrainSampler(): DemElevationSampler | undefined {
-    if (!this.config.mobileCoverageTerrainAware || !this.config.demEnabled || !this.config.demPostgisConnectionString) {
-      return undefined;
-    }
-    return new DemElevationSampler(this.config);
+    return this.terrainSampler;
   }
 
   private viewshedCacheKey(options: NormalizedMobileCoverageViewshedOptions): string {
