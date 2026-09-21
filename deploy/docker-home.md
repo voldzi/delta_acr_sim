@@ -29,12 +29,16 @@ fi
 export SIM_API_ADMIN_TOKEN="${SIM_API_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 
 cat > .env <<'EOF'
+COMPOSE_FILE=docker-compose.yml:docker-compose.x5.yml
 SIM_WEB_PORT=5020
 API_PORT=4000
 SIM_PUBLISHER_MODE=DRY_RUN
 SIM_SOURCE_SYSTEM_ID=sim-air-situation-001
 SIM_ADAPTER_VERSION=1.0.0
 SIM_DATA_DIR=/data
+SIM_DATA_HOST_DIR=/srv/x5-production/data/csm-sim/sim-data
+SITUATION_DATA_HOST_DIR=/srv/x5-production/data/csm-sim/situation-data
+SAFETY_DATA_HOST_DIR=/srv/x5-production/data/csm-sim/safety-data
 MAIN_COP_BASE_URL=http://sim-api:4000/mock-cop
 MAIN_COP_BEARER_TOKEN=dev-lab-token
 EXTERNAL_AI_ALLOWED=false

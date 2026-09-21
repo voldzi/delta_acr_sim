@@ -98,11 +98,17 @@ Every X5 bind requires filesystem UUID
 disabled. Keep the previous internal copy for at least seven days after a
 migration and remove it only with separate approval.
 
-The `sim_safety-data` volume is deliberately excluded. Its append-only CHMI
-hydrology history is not completely reproducible from the upstream source, so
-it remains on backed-up storage until an independent authoritative copy and a
-tested recovery procedure exist. PostgreSQL, Valkey persistence, secrets,
-deployment configuration and source code must never use X5.
+Persistent application files use the backup-required data tree:
+
+- `/srv/x5-production/data/csm-sim/sim-data` — SIM audit, queue and store;
+- `/srv/x5-production/data/csm-sim/situation-data` — geo-routing artifacts;
+- `/srv/x5-production/data/csm-sim/safety-data` — CHMI hydrology history.
+
+These directories are not disposable caches. Infrastructure backup and a
+tested restore are required, especially for `safety-data`, whose upstream
+history cannot be completely backfilled. PostgreSQL remains in Patroni behind
+HAProxy; Valkey persistence, secrets, deployment configuration and source code
+must never use X5.
 
 ## Operational Checks
 

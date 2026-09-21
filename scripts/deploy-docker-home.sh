@@ -237,6 +237,12 @@ if [ -z "$VALHALLA_TRAFFIC_CONTROL_TOKEN_VALUE" ]; then
 fi
 VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE="${VALHALLA_TRAFFIC_CACHE_HOST_DIR:-$(existing_value VALHALLA_TRAFFIC_CACHE_HOST_DIR)}"
 VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE="${VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE:-/srv/x5-production/cache/csm-sim/valhalla-traffic}"
+SIM_DATA_HOST_DIR_VALUE="${SIM_DATA_HOST_DIR:-$(existing_value SIM_DATA_HOST_DIR)}"
+SIM_DATA_HOST_DIR_VALUE="${SIM_DATA_HOST_DIR_VALUE:-/srv/x5-production/data/csm-sim/sim-data}"
+SITUATION_DATA_HOST_DIR_VALUE="${SITUATION_DATA_HOST_DIR:-$(existing_value SITUATION_DATA_HOST_DIR)}"
+SITUATION_DATA_HOST_DIR_VALUE="${SITUATION_DATA_HOST_DIR_VALUE:-/srv/x5-production/data/csm-sim/situation-data}"
+SAFETY_DATA_HOST_DIR_VALUE="${SAFETY_DATA_HOST_DIR:-$(existing_value SAFETY_DATA_HOST_DIR)}"
+SAFETY_DATA_HOST_DIR_VALUE="${SAFETY_DATA_HOST_DIR_VALUE:-/srv/x5-production/data/csm-sim/safety-data}"
 SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR_VALUE="${SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR:-$(existing_value SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR)}"
 SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR_VALUE="${SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR_VALUE:-/srv/x5-production/cache/csm-sim/weather-radar-frames}"
 OSM_IMPORT_HOST_DIR_VALUE="${OSM_IMPORT_HOST_DIR:-$(existing_value OSM_IMPORT_HOST_DIR)}"
@@ -256,12 +262,16 @@ fi
 
 umask 077
 cat > .env <<ENV
+COMPOSE_FILE=docker-compose.yml:docker-compose.x5.yml
 SIM_WEB_PORT=5020
 API_PORT=4000
 SIM_PUBLISHER_MODE=DRY_RUN
 SIM_SOURCE_SYSTEM_ID=sim-air-situation-001
 SIM_ADAPTER_VERSION=1.0.0
 SIM_DATA_DIR=/data
+SIM_DATA_HOST_DIR=${SIM_DATA_HOST_DIR_VALUE}
+SITUATION_DATA_HOST_DIR=${SITUATION_DATA_HOST_DIR_VALUE}
+SAFETY_DATA_HOST_DIR=${SAFETY_DATA_HOST_DIR_VALUE}
 MAIN_COP_BASE_URL=http://sim-api:4000/mock-cop
 MAIN_COP_BEARER_TOKEN=dev-lab-token
 EXTERNAL_AI_ALLOWED=false
@@ -491,6 +501,9 @@ verify_x5_cache_path "$SIM_WEB_CACHE_HOST_DIR_VALUE" "sim-web"
 verify_x5_cache_path "$VALHALLA_TRAFFIC_CACHE_HOST_DIR_VALUE" "situation-data-api Valhalla traffic cache"
 verify_x5_cache_path "$SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR_VALUE" "situation-data-api weather radar cache"
 verify_x5_cache_path "$OSM_IMPORT_HOST_DIR_VALUE" "osm-importer workspace"
+verify_x5_cache_path "$SIM_DATA_HOST_DIR_VALUE" "sim-api persistent data"
+verify_x5_cache_path "$SITUATION_DATA_HOST_DIR_VALUE" "situation-data-api persistent data"
+verify_x5_cache_path "$SAFETY_DATA_HOST_DIR_VALUE" "safety-data-api persistent data"
 
 docker compose up -d --build
 docker compose ps

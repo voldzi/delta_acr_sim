@@ -104,6 +104,10 @@
 - `VALHALLA_TRAFFIC_CACHE_DIR`
 - `SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR` (obnovitelná cache, produkčně X5)
 - `OSM_IMPORT_HOST_DIR` (stažitelný PBF a pracovní prostor importu, produkčně X5)
+- `COMPOSE_FILE=docker-compose.yml:docker-compose.x5.yml` (produkční X5 bind override)
+- `SIM_DATA_HOST_DIR` (persistentní audit, fronta a SIM store; musí být zálohováno)
+- `SITUATION_DATA_HOST_DIR` (persistentní routing artefakty; musí být zálohováno)
+- `SAFETY_DATA_HOST_DIR` (persistentní hydrologická historie; musí být zálohováno)
 - `SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS`
@@ -479,6 +483,10 @@ VALHALLA_TRAFFIC_MAX_AGE_SECONDS=1800
 VALHALLA_TRAFFIC_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/valhalla-traffic
 VALHALLA_TRAFFIC_CACHE_DIR=/valhalla-traffic-cache
 OSM_IMPORT_HOST_DIR=/srv/x5-production/cache/csm-sim/osm-import
+COMPOSE_FILE=docker-compose.yml:docker-compose.x5.yml
+SIM_DATA_HOST_DIR=/srv/x5-production/data/csm-sim/sim-data
+SITUATION_DATA_HOST_DIR=/srv/x5-production/data/csm-sim/situation-data
+SAFETY_DATA_HOST_DIR=/srv/x5-production/data/csm-sim/safety-data
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600

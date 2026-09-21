@@ -1,0 +1,24 @@
+services:
+  sim-api:
+    volumes:
+      - type: bind
+        source: ${SIM_DATA_HOST_DIR:?Set SIM_DATA_HOST_DIR to the X5 persistent data directory}
+        target: /data
+        bind:
+          create_host_path: false
+
+  situation-data-api:
+    volumes:
+      - type: bind
+        source: ${SITUATION_DATA_HOST_DIR:?Set SITUATION_DATA_HOST_DIR to the X5 persistent data directory}
+        target: /data
+        bind:
+          create_host_path: false
+
+  safety-data-api:
+    volumes:
+      - type: bind
+        source: ${SAFETY_DATA_HOST_DIR:?Set SAFETY_DATA_HOST_DIR to the X5 persistent data directory}
+        target: /data
+        bind:
+          create_host_path: false
