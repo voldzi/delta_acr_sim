@@ -94,6 +94,33 @@ describe("Flight Data API contract", () => {
     expect(source.cacheStats?.()[0]?.coalescedHits).toBe(7);
   });
 
+  it("retries transient ADSB.lol failures before returning a live snapshot", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("connection reset"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            now: Date.now(),
+            ac: [{ hex: "4d2216", flight: "TEST123", lat: 50.1, lon: 14.4, seen: 0 }]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const source = createFlightDataSources({ ...config, enabledSources: ["adsb_lol"] })[0]!;
+
+    const result = await source.fetchObservations({
+      bbox: undefined,
+      limit: 10,
+      sourceIds: ["adsb_lol"],
+      includeStale: false
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.observations).toHaveLength(1);
+  });
+
   it("exposes health and source metadata", async () => {
     const health = await request(app).get("/health/ready").expect(200);
     expect(health.body.status).toBe("ok");
@@ -839,6 +866,35 @@ describe("Flight Data API contract", () => {
 
     expect(calls).toBe(1);
     expect(service.cacheStats().coalescedHits).toBe(7);
+  });
+
+  it("does not cache a valid-looking empty response when every enabled source fails", async () => {
+    const descriptor: FlightDataSource["descriptor"] = {
+      sourceId: "mock",
+      label: "failing source",
+      enabled: true,
+      mode: "mock",
+      priority: 10,
+      license: {
+        name: "test",
+        attribution: "test",
+        commercialUse: "allowed",
+        operationalUse: "allowed",
+        notes: []
+      }
+    };
+    const source: FlightDataSource = {
+      descriptor,
+      async fetchObservations() {
+        throw new Error("upstream unavailable");
+      }
+    };
+    const service = new FlightAggregationService(config, [source]);
+
+    await expect(
+      service.getTracks({ bbox: undefined, limit: 10, sourceIds: ["mock"], includeStale: false })
+    ).rejects.toThrow("All enabled flight sources failed");
+    expect(service.cacheStats()).toMatchObject({ entries: 0, errors: 1, refreshes: 0 });
   });
 
   it("uses a canonical padded bbox cache and returns the requested viewport", async () => {

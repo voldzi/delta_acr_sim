@@ -69,6 +69,10 @@ export class FlightAggregationService {
       }
     }
 
+    if (enabledSources.length > 0 && results.length === 0) {
+      throw new Error(`All enabled flight sources failed: ${warnings.join("; ") || "unknown source failure"}`);
+    }
+
     const sourceDescriptors = enabledSources.map((source) => source.descriptor);
     const rawObservations = results.flatMap((result) => result.observations);
     const { tracks, droppedWithoutPositionCount } = deduplicateObservations(

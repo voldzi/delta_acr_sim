@@ -169,6 +169,11 @@ Concurrent COP users therefore neither wait for the public ADS-B provider nor
 multiply upstream calls; the normal `staleAfterSeconds` flag still identifies
 old tracks.
 
+The ADSB.lol adapter retries short transient connection failures with bounded
+backoff. If every enabled flight source fails, the aggregate refresh fails as a
+whole: an existing stale snapshot remains eligible, while a cold start returns
+an explicit error instead of caching a misleading zero-aircraft snapshot.
+
 ## Remaining Optimizations
 
 - Add a dedicated background radar prewarmer if COP needs instant playback
