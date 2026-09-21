@@ -48,7 +48,7 @@ export class ManagedResponseCache<T> {
     const entry = this.entries.get(key);
     if (entry && entry.expiresAtMs > now) {
       this.counters.hits += 1;
-      entry.lastAccessedAtMs = now;
+      this.touchEntry(key, entry, now);
       return entry.value;
     }
 
@@ -72,7 +72,7 @@ export class ManagedResponseCache<T> {
         const staleEntry = this.entries.get(key);
         if (staleEntry && staleEntry.staleUntilMs > Date.now()) {
           this.counters.staleHits += 1;
-          staleEntry.lastAccessedAtMs = Date.now();
+          this.touchEntry(key, staleEntry, Date.now());
           return staleEntry.value;
         }
         throw error;
@@ -103,6 +103,7 @@ export class ManagedResponseCache<T> {
 
   private store(key: string, value: T): void {
     const now = Date.now();
+    this.entries.delete(key);
     this.entries.set(key, {
       value,
       expiresAtMs: now + Math.max(0, this.options.ttlMs),
@@ -115,19 +116,18 @@ export class ManagedResponseCache<T> {
   private evictIfNeeded(): void {
     const maxEntries = Math.max(1, this.options.maxEntries);
     while (this.entries.size > maxEntries) {
-      let oldestKey: string | undefined;
-      let oldestAccessedAtMs = Number.POSITIVE_INFINITY;
-      for (const [key, entry] of this.entries) {
-        if (entry.lastAccessedAtMs < oldestAccessedAtMs) {
-          oldestKey = key;
-          oldestAccessedAtMs = entry.lastAccessedAtMs;
-        }
-      }
-      if (!oldestKey) {
+      const oldestKey = this.entries.keys().next().value as string | undefined;
+      if (oldestKey === undefined) {
         return;
       }
       this.entries.delete(oldestKey);
       this.counters.evictions += 1;
     }
+  }
+
+  private touchEntry(key: string, entry: CacheEntry<T>, now: number): void {
+    entry.lastAccessedAtMs = now;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
   }
 }

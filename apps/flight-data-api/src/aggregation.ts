@@ -35,6 +35,7 @@ export class FlightAggregationService {
     this.cache = new ManagedResponseCache<FlightTrackResponse>({
       ttlMs: config.cacheTtlSeconds * 1000,
       staleIfErrorMs: config.staleIfErrorSeconds * 1000,
+      staleWhileRevalidateMs: config.staleIfErrorSeconds * 1000,
       maxEntries: config.cacheMaxEntries
     });
   }

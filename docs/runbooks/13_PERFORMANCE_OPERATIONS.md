@@ -91,6 +91,7 @@ curl -fsS http://127.0.0.1:5020/situation-data/health/ready
 curl -fsS http://127.0.0.1:5020/situation-data/api/v1/observability
 curl -fsS http://127.0.0.1:5020/search-data/api/v1/observability
 python3 scripts/smoke-provider-gateway.py --base-url http://127.0.0.1:5020
+pnpm benchmark:providers -- --base-url http://127.0.0.1:5020 --requests 100 --concurrency 20
 curl -fsS 'http://127.0.0.1:5020/situation-data/api/v1/weather-radar/frames?product=merge1h&hours=1&limit=1'
 ```
 
@@ -132,6 +133,33 @@ The Prometheus metric prefix is
 Low hit rate is normal immediately after deploy; sustained zero hits while COP
 operators repeatedly open the same radio detail usually means COP is changing
 request parameters between refreshes.
+
+## Provider Latency Gate
+
+`scripts/benchmark-provider-latency.mjs` runs bounded concurrent GET traffic
+against health, flight, OSM communication tower, mobile coverage and safety
+summary paths. It records throughput, median, p95, p99, maximum latency, HTTP
+status distribution and failures. The command exits non-zero when any response
+fails or a path exceeds its documented p95 budget.
+
+By default it measures the complete gateway path, including the ten-second
+nginx cache. Add `--bypass-gateway-cache` to exercise application caches and
+database/read-model access directly without changing the logical request. Keep
+the default 100 requests and concurrency 20 for routine post-deploy checks;
+higher values are deliberate load tests and should be coordinated with the
+operator.
+
+Managed response caches use `Map` insertion order as an O(1) LRU queue. Reads
+move an entry to the newest position and eviction removes the oldest key
+without scanning the full cache. This matters particularly for the Situation
+API aggregate cache, whose production capacity is 10,000 entries.
+
+Flight aggregation and ADS-B source caches additionally use stale-while-
+revalidate within the configured stale window. After the ten-second live TTL,
+the first caller receives the last valid snapshot immediately while exactly one
+background refresh fetches the next snapshot. Concurrent COP users therefore
+do not wait for the public ADS-B provider and do not multiply upstream calls;
+the normal `staleAfterSeconds` flag still identifies old tracks.
 
 ## Remaining Optimizations
 
