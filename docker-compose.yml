@@ -259,6 +259,11 @@ services:
     volumes:
       - situation-data:/data
       - type: bind
+        source: ${SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR:-./data/weather-radar-frames}
+        target: /data/weather-radar-frames
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${DEM_LOCAL_CACHE_HOST_DIR:-./data/dem-cache/copernicus-glo30}
         target: ${DEM_LOCAL_CACHE_DIR:-/dem-cache/copernicus-glo30}
         read_only: true
@@ -330,7 +335,11 @@ services:
       osm-postgis:
         condition: service_healthy
     volumes:
-      - ./data/osm-import:/import
+      - type: bind
+        source: ${OSM_IMPORT_HOST_DIR:-./data/osm-import}
+        target: /import
+        bind:
+          create_host_path: false
     entrypoint: ["osm2pgsql"]
 
   safety-data-api:

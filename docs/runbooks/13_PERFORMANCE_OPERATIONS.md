@@ -71,6 +71,7 @@ SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_HISTORY_HOURS=6
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT=72
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=false
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
+SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/weather-radar-frames
 SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
 SITUATION_DATA_RADIO_PLANNING_CACHE_TTL_SECONDS=900
 SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES=512
@@ -79,6 +80,29 @@ SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES=512
 `FRAME_STORE_ENABLED=false` is acceptable because clean frames still materialize
 lazy on first request. Enable it only when COP deliberately prewarms recent
 frames.
+
+## X5 write-cache layout
+
+Production keeps only reproducible, write-heavy artifacts on the unbacked X5
+filesystem:
+
+- `/srv/x5-production/cache/csm-sim/copernicus-glo30` — DEM cache;
+- `/srv/x5-production/cache/csm-sim/nginx-provider` — provider response cache;
+- `/srv/x5-production/cache/csm-sim/operational-checks` — derived check log;
+- `/srv/x5-production/cache/csm-sim/valhalla-traffic` — normalized traffic cache;
+- `/srv/x5-production/cache/csm-sim/weather-radar-frames` — derived radar frames;
+- `/srv/x5-production/cache/csm-sim/osm-import` — downloadable PBF and import work.
+
+Every X5 bind requires filesystem UUID
+`2f93f595-b61b-4eea-9054-7afa9b275b5b` and has automatic host-path creation
+disabled. Keep the previous internal copy for at least seven days after a
+migration and remove it only with separate approval.
+
+The `sim_safety-data` volume is deliberately excluded. Its append-only CHMI
+hydrology history is not completely reproducible from the upstream source, so
+it remains on backed-up storage until an independent authoritative copy and a
+tested recovery procedure exist. PostgreSQL, Valkey persistence, secrets,
+deployment configuration and source code must never use X5.
 
 ## Operational Checks
 

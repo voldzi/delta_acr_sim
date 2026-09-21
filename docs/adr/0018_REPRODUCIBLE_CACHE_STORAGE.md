@@ -35,6 +35,12 @@ from the authenticated provider and contain neither the source XML nor its API
 token. The active Valhalla overlay itself is memory-backed on the separate
 Valhalla host; X5 is not shared between the hosts.
 
+Stored CHMI radar frames are a bounded, derived cache and use
+`/srv/x5-production/cache/csm-sim/weather-radar-frames`. The downloadable OSM
+PBF and transient importer workspace use
+`/srv/x5-production/cache/csm-sim/osm-import`; the authoritative OSM source is
+Geofabrik and the resulting read model remains in the managed PostGIS service.
+
 The `sim_safety-data` Docker volume remains on backed-up storage. It contains
 append-only CHMI hydrology observations accumulated over time; the upstream
 detail backfill is limited and is not a complete recovery source.
@@ -47,6 +53,9 @@ The Nginx cache bind uses the same protection for `sim-web`. The operational
 check installer also validates the UUID before placing its log on X5.
 The normalized traffic cache bind uses the same UUID check and disables Docker
 source-directory creation.
+The radar cache and OSM importer binds have the same no-auto-create protection.
+Both deployment and the standalone OSM import script validate the expected X5
+filesystem UUID before writing or starting the affected workload.
 
 During migration, the prior cache copy is retained for at least seven days and
 is removed only with separate operator approval.

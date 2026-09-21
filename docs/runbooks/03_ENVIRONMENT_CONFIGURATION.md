@@ -102,6 +102,8 @@
 - `VALHALLA_TRAFFIC_MAX_AGE_SECONDS` (výchozí 1800 s)
 - `VALHALLA_TRAFFIC_CACHE_HOST_DIR` (produkčně X5)
 - `VALHALLA_TRAFFIC_CACHE_DIR`
+- `SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR` (obnovitelná cache, produkčně X5)
+- `OSM_IMPORT_HOST_DIR` (stažitelný PBF a pracovní prostor importu, produkčně X5)
 - `SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS`
@@ -440,6 +442,7 @@ SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_HISTORY_HOURS=6
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_MAX_COUNT=72
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_ENABLED=false
 SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
+SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/weather-radar-frames
 SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
 SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS=300
 PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000,ostrava_traffic_cameras|Dopravní kamery Ostrava|traffic|Statutární město Ostrava|http://kamery.ostrava.cz/|ostrava_asmx|http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery
@@ -475,6 +478,7 @@ VALHALLA_TRAFFIC_IDLE_SECONDS=900
 VALHALLA_TRAFFIC_MAX_AGE_SECONDS=1800
 VALHALLA_TRAFFIC_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/valhalla-traffic
 VALHALLA_TRAFFIC_CACHE_DIR=/valhalla-traffic-cache
+OSM_IMPORT_HOST_DIR=/srv/x5-production/cache/csm-sim/osm-import
 SITUATION_DATA_ARDOS_CACHE_TTL_SECONDS=15
 SITUATION_DATA_MOBILE_NETWORK_CACHE_TTL_SECONDS=3600
 SITUATION_DATA_MOBILE_COVERAGE_CACHE_TTL_SECONDS=21600

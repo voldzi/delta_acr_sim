@@ -38,6 +38,7 @@ PY
 }
 
 OSM_IMPORT_DIR="${OSM_IMPORT_DIR:-$(env_value OSM_IMPORT_DIR)}"
+OSM_IMPORT_DIR="${OSM_IMPORT_DIR:-$(env_value OSM_IMPORT_HOST_DIR)}"
 OSM_IMPORT_DIR="${OSM_IMPORT_DIR:-data/osm-import}"
 OSM_IMPORT_DIR="${OSM_IMPORT_DIR%/}"
 OSM_IMPORT_URL="${OSM_IMPORT_URL:-$(env_value OSM_IMPORT_URL)}"
@@ -85,7 +86,18 @@ if [[ "$OSM_POSTGIS_BACKEND" == "local-postgis" && "$OSM_POSTGIS_HOST" != "osm-p
   exit 1
 fi
 
+if [[ "$OSM_IMPORT_DIR" == /srv/x5-production/* ]]; then
+  expected_x5_uuid="2f93f595-b61b-4eea-9054-7afa9b275b5b"
+  actual_x5_uuid="$(findmnt -n -o UUID --target /srv/x5-production 2>/dev/null || true)"
+  if [[ "$actual_x5_uuid" != "$expected_x5_uuid" ]]; then
+    echo "Refusing OSM import: /srv/x5-production is not the expected filesystem UUID $expected_x5_uuid." >&2
+    exit 1
+  fi
+fi
+
 mkdir -p "$OSM_IMPORT_DIR"
+OSM_IMPORT_DIR_ABS="$(cd "$OSM_IMPORT_DIR" && pwd)"
+export OSM_IMPORT_HOST_DIR="$OSM_IMPORT_DIR_ABS"
 
 if [[ ! "$OSM_IMPORT_FILE" = "$OSM_IMPORT_DIR/"* ]]; then
   echo "OSM_IMPORT_FILE must be inside OSM_IMPORT_DIR because the importer mounts only that directory." >&2
@@ -168,7 +180,7 @@ if [[ "$OSM_POSTGIS_BACKEND" == "local-postgis" ]]; then
     "/import/$(basename "$OSM_IMPORT_FILE")"
 else
   docker run --rm \
-    -v "$PWD/$OSM_IMPORT_DIR:/import:ro" \
+    -v "$OSM_IMPORT_DIR_ABS:/import:ro" \
     iboates/osm2pgsql:latest \
     --create \
     --slim \
