@@ -159,12 +159,15 @@ move an entry to the newest position and eviction removes the oldest key
 without scanning the full cache. This matters particularly for the Situation
 API aggregate cache, whose production capacity is 10,000 entries.
 
-Flight aggregation and ADS-B source caches additionally use stale-while-
-revalidate within the configured stale window. After the ten-second live TTL,
-the first caller receives the last valid snapshot immediately while exactly one
-background refresh fetches the next snapshot. Concurrent COP users therefore
-do not wait for the public ADS-B provider and do not multiply upstream calls;
-the normal `staleAfterSeconds` flag still identifies old tracks.
+Flight aggregation uses stale-while-revalidate within the configured stale
+window. After the ten-second live TTL, the first caller receives the last valid
+snapshot immediately while exactly one background aggregation refresh fetches
+the next source snapshot. Source caches deliberately refresh synchronously
+inside that background task; enabling stale-while-revalidate at both levels
+would add a full extra cache cycle before moving aircraft become visible.
+Concurrent COP users therefore neither wait for the public ADS-B provider nor
+multiply upstream calls; the normal `staleAfterSeconds` flag still identifies
+old tracks.
 
 ## Remaining Optimizations
 

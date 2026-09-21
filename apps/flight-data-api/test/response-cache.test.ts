@@ -40,4 +40,22 @@ describe("ManagedResponseCache LRU", () => {
     expect(await cache.getOrLoad("flight", loader)).toBe("v2");
     expect(cache.stats().staleHits).toBe(3);
   });
+
+  it("refreshes a nested source synchronously inside the aggregate background refresh", async () => {
+    const source = new ManagedResponseCache<string>({ ttlMs: 0, staleIfErrorMs: 60_000, maxEntries: 2 });
+    const aggregate = new ManagedResponseCache<string>({
+      ttlMs: 0,
+      staleIfErrorMs: 60_000,
+      staleWhileRevalidateMs: 60_000,
+      maxEntries: 2
+    });
+    let upstreamValue = "v1";
+    const loadAggregate = () => source.getOrLoad("source", async () => upstreamValue);
+
+    expect(await aggregate.getOrLoad("aggregate", loadAggregate)).toBe("v1");
+    upstreamValue = "v2";
+    expect(await aggregate.getOrLoad("aggregate", loadAggregate)).toBe("v1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await aggregate.getOrLoad("aggregate", loadAggregate)).toBe("v2");
+  });
 });

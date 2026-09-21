@@ -208,7 +208,6 @@ class AdsbLolSource implements FlightDataSource {
     this.payloadCache = new ManagedResponseCache<AdsbLolResponse>({
       ttlMs: config.cacheTtlSeconds * 1000,
       staleIfErrorMs: config.staleIfErrorSeconds * 1000,
-      staleWhileRevalidateMs: config.staleIfErrorSeconds * 1000,
       maxEntries: config.cacheMaxEntries
     });
     this.descriptor = {
@@ -286,7 +285,6 @@ class OpenSkySource implements FlightDataSource {
     this.payloadCache = new ManagedResponseCache<OpenSkyResponse>({
       ttlMs: config.cacheTtlSeconds * 1000,
       staleIfErrorMs: config.staleIfErrorSeconds * 1000,
-      staleWhileRevalidateMs: config.staleIfErrorSeconds * 1000,
       maxEntries: config.cacheMaxEntries
     });
     this.descriptor = {
@@ -364,7 +362,6 @@ class LocalAdsbSource implements FlightDataSource {
     this.payloadCache = new ManagedResponseCache<ReadsbAircraftResponse>({
       ttlMs: Math.max(1, config.cacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(10, config.staleIfErrorSeconds) * 1000,
-      staleWhileRevalidateMs: Math.max(10, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(1, Math.min(config.cacheMaxEntries, 64))
     });
     this.descriptor = {
