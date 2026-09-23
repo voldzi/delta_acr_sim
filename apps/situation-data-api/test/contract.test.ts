@@ -12,6 +12,7 @@ import { CommunityContextSource } from "../src/community-context-source.js";
 import type { SituationDataConfig } from "../src/config.js";
 import { MobileCoverageSource } from "../src/mobile-coverage-source.js";
 import { OsmPostgisSource } from "../src/osm-postgis-source.js";
+import { encodeValhallaPolyline6 } from "../src/routing-service.js";
 import type { SharedResponseCacheStore } from "../src/response-cache.js";
 import { spatiallyLimitFeatures } from "../src/spatial-limit.js";
 import { MobileNetworkSource, type SituationDataSource } from "../src/sources.js";
@@ -4490,6 +4491,89 @@ describe("Situation Data API contract", () => {
     expect(metrics.text).toContain('situation_data_routing_cache_hits{operation="route"} 1');
   });
 
+  it("enriches only the selected Valhalla car route and preserves ETA when attributes fail", async () => {
+    const coordinates: Array<[number, number]> = [
+      [14.42, 50.08],
+      [14.421, 50.081],
+      [14.422, 50.082]
+    ];
+    const shape = encodeValhallaPolyline6(coordinates);
+    let failAttributes = false;
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/status") {
+        return new Response(JSON.stringify({ tileset_last_modified: 1790121600, available_actions: ["route", "trace_attributes", "status"] }), { status: 200 });
+      }
+      if (path === "/route") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.costing).toBe("truck");
+        expect(body.costing_options.truck).toMatchObject({ height: 2.2, width: 2.1, length: 5.1, weight: 2.4 });
+        return new Response(
+          JSON.stringify({
+            trip: {
+              status: 0,
+              summary: { length: 0.4, time: 45 },
+              locations: [
+                { lat: 50.08, lon: 14.42 },
+                { lat: 50.082, lon: 14.422 }
+              ],
+              legs: [{ shape, maneuvers: [] }]
+            }
+          }),
+          { status: 200 }
+        );
+      }
+      if (path === "/trace_attributes") {
+        const body = JSON.parse(String(init?.body));
+        expect(body.shape_match).toBe("edge_walk");
+        expect(body.encoded_polyline).toBe(shape);
+        expect(body.costing).toBe("truck");
+        return failAttributes
+          ? new Response(JSON.stringify({ error: "temporarily unavailable" }), { status: 503 })
+          : new Response(
+              JSON.stringify({
+                shape,
+                edges: [
+                  { begin_shape_index: 0, end_shape_index: 1, speed_limit: 50 },
+                  { begin_shape_index: 1, end_shape_index: 2, speed_limit: 30 }
+                ]
+              }),
+              { status: 200 }
+            );
+      }
+      return new Response(JSON.stringify({ error: `Unexpected path ${path}` }), { status: 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const enrichedApp = (await createApp({ ...config, routingEngine: "valhalla", valhallaBaseUrl: "http://valhalla.test" })).app;
+    const payload = {
+      profileId: "car",
+      from: { lon: 14.42, lat: 50.08 },
+      to: { lon: 14.422, lat: 50.082 },
+      includeRoadAttributes: true,
+      vehicle: { heightM: 2.2, widthM: 2.1, lengthM: 5.1, weightTonnes: 2.4 }
+    };
+    const enriched = await request(enrichedApp).post("/api/v1/routing/route").send(payload).expect(200);
+    expect(enriched.body.routes[0]).toMatchObject({
+      durationSeconds: 45,
+      vehicleAssessment: { state: "provider_costing_applied", providerCosting: "truck" },
+      roadAttributes: {
+        state: "ok",
+        knownSpeedLimitCoveragePercent: 100,
+        speedLimits: [
+          { valueKph: 50, beginShapeIndex: 0, endShapeIndex: 1 },
+          { valueKph: 30, beginShapeIndex: 1, endShapeIndex: 2 }
+        ]
+      }
+    });
+    expect(enriched.body.coverage).toMatchObject({ state: "covered", routingDataset: { version: expect.stringMatching(/^sim-routing-/) } });
+    failAttributes = true;
+    const unavailable = await request(enrichedApp)
+      .post("/api/v1/routing/route")
+      .send({ ...payload, alternatives: 1 })
+      .expect(200);
+    expect(unavailable.body.routes[0]).toMatchObject({ durationSeconds: 45, roadAttributes: { state: "unavailable", speedLimits: [] } });
+  });
+
   it("uses Valhalla as the primary navigation backend when configured", async () => {
     const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const path = new URL(String(url)).pathname;
@@ -5716,9 +5800,7 @@ describe("Situation Data API contract", () => {
     expect(result.features.length).toBeGreaterThan(0);
     expect(result.features.length).toBeLessThanOrEqual(5);
     expect(result.features[0].properties.assumptions).toEqual(expect.objectContaining({ terrainApplied: false }));
-    expect(result.warnings).toContain(
-      "mobile_coverage_model read-model miss; returned the fast on-demand distance model without terrain profiling."
-    );
+    expect(result.warnings).toContain("mobile_coverage_model read-model miss; returned the fast on-demand distance model without terrain profiling.");
   });
 
   it("maps prepared mobile coverage read-model cells with display-ready styling", async () => {

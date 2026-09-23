@@ -57,6 +57,13 @@ export interface RoutingCoordinate {
 }
 
 export interface RoutingRouteRequest {
+  includeRoadAttributes?: boolean;
+  vehicle?: {
+    heightM?: number;
+    widthM?: number;
+    lengthM?: number;
+    weightTonnes?: number;
+  };
   profileId?: RoutingProfileId;
   from?: RoutingCoordinate;
   to?: RoutingCoordinate;
@@ -136,6 +143,42 @@ export interface RoutingRoute {
   elevationProfile?: RoutingElevationProfilePoint[];
   weatherOnRoute?: RoutingWeatherOnRoute;
   hazardsOnRoute?: RoutingHazardsOnRoute;
+  roadAttributes?: RoutingRoadAttributes;
+  vehicleAssessment?: {
+    state: "not_evaluated" | "partially_evaluated" | "provider_costing_applied";
+    providerCosting: "auto" | "truck";
+    appliedFields: Array<"heightM" | "widthM" | "lengthM" | "weightTonnes">;
+    limitations: string[];
+  };
+}
+
+export interface RoutingRoadAttributes {
+  state: "ok" | "partial" | "unavailable" | "unsupported";
+  reason?: string;
+  source: "valhalla_trace_attributes";
+  routingDataset?: ExactRoutingDataset;
+  sourceAgeSeconds?: number;
+  osmChangeset?: number;
+  observedAt: string;
+  matchedEdgeCount: number;
+  geometryMismatchCount: number;
+  knownSpeedLimitCoveragePercent: number;
+  vehicleRestrictionsState: "not_evaluated";
+  speedLimits: Array<{
+    beginShapeIndex: number;
+    endShapeIndex: number;
+    direction: "along_route";
+    valueKph?: number;
+    status: "explicit" | "derived" | "unknown";
+    source: "valhalla_graph_osm_maxspeed" | "unknown";
+  }>;
+  restrictions: Array<{
+    kind: "closure";
+    beginShapeIndex: number;
+    endShapeIndex: number;
+    assessment: "advisory";
+    source: "valhalla_trace_attributes";
+  }>;
 }
 
 export type RoutingTrafficAction = "warn" | "soft_penalty" | "hard_exclusion_candidate" | "hard_exclusion_applied";
@@ -309,6 +352,12 @@ export interface RoutingRouteResponse {
   routes: RoutingRoute[];
   features: RoutingFeature[];
   warnings: string[];
+  coverage?: {
+    state: "covered" | "outside_coverage" | "partial";
+    reason?: string;
+    routingDataset?: ExactRoutingDataset;
+    sourceAgeSeconds?: number;
+  };
 }
 
 export interface RoutingTrafficSummary {
@@ -526,6 +575,21 @@ interface ValhallaRouteResponse {
   error_code?: number;
   status?: number;
   status_message?: string;
+}
+
+interface ValhallaTraceAttributesResponse {
+  shape?: string;
+  edges?: Array<{
+    begin_shape_index?: number;
+    end_shape_index?: number;
+    speed_limit?: number;
+    speed_type?: string;
+  }>;
+  osm_changeset?: number;
+  shape_attributes?: {
+    closure?: Array<{ begin_shape_index?: number; end_shape_index?: number }>;
+    closures?: Array<{ begin_shape_index?: number; end_shape_index?: number }>;
+  };
 }
 
 interface ValhallaTrip {
@@ -1100,7 +1164,31 @@ export class RoutingService {
     trafficContext?: RoutingTrafficContext
   ): Promise<RoutingRouteResponse> {
     const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
-    const analysisRoutes = await this.annotateRouteAnalysis(trafficRoutes, request, trafficContext);
+    const analyzed = await this.annotateRouteAnalysis(trafficRoutes, request, trafficContext);
+    const includeRoadAttributes = Boolean(
+      request && typeof request === "object" && "includeRoadAttributes" in request && request.includeRoadAttributes === true
+    );
+    const analysisRoutes = includeRoadAttributes
+      ? analyzed.map((route) =>
+          route.roadAttributes
+            ? route
+            : {
+                ...route,
+                roadAttributes: {
+                  state: "unsupported" as const,
+                  reason: "Directed Valhalla graph attributes are unavailable for this route backend.",
+                  source: "valhalla_trace_attributes" as const,
+                  observedAt: generatedAt,
+                  matchedEdgeCount: 0,
+                  geometryMismatchCount: 0,
+                  knownSpeedLimitCoveragePercent: 0,
+                  vehicleRestrictionsState: "not_evaluated" as const,
+                  speedLimits: [],
+                  restrictions: []
+                }
+              }
+        )
+      : analyzed;
     const primaryRoute = analysisRoutes.find((route) => route.rank === 1) ?? analysisRoutes[0];
     const traffic = routingTrafficSummary(trafficContext, analysisRoutes, await this.valhallaTraffic?.status());
     const responseWarnings = [...warnings];
@@ -1110,6 +1198,9 @@ export class RoutingService {
         `Routing backend returned only ${analysisRoutes.length} of ${requestedRouteCount} requested route variant(s); no sufficiently distinct alternative path was available.`
       );
     }
+    const navigableRoutes = analysisRoutes.filter((route) => route.quality.mode !== "direct_fallback");
+    const coverageState = navigableRoutes.length === 0 ? "outside_coverage" : navigableRoutes.length < analysisRoutes.length ? "partial" : "covered";
+    const routingDataset = analysisRoutes.find((route) => route.roadAttributes?.routingDataset)?.roadAttributes?.routingDataset;
     return {
       contractVersion: "sim-routing-route-v1",
       generatedAt,
@@ -1120,7 +1211,12 @@ export class RoutingService {
       quality: primaryRoute?.quality ?? unavailableRouteQuality(backend),
       routes: analysisRoutes,
       features: analysisRoutes.map((route) => routeFeature(route)),
-      warnings: responseWarnings
+      warnings: responseWarnings,
+      coverage: {
+        state: coverageState,
+        ...(coverageState !== "covered" ? { reason: "A navigable graph path is unavailable for one or more variants." } : {}),
+        ...(routingDataset ? { routingDataset, sourceAgeSeconds: datasetAgeSeconds(routingDataset, generatedAt) } : {})
+      }
     };
   }
 
@@ -1142,7 +1238,51 @@ export class RoutingService {
       routes = augmented.routes;
       warnings.push(...augmented.warnings);
     }
+    if (request.includeRoadAttributes === true && profile.transportMode === "road") {
+      const dataset = await requestValhallaStatus(this.config)
+        .then(routingDatasetFromStatus)
+        .catch(() => undefined);
+      routes = await Promise.all(
+        routes.map(async (route) => ({
+          ...route,
+          roadAttributes: await this.valhallaRoadAttributes(route, profile, request, dataset)
+        }))
+      );
+    }
     return this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla", trafficContext);
+  }
+
+  private async valhallaRoadAttributes(
+    route: RoutingRoute,
+    profile: RoutingProfile,
+    request: RoutingRouteRequest,
+    dataset?: ExactRoutingDataset
+  ): Promise<RoutingRoadAttributes> {
+    const observedAt = new Date().toISOString();
+    const base = {
+      source: "valhalla_trace_attributes" as const,
+      observedAt,
+      matchedEdgeCount: 0,
+      geometryMismatchCount: 0,
+      knownSpeedLimitCoveragePercent: 0,
+      vehicleRestrictionsState: "not_evaluated" as const,
+      speedLimits: [],
+      restrictions: [],
+      ...(dataset ? { routingDataset: dataset, sourceAgeSeconds: datasetAgeSeconds(dataset, observedAt) } : {})
+    };
+    if (!dataset) {
+      return { ...base, state: "unavailable", reason: "Routing dataset version could not be verified." };
+    }
+    try {
+      const trace = await requestValhallaTraceAttributes(this.config, profile, request, route.geometry.coordinates);
+      const after = await requestValhallaStatus(this.config).then(routingDatasetFromStatus);
+      if (after.version !== dataset.version) {
+        return { ...base, state: "unavailable", reason: "Routing dataset changed during attribute lookup." };
+      }
+      return roadAttributesFromTrace(trace, route.geometry.coordinates, dataset, observedAt);
+    } catch {
+      return { ...base, state: "unavailable", reason: "Directed road attributes could not be verified for this route." };
+    }
   }
 
   private async computeValhallaPenaltyAlternatives(
@@ -1601,6 +1741,7 @@ export class RoutingService {
       via,
       departureTime,
       avoid: parseAvoid(raw.avoid),
+      vehicle: parseOptionalVehicle(raw.vehicle, profile),
       alternatives: Math.max(1, Math.min(3, alternatives))
     };
   }
@@ -2856,7 +2997,7 @@ async function requestValhallaRoute(
   trafficContext?: RoutingTrafficContext,
   options: ValhallaRouteRequestOptions = {}
 ): Promise<ValhallaRouteResponse> {
-  const costing = valhallaCosting(profile.profileId);
+  const costing = effectiveValhallaCosting(profile, request.vehicle);
   const recostings = valhallaRecostings(costing);
   const departureTime = valhallaDepartureTimePayload(request.departureTime, config.valhallaTrafficEnabled && profile.transportMode === "road");
   const snapLimitM = config.routingMaxSnapDistanceM;
@@ -2871,7 +3012,7 @@ async function requestValhallaRoute(
       search_cutoff: snapLimitM
     })),
     costing,
-    costing_options: valhallaCostingOptions(profile, request.avoid),
+    costing_options: valhallaCostingOptions(profile, request.avoid, request.vehicle),
     ...valhallaTrafficAvoidancePayload(trafficContext),
     ...valhallaLinearCostFactorsPayload(options.linearCostFactors),
     ...departureTime,
@@ -2898,6 +3039,182 @@ async function requestValhallaRoute(
   }
   assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM);
   return body;
+}
+
+async function requestValhallaTraceAttributes(
+  config: SituationDataConfig,
+  profile: RoutingProfile,
+  request: RoutingRouteRequest,
+  coordinates: Array<[number, number]>
+): Promise<ValhallaTraceAttributesResponse> {
+  return requestValhallaJson<ValhallaTraceAttributesResponse>(config, "/trace_attributes", {
+    encoded_polyline: encodeValhallaPolyline6(coordinates),
+    shape_match: "edge_walk",
+    costing: effectiveValhallaCosting(profile, request.vehicle),
+    costing_options: valhallaCostingOptions(profile, request.avoid ?? [], request.vehicle),
+    units: "kilometers",
+    filters: {
+      action: "include",
+      attributes: ["shape", "edge.begin_shape_index", "edge.end_shape_index", "edge.speed_limit", "shape_attributes.closure", "osm_changeset"]
+    }
+  });
+}
+
+export function roadAttributesFromTrace(
+  trace: ValhallaTraceAttributesResponse,
+  routeShape: Array<[number, number]>,
+  routingDataset: ExactRoutingDataset,
+  observedAt: string
+): RoutingRoadAttributes {
+  const base = {
+    source: "valhalla_trace_attributes" as const,
+    routingDataset,
+    sourceAgeSeconds: datasetAgeSeconds(routingDataset, observedAt),
+    observedAt,
+    vehicleRestrictionsState: "not_evaluated" as const
+  };
+  const traceShape = decodeValhallaPolyline6(trace.shape);
+  if (traceShape.length < 2 || routeShape.length < 2 || !Array.isArray(trace.edges) || trace.edges.length === 0) {
+    return {
+      ...base,
+      state: "unavailable",
+      reason: "Valhalla returned no verifiable directed edges.",
+      matchedEdgeCount: 0,
+      geometryMismatchCount: 0,
+      knownSpeedLimitCoveragePercent: 0,
+      speedLimits: [],
+      restrictions: []
+    };
+  }
+  const shapeMap: number[] = [];
+  let searchFrom = 0;
+  for (const point of traceShape) {
+    let matched = -1;
+    for (let index = searchFrom; index < routeShape.length; index += 1) {
+      if (haversineMeters(point, routeShape[index]!) <= 1) {
+        matched = index;
+        break;
+      }
+    }
+    if (matched < 0) {
+      return {
+        ...base,
+        state: "unavailable",
+        reason: "Trace geometry differs from the selected route.",
+        matchedEdgeCount: 0,
+        geometryMismatchCount: 1,
+        knownSpeedLimitCoveragePercent: 0,
+        speedLimits: [],
+        restrictions: []
+      };
+    }
+    shapeMap.push(matched);
+    searchFrom = matched + 1;
+  }
+  if (shapeMap[0] !== 0 || shapeMap[shapeMap.length - 1] !== routeShape.length - 1) {
+    return {
+      ...base,
+      state: "unavailable",
+      reason: "Trace endpoints differ from the selected route.",
+      matchedEdgeCount: 0,
+      geometryMismatchCount: 1,
+      knownSpeedLimitCoveragePercent: 0,
+      speedLimits: [],
+      restrictions: []
+    };
+  }
+  const speedLimits: RoutingRoadAttributes["speedLimits"] = [];
+  let geometryMismatchCount = 0;
+  let matchedEdgeCount = 0;
+  let knownLengthM = 0;
+  let matchedLengthM = 0;
+  let previousEnd = 0;
+  for (const edge of trace.edges) {
+    const rawBegin = edge.begin_shape_index;
+    const rawEnd = edge.end_shape_index;
+    if (!Number.isInteger(rawBegin) || !Number.isInteger(rawEnd) || rawBegin! < 0 || rawEnd! <= rawBegin! || rawEnd! >= shapeMap.length) {
+      geometryMismatchCount += 1;
+      continue;
+    }
+    const beginShapeIndex = shapeMap[rawBegin!];
+    const endShapeIndex = shapeMap[rawEnd!];
+    if (beginShapeIndex === undefined || endShapeIndex === undefined || beginShapeIndex < previousEnd || endShapeIndex <= beginShapeIndex) {
+      geometryMismatchCount += 1;
+      continue;
+    }
+    previousEnd = endShapeIndex;
+    const edgeLengthM = polylineDistanceM(routeShape.slice(beginShapeIndex, endShapeIndex + 1));
+    matchedLengthM += edgeLengthM;
+    matchedEdgeCount += 1;
+    // Valhalla's `speed` is a costing/traffic speed. Only `speed_limit` is a candidate legal limit.
+    const valueKph = Number(edge.speed_limit);
+    const explicit = Number.isFinite(valueKph) && valueKph >= 10 && valueKph <= 160 && edge.speed_type !== "classified";
+    if (explicit) knownLengthM += edgeLengthM;
+    speedLimits.push({
+      beginShapeIndex,
+      endShapeIndex,
+      direction: "along_route",
+      status: explicit ? "explicit" : "unknown",
+      source: explicit ? "valhalla_graph_osm_maxspeed" : "unknown",
+      ...(explicit ? { valueKph } : {})
+    });
+  }
+  const restrictions: RoutingRoadAttributes["restrictions"] = [];
+  for (const closure of trace.shape_attributes?.closure ?? trace.shape_attributes?.closures ?? []) {
+    const begin = Number.isInteger(closure.begin_shape_index) ? shapeMap[closure.begin_shape_index!] : undefined;
+    const end = Number.isInteger(closure.end_shape_index) ? shapeMap[closure.end_shape_index!] : undefined;
+    if (begin !== undefined && end !== undefined && end > begin) {
+      restrictions.push({ kind: "closure", beginShapeIndex: begin, endShapeIndex: end, assessment: "advisory", source: "valhalla_trace_attributes" });
+    }
+  }
+  const fullLengthM = polylineDistanceM(routeShape);
+  if (matchedEdgeCount === 0 || matchedLengthM < fullLengthM * 0.98) {
+    return {
+      ...base,
+      state: "unavailable",
+      reason: "Directed edge coverage is insufficient for this route.",
+      matchedEdgeCount,
+      geometryMismatchCount: geometryMismatchCount + 1,
+      knownSpeedLimitCoveragePercent: 0,
+      speedLimits: [],
+      restrictions: []
+    };
+  }
+  return {
+    ...base,
+    state: geometryMismatchCount > 0 ? "partial" : "ok",
+    ...(geometryMismatchCount > 0 ? { reason: "Some directed edges could not be mapped exactly." } : {}),
+    ...(Number.isSafeInteger(trace.osm_changeset) ? { osmChangeset: trace.osm_changeset } : {}),
+    matchedEdgeCount,
+    geometryMismatchCount,
+    knownSpeedLimitCoveragePercent: Math.round((knownLengthM / Math.max(1, fullLengthM)) * 10000) / 100,
+    speedLimits,
+    restrictions
+  };
+}
+
+export function encodeValhallaPolyline6(coordinates: Array<[number, number]>): string {
+  let lastLat = 0;
+  let lastLon = 0;
+  const encodeDelta = (delta: number): string => {
+    let value = delta < 0 ? ~(delta << 1) : delta << 1;
+    let result = "";
+    while (value >= 0x20) {
+      result += String.fromCharCode((0x20 | (value & 0x1f)) + 63);
+      value >>>= 5;
+    }
+    return result + String.fromCharCode(value + 63);
+  };
+  return coordinates
+    .map(([lon, lat]) => {
+      const nextLat = Math.round(lat * 1_000_000);
+      const nextLon = Math.round(lon * 1_000_000);
+      const encoded = encodeDelta(nextLat - lastLat) + encodeDelta(nextLon - lastLon);
+      lastLat = nextLat;
+      lastLon = nextLon;
+      return encoded;
+    })
+    .join("");
 }
 
 function valhallaLinearCostFactorsPayload(linearCostFactors: ValhallaLinearCostFactor[] | undefined): {
@@ -2993,6 +3310,10 @@ function routingDatasetFromStatus(status: ValhallaStatusResponse): ExactRoutingD
   };
 }
 
+function datasetAgeSeconds(dataset: ExactRoutingDataset, observedAt: string): number {
+  return Math.max(0, Math.floor((Date.parse(observedAt) - Date.parse(dataset.builtAt)) / 1000));
+}
+
 async function requestValhallaJson<T>(config: SituationDataConfig, endpoint: string, payload?: unknown, method: "GET" | "POST" = "POST"): Promise<T> {
   const baseUrl = config.valhallaBaseUrl;
   if (!baseUrl) {
@@ -3073,6 +3394,7 @@ function valhallaRoute(
       engine: "valhalla",
       ...(recostings.length > 0 ? { recostings } : {})
     },
+    ...(profile.transportMode === "road" ? { vehicleAssessment: vehicleAssessmentFor(profile, request.vehicle) } : {}),
     navigation: {
       provider: "valhalla",
       requestedDepartureTime: request.departureTime,
@@ -3246,9 +3568,48 @@ function valhallaCosting(profileId: RoutingProfileId): string {
   }
 }
 
-function valhallaCostingOptions(profile: RoutingProfile, avoid: RoutingAvoid[]): Record<string, Record<string, boolean | number>> {
+function effectiveValhallaCosting(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"]): string {
+  return profile.transportMode === "road" && vehicle && Object.keys(vehicle).length > 0 ? "truck" : valhallaCosting(profile.profileId);
+}
+
+function vehicleAssessmentFor(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"]): NonNullable<RoutingRoute["vehicleAssessment"]> {
+  const fields = (["heightM", "widthM", "lengthM", "weightTonnes"] as const).filter((field) => vehicle?.[field] !== undefined);
+  return {
+    state: fields.length === 0 ? "not_evaluated" : fields.length === 4 ? "provider_costing_applied" : "partially_evaluated",
+    providerCosting: effectiveValhallaCosting(profile, vehicle) === "truck" ? "truck" : "auto",
+    appliedFields: fields,
+    limitations: [
+      "Valhalla costing uses mapped restrictions only; this is not a guarantee of legal or physical passability.",
+      ...(fields.length < 4 ? ["Some vehicle dimensions were not supplied by the client."] : [])
+    ]
+  };
+}
+
+function parseOptionalVehicle(value: RoutingRouteRequest["vehicle"], profile: RoutingProfile): RoutingRouteRequest["vehicle"] {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value) || profile.transportMode !== "road") {
+    throw new RoutingError(400, "VALIDATION_ERROR", "Vehicle dimensions are supported only for road routing profiles.");
+  }
+  const limits = { heightM: 8, widthM: 5, lengthM: 30, weightTonnes: 100 } as const;
+  const result: NonNullable<RoutingRouteRequest["vehicle"]> = {};
+  for (const field of Object.keys(limits) as Array<keyof typeof limits>) {
+    const raw = value[field];
+    if (raw === undefined) continue;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0 || raw > limits[field]) {
+      throw new RoutingError(400, "VALIDATION_ERROR", `Vehicle ${field} must be a positive number within supported bounds.`);
+    }
+    result[field] = raw;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function valhallaCostingOptions(
+  profile: RoutingProfile,
+  avoid: RoutingAvoid[],
+  vehicle?: RoutingRouteRequest["vehicle"]
+): Record<string, Record<string, boolean | number>> {
   const options: Record<string, Record<string, boolean | number>> = {};
-  const costing = valhallaCosting(profile.profileId);
+  const costing = effectiveValhallaCosting(profile, vehicle);
   const base: Record<string, boolean | number> = {};
   if (avoid.includes("bridge")) {
     base.exclude_bridges = true;
@@ -3283,6 +3644,12 @@ function valhallaCostingOptions(profile: RoutingProfile, avoid: RoutingAvoid[]):
     base.length = 8.5;
     base.axle_count = 2;
     base.hgv_no_access_penalty = 43200;
+  }
+  if (costing === "truck" && vehicle) {
+    if (vehicle.heightM !== undefined) base.height = vehicle.heightM;
+    if (vehicle.widthM !== undefined) base.width = vehicle.widthM;
+    if (vehicle.lengthM !== undefined) base.length = vehicle.lengthM;
+    if (vehicle.weightTonnes !== undefined) base.weight = vehicle.weightTonnes;
   }
   if (Object.keys(base).length > 0) {
     options[costing] = base;

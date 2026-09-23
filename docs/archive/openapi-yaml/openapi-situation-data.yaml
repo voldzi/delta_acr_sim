@@ -4214,8 +4214,34 @@ components:
         includeTraffic:
           type: boolean
           description: Traffic context is returned by default for road profiles; this flag documents COP route-detail intent.
+        includeRoadAttributes:
+          type: boolean
+          description: Opt in to directed Valhalla edge attributes for every returned road-route variant. Failure does not remove the base route.
+        vehicle:
+          $ref: "#/components/schemas/RoutingVehicle"
         includeDebug:
           type: boolean
+    RoutingVehicle:
+      type: object
+      additionalProperties: false
+      description: Actual vehicle dimensions. Road routing uses truck costing when at least one is supplied; incomplete input is explicitly only partially evaluated.
+      properties:
+        heightM:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 8
+        widthM:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 5
+        lengthM:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 30
+        weightTonnes:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
     RoutingIsochroneRequest:
       type: object
       required: [origin]
@@ -4712,6 +4738,109 @@ components:
           $ref: "#/components/schemas/RoutingWeatherOnRoute"
         hazardsOnRoute:
           $ref: "#/components/schemas/RoutingHazardsOnRoute"
+        roadAttributes:
+          $ref: "#/components/schemas/RoutingRoadAttributes"
+        vehicleAssessment:
+          type: object
+          required: [state, providerCosting, appliedFields, limitations]
+          properties:
+            state:
+              type: string
+              enum: [not_evaluated, partially_evaluated, provider_costing_applied]
+            providerCosting:
+              type: string
+              enum: [auto, truck]
+            appliedFields:
+              type: array
+              items:
+                type: string
+                enum: [heightM, widthM, lengthM, weightTonnes]
+            limitations:
+              type: array
+              items:
+                type: string
+    RoutingRoadAttributes:
+      type: object
+      required: [state, source, observedAt, matchedEdgeCount, geometryMismatchCount, knownSpeedLimitCoveragePercent, vehicleRestrictionsState, speedLimits, restrictions]
+      properties:
+        state:
+          type: string
+          enum: [ok, partial, unavailable, unsupported]
+        reason:
+          type: string
+        source:
+          type: string
+          const: valhalla_trace_attributes
+        routingDataset:
+          $ref: "#/components/schemas/RoutingDataset"
+        sourceAgeSeconds:
+          type: integer
+          minimum: 0
+        observedAt:
+          type: string
+          format: date-time
+        matchedEdgeCount:
+          type: integer
+          minimum: 0
+        geometryMismatchCount:
+          type: integer
+          minimum: 0
+        knownSpeedLimitCoveragePercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        vehicleRestrictionsState:
+          type: string
+          const: not_evaluated
+        speedLimits:
+          type: array
+          items:
+            type: object
+            required: [beginShapeIndex, endShapeIndex, direction, status, source]
+            properties:
+              beginShapeIndex:
+                type: integer
+              endShapeIndex:
+                type: integer
+              direction:
+                type: string
+                const: along_route
+              valueKph:
+                type: number
+              status:
+                type: string
+                enum: [explicit, derived, unknown]
+              source:
+                type: string
+                enum: [valhalla_graph_osm_maxspeed, unknown]
+        restrictions:
+          type: array
+          items:
+            type: object
+            required: [kind, beginShapeIndex, endShapeIndex, assessment, source]
+            properties:
+              kind:
+                type: string
+                const: closure
+              beginShapeIndex:
+                type: integer
+              endShapeIndex:
+                type: integer
+              assessment:
+                type: string
+                const: advisory
+              source:
+                type: string
+                const: valhalla_trace_attributes
+    RoutingDataset:
+      type: object
+      required: [version, builtAt]
+      properties:
+        version:
+          type: string
+        builtAt:
+          type: string
+          format: date-time
     RoutingRouteResponse:
       type: object
       required: [contractVersion, generatedAt, source, query, profile, traffic, quality, routes, features, warnings]
@@ -4745,6 +4874,20 @@ components:
           type: array
           items:
             type: string
+        coverage:
+          type: object
+          required: [state]
+          properties:
+            state:
+              type: string
+              enum: [covered, partial, outside_coverage]
+            reason:
+              type: string
+            routingDataset:
+              $ref: "#/components/schemas/RoutingDataset"
+            sourceAgeSeconds:
+              type: integer
+              minimum: 0
     RoutingIsochroneResponse:
       type: object
       required: [contractVersion, generatedAt, source, query, profile, summary, features, warnings]

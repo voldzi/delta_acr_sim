@@ -477,7 +477,52 @@ preference; jako tvrdé překážky se zapnou až po normalizaci hazardních geo
 do routovacího grafu nebo Valhalla restriction pipeline. Pokud žádný routovací
 backend není dostupný, SIM vrátí přímou
 fallback geometrii s `quality.mode=direct_fallback`, aby COP mohl jasně ukázat,
-že nejde o trasu po komunikacích.
+že nejde o trasu po komunikacích. COP tuto geometrii od 2026-09-23 nevydává
+jako navigovatelnou trasu; nastaví `coverage.state=outside_coverage`.
+
+### Volitelné směrové atributy pro Jízdu
+
+`POST /routing/route` i `/routing/alternatives` přijímají volitelné
+`includeRoadAttributes: true`. Každá Valhalla varianta se samostatně obohatí
+voláním `/trace_attributes` s `shape_match=edge_walk` nad její již vypočtenou
+polyline6 geometrií. SIM nepočítá novou trasu. Před a po obohacení porovná
+`tileset_last_modified`; body trace mapuje monotónně na tvar konkrétní trasy
+s tolerancí 1 m. Neshoda nebo výpadek znamená
+`routes[].roadAttributes.state=unavailable` a prázdné úseky, nikoli změnu ETA
+nebo geometrie. OSM/PostGIS backend hlásí `unsupported`.
+
+`speedLimits[]` nese `beginShapeIndex`, `endShapeIndex` do téže
+`routes[].geometry.coordinates`, `direction=along_route`, `valueKph` jen u
+výslovně dostupného `edge.speed_limit`, `status=explicit|derived|unknown` a
+zdroj. Aktuální implementace právní limit **neodvozuje**: `derived` nevrací,
+chybějící hodnota je `unknown`. `edge.speed`, živé rychlosti a ETA se jako
+povolená rychlost nepoužívají. `knownSpeedLimitCoveragePercent` je vážené
+délkou trasy. `routingDataset.version/builtAt` a `observedAt` oddělují stáří
+grafu od času dotazu; `osmChangeset` je volitelný.
+
+`restrictions[]` zatím obsahuje pouze closure intervaly z Valhalla trace,
+označené `assessment=advisory`. SRTI incidenty zůstávají v `traffic` a hazardy
+v `hazardsOnRoute`. Samotné `trace_attributes` neposkytuje ověřená pravidla
+`maxheight:conditional`, `maxweight` nebo právní zákazy vjezdu, proto
+`vehicleRestrictionsState=not_evaluated` a prázdný seznam **není** povolením
+průjezdu. Pro podmíněná a rozměrová pravidla bude potřeba zvláštní zdroj
+vázaný na směrové Valhalla hrany a stejnou verzi datasetu.
+
+Volitelné `vehicle` přijímá skutečné `heightM`, `widthM`, `lengthM` a
+`weightTonnes` v bezpečných rozsazích. Pokud je pro silniční profil alespoň
+jeden parametr dodán, SIM použije Valhalla `truck` costing s předanými
+hodnotami. `vehicleAssessment` rozlišuje nepředaný profil, částečně předaný
+profil a parametry použité poskytovatelem. Ani poslední stav není zárukou
+fyzické či právní průjezdnosti. Starý požadavek `profileId=car` bez `vehicle`
+zůstává beze změny.
+
+`coverage.state` je `covered`, `partial` nebo `outside_coverage`; poslední
+stav nikdy nesmí klient zobrazit jako turn-by-turn trasu. Produkční měření
+sedmi veřejných tras dne 2026-09-23 našlo 0 neshod geometrie, známé limity
+na 71–100 % délky podle scénáře a medián dodatečné latence interního
+`trace_attributes` 145 ms. Reprodukovatelný read-only probe je
+`scripts/benchmark-road-attributes.py INTERNAL_VALHALLA_BASE_URL`; jde o
+měření Valhally, nikoli end-to-end latence COP.
 
 COP má pro stav navigace číst `GET /situation-data/health/ready` a
 `GET /situation-data/api/v1/observability`. Pole `routing.status=ok` /
@@ -561,7 +606,7 @@ Unified mobile-network features ve vrstvě `mobile_network` navíc nesou:
 | `idsjmk_vehicle_positions` | `traffic`                                                                                                                                        | Volitelný IDS JMK/Brno open-data zdroj poloh vozidel. SIM drží feed cache a publikuje pouze bbox-filtered features.                                                                                                                                                                                                                      |
 | `spravazeleznic_trains`    | `traffic`                                                                                                                                        | Volitelný zdroj aktuálních poloh vlaků z veřejné mapy Správy železnic. SIM drží jednu server-side cache položku s minimálním TTL 900 s a do COP posílá normalizovaný GeoJSON ve WGS84.                                                                                                                                                   |
 | `road_srti_lod`            | `traffic`                                                                                                                                        | NDIC/ŘSD SRTI dopravní události přes TamTam Research Linked Open Data SPARQL. Výchozí source-level TTL je 60 s; SIM dotazuje upstream po TTL a COM používá pouze SIM odpověď.                                                                                                                                                            |
-| `tpeg2`                    | `traffic`                                                                                                                                        | Autentizovaný NDIC/ŘSD TPEG2 zdroj. TFP poskytuje rychlost, zdržení, úroveň a kvalitu provozu na liniových úsecích; TEC poskytuje dopravní události. Dynamický snapshot se obnovuje nejvýše jednou za 300 s, statické OpenLR reference jednou denně. SIM nikdy nevrací zdrojové XML ani API token. |
+| `tpeg2`                    | `traffic`                                                                                                                                        | Autentizovaný NDIC/ŘSD TPEG2 zdroj. TFP poskytuje rychlost, zdržení, úroveň a kvalitu provozu na liniových úsecích; TEC poskytuje dopravní události. Dynamický snapshot se obnovuje nejvýše jednou za 300 s, statické OpenLR reference jednou denně. SIM nikdy nevrací zdrojové XML ani API token.                                       |
 | `safety_data`              | `warnings`, `weather_alerts`, `fire`, `flood`, `boundary_admin`                                                                                  | Kompatibilní projekce Safety Data API do situačního kontraktu. Primární safety katalog je `sim.safety-data`; tato projekce slouží pro starší serverové adaptéry.                                                                                                                                                                         |
 | `ardos_partner`            | `ground`, `mobile`, `traffic`                                                                                                                    | Neveřejný partnerský ARDOS zdroj. Vyžaduje `ARDOS_PARTNER_BASE_URL` a `ARDOS_PARTNER_TOKEN`.                                                                                                                                                                                                                                             |
 | `osm_postgis`              | `ground`, `mobile`, `boundary_country`, `boundary_region`, `boundary_district`, `boundary_orp`, `place_settlements`, `trail_routes`, `trail_poi` | OpenStreetMap extract v PostGIS. Preferovaně HA PostgreSQL/Patroni přes `haproxy.home.cz:5000`; lokální Docker PostGIS jen jako rebuildovatelný read-model/cache.                                                                                                                                                                        |
