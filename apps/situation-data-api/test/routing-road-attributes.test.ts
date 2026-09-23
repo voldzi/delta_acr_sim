@@ -87,4 +87,29 @@ describe("Valhalla directed route attributes", () => {
       [2, 3]
     ]);
   });
+
+  it("accepts only a duplicated terminal trace point from edge_walk", () => {
+    const result = roadAttributesFromTrace(
+      {
+        shape: encodeValhallaPolyline6([...shape, shape[shape.length - 1]!]),
+        edges: [
+          { begin_shape_index: 0, end_shape_index: 1, speed_limit: 50 },
+          { begin_shape_index: 1, end_shape_index: 3, speed_limit: 30 }
+        ]
+      },
+      shape,
+      dataset,
+      observedAt
+    );
+    expect(result).toMatchObject({ state: "ok", geometryMismatchCount: 0, matchedEdgeCount: 2 });
+    expect(result.speedLimits[1]).toMatchObject({ beginShapeIndex: 1, endShapeIndex: 2, valueKph: 30 });
+
+    const middleDuplicate = roadAttributesFromTrace(
+      { shape: encodeValhallaPolyline6([shape[0]!, shape[1]!, shape[1]!, shape[2]!]), edges: [{ begin_shape_index: 0, end_shape_index: 3, speed_limit: 50 }] },
+      shape,
+      dataset,
+      observedAt
+    );
+    expect(middleDuplicate).toMatchObject({ state: "unavailable", speedLimits: [] });
+  });
 });

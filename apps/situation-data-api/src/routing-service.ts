@@ -3088,13 +3088,24 @@ export function roadAttributesFromTrace(
   }
   const shapeMap: number[] = [];
   let searchFrom = 0;
-  for (const point of traceShape) {
+  for (const [traceIndex, point] of traceShape.entries()) {
     let matched = -1;
     for (let index = searchFrom; index < routeShape.length; index += 1) {
       if (haversineMeters(point, routeShape[index]!) <= 1) {
         matched = index;
         break;
       }
+    }
+    // Valhalla can append the destination twice in an edge_walk shape. Accept only
+    // that exact terminal duplicate; any other repeated point still needs a
+    // distinct, forward route index so loops cannot bind to the wrong edge.
+    if (
+      matched < 0 &&
+      traceIndex === traceShape.length - 1 &&
+      shapeMap[shapeMap.length - 1] === routeShape.length - 1 &&
+      haversineMeters(point, routeShape[routeShape.length - 1]!) <= 1
+    ) {
+      matched = routeShape.length - 1;
     }
     if (matched < 0) {
       return {
