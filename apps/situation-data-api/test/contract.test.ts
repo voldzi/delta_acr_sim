@@ -29,6 +29,15 @@ describe("Situation Data API contract", () => {
       port: 0,
       dataDir,
       enabledSources: ["mock"],
+      aprsIsCallsign: undefined,
+      aprsIsHost: "127.0.0.1",
+      aprsIsPort: 14580,
+      aprsIsWindowMs: 2500,
+      aprsIsCacheTtlSeconds: 30,
+      aprsIsFreshSeconds: 600,
+      aprsIsMaxBboxDegrees: 2,
+      aprsIsMaxStations: 500,
+      aprsIsMaxRequestsPerMinute: 12,
       defaultBbox: { west: 13.85, south: 49.65, east: 15.35, north: 50.45 },
       requestTimeoutMs: 1000,
       cacheTtlSeconds: 1,
@@ -930,6 +939,21 @@ describe("Situation Data API contract", () => {
         })
       })
     ]);
+  });
+
+  it("catalogs APRS as an opt-in attributed server-side layer", async () => {
+    const disabled = await request(app).get("/api/v1/catalog");
+    const layer = disabled.body.layers.find((item: { providerLayerId: string }) => item.providerLayerId === "communications.aprs");
+    expect(layer).toMatchObject({
+      recommendedCatalogLayerId: "public.communications.aprs",
+      availability: "disabled",
+      defaultVisible: false,
+      audience: "authenticated",
+      query: { providerLayerIds: ["aprs"], providerSourceIds: ["aprs_is"] }
+    });
+    expect(layer.legal.attribution).toContain("https://www.aprs-is.net/");
+    const source = disabled.body.sources.find((item: { sourceId: string }) => item.sourceId === "aprs_is");
+    expect(source).toMatchObject({ enabled: false, selectableInMap: true, backend: "aprs-is-filtered" });
   });
 
   it("exposes provider map catalog metadata for COM", async () => {

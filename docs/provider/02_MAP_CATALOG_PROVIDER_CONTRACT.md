@@ -145,6 +145,69 @@ Každá feature vrácená provider streamem má nést normalizované identifiká
 
 ## Hlavní mobilní vrstva
 
+## APRS / radioamatérské stanice
+
+SIM nabízí volitelnou vrstvu `public.communications.aprs` (provider
+`communications.aprs`, source `aprs_is`). COP předá pouze aktuálně otevřený
+bbox přes existující serverový `cop.features` dotaz
+`layers=aprs&source=aprs_is`; minimální zoom katalogu je 9 a maximální
+rozměr výřezu je 2° v každé ose. Zdroj je ve výchozí konfiguraci vypnutý.
+
+Detail bodu zachovává plnou značku včetně SSID. V `providerProperties`
+jsou `callsign`, `stationType` (`fixed`, `mobile`, `unknown`),
+`symbol`, `symbolTable`, `positionState` (`reported`, `stale`),
+`positionQuality`, `reportAt`, `simReceivedAt`, `reportTimeQuality`
+a `ageSeconds`. Poloha bez časové značky paketu nese
+`reportTimeQuality=sim_received_only`; nejde o doložený čas vysílání.
+Pakety bez platné polohy se nezobrazí jako bod a jejich počet je vidět ve
+zdraví zdroje. Poslední známá poloha je po 10 minutách `stale=true`.
+Všechny body jsou neověřené a nejsou krizovou událostí ani podkladem pro
+automobilovou navigaci.
+
+COP musí u zapnuté vrstvy viditelně zobrazit
+`APRS-IS network / transmitting amateur radio stations` a odkaz
+`https://www.aprs-is.net/`. COP ani mobilní klienti nesmějí volat APRS-IS
+přímo. SIM udržuje pouze krátkou paměťovou cache dotazovaných výřezů a
+nearchivuje historické trasy.
+
+Příklad zkrácené anonymizované odpovědi (syntetická značka; nejde o
+skutečnou polohu operátora):
+
+```json
+{
+  "type": "Feature",
+  "id": "aprs:aprs_is:N0TEST-10",
+  "geometry": { "type": "Point", "coordinates": [14.5, 49.98] },
+  "properties": {
+    "layerId": "public.communications.aprs",
+    "providerLayerId": "communications.aprs",
+    "sourceId": "aprs_is",
+    "label": "N0TEST-10",
+    "observedAt": "2026-09-24T12:00:00Z",
+    "stale": true,
+    "providerProperties": {
+      "callsign": "N0TEST-10",
+      "stationType": "mobile",
+      "positionState": "stale",
+      "reportAt": "2026-09-24T12:00:00Z",
+      "simReceivedAt": "2026-09-24T12:15:00Z",
+      "reportTimeQuality": "packet_utc",
+      "ageSeconds": 900,
+      "attribution": "APRS-IS network / transmitting amateur radio stations",
+      "attributionUrl": "https://www.aprs-is.net/",
+      "verifiedIncident": false,
+      "navigationUse": false
+    }
+  }
+}
+```
+
+První dotaz čeká nejvýše `APRS_IS_WINDOW_MS=2500` ms na filtrovaný
+APRS-IS stream; opakovaný dotaz na stejný bbox se obslouží z paměťové cache
+po dobu 30 sekund. Na portu 14580 není slíben historický snapshot, takže
+okamžitě po zapnutí může být vrstva prázdná. Chyba zdroje se hlásí pouze
+u APRS; ostatní mapové vrstvy a routing zůstávají dostupné.
+
 Pro občanské zobrazení mobilní sítě je jediná doporučená vrstva:
 
 - COM layer: `public.mobile.network`

@@ -32,7 +32,8 @@ export type SituationLayerId =
   | "weather_radar_nowcast"
   | "weather_thunderstorm_risk"
   | "weather_webcams"
-  | "air_quality_grid";
+  | "air_quality_grid"
+  | "aprs";
 export type SituationDataSourceId =
   | "mock"
   | "open_meteo"
@@ -56,7 +57,8 @@ export type SituationDataSourceId =
   | "chmi_weather_stations"
   | "chmi_weather_radar"
   | "chmi_weather_webcams"
-  | "ardos_partner";
+  | "ardos_partner"
+  | "aprs_is";
 export type SourceMode = "live" | "mock" | "reference";
 export type SituationSeverity = "info" | "advisory" | "warning" | "critical";
 export type OsmPostgisBackend = "unconfigured" | "local-postgis" | "patroni-postgis" | "external-postgis";
@@ -342,6 +344,10 @@ export interface SourceHealthStatus {
   status: "ok" | "degraded";
   backend?: string;
   objectCount?: number;
+  activeCount?: number;
+  staleCount?: number;
+  noPositionCount?: number;
+  providerErrorCount?: number;
   lastImportAt?: string;
   lastImportAgeSeconds?: number;
   boundaryFeatureCount?: number;

@@ -8726,7 +8726,8 @@
           "weather_radar_nowcast",
           "weather_thunderstorm_risk",
           "weather_webcams",
-          "air_quality_grid"
+          "air_quality_grid",
+          "aprs"
         ]
       },
       "SituationDataSourceId": {
@@ -8753,7 +8754,8 @@
           "chmi_weather_stations",
           "chmi_weather_radar",
           "chmi_weather_webcams",
-          "ardos_partner"
+          "ardos_partner",
+          "aprs_is"
         ]
       },
       "SituationDataMobileCoverageTechnology": {

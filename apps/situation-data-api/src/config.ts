@@ -18,6 +18,15 @@ export interface SituationDataConfig {
   port: number;
   dataDir: string;
   enabledSources: SituationDataSourceId[];
+  aprsIsCallsign?: string;
+  aprsIsHost: string;
+  aprsIsPort: number;
+  aprsIsWindowMs: number;
+  aprsIsCacheTtlSeconds: number;
+  aprsIsFreshSeconds: number;
+  aprsIsMaxBboxDegrees: number;
+  aprsIsMaxStations: number;
+  aprsIsMaxRequestsPerMinute: number;
   defaultBbox: BoundingBox;
   requestTimeoutMs: number;
   cacheTtlSeconds: number;
@@ -149,6 +158,15 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     port: parseInteger(process.env.SITUATION_DATA_API_PORT, 4020),
     dataDir,
     enabledSources: parseSourceList(process.env.SITUATION_DATA_ENABLED_SOURCES),
+    aprsIsCallsign: emptyToUndefined(process.env.APRS_IS_CALLSIGN)?.toUpperCase(),
+    aprsIsHost: process.env.APRS_IS_HOST ?? "euro.aprs2.net",
+    aprsIsPort: parseInteger(process.env.APRS_IS_PORT, 14580),
+    aprsIsWindowMs: parseInteger(process.env.APRS_IS_WINDOW_MS, 2500),
+    aprsIsCacheTtlSeconds: parseInteger(process.env.APRS_IS_CACHE_TTL_SECONDS, 30),
+    aprsIsFreshSeconds: parseInteger(process.env.APRS_IS_FRESH_SECONDS, 600),
+    aprsIsMaxBboxDegrees: parseFloatOr(process.env.APRS_IS_MAX_BBOX_DEGREES, 2),
+    aprsIsMaxStations: parseInteger(process.env.APRS_IS_MAX_STATIONS, 500),
+    aprsIsMaxRequestsPerMinute: parseInteger(process.env.APRS_IS_MAX_REQUESTS_PER_MINUTE, 12),
     defaultBbox: parseBbox(process.env.SITUATION_DATA_DEFAULT_BBOX) ?? {
       west: 13.85,
       south: 49.65,
@@ -328,7 +346,8 @@ function parseSourceList(value: string | undefined): SituationDataSourceId[] {
     "chmi_weather_stations",
     "chmi_weather_radar",
     "chmi_weather_webcams",
-    "ardos_partner"
+    "ardos_partner",
+    "aprs_is"
   ]);
   const parsed = (value ?? "mock")
     .split(",")

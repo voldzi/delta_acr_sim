@@ -104,6 +104,8 @@
 - `VALHALLA_TRAFFIC_CACHE_DIR`
 - `SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR` (obnovitelná cache, produkčně X5)
 - `OSM_IMPORT_HOST_DIR` (stažitelný PBF a pracovní prostor importu, produkčně X5)
+- `APRS_IS_CALLSIGN` (schválená identita pouze pro příjem; bez ní je APRS vrstva vypnutá)
+- `APRS_IS_HOST`, `APRS_IS_PORT`, `APRS_IS_WINDOW_MS`, `APRS_IS_CACHE_TTL_SECONDS`, `APRS_IS_FRESH_SECONDS`, `APRS_IS_MAX_BBOX_DEGREES`, `APRS_IS_MAX_STATIONS`, `APRS_IS_MAX_REQUESTS_PER_MINUTE`
 - `COMPOSE_FILE=docker-compose.yml:docker-compose.x5.yml` (produkční X5 bind override)
 - `SIM_DATA_HOST_DIR` (persistentní audit, fronta a SIM store; musí být zálohováno)
 - `SITUATION_DATA_HOST_DIR` (persistentní routing artefakty; musí být zálohováno)

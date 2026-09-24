@@ -1307,11 +1307,12 @@ components:
           weather_radar_nowcast,
           weather_thunderstorm_risk,
           weather_webcams,
-          air_quality_grid
+          air_quality_grid,
+          aprs
         ]
     SourceId:
       type: string
-      enum: [mock, open_meteo, weather_forecast, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, public_transit_static, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, community_context, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner]
+      enum: [mock, open_meteo, weather_forecast, mobile_coverage_model, mobile_network_model, osm_postgis, osm_overpass, ctu_nettest, ctu_stationary_mobile, pid_gtfs_rt, public_transit_static, idsjmk_vehicle_positions, spravazeleznic_trains, road_srti_lod, safety_data, community_context, aviation_weather, chmi_air_quality, chmi_weather_stations, chmi_weather_radar, chmi_weather_webcams, ardos_partner, aprs_is]
     MobileCoverageTechnology:
       type: string
       enum: [2G, 4G, 5G]
@@ -2301,10 +2302,22 @@ components:
           enum: [ok, degraded]
         backend:
           type: string
-          enum: [unconfigured, local-postgis, patroni-postgis, external-postgis]
+          enum: [unconfigured, local-postgis, patroni-postgis, external-postgis, aprs-is-filtered]
         objectCount:
           type: integer
           description: Present for PostGIS-backed providers when public.osm_poi is readable.
+        activeCount:
+          type: integer
+          description: APRS points within the configured freshness window.
+        staleCount:
+          type: integer
+          description: APRS points older than the freshness window.
+        noPositionCount:
+          type: integer
+          description: APRS packets without a usable position in the last request window.
+        providerErrorCount:
+          type: integer
+          description: Consecutive APRS-IS provider failures.
         lastImportAt:
           type: string
           format: date-time

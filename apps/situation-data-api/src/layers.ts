@@ -2,6 +2,14 @@ import type { LayerDescriptor } from "./types.js";
 
 export const LAYERS: LayerDescriptor[] = [
   {
+    layerId: "aprs",
+    label: "APRS / radioamatérské stanice",
+    description: "Neověřené polohy z filtrovaného příjmu APRS-IS. Staré hlášení není živá poloha.",
+    defaultVisible: false,
+    geometryTypes: ["Point"],
+    expectedCadenceSeconds: 30
+  },
+  {
     layerId: "weather",
     label: "Weather",
     description: "Current weather and simple hazard context for the requested map area.",

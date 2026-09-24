@@ -1,4 +1,5 @@
 import { unzipSync } from "fflate";
+import { AprsIsSource } from "./aprs-is-source.js";
 import gtfsRealtime from "gtfs-realtime-bindings";
 import type { transit_realtime } from "gtfs-realtime-bindings";
 import proj4 from "proj4";
@@ -285,6 +286,7 @@ const ARDOS_PARTNER_LICENSE: SituationDataLicense = {
 export function createSituationDataSources(config: SituationDataConfig): SituationDataSource[] {
   const allSources: Record<SituationDataSourceId, SituationDataSource> = {
     mock: new MockSituationDataSource(),
+    aprs_is: new AprsIsSource(config),
     open_meteo: new OpenMeteoSource(config),
     weather_forecast: new WeatherForecastSource(config),
     mobile_coverage_model: new MobileCoverageSource(config),
@@ -316,6 +318,7 @@ export function allSourceDescriptors(config: SituationDataConfig): SourceDescrip
   const enabled = new Set(config.enabledSources);
   return [
     new MockSituationDataSource().descriptor,
+    new AprsIsSource(config).descriptor,
     new OpenMeteoSource(config).descriptor,
     new WeatherForecastSource(config).descriptor,
     new MobileCoverageSource(config).descriptor,

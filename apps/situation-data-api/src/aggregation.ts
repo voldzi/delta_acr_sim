@@ -116,6 +116,8 @@ function responseCacheTtlMs(query: SituationQuery, config: SituationDataConfig):
         return [config.idsjmkVehiclePositionsCacheTtlSeconds];
       case "road_srti_lod":
         return [config.roadSrtiLodCacheTtlSeconds];
+      case "aprs_is":
+        return [config.aprsIsCacheTtlSeconds];
       default:
         return [];
     }
@@ -140,6 +142,7 @@ function normalizeProviderFeature(feature: SituationFeature): SituationFeature {
 
 function providerLayerIdForFeature(feature: SituationFeature): string {
   const { layer, sourceId, category } = feature.properties;
+  if (sourceId === "aprs_is") return "communications.aprs";
   if (sourceId === "open_meteo") {
     return "weather.open_meteo";
   }
@@ -276,6 +279,8 @@ function providerLayerIdForFeature(feature: SituationFeature): string {
 function catalogLayerIdForFeature(feature: SituationFeature, providerLayerId: string): string {
   const { layer, sourceId } = feature.properties;
   switch (providerLayerId) {
+    case "communications.aprs":
+      return "public.communications.aprs";
     case "weather.open_meteo":
       return "public.weather.current";
     case "weather.forecast_area":
@@ -454,7 +459,7 @@ function compactRecord(value: Record<string, unknown>): Record<string, unknown> 
 
 function cacheKeyForSituationQuery(query: SituationQuery, config: SituationDataConfig): string {
   return JSON.stringify({
-    bbox: canonicalizeBboxForCache(query.bbox, config.bboxCachePaddingDegrees),
+    bbox: query.sourceIds.includes("aprs_is") ? query.bbox : canonicalizeBboxForCache(query.bbox, config.bboxCachePaddingDegrees),
     layers: [...query.layers].sort(),
     sources: [...query.sourceIds].sort(),
     limit: query.limit,
@@ -537,7 +542,7 @@ function compareFeaturePriority(a: SituationFeature, b: SituationFeature, source
 function markStale(feature: SituationFeature, staleAfterSeconds: number): SituationFeature {
   const ageSeconds = Math.max(0, Math.round((Date.now() - Date.parse(feature.properties.observedAt)) / 1000));
   const validUntilMs = feature.properties.validUntil ? Date.parse(feature.properties.validUntil) : undefined;
-  const stale = typeof validUntilMs === "number" && !Number.isNaN(validUntilMs) ? Date.now() > validUntilMs : ageSeconds > staleAfterSeconds;
+  const stale = feature.properties.stale || (typeof validUntilMs === "number" && !Number.isNaN(validUntilMs) ? Date.now() > validUntilMs : ageSeconds > staleAfterSeconds);
   return {
     ...feature,
     properties: {

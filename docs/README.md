@@ -38,6 +38,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`testing/00_INDEX.md`](testing/00_INDEX.md)
 - [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md)
 - [`adr/00_INDEX.md`](adr/00_INDEX.md)
+- [`adr/0023_REQUEST_SCOPED_APRS_IS_SOURCE.md`](adr/0023_REQUEST_SCOPED_APRS_IS_SOURCE.md)
 
 ## Machine-Readable API Contract
 

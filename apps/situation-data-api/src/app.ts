@@ -209,7 +209,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
     const sourceHealth = await context.aggregation.sourceHealthStatuses();
     const dem = await context.demCatalog.status();
     const routing = await context.routing.healthStatus();
-    const degraded = sourceHealth.some((source) => source.status === "degraded");
+    const degraded = sourceHealth.some((source) => source.sourceId !== "aprs_is" && source.status === "degraded");
     res.json({
       status: degraded || dem.status === "degraded" || routing.status === "degraded" ? "degraded" : "ok",
       timestamp: new Date().toISOString(),
@@ -341,7 +341,7 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
       serviceId: "situation-data-api",
       generatedAt: new Date().toISOString(),
       status:
-        sourceHealth.some((source) => source.status === "degraded") || dem.status === "degraded" || routingBackend.status === "degraded" ? "degraded" : "ok",
+        sourceHealth.some((source) => source.sourceId !== "aprs_is" && source.status === "degraded") || dem.status === "degraded" || routingBackend.status === "degraded" ? "degraded" : "ok",
       cache: cacheTelemetry(cache, context.config.cacheMaxEntries),
       sharedCache: {
         enabled: cache.sharedEnabled,
@@ -376,6 +376,10 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
         status: source.status,
         backend: source.backend,
         objectCount: source.objectCount,
+        activeCount: source.activeCount,
+        staleCount: source.staleCount,
+        noPositionCount: source.noPositionCount,
+        providerErrorCount: source.providerErrorCount,
         lastImportAt: source.lastImportAt,
         lastImportAgeSeconds: source.lastImportAgeSeconds,
         boundaryFeatureCount: source.boundaryFeatureCount,
@@ -1140,7 +1144,8 @@ function parseLayers(value: unknown): SituationLayerId[] {
     "weather_radar_nowcast",
     "weather_thunderstorm_risk",
     "weather_webcams",
-    "air_quality_grid"
+    "air_quality_grid",
+    "aprs"
   ]);
   const raw = asString(value);
   if (!raw) {
@@ -1209,7 +1214,8 @@ function parseSources(value: unknown, fallback: SituationDataSourceId[]): Situat
     "chmi_weather_stations",
     "chmi_weather_radar",
     "chmi_weather_webcams",
-    "ardos_partner"
+    "ardos_partner",
+    "aprs_is"
   ]);
   const raw = asString(value);
   if (!raw) {
@@ -1540,6 +1546,13 @@ function sourceHealthMetricLines(status: SourceHealthStatus): string[] {
   const backend = escapeLabel(status.backend ?? "unknown");
   const source = escapeLabel(status.sourceId);
   const lines = [`situation_data_source_health{source="${source}",backend="${backend}"} ${status.status === "ok" ? 1 : 0}`];
+  if (status.sourceId === "aprs_is") {
+    lines.push(`situation_data_aprs_active_points ${status.activeCount ?? 0}`);
+    lines.push(`situation_data_aprs_stale_points ${status.staleCount ?? 0}`);
+    lines.push(`situation_data_aprs_without_position ${status.noPositionCount ?? 0}`);
+    lines.push(`situation_data_aprs_provider_errors ${status.providerErrorCount ?? 0}`);
+    if (status.lastImportAt) lines.push(`situation_data_aprs_last_success_timestamp_seconds ${Math.round(Date.parse(status.lastImportAt) / 1000)}`);
+  }
   if (status.sourceId === "mobile_coverage_model") {
     lines.push(`situation_data_mobile_coverage_backend_info{backend="${backend}"} 1`);
     if (typeof status.objectCount === "number") {

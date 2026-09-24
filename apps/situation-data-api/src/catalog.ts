@@ -38,7 +38,9 @@ export function buildSituationMapCatalog(config: SituationDataConfig, generatedA
 function withLayerAvailability(layers: ProviderCatalogLayerDraft[], config: SituationDataConfig): ProviderCatalogLayer[] {
   const enabledSources = new Set<SituationDataSourceId>(config.enabledSources);
   return layers.map((layer) => {
-    const disabledSources = layer.sourceIds.filter((sourceId) => !enabledSources.has(sourceId));
+    const disabledSources = layer.sourceIds.filter((sourceId) =>
+      !enabledSources.has(sourceId) || (sourceId === "aprs_is" && !/^[A-Z0-9]{1,9}(?:-[0-9]{1,2})?$/.test(config.aprsIsCallsign ?? ""))
+    );
     if (disabledSources.length === 0) {
       return {
         ...layer,
@@ -57,6 +59,32 @@ function withLayerAvailability(layers: ProviderCatalogLayerDraft[], config: Situ
 
 function buildProviderLayers(config: SituationDataConfig): ProviderCatalogLayerDraft[] {
   return [
+    {
+      providerLayerId: "communications.aprs",
+      recommendedCatalogLayerId: "public.communications.aprs",
+      label: "APRS / radioamatérské stanice",
+      description: "Neověřené bodové polohy z APRS-IS; starý záznam je poslední známá poloha.",
+      categoryPath: ["communications", "amateur_radio"],
+      categories: ["amateur_radio_station"],
+      role: "overlay",
+      audience: "authenticated",
+      kind: "vector_features",
+      defaultVisible: false,
+      selectable: true,
+      geometryTypes: ["Point"],
+      minZoom: 9,
+      maxZoom: 18,
+      refreshSeconds: config.aprsIsCacheTtlSeconds,
+      cacheTtlSeconds: config.aprsIsCacheTtlSeconds,
+      styleProfile: "aprs-station-v1",
+      sourceIds: ["aprs_is"],
+      query: query(["aprs"], ["aprs_is"], undefined, config.aprsIsMaxStations),
+      legend: { profile: "aprs-station-v1" },
+      legal: {
+        attribution: "APRS-IS network / transmitting amateur radio stations — https://www.aprs-is.net/",
+        notes: ["Zobrazit viditelnou atribuci a odkaz na APRS-IS.", "Body nejsou ověřené krizové události ani data pro automobilovou navigaci."]
+      }
+    },
     {
       providerLayerId: "weather.open_meteo",
       recommendedCatalogLayerId: "public.weather.current",
@@ -1749,6 +1777,16 @@ function sourceClassification(sourceId: SituationDataSourceId): {
   notes?: string[];
 } {
   switch (sourceId) {
+    case "aprs_is":
+      return {
+        sourceRole: "final",
+        audience: "authenticated",
+        selectableInMap: true,
+        visibleInDiagnostics: true,
+        feedsLayerIds: ["communications.aprs"],
+        feedsCatalogLayerIds: ["public.communications.aprs"],
+        notes: ["Příjem APRS-IS pouze při dotazu na omezenou oblast; bez archivace tras. Poslední známá poloha není živá."]
+      };
     case "mock":
       return {
         sourceRole: "mock",
@@ -2059,6 +2097,8 @@ function sourceClassification(sourceId: SituationDataSourceId): {
 
 function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: SituationDataConfig): number {
   switch (sourceId) {
+    case "aprs_is":
+      return config.aprsIsCacheTtlSeconds;
     case "open_meteo":
       return config.openMeteoCacheTtlSeconds;
     case "weather_forecast":
@@ -2109,6 +2149,7 @@ function cacheTtlSecondsForSource(sourceId: SituationDataSourceId, config: Situa
 }
 
 function backendForSource(sourceId: SituationDataSourceId, config: SituationDataConfig): string | undefined {
+  if (sourceId === "aprs_is") return "aprs-is-filtered";
   if (sourceId === "mobile_network_model" || sourceId === "mobile_coverage_model" || sourceId === "osm_postgis" || sourceId === "community_context") {
     return config.osmPostgisBackend;
   }
