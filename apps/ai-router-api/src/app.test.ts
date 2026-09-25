@@ -14,6 +14,7 @@ const config = {
 } as Config;
 const req = (token?: string) => ({ header: () => (token ? `Bearer ${token}` : undefined) }) as unknown as Request;
 const internalContext = { contractVersion: "cop-chat-context-v1", dataClass: "internal" };
+const reviewedInternalContext = { contractVersion: "cop-chat-context-v1", dataClass: "internal", attestation: "cop-internal-reviewed-v1", items: [{ kind: "chat_message", text: "Viditelná zpráva pouze pro lokální model." }] };
 const syntheticContext = { contractVersion: "cop-chat-context-v1", dataClass: "synthetic", attestation: "cop-policy-reviewed-v1", scenarioId: "exercise_42", facts: ["Fiktivní výpadek proudu v cvičení."] };
 const aggregateContext = { contractVersion: "cop-chat-context-v1", dataClass: "public_aggregate", attestation: "cop-policy-reviewed-v1", aggregates: [{ sourceId: "chmi_weather_stations", metricId: "station_count", regionCode: "CZ010", periodStart: "2026-09-24T00:00:00Z", periodEnd: "2026-09-25T00:00:00Z", value: 42, unit: "count", sampleSize: 42 }] };
 const copBody = (dataClass: "synthetic" | "public_aggregate" | "internal", copContext: unknown) => ({
@@ -41,6 +42,9 @@ describe("AI Router request boundary", () => {
   });
   it("rejects malformed generation input", () => {
     expect(validBody({ ...copBody("internal", internalContext), preference: "local", allowExternal: false })).toBe(true);
+    expect(validBody({ ...copBody("internal", reviewedInternalContext), preference: "local", allowExternal: false })).toBe(true);
+    expect(validBody({ ...copBody("internal", { ...reviewedInternalContext, items: [{ kind: "incident", text: "Forbidden raw incident." }] }), preference: "local", allowExternal: false })).toBe(false);
+    expect(validBody({ ...copBody("internal", { ...reviewedInternalContext, extra: "raw data" }), preference: "local", allowExternal: false })).toBe(false);
     expect(validBody({ ...copBody("internal", internalContext), maxOutputTokens: 99999 })).toBe(false);
     expect(validBody({ ...copBody("internal", internalContext), dataClass: "secret" })).toBe(false);
     expect(validBody({ ...copBody("synthetic", syntheticContext), dataClass: undefined })).toBe(false);
@@ -100,13 +104,15 @@ describe("AI Router request boundary", () => {
     const response = await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...copBody("internal", internalContext), preference: "auto", allowExternal: false }).expect(503);
     expect(response.body).toEqual({ error: "local_model_unavailable" });
     expect(store.reserve).not.toHaveBeenCalled();
-    const localFetch = vi.fn(async (_input: string | URL | Request) => new Response(JSON.stringify({ response: "Lokální odpověď", prompt_eval_count: 12, eval_count: 5 }), { status: 200 }));
+    const localFetch = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(JSON.stringify({ response: "Lokální odpověď", prompt_eval_count: 12, eval_count: 5 }), { status: 200 }));
     vi.stubGlobal("fetch", localFetch);
     const localStore = testStore();
     const localApp = createApp({ ...runtimeConfig, localUrl: "http://ollama:11434", localModel: "local-test-model" }, localStore as unknown as BudgetStore);
-    const localResult = await request(localApp).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...copBody("internal", internalContext), preference: "auto", allowExternal: false }).expect(200);
+    const localResult = await request(localApp).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...copBody("internal", reviewedInternalContext), preference: "auto", allowExternal: false }).expect(200);
     expect(localResult.body).toMatchObject({ tier: "local_fast", model: "local-test-model", usage: { estimatedMicrousd: 0 } });
     expect(String(localFetch.mock.calls[0]?.[0])).toContain("ollama:11434");
+    expect(String(localFetch.mock.calls[0]?.[1]?.body)).toContain("Viditelná zpráva pouze pro lokální model.");
+    expect(JSON.parse(String(localFetch.mock.calls[0]?.[1]?.body)).think).toBe(false);
     const failedLocalFetch = vi.fn(async () => new Response("unavailable", { status: 503 }));
     vi.stubGlobal("fetch", failedLocalFetch);
     await request(localApp).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...copBody("internal", internalContext), preference: "auto", allowExternal: false }).expect(503, { requestId: "00000000-0000-4000-8000-000000000001", error: "model_unavailable" });
