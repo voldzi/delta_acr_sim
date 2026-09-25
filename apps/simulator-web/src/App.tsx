@@ -45,6 +45,7 @@ import {
   clearQueue,
   clearSimApiToken,
   createAiDraft,
+  createAiRouterScenarioDraft,
   createScenario,
   demoScenario,
   denseDemoScenario,
@@ -2223,6 +2224,13 @@ export function App() {
                       >
                         <Bot size={16} /> Připravit textový náhled
                       </button>
+                      <button
+                        type="button"
+                        disabled={loading || !canUseAiAssistant || !aiRouterPrompt.trim() || !aiRouterSyntheticConfirmed}
+                        onClick={() => runAction("Strukturovaný návrh připraven k lidské kontrole.", async () => setDraft(await createAiRouterScenarioDraft(aiRouterPrompt)))}
+                      >
+                        <ShieldCheck size={16} /> Vytvořit návrh ke schválení
+                      </button>
                     </div>
                     {aiRouterPreview ? (
                       <div>
@@ -2234,7 +2242,7 @@ export function App() {
                       </div>
                     ) : null}
                   </div>
-                  <p>Níže je původní strukturovaný návrh z ukázkového poskytovatele; není vytvářen AI Routerem.</p>
+                  <p>Níže lze také vytvořit oddělený ukázkový návrh (mock). Tlačítko Přijmout pracuje pouze s právě zobrazeným návrhem a vždy vyžaduje lidské posouzení.</p>
                   <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
                   <div className="button-strip compact">
                     <button
@@ -2258,6 +2266,7 @@ export function App() {
                         <strong>{draft.title}</strong>
                         <StatusPill label={draft.policyCheck.allowed ? "allowed" : "rejected"} tone={draft.policyCheck.allowed ? "safe" : "danger"} />
                       </div>
+                      <small>Poskytovatel: {draft.provider} · návrh se automaticky nespouští ani nepublikuje.</small>
                       <p>{draft.explanation}</p>
                       <small>{draft.policyCheck.reasons.join(" ")}</small>
                     </div>

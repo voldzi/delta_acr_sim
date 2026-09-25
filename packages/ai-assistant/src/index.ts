@@ -109,6 +109,55 @@ export function createMockScenarioDraft(request: AiDraftRequest): AiScenarioDraf
   };
 }
 
+export function createRouterScenarioDraft(
+  prompt: string,
+  result: { requestId: string; model: string; output: string; requiresHumanReview: true }
+): AiScenarioDraft {
+  if (!classifyPrompt(prompt).allowed || !result.requiresHumanReview ||
+      !/^[a-zA-Z0-9-]{8,100}$/.test(result.requestId) ||
+      !/^[a-zA-Z0-9_.:-]{2,100}$/.test(result.model) || result.output.length > 1000) {
+    throw new Error("router_draft_policy_rejected");
+  }
+  let parsed: unknown;
+  try { parsed = JSON.parse(result.output); } catch { throw new Error("router_draft_invalid_json"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("router_draft_invalid_shape");
+  const value = parsed as Record<string, unknown>;
+  if (Object.keys(value).some((key) => !["name", "description", "durationSeconds", "objectCount"].includes(key)) ||
+      typeof value.name !== "string" || value.name.trim().length < 4 || value.name.length > 80 ||
+      typeof value.description !== "string" || value.description.trim().length < 10 || value.description.length > 500 ||
+      !Number.isInteger(value.durationSeconds) || Number(value.durationSeconds) < 60 || Number(value.durationSeconds) > 900 ||
+      !Number.isInteger(value.objectCount) || Number(value.objectCount) < 1 || Number(value.objectCount) > 20 ||
+      !classifyPrompt(`${value.name} ${value.description}`).allowed) {
+    throw new Error("router_draft_invalid_shape");
+  }
+  const now = new Date().toISOString();
+  return {
+    draftId: randomUUID(),
+    title: value.name.trim(),
+    purpose: "DEMO",
+    safetyScope: "SYNTHETIC_COP_TEST_ONLY",
+    provider: result.model.startsWith("gpt-") ? "openai" : "local",
+    scenarioPatch: {
+      name: `SYNTHETIC: ${value.name.trim()}`,
+      description: `${value.description.trim()} (Fiktivní cvičení; nikoli živá událost.)`,
+      area: { type: "BBOX", bbox: [14.0, 49.8, 15.0, 50.3] },
+      durationSeconds: Number(value.durationSeconds),
+      seed: 20260925,
+      blocks: [{ blockId: "report-sim", enabled: true, objectCount: Number(value.objectCount), updateRateHz: 1 }],
+      faults: []
+    },
+    expectedObservations: ["Pouze syntetická hlášení.", "Před spuštěním a publikací vyžadována lidská kontrola."],
+    policyCheck: { allowed: true, reasons: ["Fiktivní civilní cvičení omezené serverovým schématem."] },
+    prohibitedContentCheck: {
+      targeting: false, weaponGuidance: false, realOperationalAdvice: false,
+      useOfForceRecommendation: false, attackOptimization: false
+    },
+    validation: { schemaValid: true, issues: [] },
+    explanation: "Model navrhl pouze název, popis a omezené parametry; server sestavil civilní syntetický scénář. Před přijetím jej musí zkontrolovat člověk.",
+    audit: { requestId: result.requestId, createdAt: now, model: result.model, humanReviewStatus: "PENDING" }
+  };
+}
+
 export const aiProviders = [
   { id: "mock", enabled: true, external: false, healthy: true },
   { id: "local", enabled: false, external: false, healthy: false },

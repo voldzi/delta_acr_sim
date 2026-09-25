@@ -41,6 +41,12 @@ zůstává jednotné; Router není veřejné UI.
   samostatnou SIM identitou, vrací text pro lidské posouzení a nic neukládá
   jako scénář ani nepublikuje. Původní strukturovaný mock draft zůstává
   oddělený a je v UI takto označen.
+- SIM API proxy `POST /api/v1/ai/router-scenario-drafts`: jen `SIM_AI_USER`
+  a výslovně fiktivní zadání. Model vrací pouze striktní JSON se jménem,
+  popisem, dobou a počtem. Server odmítá další pole, zakázaný obsah a
+  neplatné limity; sám skládá jediný civilní blok `report-sim`, validuje
+  schéma a ukládá pouze návrh se stavem čekajícím na lidské přijetí.
+  Nevytváří aktivní scénář ani nic nepublikuje.
 - `/health/live` a `/health/ready`: proces a dosažitelnost databáze.
 
 Kontrakt záměrně neumožňuje přímou manipulaci s tool registry, volné URL
@@ -85,9 +91,10 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
    opt-in. Před nasazením je nutné dokončit integrační ověření, předat
    dedikovaný COP token a potvrdit přesný rollback. Matrix E2EE, COP chat a
    situační shrnutí nejsou touto změnou přepojeny.
-3. Strukturovaný AI draft v SIM zůstává ukázkový; nový textový náhled přes
-   Router jej nenahrazuje a nic nevytváří automaticky. Případná tvorba
-   strukturovaného scénáře modelem vyžaduje samostatnou validaci a schválení.
+3. Strukturovaný AI draft pro civilní fiktivní hlášení je implementován
+   odděleně od starého mock návrhu. Před označením produkčně přijatým musí
+   projít vizuální zkouškou a skutečným fiktivním dotazem přes nový endpoint;
+   lidské schválení scénáře a pozdější spuštění zůstávají samostatné kroky.
 4. Existující klíč byl zpřístupněn Routeru bez zveřejnění. Samotný stejný
    klíč nezajistí úplné účetnictví: COP volání mimo Router se zde
    nezapočítají. Pro úplný součet je třeba migrovat všechny placené cesty

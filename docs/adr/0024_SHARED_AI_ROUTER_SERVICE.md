@@ -11,6 +11,10 @@ samostatní autorizovaní konzumenti. COP dál vlastní identitu uživatele,
 policy-filtered kontext, chatové oprávnění, E2EE hranici a lidské schválení.
 SIM dál vlastní původ a kvalitu dat a syntetické scénáře. Router vlastní jen
 volbu povoleného modelu, volání providera, rezervaci rozpočtu a záznam spotřeby.
+Strukturovaný civilní návrh smí z modelu převzít pouze omezený název, popis,
+dobu a počet syntetických hlášení. SIM sama sestaví pevný `report-sim` blok,
+ověří schéma a ponechá lidské přijetí i spuštění oddělené. Model nesmí
+určovat bloky, polohu, oprávnění ani publikování.
 
 Existující COP AI chat a nový COP OpenAI souhrn zdrojů se bez samostatného
 integračního kroku **nemění**. Vypnutí Routeru nesmí odstavit mapu, routing,

@@ -1,4 +1,4 @@
-import { aiProviders, createMockScenarioDraft, type AiDraftRequest } from "@csm-sim/ai-assistant";
+import { aiProviders, classifyPrompt, createMockScenarioDraft, createRouterScenarioDraft, type AiDraftRequest } from "@csm-sim/ai-assistant";
 import { CONTRACT_VERSION, type CanonicalEventEnvelope, type FaultInjection, type Scenario } from "@csm-sim/contracts";
 import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import { PublisherClient } from "@csm-sim/publisher-client";
@@ -300,6 +300,18 @@ function registerPublisherRoutes(app: Express, context: AppContext): void {
 }
 
 function registerAiRoutes(app: Express, context: AppContext): void {
+  async function generateSynthetic(prompt: string, actor: string, maxOutputTokens: number): Promise<Response> {
+    if (!context.config.aiRouterBaseUrl || !context.config.aiRouterSimToken) throw new Error("router_not_configured");
+    return fetch(new URL("/api/v1/ai-router/generate", context.config.aiRouterBaseUrl), {
+      method: "POST",
+      headers: { authorization: `Bearer ${context.config.aiRouterSimToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        taskType: "sim_scenario", dataClass: "synthetic", preference: "auto", prompt,
+        userId: actor, allowExternal: true, allowPaidEscalation: false, maxOutputTokens
+      }),
+      signal: AbortSignal.timeout(30_000)
+    });
+  }
   async function routerRequest(path: string, init?: RequestInit): Promise<Response> {
     if (!context.config.aiRouterBaseUrl || !context.config.aiRouterAdminToken) throw new Error("router_not_configured");
     return fetch(new URL(path, context.config.aiRouterBaseUrl), {
@@ -342,21 +354,7 @@ function registerAiRoutes(app: Express, context: AppContext): void {
     const actor = authenticatedActor(req);
     if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
     try {
-      const response = await fetch(new URL("/api/v1/ai-router/generate", context.config.aiRouterBaseUrl), {
-        method: "POST",
-        headers: { authorization: `Bearer ${context.config.aiRouterSimToken}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          taskType: "sim_scenario",
-          dataClass: "synthetic",
-          preference: "auto",
-          prompt: prompt.trim(),
-          userId: actor,
-          allowExternal: true,
-          allowPaidEscalation: false,
-          maxOutputTokens: 320
-        }),
-        signal: AbortSignal.timeout(30_000)
-      });
+      const response = await generateSynthetic(prompt.trim(), actor, 320);
       if (!response.ok) {
         return problem(req, res, response.status === 429 ? 429 : 503, "AI_ROUTER_UNAVAILABLE", "AI Router rejected the request or is unavailable.");
       }
@@ -367,6 +365,33 @@ function registerAiRoutes(app: Express, context: AppContext): void {
       res.json(result);
     } catch {
       return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is unavailable.");
+    }
+  });
+  app.post("/api/v1/ai/router-scenario-drafts", async (req, res) => {
+    const prompt = req.body?.prompt;
+    if (typeof prompt !== "string" || prompt.trim().length < 1 || prompt.length > 2000 || req.body?.syntheticOnly !== true ||
+        !classifyPrompt(prompt).allowed) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "A bounded civil synthetic-only prompt is required.");
+    }
+    const actor = authenticatedActor(req);
+    if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
+    try {
+      const modelPrompt = `Vytvoř pouze fiktivní civilní cvičení pro situační mapu. Odpověz výhradně jedním JSON objektem bez Markdownu, přesně s klíči name, description, durationSeconds, objectCount. Jméno 4–80 znaků, popis 10–500 znaků, trvání 60–900 sekund, počet syntetických hlášení 1–20. Nepoužívej skutečné osoby, aktuální události ani operační pokyny. Zadání: ${prompt.trim()}`;
+      const response = await generateSynthetic(modelPrompt, actor, 450);
+      if (!response.ok) return problem(req, res, response.status === 429 ? 429 : 503, "AI_ROUTER_UNAVAILABLE", "AI Router rejected the request or is unavailable.");
+      const result = (await response.json()) as { requestId?: unknown; model?: unknown; output?: unknown; requiresHumanReview?: unknown };
+      if (typeof result.requestId !== "string" || typeof result.model !== "string" || typeof result.output !== "string" || result.requiresHumanReview !== true) {
+        return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router returned an invalid response.");
+      }
+      const draft = createRouterScenarioDraft(prompt.trim(), result as { requestId: string; model: string; output: string; requiresHumanReview: true });
+      const schemaValid = context.validators.scenario(draft.scenarioPatch);
+      const budgetIssues = schemaValid ? validateScenarioBudget(draft.scenarioPatch as Scenario, context.config) : [];
+      if (!schemaValid || budgetIssues.length > 0) return problem(req, res, 503, "AI_DRAFT_INVALID", "AI draft failed server validation.");
+      context.store.data.drafts.push(draft);
+      await context.store.save();
+      res.status(201).json(draft);
+    } catch {
+      return problem(req, res, 503, "AI_DRAFT_INVALID", "AI draft was not created.");
     }
   });
   app.post("/api/v1/ai/scenario-drafts", async (req, res) => {

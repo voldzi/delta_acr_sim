@@ -53,6 +53,10 @@ export function getAiRouterScenarioPreview(prompt: string): Promise<AiRouterScen
   return api<AiRouterScenarioPreview>("/api/v1/ai/router-scenario-preview", { method: "POST", body: JSON.stringify({ prompt, syntheticOnly: true }) }, 35_000);
 }
 
+export function createAiRouterScenarioDraft(prompt: string): Promise<AiDraft> {
+  return api<AiDraft>("/api/v1/ai/router-scenario-drafts", { method: "POST", body: JSON.stringify({ prompt, syntheticOnly: true }) }, 35_000);
+}
+
 export function getAiRouterAdmin(): Promise<AiRouterAdminState> {
   return api<AiRouterAdminState>("/api/v1/ai/router-admin");
 }

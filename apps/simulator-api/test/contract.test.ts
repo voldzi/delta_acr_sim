@@ -545,6 +545,37 @@ describe("SIM API contract baseline", () => {
     expect(context.store.data.scenarios).toHaveLength(0);
   });
 
+  it("creates only schema-validated civil synthetic Router drafts pending human acceptance", async () => {
+    context.runtimeRunner.dispose();
+    ({ app, context } = await createApp(testConfig(dataDir, { aiRouterBaseUrl: "http://ai-router-api:4050", aiRouterSimToken: "sim-test-token" })));
+    const modelOutput = JSON.stringify({ name: "Fiktivní povodeň v Javorově", description: "Cvičné hlášení o neprůjezdnosti místní komunikace.", durationSeconds: 600, objectCount: 4 });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ requestId: "a1234567-1234-1234-1234-123456789abc", model: "gpt-6-luna", output: modelOutput, requiresHumanReview: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await request(app).post("/api/v1/ai/router-scenario-drafts").send({ prompt: "Fiktivní povodeň", syntheticOnly: false }).expect(400);
+    await request(app).post("/api/v1/ai/router-scenario-drafts").send({ prompt: "Weapon attack target selection", syntheticOnly: true }).expect(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const response = await request(app).post("/api/v1/ai/router-scenario-drafts").send({ prompt: "Fiktivní povodeň", syntheticOnly: true }).expect(201);
+    expect(response.body.provider).toBe("openai");
+    expect(response.body.scenarioPatch.blocks).toEqual([{ blockId: "report-sim", enabled: true, objectCount: 4, updateRateHz: 1 }]);
+    expect(response.body.audit).toMatchObject({ requestId: "a1234567-1234-1234-1234-123456789abc", humanReviewStatus: "PENDING" });
+    expect(context.store.data.scenarios).toHaveLength(0);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.pathname).toBe("/api/v1/ai-router/generate");
+    expect(JSON.parse(String(init.body))).toMatchObject({ taskType: "sim_scenario", dataClass: "synthetic", allowPaidEscalation: false });
+    await request(app).post(`/api/v1/ai/scenario-drafts/${response.body.draftId}/validate`).send({}).expect(200);
+  });
+
+  it("does not persist malformed or over-privileged model output", async () => {
+    context.runtimeRunner.dispose();
+    ({ app, context } = await createApp(testConfig(dataDir, { aiRouterBaseUrl: "http://ai-router-api:4050", aiRouterSimToken: "sim-test-token" })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      requestId: "a1234567-1234-1234-1234-123456789abc", model: "gpt-6-luna", requiresHumanReview: true,
+      output: JSON.stringify({ name: "Cvičení", description: "Fiktivní testovací hlášení na mapě.", durationSeconds: 600, objectCount: 4, blocks: ["air-sim-missile"] })
+    }), { status: 200 })));
+    await request(app).post("/api/v1/ai/router-scenario-drafts").send({ prompt: "Fiktivní povodeň", syntheticOnly: true }).expect(503);
+    expect(context.store.data.drafts).toHaveLength(0);
+  });
+
   it("exposes a lightweight operations summary for the SIM operations center", async () => {
     vi.stubGlobal(
       "fetch",

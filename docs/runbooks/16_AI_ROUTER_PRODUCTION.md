@@ -129,3 +129,15 @@ restartem pouze `cop-api`; databázová evidence se nemaže.
 Na hostu jsou `cop_default` a `sim_default` oddělené. Před aktivací je
 potřeba výslovně schválené interní propojení pouze COP API a Routeru;
 nepublikovat host port ani nepřipojovat všechny služby obou projektů.
+
+## Strukturovaný návrh SIM
+
+`POST /api/v1/ai/router-scenario-drafts` vyžaduje roli `SIM_AI_USER`,
+fiktivní zadání do 2000 znaků a potvrzení `syntheticOnly=true`. Odpověď
+modelu je striktní čtyřpoložkový JSON; server nepřijímá modelové bloky,
+oblast ani publikační pravidla. Jediný výstupní blok je `report-sim`.
+Neplatný výstup končí 503 bez uloženého návrhu. Platný návrh má auditní
+request ID a stav čekající na lidskou kontrolu; nevytváří aktivní scénář.
+Před produkčním používáním ověřit zvlášť 400 při chybějícím potvrzení,
+503 při neplatném JSON, validaci návrhu a ruční přijetí pouze v testovacím
+fiktivním kontextu.

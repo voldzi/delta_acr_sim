@@ -5017,6 +5017,33 @@
         }
       }
     },
+    "/api/v1/ai/router-scenario-drafts": {
+      "post": {
+        "tags": ["AI Router: Simulator: AI"],
+        "operationId": "aiRouter_simCreateRouterScenarioDraft",
+        "summary": "Create a bounded synthetic civil scenario draft requiring human acceptance",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "additionalProperties": false,
+            "required": ["prompt", "syntheticOnly"],
+            "properties": {
+              "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+              "syntheticOnly": { "type": "boolean", "const": true }
+            }
+          } } }
+        },
+        "responses": {
+          "201": { "description": "Server-validated synthetic draft; not accepted or published", "content": { "application/json": { "schema": { "$ref": "../docs/api/schemas/ai-scenario-draft.schema.json" } } } },
+          "400": { "description": "Invalid, prohibited or non-synthetic request" },
+          "401": { "description": "Authentication required" },
+          "403": { "description": "SIM AI user role required" },
+          "429": { "description": "Router budget or user limit reached" },
+          "503": { "description": "Router unavailable or model output failed strict validation" }
+        }
+      }
+    },
     "/api/v1/ai-router/generate": {
       "post": {
         "tags": [

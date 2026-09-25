@@ -186,6 +186,12 @@ const routePolicies: RoutePolicy[] = [
     audit: { action: "ai.router.scenario.preview", resourceType: "aiRouterPreview" }
   },
   {
+    methods: ["POST"],
+    pattern: /^\/api\/v1\/ai\/router-scenario-drafts$/,
+    roles: ["SIM_AI_USER"],
+    audit: { action: "ai.router.scenario.draft.create", resourceType: "aiDraft" }
+  },
+  {
     methods: ["PATCH"],
     pattern: /^\/api\/v1\/ai\/router-admin\/policy$/,
     roles: ["SIM_AI_ADMIN"],
