@@ -114,6 +114,43 @@ From `docker.home.cz`, use the protected internal status endpoint with the
 server-side token. The response reports state, age, graph version, map coverage
 and applied edge counts. Never expose this token or endpoint to COP browsers.
 
+### TPEG2 map-matching quality gate
+
+The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
+uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
+not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
+`trace_attributes` identifies graph edges. Do **not** lower the 50% coverage
+quality gate or assign a shortest route between the reference points merely to
+clear a `degraded` status: with sparse two-point references this can place a
+speed on a parallel road or a long detour.
+
+Production diagnosis on 25 September 2026: all but 13 of 55,150 parsed static
+segments had both reference points inside the broad Czech operating bounding
+box, so the low match rate is not explained by foreign segments. The active
+report mapped 22,549 static segments (40.89%) and applied 10,511 of 21,902
+available flow records to 138,717 graph edges. In a deterministic 51-segment
+sample, 27 mapped directly; 24 failed predominantly with Valhalla error 444.
+A candidate route fallback with strict length, lateral-distance and endpoint
+checks mapped only 28/51. Relaxing those checks found routes ending more than
+170 m from the source point or taking more than four times the direct distance.
+That candidate was **not** deployed; the production mapper and cache remain
+unchanged. Valhalla routing and weekly builds remain independent of this
+traffic-quality issue.
+
+The safe next input is an authoritative road path for each TFP location:
+either a compatible OpenLR resolver using the full road-class, bearing and
+offset reference against the active graph, or detailed predefined-location
+geometry/road-based references from the upstream
+[DATEX II FCD predefined-location catalogue](https://registr.dopravniinfo.cz/en/sources/cz-ndic_d2-pls-fcd-v1.1/).
+The TPEG pilot documents the latter as a separate ŘSD/NDIC source with its own
+subscription process. Obtain the source and usage rights before adding it.
+Acceptance requires a reviewed match sample across road classes and directions,
+explicit rejection of ambiguous parallel roads and detours, matched-flow as
+well as static-segment coverage, route-time comparisons on affected and
+unaffected corridors, and a rollback to the current traffic cache. Until then
+`degraded` is an accurate signal; the normal Valhalla speed hierarchy still
+serves unmatched roads.
+
 Traffic failure is not a base-routing failure. If the overlay is stale beyond
 1,800 seconds, current speeds are cleared and Valhalla falls back to its normal
 speed hierarchy. Disable only the enhancement with:
