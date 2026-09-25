@@ -33,6 +33,9 @@ feed:
   the lease is inactive;
 - while active, the existing TPEG2 source coalesces refreshes and refreshes
   dynamic TFP no more than once per 300 seconds;
+- the internal traffic feed waits for any due TPEG2 refresh before returning a
+  snapshot; ordinary map requests may still use the previous snapshot while
+  refresh runs. Expired observations are never treated as current speeds;
 - the route request never waits for the traffic updater; it uses the last live
   overlay if valid, otherwise Valhalla's normal speed fallback;
 - road requests without an explicit departure time include

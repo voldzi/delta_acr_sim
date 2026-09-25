@@ -459,7 +459,7 @@ SITUATION_DATA_CHMI_WEATHER_RADAR_FRAME_STORE_DIR=/data/weather-radar-frames
 SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR=/srv/x5-production/cache/csm-sim/weather-radar-frames
 SITUATION_DATA_CHMI_WEATHER_RADAR_CLEAN_CROP_INSET_PIXELS=2
 SITUATION_DATA_CHMI_WEATHER_WEBCAMS_CACHE_TTL_SECONDS=300
-PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000,ostrava_traffic_cameras|Dopravní kamery Ostrava|traffic|Statutární město Ostrava|http://kamery.ostrava.cz/|ostrava_asmx|http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery
+PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000
 SITUATION_DATA_CHMI_AIR_QUALITY_CACHE_TTL_SECONDS=900
 SITUATION_DATA_CHMI_WEATHER_MAX_STATIONS=600
 CHMI_WEATHER_METADATA_BASE_URL=https://opendata.chmi.cz/meteorology/climate/now/metadata/
@@ -468,7 +468,7 @@ CHMI_WEATHER_RADAR_BASE_URL=https://opendata.chmi.cz/meteorology/weather/radar/c
 CHMI_WEATHER_WEBCAMS_MAP_URL=https://data-provider.chmi.cz/api/kamery/data/map
 CHMI_WEATHER_WEBCAMS_DATA_BASE_URL=https://data-provider.chmi.cz
 CHMI_WEATHER_WEBCAMS_PUBLIC_BASE_URL=https://www.chmi.cz
-PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000,ostrava_traffic_cameras|Dopravní kamery Ostrava|traffic|Statutární město Ostrava|http://kamery.ostrava.cz/|ostrava_asmx|http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery
+PUBLIC_CAMERA_FEEDS=sps_lavdis_cameras|Státní plavební správa / LAVDIS kamery|waterway|Státní plavební správa|https://www.lavdis.cz/|arcgis_lavdis|https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000
 CHMI_AIR_QUALITY_METADATA_URL=https://opendata.chmi.cz/air_quality/now/metadata/metadata.json
 CHMI_AIR_QUALITY_DATA_URL=https://opendata.chmi.cz/air_quality/now/data/airquality_1h_avg_CZ.csv
 IDSJMK_VEHICLE_POSITIONS_URL=https://gis.brno.cz/ags1/rest/services/Hosted/Kordis_26_polohy/FeatureServer/0/query?where=IsInactive%3D%27false%27&outFields=*&orderByFields=TimeUpdated%20DESC&f=geojson&resultRecordCount=10000
@@ -585,6 +585,11 @@ Podporované `kind` jsou `arcgis_lavdis`, `arcgis_ostrava`, `ostrava_asmx` a
 `static_json`. SIM tyto zdroje cacheuje server-side a COP dál používá pouze
 endpointy SIM. `static_json` může být externí URL, nebo vestavěný feed
 `builtin:curated_outdoor_webcams_cz`.
+
+Zdroj `ostrava_traffic_cameras` není od září 2026 ve výchozím ani produkčním
+seznamu: původní HTTP ASMX endpoint neodpovídá a HTTPS varianta má neplatný
+certifikát. Nevracet jej bez ověření funkčního oficiálního rozhraní a jeho
+atribuce; nedostupnost neobcházet vypnutím kontroly TLS.
 
 `static_json` je určený pro kurátorované seznamy ověřených origin kamer,
 například po ručním auditu agregátorů typu WebCamLive. URL musí vracet JSON:

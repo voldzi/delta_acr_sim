@@ -438,15 +438,6 @@ const DEFAULT_PUBLIC_CAMERA_FEEDS = [
     "https://geoportal.plavebniurad.cz/arcgis/rest/services/kamery/MapServer/0/query?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&resultRecordCount=2000"
   ].join("|"),
   [
-    "ostrava_traffic_cameras",
-    "Dopravní kamery Ostrava",
-    "traffic",
-    "Statutární město Ostrava",
-    "http://kamery.ostrava.cz/",
-    "ostrava_asmx",
-    "http://kamery.ostrava.cz/GoogleMapService.asmx/GetKamery"
-  ].join("|"),
-  [
     "cz_verified_origin_webcams",
     "Ověřené turistické webkamery ČR",
     "outdoor_webcam",

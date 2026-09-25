@@ -9,7 +9,10 @@ const document = (type: "TFP" | "TEC", body: string) => `
   </TPEGDocument>`;
 
 describe("TPEG2 streaming parsers", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
   it("joins an OpenLR static segment to its message id and decodes signed deltas", async () => {
     const parsed = await parseTpeg2Static(document("TFP", `
       <mmt><optionMMCPartLink><messageID>42</messageID><partID>1</partID></optionMMCPartLink></mmt>
@@ -112,5 +115,32 @@ describe("TPEG2 streaming parsers", () => {
     expect(result.features.map((feature) => feature.properties.category)).toEqual(["road_traffic_flow", "road_traffic_event"]);
     expect(JSON.stringify(result)).not.toContain("test-provider-secret");
     expect(result.features.every((feature) => feature.properties.raw === undefined)).toBe(true);
+  });
+
+  it("waits for refreshed TPEG2 speeds before handing a snapshot to Valhalla", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-25T15:00:00Z"));
+    const staticXml = document("TFP", `<mmt><optionMMCPartLink><messageID>42</messageID><partID>1</partID></optionMMCPartLink></mmt><loc><method><optionOpenLRLocationReferenceLink><locationReference><optionLinearLocationReference><first><coordinate><longitude>583571</longitude><latitude>2313505</latitude></coordinate></first><last><coordinate><longitude>355</longitude><latitude>119</latitude></coordinate></last></optionLinearLocationReference></locationReference></optionOpenLRLocationReferenceLink></method></loc>`);
+    const flowXml = (speed: number) => document("TFP", `<mmt><optionMMCPartLink><messageID>42</messageID><partID>2</partID></optionMMCPartLink></mmt><method><optionFlowStatus><startTime>2026-09-25T15:00:00Z</startTime><status><averageSpeed>${speed}</averageSpeed></status></optionFlowStatus></method>`);
+    let dynamicRequests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith("tfp-static")) return new Response(staticXml);
+      if (path.endsWith("tfp-dynamic")) return new Response(flowXml(++dynamicRequests === 1 ? 40 : 65));
+      return new Response(document("TEC", ""));
+    }));
+    const source = new Tpeg2Source({
+      enabledSources: ["tpeg2"],
+      tpeg2BaseUrl: "https://online.ceda.cz",
+      tpeg2ApiToken: "test-provider-secret",
+      tpeg2DynamicCacheTtlSeconds: 300,
+      tpeg2StaticCacheTtlSeconds: 86400,
+      tpeg2RequestTimeoutMs: 10000,
+      tpeg2MaxRecords: 50000
+    } as SituationDataConfig);
+    expect((await source.trafficSnapshot()).flows[0]?.averageSpeedKph).toBe(40);
+    vi.setSystemTime(new Date("2026-09-25T15:05:01Z"));
+    expect((await source.trafficSnapshot()).flows[0]?.averageSpeedKph).toBe(65);
+    expect(dynamicRequests).toBe(2);
   });
 });

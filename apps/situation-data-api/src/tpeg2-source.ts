@@ -266,7 +266,7 @@ export class Tpeg2Source {
     if (!this.config.tpeg2ApiToken) {
       throw new Error("TPEG2 source is enabled but server-side authentication is not configured");
     }
-    await this.ensureFresh();
+    await this.ensureFresh(true);
     const segments = Array.from(this.staticFeed.value?.values() ?? []);
     const flows = this.dynamicFeed.value ?? [];
     return {
@@ -281,7 +281,7 @@ export class Tpeg2Source {
     };
   }
 
-  private async ensureFresh(): Promise<void> {
+  private async ensureFresh(waitForRefresh = false): Promise<void> {
     const maxAgeMs = this.config.tpeg2DynamicCacheTtlSeconds * 1000;
     if (this.dynamicFeed.fetchedAtMs && Date.now() - this.dynamicFeed.fetchedAtMs < maxAgeMs) {
       return;
@@ -289,7 +289,7 @@ export class Tpeg2Source {
     this.refreshPromise ??= this.refresh().finally(() => {
       this.refreshPromise = undefined;
     });
-    if (this.staticFeed.value && this.dynamicFeed.value && this.tecFeed.value) {
+    if (!waitForRefresh && this.staticFeed.value && this.dynamicFeed.value && this.tecFeed.value) {
       void this.refreshPromise.catch(() => undefined);
       return;
     }
