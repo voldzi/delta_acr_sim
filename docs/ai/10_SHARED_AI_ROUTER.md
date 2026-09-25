@@ -4,7 +4,9 @@
 Samostatná interní služba, směrovací pravidla, REST kontrakt a databázová
 rezervace rozpočtu. Textový náhled fiktivního cvičení je připojen v SIM a
 prošel serverovým produkčním testem. Levný externí tier je povolen pouze v
-mezích politiky; dražší model je vypnutý. COP chat zůstává na dosavadní cestě.
+mezích politiky; dražší model je vypnutý. Běžný COP chat je od 25. 9. 2026
+přepnut přes interní Router na lokální `gemma4:12b-mlx`; externí model je pro
+tuto interní větev zakázán. Samostatný syntetický pilot smí použít Luna.
 
 ## Cíl
 
@@ -156,8 +158,20 @@ externě předány. COP nesmí přímo volat OpenAI jako náhradní cestu při 4
    grafy spotřeby ještě nejsou hotové.
 2. COP adaptér pro existující agregovaný MCP souhrn stavu zdrojů je připraven
    opt-in. Před nasazením je nutné dokončit integrační ověření, předat
-   dedikovaný COP token a potvrdit přesný rollback. Matrix E2EE, COP chat a
-   situační shrnutí nejsou touto změnou přepojeny.
+   dedikovaný COP token a potvrdit přesný rollback. Samostatně byl následně
+   přepnut běžný COP chat přes lokální Router; Matrix E2EE a ostatní AI funkce
+   nejsou touto změnou přepojeny.
+
+**Produkční ověření 25. 9. 2026:** Běžný autorizovaný dotaz a úloha na pozadí
+odpověděly lokálním modelem; interní syntetická soukromá zpráva nevedla k
+externímu modelu. SIM eviduje 19 denních požadavků, 3139 vstupních a 1868
+výstupních tokenů (součet všech klientů Routeru, nikoli jen COP). Testovací
+uživatel po vyčerpání limitu dostal 429, denní a měsíční finanční limit
+samostatně vrátily 429. Odpojení interní sítě vrátilo 503 bez náhradní cesty.
+Síť byla obnovena, obsahuje pouze COP API a Router; Router nemá veřejný port.
+Limit uživatele byl po testu vrácen na 10 denně a finanční stropy na
+1 000 000 / 10 000 000 microUSD. COP rollback na původní Ollama chat vrátil
+200 a následně byl přepínač Routeru opět zapnut.
 3. Strukturovaný AI draft pro civilní fiktivní hlášení je implementován
    odděleně od starého mock návrhu. Před označením produkčně přijatým musí
    projít vizuální zkouškou a skutečným fiktivním dotazem přes nový endpoint;
