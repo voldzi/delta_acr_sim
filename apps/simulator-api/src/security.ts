@@ -178,6 +178,13 @@ const routePolicies: RoutePolicy[] = [
     audit: { action: "ai.draft.review", resourceType: "aiDraft", resourceId: draftIdFromPath }
   },
   { methods: ["GET"], pattern: /^\/api\/v1\/ai\/providers$/, roles: ["SIM_VIEWER"], publicRead: true },
+  { methods: ["GET"], pattern: /^\/api\/v1\/ai\/router-admin$/, roles: ["SIM_AI_ADMIN"] },
+  {
+    methods: ["PATCH"],
+    pattern: /^\/api\/v1\/ai\/router-admin\/policy$/,
+    roles: ["SIM_AI_ADMIN"],
+    audit: { action: "ai.router.policy.update", resourceType: "aiRouterPolicy" }
+  },
   { methods: ["PATCH"], pattern: /^\/api\/v1\/ai\/config$/, roles: ["SIM_AI_ADMIN"], audit: { action: "ai.config.update", resourceType: "aiConfig" } }
 ];
 

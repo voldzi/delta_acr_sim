@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @csm-sim/simulator-api --filter @csm-sim/simulator-web --filter @csm-sim/flight-data-api --filter @csm-sim/situation-data-api --filter @csm-sim/safety-data-api --filter @csm-sim/tak-gateway-api dev",
+    "dev:ai-router": "pnpm --filter @csm-sim/ai-router-api dev",
     "dev:api": "pnpm --filter @csm-sim/simulator-api dev",
     "dev:flight-data": "pnpm --filter @csm-sim/flight-data-api dev",
     "dev:situation-data": "pnpm --filter @csm-sim/situation-data-api dev",

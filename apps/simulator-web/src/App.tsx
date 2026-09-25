@@ -48,16 +48,19 @@ import {
   createScenario,
   demoScenario,
   denseDemoScenario,
+  getAiRouterAdmin,
   hasSimAuthorizationToken,
   hasSimApiToken,
   loadDashboard,
   onSimApiAuthChange,
   runtimeAction,
+  saveAiRouterPolicy,
   setSimAuthorizationTokenProvider,
   setSimManualTokenUsageEnabled,
   setSimApiToken,
   testPublisher,
-  ukraineAirDefenseDemoScenario
+  ukraineAirDefenseDemoScenario,
+  type AiRouterAdminState
 } from "./api";
 import { beginLogin, createInitialAuthSession, endSession, initializeAuth, isOidcEnabled, readAuthConfig, type AuthSession, type SimRole } from "./auth";
 import type {
@@ -590,6 +593,7 @@ export function App() {
   const canManageScenarios = tokenAccessReady || hasOperatorRole || hasAdminRole;
   const canAdministerPublisher = tokenAccessReady || hasAdminRole;
   const canUseAiAssistant = tokenAccessReady || hasAiRole || hasAiAdminRole || hasAdminRole;
+  const canAdministerAiRouter = tokenAccessReady || hasAiAdminRole || hasAdminRole;
   const visibleSection = protectedSectionsUnlocked ? activeSection : "overview";
   const protectedSectionNoticeSource = oidcEnabled
     ? "Sign in with Keycloak using a SIM viewer, operator or admin role to access protected details."
@@ -2187,6 +2191,7 @@ export function App() {
               {visibleSection === "ai" ? (
                 <section id="ai" className="panel ai-panel">
                   <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
+                  {canAdministerAiRouter ? <AiRouterAdminPanel /> : null}
                   <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
                   <div className="button-strip compact">
                     <button
@@ -3585,6 +3590,122 @@ function freshnessLabel(service: OperationsSummaryService): string {
     return "-";
   }
   return formatImportAge(oldest);
+}
+
+function AiRouterAdminPanel(): ReactNode {
+  const [state, setState] = useState<AiRouterAdminState | null>(null);
+  const [policy, setPolicy] = useState<AiRouterAdminState["policy"] | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const refresh = useCallback(async () => {
+    const next = await getAiRouterAdmin();
+    setState(next);
+    setPolicy(next.policy);
+    setError("");
+  }, []);
+  useEffect(() => {
+    void refresh().catch(() => setError("AI Router není dostupný nebo zatím není zapnutý."));
+  }, [refresh]);
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!policy) return;
+    setSaving(true);
+    try {
+      await saveAiRouterPolicy(policy);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Nastavení se nepodařilo uložit.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="draft-box" aria-label="Správa AI Routeru">
+      <div className="draft-head">
+        <strong>AI Router – modely a náklady</strong>
+        <StatusPill label={state ? "připraven" : "nedostupný"} tone={state ? "safe" : "warn"} />
+      </div>
+      <p>Samostatná interní služba. Zde uvedená spotřeba zahrnuje pouze požadavky vedené přes AI Router, nikoli dosavadní přímá volání COP.</p>
+      {error ? <p role="alert">{error}</p> : null}
+      {state && policy ? (
+        <>
+          <div className="queue-list">
+            {state.models.models.map((item) => (
+              <div key={item.tier}>
+                <strong>{item.model ?? "Lokální model nenastaven"}</strong> · {item.enabled ? "povolen" : "vypnut"} ·{" "}
+                {item.tier === "local_fast" ? "lokální" : item.tier === "external_economy" ? "úsporný externí" : "výkonnější externí"}
+              </div>
+            ))}
+          </div>
+          <p>
+            Dnes: {(state.usage.dailyMicrousd / 1_000_000).toFixed(4)} USD · Tento měsíc: {(state.usage.monthlyMicrousd / 1_000_000).toFixed(4)} USD · Dnešní
+            požadavky: {state.usage.dailyRequests}
+          </p>
+          <form className="ai-router-settings" onSubmit={(event) => void save(event)}>
+            <label>
+              <input
+                type="checkbox"
+                checked={policy.externalAllowed}
+                onChange={(event) =>
+                  setPolicy({ ...policy, externalAllowed: event.target.checked, advancedAllowed: event.target.checked ? policy.advancedAllowed : false })
+                }
+              />{" "}
+              Povolit levný externí model pro schválená data
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={policy.advancedAllowed}
+                disabled={!policy.externalAllowed}
+                onChange={(event) => setPolicy({ ...policy, advancedAllowed: event.target.checked })}
+              />{" "}
+              Povolit dražší model jen po výslovném schválení požadavku
+            </label>
+            <label>
+              Denní strop (USD){" "}
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={policy.limits.dailyMicrousd / 1_000_000}
+                onChange={(event) => setPolicy({ ...policy, limits: { ...policy.limits, dailyMicrousd: Math.round(Number(event.target.value) * 1_000_000) } })}
+              />
+            </label>
+            <label>
+              Měsíční strop (USD){" "}
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={policy.limits.monthlyMicrousd / 1_000_000}
+                onChange={(event) =>
+                  setPolicy({ ...policy, limits: { ...policy.limits, monthlyMicrousd: Math.round(Number(event.target.value) * 1_000_000) } })
+                }
+              />
+            </label>
+            <label>
+              Dotazy na uživatele za den{" "}
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={policy.limits.perUserDailyRequests}
+                onChange={(event) => setPolicy({ ...policy, limits: { ...policy.limits, perUserDailyRequests: Number(event.target.value) } })}
+              />
+            </label>
+            <div className="button-strip compact">
+              <button type="submit" disabled={saving}>
+                Uložit pravidla
+              </button>
+              <button type="button" onClick={() => void refresh().catch(() => setError("AI Router není dostupný."))}>
+                Obnovit stav
+              </button>
+            </div>
+          </form>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function sectionMeta(section: AppSection, tr: (source: string) => string): { kicker: string; title: string; description: string } {

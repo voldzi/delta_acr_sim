@@ -19,6 +19,12 @@ pnpm dev
 - Web: `http://localhost:5173`
 - Health: `http://localhost:4000/health/live`
 
+Volitelná samostatná interní služba AI Router je v `apps/ai-router-api`.
+Nespouští se s výchozím Compose stackem, nemá publikovaný port a není zatím
+napojená na produkční COP AI chat. V SIM AI sekci je připravený správcovský
+panel, který bez zapnutého Routeru ukáže nedostupnost. Architektonické
+zadání a stav zavádění jsou v [docs/ai/10_SHARED_AI_ROUTER.md](docs/ai/10_SHARED_AI_ROUTER.md).
+
 ## Docker Compose
 
 ```bash

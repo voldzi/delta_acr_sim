@@ -39,6 +39,9 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md)
 - [`adr/00_INDEX.md`](adr/00_INDEX.md)
 - [`adr/0023_REQUEST_SCOPED_APRS_IS_SOURCE.md`](adr/0023_REQUEST_SCOPED_APRS_IS_SOURCE.md)
+- [`ai/10_SHARED_AI_ROUTER.md`](ai/10_SHARED_AI_ROUTER.md)
+- [`adr/0024_SHARED_AI_ROUTER_SERVICE.md`](adr/0024_SHARED_AI_ROUTER_SERVICE.md)
+- [`runbooks/16_AI_ROUTER_PRODUCTION.md`](runbooks/16_AI_ROUTER_PRODUCTION.md)
 
 ## Machine-Readable API Contract
 

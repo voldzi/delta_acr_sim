@@ -13,6 +13,14 @@
 - `COP_TOKEN_SECRET_REF`
 - `AI_PROVIDER_MODE`
 - `EXTERNAL_AI_ALLOWED`
+- `AI_ROUTER_DATABASE_URL` (samostatná databázová URL přes spravovaný HAProxy endpoint)
+- `SIM_AI_ROUTER_BASE_URL` (interní SIM API proxy na oddělenou službu; žádný přístup browseru)
+- `AI_ROUTER_COP_TOKEN`, `AI_ROUTER_SIM_TOKEN`, `AI_ROUTER_ADMIN_TOKEN` (oddělené interní identity)
+- `AI_ROUTER_USER_HASH_SECRET` (pepper pro nevratný hash uživatelského ID)
+- `OPENAI_API_KEY` (jen runtime env; lze použít dříve vytvořený klíč po provozním schválení)
+- `AI_ROUTER_EXTERNAL_ENABLED`, `AI_ROUTER_ADVANCED_ENABLED` (výchozí `false`)
+- `AI_ROUTER_LOCAL_URL`, `AI_ROUTER_LOCAL_MODEL` (volitelná lokální Ollama)
+- `AI_ROUTER_DAILY_MICROUSD`, `AI_ROUTER_MONTHLY_MICROUSD`, `AI_ROUTER_USER_DAILY_REQUESTS`
 - `SIM_API_AUTH_REQUIRED`
 - `SIM_API_ADMIN_TOKEN`
 - `SIM_API_INTERNAL_TOKEN`

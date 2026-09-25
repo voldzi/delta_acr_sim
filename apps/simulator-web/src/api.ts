@@ -32,6 +32,20 @@ import type {
 } from "./types";
 
 const API_TIMEOUT_MS = 5_000;
+
+export interface AiRouterAdminState {
+  models: { models: Array<{ tier: string; model: string | null; enabled: boolean; external: boolean }> };
+  policy: { externalAllowed: boolean; advancedAllowed: boolean; limits: { dailyMicrousd: number; monthlyMicrousd: number; perUserDailyRequests: number } };
+  usage: { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number };
+}
+
+export function getAiRouterAdmin(): Promise<AiRouterAdminState> {
+  return api<AiRouterAdminState>("/api/v1/ai/router-admin");
+}
+
+export function saveAiRouterPolicy(policy: AiRouterAdminState["policy"]): Promise<AiRouterAdminState["policy"]> {
+  return api<AiRouterAdminState["policy"]>("/api/v1/ai/router-admin/policy", { method: "PATCH", body: JSON.stringify(policy) });
+}
 const SIM_API_TOKEN_STORAGE_KEY = "csm-sim-api-token";
 const AUTH_CHANGE_EVENT = "csm-sim-auth-change";
 let authorizationTokenProvider: (() => string | undefined) | undefined;

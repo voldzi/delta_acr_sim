@@ -2312,6 +2312,24 @@ button svg {
   margin-bottom: 0;
 }
 
+.ai-router-settings {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ai-router-settings label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-router-settings input[type="number"] {
+  width: 110px;
+  margin-left: auto;
+}
+
 .draft-box,
 .notice,
 .empty-state {

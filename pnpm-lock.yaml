@@ -18,6 +18,37 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  apps/ai-router-api:
+    dependencies:
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+    devDependencies:
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
+      '@types/node':
+        specifier: 24.13.2
+        version: 24.13.2
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      '@types/supertest':
+        specifier: ^7.2.1
+        version: 7.2.1
+      supertest:
+        specifier: ^7.2.2
+        version: 7.2.2
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(vite@8.2.2(@types/node@24.13.2)(esbuild@0.28.2)(tsx@4.23.13))
+
   apps/flight-data-api:
     dependencies:
       '@csm-sim/observability':

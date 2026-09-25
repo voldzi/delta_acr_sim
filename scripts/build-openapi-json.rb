@@ -39,6 +39,13 @@ SPECS = [
     path_prefix: "/situation-data/api/v1"
   },
   {
+    key: "aiRouter",
+    prefix: "AiRouter",
+    tag_prefix: "AI Router",
+    file: "openapi/fragments/ai-router-v1.openapi.json",
+    path_prefix: ""
+  },
+  {
     key: "searchData",
     prefix: "SearchData",
     tag_prefix: "Search Data",

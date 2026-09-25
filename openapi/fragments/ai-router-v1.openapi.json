@@ -1,0 +1,186 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "SIM internal AI Router v1", "version": "0.1.0" },
+  "paths": {
+    "/api/v1/ai-router/models": {
+      "get": {
+        "tags": ["AI Router"],
+        "operationId": "aiRouterModels",
+        "summary": "List configured internal model tiers",
+        "servers": [{ "url": "http://ai-router-api:4050" }],
+        "security": [{ "aiRouterBearer": [] }],
+        "responses": {
+          "200": {
+            "description": "Enabled model tiers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "models": { "type": "array", "items": { "type": "object" } }, "policy": { "type": "object" } },
+                  "required": ["models", "policy"]
+                }
+              }
+            }
+          },
+          "401": { "description": "Missing internal token" }
+        }
+      }
+    },
+    "/api/v1/ai-router/usage": {
+      "get": {
+        "tags": ["AI Router"],
+        "operationId": "aiRouterUsage",
+        "summary": "Read router-only budget usage (admin)",
+        "servers": [{ "url": "http://ai-router-api:4050" }],
+        "security": [{ "aiRouterBearer": [] }],
+        "responses": {
+          "200": {
+            "description": "Current UTC day and month usage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "dailyMicrousd": { "type": "integer" },
+                    "monthlyMicrousd": { "type": "integer" },
+                    "dailyRequests": { "type": "integer" },
+                    "limits": { "type": "object" }
+                  },
+                  "required": ["dailyMicrousd", "monthlyMicrousd", "dailyRequests", "limits"]
+                }
+              }
+            }
+          },
+          "401": { "description": "Missing internal token" },
+          "403": { "description": "Admin identity required" }
+        }
+      }
+    },
+    "/api/v1/ai-router/policy": {
+      "get": {
+        "tags": ["AI Router"],
+        "operationId": "aiRouterPolicy",
+        "summary": "Read active model and budget policy",
+        "servers": [{ "url": "http://ai-router-api:4050" }],
+        "security": [{ "aiRouterBearer": [] }],
+        "responses": {
+          "200": { "description": "Active policy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterPolicy" } } } },
+          "401": { "description": "Missing internal token" }
+        }
+      },
+      "patch": {
+        "tags": ["AI Router"],
+        "operationId": "aiRouterUpdatePolicy",
+        "summary": "Update policy within environment hard caps (admin)",
+        "servers": [{ "url": "http://ai-router-api:4050" }],
+        "security": [{ "aiRouterBearer": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterPolicy" } } } },
+        "responses": {
+          "200": { "description": "Saved policy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterPolicy" } } } },
+          "400": { "description": "Invalid policy" },
+          "403": { "description": "Admin required" },
+          "503": { "description": "Policy store unavailable" }
+        }
+      }
+    },
+    "/api/v1/ai/router-admin": {
+      "get": {
+        "tags": ["Simulator: AI"],
+        "operationId": "simAiRouterAdmin",
+        "summary": "SIM AI admin view of models, policy and router-only usage",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Admin snapshot", "content": { "application/json": { "schema": { "type": "object" } } } },
+          "403": { "description": "SIM AI admin role required" },
+          "503": { "description": "Router unavailable" }
+        }
+      }
+    },
+    "/api/v1/ai/router-admin/policy": {
+      "patch": {
+        "tags": ["Simulator: AI"],
+        "operationId": "simAiRouterAdminPolicy",
+        "summary": "Save router policy through authenticated SIM admin proxy",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterPolicy" } } } },
+        "responses": {
+          "200": { "description": "Saved policy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterPolicy" } } } },
+          "403": { "description": "SIM AI admin role required" },
+          "503": { "description": "Router unavailable" }
+        }
+      }
+    },
+    "/api/v1/ai-router/generate": {
+      "post": {
+        "tags": ["AI Router"],
+        "operationId": "aiRouterGenerate",
+        "summary": "Route a bounded authorized AI request",
+        "servers": [{ "url": "http://ai-router-api:4050" }],
+        "security": [{ "aiRouterBearer": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterGenerateRequest" } } } },
+        "responses": {
+          "200": {
+            "description": "Assistive answer with cost estimate and routing reason",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterGenerateResponse" } } }
+          },
+          "400": { "description": "Invalid request" },
+          "401": { "description": "Missing internal token" },
+          "403": { "description": "Task not allowed for consumer" },
+          "429": { "description": "Budget or user limit exceeded" },
+          "503": { "description": "Model or budget store unavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "aiRouterBearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "AiRouterPolicy": {
+        "type": "object",
+        "required": ["externalAllowed", "advancedAllowed", "limits"],
+        "properties": {
+          "externalAllowed": { "type": "boolean" },
+          "advancedAllowed": { "type": "boolean" },
+          "limits": {
+            "type": "object",
+            "required": ["dailyMicrousd", "monthlyMicrousd", "perUserDailyRequests"],
+            "properties": {
+              "dailyMicrousd": { "type": "integer", "minimum": 1 },
+              "monthlyMicrousd": { "type": "integer", "minimum": 1 },
+              "perUserDailyRequests": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      },
+      "AiRouterGenerateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["taskType", "dataClass", "prompt", "userId"],
+        "properties": {
+          "taskType": { "type": "string", "enum": ["cop_chat", "source_health", "sim_scenario"] },
+          "dataClass": { "type": "string", "enum": ["synthetic", "public_aggregate", "internal"] },
+          "preference": { "type": "string", "enum": ["auto", "local", "external"] },
+          "prompt": { "type": "string", "minLength": 1, "maxLength": 12000 },
+          "userId": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "allowExternal": { "type": "boolean", "default": false },
+          "allowPaidEscalation": { "type": "boolean", "default": false },
+          "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 1024 }
+        }
+      },
+      "AiRouterGenerateResponse": {
+        "type": "object",
+        "required": ["requestId", "model", "tier", "routingReason", "difficulty", "output", "usage", "requiresHumanReview"],
+        "properties": {
+          "requestId": { "type": "string", "format": "uuid" },
+          "model": { "type": "string" },
+          "tier": { "type": "string" },
+          "routingReason": { "type": "string" },
+          "difficulty": { "type": "string" },
+          "output": { "type": "string" },
+          "usage": { "type": "object" },
+          "requiresHumanReview": { "type": "boolean", "const": true }
+        }
+      }
+    }
+  }
+}

@@ -24,6 +24,8 @@ export interface ApiConfig {
   mainCopBaseUrl?: string;
   mainCopBearerToken?: string;
   externalAiAllowed: boolean;
+  aiRouterBaseUrl?: string;
+  aiRouterAdminToken?: string;
   apiAuthRequired?: boolean;
   apiAuthMode?: ApiAuthMode;
   apiPublicRead?: boolean;
@@ -74,6 +76,8 @@ export async function loadConfig(): Promise<ApiConfig> {
     mainCopBaseUrl: process.env.MAIN_COP_BASE_URL,
     mainCopBearerToken: process.env.MAIN_COP_BEARER_TOKEN ?? "dev-lab-token",
     externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true",
+    aiRouterBaseUrl: process.env.SIM_AI_ROUTER_BASE_URL,
+    aiRouterAdminToken: process.env.AI_ROUTER_ADMIN_TOKEN,
     apiAuthRequired,
     apiAuthMode,
     apiPublicRead: parseBoolean(process.env.SIM_API_PUBLIC_READ, false),

@@ -300,6 +300,37 @@ function registerPublisherRoutes(app: Express, context: AppContext): void {
 }
 
 function registerAiRoutes(app: Express, context: AppContext): void {
+  async function routerRequest(path: string, init?: RequestInit): Promise<Response> {
+    if (!context.config.aiRouterBaseUrl || !context.config.aiRouterAdminToken) throw new Error("router_not_configured");
+    return fetch(new URL(path, context.config.aiRouterBaseUrl), {
+      ...init,
+      headers: { authorization: `Bearer ${context.config.aiRouterAdminToken}`, "content-type": "application/json" },
+      signal: AbortSignal.timeout(3000)
+    });
+  }
+  app.get("/api/v1/ai/router-admin", async (req, res) => {
+    try {
+      const [models, policy, usage] = await Promise.all([
+        routerRequest("/api/v1/ai-router/models"),
+        routerRequest("/api/v1/ai-router/policy"),
+        routerRequest("/api/v1/ai-router/usage")
+      ]);
+      if (!models.ok || !policy.ok || !usage.ok) return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is unavailable.");
+      res.json({ models: await models.json(), policy: await policy.json(), usage: await usage.json() });
+    } catch {
+      return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is not configured or unavailable.");
+    }
+  });
+  app.patch("/api/v1/ai/router-admin/policy", async (req, res) => {
+    try {
+      const response = await routerRequest("/api/v1/ai-router/policy", { method: "PATCH", body: JSON.stringify(req.body) });
+      if (!response.ok)
+        return problem(req, res, response.status === 400 ? 400 : 503, "AI_ROUTER_POLICY_REJECTED", "AI Router rejected the policy or is unavailable.");
+      res.json(await response.json());
+    } catch {
+      return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is not configured or unavailable.");
+    }
+  });
   app.post("/api/v1/ai/scenario-drafts", async (req, res) => {
     const draft = createMockScenarioDraft(req.body as AiDraftRequest);
     context.store.data.drafts.push(draft);
