@@ -14,11 +14,11 @@ runtime=ai_router_runtime
 output_file=${AI_ROUTER_DB_CREDENTIALS_FILE:-"$HOME/.config/csm-sim/ai-router-db-credentials.env"}
 
 usage() {
-  printf 'Usage: PGUSER=<postgres-admin> %s --check|--apply\n' "$0"
+  printf 'Usage: PGUSER=<postgres-admin> %s --check|--apply|--recover\n' "$0"
   printf 'Target: %s:%s/%s (fixed HAProxy endpoint)\n' "$host" "$port" "$database"
 }
 
-if [[ $# -ne 1 || ( $1 != --check && $1 != --apply ) ]]; then
+if [[ $# -ne 1 || ( $1 != --check && $1 != --apply && $1 != --recover ) ]]; then
   usage >&2
   exit 2
 fi
@@ -32,7 +32,7 @@ done
   printf 'Refusing a target other than %s:%s.\n' "$host" "$port" >&2
   exit 2
 }
-if [[ $mode == --apply && -e $output_file ]]; then
+if [[ $mode != --check && -e $output_file ]]; then
   printf 'Credentials file already exists; refusing to overwrite: %s\n' "$output_file" >&2
   exit 2
 fi
@@ -59,34 +59,52 @@ if [[ $mode == --check ]]; then
   printf 'HAProxy connection and administrator rights verified. Existing AI Router objects: %s.\n' "$existing"
   exit 0
 fi
-[[ $existing == 0 ]] || {
-  printf 'AI Router database or roles already exist; refusing to alter or rotate them. No changes made.\n' >&2
-  exit 1
-}
-printf 'Type %s to create the isolated database and roles: ' "$database" >/dev/tty
+if [[ $mode == --apply ]]; then
+  [[ $existing == 0 ]] || {
+    printf 'AI Router objects already exist. Use --recover only after verifying a partial setup. No changes made.\n' >&2
+    exit 1
+  }
+else
+  recovery_state=$(admin_psql -A -t -c "SELECT (SELECT count(*) FROM pg_roles WHERE rolname IN ('$migrator','$runtime') AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole) = 2 AND (SELECT count(*) FROM pg_database WHERE datname = '$database' AND pg_get_userbyid(datdba) = '$migrator') = 1")
+  [[ $existing == 3 && $recovery_state == t ]] || {
+    printf 'Unexpected partial state; refusing recovery. No changes made.\n' >&2
+    exit 1
+  }
+fi
+printf 'Type %s to confirm %s: ' "$database" "$mode" >/dev/tty
 IFS= read -r confirmation </dev/tty
 [[ $confirmation == "$database" ]] || { printf 'Cancelled; no changes made.\n'; exit 1; }
 
 migration_password=$(openssl rand -hex 32)
 runtime_password=$(openssl rand -hex 32)
-printf 'Creating isolated roles and database through HAProxy...\n'
-admin_psql <<SQL
+if [[ $mode == --apply ]]; then
+  printf 'Creating isolated roles and database through HAProxy...\n'
+  admin_psql <<SQL
 CREATE ROLE $migrator LOGIN PASSWORD '$migration_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 CREATE ROLE $runtime LOGIN PASSWORD '$runtime_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 CREATE DATABASE $database OWNER $migrator;
 REVOKE ALL ON DATABASE $database FROM PUBLIC;
 GRANT CONNECT ON DATABASE $database TO $runtime;
 SQL
+else
+  printf 'Resetting passwords for the verified partial setup and completing grants...\n'
+  admin_psql <<SQL
+ALTER ROLE $migrator PASSWORD '$migration_password';
+ALTER ROLE $runtime PASSWORD '$runtime_password';
+REVOKE ALL ON DATABASE $database FROM PUBLIC;
+GRANT CONNECT ON DATABASE $database TO $runtime;
+SQL
+fi
 
 # Preserve recovery credentials even if a later migration or grant fails.
-mkdir -p -- "$(dirname -- "$output_file")"
-chmod 700 -- "$(dirname -- "$output_file")"
+mkdir -p "$(dirname "$output_file")"
+chmod 700 "$(dirname "$output_file")"
 temp_file=$(mktemp "${output_file}.tmp.XXXXXX")
-trap 'rm -f -- "$temp_file"' EXIT
+trap 'rm -f "$temp_file"' EXIT
 printf 'AI_ROUTER_MIGRATION_DATABASE_URL=postgresql://%s:%s@%s:%s/%s\n' "$migrator" "$migration_password" "$host" "$port" "$database" >"$temp_file"
 printf 'AI_ROUTER_DATABASE_URL=postgresql://%s:%s@%s:%s/%s\n' "$runtime" "$runtime_password" "$host" "$port" "$database" >>"$temp_file"
-chmod 600 -- "$temp_file"
-mv -- "$temp_file" "$output_file"
+chmod 600 "$temp_file"
+mv "$temp_file" "$output_file"
 
 printf 'Applying schema and least-privilege grants...\n'
 PGPASSWORD=$migration_password psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$migrator" -d "$database" -f "$migration_sql"

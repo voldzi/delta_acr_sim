@@ -29,6 +29,10 @@ interní služba bez host portu. Výpadek neodstaví COP mapu ani SIM data.
    do produkčního `/srv/sim/.env`; migrační URL zůstává správci. Při chybě
    po založení objektů skript neprovádí destruktivní rollback; správce má
    zkontrolovat částečný stav a uložené přihlašovací údaje.
+   Na macOS je dostupné `--recover` pro konkrétní případ, kdy databáze i oba
+   účty vznikly, ale skript se zastavil před uložením přístupových údajů.
+   Obnova ověřuje vlastníka databáze a omezení rolí, nastaví jim nová hesla,
+   uloží je a dokončí schéma; nepoužívat ji při jiném nebo neznámém stavu.
 2. Do ignorovaného produkčního `.env` dodat nezávislé dlouhé tokeny pro COP,
    SIM a správce a pepper uživatelských identifikátorů. Nepoužívat SIM
    administrační token jako Router token. Databázová URL se nikdy nevypisuje.
