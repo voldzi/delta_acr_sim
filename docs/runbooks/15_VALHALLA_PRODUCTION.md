@@ -116,6 +116,26 @@ and applied edge counts. Never expose this token or endpoint to COP browsers.
 
 ### TPEG2 map-matching quality gate
 
+The updater's `openlr-trace-v2` mapping cache key includes the matcher version,
+routing dataset and static TPEG2 revision. On the first active vehicle request
+after installing this updater, expect one full graph mapping build; it may take
+roughly 16 minutes. The previous cache remains untouched for rollback. Do not
+interpret an idle traffic lease or the first build's delay as a base-routing
+outage. After the build, inspect the `OpenLR mapping diagnostics` journal line:
+`rejections` gives a disjoint count by first failed gate and `sourceByFrc` /
+`matchedByFrc` give per-road-class coverage. The sum of matched and rejected
+segments must equal the source segment count. No IDs, coordinates or raw feed
+are logged. Compare accepted route samples and parallel-road negative cases
+before changing any length, bearing or search-radius gate.
+
+The production baseline observed on 25 September 2026 was 55,150 static
+segments, 35,639 matched (64.62%), and 8,699 applied flows from 12,410
+fresh/valid speed records. The static feed contained 3,092 segments with at
+least one positive or negative offset and 13 with no usable reference
+distance. These are not a complete explanation of the 19,511 unmatched
+segments; reason-coded build diagnostics are required. The TMC table alone
+does not supply a Valhalla edge path.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where

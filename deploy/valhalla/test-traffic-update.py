@@ -52,18 +52,41 @@ def main() -> None:
     assert not traffic.trace_matches_openlr({"openlr": {**reference["openlr"], "positiveOffsetMeters": 10}}, valid_edges)
     assert not traffic.trace_matches_openlr({"openlr": {**reference["openlr"], "negativeOffsetMeters": 10}}, valid_edges)
     assert not traffic.trace_matches_openlr({"openlr": {"points": [{"role": "first"}, {"role": "last"}]}}, valid_edges)
+    assert traffic.trace_rejection_reason(reference, valid_edges) is None
+    assert traffic.trace_rejection_reason(reference, [{**valid_edges[0], "length": 0.62}]) == "length_mismatch"
+    assert traffic.trace_rejection_reason(reference, [{**valid_edges[0], "begin_heading": 160}, valid_edges[1]]) == "first_bearing_mismatch"
+    assert traffic.trace_rejection_reason(reference, [valid_edges[0], {**valid_edges[1], "end_heading": 160}]) == "last_bearing_mismatch"
+    assert traffic.trace_rejection_reason({"openlr": {**reference["openlr"], "positiveOffsetMeters": 10}}, valid_edges) == "offset_not_supported"
+    assert traffic.mapping_path(Path("/tmp"), "dataset", "revision") != traffic.mapping_path(Path("/tmp"), "dataset", "other-revision")
     original_request_json = traffic.request_json
     try:
         traffic.request_json = lambda *args, **kwargs: (200, {"edges": valid_edges})
-        matched_id, matched_edges = traffic.map_segment("http://valhalla.test", {
+        matched_id, matched_edges, matched_reason = traffic.map_segment("http://valhalla.test", {
             "messageId": "reference-1", "coordinates": [[14.0, 50.0], [14.001, 50.001]], **reference
         })
-        assert matched_id == "reference-1" and [edge["id"] for edge in matched_edges] == [1, 2]
-        rejected_id, rejected_edges = traffic.map_segment("http://valhalla.test", {
+        assert matched_id == "reference-1" and [edge["id"] for edge in matched_edges] == [1, 2] and matched_reason == "matched"
+        rejected_id, rejected_edges, rejected_reason = traffic.map_segment("http://valhalla.test", {
             "messageId": "reference-2", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
             "openlr": {**reference["openlr"], "positiveOffsetMeters": 10},
         })
-        assert rejected_id == "reference-2" and rejected_edges == []
+        assert rejected_id == "reference-2" and rejected_edges == [] and rejected_reason == "offset_not_supported"
+        traffic.request_json = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("HTTP 444 from Valhalla"))
+        _, _, reason = traffic.map_segment("http://valhalla.test", {
+            "messageId": "reference-3", "coordinates": [[14.0, 50.0], [14.001, 50.001]], **reference
+        })
+        assert reason == "valhalla_444"
+        traffic.request_json = lambda *args, **kwargs: (200, {"edges": valid_edges})
+        summary = traffic.build_mapping("http://valhalla.test", "dataset", "revision", [
+            {"messageId": "ok", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
+             "openlr": {"points": [{"frc": "2", "bearing": 42, "distanceToNext": 287}, {"bearing": 172}]}},
+            {"messageId": "offset", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
+             "openlr": {"positiveOffsetMeters": 10, "points": [{"frc": "3", "bearing": 42, "distanceToNext": 287}, {"bearing": 172}]}},
+        ], 1)
+        assert summary["matcherVersion"] == traffic.MATCHER_VERSION
+        assert summary["sourceSegmentCount"] == summary["mappedSegmentCount"] + sum(summary["rejectionCounts"].values())
+        assert summary["sourceByFrc"] == {"2": 1, "3": 1}
+        assert summary["matchedByFrc"] == {"2": 1}
+        assert summary["rejectionCounts"] == {"offset_not_supported": 1}
     finally:
         traffic.request_json = original_request_json
 

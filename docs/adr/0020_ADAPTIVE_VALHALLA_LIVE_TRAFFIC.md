@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted and implemented, pending the production host installation described in
-the Valhalla runbook.
+Accepted and implemented in production. The Valhalla runbook records release
+evidence and the remaining map-matching quality work.
 
 ## Context
 
@@ -112,8 +112,10 @@ Every weekly Valhalla build creates a fresh traffic skeleton with
 `valhalla_build_extract --with-traffic`. Activation stops Valhalla, switches the
 routing release, copies the corresponding skeleton to `/run`, clears the old
 applied-edge list and restarts validation. Rollback performs the symmetric copy.
-Mappings are keyed by both routing dataset and TPEG static revision, so a map
-from an earlier graph cannot be applied accidentally.
+Mappings are keyed by matcher version, routing dataset and TPEG static revision.
+The matcher version changes whenever matching semantics change, so a new
+algorithm cannot silently reuse a cache built by its predecessor. The previous
+mapping stays intact for rollback.
 
 Traffic is an optional enhancement. A missing feed, missing X5 cache, failed
 map-match or expired observation may degrade `liveSpeeds`, but must not make the
@@ -128,6 +130,15 @@ state (`disabled`, `idle`, `warming`, `current`, `stale`, `degraded`), update
 time, source observation time, age, routing dataset, mapping coverage and
 applied record counts. Tokens, raw TPEG payloads and individual internal edge
 maps are not exposed.
+
+The host-side mapping build logs aggregate rejection counts and source/matched
+counts by OpenLR functional road class. It does not log coordinates, message
+identifiers, provider payloads or tokens. This distinguishes unsupported
+offsets, missing reference properties, failed Valhalla traces, length and
+bearing mismatches before any quality threshold is reconsidered. A 50% mapping
+coverage threshold is an operational freshness gate, not proof that every
+accepted edge is geometrically correct; reviewed samples and negative tests on
+parallel roads remain release criteria.
 
 ## Rollback
 

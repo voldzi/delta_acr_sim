@@ -36,6 +36,9 @@ GRAPH_ID_EDGE_SHIFT = GRAPH_ID_LEVEL_BITS + GRAPH_ID_TILE_BITS
 GRAPH_ID_TILE_MASK = (1 << GRAPH_ID_TILE_BITS) - 1
 UNKNOWN_SPEED_RAW = 127
 MAX_SPEED_RAW = 126
+# Bump this whenever matching semantics change. The cache key must not reuse a
+# result produced by an older matcher against the same graph and TPEG snapshot.
+MATCHER_VERSION = "openlr-trace-v2"
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -118,7 +121,7 @@ def angular_difference(a: float, b: float) -> float:
     return abs((a - b + 180) % 360 - 180)
 
 
-def trace_matches_openlr(segment: dict[str, Any], edges: list[dict[str, Any]]) -> bool:
+def trace_rejection_reason(segment: dict[str, Any], edges: list[dict[str, Any]]) -> str | None:
     """Reject traces that disagree with the reference length or direction.
 
     TPEG2 OpenLR bearings use 0..255 for a full revolution. The final LRP
@@ -126,16 +129,26 @@ def trace_matches_openlr(segment: dict[str, Any], edges: list[dict[str, Any]]) -
     """
     openlr = segment.get("openlr")
     if not isinstance(openlr, dict):
-        return False
-    if float(openlr.get("positiveOffsetMeters") or 0) > 0 or float(openlr.get("negativeOffsetMeters") or 0) > 0:
+        return "missing_openlr"
+    try:
+        positive_offset = float(openlr.get("positiveOffsetMeters") or 0)
+        negative_offset = float(openlr.get("negativeOffsetMeters") or 0)
+    except (TypeError, ValueError, OverflowError):
+        return "invalid_reference_properties"
+    if not math.isfinite(positive_offset) or not math.isfinite(negative_offset):
+        return "invalid_reference_properties"
+    if positive_offset > 0 or negative_offset > 0:
         # Speeds on an offset location must not be applied to the full LRP path.
-        return False
+        return "offset_not_supported"
     points = openlr.get("points")
     if not isinstance(points, list) or len(points) < 2 or not edges:
-        return False
-    expected_m = sum(float(point.get("distanceToNext") or 0) for point in points[:-1] if isinstance(point, dict))
+        return "missing_reference_points_or_edges"
+    try:
+        expected_m = sum(float(point.get("distanceToNext") or 0) for point in points[:-1] if isinstance(point, dict))
+    except (TypeError, ValueError, OverflowError):
+        return "invalid_reference_properties"
     if expected_m <= 0:
-        return False
+        return "missing_reference_distance"
     try:
         actual_m = sum(float(edge["length"]) * 1000 for edge in edges)
         first_bearing = float(points[0]["bearing"]) * 360 / 256
@@ -143,25 +156,38 @@ def trace_matches_openlr(segment: dict[str, Any], edges: list[dict[str, Any]]) -
         first_heading = float(edges[0]["begin_heading"])
         last_heading = float(edges[-1]["end_heading"])
     except (KeyError, TypeError, ValueError, OverflowError):
-        return False
-    return (
-        all(math.isfinite(value) for value in (expected_m, actual_m, first_bearing, last_bearing, first_heading, last_heading))
-        and abs(actual_m - expected_m) <= max(35, expected_m * 0.1)
-        and angular_difference(first_bearing, first_heading) <= 35
-        and angular_difference(last_bearing, last_heading) <= 35
-    )
+        return "missing_trace_attributes"
+    if not all(math.isfinite(value) for value in (expected_m, actual_m, first_bearing, last_bearing, first_heading, last_heading)):
+        return "invalid_trace_attributes"
+    if abs(actual_m - expected_m) > max(35, expected_m * 0.1):
+        return "length_mismatch"
+    if angular_difference(first_bearing, first_heading) > 35:
+        return "first_bearing_mismatch"
+    if angular_difference(last_bearing, last_heading) > 35:
+        return "last_bearing_mismatch"
+    return None
 
 
-def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[dict[str, int | float]]]:
+def trace_matches_openlr(segment: dict[str, Any], edges: list[dict[str, Any]]) -> bool:
+    return trace_rejection_reason(segment, edges) is None
+
+
+def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[dict[str, int | float]], str]:
     message_id = str(segment.get("messageId", ""))
     coordinates = segment.get("coordinates")
     if not message_id or not isinstance(coordinates, list) or len(coordinates) < 2:
-        return message_id, []
+        return message_id, [], "missing_coordinates"
     shape = []
     for coordinate in coordinates:
         if not isinstance(coordinate, list) or len(coordinate) < 2:
-            return message_id, []
-        shape.append({"lon": float(coordinate[0]), "lat": float(coordinate[1]), "type": "through", "radius": 100})
+            return message_id, [], "invalid_coordinates"
+        try:
+            lon, lat = float(coordinate[0]), float(coordinate[1])
+        except (TypeError, ValueError, OverflowError):
+            return message_id, [], "invalid_coordinates"
+        if not math.isfinite(lon) or not math.isfinite(lat):
+            return message_id, [], "invalid_coordinates"
+        shape.append({"lon": lon, "lat": lat, "type": "through", "radius": 100})
     payload = {
         "shape": shape,
         "costing": "auto",
@@ -176,12 +202,15 @@ def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[d
     }
     try:
         status, body = request_json(f"{valhalla_url.rstrip('/')}/trace_attributes", payload=payload, timeout=30)
-    except RuntimeError:
-        return message_id, []
+    except (RuntimeError, TimeoutError, OSError) as error:
+        detail = str(error)
+        reason = "valhalla_444" if "HTTP 444" in detail else "valhalla_4xx" if "HTTP 4" in detail else "valhalla_5xx" if "HTTP 5" in detail else "valhalla_timeout" if isinstance(error, TimeoutError) or "timed out" in detail.lower() else "valhalla_request_error"
+        return message_id, [], reason
     if status != 200 or not isinstance(body, dict) or not isinstance(body.get("edges"), list):
-        return message_id, []
-    if not trace_matches_openlr(segment, body["edges"]):
-        return message_id, []
+        return message_id, [], "invalid_trace_response"
+    rejection = trace_rejection_reason(segment, body["edges"])
+    if rejection:
+        return message_id, [], rejection
     edges: list[dict[str, int | float]] = []
     seen: set[int] = set()
     for edge in body["edges"]:
@@ -195,7 +224,7 @@ def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[d
             continue
         seen.add(edge_id)
         edges.append({"id": edge_id, "baselineSpeedKph": float(edge.get("speed", 0) or 0)})
-    return message_id, edges
+    return message_id, edges, "matched" if edges else "missing_edge_ids"
 
 
 def build_mapping(
@@ -206,27 +235,45 @@ def build_mapping(
     workers: int,
 ) -> dict[str, Any]:
     mapping: dict[str, list[dict[str, int | float]]] = {}
+    rejection_counts: dict[str, int] = {}
+    source_by_frc: dict[str, int] = {}
+    matched_by_frc: dict[str, int] = {}
+    frc_by_message_id: dict[str, str] = {}
+    for segment in segments:
+        points = (segment.get("openlr") or {}).get("points") or [{}]
+        frc_by_message_id[str(segment.get("messageId", ""))] = str(points[0].get("frc", "unknown"))
+    for frc in frc_by_message_id.values():
+        source_by_frc[frc] = source_by_frc.get(frc, 0) + 1
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(4, workers))) as executor:
         futures = [executor.submit(map_segment, valhalla_url, segment) for segment in segments]
         for index, future in enumerate(concurrent.futures.as_completed(futures), 1):
-            message_id, edges = future.result()
+            message_id, edges, reason = future.result()
             if message_id and edges:
                 mapping[message_id] = edges
+                frc = frc_by_message_id.get(message_id, "unknown")
+                matched_by_frc[frc] = matched_by_frc.get(frc, 0) + 1
+            else:
+                rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
             if index % 1000 == 0:
                 print(f"Mapped {index}/{len(segments)} TPEG2 segments", flush=True)
+    print(f"OpenLR mapping diagnostics: {json.dumps({'rejections': rejection_counts, 'sourceByFrc': source_by_frc, 'matchedByFrc': matched_by_frc}, sort_keys=True)}", flush=True)
     return {
-        "contractVersion": "valhalla-openlr-edge-map-v1",
+        "contractVersion": "valhalla-openlr-edge-map-v2",
+        "matcherVersion": MATCHER_VERSION,
         "routingDataset": dataset,
         "staticRevision": static_revision,
         "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "sourceSegmentCount": len(segments),
         "mappedSegmentCount": len(mapping),
+        "rejectionCounts": rejection_counts,
+        "sourceByFrc": source_by_frc,
+        "matchedByFrc": matched_by_frc,
         "mapping": mapping,
     }
 
 
 def mapping_path(cache_dir: Path, dataset: str, static_revision: str) -> Path:
-    token = hashlib.sha256(f"{dataset}:{static_revision}".encode()).hexdigest()[:20]
+    token = hashlib.sha256(f"{MATCHER_VERSION}:{dataset}:{static_revision}".encode()).hexdigest()[:20]
     return cache_dir / f"openlr-edge-map-{token}.json.gz"
 
 
@@ -441,10 +488,13 @@ def run(config: dict[str, str]) -> int:
         and revision_state.get("routingDataset") == dataset
         and revision_state.get("staticRevision") == static_revision
         and revision_state.get("dynamicRevision") == dynamic_revision
+        and revision_state.get("matcherVersion") == MATCHER_VERSION
     ):
         return 0
     if path.exists():
         mapping = read_gzip_json(path)
+        if mapping.get("matcherVersion") != MATCHER_VERSION:
+            raise RuntimeError("Traffic mapping cache was built by a different matcher")
     else:
         query = urlencode({"includeStatic": "true"})
         static_status, static_feed = request_json(f"{feed_base_url.rstrip('/')}/feed?{query}", token=token)
@@ -503,6 +553,7 @@ def run(config: dict[str, str]) -> int:
                 "routingDataset": dataset,
                 "staticRevision": static_revision,
                 "dynamicRevision": dynamic_revision,
+                "matcherVersion": MATCHER_VERSION,
                 "appliedAtEpoch": time.time(),
             }
         ),
