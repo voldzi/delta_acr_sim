@@ -8967,6 +8967,8 @@
                   "description": "Optional OpenLR reference metadata for graph-specific resolution; coordinates alone are not a road path.",
                   "required": ["points"],
                   "properties": {
+                    "positiveOffsetMeters": { "type": "number", "minimum": 0 },
+                    "negativeOffsetMeters": { "type": "number", "minimum": 0 },
                     "points": {
                       "type": "array",
                       "items": {

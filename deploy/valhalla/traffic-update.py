@@ -114,6 +114,44 @@ def traffic_word(speed_kph: float, baseline_kph: float | None = None) -> int:
     )
 
 
+def angular_difference(a: float, b: float) -> float:
+    return abs((a - b + 180) % 360 - 180)
+
+
+def trace_matches_openlr(segment: dict[str, Any], edges: list[dict[str, Any]]) -> bool:
+    """Reject traces that disagree with the reference length or direction.
+
+    TPEG2 OpenLR bearings use 0..255 for a full revolution. The final LRP
+    points back along the path, opposite the matched edge's end heading.
+    """
+    openlr = segment.get("openlr")
+    if not isinstance(openlr, dict):
+        return False
+    if float(openlr.get("positiveOffsetMeters") or 0) > 0 or float(openlr.get("negativeOffsetMeters") or 0) > 0:
+        # Speeds on an offset location must not be applied to the full LRP path.
+        return False
+    points = openlr.get("points")
+    if not isinstance(points, list) or len(points) < 2 or not edges:
+        return False
+    expected_m = sum(float(point.get("distanceToNext") or 0) for point in points[:-1] if isinstance(point, dict))
+    if expected_m <= 0:
+        return False
+    try:
+        actual_m = sum(float(edge["length"]) * 1000 for edge in edges)
+        first_bearing = float(points[0]["bearing"]) * 360 / 256
+        last_bearing = (float(points[-1]["bearing"]) * 360 / 256 + 180) % 360
+        first_heading = float(edges[0]["begin_heading"])
+        last_heading = float(edges[-1]["end_heading"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+    return (
+        all(math.isfinite(value) for value in (expected_m, actual_m, first_bearing, last_bearing, first_heading, last_heading))
+        and abs(actual_m - expected_m) <= max(35, expected_m * 0.1)
+        and angular_difference(first_bearing, first_heading) <= 35
+        and angular_difference(last_bearing, last_heading) <= 35
+    )
+
+
 def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[dict[str, int | float]]]:
     message_id = str(segment.get("messageId", ""))
     coordinates = segment.get("coordinates")
@@ -134,13 +172,15 @@ def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[d
             "breakage_distance": 20000,
             "interpolation_distance": 10,
         },
-        "filters": {"action": "include", "attributes": ["edge.id", "edge.speed", "edge.length"]},
+        "filters": {"action": "include", "attributes": ["edge.id", "edge.speed", "edge.length", "edge.begin_heading", "edge.end_heading"]},
     }
     try:
         status, body = request_json(f"{valhalla_url.rstrip('/')}/trace_attributes", payload=payload, timeout=30)
     except RuntimeError:
         return message_id, []
     if status != 200 or not isinstance(body, dict) or not isinstance(body.get("edges"), list):
+        return message_id, []
+    if not trace_matches_openlr(segment, body["edges"]):
         return message_id, []
     edges: list[dict[str, int | float]] = []
     seen: set[int] = set()

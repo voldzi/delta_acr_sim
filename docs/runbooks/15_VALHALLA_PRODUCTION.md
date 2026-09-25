@@ -153,12 +153,27 @@ serves unmatched roads.
 
 The SIM static-feed parser now retains OpenLR FRC, FOW, bearing, lowest FRC to
 next point, distance-to-next and driving-direction metadata alongside the
-reference coordinates for the internal traffic feed. This is preparatory data,
-not a decoded road path. The host mapper still uses the proven
-`trace_attributes` method; the static-revision hash and production cache remain
-unchanged. Before activating any resolver, compare its matches against the
-existing mapping on a representative sample and reject uncertain routes. Do
-not treat the new metadata alone as evidence that coverage improved.
+reference coordinates for the internal traffic feed. A 25 September 2026
+all-segment audit identified the main mismatch: the first OpenLR point uses
+the absolute 24-bit coordinate scale; subsequent points use signed relative
+1e-5-degree deltas. The previous parser used the absolute scale for both.
+For 55,137 segments with a stated distance, median straight-line distance
+divided by OpenLR distance was 2.086 before correction and 0.972 after it;
+54,448 versus 957 segments respectively exceeded 120% of the stated road
+distance. A deterministic 221-segment read-only Valhalla comparison matched
+88 before and 160 after the coordinate correction, with no previously matched
+segment lost; 139 also passed the new strict distance, bearing and offset
+checks. This sample is diagnostic, not a national acceptance result.
+
+The graph-specific matcher additionally checks traced length against OpenLR
+distance-to-next and both encoded bearings against directed graph headings.
+OpenLR bearing values are scaled by 360/256; the last bearing points back
+toward the first LRP. Segments with nonzero positive or negative offsets are
+rejected until exact sub-path trimming is implemented. The corrected
+coordinates change `staticRevision`, so the graph mapping must be rebuilt in
+a new cache file. Do not reuse the old cache. After deployment verify static
+and active-flow coverage, inspect varied road classes and parallel roads,
+compare car route times, and retain the previous mapping for rollback.
 
 Traffic failure is not a base-routing failure. If the overlay is stale beyond
 1,800 seconds, current speeds are cleared and Valhalla falls back to its normal

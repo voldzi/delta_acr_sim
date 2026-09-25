@@ -21,6 +21,7 @@ describe("TPEG2 streaming parsers", () => {
         <method><optionOpenLRLocationReferenceLink><locationReference><optionLinearLocationReference>
           <first><coordinate><longitude>583571</longitude><latitude>2313505</latitude></coordinate><lineProperties><frc code="0"/><fow code="1"/><bearing><value>42</value></bearing></lineProperties><pathProperties><lfrcnp code="0"/><dnp><value>287</value></dnp><againstDrivingDirection>false</againstDrivingDirection></pathProperties></first>
           <last><coordinate><longitude>-355</longitude><latitude>119</latitude></coordinate><lineProperties><frc code="0"/><fow code="1"/><bearing><value>172</value></bearing></lineProperties></last>
+          <positiveOffset><value>25</value></positiveOffset>
         </optionLinearLocationReference></locationReference></optionOpenLRLocationReferenceLink></method>
       </loc>`));
 
@@ -29,6 +30,9 @@ describe("TPEG2 streaming parsers", () => {
     expect(segment?.coordinates).toHaveLength(2);
     expect(segment?.coordinates[0]?.[0]).toBeCloseTo(12.5223, 3);
     expect(segment?.coordinates[1]?.[0]).toBeLessThan(segment!.coordinates[0]![0]);
+    expect(segment?.coordinates[1]?.[0]).toBeCloseTo(segment!.coordinates[0]![0] - 0.00355, 7);
+    expect(segment?.coordinates[1]?.[1]).toBeCloseTo(segment!.coordinates[0]![1] + 0.00119, 7);
+    expect(segment?.openlr?.positiveOffsetMeters).toBe(25);
     expect(segment?.openlr?.points).toEqual([
       { role: "first", frc: "0", fow: "1", bearing: 42, lowestFrcToNext: "0", distanceToNext: 287, againstDrivingDirection: false },
       { role: "last", frc: "0", fow: "1", bearing: 172 }

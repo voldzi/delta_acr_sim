@@ -37,6 +37,36 @@ def main() -> None:
     assert (word >> 28) & 0xFF == 255
     assert (word >> 44) & 0x3F > 1
 
+    reference = {"openlr": {"points": [
+        {"role": "first", "bearing": 42, "distanceToNext": 287},
+        {"role": "last", "bearing": 172},
+    ]}}
+    valid_edges = [
+        {"id": 1, "length": 0.140, "begin_heading": 61, "end_heading": 62},
+        {"id": 2, "length": 0.147, "begin_heading": 62, "end_heading": 63},
+    ]
+    assert traffic.trace_matches_openlr(reference, valid_edges)
+    assert not traffic.trace_matches_openlr(reference, [{**valid_edges[0], "length": 0.62}])
+    assert not traffic.trace_matches_openlr(reference, [{**valid_edges[0], "begin_heading": 160}, valid_edges[1]])
+    assert not traffic.trace_matches_openlr(reference, [valid_edges[0], {**valid_edges[1], "end_heading": 160}])
+    assert not traffic.trace_matches_openlr({"openlr": {**reference["openlr"], "positiveOffsetMeters": 10}}, valid_edges)
+    assert not traffic.trace_matches_openlr({"openlr": {**reference["openlr"], "negativeOffsetMeters": 10}}, valid_edges)
+    assert not traffic.trace_matches_openlr({"openlr": {"points": [{"role": "first"}, {"role": "last"}]}}, valid_edges)
+    original_request_json = traffic.request_json
+    try:
+        traffic.request_json = lambda *args, **kwargs: (200, {"edges": valid_edges})
+        matched_id, matched_edges = traffic.map_segment("http://valhalla.test", {
+            "messageId": "reference-1", "coordinates": [[14.0, 50.0], [14.001, 50.001]], **reference
+        })
+        assert matched_id == "reference-1" and [edge["id"] for edge in matched_edges] == [1, 2]
+        rejected_id, rejected_edges = traffic.map_segment("http://valhalla.test", {
+            "messageId": "reference-2", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
+            "openlr": {**reference["openlr"], "positiveOffsetMeters": 10},
+        })
+        assert rejected_id == "reference-2" and rejected_edges == []
+    finally:
+        traffic.request_json = original_request_json
+
     now = "2099-01-01T00:00:00Z"
     mapping = {"mapping": {"flow-1": [{"id": graph_id(1, 50594, 2), "baselineSpeedKph": 80}]}}
     feed = {"flows": [{"messageId": "flow-1", "averageSpeedKph": 24, "validUntil": now}]}

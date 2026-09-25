@@ -12,6 +12,10 @@ import type {
 } from "./types.js";
 
 const COORDINATE_FACTOR = 360 / 2 ** 24;
+// OpenLR encodes the first LRP absolutely, but subsequent LRPs as signed
+// differences in 1e-5 degrees. Using the absolute scale for both places the
+// final LRP about twice as far away and breaks graph matching.
+const RELATIVE_COORDINATE_FACTOR = 1e-5;
 const TPEG2_LICENSE: SituationDataLicense = {
   name: "NDIC TPEG2 API terms",
   url: "https://tpeg.dopravniinfo.cz/about/terms-of-use",
@@ -50,6 +54,8 @@ export interface Tpeg2StaticSegment {
   messageId: string;
   coordinates: Array<[number, number]>;
   openlr?: {
+    positiveOffsetMeters?: number;
+    negativeOffsetMeters?: number;
     points: Array<{
       role: string;
       frc?: string;
@@ -507,13 +513,13 @@ function endingAt(map: Map<string, string[]>, suffix: string, index: number): st
 function decodeOpenLrCoordinates(coordinates: ParsedCoordinate[]): Array<[number, number]> {
   const encoded = coordinates.filter((coordinate) => coordinate.kind === "openlr");
   if (encoded.length === 0) return [];
-  let longitude = encoded[0]!.longitude;
-  let latitude = encoded[0]!.latitude;
-  const decoded: Array<[number, number]> = [[longitude * COORDINATE_FACTOR, latitude * COORDINATE_FACTOR]];
+  let longitude = encoded[0]!.longitude * COORDINATE_FACTOR;
+  let latitude = encoded[0]!.latitude * COORDINATE_FACTOR;
+  const decoded: Array<[number, number]> = [[longitude, latitude]];
   for (const coordinate of encoded.slice(1)) {
-    longitude += coordinate.longitude;
-    latitude += coordinate.latitude;
-    decoded.push([longitude * COORDINATE_FACTOR, latitude * COORDINATE_FACTOR]);
+    longitude += coordinate.longitude * RELATIVE_COORDINATE_FACTOR;
+    latitude += coordinate.latitude * RELATIVE_COORDINATE_FACTOR;
+    decoded.push([longitude, latitude]);
   }
   return decoded;
 }
@@ -546,7 +552,13 @@ function decodeOpenLrProperties(message: ParsedMessage): Tpeg2StaticSegment["ope
         ? { againstDrivingDirection: againstDrivingDirection === "true" } : {})
     };
   });
-  return points.length > 0 ? { points } : undefined;
+  const positiveOffsetMeters = numberOrUndefined(firstEnding(method.values, "/optionLinearLocationReference/positiveOffset/value"));
+  const negativeOffsetMeters = numberOrUndefined(firstEnding(method.values, "/optionLinearLocationReference/negativeOffset/value"));
+  return points.length > 0 ? {
+    points,
+    ...(positiveOffsetMeters !== undefined ? { positiveOffsetMeters } : {}),
+    ...(negativeOffsetMeters !== undefined ? { negativeOffsetMeters } : {})
+  } : undefined;
 }
 
 function decodeGlrCoordinates(coordinates: ParsedCoordinate[]): Array<[number, number]> {
