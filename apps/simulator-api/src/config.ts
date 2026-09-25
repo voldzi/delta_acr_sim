@@ -26,6 +26,7 @@ export interface ApiConfig {
   externalAiAllowed: boolean;
   aiRouterBaseUrl?: string;
   aiRouterAdminToken?: string;
+  aiRouterSimToken?: string;
   apiAuthRequired?: boolean;
   apiAuthMode?: ApiAuthMode;
   apiPublicRead?: boolean;
@@ -78,6 +79,7 @@ export async function loadConfig(): Promise<ApiConfig> {
     externalAiAllowed: process.env.EXTERNAL_AI_ALLOWED === "true",
     aiRouterBaseUrl: process.env.SIM_AI_ROUTER_BASE_URL,
     aiRouterAdminToken: process.env.AI_ROUTER_ADMIN_TOKEN,
+    aiRouterSimToken: process.env.AI_ROUTER_SIM_TOKEN,
     apiAuthRequired,
     apiAuthMode,
     apiPublicRead: parseBoolean(process.env.SIM_API_PUBLIC_READ, false),

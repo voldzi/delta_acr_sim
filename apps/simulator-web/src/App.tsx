@@ -49,6 +49,7 @@ import {
   demoScenario,
   denseDemoScenario,
   getAiRouterAdmin,
+  getAiRouterScenarioPreview,
   hasSimAuthorizationToken,
   hasSimApiToken,
   loadDashboard,
@@ -60,7 +61,8 @@ import {
   setSimApiToken,
   testPublisher,
   ukraineAirDefenseDemoScenario,
-  type AiRouterAdminState
+  type AiRouterAdminState,
+  type AiRouterScenarioPreview
 } from "./api";
 import { beginLogin, createInitialAuthSession, endSession, initializeAuth, isOidcEnabled, readAuthConfig, type AuthSession, type SimRole } from "./auth";
 import type {
@@ -529,6 +531,11 @@ export function App() {
   const activeSectionRef = useRef(activeSection);
   const [aiPrompt, setAiPrompt] = useState("Create a 15 minute synthetic air situation latency test with aircraft, UAV and missile tracks.");
   const [draft, setDraft] = useState<AiDraft | null>(null);
+  const [aiRouterPrompt, setAiRouterPrompt] = useState(
+    "Navrhni krátké fiktivní cvičení pro sledování dopadů povodně na dopravu. Nepoužívej skutečné osoby ani události."
+  );
+  const [aiRouterPreview, setAiRouterPreview] = useState<AiRouterScenarioPreview | null>(null);
+  const [aiRouterSyntheticConfirmed, setAiRouterSyntheticConfirmed] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(() => createNotice("Ready for continuous synthetic movement."));
   const changeUiLanguage = useCallback((language: UiLanguage) => {
     setUiLanguage(language);
@@ -2190,8 +2197,44 @@ export function App() {
 
               {visibleSection === "ai" ? (
                 <section id="ai" className="panel ai-panel">
-                  <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Mock provider, structured draft and human accept flow." />
+                  <PanelTitle icon={<Bot />} title="AI Scenario Assistant" subtitle="Fiktivní cvičení s lidským posouzením." />
                   {canAdministerAiRouter ? <AiRouterAdminPanel /> : null}
+                  <div className="draft-box">
+                    <div className="draft-head">
+                      <strong>AI náhled cvičení přes Router</strong>
+                    </div>
+                    <p>Jen fiktivní zadání. Nevkládej skutečné osoby, interní údaje ani aktuální zásahy. Výstup nic automaticky nepublikuje.</p>
+                    <textarea
+                      aria-label="Fiktivní zadání pro AI Router"
+                      value={aiRouterPrompt}
+                      maxLength={2000}
+                      onChange={(event) => setAiRouterPrompt(event.target.value)}
+                      rows={4}
+                    />
+                    <label>
+                      <input type="checkbox" checked={aiRouterSyntheticConfirmed} onChange={(event) => setAiRouterSyntheticConfirmed(event.target.checked)} />{" "}
+                      Potvrzuji, že zadání je zcela fiktivní a neobsahuje skutečné osoby, interní data ani živé události.
+                    </label>
+                    <div className="button-strip compact">
+                      <button
+                        type="button"
+                        disabled={loading || !canUseAiAssistant || !aiRouterPrompt.trim() || !aiRouterSyntheticConfirmed}
+                        onClick={() => runAction("AI náhled připraven.", async () => setAiRouterPreview(await getAiRouterScenarioPreview(aiRouterPrompt)))}
+                      >
+                        <Bot size={16} /> Připravit textový náhled
+                      </button>
+                    </div>
+                    {aiRouterPreview ? (
+                      <div>
+                        <p>{aiRouterPreview.output}</p>
+                        <small>
+                          Model: {aiRouterPreview.model} · odhad Routeru: {(aiRouterPreview.usage.estimatedMicrousd / 1_000_000).toFixed(4)} USD · vyžaduje
+                          lidskou kontrolu
+                        </small>
+                      </div>
+                    ) : null}
+                  </div>
+                  <p>Níže je původní strukturovaný návrh z ukázkového poskytovatele; není vytvářen AI Routerem.</p>
                   <textarea value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} rows={5} />
                   <div className="button-strip compact">
                     <button

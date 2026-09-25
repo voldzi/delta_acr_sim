@@ -1,7 +1,8 @@
 # AI Router - provozní zavedení
 
-**Stav:** připravený kód a izolovaný integrační test; produkční služba není
-spuštěná. Tento runbook není pokyn zapnout externí modely bez acceptance.
+**Stav:** interní Router, databáze a SIM administrační proxy jsou nasazené;
+textový náhled fiktivního cvičení v SIM vyžaduje produkční akceptaci. COP chat
+není přepojen. Tento runbook není pokyn zapnout další typy dat nebo dražší model.
 
 ## Vlastník a hranice
 

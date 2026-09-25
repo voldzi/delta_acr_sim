@@ -12,7 +12,7 @@ import { problem } from "./http.js";
 import { buildOperationsSummary } from "./operations-summary.js";
 import { buildProviderDashboardDetails } from "./provider-dashboard.js";
 import { RuntimeRunner } from "./runtime-runner.js";
-import { AuditLogger, createCorsOptions, createSecurityMiddleware } from "./security.js";
+import { AuditLogger, authenticatedActor, createCorsOptions, createSecurityMiddleware } from "./security.js";
 import { JsonStore } from "./store.js";
 import { createValidators, type Validators } from "./validation.js";
 
@@ -329,6 +329,44 @@ function registerAiRoutes(app: Express, context: AppContext): void {
       res.json(await response.json());
     } catch {
       return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is not configured or unavailable.");
+    }
+  });
+  app.post("/api/v1/ai/router-scenario-preview", async (req, res) => {
+    const prompt = req.body?.prompt;
+    if (typeof prompt !== "string" || prompt.trim().length < 1 || prompt.length > 2000 || req.body?.syntheticOnly !== true) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "A bounded synthetic-only prompt is required.");
+    }
+    if (!context.config.aiRouterBaseUrl || !context.config.aiRouterSimToken) {
+      return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is not configured.");
+    }
+    const actor = authenticatedActor(req);
+    if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
+    try {
+      const response = await fetch(new URL("/api/v1/ai-router/generate", context.config.aiRouterBaseUrl), {
+        method: "POST",
+        headers: { authorization: `Bearer ${context.config.aiRouterSimToken}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          taskType: "sim_scenario",
+          dataClass: "synthetic",
+          preference: "auto",
+          prompt: prompt.trim(),
+          userId: actor,
+          allowExternal: true,
+          allowPaidEscalation: false,
+          maxOutputTokens: 320
+        }),
+        signal: AbortSignal.timeout(30_000)
+      });
+      if (!response.ok) {
+        return problem(req, res, response.status === 429 ? 429 : 503, "AI_ROUTER_UNAVAILABLE", "AI Router rejected the request or is unavailable.");
+      }
+      const result = (await response.json()) as { output?: unknown; requiresHumanReview?: unknown };
+      if (typeof result.output !== "string" || result.requiresHumanReview !== true) {
+        return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router returned an invalid response.");
+      }
+      res.json(result);
+    } catch {
+      return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is unavailable.");
     }
   });
   app.post("/api/v1/ai/scenario-drafts", async (req, res) => {

@@ -64,6 +64,7 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
     body: JSON.stringify({
       model,
       store: false,
+      reasoning: { effort: model === config.economyModel ? "none" : "low" },
       instructions:
         "You are an assistive civil situation-map analyst. Do not make operational decisions. Explain uncertainty and data age. Do not provide targeting or tactical combat guidance.",
       input: prompt,
@@ -262,7 +263,9 @@ export function createApp(config: Config, store: BudgetStore) {
     try {
       const result =
         decision.tier === "local_fast" ? await callLocal(config, body.prompt, maxOutputTokens) : await callOpenAI(config, model, body.prompt, maxOutputTokens);
-      const chargedMicrousd = Math.max(reservedMicrousd, estimateMicrousd(result.inputTokens, result.outputTokens, inputRate, outputRate));
+      // Keep the conservative reservation for concurrent admission, then
+      // report the estimate from actual provider token counts after success.
+      const chargedMicrousd = estimateMicrousd(result.inputTokens, result.outputTokens, inputRate, outputRate);
       await store.finish(id, "success", result.inputTokens, result.outputTokens, chargedMicrousd);
       res.json({
         requestId: id,

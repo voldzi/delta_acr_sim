@@ -180,6 +180,12 @@ const routePolicies: RoutePolicy[] = [
   { methods: ["GET"], pattern: /^\/api\/v1\/ai\/providers$/, roles: ["SIM_VIEWER"], publicRead: true },
   { methods: ["GET"], pattern: /^\/api\/v1\/ai\/router-admin$/, roles: ["SIM_AI_ADMIN"] },
   {
+    methods: ["POST"],
+    pattern: /^\/api\/v1\/ai\/router-scenario-preview$/,
+    roles: ["SIM_AI_USER"],
+    audit: { action: "ai.router.scenario.preview", resourceType: "aiRouterPreview" }
+  },
+  {
     methods: ["PATCH"],
     pattern: /^\/api\/v1\/ai\/router-admin\/policy$/,
     roles: ["SIM_AI_ADMIN"],
@@ -493,6 +499,10 @@ function setPrincipal(req: Request, principal: AuthenticatedPrincipal): void {
 
 function getPrincipal(req: Request): AuthenticatedPrincipal | undefined {
   return (req as AuthenticatedRequest)[principalKey];
+}
+
+export function authenticatedActor(req: Request): string | undefined {
+  return getPrincipal(req)?.actor;
 }
 
 function scenarioIdFromPath(req: Request): string | undefined {

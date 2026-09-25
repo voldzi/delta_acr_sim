@@ -513,6 +513,38 @@ describe("SIM API contract baseline", () => {
     expect(accepted.body.scenarioId).toBeTruthy();
   });
 
+  it("proxies only bounded synthetic AI previews under the SIM service identity", async () => {
+    context.runtimeRunner.dispose();
+    ({ app, context } = await createApp(testConfig(dataDir, { aiRouterBaseUrl: "http://ai-router-api:4050", aiRouterSimToken: "sim-test-token" })));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ output: "Fiktivní cvičení", requiresHumanReview: true, model: "gpt-6-luna" }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await request(app).post("/api/v1/ai/router-scenario-preview").send({ prompt: "Skutečný zásah", syntheticOnly: false }).expect(400);
+    await request(app)
+      .post("/api/v1/ai/router-scenario-preview")
+      .send({ prompt: "x".repeat(2001), syntheticOnly: true })
+      .expect(400);
+    const response = await request(app).post("/api/v1/ai/router-scenario-preview").send({ prompt: "  Fiktivní povodeň  ", syntheticOnly: true }).expect(200);
+    expect(response.body.output).toBe("Fiktivní cvičení");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.pathname).toBe("/api/v1/ai-router/generate");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      taskType: "sim_scenario",
+      dataClass: "synthetic",
+      prompt: "Fiktivní povodeň",
+      userId: "anonymous-dev",
+      allowExternal: true,
+      allowPaidEscalation: false,
+      maxOutputTokens: 320
+    });
+    expect(context.store.data.scenarios).toHaveLength(0);
+  });
+
   it("exposes a lightweight operations summary for the SIM operations center", async () => {
     vi.stubGlobal(
       "fetch",

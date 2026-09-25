@@ -39,6 +39,20 @@ export interface AiRouterAdminState {
   usage: { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number };
 }
 
+export interface AiRouterScenarioPreview {
+  requestId: string;
+  model: string;
+  tier: string;
+  routingReason: string;
+  output: string;
+  usage: { inputTokens: number; outputTokens: number; estimatedMicrousd: number };
+  requiresHumanReview: true;
+}
+
+export function getAiRouterScenarioPreview(prompt: string): Promise<AiRouterScenarioPreview> {
+  return api<AiRouterScenarioPreview>("/api/v1/ai/router-scenario-preview", { method: "POST", body: JSON.stringify({ prompt, syntheticOnly: true }) }, 35_000);
+}
+
 export function getAiRouterAdmin(): Promise<AiRouterAdminState> {
   return api<AiRouterAdminState>("/api/v1/ai/router-admin");
 }
@@ -51,9 +65,9 @@ const AUTH_CHANGE_EVENT = "csm-sim-auth-change";
 let authorizationTokenProvider: (() => string | undefined) | undefined;
 let manualTokenUsageEnabled = true;
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+async function api<T>(path: string, init?: RequestInit, timeoutMs = API_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   const token = getSimAuthorizationToken();
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -70,7 +84,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
       headers
     }).catch((error: unknown) => {
       if (error instanceof Error && error.name === "AbortError") {
-        throw new Error(`API request timed out after ${API_TIMEOUT_MS / 1000}s: ${path}`);
+        throw new Error(`API request timed out after ${timeoutMs / 1000}s: ${path}`);
       }
       throw error;
     });

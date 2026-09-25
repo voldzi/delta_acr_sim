@@ -1,9 +1,9 @@
 # Sdílený AI Router - architektonické zadání a stav realizace
 
-**Stav 25. 9. 2026:** Fáze 1 v repozitáři SIM. Samostatná interní služba,
-směrovací pravidla, REST kontrakt a databázová rezervace rozpočtu. Není
-nasazena ani připojena ke COP/SIM produkčnímu AI toku. V SIM webu je připraven
-administrační panel přes SIM API proxy; bez běžící služby ukáže nedostupnost.
+**Stav 25. 9. 2026:** Interní Router a administrační panel SIM jsou nasazené.
+Samostatná interní služba, směrovací pravidla, REST kontrakt a databázová
+rezervace rozpočtu. Textový náhled fiktivního cvičení je připojen v SIM; jeho
+produkční akceptace se ověřuje. COP chat zůstává na dosavadní cestě.
 
 ## Cíl
 
@@ -34,6 +34,11 @@ zůstává jednotné; Router není veřejné UI.
   auditovaná v DB, lze jen v mezích tvrdých limitů z prostředí.
 - SIM API proxy `/api/v1/ai/router-admin` a `/policy`: jen `SIM_AI_ADMIN`;
   prohlížeč nedostává interní Router token.
+- SIM API proxy `POST /api/v1/ai/router-scenario-preview`: jen `SIM_AI_USER`,
+  nejvýše 2000 znaků, výslovné označení fiktivního zadání. Volá Router pod
+  samostatnou SIM identitou, vrací text pro lidské posouzení a nic neukládá
+  jako scénář ani nepublikuje. Původní strukturovaný mock draft zůstává
+  oddělený a je v UI takto označen.
 - `/health/live` a `/health/ready`: proces a dosažitelnost databáze.
 
 Kontrakt záměrně neumožňuje přímou manipulaci s tool registry, volné URL
@@ -57,8 +62,10 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
   modelové tiery; vyšší strop vyžaduje samostatnou změnu prostředí.
   PostgreSQL transakce a advisory lock brání paralelnímu
   přečerpání rezervací. Neúspěšný provider rezervaci ponechá.
-- `store: false`; žádný modelový tool calling. Přímá cena je konzervativní
-  odhad, nikoli faktura. Ceník je nutno zkontrolovat před produkčním zapnutím.
+- `store: false`; žádný modelový tool calling. Před voláním se rezervuje
+  konzervativní maximum, po úspěchu se v Routeru eviduje odhad z vráceného
+  počtu tokenů. Ani tento odhad není faktura. Ceník je nutno pravidelně
+  kontrolovat.
   Výchozí sazby a podporu `gpt-6-luna` ověřujeme proti
   [oficiálnímu katalogu modelů](https://developers.openai.com/api/docs/models/gpt-6-luna)
   a [ceníku OpenAI API](https://developers.openai.com/api/docs/pricing)
@@ -72,8 +79,9 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
    spotřeby a administrátorské testy proti běžící Router službě.
 2. Integrace COP AI gateway; nezměnit Matrix
    E2EE hranici, současné AI chat workflow ani fallback bez testů.
-3. Integrace SIM AI Scenario Assistant (dnes mock) jako prvního syntetického
-   konzumenta, včetně schvalování draftu člověkem.
+3. Strukturovaný AI draft v SIM zůstává ukázkový; nový textový náhled přes
+   Router jej nenahrazuje a nic nevytváří automaticky. Případná tvorba
+   strukturovaného scénáře modelem vyžaduje samostatnou validaci a schválení.
 4. Bezpečné zpřístupnění již existujícího klíče druhé službě. Samotný
    stejný klíč nezajistí úplné účetnictví: COP volání mimo Router se zde
    nezapočítají. Pro úplný součet je třeba migrovat všechny placené cesty

@@ -110,6 +110,37 @@
         }
       }
     },
+    "/api/v1/ai/router-scenario-preview": {
+      "post": {
+        "tags": ["Simulator: AI"],
+        "operationId": "simAiRouterScenarioPreview",
+        "summary": "Generate a human-reviewed text preview for a synthetic SIM exercise",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["prompt", "syntheticOnly"],
+                "properties": { "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 }, "syntheticOnly": { "type": "boolean", "const": true } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Advisory text, model and router usage; never creates a SIM scenario",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AiRouterGenerateResponse" } } }
+          },
+          "400": { "description": "Invalid or non-synthetic request" },
+          "403": { "description": "SIM AI user role required" },
+          "429": { "description": "Router budget or user limit reached" },
+          "503": { "description": "Router unavailable" }
+        }
+      }
+    },
     "/api/v1/ai-router/generate": {
       "post": {
         "tags": ["AI Router"],
