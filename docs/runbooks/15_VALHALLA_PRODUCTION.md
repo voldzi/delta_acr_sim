@@ -175,6 +175,23 @@ a new cache file. Do not reuse the old cache. After deployment verify static
 and active-flow coverage, inspect varied road classes and parallel roads,
 compare car route times, and retain the previous mapping for rollback.
 
+Production observation, 25 September 2026: the corrected SIM feed and matcher
+were deployed together. The first full graph mapping covered 35,639 of 55,150
+static segments (64.62%, versus 22,549 / 40.89% with the previous mapping),
+and a subsequent active lease applied 9,817 fresh flows to 82,314 directed
+edges. SIM readiness reported routing `ok` and traffic `current`; a Prague
+vehicle route returned from Valhalla with `trafficAware=true` and live speeds
+`current`. The mapping build took about 16 minutes, longer than the 15-minute
+activity lease, so its first run only populated the mapping cache. A new
+vehicle request and the next timer run applied the speeds in about 4.5 seconds.
+The systemd timer remains enabled, and the updater exited successfully.
+These checks establish initial production operation, not a proof of accuracy
+on every corridor; ambiguous/unmatched roads retain normal Valhalla speeds.
+The previous updater is retained as
+`/srv/valhalla/update-tools/traffic-update.py.before-openlr-20260925` and the
+previous cache is retained for rollback. Do not delete either during the
+post-deployment observation period.
+
 Traffic failure is not a base-routing failure. If the overlay is stale beyond
 1,800 seconds, current speeds are cleared and Valhalla falls back to its normal
 speed hierarchy. Disable only the enhancement with:
