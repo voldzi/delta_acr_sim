@@ -1000,7 +1000,10 @@ export class RoutingService {
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     const request = this.normalizeRouteRequest(raw, 1);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
-    return this.routeCache.getOrLoad(`route:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+    const trafficRevision = getRoutingProfile(request.profileId).transportMode === "road"
+      ? (await this.valhallaTraffic?.status())?.updatedAt ?? "no-overlay"
+      : "non-road";
+    return this.routeCache.getOrLoad(`route:${trafficRevision}:${stablePayload(request)}`, () => this.computeRouteResponse(request));
   }
 
   async exactRoute(profileId: "walking" | "bicycle", locations: RoutingCoordinate[]): Promise<ExactRoutingResult> {
@@ -1057,7 +1060,10 @@ export class RoutingService {
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
-    return this.routeCache.getOrLoad(`alternatives:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+    const trafficRevision = getRoutingProfile(request.profileId).transportMode === "road"
+      ? (await this.valhallaTraffic?.status())?.updatedAt ?? "no-overlay"
+      : "non-road";
+    return this.routeCache.getOrLoad(`alternatives:${trafficRevision}:${stablePayload(request)}`, () => this.computeRouteResponse(request));
   }
 
   async isochrone(raw: RoutingIsochroneRequest): Promise<RoutingIsochroneResponse> {

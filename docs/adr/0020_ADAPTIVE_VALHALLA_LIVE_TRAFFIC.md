@@ -38,6 +38,9 @@ feed:
   refresh runs. Expired observations are never treated as current speeds;
 - the route request never waits for the traffic updater; it uses the last live
   overlay if valid, otherwise Valhalla's normal speed fallback;
+- road-route response cache keys include the last overlay update timestamp, so
+  a new speed revision does not keep returning a route and traffic status from
+  the preceding five-minute cache entry;
 - road requests without an explicit departure time include
   `date_time.type=0`, which is required for Valhalla to use current traffic;
 - walking and bicycle requests neither activate the lease nor enable current
