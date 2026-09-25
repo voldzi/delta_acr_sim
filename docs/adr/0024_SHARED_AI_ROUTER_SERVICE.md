@@ -84,3 +84,17 @@ Tento klasifikátor není samostatný LLM a nespotřebovává placené tokeny.
   správu pro SIM a další konzumenty.
 - Vložit Router přímo do Situation Data API: odmítnuto kvůli provoznímu,
   bezpečnostnímu a dostupnostnímu svázání datové a placené AI cesty.
+
+## Typovaný interní kontext pro plný COP chat (25. 9. 2026)
+
+COP může u `dataClass=internal` předat pouze 1–16 položek typu
+`chat_message`, `alert`, `community_report`, `map_result` a `source_health`,
+každou nejvýše 600 znaků, s atestací `cop-internal-reviewed-v1`. COP sestaví
+položky z konkrétně povolených polí a odpovídá za oprávnění uživatele;
+Router ověří tvar a vždy vybere lokální model. Tento režim nikdy nepovoluje
+OpenAI ani dražší tier. Viditelné dešifrované zprávy mohou být mezi
+`chat_message` pouze pro interní lokální zpracování. Přílohy, syrové
+incidenty, identifikátory a libovolný objekt kontextu COP neposílá. Když
+Router nebo lokální model není dostupný nebo dojde limit, chat selže bez
+přímého volání poskytovatele. Návrat k původnímu COP chatu je výslovným
+vypnutím samostatného přepínače po provozním ověření.

@@ -99,8 +99,16 @@ historie chatu ani přiložený volný situační kontext. `copContext` má vžd
 `contractVersion="cop-chat-context-v1"` a `dataClass` shodnou s requestem.
 Jiná pole na jakékoli úrovni strukturovaného kontextu se odmítají.
 
-- `internal`: `copContext` obsahuje jen verzi a `dataClass`. COP neposílá
-  externí povolení; Router použije pouze lokální model, jinak vrátí 503.
+- `internal`: minimální kontext obsahuje jen verzi a `dataClass`. Pro běžný
+  chat může COP přidat `attestation="cop-internal-reviewed-v1"` a 1–16
+  typovaných položek `items` druhu `chat_message`, `alert`,
+  `community_report`, `map_result` nebo `source_health`, každou do 600 znaků.
+  Tento kontext může obsahovat chráněné údaje a **nikdy** nesmí být směrován
+  na externí model. COP zodpovídá za výběr a oprávnění každé položky;
+  přílohy, přístupové údaje, neupravené incidenty a volný objekt kontextu se
+  nepředávají. Router odmítá další klíče a používá pouze lokální model;
+  není-li dostupný, vrátí 503. Lokální Ollama se volá s `think=false`, aby
+  omezený počet výstupních tokenů nezmizel ve skrytém uvažování.
 - `synthetic`: kontext obsahuje `attestation="cop-policy-reviewed-v1"`,
   neprůhledné `scenarioId` a 1–12 výslovně fiktivních faktů do 240 znaků.
   COP musí izolovat cvičení od skutečných záznamů.

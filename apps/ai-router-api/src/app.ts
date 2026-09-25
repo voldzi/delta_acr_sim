@@ -99,8 +99,8 @@ async function callLocal(config: Config, prompt: string, maxOutputTokens: number
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: config.localModel, stream: false, prompt, options: { num_predict: maxOutputTokens } }),
-    signal: AbortSignal.timeout(25_000)
+    body: JSON.stringify({ model: config.localModel, stream: false, think: false, prompt, options: { num_predict: maxOutputTokens } }),
+    signal: AbortSignal.timeout(90_000)
   });
   if (!response.ok) throw new Error(`local_http_${response.status}`);
   const data = (await response.json()) as { response?: string; prompt_eval_count?: number; eval_count?: number };

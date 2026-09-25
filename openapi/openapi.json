@@ -16083,8 +16083,29 @@
           },
           "dataClass": {
             "const": "internal"
+          },
+          "attestation": {
+            "const": "cop-internal-reviewed-v1"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "text"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["chat_message", "alert", "community_report", "map_result", "source_health"]
+                },
+                "text": { "type": "string", "minLength": 1, "maxLength": 600 }
+              }
+            }
           }
-        }
+        },
+        "dependentRequired": { "items": ["attestation"], "attestation": ["items"] }
       },
       "AiRouterAiRouterCopSyntheticContext": {
         "type": "object",
