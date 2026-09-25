@@ -17,6 +17,18 @@ interní služba bez host portu. Výpadek neodstaví COP mapu ani SIM data.
    [`deploy/ai-router/001_schema.sql`](../../deploy/ai-router/001_schema.sql).
    Runtime potřebuje SELECT/INSERT/UPDATE na třech tabulkách a USAGE na
    identitní sekvenci auditní tabulky.
+   Pro správce je připraven
+   [`scripts/provision-ai-router-postgres.sh`](../../scripts/provision-ai-router-postgres.sh):
+   vyžaduje `psql`, `openssl`, terminál a administrátorský PostgreSQL účet.
+   Příkazy `PGUSER=<správce> bash scripts/provision-ai-router-postgres.sh --check`
+   a po kontrole `PGUSER=<správce> bash scripts/provision-ai-router-postgres.sh --apply`
+   míří výhradně přes `haproxy.home.cz:5000`; heslo správce se zadává skrytě.
+   Skript se při existujících objektech zastaví, nevypisuje hesla a uloží
+   dvě oddělené URL do souboru s právy 600 v
+   `~/.config/csm-sim/ai-router-db-credentials.env`. Jen runtime URL patří
+   do produkčního `/srv/sim/.env`; migrační URL zůstává správci. Při chybě
+   po založení objektů skript neprovádí destruktivní rollback; správce má
+   zkontrolovat částečný stav a uložené přihlašovací údaje.
 2. Do ignorovaného produkčního `.env` dodat nezávislé dlouhé tokeny pro COP,
    SIM a správce a pepper uživatelských identifikátorů. Nepoužívat SIM
    administrační token jako Router token. Databázová URL se nikdy nevypisuje.
