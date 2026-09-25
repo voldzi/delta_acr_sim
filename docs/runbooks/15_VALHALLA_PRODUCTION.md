@@ -151,6 +151,15 @@ unaffected corridors, and a rollback to the current traffic cache. Until then
 `degraded` is an accurate signal; the normal Valhalla speed hierarchy still
 serves unmatched roads.
 
+The SIM static-feed parser now retains OpenLR FRC, FOW, bearing, lowest FRC to
+next point, distance-to-next and driving-direction metadata alongside the
+reference coordinates for the internal traffic feed. This is preparatory data,
+not a decoded road path. The host mapper still uses the proven
+`trace_attributes` method; the static-revision hash and production cache remain
+unchanged. Before activating any resolver, compare its matches against the
+existing mapping on a representative sample and reject uncertain routes. Do
+not treat the new metadata alone as evidence that coverage improved.
+
 Traffic failure is not a base-routing failure. If the overlay is stale beyond
 1,800 seconds, current speeds are cleared and Valhalla falls back to its normal
 speed hierarchy. Disable only the enhancement with:

@@ -8950,6 +8950,44 @@
                 "messageId",
                 "coordinates"
               ],
+              "properties": {
+                "messageId": { "type": "string" },
+                "coordinates": {
+                  "type": "array",
+                  "minItems": 2,
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [{ "type": "number" }, { "type": "number" }],
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "openlr": {
+                  "type": "object",
+                  "description": "Optional OpenLR reference metadata for graph-specific resolution; coordinates alone are not a road path.",
+                  "required": ["points"],
+                  "properties": {
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["role"],
+                        "properties": {
+                          "role": { "type": "string" },
+                          "frc": { "type": "string" },
+                          "fow": { "type": "string" },
+                          "bearing": { "type": "number" },
+                          "lowestFrcToNext": { "type": "string" },
+                          "distanceToNext": { "type": "number" },
+                          "againstDrivingDirection": { "type": "boolean" }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
               "additionalProperties": true
             }
           },

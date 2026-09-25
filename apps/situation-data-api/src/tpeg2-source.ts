@@ -49,6 +49,17 @@ interface ParsedMessage {
 export interface Tpeg2StaticSegment {
   messageId: string;
   coordinates: Array<[number, number]>;
+  openlr?: {
+    points: Array<{
+      role: string;
+      frc?: string;
+      fow?: string;
+      bearing?: number;
+      lowestFrcToNext?: string;
+      distanceToNext?: number;
+      againstDrivingDirection?: boolean;
+    }>;
+  };
   locationId?: string;
   countryCode?: string;
   locationTableNumber?: string;
@@ -113,6 +124,7 @@ export async function parseTpeg2Static(input: XmlInput): Promise<Map<string, Tpe
     segments.set(messageId, {
       messageId,
       coordinates,
+      openlr: decodeOpenLrProperties(message),
       locationId: firstEnding(message.values, "/locationID"),
       countryCode: firstEnding(message.values, "/countryCode"),
       locationTableNumber: firstEnding(message.values, "/locationTableNumber")
@@ -485,6 +497,13 @@ function firstEnding(map: Map<string, string[]>, suffix: string): string | undef
   return undefined;
 }
 
+function endingAt(map: Map<string, string[]>, suffix: string, index: number): string | undefined {
+  for (const [path, values] of map) {
+    if (path.endsWith(suffix)) return values[index];
+  }
+  return undefined;
+}
+
 function decodeOpenLrCoordinates(coordinates: ParsedCoordinate[]): Array<[number, number]> {
   const encoded = coordinates.filter((coordinate) => coordinate.kind === "openlr");
   if (encoded.length === 0) return [];
@@ -497,6 +516,37 @@ function decodeOpenLrCoordinates(coordinates: ParsedCoordinate[]): Array<[number
     decoded.push([longitude * COORDINATE_FACTOR, latitude * COORDINATE_FACTOR]);
   }
   return decoded;
+}
+
+function decodeOpenLrProperties(message: ParsedMessage): Tpeg2StaticSegment["openlr"] {
+  const method = message.methods.find((candidate) =>
+    Array.from(candidate.values.keys()).some((path) => path.includes("/optionLinearLocationReference/"))
+  );
+  if (!method) return undefined;
+  const roleIndexes = new Map<string, number>();
+  const points = message.coordinates.filter((coordinate) => coordinate.kind === "openlr").map((coordinate) => {
+    const prefix = `/optionLinearLocationReference/${coordinate.role}`;
+    const index = roleIndexes.get(coordinate.role) ?? 0;
+    roleIndexes.set(coordinate.role, index + 1);
+    const property = (map: Map<string, string[]>, suffix: string) => endingAt(map, `${prefix}${suffix}`, index);
+    const bearing = numberOrUndefined(property(method.values, "/lineProperties/bearing/value"));
+    const distanceToNext = numberOrUndefined(property(method.values, "/pathProperties/dnp/value"));
+    const againstDrivingDirection = property(method.values, "/pathProperties/againstDrivingDirection");
+    return {
+      role: coordinate.role,
+      ...(property(method.codes, "/lineProperties/frc") !== undefined
+        ? { frc: property(method.codes, "/lineProperties/frc") } : {}),
+      ...(property(method.codes, "/lineProperties/fow") !== undefined
+        ? { fow: property(method.codes, "/lineProperties/fow") } : {}),
+      ...(bearing !== undefined ? { bearing } : {}),
+      ...(property(method.codes, "/pathProperties/lfrcnp") !== undefined
+        ? { lowestFrcToNext: property(method.codes, "/pathProperties/lfrcnp") } : {}),
+      ...(distanceToNext !== undefined ? { distanceToNext } : {}),
+      ...(againstDrivingDirection === "true" || againstDrivingDirection === "false"
+        ? { againstDrivingDirection: againstDrivingDirection === "true" } : {})
+    };
+  });
+  return points.length > 0 ? { points } : undefined;
 }
 
 function decodeGlrCoordinates(coordinates: ParsedCoordinate[]): Array<[number, number]> {

@@ -19,8 +19,8 @@ describe("TPEG2 streaming parsers", () => {
       <loc>
         <method><optionTMCLocationReferenceLink><locationID>37307</locationID><countryCode>11</countryCode><locationTableNumber>25</locationTableNumber></optionTMCLocationReferenceLink></method>
         <method><optionOpenLRLocationReferenceLink><locationReference><optionLinearLocationReference>
-          <first><coordinate><longitude>583571</longitude><latitude>2313505</latitude></coordinate></first>
-          <last><coordinate><longitude>-355</longitude><latitude>119</latitude></coordinate></last>
+          <first><coordinate><longitude>583571</longitude><latitude>2313505</latitude></coordinate><lineProperties><frc code="0"/><fow code="1"/><bearing><value>42</value></bearing></lineProperties><pathProperties><lfrcnp code="0"/><dnp><value>287</value></dnp><againstDrivingDirection>false</againstDrivingDirection></pathProperties></first>
+          <last><coordinate><longitude>-355</longitude><latitude>119</latitude></coordinate><lineProperties><frc code="0"/><fow code="1"/><bearing><value>172</value></bearing></lineProperties></last>
         </optionLinearLocationReference></locationReference></optionOpenLRLocationReferenceLink></method>
       </loc>`));
 
@@ -29,6 +29,27 @@ describe("TPEG2 streaming parsers", () => {
     expect(segment?.coordinates).toHaveLength(2);
     expect(segment?.coordinates[0]?.[0]).toBeCloseTo(12.5223, 3);
     expect(segment?.coordinates[1]?.[0]).toBeLessThan(segment!.coordinates[0]![0]);
+    expect(segment?.openlr?.points).toEqual([
+      { role: "first", frc: "0", fow: "1", bearing: 42, lowestFrcToNext: "0", distanceToNext: 287, againstDrivingDirection: false },
+      { role: "last", frc: "0", fow: "1", bearing: 172 }
+    ]);
+  });
+
+  it("keeps each intermediate OpenLR point's own direction and road class", async () => {
+    const parsed = await parseTpeg2Static(document("TFP", `
+      <mmt><optionMMCPartLink><messageID>43</messageID><partID>1</partID></optionMMCPartLink></mmt>
+      <loc><method><optionOpenLRLocationReferenceLink><locationReference><optionLinearLocationReference>
+        <first><coordinate><longitude>583571</longitude><latitude>2313505</latitude></coordinate><lineProperties><frc code="0"/></lineProperties></first>
+        <intermediate><coordinate><longitude>100</longitude><latitude>50</latitude></coordinate><lineProperties><frc code="1"/><bearing><value>90</value></bearing></lineProperties></intermediate>
+        <intermediate><coordinate><longitude>100</longitude><latitude>50</latitude></coordinate><lineProperties><frc code="2"/><bearing><value>180</value></bearing></lineProperties></intermediate>
+        <last><coordinate><longitude>100</longitude><latitude>50</latitude></coordinate><lineProperties><frc code="3"/></lineProperties></last>
+      </optionLinearLocationReference></locationReference></optionOpenLRLocationReferenceLink></method></loc>`));
+    expect(parsed.get("43")?.openlr?.points).toEqual([
+      { role: "first", frc: "0" },
+      { role: "intermediate", frc: "1", bearing: 90 },
+      { role: "intermediate", frc: "2", bearing: 180 },
+      { role: "last", frc: "3" }
+    ]);
   });
 
   it("uses the unrestricted TFP flow method instead of vehicle-specific alternatives", async () => {
