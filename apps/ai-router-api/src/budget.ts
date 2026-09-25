@@ -172,11 +172,12 @@ export class BudgetStore {
   }
 
   async finish(id: string, status: "success" | "failed", inputTokens?: number, outputTokens?: number, chargedMicrousd?: number): Promise<void> {
-    await this.pool.query(
+    const result = await this.pool.query(
       `UPDATE ai_router_request SET status=$2, input_tokens=$3,
       output_tokens=$4, charged_microusd=$5 WHERE id=$1 AND status='reserved'`,
       [id, status, inputTokens ?? null, outputTokens ?? null, status === "success" ? (chargedMicrousd ?? null) : null]
     );
+    if (result.rowCount !== 1) throw new Error("audit_update_missing");
   }
 
   async usage(): Promise<{ dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number; monthlyInputTokens: number; monthlyOutputTokens: number; limits: BudgetLimits }> {

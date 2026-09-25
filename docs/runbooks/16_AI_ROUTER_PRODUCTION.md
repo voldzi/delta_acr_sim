@@ -42,8 +42,9 @@ interní služba bez host portu. Výpadek neodstaví COP mapu ani SIM data.
    produkčního env souboru. Přenáší se pouze hodnota `OPENAI_API_KEY`, nikdy
    celý COP `.env`; v Gitu se neukládá. Shodný klíč ale neznamená úplnou
    routerovou evidenci dosavadních COP volání.
-4. Vybrat lokální model a interní adresu Ollama. COP chat zůstává v první
-   fázi lokální, i pokud se externí model později zapne pro jiné úlohy.
+4. Vybrat lokální model a interní adresu Ollama. Produkční COP chat zůstává
+   na dosavadní cestě; připravený typovaný kontrakt sám žádné COP volání
+   nepřepíná.
 
 ## Bezpečný postup
 
@@ -65,7 +66,8 @@ interní služba bez host portu. Výpadek neodstaví COP mapu ani SIM data.
 ## Kontroly před aktivací
 
 - Transakční test souběžných rezervací vůči dennímu a měsíčnímu stropu.
-- Odmítnutí `internal` dat pro externí model; `cop_chat` pouze lokálně.
+- Odmítnutí `internal` dat pro externí model; COP chat smí externě jen
+  atestovanou syntetickou nebo veřejně agregovanou třídu s výslovným opt-in.
 - Nefunkční DB, lokální i externí provider; žádné obejití rozpočtu.
 - Cena porovnaná s aktuálním účtem poskytovatele, včetně regionu a zvoleného
   režimu. Interní odhad není faktura.
@@ -141,3 +143,30 @@ request ID a stav čekající na lidskou kontrolu; nevytváří aktivní scéná
 Před produkčním používáním ověřit zvlášť 400 při chybějícím potvrzení,
 503 při neplatném JSON, validaci návrhu a ruční přijetí pouze v testovacím
 fiktivním kontextu.
+
+## Připravený kontrakt budoucího COP chatu — bez aktivace
+
+Router již umí rozlišit interní, fiktivní a veřejně agregovaný `cop_chat`.
+Jen službový token COP s typovaným `copContext`, atestací
+`cop-policy-reviewed-v1`, `allowExternal=true` a třídou `synthetic` či
+`public_aggregate` může po výslovné volbě nebo politice použít
+`gpt-6-luna`. Interní třída smí jen lokální model. Drahý model nelze pro
+COP chat vyžádat. Závazné schéma je v `openapi/openapi.json`, příklad a
+odpovědnosti v `docs/ai/10_SHARED_AI_ROUTER.md`.
+
+Nasazení této změny kódu Routeru samo **nezapíná** COP chat. Síťové
+propojení COP API ↔ Router, přenos dedikovaného COP tokenu a přepnutí chatu
+vyžadují samostatný výslovný souhlas. Při schválené akceptaci: (1) zaznamenat
+image a politiku Routeru jako rollback bod, (2) nasadit pouze Router z
+ověřeného commitu, (3) v interní izolované zkoušce ověřit obě povolené
+třídy, odmítnutí `internal`/neplatné klasifikace, hashované uživatelské ID,
+1 USD/den, 10 USD/měsíc, 10 požadavků/uživatele/den, SIM přehled tokenů a
+odhadů, nedostupnost DB a obou modelů, (4) teprve po společném testu COP
+policy gate a klasifikace schválit oddělenou interní síť a COP token, (5)
+ověřit produkční COP chat bez chráněných dat a bez přímého OpenAI bypassu.
+
+Návrat před zapnutím COP: obnovit předchozí Router image a restartovat pouze
+`ai-router-api`, zachovat auditní databázi; SIM fiktivní náhled lze dočasně
+vypnout samostatně. Po případném pozdějším přepnutí COP vrátit nejprve jeho
+chatový přepínač na původní cestu a restartovat jen `cop-api`; teprve pak
+vracet Router image. Neodstraňovat databázové záznamy ani klíče při rollbacku.

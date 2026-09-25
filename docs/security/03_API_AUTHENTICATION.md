@@ -39,3 +39,12 @@ Details are in
 ## Audit
 
 Auth selhání a změny auth konfigurace se auditují bez ukládání tajných hodnot.
+
+## Interní AI Router
+
+Samostatné neprůhledné bearer tokeny rozlišují službu COP, SIM a správce.
+Pouze identita COP smí použít `taskType=cop_chat`; token nikdy nepřechází do
+prohlížeče. Router nevyvozuje třídu dat z tokenu ani z modelové preference:
+vyžaduje přesnou klasifikaci a pro externí COP chat navíc explicitní
+`allowExternal=true` a atestovaný `copContext`. Ochrana neumožňuje přímý
+fallback do poskytovatele při výpadku modelu, databáze nebo limitu.

@@ -40,6 +40,19 @@ browser ani COP klient jej nesmí volat přímo. Updater má pouze odchozí př�
 nutný pro pinované images a veřejné mapové/elevation zdroje; release manifest
 nesmí obsahovat credentials.
 
+## AI Router a hranice COP kontextu
+
+AI Router je interní server-to-server služba. Samotná autentizace služby COP
+neznamená, že její kontext smí opustit infrastrukturu: externí `cop_chat`
+vyžaduje explicitní opt-in a typovanou, atestovanou třídu `synthetic` nebo
+`public_aggregate` podle [kontraktu](../ai/10_SHARED_AI_ROUTER.md).
+`internal` používá jen lokální model bez externího fallbacku. Router
+ověřuje strukturu, politiku a rozpočty; nemůže sám ověřit pravdivost původu
+dat nebo sémanticky zaručit, že otázka neobsahuje osobní údaje. COP proto
+musí před sestavením requestu odmítnout dešifrované soukromé zprávy,
+identifikovatelné osoby, citlivé incidenty, neupravené záznamy a volný
+kontext. Chyba Routeru se nesmí obcházet přímým voláním OpenAI.
+
 ## Zákazy
 
 Systém nesmí obsahovat reálná operační data, secrets v repozitáři, targeting, navádění nebo bojové workflow.

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import { BudgetError, BudgetStore, type RouterPolicy } from "./budget.js";
+import { copModelPrompt, validCopContext } from "./cop-context.js";
 import type { Config } from "./config.js";
 import { chooseRoute, estimateMicrousd, estimateTokens, taskAllowsDataClass, type DataClass, type ModelPreference, type TaskType } from "./routing.js";
 
@@ -13,6 +14,7 @@ interface GenerateBody {
   allowExternal?: boolean;
   allowPaidEscalation?: boolean;
   maxOutputTokens?: number;
+  copContext?: Record<string, unknown>;
 }
 
 function bearer(req: Request): string {
@@ -34,9 +36,11 @@ export function caller(req: Request, config: Config): "cop" | "sim" | "admin" | 
 export function validBody(value: unknown): value is GenerateBody {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
+  const allowedKeys = new Set(["taskType", "dataClass", "preference", "prompt", "userId", "allowExternal", "allowPaidEscalation", "maxOutputTokens", "copContext"]);
+  if (Object.keys(v).some((key) => !allowedKeys.has(key))) return false;
   return (
-    ["cop_chat", "source_health", "sim_scenario"].includes(String(v.taskType)) &&
-    ["synthetic", "public_aggregate", "internal"].includes(String(v.dataClass)) &&
+    ["cop_chat", "source_health", "sim_scenario"].includes(v.taskType as string) &&
+    ["synthetic", "public_aggregate", "internal"].includes(v.dataClass as string) &&
     [undefined, "auto", "local", "external"].includes(v.preference as string | undefined) &&
     typeof v.prompt === "string" &&
     v.prompt.length > 0 &&
@@ -44,6 +48,8 @@ export function validBody(value: unknown): value is GenerateBody {
     typeof v.userId === "string" &&
     v.userId.length > 0 &&
     v.userId.length <= 200 &&
+    (v.taskType !== "cop_chat" || (/^[A-Za-z0-9_-]{8,128}$/u.test(v.userId) && v.prompt.length <= 1200 && validCopContext(v.copContext, v.dataClass as DataClass))) &&
+    (v.taskType === "cop_chat" || v.copContext === undefined) &&
     [undefined, true, false].includes(v.allowExternal as boolean | undefined) &&
     [undefined, true, false].includes(v.allowPaidEscalation as boolean | undefined) &&
     (v.maxOutputTokens === undefined ||
@@ -147,7 +153,7 @@ export function createApp(config: Config, store: BudgetStore) {
             external: true
           }
         ],
-        policy: { advancedRequiresExplicitApproval: true, internalDataLocalOnly: true, copChatLocalOnly: true }
+        policy: { advancedRequiresExplicitApproval: true, internalDataLocalOnly: true, copChatExternalRequiresApproval: true, copChatExternalEconomyOnly: true }
       });
     } catch {
       res.status(503).json({ error: "policy_unavailable" });
@@ -214,6 +220,18 @@ export function createApp(config: Config, store: BudgetStore) {
       res.status(400).json({ error: "data_class_not_allowed" });
       return;
     }
+    if (body.taskType === "cop_chat" && body.allowExternal === true && body.dataClass === "internal") {
+      res.status(400).json({ error: "internal_external_forbidden" });
+      return;
+    }
+    if (body.taskType === "cop_chat" && body.preference === "external" && body.allowExternal !== true) {
+      res.status(400).json({ error: "external_processing_not_approved" });
+      return;
+    }
+    if (body.taskType === "cop_chat" && body.allowPaidEscalation === true) {
+      res.status(400).json({ error: "cop_paid_escalation_forbidden" });
+      return;
+    }
     let decision;
     try {
       const activePolicy = await store.policy();
@@ -223,8 +241,8 @@ export function createApp(config: Config, store: BudgetStore) {
           dataClass: body.dataClass,
           preference: body.preference ?? "auto",
           prompt: body.prompt,
-          allowExternal: body.taskType !== "cop_chat" && body.allowExternal === true,
-          allowPaidEscalation: body.allowPaidEscalation === true
+          allowExternal: body.allowExternal === true,
+          allowPaidEscalation: body.taskType !== "cop_chat" && body.allowPaidEscalation === true
         },
         {
           localAvailable: Boolean(config.localUrl && config.localModel),
@@ -234,17 +252,19 @@ export function createApp(config: Config, store: BudgetStore) {
         }
       );
     } catch (error) {
-      res.status(503).json({ error: error instanceof Error ? error.message : "routing_unavailable" });
+      const code = error instanceof Error ? error.message : "";
+      res.status(503).json({ error: ["local_model_unavailable", "external_model_unavailable", "no_model_available"].includes(code) ? code : "policy_unavailable" });
       return;
     }
     const maxOutputTokens = body.maxOutputTokens ?? 512;
     const model = decision.tier === "local_fast" ? config.localModel : decision.tier === "external_advanced" ? config.advancedModel : config.economyModel;
+    const modelPrompt = body.taskType === "cop_chat" ? copModelPrompt(body.prompt, body.copContext!) : body.prompt;
     // Conservative reservation at 2x published standard text-token rates.
     const inputRate = decision.tier === "external_advanced" ? 4 : decision.tier === "external_economy" ? 0.2 : 0;
     const outputRate = decision.tier === "external_advanced" ? 20 : decision.tier === "external_economy" ? 1 : 0;
     // UTF-8 bytes plus fixed instruction overhead is a conservative upper
     // bound for text tokenization, including non-ASCII Czech input.
-    const reservedMicrousd = estimateMicrousd(Buffer.byteLength(body.prompt, "utf8") + 1024, maxOutputTokens, inputRate, outputRate);
+    const reservedMicrousd = estimateMicrousd(Buffer.byteLength(modelPrompt, "utf8") + 1024, maxOutputTokens, inputRate, outputRate);
     let id: string;
     try {
       id = await store.reserve(identity, body.userId, body.taskType, model, decision.reason, decision.difficulty, decision.tier, reservedMicrousd);
@@ -256,27 +276,31 @@ export function createApp(config: Config, store: BudgetStore) {
       res.status(503).json({ error: "budget_store_unavailable" });
       return;
     }
+    let result: ModelResult;
     try {
-      const result =
-        decision.tier === "local_fast" ? await callLocal(config, body.prompt, maxOutputTokens) : await callOpenAI(config, model, body.prompt, maxOutputTokens);
-      // Keep the conservative reservation for concurrent admission, then
-      // report the estimate from actual provider token counts after success.
-      const chargedMicrousd = estimateMicrousd(result.inputTokens, result.outputTokens, inputRate, outputRate);
-      await store.finish(id, "success", result.inputTokens, result.outputTokens, chargedMicrousd);
-      res.json({
-        requestId: id,
-        model,
-        tier: decision.tier,
-        routingReason: decision.reason,
-        difficulty: decision.difficulty,
-        output: result.text,
-        usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens, estimatedMicrousd: chargedMicrousd },
-        requiresHumanReview: true
-      });
+      result = decision.tier === "local_fast" ? await callLocal(config, modelPrompt, maxOutputTokens) : await callOpenAI(config, model, modelPrompt, maxOutputTokens);
     } catch {
       await store.finish(id, "failed").catch(() => undefined);
       res.status(503).json({ requestId: id, error: "model_unavailable" });
+      return;
     }
+    const chargedMicrousd = estimateMicrousd(result.inputTokens, result.outputTokens, inputRate, outputRate);
+    try {
+      await store.finish(id, "success", result.inputTokens, result.outputTokens, chargedMicrousd);
+    } catch {
+      res.status(503).json({ requestId: id, error: "budget_store_unavailable" });
+      return;
+    }
+    res.json({
+      requestId: id,
+      model,
+      tier: decision.tier,
+      routingReason: decision.reason,
+      difficulty: decision.difficulty,
+      output: result.text,
+      usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens, estimatedMicrousd: chargedMicrousd },
+      requiresHumanReview: true
+    });
   });
   app.use((error: unknown, _req: Request, res: Response, _next: unknown) => {
     res.status(400).json({ error: error instanceof SyntaxError ? "invalid_json" : "invalid_request" });

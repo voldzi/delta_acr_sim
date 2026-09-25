@@ -4725,7 +4725,7 @@
           "AI Router: AI Router"
         ],
         "operationId": "aiRouter_aiRouterUsage",
-        "summary": "Read aggregate router-only budget usage (authenticated service)",
+        "summary": "Read router-only budget usage (admin)",
         "servers": [
           {
             "url": "http://ai-router-api:4050"
@@ -4755,13 +4755,6 @@
                     "dailyRequests": {
                       "type": "integer"
                     },
-                    "monthlyRequests": {
-                      "type": "integer"
-                    },
-                    "dailyInputTokens": { "type": "integer" },
-                    "dailyOutputTokens": { "type": "integer" },
-                    "monthlyInputTokens": { "type": "integer" },
-                    "monthlyOutputTokens": { "type": "integer" },
                     "limits": {
                       "type": "object"
                     }
@@ -4770,11 +4763,6 @@
                     "dailyMicrousd",
                     "monthlyMicrousd",
                     "dailyRequests",
-                    "monthlyRequests",
-                    "dailyInputTokens",
-                    "dailyOutputTokens",
-                    "monthlyInputTokens",
-                    "monthlyOutputTokens",
                     "limits"
                   ]
                 }
@@ -4783,6 +4771,9 @@
           },
           "401": {
             "description": "Missing internal token"
+          },
+          "403": {
+            "description": "Admin identity required"
           }
         }
       }
@@ -5017,40 +5008,13 @@
         }
       }
     },
-    "/api/v1/ai/router-scenario-drafts": {
-      "post": {
-        "tags": ["AI Router: Simulator: AI"],
-        "operationId": "aiRouter_simCreateRouterScenarioDraft",
-        "summary": "Create a bounded synthetic civil scenario draft requiring human acceptance",
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": { "application/json": { "schema": {
-            "type": "object", "additionalProperties": false,
-            "required": ["prompt", "syntheticOnly"],
-            "properties": {
-              "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
-              "syntheticOnly": { "type": "boolean", "const": true }
-            }
-          } } }
-        },
-        "responses": {
-          "201": { "description": "Server-validated synthetic draft; not accepted or published", "content": { "application/json": { "schema": { "$ref": "../docs/api/schemas/ai-scenario-draft.schema.json" } } } },
-          "400": { "description": "Invalid, prohibited or non-synthetic request" },
-          "401": { "description": "Authentication required" },
-          "403": { "description": "SIM AI user role required" },
-          "429": { "description": "Router budget or user limit reached" },
-          "503": { "description": "Router unavailable or model output failed strict validation" }
-        }
-      }
-    },
     "/api/v1/ai-router/generate": {
       "post": {
         "tags": [
           "AI Router: AI Router"
         ],
         "operationId": "aiRouter_aiRouterGenerate",
-        "summary": "Route a bounded authorized AI request",
+        "summary": "Route a bounded authorized AI request; COP chat external processing requires a reviewed typed context",
         "servers": [
           {
             "url": "http://ai-router-api:4050"
@@ -5085,7 +5049,7 @@
             }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid or missing classification/context, unapproved external processing, or forbidden COP escalation"
           },
           "401": {
             "description": "Missing internal token"
@@ -5097,7 +5061,7 @@
             "description": "Budget or user limit exceeded"
           },
           "503": {
-            "description": "Model or budget store unavailable"
+            "description": "Policy, selected model or budget/audit store unavailable; no direct-provider fallback"
           }
         }
       }
@@ -15864,6 +15828,138 @@
           "prompt",
           "userId"
         ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                }
+              },
+              "required": [
+                "taskType"
+              ]
+            },
+            "then": {
+              "required": [
+                "copContext"
+              ],
+              "properties": {
+                "prompt": {
+                  "maxLength": 1200
+                },
+                "userId": {
+                  "pattern": "^[A-Za-z0-9_-]{8,128}$"
+                },
+                "allowPaidEscalation": {
+                  "not": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                },
+                "dataClass": {
+                  "const": "internal"
+                }
+              },
+              "required": [
+                "taskType",
+                "dataClass"
+              ]
+            },
+            "then": {
+              "properties": {
+                "copContext": {
+                  "$ref": "#/components/schemas/AiRouterAiRouterCopInternalContext"
+                },
+                "allowExternal": {
+                  "not": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                },
+                "dataClass": {
+                  "const": "synthetic"
+                }
+              },
+              "required": [
+                "taskType",
+                "dataClass"
+              ]
+            },
+            "then": {
+              "properties": {
+                "copContext": {
+                  "$ref": "#/components/schemas/AiRouterAiRouterCopSyntheticContext"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                },
+                "dataClass": {
+                  "const": "public_aggregate"
+                }
+              },
+              "required": [
+                "taskType",
+                "dataClass"
+              ]
+            },
+            "then": {
+              "properties": {
+                "copContext": {
+                  "$ref": "#/components/schemas/AiRouterAiRouterCopPublicAggregateContext"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                },
+                "preference": {
+                  "const": "external"
+                }
+              },
+              "required": [
+                "taskType",
+                "preference"
+              ]
+            },
+            "then": {
+              "required": [
+                "allowExternal"
+              ],
+              "properties": {
+                "allowExternal": {
+                  "const": true
+                }
+              }
+            }
+          }
+        ],
         "properties": {
           "taskType": {
             "type": "string",
@@ -15892,12 +15988,14 @@
           "prompt": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 12000
+            "maxLength": 12000,
+            "description": "For cop_chat, a COP-reviewed question of at most 1200 characters, never raw conversation history or free-form situational context."
           },
           "userId": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 200
+            "maxLength": 200,
+            "description": "For cop_chat, a stable opaque 8-128 character identifier matching [A-Za-z0-9_-]; no name or email. Router hashes it before storage."
           },
           "allowExternal": {
             "type": "boolean",
@@ -15905,12 +16003,166 @@
           },
           "allowPaidEscalation": {
             "type": "boolean",
-            "default": false
+            "default": false,
+            "description": "Forbidden for cop_chat; reviewed external COP requests may only use gpt-6-luna."
           },
           "maxOutputTokens": {
             "type": "integer",
             "minimum": 1,
             "maximum": 1024
+          },
+          "copContext": {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopContext"
+          }
+        }
+      },
+      "AiRouterAiRouterCopContext": {
+        "description": "Required for cop_chat. dataClass must exactly equal the request dataClass. External synthetic/public_aggregate requests also require allowExternal=true and a COP policy attestation. Internal is local only.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopInternalContext"
+          },
+          {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopSyntheticContext"
+          },
+          {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopPublicAggregateContext"
+          }
+        ]
+      },
+      "AiRouterAiRouterCopInternalContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "dataClass"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-chat-context-v1"
+          },
+          "dataClass": {
+            "const": "internal"
+          }
+        }
+      },
+      "AiRouterAiRouterCopSyntheticContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "dataClass",
+          "attestation",
+          "scenarioId",
+          "facts"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-chat-context-v1"
+          },
+          "dataClass": {
+            "const": "synthetic"
+          },
+          "attestation": {
+            "const": "cop-policy-reviewed-v1"
+          },
+          "scenarioId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "facts": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          }
+        }
+      },
+      "AiRouterAiRouterCopPublicAggregateContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "dataClass",
+          "attestation",
+          "aggregates"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-chat-context-v1"
+          },
+          "dataClass": {
+            "const": "public_aggregate"
+          },
+          "attestation": {
+            "const": "cop-policy-reviewed-v1"
+          },
+          "aggregates": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/AiRouterAiRouterCopAggregate"
+            }
+          }
+        }
+      },
+      "AiRouterAiRouterCopAggregate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceId",
+          "metricId",
+          "regionCode",
+          "periodStart",
+          "periodEnd",
+          "value",
+          "unit",
+          "sampleSize"
+        ],
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "metricId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "regionCode": {
+            "type": "string",
+            "pattern": "^CZ([0-9]{3})?$",
+            "description": "Country or NUTS3 region only; no precise locations."
+          },
+          "periodStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "description": "At least one hour after periodStart."
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "count",
+              "percent",
+              "minutes",
+              "km",
+              "index"
+            ]
+          },
+          "sampleSize": {
+            "type": "integer",
+            "minimum": 10
           }
         }
       },

@@ -42,6 +42,20 @@ export function classifyDifficulty(input: Pick<RoutingInput, "taskType" | "promp
 
 export function chooseRoute(input: RoutingInput, policy: RoutingPolicy): RoutingDecision {
   const difficulty = classifyDifficulty(input);
+  if (input.taskType === "cop_chat") {
+    if (input.dataClass === "internal" || input.preference === "local" || !input.allowExternal) {
+      if (!policy.localAvailable) throw new Error("local_model_unavailable");
+      return { tier: "local_fast", difficulty, reason: "local_only_policy" };
+    }
+    if (input.preference === "auto" && difficulty === "simple" && policy.localAvailable) {
+      return { tier: "local_fast", difficulty, reason: "simple_local_first" };
+    }
+    if (policy.externalEnabled && policy.externalAvailable) {
+      return { tier: "external_economy", difficulty, reason: "approved_cop_external_economy" };
+    }
+    if (input.preference === "external" || !policy.localAvailable) throw new Error("external_model_unavailable");
+    return { tier: "local_fast", difficulty, reason: "external_disabled_local_only" };
+  }
   if (input.preference === "local" || input.dataClass === "internal" || !input.allowExternal || !policy.externalEnabled) {
     if (!policy.localAvailable) throw new Error("local_model_unavailable");
     return { tier: "local_fast", difficulty, reason: "local_only_policy" };

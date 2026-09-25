@@ -26,6 +26,21 @@ a jeho read-only spotřebu. Router vrací stejné celkové rozpočtové součty
 autentizovaným službám bez detailů požadavků. COP chat, situační shrnutí a
 Matrix E2EE nejsou v tomto kroku povoleny pro externí Router.
 
+## Rozšíření kontraktu pro budoucí COP chat (25. 9. 2026)
+
+Původní pravidlo „všechny `cop_chat` jen lokálně“ se na úrovni Routeru
+nahrazuje úzkým povolením ekonomického modelu `gpt-6-luna`: pouze identita
+služby COP, `allowExternal=true`, platný typovaný kontext s atestací COP a
+výslovná třída `synthetic` nebo `public_aggregate`. Typovaný veřejný kontext
+přijímá jen číselné souhrny za stát/kraj a období nejméně hodiny, s alespoň
+10 vzorky. Interní třída je nadále pouze lokální a nemá externí fallback.
+Pokročilý tier je pro COP chat zakázán. Přesné schéma a odpovědnost COP jsou v
+závazném `openapi/openapi.json` a v `docs/ai/10_SHARED_AI_ROUTER.md`.
+
+Jde o připravenou změnu kontraktu SIM, nikoli o schválení produkčního
+propojení COP API ↔ Router. Síť, tokeny a přepínač COP chatu zůstávají beze
+změny. Aktivace vyžaduje samostatný souhlas a společnou akceptaci obou služeb.
+
 ## Bezpečnost a data
 
 - Oddělené bearer identity COP, SIM a správce; interní data mají pouze lokální

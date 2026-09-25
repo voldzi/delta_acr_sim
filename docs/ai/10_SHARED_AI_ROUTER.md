@@ -62,9 +62,13 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
 - `internal` data nikdy nejdou na externí model. Automatická volba dává
   jednoduchému dotazu přednostně lokální model. Když bezpečná cesta není
   dostupná, požadavek selže uzavřeně.
-- `cop_chat` je ve V1 vždy pouze lokální, i kdyby konzument požadoval externí
-  model. `source_health` smí mít jen `public_aggregate` a `sim_scenario` jen
-  `synthetic`. Teprve samostatné posouzení může tuto politiku změnit.
+- Připravený kontrakt `cop_chat` připouští `gpt-6-luna` pouze pro
+  autentizovanou službu COP, `allowExternal=true`, třídu `synthetic` nebo
+  `public_aggregate` a platný `copContext` s atestací COP. Drahý tier je pro
+  COP chat zakázán. `internal` zůstává výhradně lokální; bez lokálního modelu
+  vrací 503. Tento kontrakt není zapnutím produkčního chatu COP.
+- `source_health` smí mít jen `public_aggregate` a `sim_scenario` jen
+  `synthetic`.
 - Denní a měsíční limity mají tvrdé výchozí stropy 1 a 10 USD, 10 dotazů na
   uživatele za den. Správce je v SIM může snížit a v mezích stropu povolit
   modelové tiery; vyšší strop vyžaduje samostatnou změnu prostředí.
@@ -82,6 +86,61 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
   zapnutím musí posoudit zvlášť.
 
 ## Otevřené kroky
+
+### Přesný předávací kontrakt pro budoucí COP chat
+
+COP volá výhradně interní `POST /api/v1/ai-router/generate` s vlastní
+službovou bearer identitou. `taskType` je `cop_chat`, `dataClass` je vždy
+výslovně jedna z `internal`, `synthetic`, `public_aggregate`; chybějící nebo
+jiná hodnota končí 400. `userId` je stabilní neprůhledný identifikátor
+8–128 znaků `[A-Za-z0-9_-]`, ne jméno ani e-mail. Router ho ukládá pouze
+hashovaný. `prompt` je COP zkontrolovaná otázka nejvýše 1200 znaků, nikdy
+historie chatu ani přiložený volný situační kontext. `copContext` má vždy
+`contractVersion="cop-chat-context-v1"` a `dataClass` shodnou s requestem.
+Jiná pole na jakékoli úrovni strukturovaného kontextu se odmítají.
+
+- `internal`: `copContext` obsahuje jen verzi a `dataClass`. COP neposílá
+  externí povolení; Router použije pouze lokální model, jinak vrátí 503.
+- `synthetic`: kontext obsahuje `attestation="cop-policy-reviewed-v1"`,
+  neprůhledné `scenarioId` a 1–12 výslovně fiktivních faktů do 240 znaků.
+  COP musí izolovat cvičení od skutečných záznamů.
+- `public_aggregate`: kontext obsahuje stejnou atestaci a 1–20 číselných
+  agregátů. Každý má omezené kódy `sourceId`, `metricId`, pouze stát/kraj
+  (`CZ` či `CZ` + tři číslice), počátek a konec období alespoň hodinu od
+  sebe, konečnou číselnou hodnotu, jednotku z `count|percent|minutes|km|index`
+  a `sampleSize>=10`. Nejsou zde textové záznamy, souřadnice ani jednotlivé
+  incidenty. Ukázka:
+
+```json
+{
+  "taskType": "cop_chat",
+  "dataClass": "public_aggregate",
+  "preference": "external",
+  "prompt": "Shrň vývoj tohoto veřejného souhrnu.",
+  "userId": "cop_user_opaque_123456",
+  "allowExternal": true,
+  "copContext": {
+    "contractVersion": "cop-chat-context-v1",
+    "dataClass": "public_aggregate",
+    "attestation": "cop-policy-reviewed-v1",
+    "aggregates": [{
+      "sourceId": "chmi_weather_stations", "metricId": "station_count",
+      "regionCode": "CZ010", "periodStart": "2026-09-24T00:00:00Z",
+      "periodEnd": "2026-09-25T00:00:00Z", "value": 42,
+      "unit": "count", "sampleSize": 42
+    }]
+  }
+}
+```
+
+Router sám kontroluje službový token, tvar a shodu klasifikace, atestaci,
+externí opt-in, zákaz dražšího modelu, volbu modelu, limity a audit tokenů
+a odhadu ceny. Nemůže prokázat, že COP označil skutečně veřejná či fiktivní
+data správně, že agregát vznikl z povoleného zdroje, ani že otázka neobsahuje
+osobní či citlivé údaje. To je povinná předávací kontrola COP. Dešifrované
+soukromé zprávy, osobní údaje, citlivé incidenty, neupravené situační
+záznamy a volný kontext nejsou `public_aggregate`; tyto vstupy nesmějí být
+externě předány. COP nesmí přímo volat OpenAI jako náhradní cestu při 429/503.
 
 1. Vizuální acceptance SIM panelu v přihlášeném prohlížeči proběhla
    25. 9. 2026: přihlášený správce viděl modely a limity, fiktivní náhled

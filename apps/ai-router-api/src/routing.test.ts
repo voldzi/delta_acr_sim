@@ -18,6 +18,18 @@ describe("AI routing policy", () => {
         .tier
     ).toBe("local_fast");
   });
+  it("permits an explicitly approved COP synthetic or public aggregate request only on Luna's economy tier", () => {
+    for (const dataClass of ["synthetic", "public_aggregate"] as const) {
+      expect(chooseRoute({ taskType: "cop_chat", dataClass, preference: "external", prompt: "Porovnej", allowExternal: true, allowPaidEscalation: true }, policy))
+        .toMatchObject({ tier: "external_economy", reason: "approved_cop_external_economy" });
+    }
+  });
+  it("does not fall back from an explicitly selected external COP model", () => {
+    expect(() => chooseRoute(
+      { taskType: "cop_chat", dataClass: "synthetic", preference: "external", prompt: "Přehled", allowExternal: true, allowPaidEscalation: false },
+      { ...policy, externalAvailable: false }
+    )).toThrow("external_model_unavailable");
+  });
   it("does not escalate without explicit permission", () => {
     expect(
       chooseRoute(
