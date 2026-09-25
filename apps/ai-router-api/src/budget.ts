@@ -179,12 +179,17 @@ export class BudgetStore {
     );
   }
 
-  async usage(): Promise<{ dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; limits: BudgetLimits }> {
-    const result = await this.pool.query<{ day_total: string; month_total: string; day_count: string }>(`
+  async usage(): Promise<{ dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number; monthlyInputTokens: number; monthlyOutputTokens: number; limits: BudgetLimits }> {
+    const result = await this.pool.query<{ day_total: string; month_total: string; day_count: string; month_count: string; day_input: string; day_output: string; month_input: string; month_output: string }>(`
       SELECT
         COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_total,
         COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)), 0) AS month_total,
-        COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS day_count
+        COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS day_count,
+        COUNT(*) AS month_count,
+        COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_input,
+        COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_output,
+        COALESCE(SUM(input_tokens), 0) AS month_input,
+        COALESCE(SUM(output_tokens), 0) AS month_output
       FROM ai_router_request WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
     `);
     const row = result.rows[0]!;
@@ -192,6 +197,11 @@ export class BudgetStore {
       dailyMicrousd: Number(row.day_total),
       monthlyMicrousd: Number(row.month_total),
       dailyRequests: Number(row.day_count),
+      monthlyRequests: Number(row.month_count),
+      dailyInputTokens: Number(row.day_input),
+      dailyOutputTokens: Number(row.day_output),
+      monthlyInputTokens: Number(row.month_input),
+      monthlyOutputTokens: Number(row.month_output),
       limits: (await this.policy()).limits
     };
   }

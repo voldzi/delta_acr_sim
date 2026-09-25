@@ -30,7 +30,8 @@ zůstává jednotné; Router není veřejné UI.
   externího/dražšího modelu. Vrací request ID, model, tier, důvod směrování,
   tokeny, interní odhad ceny a `requiresHumanReview=true`.
 - `GET /api/v1/ai-router/models`: dostupnost nakonfigurovaných modelových tierů.
-- `GET /api/v1/ai-router/usage`: jen správce; denní/měsíční spotřeba a limity.
+- `GET /api/v1/ai-router/usage`: autentizované služby COP/SIM a správce;
+  pouze celkové denní/měsíční součty, tokeny a limity, bez identit či promptů.
 - `GET/PATCH /api/v1/ai-router/policy`: uložená provozní politika. Změna je
   auditovaná v DB, lze jen v mezích tvrdých limitů z prostředí.
 - SIM API proxy `/api/v1/ai/router-admin` a `/policy`: jen `SIM_AI_ADMIN`;
@@ -76,10 +77,14 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
 
 ## Otevřené kroky
 
-1. Vizuální acceptance SIM panelu v přihlášeném prohlížeči a detailnější grafy
-   spotřeby. Serverové admin testy již prošly.
-2. Integrace COP AI gateway; nezměnit Matrix
-   E2EE hranici, současné AI chat workflow ani fallback bez testů.
+1. Vizuální acceptance SIM panelu v přihlášeném prohlížeči proběhla
+   25. 9. 2026: přihlášený správce viděl modely a limity, fiktivní náhled
+   přes `gpt-6-luna` se zobrazil a zůstal bez publikování. Detailnější
+   grafy spotřeby ještě nejsou hotové.
+2. COP adaptér pro existující agregovaný MCP souhrn stavu zdrojů je připraven
+   opt-in. Před nasazením je nutné dokončit integrační ověření, předat
+   dedikovaný COP token a potvrdit přesný rollback. Matrix E2EE, COP chat a
+   situační shrnutí nejsou touto změnou přepojeny.
 3. Strukturovaný AI draft v SIM zůstává ukázkový; nový textový náhled přes
    Router jej nenahrazuje a nic nevytváří automaticky. Případná tvorba
    strukturovaného scénáře modelem vyžaduje samostatnou validaci a schválení.

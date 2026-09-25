@@ -4725,7 +4725,7 @@
           "AI Router: AI Router"
         ],
         "operationId": "aiRouter_aiRouterUsage",
-        "summary": "Read router-only budget usage (admin)",
+        "summary": "Read aggregate router-only budget usage (authenticated service)",
         "servers": [
           {
             "url": "http://ai-router-api:4050"
@@ -4755,6 +4755,13 @@
                     "dailyRequests": {
                       "type": "integer"
                     },
+                    "monthlyRequests": {
+                      "type": "integer"
+                    },
+                    "dailyInputTokens": { "type": "integer" },
+                    "dailyOutputTokens": { "type": "integer" },
+                    "monthlyInputTokens": { "type": "integer" },
+                    "monthlyOutputTokens": { "type": "integer" },
                     "limits": {
                       "type": "object"
                     }
@@ -4763,6 +4770,11 @@
                     "dailyMicrousd",
                     "monthlyMicrousd",
                     "dailyRequests",
+                    "monthlyRequests",
+                    "dailyInputTokens",
+                    "dailyOutputTokens",
+                    "monthlyInputTokens",
+                    "monthlyOutputTokens",
                     "limits"
                   ]
                 }
@@ -4771,9 +4783,6 @@
           },
           "401": {
             "description": "Missing internal token"
-          },
-          "403": {
-            "description": "Admin identity required"
           }
         }
       }

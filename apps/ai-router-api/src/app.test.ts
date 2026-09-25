@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { caller, validBody } from "./app.js";
 import type { Config } from "./config.js";
 import type { Request } from "express";
+import request from "supertest";
+import { createApp } from "./app.js";
+import type { BudgetStore } from "./budget.js";
 
 const config = {
   copToken: "cop-secret-value-long-enough-123456",
@@ -24,5 +27,14 @@ describe("AI Router request boundary", () => {
     expect(validBody({ taskType: "cop_chat", dataClass: "internal", prompt: "test", userId: "u" })).toBe(true);
     expect(validBody({ taskType: "cop_chat", dataClass: "internal", prompt: "test", userId: "u", maxOutputTokens: 99999 })).toBe(false);
     expect(validBody({ taskType: "cop_chat", dataClass: "secret", prompt: "test", userId: "u" })).toBe(false);
+  });
+  it("shares only aggregate usage with authenticated service callers", async () => {
+    const usage = { dailyMicrousd: 42, monthlyMicrousd: 84, dailyRequests: 2, limits: { dailyMicrousd: 1_000_000, monthlyMicrousd: 10_000_000, perUserDailyRequests: 10 } };
+    const app = createApp(config, { usage: async () => usage } as BudgetStore);
+    await request(app).get("/api/v1/ai-router/usage").expect(401);
+    for (const token of [config.copToken, config.simToken, config.adminToken]) {
+      const response = await request(app).get("/api/v1/ai-router/usage").set("authorization", `Bearer ${token}`).expect(200);
+      expect(response.body).toEqual(usage);
+    }
   });
 });

@@ -112,4 +112,17 @@ izolovaném testu nebylo provedeno žádné živé OpenAI volání.
   validace a skeleton kontrola prošly. První souběžný běh celé sady vykázal
   přechodné 404 v nesouvisejícím testu referenčního typu letadla; samostatný
   opakovaný test letových dat (24) i následný opakovaný běh celé sady prošly.
-  Vizuální acceptance v přihlášeném prohlížeči ještě neproběhla.
+  Vizuální acceptance v přihlášeném prohlížeči proběhla 25. 9. 2026:
+  správce viděl `gpt-6-luna`, denní 1 USD, měsíční 10 USD a 10 dotazů;
+  fiktivní náhled povodňového cvičení se zobrazil a nepublikoval.
+
+## Připravený COP pilot agregovaného souhrnu
+
+COP může opt-in použít stejný Router pouze pro auditovaný MCP souhrn stavu
+zdrojů. Před přepnutím ověřit kompatibilní verzi obou služeb, vložit do
+`/srv/cop/.env` pouze dedikovaný `AI_ROUTER_COP_TOKEN` jako
+`COP_AI_ROUTER_TOKEN`, nastavit interní URL a vypnout původní přímé volání
+této funkce. Tokeny ani hodnoty env se nevypisují. Produkční COP chat a
+situační shrnutí zůstávají beze změny. Výpadek Routeru znamená jen 503 pro
+MCP souhrn a jeho spotřebu. Návrat se provádí vypnutím COP přepínače a
+restartem pouze `cop-api`; databázová evidence se nemaže.

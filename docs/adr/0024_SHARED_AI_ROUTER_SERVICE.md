@@ -1,6 +1,7 @@
 # ADR 0024: Sdílená služba AI Router v repozitáři SIM
 
-**Stav:** Přijato pro postupnou implementaci, neaktivováno v produkci.
+**Stav:** Interní služba a SIM textový náhled aktivní; agregovaný COP MCP
+adaptér je připraven jako vypnutelný další krok.
 
 ## Rozhodnutí
 
@@ -15,6 +16,11 @@ Existující COP AI chat a nový COP OpenAI souhrn zdrojů se bez samostatného
 integračního kroku **nemění**. Vypnutí Routeru nesmí odstavit mapu, routing,
 SIM datové zdroje ani lidskou komunikaci. Router je ve Compose za profilem
 `ai-router` bez publikovaného portu. Žádný prohlížeč ho nesmí volat přímo.
+
+První COP integrace smí změnit výhradně agregovaný `cop.sources.health`
+a jeho read-only spotřebu. Router vrací stejné celkové rozpočtové součty
+autentizovaným službám bez detailů požadavků. COP chat, situační shrnutí a
+Matrix E2EE nejsou v tomto kroku povoleny pro externí Router.
 
 ## Bezpečnost a data
 

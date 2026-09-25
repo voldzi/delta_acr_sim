@@ -192,11 +192,7 @@ export function createApp(config: Config, store: BudgetStore) {
       res.status(503).json({ error: "policy_unavailable" });
     }
   });
-  app.get("/api/v1/ai-router/usage", async (req, res) => {
-    if (res.locals.caller !== "admin") {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
+  app.get("/api/v1/ai-router/usage", async (_req, res) => {
     try {
       res.json(await store.usage());
     } catch {
