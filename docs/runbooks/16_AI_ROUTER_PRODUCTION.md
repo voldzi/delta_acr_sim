@@ -126,3 +126,6 @@ této funkce. Tokeny ani hodnoty env se nevypisují. Produkční COP chat a
 situační shrnutí zůstávají beze změny. Výpadek Routeru znamená jen 503 pro
 MCP souhrn a jeho spotřebu. Návrat se provádí vypnutím COP přepínače a
 restartem pouze `cop-api`; databázová evidence se nemaže.
+Na hostu jsou `cop_default` a `sim_default` oddělené. Před aktivací je
+potřeba výslovně schválené interní propojení pouze COP API a Routeru;
+nepublikovat host port ani nepřipojovat všechny služby obou projektů.
