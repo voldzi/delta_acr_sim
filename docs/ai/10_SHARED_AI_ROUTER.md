@@ -2,8 +2,9 @@
 
 **Stav 25. 9. 2026:** Interní Router a administrační panel SIM jsou nasazené.
 Samostatná interní služba, směrovací pravidla, REST kontrakt a databázová
-rezervace rozpočtu. Textový náhled fiktivního cvičení je připojen v SIM; jeho
-produkční akceptace se ověřuje. COP chat zůstává na dosavadní cestě.
+rezervace rozpočtu. Textový náhled fiktivního cvičení je připojen v SIM a
+prošel serverovým produkčním testem. Levný externí tier je povolen pouze v
+mezích politiky; dražší model je vypnutý. COP chat zůstává na dosavadní cestě.
 
 ## Cíl
 
@@ -73,21 +74,22 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
   krátké textové požadavky. Regionální, prioritní či dlouhý kontext se před
   zapnutím musí posoudit zvlášť.
 
-## Co ještě chybí před provozem
+## Otevřené kroky
 
-1. Provozní a vizuální acceptance připraveného SIM panelu, detailnější grafy
-   spotřeby a administrátorské testy proti běžící Router službě.
+1. Vizuální acceptance SIM panelu v přihlášeném prohlížeči a detailnější grafy
+   spotřeby. Serverové admin testy již prošly.
 2. Integrace COP AI gateway; nezměnit Matrix
    E2EE hranici, současné AI chat workflow ani fallback bez testů.
 3. Strukturovaný AI draft v SIM zůstává ukázkový; nový textový náhled přes
    Router jej nenahrazuje a nic nevytváří automaticky. Případná tvorba
    strukturovaného scénáře modelem vyžaduje samostatnou validaci a schválení.
-4. Bezpečné zpřístupnění již existujícího klíče druhé službě. Samotný
-   stejný klíč nezajistí úplné účetnictví: COP volání mimo Router se zde
+4. Existující klíč byl zpřístupněn Routeru bez zveřejnění. Samotný stejný
+   klíč nezajistí úplné účetnictví: COP volání mimo Router se zde
    nezapočítají. Pro úplný součet je třeba migrovat všechny placené cesty
    nebo porovnávat s účtem poskytovatele.
-5. End-to-end test s neprodukčními daty, paralelní zátěž limitů, výpadky DB,
-   providera, odmítnutí externích interních dat, rollback a provozní alerty.
+5. Jeden produkční end-to-end test s čistě fiktivními daty prošel. Ještě zbývá
+   širší paralelní zátěž limitů, výpadky DB a providera, rollbackové cvičení
+   a provozní alerty.
 
 ## Nasazení a návrat
 

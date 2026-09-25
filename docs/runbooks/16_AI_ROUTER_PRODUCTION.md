@@ -1,8 +1,9 @@
 # AI Router - provozní zavedení
 
-**Stav:** interní Router, databáze a SIM administrační proxy jsou nasazené;
-textový náhled fiktivního cvičení v SIM vyžaduje produkční akceptaci. COP chat
-není přepojen. Tento runbook není pokyn zapnout další typy dat nebo dražší model.
+**Stav:** interní Router, databáze, SIM administrační proxy a textový náhled
+fiktivního cvičení jsou nasazené a serverově ověřené. Ekonomický tier je
+povolen, dražší tier vypnutý. COP chat není přepojen. Tento runbook není
+pokyn zapnout další typy dat nebo dražší model.
 
 ## Vlastník a hranice
 
@@ -77,13 +78,38 @@ Vypnout Compose profil služby nebo externí přístup, COP nechat na stávajíc
 AI gateway. Rozpočtové a auditní záznamy ponechat; tabulky nemazat při
 rollbacku. Rotaci nebo odebrání klíče řešit samostatně, protože tentýž klíč
 může používat COP.
+Pro okamžité zastavení AI volání lze na `docker.home.cz` zastavit pouze
+`ai-router-api` v projektu `sim`; SIM náhled pak bezpečně vrátí 503 a jiné
+vrstvy pokračují. Předchozí obrazy API a webu jsou označené
+`sim-sim-api:pre-ai-router-20260925` a `sim-sim-web:pre-ai-router-20260925`.
+Produkční `.env` má zálohy se značkou `before-ai-router-*` v `/srv/sim`;
+neodstraňovat je bez samostatného rozhodnutí.
 
 ## Ověření lokálního izolovaného buildu (25. 9. 2026)
 
 Node 24 typová kontrola a build prošly. Nové AI Router testy prošly. Celá SIM
-test sada prošla v prostředí s povolenými lokálními porty. Docker image se
+test sada tehdy prošla v prostředí s povolenými lokálními porty. Docker image se
 sestavil. Proti dočasné PostgreSQL 16 databázi prošla migrace, readiness,
 čtení modelů/politiky/spotřeby, snížení limitu, odmítnutí překročení tvrdého
 stropu, auditní zápis, odmítnutí neautorizovaného přístupu a bezpečné selhání
-bez modelu. Dočasné kontejnery a síť byly odstraněny. Žádné živé OpenAI
-volání ani produkční nasazení nebylo provedeno.
+bez modelu. Dočasné kontejnery a síť byly odstraněny. V tomto počátečním
+izolovaném testu nebylo provedeno žádné živé OpenAI volání.
+
+## Produkční akceptace SIM (25. 9. 2026)
+
+- Commit `a9ca469`; dotčeny a restartovány pouze `ai-router-api`, `sim-api`
+  a `sim-web`. Ostatní datové služby nebyly restartovány a zůstaly healthy.
+- Router nemá publikovaný host port, `/health/ready` vrací 200,
+  neautorizované volání 401. SIM admin proxy vrací 200; pokus nastavit
+  `1,000001 USD/den` (nad schválený 1 USD) vrací 400 bez změny politiky. Změna politiky má jeden
+  auditní záznam v oddělené databázi přes HAProxy.
+- `SIM_AI_USER` preview odmítá požadavek bez potvrzení fiktivnosti (400), při vypnutém
+  provideru selhává uzavřeně (503). Po povolení pouze `gpt-6-luna` prošel
+  jeden fiktivní civilní test přes SIM API: HTTP 200, lidská kontrola=true,
+  délka výstupu 381 znaků, odhad 146 µUSD. Spotřeba v SIM ukázala jeden
+  požadavek a 146 µUSD; pokročilý tier zůstal vypnutý.
+- Typová kontrola, cílené testy Routeru (14) a SIM API (32), build, OpenAPI
+  validace a skeleton kontrola prošly. První souběžný běh celé sady vykázal
+  přechodné 404 v nesouvisejícím testu referenčního typu letadla; samostatný
+  opakovaný test letových dat (24) i následný opakovaný běh celé sady prošly.
+  Vizuální acceptance v přihlášeném prohlížeči ještě neproběhla.
