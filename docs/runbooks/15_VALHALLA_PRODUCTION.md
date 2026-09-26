@@ -225,6 +225,20 @@ matcher. Investigate endpoint/costing differences and require a reviewed
 parallel-road/roundabout sample plus independent acceptance after each weekly
 graph rebuild. The live `openlr-trace-v2` cache and timer are unchanged.
 
+The v6 audit-only graph matcher fixes a further endpoint error: the last LRP
+now uses its own FRC and FOW instead of the first LRP's classification. A full
+read-only repeat over the same 55,150-segment source and active graph returned
+7,275 disjoint additions (potential 77.81% combined static coverage), eight
+fewer than v5. All 7,275 segments shared with v5 retained identical directed
+edge sequences; no new segment was accepted. This is not independent
+geographic acceptance. A fresh deterministic 47-offset sample compared with
+Valhalla's shortest route had 31 identical whole-edge sequences, nine partial
+overlaps, six disjoint results and one unavailable comparison. The sample
+members changed when v6 rejected eight matches, so this is not a paired
+before/after success rate. Fifteen disagreements remain: do not activate v6
+or treat its potential coverage as real routing coverage. Production matching
+remains v2.
+
 #### Additional speed-data strategy (26 September 2026)
 
 The [current TPEG2-TFP pilot](https://tpeg.dopravniinfo.cz/pilot/) is itself
@@ -236,7 +250,16 @@ two-point OpenLR references; it does not demonstrate a full road polyline.
 Before changing the parser, inspect an authorized full static feed for any
 additional geometry and ask the operator whether an authoritative segment
 polyline, direction, or map-edge crosswalk is available. Do not infer a road
-path from the sample's two endpoints.
+path from the sample's two endpoints. A one-time, aggregate-only check of the
+authorized full static feed on 26 September 2026 found 55,150 OpenLR methods,
+55,150 TMC methods, **zero GLR methods and zero geometric line points** in
+153,548,454 decompressed XML bytes. The feed and token were not logged or
+stored by the audit. Thus this TPEG2 feed cannot itself provide a more detailed
+road polyline; ask the operator about a separately authorized crosswalk or
+geometry product. `scripts/audit-tpeg-static-geometry.py` checks a supplied
+XML/XML.gz file offline, while `scripts/audit-tpeg-live-static-geometry.mjs`
+requires `--one-shot` for an explicit authenticated check inside the SIM service and
+prints only aggregate counts. The latter is not a scheduled poller.
 
 Valhalla [supports a speed hierarchy](https://valhalla.github.io/valhalla/concepts/speeds/): live `traffic.tar`, predicted weekly
 five-minute profiles, constrained/free-flow speeds, then base OSM speeds.

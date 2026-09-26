@@ -117,7 +117,7 @@ def main() -> None:
             "messageId": "direct-reference", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
             "openlr": {"points": [
                 {"frc": "3", "fow": "3", "bearing": 42, "distanceToNext": 100},
-                {"bearing": 172},
+                {"frc": "3", "fow": "3", "bearing": 172},
             ]},
         }
         def direct_edge(edge_id: int, percent: float, heading: float = 62) -> dict:
@@ -161,6 +161,16 @@ def main() -> None:
         graph_edges, graph_reason = traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)
         assert graph_reason == "graph_matched" and [edge["id"] for edge in graph_edges] == [5, 6]
         assert fake_graph.calls == 1
+        last_point = direct_reference["openlr"]["points"][1]
+        last_point["frc"] = "0"
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_no_endpoint"
+        last_point["frc"] = "3"
+        last_point["fow"] = "6"
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_no_endpoint"
+        last_point["fow"] = "3"
+        last_point.pop("fow")
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_unknown_fow"
+        last_point["fow"] = "3"
         fake_graph.result = {"status": "ok", "lengthMeters": 180, "edges": [5, 6], "edgeLengthsMeters": [50, 50]}
         assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_length_mismatch"
         fake_graph.result = {"status": "ok", "lengthMeters": 100, "edges": [6, 5], "edgeLengthsMeters": [50, 50]}

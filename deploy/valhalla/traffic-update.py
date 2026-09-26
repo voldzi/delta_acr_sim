@@ -44,7 +44,7 @@ MAX_SPEED_RAW = 126
 MATCHER_VERSION = "openlr-trace-v2"
 ROUTE_MATCHER_VERSION = "openlr-route-candidate-v3"
 DIRECT_MATCHER_VERSION = "openlr-directed-single-edge-v1"
-GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v5"
+GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v6"
 ROAD_CLASS_BITS = {
     "motorway": 0, "trunk": 1, "primary": 2, "secondary": 3,
     "tertiary": 4, "unclassified": 5, "residential": 6, "service_other": 7,
@@ -404,6 +404,11 @@ def bounded_graph_candidate(
     points = reference.get("points")
     if not isinstance(points, list) or len(points) != 2 or len(coordinates) != 2:
         return [], "graph_unsupported_lrp_count"
+    if not all(isinstance(point, dict) for point in points):
+        return [], "graph_invalid_reference"
+    if any(str(point.get("fow", "")) not in {"1", "2", "3", "4", "5", "6", "7"}
+           for point in points):
+        return [], "graph_unknown_fow"
     try:
         positive_offset = float(reference.get("positiveOffsetMeters") or 0)
         negative_offset = float(reference.get("negativeOffsetMeters") or 0)
@@ -425,10 +430,13 @@ def bounded_graph_candidate(
         math.isfinite(float(value)) for location in locations for value in location.values()
     ):
         return [], "graph_invalid_reference"
-    allowed = FRC_ROAD_CLASSES.get(str(points[0].get("frc", "")))
-    if not allowed:
+    endpoint_classes = [FRC_ROAD_CLASSES.get(str(point.get("frc", ""))) for point in points]
+    if not all(endpoint_classes):
         return [], "graph_unknown_frc"
-    class_mask = sum(1 << ROAD_CLASS_BITS[name] for name in allowed)
+    # This probe deliberately keeps the first LRP's restrictive path mask.
+    # The final LRP still needs its *own* FRC/FOW check: applying the first
+    # LRP's properties to both ends can select the wrong parallel road.
+    class_mask = sum(1 << ROAD_CLASS_BITS[name] for name in endpoint_classes[0])
     try:
         status, located = request_json(f"{valhalla_url.rstrip('/')}/locate", payload={
             "locations": locations, "costing": "auto", "verbose": True,
@@ -438,7 +446,8 @@ def bounded_graph_candidate(
     if status != 200 or not isinstance(located, list) or len(located) != 2:
         return [], "graph_locate_failed"
 
-    def candidates(location: Any, heading: float, at_start: bool) -> list[tuple[int, float, float]]:
+    def candidates(location: Any, heading: float, point: dict[str, Any],
+                   allowed_classes: set[str]) -> list[tuple[int, float, float]]:
         result: list[tuple[float, int, float, float]] = []
         if not isinstance(location, dict):
             return result
@@ -458,10 +467,10 @@ def bounded_graph_candidate(
                 continue
             if (not all(math.isfinite(value) for value in (percent, distance, candidate_heading, speed, length_m)) or
                 not car_access or distance < 0 or distance > 20 or length_m <= 0 or
-                angular_difference(heading, candidate_heading) > 34 or road_class not in allowed or
+                angular_difference(heading, candidate_heading) > 34 or road_class not in allowed_classes or
                 percent < 0 or percent > 1):
                 continue
-            fow = str(points[0].get("fow", ""))
+            fow = str(point.get("fow", ""))
             if (fow == "1" and road_class != "motorway") or (fow == "6" and use not in {"ramp", "turn_channel"}):
                 continue
             result.append((distance + angular_difference(heading, candidate_heading) / 34,
@@ -471,8 +480,8 @@ def bounded_graph_candidate(
         # quadratic number of graph searches.
         return [(edge_id, percent, speed) for _, edge_id, percent, speed in result[:4]]
 
-    first = candidates(located[0], headings[0], True)
-    last = candidates(located[1], headings[1], False)
+    first = candidates(located[0], headings[0], points[0], endpoint_classes[0])
+    last = candidates(located[1], headings[1], points[1], endpoint_classes[1])
     if not first or not last:
         return [], "graph_no_endpoint"
     tolerance_m = max(35, expected_m * 0.1)
