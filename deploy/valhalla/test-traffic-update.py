@@ -30,6 +30,13 @@ def make_archive(path: Path, level: int, tile_id: int, edges: int) -> None:
 
 
 def main() -> None:
+    try:
+        traffic.run({"SIM_TRAFFIC_FEED_BASE_URL": "http://sim.test",
+                     "SIM_TRAFFIC_CONTROL_TOKEN": "test", "TRAFFIC_OPENLR_ROUTE_FALLBACK": "true"})
+    except RuntimeError as error:
+        assert "not approved for live speeds" in str(error)
+    else:
+        raise AssertionError("unapproved route fallback must be refused")
     assert traffic.graph_id_parts(graph_id(2, 807177, 210837)) == (2, 807177, 210837)
     assert traffic.parse_iso_timestamp("2026-09-14T19:49:03+02:00") == traffic.parse_iso_timestamp("2026-09-14T17:49:03Z")
     word = traffic.traffic_word(36, 90)
@@ -80,6 +87,64 @@ def main() -> None:
         assert traffic.valhalla_failure_reason(RuntimeError('HTTP 400 from Valhalla: {"error_code":171}')) == "valhalla_error_171"
         assert traffic.valhalla_failure_reason(RuntimeError("HTTP 502 from Valhalla")) == "valhalla_5xx"
         assert traffic.valhalla_failure_reason(TimeoutError("timed out")) == "valhalla_timeout"
+        direct_reference = {
+            "messageId": "direct-reference", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
+            "openlr": {"points": [
+                {"frc": "3", "fow": "3", "bearing": 42, "distanceToNext": 100},
+                {"bearing": 172},
+            ]},
+        }
+        def direct_edge(edge_id: int, percent: float, heading: float = 62) -> dict:
+            return {"edge_id": {"value": edge_id}, "distance": 2, "heading": heading,
+                    "percent_along": percent, "edge": {
+                        "classification": {"classification": "secondary", "use": "road"},
+                        "geo_attributes": {"length": 100}, "speeds": {"default": 20},
+                        "access": {"car": True},
+                    }}
+        direct_locations = [{"edges": [direct_edge(5, 0)]}, {"edges": [direct_edge(5, 1)]}]
+        traffic.request_json = lambda *args, **kwargs: (200, direct_locations)
+        direct_edges, direct_reason = traffic.directed_single_edge_candidate("http://valhalla.test", direct_reference)
+        assert direct_reason == "direct_matched" and direct_edges == [{"id": 5, "baselineSpeedKph": 72}]
+        direct_locations[1]["edges"][0] = direct_edge(6, 1)
+        assert traffic.directed_single_edge_candidate("http://valhalla.test", direct_reference)[1] == "direct_ambiguous_or_unmatched"
+        direct_locations[1]["edges"][0] = direct_edge(5, 1, 240)
+        assert traffic.directed_single_edge_candidate("http://valhalla.test", direct_reference)[1] == "direct_ambiguous_or_unmatched"
+        direct_locations[1]["edges"][0] = direct_edge(5, 1)
+        assert traffic.directed_single_edge_candidate("http://valhalla.test", {
+            **direct_reference, "openlr": {**direct_reference["openlr"], "positiveOffsetMeters": 4},
+        })[1] == "direct_offset_not_supported"
+        assert traffic.directed_single_edge_candidate("http://valhalla.test", {
+            **direct_reference, "openlr": {"points": [
+                {**direct_reference["openlr"]["points"][0], "distanceToNext": 200},
+                direct_reference["openlr"]["points"][1],
+            ]},
+        })[1] == "direct_length_mismatch"
+        class FakeGraph:
+            def __init__(self) -> None:
+                self.result = {"status": "ok", "lengthMeters": 100, "edges": [5, 6]}
+                self.calls = 0
+            def path(self, source: int, source_percent: float, target: int,
+                     target_percent: float, max_m: float, class_mask: int) -> dict:
+                self.calls += 1
+                assert (source, target) == (5, 6)
+                assert source_percent == 0 and target_percent == 1
+                assert max_m == 135 and class_mask & (1 << 3)
+                return self.result
+        fake_graph = FakeGraph()
+        direct_locations[1]["edges"][0] = direct_edge(6, 1)
+        graph_edges, graph_reason = traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)
+        assert graph_reason == "graph_matched" and [edge["id"] for edge in graph_edges] == [5, 6]
+        assert fake_graph.calls == 1
+        fake_graph.result = {"status": "ok", "lengthMeters": 180, "edges": [5, 6]}
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_length_mismatch"
+        fake_graph.result = {"status": "ok", "lengthMeters": 100, "edges": [6, 5]}
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_path_shape_mismatch"
+        direct_locations[0]["edges"].append(direct_edge(7, 0))
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_ambiguous_endpoint"
+        direct_locations[0]["edges"].pop()
+        assert traffic.bounded_graph_candidate("http://valhalla.test", {
+            **direct_reference, "openlr": {**direct_reference["openlr"], "negativeOffsetMeters": 10},
+        }, fake_graph)[1] == "graph_offset_not_supported"
         route_reference = {
             "messageId": "route-reference", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
             "openlr": {"points": [
@@ -224,6 +289,49 @@ def main() -> None:
         assert audit_result["mappedSegmentCount"] == 1
     finally:
         traffic.map_segment = original_map_segment
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        dataset = "sim-routing-2026-09-20-1789879440"
+        traffic.write_gzip_json(traffic.mapping_path(root, dataset, "static-revision"), {
+            "matcherVersion": traffic.MATCHER_VERSION, "routingDataset": dataset,
+            "staticRevision": "static-revision",
+            "mapping": {"baseline": [{"id": 1, "baselineSpeedKph": 80}]},
+        })
+        original_direct = traffic.directed_single_edge_candidate
+        original_report = traffic.post_report
+        try:
+            def direct_audit_request(url: str, **kwargs: object) -> tuple[int, object]:
+                if url.endswith("/status"):
+                    return 200, {"tileset_last_modified": 1789879440}
+                if "includeStatic=true" in url:
+                    return 200, {"staticRevision": "static-revision", "segments": [
+                        {"messageId": key} for key in ("baseline", "overlap", "candidate-a", "candidate-b", "safe")
+                    ]}
+                raise AssertionError(url)
+            def direct_audit_candidate(_url: str, segment: dict) -> tuple[list[dict], str]:
+                return [{"id": {"overlap": 1, "candidate-a": 2, "candidate-b": 2, "safe": 3}[segment["messageId"]],
+                         "baselineSpeedKph": 60}], "direct_matched"
+            traffic.request_json = direct_audit_request
+            traffic.directed_single_edge_candidate = direct_audit_candidate
+            traffic.post_report = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("audit must not report to SIM"))
+            assert traffic.audit_direct_matcher({
+                "SIM_TRAFFIC_FEED_BASE_URL": "http://sim.test/feed-root", "SIM_TRAFFIC_CONTROL_TOKEN": "test-token",
+                "VALHALLA_URL": "http://valhalla.test", "TRAFFIC_MAPPING_CACHE_DIR": str(root),
+            }) == 0
+            audits = list(root.glob("openlr-direct-audit-*.json.gz"))
+            assert len(audits) == 1
+            audit = traffic.read_gzip_json(audits[0])
+            assert set(audit["mapping"]) == {"safe"}
+            assert audit["rejectionCounts"] == {
+                "direct_edge_overlap_baseline": 1, "direct_edge_overlap_candidate": 2,
+            }
+            assert audit["combinedCoveragePercent"] == 40
+            assert not (root / "traffic.tar").exists()
+        finally:
+            traffic.request_json = original_request_json
+            traffic.directed_single_edge_candidate = original_direct
+            traffic.post_report = original_report
 
     now = "2099-01-01T00:00:00Z"
     mapping = {"mapping": {"flow-1": [{"id": graph_id(1, 50594, 2), "baselineSpeedKph": 80}]}}

@@ -167,6 +167,36 @@ offline against the current graph before enabling it in the live updater.
 Acceptance must include manually reviewed parallel-road and wrong-direction
 negative cases and no reduction in the currently accepted 35,639 segments.
 
+The graph-directed single-edge audit is invoked with
+`python3 /srv/valhalla/update-tools/traffic-update.py --audit-direct-matcher`
+after installing the candidate updater. It reads only the active static feed
+and validated baseline map, writes an isolated mode-0600
+`openlr-direct-audit-*.json.gz` under the traffic cache, and does not touch
+`traffic.tar` or SIM's traffic report. It covers only the maintainers' trivial
+same-directed-edge path, not multi-edge OpenLR decoding. Review its disjoint
+rejection counts and sampled parallel-road/direction cases before considering
+live use. `TRAFFIC_OPENLR_ROUTE_FALLBACK=true` is refused by the live updater;
+the HTTP route-candidate experiment is audit-only.
+For an audit without production sudo or a feed token, use a temporary copy of
+SIM's normalized `static-segments.json.gz` and the existing graph-matched
+baseline map with `--static-cache-file`, `--baseline-file` and
+`--audit-output-dir`. This mode still verifies the current routing dataset and
+static revision, calls only Valhalla `/locate` and `/status`, and must run at a
+bounded worker count. The temporary provider-data copy is removed afterward.
+
+`deploy/valhalla/openlr-graph-probe.cc` and
+`Dockerfile.openlr-graph-builder` are an isolated C++23 development probe
+against Valhalla 3.8.3, not part of the production image or updater. The
+`--audit-graph-matcher` command additionally requires `--graph-helper` and
+`--graph-config` alongside offline static/baseline/output paths. It is
+intentionally audit-only and runs in a disposable container with read-only
+graph and traffic mounts. The 26 September full-dataset result was just 5
+additional disjoint segments; do not install or activate it. Completing the
+maintainers' algorithm requires candidate ranking, distance-only graph
+costing with hierarchy-aware traversal, FRC/FOW and offset handling, plus
+independent wrong-road/parallel-road acceptance. The validated live baseline
+remains `openlr-trace-v2` until those gates pass.
+
 An isolated route-candidate prototype is now included in the updater, but is
 **disabled by default** with `TRAFFIC_OPENLR_ROUTE_FALLBACK=false`. A bounded
 240-segment read-only sample found 62 trace error-444 segments. Only nine

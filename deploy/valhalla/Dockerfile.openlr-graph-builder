@@ -1,0 +1,12 @@
+FROM ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:24ef7955899dececb94e26c6dfb89d64fabfae875f980432694b0261eb6c251b
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++ pkg-config libboost-dev libprotobuf-dev zlib1g-dev libsqlite3-dev \
+    libspatialite-dev libgeos-dev libssl-dev libcurl4-openssl-dev libtiff-dev \
+    liblz4-dev libluajit-5.1-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++-14 libzmq3-dev libczmq-dev rapidjson-dev && rm -rf /var/lib/apt/lists/*
+COPY openlr-graph-probe.cc /tmp/openlr-graph-probe.cc
+RUN g++-14 -std=c++23 -O2 -o /usr/local/bin/openlr-graph-probe \
+    /tmp/openlr-graph-probe.cc $(pkg-config --cflags --libs libvalhalla) -lcurl

@@ -154,6 +154,41 @@ and never updates `traffic.tar` or reports a new state to SIM. Enabling the
 fallback for live traffic requires full-dataset acceptance and reviewed
 parallel-road, direction and partial-edge counterexamples; a positive sample
 alone is insufficient.
+Following the Valhalla maintainers' OpenLR guidance, the route-candidate
+fallback is now explicitly refused by the live updater even if its flag is set.
+Its audit remains available only to compare historical experiments. Ordinary
+auto/shortest HTTP routes are not a substitute for OpenLR-specific graph
+costing, road-class/form-of-way ranking, node snapping and offsets.
+
+The first graph-directed decoder stage implements the maintainers' trivial
+single-edge case as a separate read-only `--audit-direct-matcher` operation.
+Both LRPs must correlate to the same directed Valhalla edge within 20 m and
+34 degrees, with unique candidates, compatible FRC/FOW, vehicular access,
+near-complete edge coverage and matching distance-to-next. Nonzero offsets and
+all multi-edge paths remain unmatched. The audit rejects overlap with baseline
+edges and collisions between candidate segments, is keyed by graph and static
+revision, and never writes a live speed or reports a new status to SIM. A
+subsequent graph-native pathfinder must handle multi-edge paths, intermediate
+LRPs and offsets before this work can claim full OpenLR decoding.
+
+An isolated C++23 `GraphReader` helper now probes the exact Valhalla 3.8.3
+graph and performs bounded, distance-weighted paths between two already
+correlated directed endpoint edges. It filters car access, road classes,
+shortcuts, U-turns, simple turn restrictions and edges involved in complex
+restrictions. Its separate `--audit-graph-matcher` never applies speeds.
+This is an experimental subset, **not** the maintainers' complete proposed
+`loki::search` plus special-costing `thor::astar` decoder: it does not rank
+multiple LRP candidates, traverse graph hierarchy transitions, resolve
+intermediate LRPs or trim offsets. Its output must not be used live.
+
+Against the 20 September graph and 55,150 static OpenLR segments, the direct
+same-edge audit added only 237 disjoint segments (64.62% to 65.05% combined
+coverage); 30/30 sampled edges were independently confirmed using the directed
+graph geometry. The preliminary bounded graph-path audit added only 5 disjoint
+segments (64.63% combined coverage). In that audit 7,085 segments had ambiguous
+endpoints, 5,560 failed the reference-distance check and 3,092 carried
+unsupported offsets. These numbers establish that the graph prototype is not
+production-ready; raising coverage by loosening the gates is prohibited.
 The v2 candidate matcher also rejects an entire candidate segment if any of
 its directed edges overlaps the validated trace-only mapping or another
 candidate segment. This avoids silently selecting one of two independently

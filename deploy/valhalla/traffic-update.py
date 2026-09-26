@@ -21,8 +21,10 @@ import os
 from pathlib import Path
 import shutil
 import struct
+import subprocess
 import sys
 import tarfile
+import threading
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -41,6 +43,12 @@ MAX_SPEED_RAW = 126
 # result produced by an older matcher against the same graph and TPEG snapshot.
 MATCHER_VERSION = "openlr-trace-v2"
 ROUTE_MATCHER_VERSION = "openlr-route-candidate-v3"
+DIRECT_MATCHER_VERSION = "openlr-directed-single-edge-v1"
+GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v1"
+ROAD_CLASS_BITS = {
+    "motorway": 0, "trunk": 1, "primary": 2, "secondary": 3,
+    "tertiary": 4, "unclassified": 5, "residential": 6, "service_other": 7,
+}
 FRC_ROAD_CLASSES = {
     "0": {"motorway"},
     "1": {"trunk", "primary"},
@@ -200,6 +208,234 @@ def valhalla_failure_reason(error: Exception) -> str:
     if isinstance(error, TimeoutError) or "timed out" in detail.lower():
         return "valhalla_timeout"
     return "valhalla_request_error"
+
+
+def directed_single_edge_candidate(valhalla_url: str, segment: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    """Decode only an unambiguous OpenLR path contained in one directed graph edge.
+
+    This is the trivial-path case in Valhalla's proposed OpenLR decoder. It
+    deliberately does not infer a path between different endpoint edges.
+    """
+    reference = segment.get("openlr")
+    coordinates = segment.get("coordinates")
+    if not isinstance(reference, dict) or not isinstance(coordinates, list):
+        return [], "direct_invalid_reference"
+    points = reference.get("points")
+    if not isinstance(points, list) or len(points) != 2 or len(coordinates) != 2:
+        return [], "direct_nontrivial_reference"
+    if any(not isinstance(point, dict) for point in points):
+        return [], "direct_invalid_reference"
+    try:
+        offsets = [float(reference.get(key) or 0) for key in ("positiveOffsetMeters", "negativeOffsetMeters")]
+        expected_m = float(points[0]["distanceToNext"])
+        headings = [float(points[0]["bearing"]) * 360 / 256,
+                    (float(points[-1]["bearing"]) * 360 / 256 + 180) % 360]
+        locations = [
+            {"lon": float(coordinate[0]), "lat": float(coordinate[1]),
+             "radius": 20, "search_cutoff": 20, "heading": headings[index],
+             "heading_tolerance": 34}
+            for index, coordinate in enumerate(coordinates)
+        ]
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError):
+        return [], "direct_invalid_reference"
+    if not all(math.isfinite(value) for value in offsets + [expected_m] + headings):
+        return [], "direct_invalid_reference"
+    if any(value < 0 for value in offsets) or expected_m <= 0:
+        return [], "direct_invalid_reference"
+    if any(offsets):
+        # The overlay writes one speed for an entire directed edge. A partially
+        # covered edge must not be advertised as wholly live-speed covered.
+        return [], "direct_offset_not_supported"
+    if any(not all(math.isfinite(float(value)) for value in location.values()) for location in locations):
+        return [], "direct_invalid_reference"
+    allowed_classes = FRC_ROAD_CLASSES.get(str(points[0].get("frc", "")))
+    if not allowed_classes:
+        return [], "direct_unknown_frc"
+    try:
+        status, located = request_json(f"{valhalla_url.rstrip('/')}/locate", payload={
+            "locations": locations, "costing": "auto", "verbose": True,
+        }, timeout=15)
+    except (RuntimeError, TimeoutError, OSError) as error:
+        return [], f"direct_{valhalla_failure_reason(error)}"
+    if status != 200 or not isinstance(located, list) or len(located) != 2:
+        return [], "direct_locate_failed"
+
+    def candidates(location: Any, heading: float, at_start: bool) -> dict[int, tuple[float, float, float]]:
+        result: dict[int, tuple[float, float, float]] = {}
+        if not isinstance(location, dict):
+            return result
+        for candidate in location.get("edges", []):
+            if not isinstance(candidate, dict):
+                continue
+            try:
+                edge = candidate["edge"]
+                road_class = edge["classification"]["classification"]
+                use = edge["classification"]["use"]
+                edge_id = int(candidate["edge_id"]["value"])
+                percent = float(candidate["percent_along"])
+                distance = float(candidate["distance"])
+                candidate_heading = float(candidate["heading"])
+                length_m = float(edge["geo_attributes"]["length"])
+                speed = float(edge.get("speeds", {}).get("default") or 0)
+                car_access = edge.get("access", {}).get("car") is True
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            if (not all(math.isfinite(value) for value in (percent, distance, candidate_heading, length_m, speed)) or
+                distance > 20 or distance < 0 or length_m <= 0 or not car_access or
+                angular_difference(heading, candidate_heading) > 34 or road_class not in allowed_classes or
+                (at_start and percent > 0.05) or (not at_start and percent < 0.95)):
+                continue
+            fow = str(points[0].get("fow", ""))
+            if (fow == "1" and road_class != "motorway") or (fow == "6" and use not in {"ramp", "turn_channel"}):
+                continue
+            result[edge_id] = (percent, length_m, speed)
+        return result
+
+    first = candidates(located[0], headings[0], True)
+    last = candidates(located[1], headings[1], False)
+    common = set(first) & set(last)
+    if len(common) != 1 or len(first) != 1 or len(last) != 1:
+        return [], "direct_ambiguous_or_unmatched"
+    edge_id = next(iter(common))
+    source_percent, source_length, source_speed = first[edge_id]
+    target_percent, target_length, target_speed = last[edge_id]
+    actual_m = (target_percent - source_percent) * source_length
+    if (target_percent <= source_percent or abs(source_length - target_length) > 1 or
+        abs(actual_m - expected_m) > max(35, expected_m * 0.1)):
+        return [], "direct_length_mismatch"
+    return [{"id": edge_id, "baselineSpeedKph": max(source_speed, target_speed) * 3.6}], "direct_matched"
+
+
+class GraphPathClient:
+    """One graph-reader process for bounded, read-only path queries."""
+
+    def __init__(self, helper: Path, config: Path) -> None:
+        self._lock = threading.Lock()
+        self._process = subprocess.Popen(
+            [str(helper), str(config), "--stream"], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1,
+        )
+
+    def path(self, source: int, source_percent: float, target: int, target_percent: float,
+             max_m: float, class_mask: int) -> dict[str, Any]:
+        with self._lock:
+            if self._process.poll() is not None or self._process.stdin is None or self._process.stdout is None:
+                raise RuntimeError("OpenLR graph helper is unavailable")
+            self._process.stdin.write(
+                f"{source} {source_percent:.6f} {target} {target_percent:.6f} {max_m:.2f} {class_mask}\n"
+            )
+            self._process.stdin.flush()
+            response = self._process.stdout.readline()
+            if not response:
+                raise RuntimeError("OpenLR graph helper stopped unexpectedly")
+            return json.loads(response)
+
+    def close(self) -> None:
+        if self._process.stdin:
+            self._process.stdin.close()
+        try:
+            self._process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._process.kill()
+            self._process.wait(timeout=5)
+
+
+def bounded_graph_candidate(
+    valhalla_url: str, segment: dict[str, Any], graph: GraphPathClient,
+) -> tuple[list[dict[str, Any]], str]:
+    """Audit-only, two-LRP graph path; reject uncertain endpoints and partial edges."""
+    reference = segment.get("openlr")
+    coordinates = segment.get("coordinates")
+    if not isinstance(reference, dict) or not isinstance(coordinates, list):
+        return [], "graph_invalid_reference"
+    points = reference.get("points")
+    if not isinstance(points, list) or len(points) != 2 or len(coordinates) != 2:
+        return [], "graph_unsupported_lrp_count"
+    try:
+        if float(reference.get("positiveOffsetMeters") or 0) != 0 or float(reference.get("negativeOffsetMeters") or 0) != 0:
+            return [], "graph_offset_not_supported"
+        expected_m = float(points[0]["distanceToNext"])
+        headings = [float(points[0]["bearing"]) * 360 / 256,
+                    (float(points[1]["bearing"]) * 360 / 256 + 180) % 360]
+        locations = [
+            {"lon": float(coordinate[0]), "lat": float(coordinate[1]), "radius": 20,
+             "search_cutoff": 20, "heading": headings[index], "heading_tolerance": 34}
+            for index, coordinate in enumerate(coordinates)
+        ]
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError):
+        return [], "graph_invalid_reference"
+    if not math.isfinite(expected_m) or expected_m <= 0 or not all(
+        math.isfinite(float(value)) for location in locations for value in location.values()
+    ):
+        return [], "graph_invalid_reference"
+    allowed = FRC_ROAD_CLASSES.get(str(points[0].get("frc", "")))
+    if not allowed:
+        return [], "graph_unknown_frc"
+    class_mask = sum(1 << ROAD_CLASS_BITS[name] for name in allowed)
+    try:
+        status, located = request_json(f"{valhalla_url.rstrip('/')}/locate", payload={
+            "locations": locations, "costing": "auto", "verbose": True,
+        }, timeout=15)
+    except (RuntimeError, TimeoutError, OSError) as error:
+        return [], f"graph_{valhalla_failure_reason(error)}"
+    if status != 200 or not isinstance(located, list) or len(located) != 2:
+        return [], "graph_locate_failed"
+
+    def candidates(location: Any, heading: float, at_start: bool) -> list[tuple[int, float, float]]:
+        result: list[tuple[int, float, float]] = []
+        if not isinstance(location, dict):
+            return result
+        for candidate in location.get("edges", []):
+            try:
+                edge = candidate["edge"]
+                road_class = edge["classification"]["classification"]
+                use = edge["classification"]["use"]
+                edge_id = int(candidate["edge_id"]["value"])
+                percent = float(candidate["percent_along"])
+                distance = float(candidate["distance"])
+                candidate_heading = float(candidate["heading"])
+                speed = float(edge.get("speeds", {}).get("default") or 0)
+                car_access = edge.get("access", {}).get("car") is True
+            except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
+                continue
+            if (not all(math.isfinite(value) for value in (percent, distance, candidate_heading, speed)) or
+                not car_access or distance < 0 or distance > 20 or
+                angular_difference(heading, candidate_heading) > 34 or road_class not in allowed or
+                (at_start and percent > 0.05) or (not at_start and percent < 0.95)):
+                continue
+            fow = str(points[0].get("fow", ""))
+            if (fow == "1" and road_class != "motorway") or (fow == "6" and use not in {"ramp", "turn_channel"}):
+                continue
+            result.append((edge_id, percent, speed * 3.6))
+        return result
+
+    first = candidates(located[0], headings[0], True)
+    last = candidates(located[1], headings[1], False)
+    if len(first) != 1 or len(last) != 1:
+        return [], "graph_ambiguous_endpoint"
+    source_id, source_percent, source_speed = first[0]
+    target_id, target_percent, target_speed = last[0]
+    if source_id == target_id:
+        return [], "graph_single_edge_deferred"
+    tolerance_m = max(35, expected_m * 0.1)
+    try:
+        result = graph.path(source_id, source_percent, target_id, target_percent,
+                            expected_m + tolerance_m, class_mask)
+    except (RuntimeError, OSError, ValueError, json.JSONDecodeError):
+        return [], "graph_helper_failed"
+    if result.get("status") != "ok":
+        return [], "graph_no_path"
+    try:
+        edge_ids = [int(edge_id) for edge_id in result["edges"]]
+        length_m = float(result["lengthMeters"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return [], "graph_invalid_path"
+    if not math.isfinite(length_m) or abs(length_m - expected_m) > tolerance_m:
+        return [], "graph_length_mismatch"
+    if (len(edge_ids) < 2 or len(edge_ids) > 64 or edge_ids[0] != source_id or
+        edge_ids[-1] != target_id or len(set(edge_ids)) != len(edge_ids)):
+        return [], "graph_path_shape_mismatch"
+    return [{"id": edge_id, "baselineSpeedKph": max(source_speed, target_speed)} for edge_id in edge_ids], "graph_matched"
 
 
 def route_candidate(valhalla_url: str, segment: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
@@ -675,6 +911,8 @@ def run(config: dict[str, str]) -> int:
     revision_state_path = runtime_dir / "last-applied.json"
     workers = int(config.get("TRAFFIC_MAPPING_WORKERS", "2"))
     allow_route_fallback = config.get("TRAFFIC_OPENLR_ROUTE_FALLBACK", "false").lower() == "true"
+    if allow_route_fallback:
+        raise RuntimeError("TRAFFIC_OPENLR_ROUTE_FALLBACK is not approved for live speeds; use read-only audits")
     matcher_version = ROUTE_MATCHER_VERSION if allow_route_fallback else MATCHER_VERSION
 
     status, feed = request_json(f"{feed_base_url.rstrip('/')}/feed", token=token)
@@ -835,13 +1073,184 @@ def audit_route_fallback(config: dict[str, str]) -> int:
     return 0
 
 
+def audit_direct_matcher(
+    config: dict[str, str],
+    static_file: Path | None = None,
+    baseline_file: Path | None = None,
+    output_dir: Path | None = None,
+) -> int:
+    """Evaluate graph-identical trivial OpenLR paths without changing live speeds."""
+    valhalla_url = config.get("VALHALLA_URL", "http://127.0.0.1:8002")
+    cache_dir = Path(config.get("TRAFFIC_MAPPING_CACHE_DIR", "/srv/valhalla/traffic-cache"))
+    if (static_file is None) != (baseline_file is None):
+        raise RuntimeError("offline audit requires both static and baseline files")
+    if static_file is not None:
+        feed = read_gzip_json(static_file)
+        status = 200
+    else:
+        feed_base_url = required(config, "SIM_TRAFFIC_FEED_BASE_URL")
+        token = required(config, "SIM_TRAFFIC_CONTROL_TOKEN")
+        status, feed = request_json(f"{feed_base_url.rstrip('/')}/feed?includeStatic=true", token=token)
+    if status != 200 or not isinstance(feed, dict) or not isinstance(feed.get("segments"), list):
+        raise RuntimeError("An active SIM traffic lease with a static feed is required for audit")
+    dataset = routing_dataset(valhalla_url)
+    static_revision = str(feed.get("staticRevision") or "")
+    baseline_path = baseline_file or mapping_path(cache_dir, dataset, static_revision)
+    if not static_revision or not baseline_path.is_file():
+        raise RuntimeError("The validated baseline graph mapping is unavailable")
+    baseline = read_gzip_json(baseline_path)
+    if (baseline.get("matcherVersion") != MATCHER_VERSION or baseline.get("routingDataset") != dataset or
+        baseline.get("staticRevision") != static_revision):
+        raise RuntimeError("The baseline graph mapping does not match the active dataset")
+    baseline_mapping = baseline["mapping"]
+    baseline_edge_ids = {int(edge["id"]) for edges in baseline_mapping.values() for edge in edges}
+    unmatched = [segment for segment in feed["segments"] if str(segment.get("messageId", "")) not in baseline_mapping]
+    results: dict[str, list[dict[str, Any]]] = {}
+    reasons: dict[str, int] = {}
+    workers = max(1, min(4, int(config.get("TRAFFIC_MAPPING_WORKERS", "2"))))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(directed_single_edge_candidate, valhalla_url, segment): str(segment.get("messageId", ""))
+                   for segment in unmatched}
+        for index, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            message_id = futures[future]
+            edges, reason = future.result()
+            if message_id and edges:
+                results[message_id] = edges
+            else:
+                reasons[reason] = reasons.get(reason, 0) + 1
+            if index % 1000 == 0:
+                print(f"Direct OpenLR audit evaluated {index}/{len(unmatched)} unmatched segments", flush=True)
+    owners: dict[int, set[str]] = {}
+    for message_id, edges in results.items():
+        for edge in edges:
+            owners.setdefault(int(edge["id"]), set()).add(message_id)
+    for message_id, edges in list(results.items()):
+        edge_ids = {int(edge["id"]) for edge in edges}
+        reason = None
+        if edge_ids & baseline_edge_ids:
+            reason = "direct_edge_overlap_baseline"
+        elif any(len(owners[edge_id]) > 1 for edge_id in edge_ids):
+            reason = "direct_edge_overlap_candidate"
+        if reason:
+            del results[message_id]
+            reasons[reason] = reasons.get(reason, 0) + 1
+    if routing_dataset(valhalla_url) != dataset:
+        raise RuntimeError("Valhalla routing dataset changed during the audit")
+    report = {
+        "contractVersion": "valhalla-openlr-direct-audit-v1",
+        "matcherVersion": DIRECT_MATCHER_VERSION,
+        "routingDataset": dataset,
+        "staticRevision": static_revision,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sourceSegmentCount": len(feed["segments"]),
+        "baselineMappedSegmentCount": len(baseline_mapping),
+        "newlyMappedSegmentCount": len(results),
+        "combinedCoveragePercent": round(100 * (len(baseline_mapping) + len(results)) / len(feed["segments"]), 2),
+        "rejectionCounts": reasons,
+        "mapping": results,
+    }
+    token_hash = hashlib.sha256(f"{DIRECT_MATCHER_VERSION}:{dataset}:{static_revision}".encode()).hexdigest()[:20]
+    audit_path = (output_dir or cache_dir) / f"openlr-direct-audit-{token_hash}.json.gz"
+    write_gzip_json(audit_path, report)
+    print(json.dumps({key: value for key, value in report.items() if key != "mapping"}, sort_keys=True), flush=True)
+    return 0
+
+
+def audit_graph_matcher(
+    config: dict[str, str], static_file: Path, baseline_file: Path,
+    output_dir: Path, helper: Path, graph_config: Path,
+) -> int:
+    """Read-only bounded graph-path experiment; never update live traffic."""
+    valhalla_url = config.get("VALHALLA_URL", "http://127.0.0.1:8002")
+    feed = read_gzip_json(static_file)
+    baseline = read_gzip_json(baseline_file)
+    if not isinstance(feed, dict) or not isinstance(feed.get("segments"), list):
+        raise RuntimeError("invalid normalized static segment cache")
+    dataset = routing_dataset(valhalla_url)
+    revision = str(feed.get("staticRevision") or "")
+    if (not revision or baseline.get("matcherVersion") != MATCHER_VERSION or
+        baseline.get("routingDataset") != dataset or baseline.get("staticRevision") != revision):
+        raise RuntimeError("baseline mapping does not match the active graph and static revision")
+    baseline_mapping = baseline["mapping"]
+    baseline_edge_ids = {int(edge["id"]) for edges in baseline_mapping.values() for edge in edges}
+    unmatched = [segment for segment in feed["segments"] if str(segment.get("messageId", "")) not in baseline_mapping]
+    mapped: dict[str, list[dict[str, Any]]] = {}
+    reasons: dict[str, int] = {}
+    graph = GraphPathClient(helper, graph_config)
+    try:
+        workers = max(1, min(4, int(config.get("TRAFFIC_MAPPING_WORKERS", "2"))))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(bounded_graph_candidate, valhalla_url, segment, graph): str(segment.get("messageId", ""))
+                       for segment in unmatched}
+            for index, future in enumerate(concurrent.futures.as_completed(futures), 1):
+                message_id = futures[future]
+                edges, reason = future.result()
+                if message_id and edges:
+                    mapped[message_id] = edges
+                else:
+                    reasons[reason] = reasons.get(reason, 0) + 1
+                if index % 1000 == 0:
+                    print(f"Graph OpenLR audit evaluated {index}/{len(unmatched)} unmatched segments", flush=True)
+    finally:
+        graph.close()
+    owners: dict[int, set[str]] = {}
+    for message_id, edges in mapped.items():
+        for edge in edges:
+            owners.setdefault(int(edge["id"]), set()).add(message_id)
+    for message_id, edges in list(mapped.items()):
+        edge_ids = {int(edge["id"]) for edge in edges}
+        reason = None
+        if edge_ids & baseline_edge_ids:
+            reason = "graph_edge_overlap_baseline"
+        elif any(len(owners[edge_id]) > 1 for edge_id in edge_ids):
+            reason = "graph_edge_overlap_candidate"
+        if reason:
+            del mapped[message_id]
+            reasons[reason] = reasons.get(reason, 0) + 1
+    if routing_dataset(valhalla_url) != dataset:
+        raise RuntimeError("Valhalla routing dataset changed during graph audit")
+    report = {
+        "contractVersion": "valhalla-openlr-graph-audit-v1",
+        "matcherVersion": GRAPH_MATCHER_VERSION,
+        "routingDataset": dataset,
+        "staticRevision": revision,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sourceSegmentCount": len(feed["segments"]),
+        "baselineMappedSegmentCount": len(baseline_mapping),
+        "newlyMappedSegmentCount": len(mapped),
+        "combinedCoveragePercent": round(100 * (len(baseline_mapping) + len(mapped)) / len(feed["segments"]), 2),
+        "rejectionCounts": reasons,
+        "mapping": mapped,
+    }
+    token_hash = hashlib.sha256(f"{GRAPH_MATCHER_VERSION}:{dataset}:{revision}".encode()).hexdigest()[:20]
+    output_path = output_dir / f"openlr-graph-audit-{token_hash}.json.gz"
+    write_gzip_json(output_path, report)
+    print(json.dumps({key: value for key, value in report.items() if key != "mapping"}, sort_keys=True), flush=True)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=Path, default=Path("/srv/valhalla/.traffic.env"))
     parser.add_argument("--audit-route-fallback", action="store_true")
+    parser.add_argument("--audit-direct-matcher", action="store_true")
+    parser.add_argument("--audit-graph-matcher", action="store_true")
+    parser.add_argument("--static-cache-file", type=Path)
+    parser.add_argument("--baseline-file", type=Path)
+    parser.add_argument("--audit-output-dir", type=Path)
+    parser.add_argument("--graph-helper", type=Path)
+    parser.add_argument("--graph-config", type=Path)
     args = parser.parse_args()
     config = {**load_env(args.env), **os.environ}
     try:
+        if args.audit_direct_matcher:
+            return audit_direct_matcher(config, args.static_cache_file, args.baseline_file, args.audit_output_dir)
+        if args.audit_graph_matcher:
+            if not all((args.static_cache_file, args.baseline_file, args.audit_output_dir,
+                        args.graph_helper, args.graph_config)):
+                raise RuntimeError("graph audit requires static cache, baseline, output directory, helper and graph config")
+            return audit_graph_matcher(config, args.static_cache_file, args.baseline_file,
+                                       args.audit_output_dir, args.graph_helper, args.graph_config)
         return audit_route_fallback(config) if args.audit_route_fallback else run(config)
     except Exception as error:  # systemd captures the sanitized failure; secrets are never interpolated
         print(f"Valhalla traffic update failed: {error}", file=sys.stderr)
