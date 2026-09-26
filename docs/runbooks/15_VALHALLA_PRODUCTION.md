@@ -205,6 +205,12 @@ with 10,436 fresh flows matched by the baseline (a 7.17% relative flow gain
 for that snapshot). This is mapping and availability evidence, not proof that
 every alternative path is geographically correct. Review road geometry before
 setting the feature flag; leave the flag off until that quality gate passes.
+A subsequent 62-candidate stratified recheck found one case where Valhalla's
+ordinary and shortest-distance auto routes chose different edge sequences,
+even though the alternative length was plausible. The v3 candidate matcher
+rejects such costing disagreements and has its own cache version. The v2
+coverage figure must not be presented as v3 coverage until a v3 national audit
+has completed.
 
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),

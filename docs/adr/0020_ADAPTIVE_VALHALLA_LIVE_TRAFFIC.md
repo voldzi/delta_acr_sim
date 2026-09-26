@@ -159,6 +159,10 @@ its directed edges overlaps the validated trace-only mapping or another
 candidate segment. This avoids silently selecting one of two independently
 reported flow speeds for the same new edge. The same gate runs in a full live
 mapping build and in the isolated audit against its baseline mapping.
+The v3 candidate matcher additionally compares the ordinary auto route with
+the shortest-distance auto route and rejects any difference in the directed
+edge sequence. This is a conservative ambiguity gate, not a substitute for a
+full OpenLR decoder with specialized candidate ranking and distance costing.
 
 ## Rollback
 

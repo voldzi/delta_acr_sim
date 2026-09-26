@@ -40,7 +40,7 @@ MAX_SPEED_RAW = 126
 # Bump this whenever matching semantics change. The cache key must not reuse a
 # result produced by an older matcher against the same graph and TPEG snapshot.
 MATCHER_VERSION = "openlr-trace-v2"
-ROUTE_MATCHER_VERSION = "openlr-route-candidate-v2"
+ROUTE_MATCHER_VERSION = "openlr-route-candidate-v3"
 FRC_ROAD_CLASSES = {
     "0": {"motorway"},
     "1": {"trunk", "primary"},
@@ -303,6 +303,36 @@ def route_candidate(valhalla_url: str, segment: dict[str, Any]) -> tuple[list[di
             return [], "route_endpoint_disagreement"
     except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
         return [], "route_invalid_attributes"
+    # Ordinary auto costing may choose a different branch than distance-based
+    # OpenLR path decoding. Accept a candidate only when both choose exactly
+    # the same directed edge sequence. This check is intentionally fail-closed.
+    try:
+        shortest_status, shortest_route = request_json(f"{base}/route", payload={
+            "locations": locations, "costing": "auto",
+            "costing_options": {"auto": {"shortest": True}},
+            "directions_type": "none",
+        }, timeout=20)
+        if shortest_status != 200 or not isinstance(shortest_route, dict):
+            return [], "route_shortest_failed"
+        shortest_trip = shortest_route.get("trip")
+        shortest_legs = (shortest_trip.get("legs") or []) if isinstance(shortest_trip, dict) else []
+        shortest_shape = shortest_legs[0].get("shape") if shortest_legs and isinstance(shortest_legs[0], dict) else None
+        if not isinstance(shortest_shape, str) or not shortest_shape:
+            return [], "route_shortest_missing_shape"
+        shortest_trace_status, shortest_trace = request_json(f"{base}/trace_attributes", payload={
+            "encoded_polyline": shortest_shape, "costing": "auto", "shape_match": "edge_walk",
+            "filters": {"action": "include", "attributes": ["edge.id"]},
+        }, timeout=20)
+        if (shortest_trace_status != 200 or not isinstance(shortest_trace, dict) or
+            not isinstance(shortest_trace.get("edges"), list)):
+            return [], "route_shortest_trace_failed"
+        shortest_ids = [int(edge["id"]) for edge in shortest_trace["edges"]]
+        if shortest_ids != [int(edge["id"]) for edge in edges]:
+            return [], "route_costing_disagreement"
+    except (RuntimeError, TimeoutError, OSError, KeyError, TypeError, ValueError, OverflowError) as error:
+        if isinstance(error, (RuntimeError, TimeoutError, OSError)):
+            return [], f"route_shortest_{valhalla_failure_reason(error)}"
+        return [], "route_shortest_invalid_attributes"
     return edges, "route_matched"
 
 

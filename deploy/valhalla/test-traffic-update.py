@@ -100,15 +100,23 @@ def main() -> None:
                 assert kwargs["payload"]["locations"][0]["radius"] == 20
                 return 200, located
             if url.endswith("/route"):
-                return 200, {"trip": {"legs": [{"shape": "encoded-route"}]}}
+                shape = "encoded-shortest" if kwargs["payload"].get("costing_options") else "encoded-route"
+                return 200, {"trip": {"legs": [{"shape": shape}]}}
             if kwargs["payload"].get("shape_match") == "edge_walk":
+                if kwargs["payload"].get("encoded_polyline") == "encoded-shortest" and shortest_disagrees[0]:
+                    return 200, {"edges": [{"id": 1}, {"id": 99}]}
                 return 200, {"edges": route_edges}
             raise RuntimeError('HTTP 400 from Valhalla: {"error_code":444}')
+        shortest_disagrees = [False]
         traffic.request_json = route_request
         _, default_edges, default_reason = traffic.map_segment("http://valhalla.test", route_reference)
         assert default_edges == [] and default_reason == "valhalla_error_444"
         _, fallback_edges, fallback_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
         assert [edge["id"] for edge in fallback_edges] == [1, 2] and fallback_reason == "route_matched"
+        shortest_disagrees[0] = True
+        _, disagree_edges, disagree_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
+        assert disagree_edges == [] and disagree_reason == "route_costing_disagreement"
+        shortest_disagrees[0] = False
         located[0]["edges"].append(locate_edge(3, 0))
         _, ambiguous_edges, ambiguous_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
         assert ambiguous_edges == [] and ambiguous_reason == "route_ambiguous_endpoint"
