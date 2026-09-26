@@ -136,6 +136,18 @@ distance. These are not a complete explanation of the 19,511 unmatched
 segments; reason-coded build diagnostics are required. The TMC table alone
 does not supply a Valhalla edge path.
 
+The first production `openlr-trace-v2` rebuild completed successfully on
+26 September 2026 at 06:27 UTC. It preserved the 35,639 / 55,150 match count
+(64.62%). The 19,511 disjoint rejections were: 14,567 Valhalla 4xx trace
+responses, 1,306 first-bearing mismatches, 1,139 last-bearing mismatches,
+1,197 length mismatches, and 1,302 unsupported offsets. After a fresh vehicle
+request, the next timer run applied 9,939 current flows to 84,639 graph edges;
+SIM reported `status=current` at 06:29 UTC. This proves the versioned rebuild
+and adaptive speed path work, but does **not** raise the static match rate.
+Investigate the 4xx trace responses with bounded, non-sensitive samples before
+proposing an OpenLR resolver change; never weaken directional or length gates
+solely to increase coverage.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
