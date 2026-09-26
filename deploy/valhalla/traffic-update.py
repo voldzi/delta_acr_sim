@@ -44,7 +44,7 @@ MAX_SPEED_RAW = 126
 MATCHER_VERSION = "openlr-trace-v2"
 ROUTE_MATCHER_VERSION = "openlr-route-candidate-v3"
 DIRECT_MATCHER_VERSION = "openlr-directed-single-edge-v1"
-GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v1"
+GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v3"
 ROAD_CLASS_BITS = {
     "motorway": 0, "trunk": 1, "primary": 2, "secondary": 3,
     "tertiary": 4, "unclassified": 5, "residential": 6, "service_other": 7,
@@ -382,7 +382,7 @@ def bounded_graph_candidate(
         return [], "graph_locate_failed"
 
     def candidates(location: Any, heading: float, at_start: bool) -> list[tuple[int, float, float]]:
-        result: list[tuple[int, float, float]] = []
+        result: list[tuple[float, int, float, float]] = []
         if not isinstance(location, dict):
             return result
         for candidate in location.get("edges", []):
@@ -395,47 +395,73 @@ def bounded_graph_candidate(
                 distance = float(candidate["distance"])
                 candidate_heading = float(candidate["heading"])
                 speed = float(edge.get("speeds", {}).get("default") or 0)
+                length_m = float(edge["geo_attributes"]["length"])
                 car_access = edge.get("access", {}).get("car") is True
             except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
                 continue
-            if (not all(math.isfinite(value) for value in (percent, distance, candidate_heading, speed)) or
-                not car_access or distance < 0 or distance > 20 or
+            if (not all(math.isfinite(value) for value in (percent, distance, candidate_heading, speed, length_m)) or
+                not car_access or distance < 0 or distance > 20 or length_m <= 0 or
                 angular_difference(heading, candidate_heading) > 34 or road_class not in allowed or
-                (at_start and percent > 0.05) or (not at_start and percent < 0.95)):
+                percent < 0 or percent > 1):
                 continue
             fow = str(points[0].get("fow", ""))
             if (fow == "1" and road_class != "motorway") or (fow == "6" and use not in {"ramp", "turn_channel"}):
                 continue
-            result.append((edge_id, percent, speed * 3.6))
-        return result
+            result.append((distance + angular_difference(heading, candidate_heading) / 34,
+                           edge_id, percent, speed * 3.6))
+        result.sort()
+        # A bounded candidate set avoids untrusted locate responses causing a
+        # quadratic number of graph searches.
+        return [(edge_id, percent, speed) for _, edge_id, percent, speed in result[:4]]
 
     first = candidates(located[0], headings[0], True)
     last = candidates(located[1], headings[1], False)
-    if len(first) != 1 or len(last) != 1:
-        return [], "graph_ambiguous_endpoint"
-    source_id, source_percent, source_speed = first[0]
-    target_id, target_percent, target_speed = last[0]
-    if source_id == target_id:
-        return [], "graph_single_edge_deferred"
+    if not first or not last:
+        return [], "graph_no_endpoint"
     tolerance_m = max(35, expected_m * 0.1)
-    try:
-        result = graph.path(source_id, source_percent, target_id, target_percent,
-                            expected_m + tolerance_m, class_mask)
-    except (RuntimeError, OSError, ValueError, json.JSONDecodeError):
-        return [], "graph_helper_failed"
-    if result.get("status") != "ok":
-        return [], "graph_no_path"
-    try:
-        edge_ids = [int(edge_id) for edge_id in result["edges"]]
-        length_m = float(result["lengthMeters"])
-    except (KeyError, TypeError, ValueError, OverflowError):
-        return [], "graph_invalid_path"
-    if not math.isfinite(length_m) or abs(length_m - expected_m) > tolerance_m:
-        return [], "graph_length_mismatch"
-    if (len(edge_ids) < 2 or len(edge_ids) > 64 or edge_ids[0] != source_id or
-        edge_ids[-1] != target_id or len(set(edge_ids)) != len(edge_ids)):
-        return [], "graph_path_shape_mismatch"
-    return [{"id": edge_id, "baselineSpeedKph": max(source_speed, target_speed)} for edge_id in edge_ids], "graph_matched"
+    paths: dict[tuple[int, ...], float] = {}
+    rejections: dict[str, int] = {}
+    for source_id, source_percent, source_speed in first:
+        for target_id, target_percent, target_speed in last:
+            if source_id == target_id:
+                rejections["graph_single_edge_deferred"] = 1
+                continue
+            try:
+                result = graph.path(source_id, source_percent, target_id, target_percent,
+                                    expected_m + tolerance_m, class_mask)
+            except (RuntimeError, OSError, ValueError, json.JSONDecodeError):
+                rejections["graph_helper_failed"] = 1
+                continue
+            if result.get("status") != "ok":
+                rejections["graph_no_path"] = 1
+                continue
+            try:
+                edge_ids = [int(edge_id) for edge_id in result["edges"]]
+                length_m = float(result["lengthMeters"])
+            except (KeyError, TypeError, ValueError, OverflowError):
+                rejections["graph_invalid_path"] = 1
+                continue
+            if not math.isfinite(length_m) or abs(length_m - expected_m) > tolerance_m:
+                rejections["graph_length_mismatch"] = 1
+                continue
+            if (len(edge_ids) < 2 or len(edge_ids) > 64 or edge_ids[0] != source_id or
+                edge_ids[-1] != target_id or len(set(edge_ids)) != len(edge_ids)):
+                rejections["graph_path_shape_mismatch"] = 1
+                continue
+            # The traffic archive has one speed per whole directed edge. Keep
+            # only edges fully covered by the OpenLR reference; partially
+            # covered endpoints can validate the path but cannot receive it.
+            covered = edge_ids[source_percent > 0.000001:len(edge_ids) - (target_percent < 0.999999)]
+            if not covered:
+                rejections["graph_no_whole_edge"] = 1
+                continue
+            paths[tuple(covered)] = max(source_speed, target_speed)
+    if len(paths) > 1:
+        return [], "graph_ambiguous_path"
+    if not paths:
+        return [], next(iter(rejections), "graph_no_path")
+    edge_ids, speed = next(iter(paths.items()))
+    return [{"id": edge_id, "baselineSpeedKph": speed} for edge_id in edge_ids], "graph_matched"
 
 
 def route_candidate(valhalla_url: str, segment: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:

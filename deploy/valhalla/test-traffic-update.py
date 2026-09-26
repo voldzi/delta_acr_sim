@@ -140,8 +140,32 @@ def main() -> None:
         fake_graph.result = {"status": "ok", "lengthMeters": 100, "edges": [6, 5]}
         assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_path_shape_mismatch"
         direct_locations[0]["edges"].append(direct_edge(7, 0))
-        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_ambiguous_endpoint"
+        class AlternativeGraph:
+            def path(self, source: int, source_percent: float, target: int,
+                     target_percent: float, max_m: float, class_mask: int) -> dict:
+                return {"status": "ok", "lengthMeters": 100, "edges": [source, target]}
+        assert traffic.bounded_graph_candidate(
+            "http://valhalla.test", direct_reference, AlternativeGraph(),
+        )[1] == "graph_ambiguous_path"
+        class SamePathGraph:
+            def path(self, source: int, source_percent: float, target: int,
+                     target_percent: float, max_m: float, class_mask: int) -> dict:
+                return {"status": "ok", "lengthMeters": 100, "edges": [5, 6]}
+        assert traffic.bounded_graph_candidate(
+            "http://valhalla.test", direct_reference, SamePathGraph(),
+        )[1] == "graph_matched"
         direct_locations[0]["edges"].pop()
+        direct_locations[0]["edges"][0]["percent_along"] = 0.03
+        partial_edges, partial_reason = traffic.bounded_graph_candidate(
+            "http://valhalla.test", direct_reference, AlternativeGraph(),
+        )
+        assert partial_reason == "graph_matched" and [edge["id"] for edge in partial_edges] == [6]
+        direct_locations[1]["edges"][0]["percent_along"] = 0.97
+        assert traffic.bounded_graph_candidate(
+            "http://valhalla.test", direct_reference, AlternativeGraph(),
+        )[1] == "graph_no_whole_edge"
+        direct_locations[0]["edges"][0]["percent_along"] = 0
+        direct_locations[1]["edges"][0]["percent_along"] = 1
         assert traffic.bounded_graph_candidate("http://valhalla.test", {
             **direct_reference, "openlr": {**direct_reference["openlr"], "negativeOffsetMeters": 10},
         }, fake_graph)[1] == "graph_offset_not_supported"

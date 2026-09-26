@@ -190,12 +190,22 @@ against Valhalla 3.8.3, not part of the production image or updater. The
 `--audit-graph-matcher` command additionally requires `--graph-helper` and
 `--graph-config` alongside offline static/baseline/output paths. It is
 intentionally audit-only and runs in a disposable container with read-only
-graph and traffic mounts. The 26 September full-dataset result was just 5
-additional disjoint segments; do not install or activate it. Completing the
-maintainers' algorithm requires candidate ranking, distance-only graph
-costing with hierarchy-aware traversal, FRC/FOW and offset handling, plus
-independent wrong-road/parallel-road acceptance. The validated live baseline
-remains `openlr-trace-v2` until those gates pass.
+graph and traffic mounts. The 26 September full-dataset v1 result was just 5
+additional disjoint segments. A bounded four-by-four endpoint candidate audit
+(v2) found only 1; allowing partially covered endpoint edges but excluding
+them from whole-edge speed writes (v3) found only 2. Both evaluated all 19,511
+baseline-unmatched segments against the same 55,150-segment static revision
+and current routing dataset. Neither is approved for live use. The dominant
+rejections were route length disagreement (7,267 in v2; 7,785 in v3), no
+traversable path (3,269; 3,948), and path-shape disagreement (2,221; 3,737).
+These figures show that trying additional `/locate` candidates around a
+simple bounded shortest-path search is insufficient; they do not establish a
+safer alternative mapping. Completing the maintainer's algorithm requires
+true candidate ranking, distance-only Valhalla costing with hierarchy-aware
+traversal, FRC/FOW and offset handling, `EdgeSegment` begin/end fractions,
+plus independent wrong-road/parallel-road acceptance. Do not install or
+activate the probe. The validated live baseline remains `openlr-trace-v2`
+until those gates pass.
 
 An isolated route-candidate prototype is now included in the updater, but is
 **disabled by default** with `TRAFFIC_OPENLR_ROUTE_FALLBACK=false`. A bounded
