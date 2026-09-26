@@ -58,6 +58,7 @@ def main() -> None:
     assert traffic.trace_rejection_reason(reference, [valid_edges[0], {**valid_edges[1], "end_heading": 160}]) == "last_bearing_mismatch"
     assert traffic.trace_rejection_reason({"openlr": {**reference["openlr"], "positiveOffsetMeters": 10}}, valid_edges) == "offset_not_supported"
     assert traffic.mapping_path(Path("/tmp"), "dataset", "revision") != traffic.mapping_path(Path("/tmp"), "dataset", "other-revision")
+    assert traffic.mapping_path(Path("/tmp"), "dataset", "revision") != traffic.mapping_path(Path("/tmp"), "dataset", "revision", traffic.ROUTE_MATCHER_VERSION)
     original_request_json = traffic.request_json
     try:
         traffic.request_json = lambda *args, **kwargs: (200, {"edges": valid_edges})
@@ -79,6 +80,51 @@ def main() -> None:
         assert traffic.valhalla_failure_reason(RuntimeError('HTTP 400 from Valhalla: {"error_code":171}')) == "valhalla_error_171"
         assert traffic.valhalla_failure_reason(RuntimeError("HTTP 502 from Valhalla")) == "valhalla_5xx"
         assert traffic.valhalla_failure_reason(TimeoutError("timed out")) == "valhalla_timeout"
+        route_reference = {
+            "messageId": "route-reference", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
+            "openlr": {"points": [
+                {"frc": "3", "fow": "3", "bearing": 42, "distanceToNext": 287},
+                {"bearing": 172},
+            ]},
+        }
+        def locate_edge(edge_id: int, percent: float) -> dict:
+            return {"edge_id": {"value": edge_id}, "distance": 2, "heading": 62,
+                    "percent_along": percent, "edge": {"classification": {"classification": "secondary"}}}
+        located = [{"edges": [locate_edge(1, 0)]}, {"edges": [locate_edge(2, 1)]}]
+        route_edges = [
+            {**valid_edges[0], "road_class": "secondary", "speed": 80},
+            {**valid_edges[1], "road_class": "secondary", "speed": 80},
+        ]
+        def route_request(url: str, **kwargs: object) -> tuple[int, object]:
+            if url.endswith("/locate"):
+                assert kwargs["payload"]["locations"][0]["radius"] == 20
+                return 200, located
+            if url.endswith("/route"):
+                return 200, {"trip": {"legs": [{"shape": "encoded-route"}]}}
+            if kwargs["payload"].get("shape_match") == "edge_walk":
+                return 200, {"edges": route_edges}
+            raise RuntimeError('HTTP 400 from Valhalla: {"error_code":444}')
+        traffic.request_json = route_request
+        _, default_edges, default_reason = traffic.map_segment("http://valhalla.test", route_reference)
+        assert default_edges == [] and default_reason == "valhalla_error_444"
+        _, fallback_edges, fallback_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
+        assert [edge["id"] for edge in fallback_edges] == [1, 2] and fallback_reason == "route_matched"
+        located[0]["edges"].append(locate_edge(3, 0))
+        _, ambiguous_edges, ambiguous_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
+        assert ambiguous_edges == [] and ambiguous_reason == "route_ambiguous_endpoint"
+        located[0]["edges"].pop()
+        route_edges[0]["source_percent_along"] = 0.2
+        _, partial_edges, partial_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
+        assert partial_edges == [] and partial_reason == "route_partial_edge"
+        route_edges[0].pop("source_percent_along")
+        route_edges[0]["road_class"] = "motorway"
+        _, wrong_road_edges, wrong_road_reason = traffic.map_segment("http://valhalla.test", route_reference, True)
+        assert wrong_road_edges == [] and wrong_road_reason == "route_road_class_mismatch"
+        route_edges[0]["road_class"] = "secondary"
+        _, offset_edges, offset_reason = traffic.map_segment("http://valhalla.test", {
+            **route_reference, "openlr": {**route_reference["openlr"], "positiveOffsetMeters": 10}
+        }, True)
+        assert offset_edges == [] and offset_reason == "offset_not_supported"
         traffic.request_json = lambda *args, **kwargs: (200, {"edges": valid_edges})
         summary = traffic.build_mapping("http://valhalla.test", "dataset", "revision", [
             {"messageId": "ok", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
@@ -90,9 +136,54 @@ def main() -> None:
         assert summary["sourceSegmentCount"] == summary["mappedSegmentCount"] + sum(summary["rejectionCounts"].values())
         assert summary["sourceByFrc"] == {"2": 1, "3": 1}
         assert summary["matchedByFrc"] == {"2": 1}
+        assert summary["matchedByMethod"] == {"matched": 1}
         assert summary["rejectionCounts"] == {"offset_not_supported": 1}
     finally:
         traffic.request_json = original_request_json
+
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        baseline = traffic.mapping_path(root, "sim-routing-2026-09-20-1789879440", "static-revision")
+        traffic.write_gzip_json(baseline, {
+            "matcherVersion": traffic.MATCHER_VERSION,
+            "routingDataset": "sim-routing-2026-09-20-1789879440",
+            "staticRevision": "static-revision",
+            "mapping": {"already-matched": [{"id": 1, "baselineSpeedKph": 80}]},
+        })
+        original_build_mapping = traffic.build_mapping
+        original_post_report = traffic.post_report
+        try:
+            def audit_request(url: str, **kwargs: object) -> tuple[int, object]:
+                if url.endswith("/status"):
+                    return 200, {"tileset_last_modified": 1789879440}
+                if "includeStatic=true" in url:
+                    return 200, {"staticRevision": "static-revision", "segments": [
+                        {"messageId": "already-matched"}, {"messageId": "new-candidate"},
+                    ]}
+                raise AssertionError(f"Unexpected audit request: {url}")
+            def audit_mapping(url: str, dataset: str, revision: str, segments: list, workers: int, fallback: bool) -> dict:
+                assert fallback and [segment["messageId"] for segment in segments] == ["new-candidate"]
+                return {"mappedSegmentCount": 1, "matchedByMethod": {"route_matched": 1},
+                        "rejectionCounts": {}, "mapping": {"new-candidate": [{"id": 2, "baselineSpeedKph": 60}]}}
+            traffic.request_json = audit_request
+            traffic.build_mapping = audit_mapping
+            traffic.post_report = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("audit must not report to SIM"))
+            assert traffic.audit_route_fallback({
+                "SIM_TRAFFIC_FEED_BASE_URL": "http://sim.test/feed-root",
+                "SIM_TRAFFIC_CONTROL_TOKEN": "test-token",
+                "VALHALLA_URL": "http://valhalla.test", "TRAFFIC_MAPPING_CACHE_DIR": str(root),
+            }) == 0
+            audits = list(root.glob("openlr-route-candidate-audit-*.json.gz"))
+            assert len(audits) == 1
+            audit = traffic.read_gzip_json(audits[0])
+            assert audit["baselineMappedSegmentCount"] == 1
+            assert audit["newlyMappedSegmentCount"] == 1
+            assert audit["combinedCoveragePercent"] == 100
+            assert not (root / "traffic.tar").exists()
+        finally:
+            traffic.request_json = original_request_json
+            traffic.build_mapping = original_build_mapping
+            traffic.post_report = original_post_report
 
     now = "2099-01-01T00:00:00Z"
     mapping = {"mapping": {"flow-1": [{"id": graph_id(1, 50594, 2), "baselineSpeedKph": 80}]}}

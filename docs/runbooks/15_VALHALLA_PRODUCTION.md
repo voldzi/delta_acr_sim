@@ -167,6 +167,22 @@ offline against the current graph before enabling it in the live updater.
 Acceptance must include manually reviewed parallel-road and wrong-direction
 negative cases and no reduction in the currently accepted 35,639 segments.
 
+An isolated route-candidate prototype is now included in the updater, but is
+**disabled by default** with `TRAFFIC_OPENLR_ROUTE_FALLBACK=false`. A bounded
+240-segment read-only sample found 62 trace error-444 segments. Only nine
+candidate routes survived strict length, both bearings, road-class, full-edge
+and unique endpoint checks. This is evidence that the method can recover some
+segments, not a national accuracy estimate. Do not enable the production flag
+on this sample alone. After staging a tested updater and activating a vehicle
+lease, run `sudo python3 /srv/valhalla/update-tools/traffic-update.py
+--audit-route-fallback` on `valhalla.home.cz`. This reads the authenticated SIM
+static feed and active graph, rechecks only baseline-unmatched segments, and
+writes a separate `openlr-route-candidate-audit-*.json.gz` under
+`/srv/valhalla/traffic-cache`. It does not alter the active mapping,
+`traffic.tar`, SIM report or route service. Audit output reports additional
+matches and rejection reasons without message IDs or coordinates. Review a
+stratified set of candidate paths and counterexamples before any activation.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where

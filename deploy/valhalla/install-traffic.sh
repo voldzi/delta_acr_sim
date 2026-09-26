@@ -67,6 +67,7 @@ trap 'rm -f -- "${traffic_env}" "${build_config:-}" "${compose_backup}" "${confi
   printf 'TRAFFIC_RUNTIME_DIR=/run/valhalla-traffic\n'
   printf 'TRAFFIC_SKELETON=%s/current/traffic-skeleton.tar\n' "${BASE_DIR}"
   printf 'TRAFFIC_MAPPING_WORKERS=2\n'
+  printf 'TRAFFIC_OPENLR_ROUTE_FALLBACK=false\n'
   printf 'TRAFFIC_MAX_AGE_SECONDS=1800\n'
 } >"${traffic_env}"
 install -m 0600 "${traffic_env}" "${BASE_DIR}/.traffic.env"

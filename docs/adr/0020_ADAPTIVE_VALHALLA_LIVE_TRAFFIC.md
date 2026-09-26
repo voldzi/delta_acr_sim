@@ -140,6 +140,21 @@ coverage threshold is an operational freshness gate, not proof that every
 accepted edge is geometrically correct; reviewed samples and negative tests on
 parallel roads remain release criteria.
 
+An experimental OpenLR route-candidate resolver is available behind
+`TRAFFIC_OPENLR_ROUTE_FALLBACK=false` (the default). It is considered only after
+Valhalla trace error 444. It constrains both LRP endpoint searches to 20 m and
+34 degrees, then requires full first/last edges, one uniquely qualified
+directed edge at each endpoint, matching route edge IDs, a path length within
+10% or 35 m, both bearings within 35 degrees, road classes compatible with
+the OpenLR FRC, and limited FOW checks. Nonzero offsets are rejected. The
+candidate matcher has its own versioned cache key and cannot silently replace
+the validated trace-only mapping. `--audit-route-fallback` compares only
+previously unmatched segments, saves a separate mode-0600 candidate artifact,
+and never updates `traffic.tar` or reports a new state to SIM. Enabling the
+fallback for live traffic requires full-dataset acceptance and reviewed
+parallel-road, direction and partial-edge counterexamples; a positive sample
+alone is insufficient.
+
 ## Rollback
 
 1. Set `VALHALLA_TRAFFIC_ENABLED=false` and recreate `situation-data-api`.
