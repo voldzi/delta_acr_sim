@@ -182,6 +182,17 @@ writes a separate `openlr-route-candidate-audit-*.json.gz` under
 `traffic.tar`, SIM report or route service. Audit output reports additional
 matches and rejection reasons without message IDs or coordinates. Review a
 stratified set of candidate paths and counterexamples before any activation.
+On 26 September 2026, the isolated full-dataset audit completed against
+`sim-routing-2026-09-20-1789879440`: 5,917 candidate matches beyond the
+35,639 trace-only matches among 55,150 source segments (potential coverage
+75.35% versus 64.62%). The separate candidate artifact was 727 KiB; the
+live flag remained off. An independent read-only recheck of 64 deterministic
+stratified candidates found identical directed edge sequences and passed the
+length, bearing and full-edge checks. Run the reusable checker with
+`python3 deploy/valhalla/recheck-route-audit.py --audit-path <readable-audit.gz>`.
+This establishes reproducibility, not ground-truth correctness on ambiguous
+parallel roads. Check overlap with the baseline edge map and manually review
+high-risk examples before considering activation.
 
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
