@@ -193,6 +193,13 @@ length, bearing and full-edge checks. Run the reusable checker with
 This establishes reproducibility, not ground-truth correctness on ambiguous
 parallel roads. Check overlap with the baseline edge map and manually review
 high-risk examples before considering activation.
+The initial audit found 374 directed edges shared with the baseline. Excluding
+all candidate segments that touch a baseline edge or another candidate leaves
+5,614 conflict-free additions, an estimated 74.80% combined coverage. The
+v2 candidate matcher enforces this disjointness in code and uses a separate
+cache version. This estimate is not a completed v2 production audit or an
+activation decision; rerun the isolated audit after deploying v2, then review
+road geometry before setting the feature flag.
 
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),

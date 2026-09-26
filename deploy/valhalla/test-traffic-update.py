@@ -161,8 +161,9 @@ def main() -> None:
                         {"messageId": "already-matched"}, {"messageId": "new-candidate"},
                     ]}
                 raise AssertionError(f"Unexpected audit request: {url}")
-            def audit_mapping(url: str, dataset: str, revision: str, segments: list, workers: int, fallback: bool) -> dict:
+            def audit_mapping(url: str, dataset: str, revision: str, segments: list, workers: int, fallback: bool, baseline_mapping: dict) -> dict:
                 assert fallback and [segment["messageId"] for segment in segments] == ["new-candidate"]
+                assert baseline_mapping == {"already-matched": [{"id": 1, "baselineSpeedKph": 80}]}
                 return {"mappedSegmentCount": 1, "matchedByMethod": {"route_matched": 1},
                         "rejectionCounts": {}, "mapping": {"new-candidate": [{"id": 2, "baselineSpeedKph": 60}]}}
             traffic.request_json = audit_request
@@ -184,6 +185,37 @@ def main() -> None:
             traffic.request_json = original_request_json
             traffic.build_mapping = original_build_mapping
             traffic.post_report = original_post_report
+
+    original_map_segment = traffic.map_segment
+    try:
+        def overlap_segment(_url: str, segment: dict, _fallback: bool) -> tuple[str, list[dict], str]:
+            choices = {
+                "base": ([1], "matched"),
+                "overlap-base": ([1, 2], "route_matched"),
+                "overlap-candidate-a": ([3, 4], "route_matched"),
+                "overlap-candidate-b": ([4, 5], "route_matched"),
+                "safe": ([6, 7], "route_matched"),
+            }
+            ids, reason = choices[segment["messageId"]]
+            return segment["messageId"], [{"id": edge_id, "baselineSpeedKph": 60} for edge_id in ids], reason
+        traffic.map_segment = overlap_segment
+        segments = [
+            {"messageId": message_id, "openlr": {"points": [{"frc": "3"}]}}
+            for message_id in ("base", "overlap-base", "overlap-candidate-a", "overlap-candidate-b", "safe")
+        ]
+        result = traffic.build_mapping("http://valhalla.test", "dataset", "revision", segments, 1, True)
+        assert set(result["mapping"]) == {"base", "safe"}
+        assert result["mappedSegmentCount"] == 2
+        assert result["matchedByMethod"] == {"matched": 1, "route_matched": 1}
+        assert result["rejectionCounts"] == {
+            "route_edge_overlap_baseline": 1, "route_edge_overlap_candidate": 2,
+        }
+        audit_result = traffic.build_mapping("http://valhalla.test", "dataset", "revision", segments[1:], 1, True,
+                                             {"already-baseline": [{"id": 1, "baselineSpeedKph": 80}]})
+        assert set(audit_result["mapping"]) == {"safe"}
+        assert audit_result["mappedSegmentCount"] == 1
+    finally:
+        traffic.map_segment = original_map_segment
 
     now = "2099-01-01T00:00:00Z"
     mapping = {"mapping": {"flow-1": [{"id": graph_id(1, 50594, 2), "baselineSpeedKph": 80}]}}

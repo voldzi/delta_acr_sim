@@ -154,6 +154,11 @@ and never updates `traffic.tar` or reports a new state to SIM. Enabling the
 fallback for live traffic requires full-dataset acceptance and reviewed
 parallel-road, direction and partial-edge counterexamples; a positive sample
 alone is insufficient.
+The v2 candidate matcher also rejects an entire candidate segment if any of
+its directed edges overlaps the validated trace-only mapping or another
+candidate segment. This avoids silently selecting one of two independently
+reported flow speeds for the same new edge. The same gate runs in a full live
+mapping build and in the isolated audit against its baseline mapping.
 
 ## Rollback
 

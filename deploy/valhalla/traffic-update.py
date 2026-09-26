@@ -40,7 +40,7 @@ MAX_SPEED_RAW = 126
 # Bump this whenever matching semantics change. The cache key must not reuse a
 # result produced by an older matcher against the same graph and TPEG snapshot.
 MATCHER_VERSION = "openlr-trace-v2"
-ROUTE_MATCHER_VERSION = "openlr-route-candidate-v1"
+ROUTE_MATCHER_VERSION = "openlr-route-candidate-v2"
 FRC_ROAD_CLASSES = {
     "0": {"motorway"},
     "1": {"trunk", "primary"},
@@ -377,6 +377,7 @@ def build_mapping(
     segments: list[dict[str, Any]],
     workers: int,
     allow_route_fallback: bool = False,
+    baseline_mapping: dict[str, list[dict[str, int | float]]] | None = None,
 ) -> dict[str, Any]:
     matcher_version = ROUTE_MATCHER_VERSION if allow_route_fallback else MATCHER_VERSION
     mapping: dict[str, list[dict[str, int | float]]] = {}
@@ -385,6 +386,7 @@ def build_mapping(
     source_by_frc: dict[str, int] = {}
     matched_by_frc: dict[str, int] = {}
     frc_by_message_id: dict[str, str] = {}
+    method_by_message_id: dict[str, str] = {}
     for segment in segments:
         points = (segment.get("openlr") or {}).get("points") or [{}]
         frc_by_message_id[str(segment.get("messageId", ""))] = str(points[0].get("frc", "unknown"))
@@ -396,6 +398,7 @@ def build_mapping(
             message_id, edges, reason = future.result()
             if message_id and edges:
                 mapping[message_id] = edges
+                method_by_message_id[message_id] = reason
                 matched_by_method[reason] = matched_by_method.get(reason, 0) + 1
                 frc = frc_by_message_id.get(message_id, "unknown")
                 matched_by_frc[frc] = matched_by_frc.get(frc, 0) + 1
@@ -403,6 +406,36 @@ def build_mapping(
                 rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
             if index % 1000 == 0:
                 print(f"Mapped {index}/{len(segments)} TPEG2 segments", flush=True)
+    if allow_route_fallback:
+        baseline_edge_ids = {
+            int(edge["id"])
+            for message_id, edges in mapping.items()
+            if method_by_message_id[message_id] != "route_matched"
+            for edge in edges
+        }
+        if baseline_mapping:
+            baseline_edge_ids.update(int(edge["id"]) for edges in baseline_mapping.values() for edge in edges)
+        candidate_owners: dict[int, set[str]] = {}
+        for message_id, edges in mapping.items():
+            if method_by_message_id[message_id] != "route_matched":
+                continue
+            for edge in edges:
+                candidate_owners.setdefault(int(edge["id"]), set()).add(message_id)
+        for message_id, edges in list(mapping.items()):
+            if method_by_message_id[message_id] != "route_matched":
+                continue
+            edge_ids = {int(edge["id"]) for edge in edges}
+            if edge_ids & baseline_edge_ids:
+                reason = "route_edge_overlap_baseline"
+            elif any(len(candidate_owners[edge_id]) > 1 for edge_id in edge_ids):
+                reason = "route_edge_overlap_candidate"
+            else:
+                continue
+            del mapping[message_id]
+            matched_by_method["route_matched"] -= 1
+            frc = frc_by_message_id.get(message_id, "unknown")
+            matched_by_frc[frc] -= 1
+            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
     print(f"OpenLR mapping diagnostics: {json.dumps({'rejections': rejection_counts, 'matchedByMethod': matched_by_method, 'sourceByFrc': source_by_frc, 'matchedByFrc': matched_by_frc}, sort_keys=True)}", flush=True)
     return {
         "contractVersion": "valhalla-openlr-edge-map-v2",
@@ -745,7 +778,7 @@ def audit_route_fallback(config: dict[str, str]) -> int:
     unmatched = [segment for segment in feed["segments"] if str(segment.get("messageId", "")) not in baseline_ids]
     candidates = build_mapping(
         valhalla_url, dataset, static_revision, unmatched,
-        int(config.get("TRAFFIC_MAPPING_WORKERS", "2")), True,
+        int(config.get("TRAFFIC_MAPPING_WORKERS", "2")), True, baseline["mapping"],
     )
     if routing_dataset(valhalla_url) != dataset:
         raise RuntimeError("Valhalla routing dataset changed during the audit")
