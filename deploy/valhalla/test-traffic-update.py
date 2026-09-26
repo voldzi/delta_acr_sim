@@ -74,7 +74,11 @@ def main() -> None:
         _, _, reason = traffic.map_segment("http://valhalla.test", {
             "messageId": "reference-3", "coordinates": [[14.0, 50.0], [14.001, 50.001]], **reference
         })
-        assert reason == "valhalla_444"
+        assert reason == "valhalla_error_444"
+        assert traffic.valhalla_failure_reason(RuntimeError('HTTP 400 from Valhalla: {"error_code":444,"error":"no path"}')) == "valhalla_error_444"
+        assert traffic.valhalla_failure_reason(RuntimeError('HTTP 400 from Valhalla: {"error_code":171}')) == "valhalla_error_171"
+        assert traffic.valhalla_failure_reason(RuntimeError("HTTP 502 from Valhalla")) == "valhalla_5xx"
+        assert traffic.valhalla_failure_reason(TimeoutError("timed out")) == "valhalla_timeout"
         traffic.request_json = lambda *args, **kwargs: (200, {"edges": valid_edges})
         summary = traffic.build_mapping("http://valhalla.test", "dataset", "revision", [
             {"messageId": "ok", "coordinates": [[14.0, 50.0], [14.001, 50.001]],

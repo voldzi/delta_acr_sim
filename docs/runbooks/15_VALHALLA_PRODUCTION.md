@@ -148,6 +148,25 @@ Investigate the 4xx trace responses with bounded, non-sensitive samples before
 proposing an OpenLR resolver change; never weaken directional or length gates
 solely to increase coverage.
 
+On 26 September a read-only, deterministic 96-segment sample across all eight
+OpenLR road classes returned 23 HTTP 400 responses, all with Valhalla internal
+error code 444 (no matched path). In a larger 160-segment sample, all 42
+`walk_or_snap` failures remained code 444 with `map_snap`; switching the trace
+algorithm alone would not recover them. The updater now records the internal
+Valhalla error code separately from HTTP status in aggregate diagnostics.
+This change is diagnostic only and intentionally keeps the same matcher cache
+version and acceptance gates. No new road speed is applied on this evidence.
+
+A production OpenLR decoder must score candidate directed edges using LRP
+position, bearing, functional road class (FRC) and form of way (FOW), then
+reconstruct and validate a path against distance-to-next, lowest FRC and
+offsets. TomTom's Apache-2.0 `openlr-dereferencer-python` demonstrates this
+algorithm but requires a `MapReader` implementation for the target graph;
+Valhalla does not supply that adapter. Build and evaluate such an adapter
+offline against the current graph before enabling it in the live updater.
+Acceptance must include manually reviewed parallel-road and wrong-direction
+negative cases and no reduction in the currently accepted 35,639 segments.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where

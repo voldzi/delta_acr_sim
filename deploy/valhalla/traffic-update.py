@@ -16,6 +16,7 @@ import gzip
 import hashlib
 import json
 import math
+import re
 import os
 from pathlib import Path
 import shutil
@@ -172,6 +173,24 @@ def trace_matches_openlr(segment: dict[str, Any], edges: list[dict[str, Any]]) -
     return trace_rejection_reason(segment, edges) is None
 
 
+def valhalla_failure_reason(error: Exception) -> str:
+    """Classify trace failures without recording provider payloads or locations."""
+    detail = str(error)
+    if "HTTP 400" in detail:
+        code = re.search(r'"error_code"\s*:\s*(\d+)', detail)
+        if code:
+            return f"valhalla_error_{code.group(1)}"
+    if "HTTP 444" in detail:
+        return "valhalla_error_444"
+    if "HTTP 4" in detail:
+        return "valhalla_4xx"
+    if "HTTP 5" in detail:
+        return "valhalla_5xx"
+    if isinstance(error, TimeoutError) or "timed out" in detail.lower():
+        return "valhalla_timeout"
+    return "valhalla_request_error"
+
+
 def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[dict[str, int | float]], str]:
     message_id = str(segment.get("messageId", ""))
     coordinates = segment.get("coordinates")
@@ -203,9 +222,7 @@ def map_segment(valhalla_url: str, segment: dict[str, Any]) -> tuple[str, list[d
     try:
         status, body = request_json(f"{valhalla_url.rstrip('/')}/trace_attributes", payload=payload, timeout=30)
     except (RuntimeError, TimeoutError, OSError) as error:
-        detail = str(error)
-        reason = "valhalla_444" if "HTTP 444" in detail else "valhalla_4xx" if "HTTP 4" in detail else "valhalla_5xx" if "HTTP 5" in detail else "valhalla_timeout" if isinstance(error, TimeoutError) or "timed out" in detail.lower() else "valhalla_request_error"
-        return message_id, [], reason
+        return message_id, [], valhalla_failure_reason(error)
     if status != 200 or not isinstance(body, dict) or not isinstance(body.get("edges"), list):
         return message_id, [], "invalid_trace_response"
     rejection = trace_rejection_reason(segment, body["edges"])
