@@ -239,6 +239,24 @@ before/after success rate. Fifteen disagreements remain: do not activate v6
 or treat its potential coverage as real routing coverage. Production matching
 remains v2.
 
+The audit-only v7 additionally checks Valhalla's `round_about` and
+`classification.link` flags when the OpenLR endpoint declares an ordinary
+single carriageway, roundabout, motorway or slip road. The full 26 September
+repeat on the same graph and 55,150 references found 7,472 additions beyond
+the live baseline (potential 78.17% combined static coverage). Relative to v6,
+7,234 shared references had identical directed-edge sequences, 238 appeared
+only in v7, and 41 only in v6. Against the separate HTTP route audit, 3,656
+shared references were identical and 144 were contiguous graph subpaths; this
+is corroboration, not ground truth. A 47-reference offset recheck found 34
+identical whole-edge sequences, nine partial overlaps and four disjoint
+sequences. New matches can arise because endpoint filtering removes one of
+several ambiguous paths; they are not verified traffic coverage. Keep v7
+audit-only and the production v2 matcher unchanged until geographically
+reviewed wrong-road, parallel-road, roundabout, direction and offset cases
+pass. The authorized static feed has no full road polyline (see below); seek
+an authoritative geometry/crosswalk from the provider or a separately
+validated OpenLR decoder before activation.
+
 #### Additional speed-data strategy (26 September 2026)
 
 The [current TPEG2-TFP pilot](https://tpeg.dopravniinfo.cz/pilot/) is itself

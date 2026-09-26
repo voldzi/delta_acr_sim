@@ -120,10 +120,12 @@ def main() -> None:
                 {"frc": "3", "fow": "3", "bearing": 172},
             ]},
         }
-        def direct_edge(edge_id: int, percent: float, heading: float = 62) -> dict:
+        def direct_edge(edge_id: int, percent: float, heading: float = 62,
+                        link: bool = False, roundabout: bool = False) -> dict:
             return {"edge_id": {"value": edge_id}, "distance": 2, "heading": heading,
                     "percent_along": percent, "edge": {
-                        "classification": {"classification": "secondary", "use": "road"},
+                        "classification": {"classification": "secondary", "use": "road", "link": link},
+                        "round_about": roundabout,
                         "geo_attributes": {"length": 100}, "speeds": {"default": 20},
                         "access": {"car": True},
                     }}
@@ -167,6 +169,19 @@ def main() -> None:
         last_point["frc"] = "3"
         last_point["fow"] = "6"
         assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_no_endpoint"
+        last_point["fow"] = "3"
+        direct_locations[1]["edges"][0] = direct_edge(6, 1, roundabout=True)
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_no_endpoint"
+        last_point["fow"] = "4"
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_matched"
+        direct_locations[1]["edges"][0] = direct_edge(6, 1)
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_no_endpoint"
+        direct_locations[1]["edges"][0] = direct_edge(6, 1, link=True)
+        last_point["fow"] = "6"
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_matched"
+        last_point["fow"] = "3"
+        assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_no_endpoint"
+        direct_locations[1]["edges"][0] = direct_edge(6, 1)
         last_point["fow"] = "3"
         last_point.pop("fow")
         assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_unknown_fow"

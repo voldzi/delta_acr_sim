@@ -44,7 +44,7 @@ MAX_SPEED_RAW = 126
 MATCHER_VERSION = "openlr-trace-v2"
 ROUTE_MATCHER_VERSION = "openlr-route-candidate-v3"
 DIRECT_MATCHER_VERSION = "openlr-directed-single-edge-v1"
-GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v6"
+GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v7"
 ROAD_CLASS_BITS = {
     "motorway": 0, "trunk": 1, "primary": 2, "secondary": 3,
     "tertiary": 4, "unclassified": 5, "residential": 6, "service_other": 7,
@@ -456,6 +456,8 @@ def bounded_graph_candidate(
                 edge = candidate["edge"]
                 road_class = edge["classification"]["classification"]
                 use = edge["classification"]["use"]
+                link = edge["classification"].get("link") is True
+                roundabout = edge.get("round_about") is True
                 edge_id = int(candidate["edge_id"]["value"])
                 percent = float(candidate["percent_along"])
                 distance = float(candidate["distance"])
@@ -471,7 +473,12 @@ def bounded_graph_candidate(
                 percent < 0 or percent > 1):
                 continue
             fow = str(point.get("fow", ""))
-            if (fow == "1" and road_class != "motorway") or (fow == "6" and use not in {"ramp", "turn_channel"}):
+            # These Valhalla flags are stronger than a bare FRC match. Do not
+            # treat a circular carriageway or slip road as an ordinary road.
+            if ((fow == "1" and (road_class != "motorway" or roundabout or link)) or
+                (fow == "3" and (roundabout or link)) or
+                (fow == "4" and not roundabout) or
+                (fow == "6" and not (link or use in {"ramp", "turn_channel"}))):
                 continue
             result.append((distance + angular_difference(heading, candidate_heading) / 34,
                            edge_id, percent, speed * 3.6))
