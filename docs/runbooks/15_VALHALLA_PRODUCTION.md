@@ -225,6 +225,44 @@ matcher. Investigate endpoint/costing differences and require a reviewed
 parallel-road/roundabout sample plus independent acceptance after each weekly
 graph rebuild. The live `openlr-trace-v2` cache and timer are unchanged.
 
+#### Additional speed-data strategy (26 September 2026)
+
+The [current TPEG2-TFP pilot](https://tpeg.dopravniinfo.cz/pilot/) is itself
+republished from the ŘSD/NDIC DATEX II FCD predefined-location and live-flow
+feeds. Taking the direct DATEX II copy
+does not, by itself, create independent speed observations or resolve its
+location references. The [pilot's public static XML sample](https://github.com/tamtamresearch/x-format_cz-ndic_tpeg2-tfp-v0.1/blob/main/samples/tpeg-tfp-pls.xml) carries TMC and
+two-point OpenLR references; it does not demonstrate a full road polyline.
+Before changing the parser, inspect an authorized full static feed for any
+additional geometry and ask the operator whether an authoritative segment
+polyline, direction, or map-edge crosswalk is available. Do not infer a road
+path from the sample's two endpoints.
+
+Valhalla [supports a speed hierarchy](https://valhalla.github.io/valhalla/concepts/speeds/): live `traffic.tar`, predicted weekly
+five-minute profiles, constrained/free-flow speeds, then base OSM speeds.
+Therefore two complementary improvements are possible:
+
+1. Complete a graph-aware OpenLR resolver with ranked FRC/FOW candidates,
+   distance-only vehicular costing, turn/hierarchy handling, exact offset
+   fractions, conflict resolution, and geographically reviewed acceptance.
+   Map once per routing dataset and static revision; keep the current matched
+   baseline and reject ambiguous roads.
+2. Evaluate a licensed predicted-speed dataset for uncovered/time-future
+   edges. Historical profiles are **not** live observations. If deriving them
+   from collected TPEG snapshots, first verify the provider's rights for
+   retention and derivative use, require enough observations by road class,
+   day and five-minute interval, and report coverage/confidence separately.
+   Never fill a missing current measurement with a stale value labelled live.
+
+Commercial flow providers may offer wider or differently referenced coverage,
+but their API access, cache rights, attribution, price, geographic coverage,
+and whether derived speeds may be loaded into a self-hosted routing engine
+must be verified before procurement or integration. A point-query API is not
+automatically a lawful or economical nationwide feed. Do not mix providers on
+one edge without a documented priority, freshness, direction and confidence
+policy. Evaluate ETA against independent measured trips and compare route
+changes, not merely the count of matched segments.
+
 Completing the maintainer's algorithm still requires a special distance-only
 Valhalla costing with hierarchy-aware traversal and ranked FRC/FOW candidates,
 `EdgeSegment` begin/end fractions, and independent wrong-road/parallel-road
