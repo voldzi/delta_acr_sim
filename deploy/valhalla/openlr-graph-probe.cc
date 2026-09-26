@@ -8,6 +8,7 @@
 #include <limits>
 #include <queue>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -117,29 +118,42 @@ int main(int argc, char* argv[]) {
       std::string line;
       while (std::getline(std::cin, line)) {
         std::istringstream input(line);
-        uint64_t source_id, target_id;
+        uint64_t request_id, source_id, target_id;
         double source_percent, target_percent, max_m;
         uint32_t classes;
-        if (!(input >> source_id >> source_percent >> target_id >> target_percent >> max_m >> classes)) {
-          std::cout << "{\"status\":\"invalid_input\"}\n" << std::flush;
+        if (!(input >> request_id >> source_id >> source_percent >> target_id >> target_percent >> max_m >> classes)) {
+          std::cout << "{\"requestId\":0,\"status\":\"invalid_input\"}\n" << std::flush;
           continue;
         }
         try {
           const auto path = bounded_path(reader, source_id, source_percent, target_id,
                                          target_percent, max_m, classes);
           if (path.edges.empty()) {
-            std::cout << "{\"status\":\"no_path\"}\n";
+            std::cout << "{\"requestId\":" << request_id << ",\"status\":\"no_path\"}\n";
           } else {
-            std::cout << "{\"status\":\"ok\",\"lengthMeters\":" << path.length_m
+            std::vector<double> lengths_m;
+            lengths_m.reserve(path.edges.size());
+            for (const auto value : path.edges) {
+              const auto* edge = reader.directededge(GraphId(value));
+              if (!edge) throw std::runtime_error("path edge is unavailable");
+              lengths_m.push_back(edge->length());
+            }
+            std::cout << "{\"requestId\":" << request_id
+                      << ",\"status\":\"ok\",\"lengthMeters\":" << path.length_m
                       << ",\"edges\":[";
             for (size_t i = 0; i < path.edges.size(); ++i) {
               if (i) std::cout << ',';
               std::cout << path.edges[i];
             }
+            std::cout << "],\"edgeLengthsMeters\":[";
+            for (size_t i = 0; i < lengths_m.size(); ++i) {
+              if (i) std::cout << ',';
+              std::cout << lengths_m[i];
+            }
             std::cout << "]}\n";
           }
         } catch (const std::exception&) {
-          std::cout << "{\"status\":\"graph_error\"}\n";
+          std::cout << "{\"requestId\":" << request_id << ",\"status\":\"graph_error\"}\n";
         }
         std::cout << std::flush;
       }

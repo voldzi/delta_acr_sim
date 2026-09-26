@@ -190,22 +190,49 @@ against Valhalla 3.8.3, not part of the production image or updater. The
 `--audit-graph-matcher` command additionally requires `--graph-helper` and
 `--graph-config` alongside offline static/baseline/output paths. It is
 intentionally audit-only and runs in a disposable container with read-only
-graph and traffic mounts. The 26 September full-dataset v1 result was just 5
-additional disjoint segments. A bounded four-by-four endpoint candidate audit
-(v2) found only 1; allowing partially covered endpoint edges but excluding
-them from whole-edge speed writes (v3) found only 2. Both evaluated all 19,511
-baseline-unmatched segments against the same 55,150-segment static revision
-and current routing dataset. Neither is approved for live use. The dominant
-rejections were route length disagreement (7,267 in v2; 7,785 in v3), no
-traversable path (3,269; 3,948), and path-shape disagreement (2,221; 3,737).
-These figures show that trying additional `/locate` candidates around a
-simple bounded shortest-path search is insufficient; they do not establish a
-safer alternative mapping. Completing the maintainer's algorithm requires
-true candidate ranking, distance-only Valhalla costing with hierarchy-aware
-traversal, FRC/FOW and offset handling, `EdgeSegment` begin/end fractions,
-plus independent wrong-road/parallel-road acceptance. Do not install or
-activate the probe. The validated live baseline remains `openlr-trace-v2`
-until those gates pass.
+graph and traffic mounts. The early v1-v3 nationwide counts (5, 1, and 2
+additions) are **invalid**: Valhalla's graph reader emitted a startup diagnostic
+on the helper's stdout, causing the first JSON parse to fail and subsequent
+responses to be paired with the wrong requests. The v4 protocol echoes a
+monotonic request ID and rejects out-of-sequence answers; it passed two
+consecutive identical-path checks and a 64-reference comparison before the
+national audit. Never use a helper without correlated responses.
+
+The corrected 26 September v4 audit evaluated all 19,511 baseline-unmatched
+references and found 5,967 new disjoint mappings among 55,150 source segments:
+potential combined static coverage 75.44%, versus the live baseline 64.62%.
+It rejected 5,799 ambiguous paths, 3,419 with no traversable path, and 3,092
+with unsupported offsets. Against the separate HTTP route-candidate audit,
+3,753 segment identifiers occurred in both; 3,611 had identical directed-edge
+sequences and the other 142 had a contiguous graph path contained in the HTTP
+path after excluding partially covered endpoint edges. None of the shared
+segments had divergent or disjoint edges. Another 2,214 v4 matches lack this
+independent route-audit corroboration. These are **read-only audit results**,
+not live traffic coverage or proof of ground-truth correctness.
+
+The 26 September v5 audit added whole-edge OpenLR offset trimming. It kept
+all 5,967 v4 mappings with identical directed-edge sequences and identified
+1,316 additional offset-bearing references; potential combined static
+coverage would be 77.83% (7,283 additions), but this is **not** a production
+coverage figure. A deterministic, road-class-stratified independent recheck
+of 47 new offset references against Valhalla's shortest route and edge walk
+found 34 identical whole-edge sequences, eight different sequences sharing
+some edges, four wholly disjoint sequences and one unavailable comparison.
+Ten of the twelve disagreements have OpenLR form-of-way 3 and two have
+form-of-way 4. Because a plausible graph path can put a live speed on the
+wrong road, do not promote the v5 offset additions or enable the graph
+matcher. Investigate endpoint/costing differences and require a reviewed
+parallel-road/roundabout sample plus independent acceptance after each weekly
+graph rebuild. The live `openlr-trace-v2` cache and timer are unchanged.
+
+Completing the maintainer's algorithm still requires a special distance-only
+Valhalla costing with hierarchy-aware traversal and ranked FRC/FOW candidates,
+`EdgeSegment` begin/end fractions, and independent wrong-road/parallel-road
+acceptance. The current graph probe approximates some of these checks,
+including conservative whole-edge offset trimming, but does not implement
+them all. Do not install or activate the
+probe. The validated live baseline remains `openlr-trace-v2` until those gates
+pass and a fresh graph-specific audit is repeated after each weekly map build.
 
 An isolated route-candidate prototype is now included in the updater, but is
 **disabled by default** with `TRAFFIC_OPENLR_ROUTE_FALLBACK=false`. A bounded

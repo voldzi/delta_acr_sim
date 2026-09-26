@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from io import BytesIO
+from io import BytesIO, StringIO
 import importlib.util
 import json
 from pathlib import Path
 import struct
 import tarfile
 import tempfile
+import threading
+from types import SimpleNamespace
 
 MODULE_PATH = Path(__file__).with_name("traffic-update.py")
 SPEC = importlib.util.spec_from_file_location("traffic_update", MODULE_PATH)
@@ -30,6 +32,22 @@ def make_archive(path: Path, level: int, tile_id: int, edges: int) -> None:
 
 
 def main() -> None:
+    protocol = traffic.GraphPathClient.__new__(traffic.GraphPathClient)
+    protocol._lock = threading.Lock()
+    protocol._request_id = 0
+    protocol._process = SimpleNamespace(
+        poll=lambda: None, stdin=StringIO(),
+        stdout=StringIO('2026 startup diagnostic\n{"requestId":1,"status":"ok","edges":[5,6]}\n'),
+    )
+    assert protocol.path(5, 0, 6, 1, 100, 255)["edges"] == [5, 6]
+    assert protocol._process.stdin.getvalue().startswith("1 5 0.000000 6 1.000000")
+    protocol._process.stdout = StringIO('{"requestId":1,"status":"no_path"}\n')
+    try:
+        protocol.path(5, 0, 6, 1, 100, 255)
+    except RuntimeError as error:
+        assert "out of sequence" in str(error)
+    else:
+        raise AssertionError("stale helper response must be rejected")
     try:
         traffic.run({"SIM_TRAFFIC_FEED_BASE_URL": "http://sim.test",
                      "SIM_TRAFFIC_CONTROL_TOKEN": "test", "TRAFFIC_OPENLR_ROUTE_FALLBACK": "true"})
@@ -38,6 +56,14 @@ def main() -> None:
     else:
         raise AssertionError("unapproved route fallback must be refused")
     assert traffic.graph_id_parts(graph_id(2, 807177, 210837)) == (2, 807177, 210837)
+    assert traffic.fully_covered_edges([1, 2, 3], [100, 100, 100], 0, 1, 0, 0) == [1, 2, 3]
+    assert traffic.fully_covered_edges([1, 2, 3], [100, 100, 100], 0.2, 0.9, 0, 0) == [2]
+    assert traffic.fully_covered_edges([1, 2, 3], [100, 100, 100], 0, 1, 30, 20) == [2]
+    assert traffic.fully_covered_edges([1, 2, 3], [100, 100, 100], 0, 1, 100, 0) == [2, 3]
+    assert traffic.fully_covered_edges([1, 2, 3], [100, 100, 100], 0, 1, 0, 100) == [1, 2]
+    assert traffic.fully_covered_edges([1, 2], [100, 100], 0, 1, 100, 100) == []
+    assert traffic.fully_covered_edges([1], [100], 0.1, 0.9, 0, 0) == []
+    assert traffic.fully_covered_edges([1, 2], [100, float("nan")], 0, 1, 0, 0) == []
     assert traffic.parse_iso_timestamp("2026-09-14T19:49:03+02:00") == traffic.parse_iso_timestamp("2026-09-14T17:49:03Z")
     word = traffic.traffic_word(36, 90)
     assert word & 0x7F == 18
@@ -121,7 +147,7 @@ def main() -> None:
         })[1] == "direct_length_mismatch"
         class FakeGraph:
             def __init__(self) -> None:
-                self.result = {"status": "ok", "lengthMeters": 100, "edges": [5, 6]}
+                self.result = {"status": "ok", "lengthMeters": 100, "edges": [5, 6], "edgeLengthsMeters": [50, 50]}
                 self.calls = 0
             def path(self, source: int, source_percent: float, target: int,
                      target_percent: float, max_m: float, class_mask: int) -> dict:
@@ -135,22 +161,22 @@ def main() -> None:
         graph_edges, graph_reason = traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)
         assert graph_reason == "graph_matched" and [edge["id"] for edge in graph_edges] == [5, 6]
         assert fake_graph.calls == 1
-        fake_graph.result = {"status": "ok", "lengthMeters": 180, "edges": [5, 6]}
+        fake_graph.result = {"status": "ok", "lengthMeters": 180, "edges": [5, 6], "edgeLengthsMeters": [50, 50]}
         assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_length_mismatch"
-        fake_graph.result = {"status": "ok", "lengthMeters": 100, "edges": [6, 5]}
+        fake_graph.result = {"status": "ok", "lengthMeters": 100, "edges": [6, 5], "edgeLengthsMeters": [50, 50]}
         assert traffic.bounded_graph_candidate("http://valhalla.test", direct_reference, fake_graph)[1] == "graph_path_shape_mismatch"
         direct_locations[0]["edges"].append(direct_edge(7, 0))
         class AlternativeGraph:
             def path(self, source: int, source_percent: float, target: int,
                      target_percent: float, max_m: float, class_mask: int) -> dict:
-                return {"status": "ok", "lengthMeters": 100, "edges": [source, target]}
+                return {"status": "ok", "lengthMeters": 100, "edges": [source, target], "edgeLengthsMeters": [50, 50]}
         assert traffic.bounded_graph_candidate(
             "http://valhalla.test", direct_reference, AlternativeGraph(),
         )[1] == "graph_ambiguous_path"
         class SamePathGraph:
             def path(self, source: int, source_percent: float, target: int,
                      target_percent: float, max_m: float, class_mask: int) -> dict:
-                return {"status": "ok", "lengthMeters": 100, "edges": [5, 6]}
+                return {"status": "ok", "lengthMeters": 100, "edges": [5, 6], "edgeLengthsMeters": [50, 50]}
         assert traffic.bounded_graph_candidate(
             "http://valhalla.test", direct_reference, SamePathGraph(),
         )[1] == "graph_matched"
@@ -166,9 +192,10 @@ def main() -> None:
         )[1] == "graph_no_whole_edge"
         direct_locations[0]["edges"][0]["percent_along"] = 0
         direct_locations[1]["edges"][0]["percent_along"] = 1
-        assert traffic.bounded_graph_candidate("http://valhalla.test", {
+        offset_edges, offset_reason = traffic.bounded_graph_candidate("http://valhalla.test", {
             **direct_reference, "openlr": {**direct_reference["openlr"], "negativeOffsetMeters": 10},
-        }, fake_graph)[1] == "graph_offset_not_supported"
+        }, AlternativeGraph())
+        assert offset_reason == "graph_matched" and [edge["id"] for edge in offset_edges] == [5]
         route_reference = {
             "messageId": "route-reference", "coordinates": [[14.0, 50.0], [14.001, 50.001]],
             "openlr": {"points": [

@@ -44,7 +44,7 @@ MAX_SPEED_RAW = 126
 MATCHER_VERSION = "openlr-trace-v2"
 ROUTE_MATCHER_VERSION = "openlr-route-candidate-v3"
 DIRECT_MATCHER_VERSION = "openlr-directed-single-edge-v1"
-GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v3"
+GRAPH_MATCHER_VERSION = "openlr-graph-bounded-v5"
 ROAD_CLASS_BITS = {
     "motorway": 0, "trunk": 1, "primary": 2, "secondary": 3,
     "tertiary": 4, "unclassified": 5, "residential": 6, "service_other": 7,
@@ -311,6 +311,7 @@ class GraphPathClient:
 
     def __init__(self, helper: Path, config: Path) -> None:
         self._lock = threading.Lock()
+        self._request_id = 0
         self._process = subprocess.Popen(
             [str(helper), str(config), "--stream"], stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1,
@@ -321,14 +322,29 @@ class GraphPathClient:
         with self._lock:
             if self._process.poll() is not None or self._process.stdin is None or self._process.stdout is None:
                 raise RuntimeError("OpenLR graph helper is unavailable")
+            self._request_id += 1
+            request_id = self._request_id
             self._process.stdin.write(
-                f"{source} {source_percent:.6f} {target} {target_percent:.6f} {max_m:.2f} {class_mask}\n"
+                f"{request_id} {source} {source_percent:.6f} {target} {target_percent:.6f} {max_m:.2f} {class_mask}\n"
             )
             self._process.stdin.flush()
-            response = self._process.stdout.readline()
-            if not response:
-                raise RuntimeError("OpenLR graph helper stopped unexpectedly")
-            return json.loads(response)
+            # GraphReader writes startup diagnostics to stdout in Valhalla
+            # 3.8.3. Consume only an explicitly correlated protocol response;
+            # never interpret a stale answer as the next OpenLR path.
+            for _ in range(64):
+                response = self._process.stdout.readline()
+                if not response:
+                    raise RuntimeError("OpenLR graph helper stopped unexpectedly")
+                try:
+                    result = json.loads(response)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(result, dict) or "requestId" not in result:
+                    continue
+                if result["requestId"] != request_id:
+                    raise RuntimeError("OpenLR graph helper response is out of sequence")
+                return result
+            raise RuntimeError("OpenLR graph helper emitted too many diagnostic lines")
 
     def close(self) -> None:
         if self._process.stdin:
@@ -340,10 +356,47 @@ class GraphPathClient:
             self._process.wait(timeout=5)
 
 
+def fully_covered_edges(
+    edge_ids: list[int], lengths_m: list[float], source_percent: float,
+    target_percent: float, positive_offset_m: float, negative_offset_m: float,
+) -> list[int]:
+    """Trim OpenLR offsets; whole-edge traffic records cannot cover partials."""
+    if (not edge_ids or len(edge_ids) != len(lengths_m) or
+        not all(math.isfinite(value) and value > 0 for value in lengths_m) or
+        not all(math.isfinite(value) for value in (
+            source_percent, target_percent, positive_offset_m, negative_offset_m,
+        )) or not 0 <= source_percent <= 1 or not 0 <= target_percent <= 1 or
+        positive_offset_m < 0 or negative_offset_m < 0):
+        return []
+    begin = [source_percent] + [0.0] * (len(edge_ids) - 1)
+    end = [1.0] * (len(edge_ids) - 1) + [target_percent]
+    if len(edge_ids) == 1 and source_percent >= target_percent:
+        return []
+    path_m = sum(max(0.0, end[index] - begin[index]) * length
+                 for index, length in enumerate(lengths_m))
+    if path_m <= 0 or positive_offset_m + negative_offset_m >= path_m:
+        return []
+    remaining = positive_offset_m
+    for index, length in enumerate(lengths_m):
+        span = max(0.0, end[index] - begin[index]) * length
+        consumed = min(remaining, span)
+        begin[index] += consumed / length
+        remaining -= consumed
+    remaining = negative_offset_m
+    for index in range(len(edge_ids) - 1, -1, -1):
+        length = lengths_m[index]
+        span = max(0.0, end[index] - begin[index]) * length
+        consumed = min(remaining, span)
+        end[index] -= consumed / length
+        remaining -= consumed
+    return [edge_id for edge_id, start, stop in zip(edge_ids, begin, end)
+            if start <= 0.000001 and stop >= 0.999999]
+
+
 def bounded_graph_candidate(
     valhalla_url: str, segment: dict[str, Any], graph: GraphPathClient,
 ) -> tuple[list[dict[str, Any]], str]:
-    """Audit-only, two-LRP graph path; reject uncertain endpoints and partial edges."""
+    """Audit-only, two-LRP graph path; write only whole covered edges."""
     reference = segment.get("openlr")
     coordinates = segment.get("coordinates")
     if not isinstance(reference, dict) or not isinstance(coordinates, list):
@@ -352,8 +405,8 @@ def bounded_graph_candidate(
     if not isinstance(points, list) or len(points) != 2 or len(coordinates) != 2:
         return [], "graph_unsupported_lrp_count"
     try:
-        if float(reference.get("positiveOffsetMeters") or 0) != 0 or float(reference.get("negativeOffsetMeters") or 0) != 0:
-            return [], "graph_offset_not_supported"
+        positive_offset = float(reference.get("positiveOffsetMeters") or 0)
+        negative_offset = float(reference.get("negativeOffsetMeters") or 0)
         expected_m = float(points[0]["distanceToNext"])
         headings = [float(points[0]["bearing"]) * 360 / 256,
                     (float(points[1]["bearing"]) * 360 / 256 + 180) % 360]
@@ -364,7 +417,11 @@ def bounded_graph_candidate(
         ]
     except (IndexError, KeyError, TypeError, ValueError, OverflowError):
         return [], "graph_invalid_reference"
-    if not math.isfinite(expected_m) or expected_m <= 0 or not all(
+    if (not all(math.isfinite(value) and value >= 0 for value in (positive_offset, negative_offset)) or
+        not math.isfinite(expected_m) or expected_m <= 0 or
+        positive_offset + negative_offset >= expected_m):
+        return [], "graph_invalid_offset_or_distance"
+    if not all(
         math.isfinite(float(value)) for location in locations for value in location.values()
     ):
         return [], "graph_invalid_reference"
@@ -437,6 +494,7 @@ def bounded_graph_candidate(
                 continue
             try:
                 edge_ids = [int(edge_id) for edge_id in result["edges"]]
+                edge_lengths = [float(length) for length in result["edgeLengthsMeters"]]
                 length_m = float(result["lengthMeters"])
             except (KeyError, TypeError, ValueError, OverflowError):
                 rejections["graph_invalid_path"] = 1
@@ -445,13 +503,14 @@ def bounded_graph_candidate(
                 rejections["graph_length_mismatch"] = 1
                 continue
             if (len(edge_ids) < 2 or len(edge_ids) > 64 or edge_ids[0] != source_id or
-                edge_ids[-1] != target_id or len(set(edge_ids)) != len(edge_ids)):
+                edge_ids[-1] != target_id or len(set(edge_ids)) != len(edge_ids) or
+                len(edge_lengths) != len(edge_ids)):
                 rejections["graph_path_shape_mismatch"] = 1
                 continue
-            # The traffic archive has one speed per whole directed edge. Keep
-            # only edges fully covered by the OpenLR reference; partially
-            # covered endpoints can validate the path but cannot receive it.
-            covered = edge_ids[source_percent > 0.000001:len(edge_ids) - (target_percent < 0.999999)]
+            covered = fully_covered_edges(
+                edge_ids, edge_lengths, source_percent, target_percent,
+                positive_offset, negative_offset,
+            )
             if not covered:
                 rejections["graph_no_whole_edge"] = 1
                 continue
