@@ -226,6 +226,27 @@ describe("AI Router request boundary", () => {
     await request(localApp).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...copBody("internal", internalContext), preference: "auto", allowExternal: false }).expect(503, { requestId: "00000000-0000-4000-8000-000000000001", error: "model_unavailable" });
     expect(failedLocalFetch).toHaveBeenCalledTimes(1);
   });
+  it("uses ordered Ollama addresses and never falls back to OpenAI for internal COP chat", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? "GET"} ${url}`);
+      if (url.includes("192.168.1.176")) throw new Error("LAN unavailable");
+      if (url.includes("192.168.200.1")) return new Response(JSON.stringify({ models: [{ name: "other-model" }] }), { status: 200 });
+      if (url.endsWith("/api/tags")) return new Response(JSON.stringify({ models: [{ name: "local-test-model" }] }), { status: 200 });
+      return new Response(JSON.stringify({ response: "Lokální odpověď", prompt_eval_count: 10, eval_count: 4 }), { status: 200 });
+    }));
+    const store = testStore();
+    const app = createApp({ ...runtimeConfig, localModel: "local-test-model", localUrls: ["http://192.168.1.176:11434", "http://192.168.200.1:11434", "http://192.168.200.2:11434"] }, store as unknown as BudgetStore);
+    const response = await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...copBody("internal", internalContext), preference: "auto", allowExternal: false }).expect(200);
+    expect(response.body).toMatchObject({ tier: "local_fast", usage: { estimatedMicrousd: 0 } });
+    expect(calls).toEqual([
+      "GET http://192.168.1.176:11434/api/tags",
+      "GET http://192.168.200.1:11434/api/tags",
+      "GET http://192.168.200.2:11434/api/tags",
+      "POST http://192.168.200.2:11434/api/generate"
+    ]);
+  });
   it("returns specific limit, database and model failures without an external bypass", async () => {
     const body = copBody("synthetic", syntheticContext);
     for (const code of ["daily_budget_exceeded", "monthly_budget_exceeded", "user_daily_limit_exceeded"]) {
