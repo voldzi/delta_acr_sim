@@ -278,3 +278,17 @@ HTTP 200 s tierem `local_fast` a modelem `gemma4:12b-mlx`. VPN adresy v tomto
 ověření dostupné nebyly; jejich záložní funkce je pokryta jednotkovým testem,
 nikoli produkčním výpadkovým testem. Externí chat, BYOK ani IZS režim se
 nezapínaly.
+
+### Příprava společné akceptace COP BYOK (27. 9. 2026)
+
+V produkčním `/srv/sim/.env` je připraven samostatný 32bajtový šifrovací klíč
+pro úložiště uživatelských API klíčů; soubor i záloha
+`/srv/sim/.env.before-ai-router-encryption-20260927` mají práva 600.
+Restartován byl jen `ai-router-api`, který po změně opět prošel healthcheckem.
+`AI_ROUTER_COP_BYOK_ENABLED=false` a `AI_ROUTER_SIM_IZS_ENABLED=false`
+zůstávají beze změny. Podpisové tajemství `AI_ROUTER_COP_ACTOR_SECRET` zatím
+v SIM nastavené není; musí být shodné s `COP_AI_ROUTER_ACTOR_SECRET` na straně
+COP a jeho zápis čeká na výslovné schválení. V COP `.env` nebyla tato
+proměnná při kontrole ještě nastavena. Migrace `002_separate_billing.sql`
+byla aplikována při předchozím nasazení. Živé dvouuživatelské účtování a
+externí OpenAI projekty zatím nebyly přijaty; běžný COP chat se nepřepínal.
