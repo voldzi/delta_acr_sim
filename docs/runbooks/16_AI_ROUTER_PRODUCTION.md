@@ -196,3 +196,17 @@ Návrat před zapnutím COP: obnovit předchozí Router image a restartovat pouz
 vypnout samostatně. Po případném pozdějším přepnutí COP vrátit nejprve jeho
 chatový přepínač na původní cestu a restartovat jen `cop-api`; teprve pak
 vracet Router image. Neodstraňovat databázové záznamy ani klíče při rollbacku.
+
+## Nasazení vypnutého kontraktu (27. 9. 2026)
+
+Commit `f3c77fe` byl na produkční větvi `/srv/sim` převzat jako `5f31a51`.
+Přestavěn a restartován byl pouze `ai-router-api`; předchozí image má digest
+`sha256:f1835a7dbb51709a554236eb2dedeacf3a7723eadbfb8764bd91af957ae8a2a0`,
+nový `sha256:39e3bb41bf8088ce2ac1a17d0f73f9efe0560ffa389c68544ab13dfb4b09d7af`.
+Ostatní služby SIM zůstaly healthy. Router `/health/ready` vrátil 200 a
+autentizované čtení agregované spotřeby 200. Neautorizovaný požadavek na
+`internal_minimized` vrátil 401, textová položka 400 `invalid_request` a
+platný minimální kontext 503 `internal_minimized_not_enabled`. Tím byl
+ověřen nasazený kontrakt bez volání OpenAI. Přepínač zůstal vypnutý;
+produkční COP chat se nepřepnul. Plný pozitivní test čeká na kontrolu
+nastavení konkrétního OpenAI projektu a společnou akceptaci COP/SIM.
