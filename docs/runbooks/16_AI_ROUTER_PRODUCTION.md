@@ -254,3 +254,16 @@ stávající lokální COP chat v provozu; auditní tabulky zachovat.
   poskytovatele/vnitřního spojení vyžaduje samostatné obnovení a poté
   opakovaný chatový test. VPN, VLAN ani firewall se v rámci nasazení
   neměnily.
+
+### Více adres lokální Ollamy
+
+Při migraci na zařízení dostupné přes LAN i VPN použít v ignorovaném
+`/srv/sim/.env` pořadí
+`AI_ROUTER_LOCAL_URLS=http://192.168.1.176:11434,http://192.168.200.1:11434,http://192.168.200.2:11434`.
+Router před odesláním interní otázky načte `/api/tags` s krátkým timeoutem a
+požaduje přesný `AI_ROUTER_LOCAL_MODEL`; nefunkční adresu či adresu bez modelu
+přeskočí. Stará `AI_ROUTER_LOCAL_URL` zůstává pro návrat. Interní třída nemá
+externí fallback. Funkční ověření musí obsahovat `/health/ready` a fiktivní
+`cop_chat/internal` s odpovědí `local_fast`; samotný stav kontejneru nestačí.
+Vrácení: obnovit předchozí image Routeru a původní `.env`, případně odstranit
+novou proměnnou; ostatní SIM služby a COP chat se nepřepínají.

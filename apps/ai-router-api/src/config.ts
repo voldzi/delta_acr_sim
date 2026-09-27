@@ -10,6 +10,7 @@ export interface Config {
   copInternalMinimizedEnabled: boolean;
   advancedEnabled: boolean;
   localUrl: string;
+  localUrls?: string[];
   localModel: string;
   economyModel: string;
   advancedModel: string;
@@ -81,6 +82,7 @@ export function loadConfig(): Config {
     copInternalMinimizedEnabled: process.env.AI_ROUTER_COP_INTERNAL_MINIMIZED_ENABLED === "true",
     advancedEnabled: process.env.AI_ROUTER_ADVANCED_ENABLED === "true",
     localUrl: process.env.AI_ROUTER_LOCAL_URL ?? "",
+    localUrls: (process.env.AI_ROUTER_LOCAL_URLS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
     localModel: process.env.AI_ROUTER_LOCAL_MODEL ?? "",
     economyModel: process.env.AI_ROUTER_ECONOMY_MODEL ?? "gpt-6-luna",
     advancedModel: process.env.AI_ROUTER_ADVANCED_MODEL ?? "gpt-6-sol",

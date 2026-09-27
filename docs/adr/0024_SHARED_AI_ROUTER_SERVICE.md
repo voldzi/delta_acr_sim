@@ -58,6 +58,14 @@ změny. Aktivace vyžaduje samostatný souhlas a společnou akceptaci obou služ
 
 ## Směrování
 
+Lokální Ollama může být dostupná přes více interních adres téhož zařízení.
+Konfigurace `AI_ROUTER_LOCAL_URLS` určuje jejich prioritu; při jejím vyplnění
+nahrazuje starou jedinou `AI_ROUTER_LOCAL_URL`. Router před odesláním promptu
+ověří, že kandidát odpovídá a nabízí přesný požadovaný model. Nedostupného
+kandidáta přeskočí, aniž by změnil datovou třídu či zdroj úhrady. Všechny
+adresy musí spravovat provozovatel SIM; interní prompt se nikdy nepřesměruje
+na veřejný endpoint ani na externí OpenAI jako zálohu.
+
 Deterministická levná klasifikace používá typ úlohy, délku a vybrané signály
 složitosti. Jednoduché automatické dotazy mají přednostně lokální model.
 Složitější schválené veřejné či syntetické úlohy mohou použít ekonomický

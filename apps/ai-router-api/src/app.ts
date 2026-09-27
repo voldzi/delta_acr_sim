@@ -100,22 +100,44 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
   return { text, inputTokens: data.usage!.input_tokens!, outputTokens: data.usage!.output_tokens! };
 }
 
+function localCandidates(config: Config): string[] {
+  return [...new Set(config.localUrls?.length ? config.localUrls : config.localUrl ? [config.localUrl] : [])];
+}
+
 async function callLocal(config: Config, prompt: string, maxOutputTokens: number): Promise<ModelResult> {
-  const url = new URL("/api/generate", config.localUrl);
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model: config.localModel, stream: false, think: false, prompt, options: { num_predict: maxOutputTokens } }),
-    signal: AbortSignal.timeout(90_000)
-  });
-  if (!response.ok) throw new Error(`local_http_${response.status}`);
-  const data = (await response.json()) as { response?: string; prompt_eval_count?: number; eval_count?: number };
-  if (!data.response?.trim()) throw new Error("provider_response_incomplete");
-  return {
-    text: data.response.trim(),
-    inputTokens: data.prompt_eval_count ?? estimateTokens(prompt),
-    outputTokens: data.eval_count ?? estimateTokens(data.response)
-  };
+  const candidates = localCandidates(config);
+  for (const candidate of candidates) {
+    try {
+      const base = new URL(candidate);
+      if (!["http:", "https:"].includes(base.protocol) || base.username || base.password) continue;
+      if (candidates.length > 1) {
+        const tags = await fetch(new URL("/api/tags", base), { signal: AbortSignal.timeout(2500) });
+        if (!tags.ok) continue;
+        const data = (await tags.json()) as { models?: Array<{ name?: string; model?: string }> };
+        if (!data.models?.some((item) => item.name === config.localModel || item.model === config.localModel)) continue;
+      }
+      const response = await fetch(new URL("/api/generate", base), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: config.localModel, stream: false, think: false, prompt, options: { num_predict: maxOutputTokens } }),
+        signal: AbortSignal.timeout(90_000)
+      });
+      if (!response.ok) {
+        if (response.status < 500) throw new Error(`local_http_${response.status}`);
+        continue;
+      }
+      const data = (await response.json()) as { response?: string; prompt_eval_count?: number; eval_count?: number };
+      if (!data.response?.trim()) continue;
+      return {
+        text: data.response.trim(),
+        inputTokens: data.prompt_eval_count ?? estimateTokens(prompt),
+        outputTokens: data.eval_count ?? estimateTokens(data.response)
+      };
+    } catch (error) {
+      if (error instanceof Error && /^local_http_4\d\d$/u.test(error.message)) throw error;
+    }
+  }
+  throw new Error("local_model_unavailable");
 }
 
 export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling) {
@@ -147,7 +169,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
       const activePolicy = await store.policy();
       res.json({
         models: [
-          { tier: "local_fast", model: config.localModel || null, enabled: Boolean(config.localUrl && config.localModel), external: false },
+          { tier: "local_fast", model: config.localModel || null, enabled: Boolean(localCandidates(config).length && config.localModel), external: false },
           {
             tier: "external_economy",
             model: config.economyModel,
@@ -275,7 +297,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
           allowPaidEscalation: body.taskType !== "cop_chat" && body.allowPaidEscalation === true
         },
         {
-          localAvailable: Boolean(config.localUrl && config.localModel),
+          localAvailable: Boolean(localCandidates(config).length && config.localModel),
           externalAvailable: config.externalEnabled && activePolicy.externalAllowed && Boolean(config.openaiKey) &&
             (body.dataClass !== "internal_minimized" || config.economyModel === "gpt-6-luna"),
           advancedAvailable: config.externalEnabled && config.advancedEnabled && activePolicy.advancedAllowed && Boolean(config.openaiKey),

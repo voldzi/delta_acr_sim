@@ -22,7 +22,7 @@
   `AI_ROUTER_COP_INTERNAL_MINIMIZED_ENABLED` (výchozí `false`; poslední
   přepínač smí být zapnut až po kontrole OpenAI projektu a společné akceptaci
   COP/SIM podle [runbooku AI Routeru](16_AI_ROUTER_PRODUCTION.md))
-- `AI_ROUTER_LOCAL_URL`, `AI_ROUTER_LOCAL_MODEL` (volitelná lokální Ollama)
+- `AI_ROUTER_LOCAL_URL`, `AI_ROUTER_LOCAL_MODEL` (volitelná lokální Ollama); `AI_ROUTER_LOCAL_URLS` je volitelný prioritní seznam adres oddělených čárkou a při vyplnění nahrazuje jednu adresu. Router před lokálním dotazem ověří dostupnost požadovaného modelu na každé adrese; nedostupnou přeskočí. Interní data nikdy neposílá na externí model.
 - `AI_ROUTER_DAILY_MICROUSD`, `AI_ROUTER_MONTHLY_MICROUSD`, `AI_ROUTER_USER_DAILY_REQUESTS`
 - `AI_ROUTER_COP_BYOK_ENABLED`, `AI_ROUTER_SIM_IZS_ENABLED` (nové cesty, obě výchozí `false`; požadavky na aktivaci v [runbooku](16_AI_ROUTER_PRODUCTION.md))
 - `AI_ROUTER_COP_ACTOR_SECRET`, `AI_ROUTER_CREDENTIAL_ENCRYPTION_KEY` (oddělený HMAC a 32bytový base64 AES klíč; nikdy v Gitu)
