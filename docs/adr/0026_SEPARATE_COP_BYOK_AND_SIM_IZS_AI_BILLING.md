@@ -1,6 +1,6 @@
 # ADR 0026: Oddělené účtování COP BYOK a SIM/IZS v AI Routeru
 
-**Stav:** přijato pro implementaci; produkční aktivace čeká na společnou akceptaci.
+**Stav:** kontrakt nasazen v neaktivním režimu; produkční aktivace čeká na společnou akceptaci.
 **Datum:** 27. 9. 2026.
 
 ## Kontext

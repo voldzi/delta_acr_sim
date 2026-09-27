@@ -211,7 +211,7 @@ ověřen nasazený kontrakt bez volání OpenAI. Přepínač zůstal vypnutý;
 produkční COP chat se nepřepnul. Plný pozitivní test čeká na kontrolu
 nastavení konkrétního OpenAI projektu a společnou akceptaci COP/SIM.
 
-## Další oddělené cesty COP BYOK a SIM/IZS — zatím nenasazené
+## Oddělené cesty COP BYOK a SIM/IZS — nasazené, neaktivní
 
 Nový [kontrakt a akceptační postup](../ai/11_COP_BYOK_AND_SIM_IZS_ROUTER.md)
 vyžaduje migraci `deploy/ai-router/002_separate_billing.sql` v existující
@@ -222,3 +222,35 @@ použít pro syntetické vývojové ověření SIM; vlastnictví nového produk�
 projektu tím není prokázáno. Společná akceptace, rozpočty a přepnutí COP
 chatu jsou samostatné kroky. Při chybě ponechat oba přepínače vypnuté a
 stávající lokální COP chat v provozu; auditní tabulky zachovat.
+
+### Produkční nasazení 27. 9. 2026
+
+- Aditivní migrace `002_separate_billing.sql` prošla v oddělené databázi
+  `sim_ai_router` přes HAProxy. Běhový účet vidí nové tabulky a má ověřená
+  potřebná práva. Přihlašovací údaje nebyly přidány do repozitáře.
+- Commit `32a953f` byl do produkční větve převzat jako `e857696`.
+  Dotčeny a restartovány byly pouze `ai-router-api`, `sim-api` a `sim-web`;
+  jiné datové služby zůstaly healthy. Nesouvisející rozpracovaný soubor
+  `deploy/otel-collector.yaml` zůstal nedotčen.
+- Nové obrazy: Router `sha256:ce95093a1f871db37c3f9737193ca709ab1b3624b30f385ca968c0edd871d762`,
+  SIM API `sha256:e2b61d0d0aace9168ab0b0410dc129e8e78963fe48cf6f17b03b469de1607a7f`,
+  SIM web `sha256:c6e756cda935a51540e1ab453e0f3810dac1c2cc05464f680a460bffb3e6a999`.
+  Původní obrazy zůstávají označené `:pre-byok-20260927` pro návrat.
+- Všechny tři kontejnery jsou healthy; interní Router `/health/ready`
+  vrátil 200. COP BYOK vrátil 503 `cop_byok_not_enabled`; IZS službový token
+  zatím není nastaven. Router port 4050 nemá host mapping. SIM admin proxy
+  vrátila 200 a oddělenou knihu označila `not_enabled`. Veřejný live
+  healthcheck vrátil 200, interní readiness přes web bez autentizace 401
+  podle stávajícího přístupového pravidla.
+- Na interním disku zůstalo 39 GB volných; žádné staré soubory ani cache
+  nebylo kvůli nasazení nutné mazat. Zálohy env a návratové obrazy se
+  ponechávají. Nebyl proveden produkční dotaz na OpenAI, přepnutí COP chatu
+  ani aktivace SIM/IZS úlohy.
+- Doplňkový fiktivní canary dosavadní lokální cesty `cop_chat/internal`
+  vrátil 503 `model_unavailable`: Router má stále nastaven
+  `gemma4:12b-mlx` na `192.168.200.2:11434`, ale HTTP dotaz na tento
+  endpoint timeoutuje i přímo z hostu `docker.home.cz`. Nejde o aktivaci
+  nové externí větve ani o chybu databázové migrace; stav lokálního
+  poskytovatele/vnitřního spojení vyžaduje samostatné obnovení a poté
+  opakovaný chatový test. VPN, VLAN ani firewall se v rámci nasazení
+  neměnily.
