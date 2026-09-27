@@ -296,3 +296,25 @@ proměnnou nenačetlo; jeho bezpečné znovunačtení koordinuje vlastník COP.
 Migrace `002_separate_billing.sql` byla aplikována při předchozím nasazení.
 Živé dvouuživatelské účtování a externí OpenAI projekty zatím nebyly přijaty;
 běžný COP chat se nepřepínal.
+
+### Záporný produkční canary COP BYOK
+
+Po načtení společného actor tajemství v COP byla nová SIM větev na dobu testu
+krátce zapnuta bez uloženého uživatelského OpenAI klíče. Výsledky:
+
+- Bez službového tokenu: 401 `unauthorized`; bez podepsaného actor tvrzení:
+  401 `actor_assertion_invalid`.
+- Podepsaný požadavek s nepovoleným automatickým kontextem: 400
+  `invalid_request`; platný fiktivní požadavek bez uživatelského klíče: 422
+  `user_key_missing`.
+- Administrátorský přehled účtování vrátil 200 před i po testu a jeho kniha
+  spotřeby se nezměnila; nebyl vytvořen rezervovaný ani placený požadavek.
+- Návrat obnovil původní `.env` bitově shodně, přepínač v běžícím Routeru je
+  znovu `AI_ROUTER_COP_BYOK_ENABLED=false` a služba prošla healthcheckem.
+
+První pokus testu se spustil před dokončením startu Routeru; ochranný návrat
+vrátil přepínač na `false` bez provedení canary. Druhý pokus po healthchecku
+prošel. Obě zálohy `.env.before-byok-negative-canary*` zůstávají pro audit.
+Tento důkaz **neověřuje** izolaci dvou skutečných OpenAI projektů, provider
+429, účtování tokenů ani obsah odchozího požadavku; tyto kroky vyžadují
+schválené testovací projekty a samostatnou společnou akceptaci.
