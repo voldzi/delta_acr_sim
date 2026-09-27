@@ -181,6 +181,12 @@ const routePolicies: RoutePolicy[] = [
   { methods: ["GET"], pattern: /^\/api\/v1\/ai\/router-admin$/, roles: ["SIM_AI_ADMIN"] },
   {
     methods: ["POST"],
+    pattern: /^\/api\/v1\/ai\/izs-summary$/,
+    roles: ["SIM_IZS_ANALYST"],
+    audit: { action: "ai.izs.summary.request", resourceType: "aiIzsSummary" }
+  },
+  {
+    methods: ["POST"],
     pattern: /^\/api\/v1\/ai\/router-scenario-preview$/,
     roles: ["SIM_AI_USER"],
     audit: { action: "ai.router.scenario.preview", resourceType: "aiRouterPreview" }
@@ -203,7 +209,7 @@ const routePolicies: RoutePolicy[] = [
 const devPrincipal: AuthenticatedPrincipal = {
   actor: "anonymous-dev",
   authMode: "dev",
-  roles: ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"]
+  roles: ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN", "SIM_IZS_ANALYST"]
 };
 
 const publicReadPrincipal: AuthenticatedPrincipal = {
@@ -464,6 +470,9 @@ function mapOidcRoles(roles: string[]): SimRole[] {
   }
   if (hasAnyRole(normalized, ["SIM_AI_USER", "sim_ai_user", "csm-sim-ai-user"])) {
     mapped.add("SIM_AI_USER");
+  }
+  if (hasAnyRole(normalized, ["SIM_IZS_ANALYST", "sim_izs_analyst", "csm-sim-izs-analyst"])) {
+    mapped.add("SIM_IZS_ANALYST");
   }
   return Array.from(mapped);
 }

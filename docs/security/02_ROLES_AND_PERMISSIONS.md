@@ -9,6 +9,7 @@
 - `SIM_VIEWER`
 - `SIM_AI_USER`
 - `SIM_AI_ADMIN`
+- `SIM_IZS_ANALYST`
 
 ## Baseline oprávnění
 
@@ -17,6 +18,8 @@
 - `SIM_ADMIN`: konfigurace publisheru, secrets reference a queue operace.
 - `SIM_AI_USER`: tvorba AI draftů v povolených limitech.
 - `SIM_AI_ADMIN`: konfigurace AI providerů a external-provider policy.
+- `SIM_IZS_ANALYST`: výslovně potvrzený návrh souhrnu SIM/IZS přes oddělený
+  projekt Routeru; role neuděluje správu AI klíčů ani publikaci souhrnu.
 
 ## Citlivé akce
 

@@ -37,6 +37,12 @@ export interface AiRouterAdminState {
   models: { models: Array<{ tier: string; model: string | null; enabled: boolean; external: boolean }> };
   policy: { externalAllowed: boolean; advancedAllowed: boolean; limits: { dailyMicrousd: number; monthlyMicrousd: number; perUserDailyRequests: number } };
   usage: { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number };
+  separateBilling?: {
+    status?: string;
+    actualProviderChargesVerified?: boolean;
+    usage?: Record<"user_openai_key" | "sim_project", { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number }>;
+    limits?: { userOpenaiKey: { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number }; simProject: { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number } };
+  };
 }
 
 export interface AiRouterScenarioPreview {

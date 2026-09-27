@@ -3,6 +3,8 @@ import express, { type Request, type Response } from "express";
 import { BudgetError, BudgetStore, type RouterPolicy } from "./budget.js";
 import { copModelPrompt, validCopContext } from "./cop-context.js";
 import type { Config } from "./config.js";
+import { registerSeparateRoutes } from "./separate-routes.js";
+import type { SeparateBilling } from "./separate-billing.js";
 import { chooseRoute, estimateMicrousd, estimateTokens, taskAllowsDataClass, type DataClass, type ModelPreference, type TaskType } from "./routing.js";
 
 interface GenerateBody {
@@ -25,12 +27,13 @@ function secureEqual(a: string, b: string): boolean {
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
 }
-export function caller(req: Request, config: Config): "cop" | "sim" | "admin" | null {
+export function caller(req: Request, config: Config): "cop" | "sim" | "admin" | "izs" | null {
   const token = bearer(req);
   if (!token) return null;
   if (secureEqual(token, config.adminToken)) return "admin";
   if (secureEqual(token, config.copToken)) return "cop";
   if (secureEqual(token, config.simToken)) return "sim";
+  if (config.izsToken && secureEqual(token, config.izsToken)) return "izs";
   return null;
 }
 export function validBody(value: unknown): value is GenerateBody {
@@ -115,7 +118,7 @@ async function callLocal(config: Config, prompt: string, maxOutputTokens: number
   };
 }
 
-export function createApp(config: Config, store: BudgetStore) {
+export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "32kb" }));
@@ -123,6 +126,7 @@ export function createApp(config: Config, store: BudgetStore) {
   app.get("/health/ready", async (_req, res) => {
     try {
       await store.pool.query("SELECT 1");
+      if (separate) await separate.usage();
       res.json({ status: "ok" });
     } catch {
       res.status(503).json({ status: "unavailable" });
@@ -138,6 +142,7 @@ export function createApp(config: Config, store: BudgetStore) {
     next();
   });
   app.get("/api/v1/ai-router/models", async (_req, res) => {
+    if (res.locals.caller === "izs") { res.status(403).json({ error: "forbidden" }); return; }
     try {
       const activePolicy = await store.policy();
       res.json({
@@ -163,6 +168,7 @@ export function createApp(config: Config, store: BudgetStore) {
     }
   });
   app.get("/api/v1/ai-router/policy", async (_req, res) => {
+    if (res.locals.caller === "izs") { res.status(403).json({ error: "forbidden" }); return; }
     try {
       res.json(await store.policy());
     } catch {
@@ -187,7 +193,8 @@ export function createApp(config: Config, store: BudgetStore) {
       res.status(400).json({ error: "invalid_policy" });
       return;
     }
-    if ((policy.externalAllowed && (!config.externalEnabled || !config.openaiKey)) || (policy.advancedAllowed && !config.advancedEnabled)) {
+    const hasExternalCredential = Boolean(config.openaiKey || config.copByokEnabled || (config.simIzsEnabled && config.simIzsOpenaiKey));
+    if ((policy.externalAllowed && (!config.externalEnabled || !hasExternalCredential)) || (policy.advancedAllowed && !config.advancedEnabled)) {
       res.status(400).json({ error: "environment_cap_disabled" });
       return;
     }
@@ -202,12 +209,14 @@ export function createApp(config: Config, store: BudgetStore) {
     }
   });
   app.get("/api/v1/ai-router/usage", async (_req, res) => {
+    if (res.locals.caller === "izs") { res.status(403).json({ error: "forbidden" }); return; }
     try {
       res.json(await store.usage());
     } catch {
       res.status(503).json({ error: "usage_unavailable" });
     }
   });
+  registerSeparateRoutes(app, config, store, separate);
   app.post("/api/v1/ai-router/generate", async (req, res) => {
     if (!validBody(req.body)) {
       res.status(400).json({ error: "invalid_request" });
@@ -215,7 +224,7 @@ export function createApp(config: Config, store: BudgetStore) {
     }
     const body = req.body;
     const identity = res.locals.caller as string;
-    if (identity === "admin" || (identity === "cop" && body.taskType === "sim_scenario") || (identity === "sim" && body.taskType !== "sim_scenario")) {
+    if (identity === "admin" || identity === "izs" || (identity === "cop" && body.taskType === "sim_scenario") || (identity === "sim" && body.taskType !== "sim_scenario")) {
       res.status(403).json({ error: "task_not_allowed" });
       return;
     }

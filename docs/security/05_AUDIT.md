@@ -39,3 +39,11 @@ plaintext uživatelské ID ani API klíč. Denní/měsíční součty v SIM zahr
 jen volání přes Router; nejsou fakturou ani součtem přímých volání COP mimo
 Router. Pokud po odpovědi modelu selže zápis výsledku do evidence, Router
 vrací 503 a neoznačí požadavek jako úspěšný.
+
+Nové oddělené cesty vedou další knihu `ai_router_billing_request` s typem
+plátce, HMAC otiskem použitého klíče, neprůhlednými hashi plátce/aktéra,
+rezervací, stavem, modelem a tokeny; částka je jen odhad. Správa klíče má
+oddělený audit změn bez hodnot klíčů. SIM/IZS proxy vyžaduje
+`SIM_IZS_ANALYST` a zapisuje `ai.izs.summary.request`; samotný text souhrnu
+ani vstupní fakta se do rozpočtové knihy neukládají. Při nejistém výsledku
+provider volání zůstává rezervace pro následné vyrovnání.

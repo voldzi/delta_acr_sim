@@ -1,0 +1,151 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "SIM AI Router separate billing pilot", "version": "0.1.0" },
+  "paths": {
+    "/api/v1/ai-router/cop/users/me/openai-key": {
+      "get": {
+        "tags": ["AI Router"], "operationId": "copUserKeyStatus",
+        "summary": "Read the signed-in COP user's key status without returning the key",
+        "description": "Internal COP service token plus x-cop-actor and x-cop-actor-signature are required. The signed actor, never a body userId, selects the account. COP must not persist or log a key in transit.",
+        "servers": [{ "url": "http://ai-router-api:4050" }], "security": [{ "aiRouterBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/CopActorHeader" }, { "$ref": "#/components/parameters/CopActorSignatureHeader" }],
+        "responses": { "200": { "description": "Key status only", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserKeyStatus" } } } }, "401": { "description": "Invalid actor assertion" }, "403": { "description": "COP service only" }, "503": { "description": "Feature or credential store unavailable" } }
+      },
+      "put": {
+        "tags": ["AI Router"], "operationId": "copPutUserKey", "summary": "Validate and atomically save or replace the signed-in COP user's project key",
+        "servers": [{ "url": "http://ai-router-api:4050" }], "security": [{ "aiRouterBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/CopActorHeader" }, { "$ref": "#/components/parameters/CopActorSignatureHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserKeyPutRequest" } } } },
+        "responses": { "200": { "description": "Key status without secret", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserKeyStatus" } } } }, "400": { "description": "Invalid input" }, "401": { "description": "Invalid actor assertion" }, "403": { "description": "COP service only" }, "422": { "description": "Key invalid or model not available" }, "429": { "description": "Provider rate limited" }, "503": { "description": "Provider or encrypted store unavailable" } }
+      },
+      "delete": {
+        "tags": ["AI Router"], "operationId": "copDeleteUserKey", "summary": "Stop further use and logically remove the signed-in user's stored key",
+        "servers": [{ "url": "http://ai-router-api:4050" }], "security": [{ "aiRouterBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/CopActorHeader" }, { "$ref": "#/components/parameters/CopActorSignatureHeader" }],
+        "responses": { "204": { "description": "Removed; provider-side revocation and backup retention are separate" }, "401": { "description": "Invalid actor assertion" }, "403": { "description": "COP service only" }, "503": { "description": "Store unavailable" } }
+      }
+    },
+    "/api/v1/ai-router/cop/chat": {
+      "post": {
+        "tags": ["AI Router"], "operationId": "copChatByok", "summary": "Unified COP chat billed only to the authenticated user's OpenAI project key",
+        "description": "Disabled by default. The user-authored question is distinct from optional bounded published context. No fallback to a COP or SIM key. The Router cannot prove question authorship or publication status from attestation alone.",
+        "servers": [{ "url": "http://ai-router-api:4050" }], "security": [{ "aiRouterBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/CopActorHeader" }, { "$ref": "#/components/parameters/CopActorSignatureHeader" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CopByokChatRequest" } } } },
+        "responses": { "200": { "description": "Advisory answer and estimated usage; not a provider invoice", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeparateBillingResponse" } } } }, "400": { "description": "Invalid or unreviewed context" }, "401": { "description": "Invalid actor assertion" }, "403": { "description": "COP service only" }, "422": { "description": "User key missing, invalid or lacking model access" }, "429": { "description": "Budget, per-user limit or provider rate limit" }, "503": { "description": "Router, database, model or outcome unavailable; never uses house key" } }
+      }
+    },
+    "/api/v1/ai-router/sim/izs-summary": {
+      "post": {
+        "tags": ["AI Router"], "operationId": "simIzsSummary", "summary": "Separately authorized, audited SIM analysis for human-reviewed IZS summaries",
+        "description": "Disabled by default; requires dedicated IZS service token and an opaque x-sim-actor. The SIM project key and ledger cannot be selected by the client. Only synthetic or reviewed published numeric context is accepted in this pilot.",
+        "servers": [{ "url": "http://ai-router-api:4050" }], "security": [{ "aiRouterBearer": [] }],
+        "parameters": [{ "name": "x-sim-actor", "in": "header", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SimIzsSummaryRequest" } } } },
+        "responses": { "200": { "description": "Advisory summary with estimated usage", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeparateBillingResponse" } } } }, "400": { "description": "Invalid context" }, "403": { "description": "Dedicated IZS service identity required" }, "429": { "description": "Limit reached" }, "503": { "description": "Feature, project, database or provider unavailable" } }
+      }
+    },
+    "/api/v1/ai-router/billing-usage": {
+      "get": {
+        "tags": ["AI Router"], "operationId": "separateBillingUsage", "summary": "Aggregated separate-ledger usage and limits, without user keys or identities",
+        "servers": [{ "url": "http://ai-router-api:4050" }], "security": [{ "aiRouterBearer": [] }],
+        "responses": { "200": { "description": "Estimated usage by billing source; actual provider charges not verified", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeparateBillingUsageResponse" } } } }, "403": { "description": "Router admin required" }, "503": { "description": "Ledger unavailable" } }
+      }
+    },
+    "/api/v1/ai/izs-summary": {
+      "post": {
+        "tags": ["Simulator: AI"], "operationId": "simIzsSummaryProxy", "summary": "Authorized SIM IZS analyst proxy with access audit",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SimIzsSummaryProxyRequest" } } } },
+        "responses": { "200": { "description": "Human-review-required summary", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SeparateBillingResponse" } } } }, "400": { "description": "Invalid input" }, "403": { "description": "SIM_IZS_ANALYST role required" }, "429": { "description": "Limit reached" }, "503": { "description": "Router unavailable" } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "CopActorHeader": { "name": "x-cop-actor", "in": "header", "required": true, "description": "Base64url JSON with exactly sub, aud=sim-ai-router, iat and exp; issued by COP API for its authenticated user, at most 60 seconds lifetime.", "schema": { "type": "string" } },
+      "CopActorSignatureHeader": { "name": "x-cop-actor-signature", "in": "header", "required": true, "description": "Lowercase hex HMAC-SHA256 of the unmodified x-cop-actor string using the separate COP/Router actor secret.", "schema": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+    },
+    "schemas": {
+      "UserKeyPutRequest": { "type": "object", "additionalProperties": false, "required": ["apiKey"], "properties": { "apiKey": { "type": "string", "minLength": 20, "maxLength": 512, "writeOnly": true } } },
+      "UserKeyStatus": { "type": "object", "additionalProperties": false, "required": ["configured"], "properties": { "configured": { "type": "boolean" }, "fingerprint": { "type": "string", "description": "Non-reversible short HMAC fingerprint, never the API key" }, "updatedAt": { "type": "string", "format": "date-time" } } },
+      "CopByokChatRequest": { "type": "object", "additionalProperties": false, "required": ["contractVersion", "billingSource", "question", "allowExternal"], "properties": {
+        "contractVersion": { "const": "cop-chat-byok-v1" }, "billingSource": { "const": "user_openai_key" },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1200, "description": "Only the user's freshly authored question; no auto-attached private chat history." },
+        "allowExternal": { "const": true }, "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 1024 },
+        "automaticContext": { "$ref": "#/components/schemas/CopPublishedContext" }
+      } },
+      "PublishedContext": { "type": "object", "additionalProperties": false, "required": ["contractVersion", "attestation", "items"], "properties": {
+        "contractVersion": { "const": "published-context-v1" },
+        "attestation": { "enum": ["cop-published-reviewed-v1", "sim-published-reviewed-v1"] },
+        "items": { "type": "array", "maxItems": 12, "items": { "oneOf": [{ "$ref": "#/components/schemas/PublishedSourceHealth" }, { "$ref": "#/components/schemas/PublishedMetric" }] } }
+      } },
+      "CopPublishedContext": { "allOf": [{ "$ref": "#/components/schemas/PublishedContext" }, { "type": "object", "properties": { "attestation": { "const": "cop-published-reviewed-v1" } } }] },
+      "SimPublishedContext": { "allOf": [{ "$ref": "#/components/schemas/PublishedContext" }, { "type": "object", "properties": { "attestation": { "const": "sim-published-reviewed-v1" } } }] },
+      "PublishedSourceHealth": { "type": "object", "additionalProperties": false, "required": ["kind", "sourceId", "publicationStatus", "originType", "publicationRef", "observedAt", "publishedAt", "validUntil", "status"], "properties": {
+        "kind": { "const": "source_health" }, "sourceId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+        "publicationStatus": { "const": "published" }, "originType": { "enum": ["official", "licensed_public", "sim_published"] },
+        "publicationRef": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+        "observedAt": { "type": "string", "format": "date-time" }, "publishedAt": { "type": "string", "format": "date-time" }, "validUntil": { "type": "string", "format": "date-time" },
+        "status": { "enum": ["up", "degraded", "down"] }
+      } },
+      "PublishedMetric": { "type": "object", "additionalProperties": false, "required": ["kind", "sourceId", "publicationStatus", "originType", "publicationRef", "observedAt", "publishedAt", "validUntil", "metricId", "regionCode", "value", "unit", "sampleSize"], "properties": {
+        "kind": { "const": "operational_metric" }, "sourceId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+        "publicationStatus": { "const": "published" }, "originType": { "enum": ["official", "licensed_public", "sim_published"] },
+        "publicationRef": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+        "observedAt": { "type": "string", "format": "date-time" }, "publishedAt": { "type": "string", "format": "date-time" }, "validUntil": { "type": "string", "format": "date-time" },
+        "metricId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" }, "regionCode": { "type": "string", "pattern": "^CZ([0-9]{3})?$" },
+        "value": { "type": "number" }, "unit": { "enum": ["count", "percent", "minutes", "km", "index"] }, "sampleSize": { "type": "integer", "minimum": 10 }
+      } },
+      "SimIzsSummaryRequest": { "type": "object", "additionalProperties": false, "required": ["contractVersion", "billingSource", "taskType", "dataClass", "prompt", "context"],
+        "allOf": [{ "if": { "properties": { "dataClass": { "const": "synthetic" } } }, "then": { "properties": { "context": { "$ref": "#/components/schemas/SimSyntheticContext" } } } },
+          { "if": { "properties": { "dataClass": { "const": "public_aggregate" } } }, "then": { "properties": { "context": { "$ref": "#/components/schemas/SimPublishedContext" } } } }],
+        "properties": {
+        "contractVersion": { "const": "sim-izs-summary-v1" }, "billingSource": { "const": "sim_project" }, "taskType": { "const": "sim_izs_summary" },
+        "dataClass": { "enum": ["synthetic", "public_aggregate"] }, "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "context": { "oneOf": [{ "$ref": "#/components/schemas/SimPublishedContext" }, { "$ref": "#/components/schemas/SimSyntheticContext" }] },
+        "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 1024 }
+      } },
+      "SimIzsSummaryProxyRequest": { "type": "object", "additionalProperties": false, "required": ["contractVersion", "billingSource", "taskType", "dataClass", "prompt", "context", "approvedExternalProcessing"],
+        "allOf": [{ "if": { "properties": { "dataClass": { "const": "synthetic" } } }, "then": { "properties": { "context": { "$ref": "#/components/schemas/SimSyntheticContext" } } } },
+          { "if": { "properties": { "dataClass": { "const": "public_aggregate" } } }, "then": { "properties": { "context": { "$ref": "#/components/schemas/SimPublishedContext" } } } }],
+        "properties": {
+        "contractVersion": { "const": "sim-izs-summary-v1" }, "billingSource": { "const": "sim_project" }, "taskType": { "const": "sim_izs_summary" },
+        "dataClass": { "enum": ["synthetic", "public_aggregate"] }, "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "context": { "oneOf": [{ "$ref": "#/components/schemas/SimPublishedContext" }, { "$ref": "#/components/schemas/SimSyntheticContext" }] },
+        "maxOutputTokens": { "type": "integer", "minimum": 1, "maximum": 1024 }, "approvedExternalProcessing": { "const": true }
+      } },
+      "SimSyntheticContext": { "type": "object", "additionalProperties": false, "required": ["contractVersion", "attestation", "facts"], "properties": {
+        "contractVersion": { "const": "sim-synthetic-context-v1" }, "attestation": { "const": "sim-synthetic-reviewed-v1" },
+        "facts": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "type": "string", "minLength": 1, "maxLength": 240 } }
+      } },
+      "SeparateBillingResponse": { "type": "object", "required": ["requestId", "billingSource", "model", "output", "usage", "requiresHumanReview"], "properties": {
+        "requestId": { "type": "string", "format": "uuid" }, "billingSource": { "enum": ["user_openai_key", "sim_project"] },
+        "model": { "type": "string" }, "output": { "type": "string" }, "requiresHumanReview": { "const": true },
+        "usage": { "type": "object", "required": ["inputTokens", "outputTokens", "estimatedMicrousd", "actualProviderChargesVerified"], "properties": {
+          "inputTokens": { "type": "integer" }, "outputTokens": { "type": "integer" }, "estimatedMicrousd": { "type": "integer" }, "actualProviderChargesVerified": { "const": false }
+        } }
+      } },
+      "SeparateBillingUsageResponse": { "type": "object", "additionalProperties": false, "required": ["usage", "limits", "actualProviderChargesVerified"], "properties": {
+        "usage": { "type": "object", "additionalProperties": false, "required": ["user_openai_key", "sim_project"], "properties": {
+          "user_openai_key": { "$ref": "#/components/schemas/SeparateBillingUsageBucket" },
+          "sim_project": { "$ref": "#/components/schemas/SeparateBillingUsageBucket" }
+        } },
+        "limits": { "type": "object", "additionalProperties": false, "required": ["userOpenaiKey", "simProject"], "properties": {
+          "userOpenaiKey": { "$ref": "#/components/schemas/SeparateBillingLimits" },
+          "simProject": { "$ref": "#/components/schemas/SeparateBillingLimits" }
+        } },
+        "actualProviderChargesVerified": { "const": false }
+      } },
+      "SeparateBillingUsageBucket": { "type": "object", "additionalProperties": false, "required": ["dailyMicrousd", "monthlyMicrousd", "dailyRequests", "monthlyRequests", "dailyInputTokens", "dailyOutputTokens"], "properties": {
+        "dailyMicrousd": { "type": "integer", "minimum": 0 }, "monthlyMicrousd": { "type": "integer", "minimum": 0 },
+        "dailyRequests": { "type": "integer", "minimum": 0 }, "monthlyRequests": { "type": "integer", "minimum": 0 },
+        "dailyInputTokens": { "type": "integer", "minimum": 0 }, "dailyOutputTokens": { "type": "integer", "minimum": 0 }
+      } },
+      "SeparateBillingLimits": { "type": "object", "additionalProperties": false, "required": ["dailyMicrousd", "monthlyMicrousd", "dailyRequests"], "properties": {
+        "dailyMicrousd": { "type": "integer", "minimum": 1 }, "monthlyMicrousd": { "type": "integer", "minimum": 1 },
+        "dailyRequests": { "type": "integer", "minimum": 1 }
+      } }
+    }
+  }
+}

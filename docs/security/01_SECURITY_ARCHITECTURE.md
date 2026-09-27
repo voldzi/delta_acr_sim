@@ -59,6 +59,17 @@ konkrétní OpenAI API projekt, retence a případná evropská rezidence;
 `store:false` samo o sobě neznamená nulové uchování. Chyba Routeru se nesmí
 obcházet přímým voláním OpenAI.
 
+Nový, zatím vypnutý [COP BYOK kontrakt](../ai/11_COP_BYOK_AND_SIM_IZS_ROUTER.md)
+je jiná cesta: samotnou otázku napsanou uživatelem smí COP po jeho vědomé
+volbě předat do OpenAI Global pod jeho vlastním projektovým klíčem, včetně
+údajů, které do ní sám vložil. Automaticky připojený kontext však zůstává
+omezen na typované zveřejněné položky s původem, časem platnosti a kontrolou
+COP. Router nedokáže ověřit autorství textu ani pravdivost zveřejnění.
+Uživatelské klíče ukládá šifrovaně, identitu COP ověřuje podepsaným
+krátkodobým tvrzením, nepřijímá klientskou volbu cizího účtu a při výpadku
+nesmí přejít na sdílený placený účet. Oddělená SIM/IZS větev má vlastní
+roli, token, projekt a audit; jen syntetické či zveřejněné agregáty.
+
 ## Zákazy
 
 Systém nesmí obsahovat reálná operační data, secrets v repozitáři, targeting, navádění nebo bojové workflow.

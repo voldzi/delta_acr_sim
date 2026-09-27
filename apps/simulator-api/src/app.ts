@@ -5,7 +5,7 @@ import { PublisherClient } from "@csm-sim/publisher-client";
 import { availableBlocks } from "@csm-sim/simulation-core";
 import cors from "cors";
 import express, { type Express } from "express";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ApiConfig } from "./config.js";
 import { problem } from "./http.js";
@@ -322,15 +322,49 @@ function registerAiRoutes(app: Express, context: AppContext): void {
   }
   app.get("/api/v1/ai/router-admin", async (req, res) => {
     try {
-      const [models, policy, usage] = await Promise.all([
+      const [models, policy, usage, separateUsage] = await Promise.all([
         routerRequest("/api/v1/ai-router/models"),
         routerRequest("/api/v1/ai-router/policy"),
-        routerRequest("/api/v1/ai-router/usage")
+        routerRequest("/api/v1/ai-router/usage"),
+        routerRequest("/api/v1/ai-router/billing-usage")
       ]);
       if (!models.ok || !policy.ok || !usage.ok) return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is unavailable.");
-      res.json({ models: await models.json(), policy: await policy.json(), usage: await usage.json() });
+      res.json({ models: await models.json(), policy: await policy.json(), usage: await usage.json(),
+        separateBilling: separateUsage.ok ? await separateUsage.json() : { status: "not_enabled" } });
     } catch {
       return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is not configured or unavailable.");
+    }
+  });
+  app.post("/api/v1/ai/izs-summary", async (req, res) => {
+    if (!context.config.aiRouterBaseUrl || !context.config.aiRouterIzsToken) {
+      return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "IZS analysis is not configured.");
+    }
+    const actor = authenticatedActor(req);
+    if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
+    const body = req.body as Record<string, unknown> | undefined;
+    if (!body || body.approvedExternalProcessing !== true ||
+        !["synthetic", "public_aggregate"].includes(String(body.dataClass)) ||
+        typeof body.prompt !== "string" || body.prompt.length > 2000 || !body.context) {
+      return problem(req, res, 400, "VALIDATION_ERROR", "Reviewed, bounded IZS input and external-processing approval are required.");
+    }
+    const { approvedExternalProcessing: _approval, ...requestBody } = body;
+    const actorId = createHmac("sha256", context.config.aiRouterIzsToken).update("izs-actor\0").update(actor).digest("base64url");
+    try {
+      const response = await fetch(new URL("/api/v1/ai-router/sim/izs-summary", context.config.aiRouterBaseUrl), {
+        method: "POST",
+        headers: { authorization: `Bearer ${context.config.aiRouterIzsToken}`, "content-type": "application/json", "x-sim-actor": actorId },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(30_000)
+      });
+      const result = await response.json() as Record<string, unknown>;
+      if (!response.ok) return problem(req, res, response.status === 429 ? 429 : response.status === 400 ? 400 : 503,
+        "AI_ROUTER_REJECTED", `IZS analysis was rejected: ${typeof result.error === "string" ? result.error : "router_unavailable"}.`);
+      if (typeof result.output !== "string" || result.requiresHumanReview !== true) {
+        return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router returned an invalid response.");
+      }
+      res.json(result);
+    } catch {
+      return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "IZS analysis is unavailable.");
     }
   });
   app.patch("/api/v1/ai/router-admin/policy", async (req, res) => {
