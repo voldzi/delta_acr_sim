@@ -46,6 +46,13 @@ SPECS = [
     path_prefix: ""
   },
   {
+    key: "aiRouterSeparate",
+    prefix: "AiRouterSeparate",
+    tag_prefix: "AI Router",
+    file: "openapi/fragments/ai-router-separate-billing.openapi.json",
+    path_prefix: ""
+  },
+  {
     key: "searchData",
     prefix: "SearchData",
     tag_prefix: "Search Data",

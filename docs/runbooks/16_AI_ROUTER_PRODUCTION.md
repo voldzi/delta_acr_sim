@@ -210,3 +210,15 @@ platný minimální kontext 503 `internal_minimized_not_enabled`. Tím byl
 ověřen nasazený kontrakt bez volání OpenAI. Přepínač zůstal vypnutý;
 produkční COP chat se nepřepnul. Plný pozitivní test čeká na kontrolu
 nastavení konkrétního OpenAI projektu a společnou akceptaci COP/SIM.
+
+## Další oddělené cesty COP BYOK a SIM/IZS — zatím nenasazené
+
+Nový [kontrakt a akceptační postup](../ai/11_COP_BYOK_AND_SIM_IZS_ROUTER.md)
+vyžaduje migraci `deploy/ai-router/002_separate_billing.sql` v existující
+oddělené databázi Routeru, nové oddělené HMAC/šifrovací tajemství a kontrolu
+projektu OpenAI. **Nepovolovat** `AI_ROUTER_COP_BYOK_ENABLED` ani
+`AI_ROUTER_SIM_IZS_ENABLED` pouhým nasazením image. `OPENAI_API_KEY` lze
+použít pro syntetické vývojové ověření SIM; vlastnictví nového produkčního
+projektu tím není prokázáno. Společná akceptace, rozpočty a přepnutí COP
+chatu jsou samostatné kroky. Při chybě ponechat oba přepínače vypnuté a
+stávající lokální COP chat v provozu; auditní tabulky zachovat.

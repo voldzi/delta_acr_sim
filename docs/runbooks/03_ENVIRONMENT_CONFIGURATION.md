@@ -24,6 +24,13 @@
   COP/SIM podle [runbooku AI Routeru](16_AI_ROUTER_PRODUCTION.md))
 - `AI_ROUTER_LOCAL_URL`, `AI_ROUTER_LOCAL_MODEL` (volitelná lokální Ollama)
 - `AI_ROUTER_DAILY_MICROUSD`, `AI_ROUTER_MONTHLY_MICROUSD`, `AI_ROUTER_USER_DAILY_REQUESTS`
+- `AI_ROUTER_COP_BYOK_ENABLED`, `AI_ROUTER_SIM_IZS_ENABLED` (nové cesty, obě výchozí `false`; požadavky na aktivaci v [runbooku](16_AI_ROUTER_PRODUCTION.md))
+- `AI_ROUTER_COP_ACTOR_SECRET`, `AI_ROUTER_CREDENTIAL_ENCRYPTION_KEY` (oddělený HMAC a 32bytový base64 AES klíč; nikdy v Gitu)
+- `AI_ROUTER_IZS_TOKEN` (stejný dedikovaný vysokonáhodný token na straně Routeru a SIM API)
+- `AI_ROUTER_SIM_IZS_OPENAI_API_KEY`, `AI_ROUTER_SIM_IZS_PROJECT_ID`, `AI_ROUTER_SIM_IZS_BUDGET_APPROVED` (samostatný projekt po ověření; vývojový fallback na existující `OPENAI_API_KEY` neprokazuje oddělený produkční účet)
+- `AI_ROUTER_BYOK_DAILY_MICROUSD`, `AI_ROUTER_BYOK_MONTHLY_MICROUSD`, `AI_ROUTER_BYOK_DAILY_REQUESTS` (limity na uživatele)
+- `AI_ROUTER_SIM_IZS_DAILY_MICROUSD`, `AI_ROUTER_SIM_IZS_MONTHLY_MICROUSD`, `AI_ROUTER_SIM_IZS_DAILY_REQUESTS` (limity projektu a operátora)
+- `AI_ROUTER_PUBLISHED_SOURCE_IDS` (explicitní allowlist zdrojů zveřejněného kontextu)
 - `SIM_API_AUTH_REQUIRED`
 - `SIM_API_ADMIN_TOKEN`
 - `SIM_API_INTERNAL_TOKEN`

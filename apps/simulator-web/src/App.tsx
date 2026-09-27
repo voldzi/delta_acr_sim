@@ -3693,6 +3693,27 @@ function AiRouterAdminPanel(): ReactNode {
             Dnes: {(state.usage.dailyMicrousd / 1_000_000).toFixed(4)} USD · Tento měsíc: {(state.usage.monthlyMicrousd / 1_000_000).toFixed(4)} USD · Dnešní
             požadavky: {state.usage.dailyRequests}
           </p>
+          {state.separateBilling?.usage && state.separateBilling.limits ? (
+            <div className="queue-list" aria-label="Oddělené účtování AI Routeru">
+              <div>
+                <strong>Chat COP – klíče uživatelů</strong> · odhad dnes {(state.separateBilling.usage.user_openai_key.dailyMicrousd / 1_000_000).toFixed(4)} USD ·
+                měsíc {(state.separateBilling.usage.user_openai_key.monthlyMicrousd / 1_000_000).toFixed(4)} USD ·
+                {" "}{state.separateBilling.usage.user_openai_key.dailyRequests} požadavků dnes. Limit na jeden klíč:
+                {" "}{(state.separateBilling.limits.userOpenaiKey.dailyMicrousd / 1_000_000).toFixed(2)} USD/den a
+                {" "}{(state.separateBilling.limits.userOpenaiKey.monthlyMicrousd / 1_000_000).toFixed(2)} USD/měsíc.
+                {" "}Tokeny dnes: {state.separateBilling.usage.user_openai_key.dailyInputTokens} vstup / {state.separateBilling.usage.user_openai_key.dailyOutputTokens} výstup.
+              </div>
+              <div>
+                <strong>SIM / IZS – projekt SIM</strong> · odhad dnes {(state.separateBilling.usage.sim_project.dailyMicrousd / 1_000_000).toFixed(4)} USD ·
+                měsíc {(state.separateBilling.usage.sim_project.monthlyMicrousd / 1_000_000).toFixed(4)} USD ·
+                {" "}{state.separateBilling.usage.sim_project.dailyRequests} požadavků dnes. Strop projektu:
+                {" "}{(state.separateBilling.limits.simProject.dailyMicrousd / 1_000_000).toFixed(2)} USD/den a
+                {" "}{(state.separateBilling.limits.simProject.monthlyMicrousd / 1_000_000).toFixed(2)} USD/měsíc.
+                {" "}Tokeny dnes: {state.separateBilling.usage.sim_project.dailyInputTokens} vstup / {state.separateBilling.usage.sim_project.dailyOutputTokens} výstup.
+              </div>
+              <p>Částky jsou rezervace a odhady Routeru, nikoli potvrzená faktura OpenAI ani potvrzení bezplatných tokenů. Aktivaci nových větví řídí samostatné produkční přepínače.</p>
+            </div>
+          ) : null}
           <form className="ai-router-settings" onSubmit={(event) => void save(event)}>
             <label>
               <input

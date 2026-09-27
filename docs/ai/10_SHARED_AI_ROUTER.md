@@ -1,5 +1,9 @@
 # Sdílený AI Router - architektonické zadání a stav realizace
 
+Nové, zatím vypnuté cesty pro uživatelské OpenAI klíče COP a oddělené
+souhrny SIM/IZS popisuje [navazující kontrakt](11_COP_BYOK_AND_SIM_IZS_ROUTER.md).
+Dosavadní `generate` a interní lokální chat se tím samy nemění.
+
 **Stav 25. 9. 2026:** Interní Router a administrační panel SIM jsou nasazené.
 Samostatná interní služba, směrovací pravidla, REST kontrakt a databázová
 rezervace rozpočtu. Textový náhled fiktivního cvičení je připojen v SIM a

@@ -4,7 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const SIM_ROLES = ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN"] as const;
+export const SIM_ROLES = ["SIM_ADMIN", "SIM_OPERATOR", "SIM_VIEWER", "SIM_AI_USER", "SIM_AI_ADMIN", "SIM_IZS_ANALYST"] as const;
 export type SimRole = (typeof SIM_ROLES)[number];
 export type ApiAuthMode = "token" | "hybrid" | "oidc";
 
@@ -27,6 +27,7 @@ export interface ApiConfig {
   aiRouterBaseUrl?: string;
   aiRouterAdminToken?: string;
   aiRouterSimToken?: string;
+  aiRouterIzsToken?: string;
   apiAuthRequired?: boolean;
   apiAuthMode?: ApiAuthMode;
   apiPublicRead?: boolean;
@@ -80,6 +81,7 @@ export async function loadConfig(): Promise<ApiConfig> {
     aiRouterBaseUrl: process.env.SIM_AI_ROUTER_BASE_URL,
     aiRouterAdminToken: process.env.AI_ROUTER_ADMIN_TOKEN,
     aiRouterSimToken: process.env.AI_ROUTER_SIM_TOKEN,
+    aiRouterIzsToken: process.env.AI_ROUTER_IZS_TOKEN,
     apiAuthRequired,
     apiAuthMode,
     apiPublicRead: parseBoolean(process.env.SIM_API_PUBLIC_READ, false),

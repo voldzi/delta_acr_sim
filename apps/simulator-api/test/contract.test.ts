@@ -1010,6 +1010,34 @@ describe("SIM API security controls", () => {
     expect(auditLog).toContain("auth.forbidden");
   });
 
+  it("allows only a separately authorized IZS analyst to request an audited SIM summary", async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "csm-sim-izs-"));
+    ({ app, context } = await createApp(testConfig(dataDir, {
+      apiAuthRequired: true,
+      aiRouterBaseUrl: "http://ai-router-api:4050",
+      aiRouterIzsToken: "izs-service-token-long-enough-123456",
+      apiPrincipals: [
+        { actor: "viewer", token: "viewer-token", roles: ["SIM_VIEWER"] },
+        { actor: "izs-operator", token: "izs-operator-token", roles: ["SIM_IZS_ANALYST"] }
+      ]
+    })));
+    const fetchMock = vi.fn(async (_url: URL, _init: RequestInit) => new Response(JSON.stringify({ output: "Fiktivní návrh souhrnu", requiresHumanReview: true, billingSource: "sim_project", model: "gpt-5.4-mini" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const body = { contractVersion: "sim-izs-summary-v1", billingSource: "sim_project", taskType: "sim_izs_summary",
+      dataClass: "synthetic", prompt: "Shrň fiktivní cvičení.", context: { contractVersion: "sim-synthetic-context-v1", attestation: "sim-synthetic-reviewed-v1", facts: ["Fiktivní povodeň."] }, approvedExternalProcessing: true };
+    await request(app).post("/api/v1/ai/izs-summary").send(body).expect(401);
+    await request(app).post("/api/v1/ai/izs-summary").set("authorization", "Bearer viewer-token").send(body).expect(403);
+    await request(app).post("/api/v1/ai/izs-summary").set("authorization", "Bearer izs-operator-token").send({ ...body, approvedExternalProcessing: false }).expect(400);
+    const response = await request(app).post("/api/v1/ai/izs-summary").set("authorization", "Bearer izs-operator-token").send(body).expect(200);
+    expect(response.body).toMatchObject({ billingSource: "sim_project", requiresHumanReview: true });
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(url.pathname).toBe("/api/v1/ai-router/sim/izs-summary");
+    expect((init.headers as Record<string, string>)["x-sim-actor"]).toMatch(/^[A-Za-z0-9_-]{8,128}$/u);
+    expect((init.headers as Record<string, string>)["x-sim-actor"]).not.toContain("izs-operator");
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("approvedExternalProcessing");
+    expect(await readFile(join(dataDir, "sim-audit.jsonl"), "utf8")).toContain("ai.izs.summary.request");
+  });
+
   it("allows configured public read-only dashboard routes without exposing mutations", async () => {
     dataDir = await mkdtemp(join(tmpdir(), "csm-sim-sec-"));
     ({ app, context } = await createApp(
