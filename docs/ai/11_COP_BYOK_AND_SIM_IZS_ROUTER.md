@@ -1,7 +1,8 @@
 # COP BYOK a samostatné analýzy SIM/IZS
 
-**Stav k 27. 9. 2026:** implementováno v pracovní větvi, oba produkční přepínače
-zůstávají vypnuté. Není potvrzen skutečný OpenAI projekt, nárok na pobídku
+**Stav k 27. 9. 2026:** kontrakt, migrace a tři dotčené služby SIM jsou
+nasazené; oba produkční přepínače nových větví zůstávají vypnuté. Není
+potvrzen skutečný OpenAI projekt, nárok na pobídku
 bezplatných tokenů, živá fakturace, COP adaptér ani akceptace IZS. Tato část
 není pokynem přepnout běžný chat COP.
 
