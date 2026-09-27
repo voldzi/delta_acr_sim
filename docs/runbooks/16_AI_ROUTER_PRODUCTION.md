@@ -286,9 +286,13 @@ pro úložiště uživatelských API klíčů; soubor i záloha
 `/srv/sim/.env.before-ai-router-encryption-20260927` mají práva 600.
 Restartován byl jen `ai-router-api`, který po změně opět prošel healthcheckem.
 `AI_ROUTER_COP_BYOK_ENABLED=false` a `AI_ROUTER_SIM_IZS_ENABLED=false`
-zůstávají beze změny. Podpisové tajemství `AI_ROUTER_COP_ACTOR_SECRET` zatím
-v SIM nastavené není; musí být shodné s `COP_AI_ROUTER_ACTOR_SECRET` na straně
-COP a jeho zápis čeká na výslovné schválení. V COP `.env` nebyla tato
-proměnná při kontrole ještě nastavena. Migrace `002_separate_billing.sql`
-byla aplikována při předchozím nasazení. Živé dvouuživatelské účtování a
-externí OpenAI projekty zatím nebyly přijaty; běžný COP chat se nepřepínal.
+zůstávají beze změny. Po výslovném schválení bylo 27. 9. 2026 jednorázově
+vytvořeno společné podpisové tajemství do `COP_AI_ROUTER_ACTOR_SECRET` v
+`/srv/cop/.env` a `AI_ROUTER_COP_ACTOR_SECRET` v `/srv/sim/.env`. Oba soubory
+mají práva 600, zálohy `.env.before-cop-actor-20260927` také; shoda byla
+ověřena bez výpisu hodnoty. Restartován byl pouze SIM `ai-router-api`, který
+tajemství načetl a je healthy. Běžící COP API při této kontrole ještě novou
+proměnnou nenačetlo; jeho bezpečné znovunačtení koordinuje vlastník COP.
+Migrace `002_separate_billing.sql` byla aplikována při předchozím nasazení.
+Živé dvouuživatelské účtování a externí OpenAI projekty zatím nebyly přijaty;
+běžný COP chat se nepřepínal.
