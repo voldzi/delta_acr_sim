@@ -2,7 +2,8 @@
 
 **Stav:** interní Router, databáze, SIM administrační proxy a textový náhled
 fiktivního cvičení jsou nasazené a serverově ověřené. Ekonomický tier je
-povolen, dražší tier vypnutý. COP chat není přepojen. Tento runbook není
+povolen, dražší tier vypnutý. Běžný COP chat používá Router jen s lokálním
+modelem; nová externí větev `internal_minimized` není zapnutá. Tento runbook není
 pokyn zapnout další typy dat nebo dražší model.
 
 ## Vlastník a hranice
@@ -67,7 +68,8 @@ interní služba bez host portu. Výpadek neodstaví COP mapu ani SIM data.
 
 - Transakční test souběžných rezervací vůči dennímu a měsíčnímu stropu.
 - Odmítnutí `internal` dat pro externí model; COP chat smí externě jen
-  atestovanou syntetickou nebo veřejně agregovanou třídu s výslovným opt-in.
+  atestovanou syntetickou nebo veřejně agregovanou třídu s výslovným opt-in;
+  `internal_minimized` je oddělená schopnost vypnutá do společné akceptace.
 - Nefunkční DB, lokální i externí provider; žádné obejití rozpočtu.
 - Cena porovnaná s aktuálním účtem poskytovatele, včetně regionu a zvoleného
   režimu. Interní odhad není faktura.
@@ -144,7 +146,7 @@ Před produkčním používáním ověřit zvlášť 400 při chybějícím potv
 503 při neplatném JSON, validaci návrhu a ruční přijetí pouze v testovacím
 fiktivním kontextu.
 
-## Připravený kontrakt budoucího COP chatu — bez aktivace
+## Kontrakt COP chatu a připravená minimalizovaná větev — bez aktivace
 
 Router již umí rozlišit interní, fiktivní a veřejně agregovaný `cop_chat`.
 Jen službový token COP s typovaným `copContext`, atestací
@@ -154,7 +156,31 @@ Jen službový token COP s typovaným `copContext`, atestací
 COP chat vyžádat. Závazné schéma je v `openapi/openapi.json`, příklad a
 odpovědnosti v `docs/ai/10_SHARED_AI_ROUTER.md`.
 
-Nasazení této změny kódu Routeru samo **nezapíná** COP chat. Síťové
+COP commit `623927f` připravil na straně COP odpojený adaptér
+`internal_minimized`. Router pro něj přijímá jen COP službový token,
+`taskType=cop_chat`, neprůhledné `userId`, zkontrolovanou otázku do 1200
+znaků, `preference=external`, `allowExternal=true`, explicitní
+`allowPaidEscalation=false` a přesnou atestaci
+`cop-internal-minimized-reviewed-v1`. `copContext.items` má 0–12 položek a
+smí obsahovat pouze omezený `source_health` nebo `operational_metric` bez
+volného textu. Další klíče i chybné třídy vrací 400. Jiná konfigurace
+ekonomického modelu než `gpt-6-luna` vrací 503; 429/503 nespouští přímý
+fallback. Přepínač `AI_ROUTER_COP_INTERNAL_MINIMIZED_ENABLED` je výchozím
+nastavením `false`, nezávisle na ostatním externím provozu.
+
+**Před zapnutím přepínače** vlastník COP/SIM společně doloží: (1) schválení
+účelu a souhlasu pro externí zpracování; (2) identitu konkrétního OpenAI API
+projektu, jeho zpracovatelský vztah, retenční režim a případné schválení
+Modified Abuse Monitoring/Zero Data Retention; (3) požadovanou rezidenci a
+správný regionální endpoint, pokud je sjednána; (4) dostupnost
+`gpt-6-luna` pro projekt a aktuální cenu; (5) společné testy autentizace,
+minimalizace, 429, výpadků, rozpočtu, spotřeby v SIM a návratu. Aktuální
+Router volá `api.openai.com` se `store:false`; to samo **nedokazuje** nulové
+uchování ani evropskou rezidenci. Viz
+[OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
+a [katalog Luna](https://developers.openai.com/api/docs/models/gpt-6-luna).
+
+Nasazení této změny kódu Routeru samo **nezapíná** externí COP chat. Síťové
 propojení COP API ↔ Router, přenos dedikovaného COP tokenu a přepnutí chatu
 vyžadují samostatný výslovný souhlas. Při schválené akceptaci: (1) zaznamenat
 image a politiku Routeru jako rollback bod, (2) nasadit pouze Router z

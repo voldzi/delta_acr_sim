@@ -66,7 +66,9 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
   dostupná, požadavek selže uzavřeně.
 - Připravený kontrakt `cop_chat` připouští `gpt-6-luna` pouze pro
   autentizovanou službu COP, `allowExternal=true`, třídu `synthetic` nebo
-  `public_aggregate` a platný `copContext` s atestací COP. Drahý tier je pro
+  `public_aggregate` a platný `copContext` s atestací COP. Nová třída
+  `internal_minimized` má navíc vlastní atestaci, výslovnou externí volbu a
+  samostatný výchozím nastavením vypnutý provozní přepínač. Drahý tier je pro
   COP chat zakázán. `internal` zůstává výhradně lokální; bez lokálního modelu
   vrací 503. Tento kontrakt není zapnutím produkčního chatu COP.
 - `source_health` smí mít jen `public_aggregate` a `sim_scenario` jen
@@ -93,7 +95,8 @@ Request je omezen velikostí, výstupem a timeoutem. Odpověď neobsahuje secret
 
 COP volá výhradně interní `POST /api/v1/ai-router/generate` s vlastní
 službovou bearer identitou. `taskType` je `cop_chat`, `dataClass` je vždy
-výslovně jedna z `internal`, `synthetic`, `public_aggregate`; chybějící nebo
+výslovně jedna z `internal`, `synthetic`, `public_aggregate`,
+`internal_minimized`; chybějící nebo
 jiná hodnota končí 400. `userId` je stabilní neprůhledný identifikátor
 8–128 znaků `[A-Za-z0-9_-]`, ne jméno ani e-mail. Router ho ukládá pouze
 hashovaný. `prompt` je COP zkontrolovaná otázka nejvýše 1200 znaků, nikdy
@@ -119,7 +122,9 @@ Jiná pole na jakékoli úrovni strukturovaného kontextu se odmítají.
   (`CZ` či `CZ` + tři číslice), počátek a konec období alespoň hodinu od
   sebe, konečnou číselnou hodnotu, jednotku z `count|percent|minutes|km|index`
   a `sampleSize>=10`. Nejsou zde textové záznamy, souřadnice ani jednotlivé
-  incidenty. Ukázka:
+  incidenty.
+
+Příklad `public_aggregate`:
 
 ```json
 {
@@ -143,13 +148,53 @@ Jiná pole na jakékoli úrovni strukturovaného kontextu se odmítají.
 }
 ```
 
+- `internal_minimized`: výhradně nová, COP předem zkontrolovaná otázka a
+  minimální strukturovaný kontext. Vyžaduje přesně
+  `preference="external"`, `allowExternal=true`, `allowPaidEscalation=false`,
+  `contractVersion="cop-chat-context-v1"`, shodnou třídu a oddělenou atestaci
+  `cop-internal-minimized-reviewed-v1`. `items` má 0–12 položek: buď přesně
+  `kind="source_health"`, `sourceId` (kód 1–64 znaků) a
+  `status=up|degraded|down`, nebo přesně `kind="operational_metric"`,
+  `metricId` (kód 1–64 znaků), `regionCode` (`CZ` či `CZ` + tři číslice),
+  konečné číselné `value`, `unit=count|percent|minutes|km|index` a
+  celočíselné `sampleSize>=10`. Router odmítá neznámé klíče, volný text,
+  chybnou atestaci, nesouhlasící třídu a jinou volbu modelu. Smí použít
+  pouze `gpt-6-luna`; při nedostupnosti nesmí přepnout na jiný model.
+  Výchozí `AI_ROUTER_COP_INTERNAL_MINIMIZED_ENABLED=false` zůstává vypnutý
+  do společné akceptace COP/SIM.
+
+Příklad samostatné, zatím neaktivní větve `internal_minimized`:
+
+```json
+{
+  "taskType": "cop_chat",
+  "dataClass": "internal_minimized",
+  "preference": "external",
+  "prompt": "Které zdroje mají zhoršený stav?",
+  "userId": "cop_user_opaque_123456",
+  "allowExternal": true,
+  "allowPaidEscalation": false,
+  "copContext": {
+    "contractVersion": "cop-chat-context-v1",
+    "dataClass": "internal_minimized",
+    "attestation": "cop-internal-minimized-reviewed-v1",
+    "items": [
+      { "kind": "source_health", "sourceId": "chmi_weather_stations", "status": "degraded" },
+      { "kind": "operational_metric", "metricId": "station_count", "regionCode": "CZ010", "value": 42, "unit": "count", "sampleSize": 42 }
+    ]
+  }
+}
+```
+
 Router sám kontroluje službový token, tvar a shodu klasifikace, atestaci,
 externí opt-in, zákaz dražšího modelu, volbu modelu, limity a audit tokenů
 a odhadu ceny. Nemůže prokázat, že COP označil skutečně veřejná či fiktivní
 data správně, že agregát vznikl z povoleného zdroje, ani že otázka neobsahuje
-osobní či citlivé údaje. To je povinná předávací kontrola COP. Dešifrované
+osobní či citlivé údaje. To je povinná předávací kontrola COP. Atestace
+`internal_minimized` nedokazuje původ ani absenci osobních údajů. Dešifrované
 soukromé zprávy, osobní údaje, citlivé incidenty, neupravené situační
-záznamy a volný kontext nejsou `public_aggregate`; tyto vstupy nesmějí být
+záznamy, přílohy a volný `chatContext` nejsou `public_aggregate` ani
+`internal_minimized`; tyto vstupy nesmějí být
 externě předány. COP nesmí přímo volat OpenAI jako náhradní cestu při 429/503.
 
 1. Vizuální acceptance SIM panelu v přihlášeném prohlížeči proběhla

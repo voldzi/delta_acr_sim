@@ -44,14 +44,20 @@ nesmí obsahovat credentials.
 
 AI Router je interní server-to-server služba. Samotná autentizace služby COP
 neznamená, že její kontext smí opustit infrastrukturu: externí `cop_chat`
-vyžaduje explicitní opt-in a typovanou, atestovanou třídu `synthetic` nebo
-`public_aggregate` podle [kontraktu](../ai/10_SHARED_AI_ROUTER.md).
+vyžaduje explicitní opt-in a typovanou, atestovanou třídu `synthetic`,
+`public_aggregate` nebo odděleně povolenou `internal_minimized` podle
+[kontraktu](../ai/10_SHARED_AI_ROUTER.md). Poslední třída připouští jen
+strukturované stavy zdrojů a číselné provozní metriky, nikdy volné záznamy;
+její produkční přepínač zůstává vypnutý do společné akceptace.
 `internal` používá jen lokální model bez externího fallbacku. Router
 ověřuje strukturu, politiku a rozpočty; nemůže sám ověřit pravdivost původu
 dat nebo sémanticky zaručit, že otázka neobsahuje osobní údaje. COP proto
 musí před sestavením requestu odmítnout dešifrované soukromé zprávy,
 identifikovatelné osoby, citlivé incidenty, neupravené záznamy a volný
-kontext. Chyba Routeru se nesmí obcházet přímým voláním OpenAI.
+kontext. Před aktivací externího `internal_minimized` se navíc musí ověřit
+konkrétní OpenAI API projekt, retence a případná evropská rezidence;
+`store:false` samo o sobě neznamená nulové uchování. Chyba Routeru se nesmí
+obcházet přímým voláním OpenAI.
 
 ## Zákazy
 

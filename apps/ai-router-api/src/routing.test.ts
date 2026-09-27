@@ -24,6 +24,17 @@ describe("AI routing policy", () => {
         .toMatchObject({ tier: "external_economy", reason: "approved_cop_external_economy" });
     }
   });
+  it("routes reviewed minimized internal COP data only to the economy tier", () => {
+    const input = { taskType: "cop_chat" as const, dataClass: "internal_minimized" as const, preference: "external" as const, prompt: "Shrň stav.", allowExternal: true, allowPaidEscalation: false };
+    expect(chooseRoute(input, policy)).toMatchObject({ tier: "external_economy", reason: "approved_cop_internal_minimized" });
+    for (const changed of [
+      { preference: "auto" as const }, { preference: "local" as const },
+      { allowExternal: false }, { allowPaidEscalation: true }
+    ]) {
+      expect(() => chooseRoute({ ...input, ...changed }, policy)).toThrow("internal_minimized_policy_invalid");
+    }
+    expect(() => chooseRoute(input, { ...policy, externalAvailable: false, localAvailable: true })).toThrow("external_model_unavailable");
+  });
   it("does not fall back from an explicitly selected external COP model", () => {
     expect(() => chooseRoute(
       { taskType: "cop_chat", dataClass: "synthetic", preference: "external", prompt: "Přehled", allowExternal: true, allowPaidEscalation: false },
@@ -63,7 +74,9 @@ describe("AI routing policy", () => {
   it("limits task-specific data classes", () => {
     expect(taskAllowsDataClass("source_health", "internal")).toBe(false);
     expect(taskAllowsDataClass("source_health", "public_aggregate")).toBe(true);
+    expect(taskAllowsDataClass("source_health", "internal_minimized")).toBe(false);
     expect(taskAllowsDataClass("sim_scenario", "synthetic")).toBe(true);
     expect(taskAllowsDataClass("sim_scenario", "public_aggregate")).toBe(false);
+    expect(taskAllowsDataClass("sim_scenario", "internal_minimized")).toBe(false);
   });
 });

@@ -17,10 +17,15 @@ const internalContext = { contractVersion: "cop-chat-context-v1", dataClass: "in
 const reviewedInternalContext = { contractVersion: "cop-chat-context-v1", dataClass: "internal", attestation: "cop-internal-reviewed-v1", items: [{ kind: "chat_message", text: "Viditelná zpráva pouze pro lokální model." }] };
 const syntheticContext = { contractVersion: "cop-chat-context-v1", dataClass: "synthetic", attestation: "cop-policy-reviewed-v1", scenarioId: "exercise_42", facts: ["Fiktivní výpadek proudu v cvičení."] };
 const aggregateContext = { contractVersion: "cop-chat-context-v1", dataClass: "public_aggregate", attestation: "cop-policy-reviewed-v1", aggregates: [{ sourceId: "chmi_weather_stations", metricId: "station_count", regionCode: "CZ010", periodStart: "2026-09-24T00:00:00Z", periodEnd: "2026-09-25T00:00:00Z", value: 42, unit: "count", sampleSize: 42 }] };
-const copBody = (dataClass: "synthetic" | "public_aggregate" | "internal", copContext: unknown) => ({
+const minimizedContext = { contractVersion: "cop-chat-context-v1", dataClass: "internal_minimized", attestation: "cop-internal-minimized-reviewed-v1", items: [
+  { kind: "source_health", sourceId: "chmi_weather_stations", status: "degraded" },
+  { kind: "operational_metric", metricId: "station_count", regionCode: "CZ010", value: 42, unit: "count", sampleSize: 42 }
+] };
+const copBody = (dataClass: "synthetic" | "public_aggregate" | "internal" | "internal_minimized", copContext: unknown) => ({
   taskType: "cop_chat", dataClass, prompt: "Stručně shrň povolený kontext.", userId: "user_opaque_123456", preference: "external", allowExternal: true, copContext
 });
-const runtimeConfig = { ...config, localUrl: "", localModel: "", externalEnabled: true, advancedEnabled: true, openaiKey: "test-only-key", economyModel: "gpt-6-luna", advancedModel: "gpt-6-sol" } as Config;
+const minimizedBody = () => ({ ...copBody("internal_minimized", minimizedContext), allowPaidEscalation: false });
+const runtimeConfig = { ...config, localUrl: "", localModel: "", externalEnabled: true, copInternalMinimizedEnabled: true, advancedEnabled: true, openaiKey: "test-only-key", economyModel: "gpt-6-luna", advancedModel: "gpt-6-sol" } as Config;
 const testStore = () => ({
   policy: vi.fn(async () => ({ externalAllowed: true, advancedAllowed: true, limits: { dailyMicrousd: 1_000_000, monthlyMicrousd: 10_000_000, perUserDailyRequests: 10 } })),
   reserve: vi.fn(async () => "00000000-0000-4000-8000-000000000001"),
@@ -53,6 +58,39 @@ describe("AI Router request boundary", () => {
     expect(validBody({ ...copBody("public_aggregate", { ...aggregateContext, aggregates: [{ ...aggregateContext.aggregates[0], sampleSize: 1 }] }) })).toBe(false);
     expect(validBody({ ...copBody("public_aggregate", { ...aggregateContext, aggregates: [{ ...aggregateContext.aggregates[0], periodStart: "2026-09-24" }] }) })).toBe(false);
   });
+  it("accepts only exact minimized structures and a reviewed question with opaque identity", () => {
+    expect(validBody(minimizedBody())).toBe(true);
+    expect(validBody({ ...minimizedBody(), copContext: { ...minimizedContext, items: [] } })).toBe(true);
+    expect(validBody({ ...minimizedBody(), copContext: { ...minimizedContext, items: Array(12).fill(minimizedContext.items[0]) } })).toBe(true);
+    const badContexts: unknown[] = [
+      { ...minimizedContext, attestation: "cop-policy-reviewed-v1" },
+      { ...minimizedContext, attestation: undefined },
+      { ...minimizedContext, dataClass: "public_aggregate" },
+      { ...minimizedContext, extra: "free text" },
+      { ...minimizedContext, items: undefined },
+      { ...minimizedContext, items: Array(13).fill(minimizedContext.items[0]) },
+      { ...minimizedContext, items: [{ kind: "chat_message", text: "private message" }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[0], text: "private message" }] },
+      { ...minimizedContext, items: [{ kind: "source_health", sourceId: "source", status: "unknown" }] },
+      { ...minimizedContext, items: [{ kind: "source_health", sourceId: "private@example.cz", status: "up" }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], sampleSize: 9 }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], value: "42" }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], value: null }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], value: "NaN" }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], value: Number.NaN }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], value: Number.POSITIVE_INFINITY }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], unit: "raw_text" }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], regionCode: "CZ0100" }] },
+      { ...minimizedContext, items: [{ ...minimizedContext.items[1], chatContext: "raw records" }] }
+    ];
+    for (const context of badContexts) expect(validBody({ ...minimizedBody(), copContext: context })).toBe(false);
+    expect(validBody({ ...minimizedBody(), prompt: "a".repeat(1201) })).toBe(false);
+    expect(validBody({ ...minimizedBody(), prompt: "   " })).toBe(false);
+    expect(validBody({ ...minimizedBody(), userId: "person@example.cz" })).toBe(false);
+    expect(validBody({ ...minimizedBody(), userId: "short" })).toBe(false);
+    expect(validBody({ ...minimizedBody(), chatContext: "raw history" })).toBe(false);
+    expect(validBody({ ...minimizedBody(), dataClass: "internal" })).toBe(false);
+  });
   it("shares only aggregate usage with authenticated service callers", async () => {
     const usage = { dailyMicrousd: 42, monthlyMicrousd: 84, dailyRequests: 2, limits: { dailyMicrousd: 1_000_000, monthlyMicrousd: 10_000_000, perUserDailyRequests: 10 } };
     const app = createApp(config, { usage: async () => usage } as BudgetStore);
@@ -82,6 +120,76 @@ describe("AI Router request boundary", () => {
     expect(store.finish).toHaveBeenCalledWith(expect.any(String), "success", 100, 20, 40);
     const usage = await request(app).get("/api/v1/ai-router/usage").set("authorization", `Bearer ${config.copToken}`).expect(200);
     expect(usage.body).toMatchObject({ dailyInputTokens: 100, dailyOutputTokens: 20, dailyMicrousd: 120 });
+  });
+  it("accepts reviewed minimized internal COP data only on Luna and accounts for tokens and cost", async () => {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string; input: string; store: boolean };
+      expect(body.model).toBe("gpt-6-luna");
+      expect(body.store).toBe(false);
+      expect(body.input).toContain("degraded");
+      expect(body.input).toContain("station_count");
+      expect(body.input).not.toContain("cop-internal-minimized-reviewed-v1");
+      return new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "Provozní souhrn." }] }], usage: { input_tokens: 100, output_tokens: 20 } }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const store = testStore();
+    const app = createApp(runtimeConfig, store as unknown as BudgetStore);
+    const response = await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(200);
+    expect(response.body).toMatchObject({ model: "gpt-6-luna", tier: "external_economy", routingReason: "approved_cop_internal_minimized", usage: { inputTokens: 100, outputTokens: 20, estimatedMicrousd: 40 } });
+    expect(store.reserve).toHaveBeenCalledWith("cop", "user_opaque_123456", "cop_chat", "gpt-6-luna", "approved_cop_internal_minimized", expect.any(String), "external_economy", expect.any(Number));
+    expect(store.finish).toHaveBeenCalledWith(response.body.requestId, "success", 100, 20, 40);
+    const usage = await request(app).get("/api/v1/ai-router/usage").set("authorization", `Bearer ${config.copToken}`).expect(200);
+    expect(usage.body).toMatchObject({ dailyMicrousd: 120, dailyInputTokens: 100, dailyOutputTokens: 20 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("requires COP identity, explicit consent, disabled escalation and a separate activation flag", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const store = testStore();
+    const app = createApp(runtimeConfig, store as unknown as BudgetStore);
+    await request(app).post("/api/v1/ai-router/generate").send(minimizedBody()).expect(401);
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.simToken}`).send(minimizedBody()).expect(403);
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.simToken}`).send({ ...minimizedBody(), taskType: "source_health" }).expect(400, { error: "invalid_request" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), copContext: { ...minimizedContext, attestation: "cop-policy-reviewed-v1" } }).expect(400, { error: "invalid_request" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), copContext: { ...minimizedContext, items: [{ kind: "chat_message", text: "Private." }] } }).expect(400, { error: "invalid_request" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), preference: "auto" }).expect(400, { error: "external_processing_not_approved" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), allowExternal: false }).expect(400, { error: "external_processing_not_approved" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), allowExternal: undefined }).expect(400, { error: "external_processing_not_approved" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), allowPaidEscalation: true }).expect(400, { error: "cop_paid_escalation_forbidden" });
+    await request(app).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send({ ...minimizedBody(), allowPaidEscalation: undefined }).expect(400, { error: "cop_paid_escalation_forbidden" });
+    await request(createApp({ ...runtimeConfig, copInternalMinimizedEnabled: false }, store as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(503, { error: "internal_minimized_not_enabled" });
+    await request(createApp({ ...runtimeConfig, economyModel: "gpt-6-sol" }, store as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(503, { error: "external_model_unavailable" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(store.reserve).not.toHaveBeenCalled();
+  });
+  it("keeps minimized traffic within all limits and fails closed on store or OpenAI errors", async () => {
+    const fetchMock = vi.fn(async () => new Response("rate limited", { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
+    for (const code of ["daily_budget_exceeded", "monthly_budget_exceeded", "user_daily_limit_exceeded"]) {
+      const store = testStore();
+      store.reserve.mockRejectedValueOnce(new BudgetError(code));
+      await request(createApp(runtimeConfig, store as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(429, { error: code });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    const failedPolicy = testStore();
+    failedPolicy.policy.mockRejectedValueOnce(new Error("db down"));
+    await request(createApp(runtimeConfig, failedPolicy as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(503, { error: "policy_unavailable" });
+    const failedReserve = testStore();
+    failedReserve.reserve.mockImplementationOnce(async () => { throw new Error("db down"); });
+    await request(createApp(runtimeConfig, failedReserve as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(503, { error: "budget_store_unavailable" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const providerStore = testStore();
+    await request(createApp(runtimeConfig, providerStore as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(429, { requestId: "00000000-0000-4000-8000-000000000001", error: "provider_rate_limited" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(providerStore.finish).toHaveBeenCalledWith(expect.any(String), "failed");
+    const failedProviderAudit = testStore();
+    failedProviderAudit.finish.mockRejectedValueOnce(new Error("audit db down"));
+    await request(createApp(runtimeConfig, failedProviderAudit as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(503, { requestId: "00000000-0000-4000-8000-000000000001", error: "budget_store_unavailable" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const failedAudit = testStore();
+    failedAudit.finish.mockRejectedValueOnce(new Error("audit db down"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "Odpověď" }] }], usage: { input_tokens: 5, output_tokens: 5 } }), { status: 200 })));
+    await request(createApp(runtimeConfig, failedAudit as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(minimizedBody()).expect(503, { requestId: "00000000-0000-4000-8000-000000000001", error: "budget_store_unavailable" });
   });
   it("rejects missing approval, internal external processing, wrong caller and invalid classification before a model call", async () => {
     const fetchMock = vi.fn();

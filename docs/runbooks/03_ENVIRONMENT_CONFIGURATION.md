@@ -18,7 +18,10 @@
 - `AI_ROUTER_COP_TOKEN`, `AI_ROUTER_SIM_TOKEN`, `AI_ROUTER_ADMIN_TOKEN` (oddělené interní identity)
 - `AI_ROUTER_USER_HASH_SECRET` (pepper pro nevratný hash uživatelského ID)
 - `OPENAI_API_KEY` (jen runtime env; lze použít dříve vytvořený klíč po provozním schválení)
-- `AI_ROUTER_EXTERNAL_ENABLED`, `AI_ROUTER_ADVANCED_ENABLED` (výchozí `false`)
+- `AI_ROUTER_EXTERNAL_ENABLED`, `AI_ROUTER_ADVANCED_ENABLED` a
+  `AI_ROUTER_COP_INTERNAL_MINIMIZED_ENABLED` (výchozí `false`; poslední
+  přepínač smí být zapnut až po kontrole OpenAI projektu a společné akceptaci
+  COP/SIM podle [runbooku AI Routeru](16_AI_ROUTER_PRODUCTION.md))
 - `AI_ROUTER_LOCAL_URL`, `AI_ROUTER_LOCAL_MODEL` (volitelná lokální Ollama)
 - `AI_ROUTER_DAILY_MICROUSD`, `AI_ROUTER_MONTHLY_MICROUSD`, `AI_ROUTER_USER_DAILY_REQUESTS`
 - `SIM_API_AUTH_REQUIRED`
