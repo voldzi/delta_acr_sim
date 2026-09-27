@@ -1,4 +1,4 @@
-export type DataClass = "synthetic" | "public_aggregate" | "internal";
+export type DataClass = "synthetic" | "public_aggregate" | "internal" | "internal_minimized";
 export type TaskType = "cop_chat" | "source_health" | "sim_scenario";
 export type ModelPreference = "auto" | "local" | "external";
 export type ModelTier = "local_fast" | "external_economy" | "external_advanced";
@@ -43,6 +43,13 @@ export function classifyDifficulty(input: Pick<RoutingInput, "taskType" | "promp
 export function chooseRoute(input: RoutingInput, policy: RoutingPolicy): RoutingDecision {
   const difficulty = classifyDifficulty(input);
   if (input.taskType === "cop_chat") {
+    if (input.dataClass === "internal_minimized") {
+      if (input.preference !== "external" || !input.allowExternal || input.allowPaidEscalation) {
+        throw new Error("internal_minimized_policy_invalid");
+      }
+      if (!policy.externalEnabled || !policy.externalAvailable) throw new Error("external_model_unavailable");
+      return { tier: "external_economy", difficulty, reason: "approved_cop_internal_minimized" };
+    }
     if (input.dataClass === "internal" || input.preference === "local" || !input.allowExternal) {
       if (!policy.localAvailable) throw new Error("local_model_unavailable");
       return { tier: "local_fast", difficulty, reason: "local_only_policy" };

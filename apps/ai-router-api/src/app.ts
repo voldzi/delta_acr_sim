@@ -40,10 +40,10 @@ export function validBody(value: unknown): value is GenerateBody {
   if (Object.keys(v).some((key) => !allowedKeys.has(key))) return false;
   return (
     ["cop_chat", "source_health", "sim_scenario"].includes(v.taskType as string) &&
-    ["synthetic", "public_aggregate", "internal"].includes(v.dataClass as string) &&
+    ["synthetic", "public_aggregate", "internal", "internal_minimized"].includes(v.dataClass as string) &&
     [undefined, "auto", "local", "external"].includes(v.preference as string | undefined) &&
     typeof v.prompt === "string" &&
-    v.prompt.length > 0 &&
+    v.prompt.trim().length > 0 &&
     v.prompt.length <= 12_000 &&
     typeof v.userId === "string" &&
     v.userId.length > 0 &&
@@ -63,6 +63,8 @@ interface ModelResult {
   outputTokens: number;
 }
 
+class OpenAiRateLimitedError extends Error {}
+
 async function callOpenAI(config: Config, model: string, prompt: string, maxOutputTokens: number): Promise<ModelResult> {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -78,6 +80,7 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
     }),
     signal: AbortSignal.timeout(25_000)
   });
+  if (response.status === 429) throw new OpenAiRateLimitedError("provider_rate_limited");
   if (!response.ok) throw new Error(`openai_http_${response.status}`);
   const data = (await response.json()) as {
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
@@ -220,6 +223,24 @@ export function createApp(config: Config, store: BudgetStore) {
       res.status(400).json({ error: "data_class_not_allowed" });
       return;
     }
+    if (body.dataClass === "internal_minimized") {
+      if (body.taskType !== "cop_chat") {
+        res.status(400).json({ error: "data_class_not_allowed" });
+        return;
+      }
+      if (body.preference !== "external" || body.allowExternal !== true) {
+        res.status(400).json({ error: "external_processing_not_approved" });
+        return;
+      }
+      if (body.allowPaidEscalation !== false) {
+        res.status(400).json({ error: "cop_paid_escalation_forbidden" });
+        return;
+      }
+      if (!config.copInternalMinimizedEnabled) {
+        res.status(503).json({ error: "internal_minimized_not_enabled" });
+        return;
+      }
+    }
     if (body.taskType === "cop_chat" && body.allowExternal === true && body.dataClass === "internal") {
       res.status(400).json({ error: "internal_external_forbidden" });
       return;
@@ -246,7 +267,8 @@ export function createApp(config: Config, store: BudgetStore) {
         },
         {
           localAvailable: Boolean(config.localUrl && config.localModel),
-          externalAvailable: config.externalEnabled && activePolicy.externalAllowed && Boolean(config.openaiKey),
+          externalAvailable: config.externalEnabled && activePolicy.externalAllowed && Boolean(config.openaiKey) &&
+            (body.dataClass !== "internal_minimized" || config.economyModel === "gpt-6-luna"),
           advancedAvailable: config.externalEnabled && config.advancedEnabled && activePolicy.advancedAllowed && Boolean(config.openaiKey),
           externalEnabled: config.externalEnabled && activePolicy.externalAllowed
         }
@@ -279,9 +301,15 @@ export function createApp(config: Config, store: BudgetStore) {
     let result: ModelResult;
     try {
       result = decision.tier === "local_fast" ? await callLocal(config, modelPrompt, maxOutputTokens) : await callOpenAI(config, model, modelPrompt, maxOutputTokens);
-    } catch {
-      await store.finish(id, "failed").catch(() => undefined);
-      res.status(503).json({ requestId: id, error: "model_unavailable" });
+    } catch (error) {
+      try {
+        await store.finish(id, "failed");
+      } catch {
+        res.status(503).json({ requestId: id, error: "budget_store_unavailable" });
+        return;
+      }
+      const rateLimited = error instanceof OpenAiRateLimitedError;
+      res.status(rateLimited ? 429 : 503).json({ requestId: id, error: rateLimited ? "provider_rate_limited" : "model_unavailable" });
       return;
     }
     const chargedMicrousd = estimateMicrousd(result.inputTokens, result.outputTokens, inputRate, outputRate);

@@ -5058,7 +5058,7 @@
             "description": "Task not allowed for consumer"
           },
           "429": {
-            "description": "Budget or user limit exceeded"
+            "description": "Budget or user limit exceeded, or external provider rate-limited; no retry or fallback"
           },
           "503": {
             "description": "Policy, selected model or budget/audit store unavailable; no direct-provider fallback"
@@ -15976,6 +15976,62 @@
           {
             "if": {
               "properties": {
+                "dataClass": {
+                  "const": "internal_minimized"
+                }
+              },
+              "required": [
+                "dataClass"
+              ]
+            },
+            "then": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "taskType": {
+                  "const": "cop_chat"
+                },
+                "dataClass": {
+                  "const": "internal_minimized"
+                }
+              },
+              "required": [
+                "taskType",
+                "dataClass"
+              ]
+            },
+            "then": {
+              "required": [
+                "preference",
+                "allowExternal",
+                "allowPaidEscalation"
+              ],
+              "properties": {
+                "preference": {
+                  "const": "external"
+                },
+                "allowExternal": {
+                  "const": true
+                },
+                "allowPaidEscalation": {
+                  "const": false
+                },
+                "copContext": {
+                  "$ref": "#/components/schemas/AiRouterAiRouterCopInternalMinimizedContext"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
                 "taskType": {
                   "const": "cop_chat"
                 },
@@ -16014,7 +16070,8 @@
             "enum": [
               "synthetic",
               "public_aggregate",
-              "internal"
+              "internal",
+              "internal_minimized"
             ]
           },
           "preference": {
@@ -16044,7 +16101,7 @@
           "allowPaidEscalation": {
             "type": "boolean",
             "default": false,
-            "description": "Forbidden for cop_chat; reviewed external COP requests may only use gpt-6-luna."
+            "description": "Forbidden for cop_chat; internal_minimized requires an explicit false. Reviewed external COP requests may only use gpt-6-luna."
           },
           "maxOutputTokens": {
             "type": "integer",
@@ -16057,7 +16114,7 @@
         }
       },
       "AiRouterAiRouterCopContext": {
-        "description": "Required for cop_chat. dataClass must exactly equal the request dataClass. External synthetic/public_aggregate requests also require allowExternal=true and a COP policy attestation. Internal is local only.",
+        "description": "Required for cop_chat. dataClass must exactly equal the request dataClass. External synthetic/public_aggregate/internal_minimized requests require allowExternal=true and class-specific COP attestation. Internal is local only. Attestation is a COP assertion, not proof of content provenance or absence of personal data.",
         "oneOf": [
           {
             "$ref": "#/components/schemas/AiRouterAiRouterCopInternalContext"
@@ -16067,6 +16124,9 @@
           },
           {
             "$ref": "#/components/schemas/AiRouterAiRouterCopPublicAggregateContext"
+          },
+          {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopInternalMinimizedContext"
           }
         ]
       },
@@ -16094,18 +16154,38 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["kind", "text"],
+              "required": [
+                "kind",
+                "text"
+              ],
               "properties": {
                 "kind": {
                   "type": "string",
-                  "enum": ["chat_message", "alert", "community_report", "map_result", "source_health"]
+                  "enum": [
+                    "chat_message",
+                    "alert",
+                    "community_report",
+                    "map_result",
+                    "source_health"
+                  ]
                 },
-                "text": { "type": "string", "minLength": 1, "maxLength": 600 }
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 600
+                }
               }
             }
           }
         },
-        "dependentRequired": { "items": ["attestation"], "attestation": ["items"] }
+        "dependentRequired": {
+          "items": [
+            "attestation"
+          ],
+          "attestation": [
+            "items"
+          ]
+        }
       },
       "AiRouterAiRouterCopSyntheticContext": {
         "type": "object",
@@ -16169,6 +16249,116 @@
             "items": {
               "$ref": "#/components/schemas/AiRouterAiRouterCopAggregate"
             }
+          }
+        }
+      },
+      "AiRouterAiRouterCopInternalMinimizedContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "COP-reviewed operational facts only. No decrypted messages, personal data, sensitive incidents, raw situation records, attachments or free chatContext. Disabled by default until project retention/residency and joint COP/SIM acceptance are verified.",
+        "required": [
+          "contractVersion",
+          "dataClass",
+          "attestation",
+          "items"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-chat-context-v1"
+          },
+          "dataClass": {
+            "const": "internal_minimized"
+          },
+          "attestation": {
+            "const": "cop-internal-minimized-reviewed-v1"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 12,
+            "items": {
+              "$ref": "#/components/schemas/AiRouterAiRouterCopInternalMinimizedItem"
+            }
+          }
+        }
+      },
+      "AiRouterAiRouterCopInternalMinimizedItem": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopMinimizedSourceHealth"
+          },
+          {
+            "$ref": "#/components/schemas/AiRouterAiRouterCopMinimizedOperationalMetric"
+          }
+        ]
+      },
+      "AiRouterAiRouterCopMinimizedSourceHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "sourceId",
+          "status"
+        ],
+        "properties": {
+          "kind": {
+            "const": "source_health"
+          },
+          "sourceId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "up",
+              "degraded",
+              "down"
+            ]
+          }
+        }
+      },
+      "AiRouterAiRouterCopMinimizedOperationalMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "metricId",
+          "regionCode",
+          "value",
+          "unit",
+          "sampleSize"
+        ],
+        "properties": {
+          "kind": {
+            "const": "operational_metric"
+          },
+          "metricId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "regionCode": {
+            "type": "string",
+            "pattern": "^CZ([0-9]{3})?$",
+            "description": "Country or NUTS3 region only; no precise locations."
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "count",
+              "percent",
+              "minutes",
+              "km",
+              "index"
+            ]
+          },
+          "sampleSize": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 9007199254740991
           }
         }
       },

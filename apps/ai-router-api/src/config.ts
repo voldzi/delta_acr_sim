@@ -7,6 +7,7 @@ export interface Config {
   userHashSecret: string;
   openaiKey: string;
   externalEnabled: boolean;
+  copInternalMinimizedEnabled: boolean;
   advancedEnabled: boolean;
   localUrl: string;
   localModel: string;
@@ -44,6 +45,7 @@ export function loadConfig(): Config {
     userHashSecret: required("AI_ROUTER_USER_HASH_SECRET"),
     openaiKey: process.env.OPENAI_API_KEY ?? "",
     externalEnabled: process.env.AI_ROUTER_EXTERNAL_ENABLED === "true",
+    copInternalMinimizedEnabled: process.env.AI_ROUTER_COP_INTERNAL_MINIMIZED_ENABLED === "true",
     advancedEnabled: process.env.AI_ROUTER_ADVANCED_ENABLED === "true",
     localUrl: process.env.AI_ROUTER_LOCAL_URL ?? "",
     localModel: process.env.AI_ROUTER_LOCAL_MODEL ?? "",

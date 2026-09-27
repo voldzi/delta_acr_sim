@@ -48,3 +48,9 @@ prohlížeče. Router nevyvozuje třídu dat z tokenu ani z modelové preference
 vyžaduje přesnou klasifikaci a pro externí COP chat navíc explicitní
 `allowExternal=true` a atestovaný `copContext`. Ochrana neumožňuje přímý
 fallback do poskytovatele při výpadku modelu, databáze nebo limitu.
+`internal_minimized` navíc vyžaduje COP identitu, `preference=external`,
+výslovné `allowPaidEscalation=false`, přesnou atestaci
+`cop-internal-minimized-reviewed-v1` a oddělený výchozím nastavením vypnutý
+provozní přepínač. Router odmítá neznámé klíče a volný text v položkách;
+samotný token ani atestace nedokazují skutečnou minimalizaci. Tu musí před
+odesláním zajistit COP. Běžný `internal` zůstává výhradně lokální.
