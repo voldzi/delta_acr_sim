@@ -267,3 +267,14 @@ externí fallback. Funkční ověření musí obsahovat `/health/ready` a fiktiv
 `cop_chat/internal` s odpovědí `local_fast`; samotný stav kontejneru nestačí.
 Vrácení: obnovit předchozí image Routeru a původní `.env`, případně odstranit
 novou proměnnou; ostatní SIM služby a COP chat se nepřepínají.
+
+Produkčně provedeno 27. 9. 2026: commit `851f067` (na produkční větvi
+`f5bf685`), image Routeru `sha256:2e21d0576a9cdc2626e3540da112211f7b425f76b3b51109f7cfcc5454bcef88`.
+Restartován pouze `ai-router-api`; předchozí image je označen
+`sim-ai-router-api:pre-local-urls-20260927` a env záloha je
+`/srv/sim/.env.before-local-urls-20260927`. Kontejner byl healthy, LAN
+Ollama `/api/tags` vrátila HTTP 200 a fiktivní interní COP dotaz přes Router
+HTTP 200 s tierem `local_fast` a modelem `gemma4:12b-mlx`. VPN adresy v tomto
+ověření dostupné nebyly; jejich záložní funkce je pokryta jednotkovým testem,
+nikoli produkčním výpadkovým testem. Externí chat, BYOK ani IZS režim se
+nezapínaly.
