@@ -179,6 +179,21 @@ export interface RoutingRoadAttributes {
     assessment: "advisory";
     source: "valhalla_trace_attributes";
   }>;
+  tunnels?: RoutingTunnelAttributes;
+}
+
+export interface RoutingTunnelAttributes {
+  state: "known" | "unknown";
+  reason?: string;
+  routeId: string;
+  source: "valhalla_trace_attributes.edge.tunnel";
+  routingDataset?: ExactRoutingDataset;
+  observedAt: string;
+  intervals: Array<{
+    beginShapeIndex: number;
+    endShapeIndex: number;
+    direction: "along_route";
+  }>;
 }
 
 export type RoutingTrafficAction = "warn" | "soft_penalty" | "hard_exclusion_candidate" | "hard_exclusion_applied";
@@ -584,6 +599,7 @@ interface ValhallaTraceAttributesResponse {
     end_shape_index?: number;
     speed_limit?: number;
     speed_type?: string;
+    tunnel?: boolean;
   }>;
   osm_changeset?: number;
   shape_attributes?: {
@@ -1190,7 +1206,8 @@ export class RoutingService {
                   knownSpeedLimitCoveragePercent: 0,
                   vehicleRestrictionsState: "not_evaluated" as const,
                   speedLimits: [],
-                  restrictions: []
+                  restrictions: [],
+                  tunnels: unknownTunnelAttributes(route.routeId, generatedAt, undefined, "Directed Valhalla graph attributes are unavailable for this route backend.")
                 }
               }
         )
@@ -1204,7 +1221,7 @@ export class RoutingService {
         `Routing backend returned only ${analysisRoutes.length} of ${requestedRouteCount} requested route variant(s); no sufficiently distinct alternative path was available.`
       );
     }
-    const navigableRoutes = analysisRoutes.filter((route) => route.quality.mode !== "direct_fallback");
+    const navigableRoutes = analysisRoutes.filter((route) => route.status !== "unavailable" && route.quality.mode !== "direct_fallback");
     const coverageState = navigableRoutes.length === 0 ? "outside_coverage" : navigableRoutes.length < analysisRoutes.length ? "partial" : "covered";
     const routingDataset = analysisRoutes.find((route) => route.roadAttributes?.routingDataset)?.roadAttributes?.routingDataset;
     return {
@@ -1274,6 +1291,7 @@ export class RoutingService {
       vehicleRestrictionsState: "not_evaluated" as const,
       speedLimits: [],
       restrictions: [],
+      tunnels: unknownTunnelAttributes(route.routeId, observedAt, dataset, "Directed tunnel edges could not be verified."),
       ...(dataset ? { routingDataset: dataset, sourceAgeSeconds: datasetAgeSeconds(dataset, observedAt) } : {})
     };
     if (!dataset) {
@@ -1285,7 +1303,7 @@ export class RoutingService {
       if (after.version !== dataset.version) {
         return { ...base, state: "unavailable", reason: "Routing dataset changed during attribute lookup." };
       }
-      return roadAttributesFromTrace(trace, route.geometry.coordinates, dataset, observedAt);
+      return roadAttributesFromTrace(trace, route.geometry.coordinates, dataset, observedAt, route.routeId);
     } catch {
       return { ...base, state: "unavailable", reason: "Directed road attributes could not be verified for this route." };
     }
@@ -3061,23 +3079,42 @@ async function requestValhallaTraceAttributes(
     units: "kilometers",
     filters: {
       action: "include",
-      attributes: ["shape", "edge.begin_shape_index", "edge.end_shape_index", "edge.speed_limit", "shape_attributes.closure", "osm_changeset"]
+      attributes: ["shape", "edge.begin_shape_index", "edge.end_shape_index", "edge.speed_limit", "edge.tunnel", "shape_attributes.closure", "osm_changeset"]
     }
   });
+}
+
+function unknownTunnelAttributes(
+  routeId: string,
+  observedAt: string,
+  routingDataset?: ExactRoutingDataset,
+  reason = "Directed tunnel edges could not be verified."
+): RoutingTunnelAttributes {
+  return {
+    state: "unknown",
+    reason,
+    routeId,
+    source: "valhalla_trace_attributes.edge.tunnel",
+    ...(routingDataset ? { routingDataset } : {}),
+    observedAt,
+    intervals: []
+  };
 }
 
 export function roadAttributesFromTrace(
   trace: ValhallaTraceAttributesResponse,
   routeShape: Array<[number, number]>,
   routingDataset: ExactRoutingDataset,
-  observedAt: string
+  observedAt: string,
+  routeId: string
 ): RoutingRoadAttributes {
   const base = {
     source: "valhalla_trace_attributes" as const,
     routingDataset,
     sourceAgeSeconds: datasetAgeSeconds(routingDataset, observedAt),
     observedAt,
-    vehicleRestrictionsState: "not_evaluated" as const
+    vehicleRestrictionsState: "not_evaluated" as const,
+    tunnels: unknownTunnelAttributes(routeId, observedAt, routingDataset)
   };
   const traceShape = decodeValhallaPolyline6(trace.shape);
   if (traceShape.length < 2 || routeShape.length < 2 || !Array.isArray(trace.edges) || trace.edges.length === 0) {
@@ -3141,6 +3178,8 @@ export function roadAttributesFromTrace(
     };
   }
   const speedLimits: RoutingRoadAttributes["speedLimits"] = [];
+  const tunnelIntervals: RoutingTunnelAttributes["intervals"] = [];
+  let tunnelMappingComplete = true;
   let geometryMismatchCount = 0;
   let matchedEdgeCount = 0;
   let knownLengthM = 0;
@@ -3151,13 +3190,18 @@ export function roadAttributesFromTrace(
     const rawEnd = edge.end_shape_index;
     if (!Number.isInteger(rawBegin) || !Number.isInteger(rawEnd) || rawBegin! < 0 || rawEnd! <= rawBegin! || rawEnd! >= shapeMap.length) {
       geometryMismatchCount += 1;
+      tunnelMappingComplete = false;
       continue;
     }
     const beginShapeIndex = shapeMap[rawBegin!];
     const endShapeIndex = shapeMap[rawEnd!];
     if (beginShapeIndex === undefined || endShapeIndex === undefined || beginShapeIndex < previousEnd || endShapeIndex <= beginShapeIndex) {
       geometryMismatchCount += 1;
+      tunnelMappingComplete = false;
       continue;
+    }
+    if (beginShapeIndex !== previousEnd || typeof edge.tunnel !== "boolean") {
+      tunnelMappingComplete = false;
     }
     previousEnd = endShapeIndex;
     const edgeLengthM = polylineDistanceM(routeShape.slice(beginShapeIndex, endShapeIndex + 1));
@@ -3175,6 +3219,14 @@ export function roadAttributesFromTrace(
       source: explicit ? "valhalla_graph_osm_maxspeed" : "unknown",
       ...(explicit ? { valueKph } : {})
     });
+    if (edge.tunnel === true) {
+      const previousInterval = tunnelIntervals[tunnelIntervals.length - 1];
+      if (previousInterval && previousInterval.endShapeIndex === beginShapeIndex) {
+        previousInterval.endShapeIndex = endShapeIndex;
+      } else {
+        tunnelIntervals.push({ beginShapeIndex, endShapeIndex, direction: "along_route" });
+      }
+    }
   }
   const restrictions: RoutingRoadAttributes["restrictions"] = [];
   for (const closure of trace.shape_attributes?.closure ?? trace.shape_attributes?.closures ?? []) {
@@ -3206,7 +3258,17 @@ export function roadAttributesFromTrace(
     geometryMismatchCount,
     knownSpeedLimitCoveragePercent: Math.round((knownLengthM / Math.max(1, fullLengthM)) * 10000) / 100,
     speedLimits,
-    restrictions
+    restrictions,
+    tunnels: tunnelMappingComplete && geometryMismatchCount === 0 && previousEnd === routeShape.length - 1
+      ? {
+          state: "known",
+          routeId,
+          source: "valhalla_trace_attributes.edge.tunnel",
+          routingDataset,
+          observedAt,
+          intervals: tunnelIntervals
+        }
+      : unknownTunnelAttributes(routeId, observedAt, routingDataset, "Tunnel flags or directed edge coverage are incomplete for this route.")
   };
 }
 
@@ -3388,19 +3450,20 @@ function valhallaRoute(
   const elevationProfile = request.includeElevationProfile ? valhallaElevationProfile(trip.legs ?? [], coordinates, distanceM) : undefined;
   const elevation = elevationProfile && elevationProfile.length > 0 ? elevationSummary(elevationProfile, "ok", "valhalla", []) : undefined;
   const recostings = valhallaRouteRecostings(summary);
+  const steps = valhallaSteps(trip.legs ?? [], coordinates);
   return {
-    routeId: `routing:${profile.profileId}:valhalla:${stablePayload({ from: request.from, to: request.to, rank })}`,
+    routeId: valhallaRouteId(profile.profileId, request.from, request.to, rank, coordinates),
     profileId: profile.profileId,
     rank,
-    status: "ok",
+    status: steps.length > 0 ? "ok" : "unavailable",
     geometry: { type: "LineString", coordinates },
     distanceM,
     durationSeconds,
     ascentM: elevation?.gainM,
     descentM: elevation?.lossM,
     snap: valhallaSnap(request, trip),
-    steps: valhallaSteps(trip.legs ?? [], coordinates),
-    warnings: [],
+    steps,
+    warnings: steps.length > 0 ? [] : ["Valhalla maneuver indexes could not be verified against route geometry."],
     traffic: emptyRouteTraffic(),
     quality: {
       mode: "engine_route",
@@ -3421,6 +3484,16 @@ function valhallaRoute(
     elevation,
     elevationProfile
   };
+}
+
+export function valhallaRouteId(
+  profileId: RoutingProfileId,
+  from: RoutingCoordinate,
+  to: RoutingCoordinate,
+  rank: number,
+  coordinates: Array<[number, number]>
+): string {
+  return `routing:${profileId}:valhalla:${stablePayload({ from, to, rank, coordinates })}`;
 }
 
 function valhallaIsochroneResponse(
@@ -3740,20 +3813,31 @@ export function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[numb
   // Match each decoded vertex sequentially into the deduplicated full geometry.
   // Searching from the previous position preserves loops and repeated junctions.
   let routeCursor = 0;
-  for (const leg of legs) {
+  for (const [legIndex, leg] of legs.entries()) {
     const coordinates = decodeValhallaPolyline6(leg.shape);
-    const routeIndices = coordinates.map((coordinate) => {
-      while (
-        routeCursor < routeCoordinates.length - 1 &&
-        (routeCoordinates[routeCursor]?.[0] !== coordinate[0] || routeCoordinates[routeCursor]?.[1] !== coordinate[1])
-      )
-        routeCursor += 1;
-      return routeCursor;
-    });
+    if (coordinates.length < 2) return [];
+    const routeIndices: number[] = [];
+    for (const [index, coordinate] of coordinates.entries()) {
+      const previous = index > 0 ? coordinates[index - 1] : undefined;
+      const repeated = previous?.[0] === coordinate[0] && previous[1] === coordinate[1];
+      const searchFrom = routeIndices.length === 0 ? routeCursor : routeCursor + (repeated ? 0 : 1);
+      let matched = -1;
+      for (let routeIndex = searchFrom; routeIndex < routeCoordinates.length; routeIndex += 1) {
+        if (routeCoordinates[routeIndex]?.[0] === coordinate[0] && routeCoordinates[routeIndex]?.[1] === coordinate[1]) {
+          matched = routeIndex;
+          break;
+        }
+      }
+      if (matched < 0) return [];
+      if (index === 0 && (legIndex === 0 ? matched !== 0 : matched !== routeCursor)) return [];
+      routeIndices.push(matched);
+      routeCursor = matched;
+    }
     for (const maneuver of leg.maneuvers ?? []) {
-      const begin = Math.max(0, Math.min(coordinates.length - 1, Number(maneuver.begin_shape_index) || 0));
-      const end = Math.max(begin, Math.min(coordinates.length - 1, Number(maneuver.end_shape_index) || begin));
-      const stepCoordinates = coordinates.slice(begin, end + 1);
+      const begin = maneuver.begin_shape_index;
+      const end = maneuver.end_shape_index;
+      if (!Number.isInteger(begin) || !Number.isInteger(end) || begin! < 0 || end! < begin! || end! >= coordinates.length) return [];
+      const stepCoordinates = coordinates.slice(begin!, end! + 1);
       if (stepCoordinates.length < 1) {
         continue;
       }
@@ -3768,8 +3852,8 @@ export function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[numb
         ...(Number.isInteger(maneuver.roundabout_exit_count) && Number(maneuver.roundabout_exit_count) > 0
           ? { roundaboutExitCount: maneuver.roundabout_exit_count }
           : {}),
-        beginShapeIndex: routeIndices[begin],
-        endShapeIndex: routeIndices[end],
+        beginShapeIndex: routeIndices[begin!],
+        endShapeIndex: routeIndices[end!],
         instructionLocalized: {
           cs: cleanString(maneuver.instruction) ?? "Pokračujte po trase.",
           en: cleanString(maneuver.instruction) ?? "Continue on the route."
@@ -3788,18 +3872,17 @@ export function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[numb
       });
     }
   }
-  if (steps.length > 0) {
-    return steps;
-  }
-  return [
-    {
-      index: 0,
-      instructionLocalized: { cs: "Pokračujte po trase.", en: "Continue on the route." },
-      distanceM: Math.round(polylineDistanceM(routeCoordinates)),
-      durationSeconds: 0,
-      geometry: { type: "LineString", coordinates: routeCoordinates }
-    }
-  ];
+  if (routeCursor !== routeCoordinates.length - 1) return [];
+  if (steps.length > 0) return steps;
+  // Keep the existing summary-only route behavior when Valhalla supplies no maneuvers.
+  // An invalid supplied maneuver still returned early above and is never guessed.
+  return [{
+    index: 0,
+    instructionLocalized: { cs: "Pokračujte po trase.", en: "Continue on the route." },
+    distanceM: Math.round(polylineDistanceM(routeCoordinates)),
+    durationSeconds: 0,
+    geometry: { type: "LineString", coordinates: routeCoordinates }
+  }];
 }
 
 function valhallaStepLanes(value: unknown[] | undefined): RoutingStepLane[] {

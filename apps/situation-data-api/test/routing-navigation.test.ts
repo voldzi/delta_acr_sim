@@ -41,4 +41,18 @@ describe("native maneuver geometry", () => {
     );
     expect(steps[0]?.maneuverType).toBeUndefined();
   });
+
+  it("rejects a maneuver index outside the selected geometry instead of clamping it", () => {
+    expect(valhallaSteps(
+      [{ shape: "_oso~A_acoZowH_pRoh\\_af@", maneuvers: [{ begin_shape_index: 0, end_shape_index: 99 }] }],
+      [[14.42, 50.08], [14.43, 50.085], [14.45, 50.1]]
+    )).toEqual([]);
+  });
+
+  it("rejects a parallel or different route shape instead of binding its maneuvers to the final point", () => {
+    expect(valhallaSteps(
+      [{ shape: "_oso~A_acoZowH_pRoh\\_af@", maneuvers: [{ begin_shape_index: 0, end_shape_index: 2 }] }],
+      [[14.42, 50.08], [14.43, 50.086], [14.45, 50.1]]
+    )).toEqual([]);
+  });
 });

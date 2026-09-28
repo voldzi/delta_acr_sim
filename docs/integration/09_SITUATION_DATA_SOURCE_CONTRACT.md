@@ -500,6 +500,49 @@ povolená rychlost nepoužívají. `knownSpeedLimitCoveragePercent` je vážené
 délkou trasy. `routingDataset.version/builtAt` a `observedAt` oddělují stáří
 grafu od času dotazu; `osmChangeset` je volitelný.
 
+Volitelný objekt `routes[].roadAttributes.tunnels` popisuje pouze tutéž
+konkrétní variantu. Jeho `routeId` se musí rovnat ID trasy; ID Valhalla trasy
+nyní zahrnuje hash výsledné geometrie, takže přepočet s jiným tvarem nedědí
+staré intervaly. `routingDataset` je verze grafu ověřená před i po
+`trace_attributes`; `source=valhalla_trace_attributes.edge.tunnel` označuje
+normalizovaný směrový graf, nikoli terénní potvrzení polohy vozidla.
+`intervals[]` obsahuje jen souvislé hrany s `edge.tunnel=true`. Oba indexy
+označují krajní vrcholy v `routes[].geometry.coordinates` v pořadí jízdy,
+včetně počátečního i koncového vrcholu; jednotkou jsou body, nikoli metry.
+`state=known` a prázdné intervaly znamenají, že úplně spárovaná cesta nemá
+v grafu označenou tunelovou hranu. Chybějící příznak na kterékoli hraně,
+mezera v pokrytí, nesoulad tvaru nebo změna grafu vrací `state=unknown` a
+prázdné intervaly; to nikdy neznamená potvrzení, že na silnici tunel není.
+Při nedostupných a nesilničních trasách zůstává základní trasa beze změny a
+tunely jsou `unknown`. Pole je doplňkové a starší klient jej mohou ignorovat.
+Neplatné indexy či body manévrů se již neomezují na konec trasy: varianta se
+označí `status=unavailable` a nezapočítá se mezi navigovatelné grafové trasy.
+
+Příklad ilustrační varianty po úspěšném obohacení:
+
+```json
+{
+  "routeId": "routing:car:valhalla:example-shape-id",
+  "geometry": { "type": "LineString", "coordinates": [[14.42, 50.08], [14.4205, 50.08], [14.421, 50.08]] },
+  "roadAttributes": {
+    "tunnels": {
+      "state": "known", "routeId": "routing:car:valhalla:example-shape-id",
+      "source": "valhalla_trace_attributes.edge.tunnel",
+      "routingDataset": { "version": "sim-routing-example", "builtAt": "2026-09-20T03:00:00Z" },
+      "observedAt": "2026-09-23T12:00:00Z",
+      "intervals": [{ "beginShapeIndex": 1, "endShapeIndex": 2, "direction": "along_route" }]
+    }
+  }
+}
+```
+
+Čtecí ověření produkční Valhally 2026-09-28 na veřejné zkušební trase
+u Strahovského tunelu: místně spuštěný nový převod nad skutečnou odpovědí
+spároval v jednom směru 71/71 hran a ve druhém 57/57 hran bez neshody
+geometrie; v obou směrech vrátil dva platné tunelové intervaly. V opačném
+směru byly mezi označenými hranami i `turn_channel`. Nejde o nasazení
+nového kontraktu v produkčním SIM/COP ani o test polohy na iPhonu.
+
 `restrictions[]` zatím obsahuje pouze closure intervaly z Valhalla trace,
 označené `assessment=advisory`. SRTI incidenty zůstávají v `traffic` a hazardy
 v `hazardsOnRoute`. Samotné `trace_attributes` neposkytuje ověřená pravidla
