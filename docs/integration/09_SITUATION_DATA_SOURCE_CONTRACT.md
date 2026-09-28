@@ -1299,3 +1299,17 @@ Requests without the new flag retain the existing nearest-access behavior.
 The response cache is process-local and resets when situation-data-api is
 recreated. COP rejects enrichment evidence older than ten minutes. No new
 public endpoint, token or Valhalla configuration is introduced.
+
+## Route-bound tunnel server activation, 2026-09-28
+
+The production `situation-data-api` on `docker.home.cz` runs SIM revision
+`6047499` (image `sha256:87f212f9...`). Its internal ready endpoint returned
+200. An actual route across the Strahov tunnel returned 200, `coverage=covered`,
+201 geometry vertices, zero geometry mismatches and `tunnels.state=known` with
+intervals `[44,71]` and `[92,133]`. COP independently confirmed the same route
+and the reverse direction. The previous image is retained as
+`sim-situation-data-api:rollback-20260928-pre-tunnel`; only
+`situation-data-api` was recreated. The existing `deploy/otel-collector.yaml`
+edit and environment backups were preserved. This is server contract
+verification, not physical iPhone acceptance or confirmation that a vehicle
+entered a tunnel.
