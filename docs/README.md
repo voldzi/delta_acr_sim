@@ -69,3 +69,4 @@ archived in `docs/archive/openapi-yaml/`.
   configuration, deployment, testing, security, data handling, or operations.
 
 Native routing additions: [ADR 0021](adr/0021_NATIVE_MANEUVERS_AND_ROAD_MATCH.md).
+Directed tunnel interval decision: [ADR 0027](adr/0027_ROUTE_BOUND_TUNNEL_INTERVALS.md).

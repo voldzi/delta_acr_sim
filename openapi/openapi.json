@@ -15672,6 +15672,71 @@
                 }
               }
             }
+          },
+          "tunnels": {
+            "$ref": "#/components/schemas/SituationDataRoutingTunnelAttributes"
+          }
+        }
+      },
+      "SituationDataRoutingTunnelAttributes": {
+        "type": "object",
+        "description": "Optional directed graph tunnel coverage for this exact route variant. Indexes are inclusive vertex indexes into route geometry in travel order; unknown never implies absence of a physical tunnel.",
+        "required": [
+          "state",
+          "routeId",
+          "source",
+          "observedAt",
+          "intervals"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "known",
+              "unknown"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "routeId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "const": "valhalla_trace_attributes.edge.tunnel"
+          },
+          "routingDataset": {
+            "$ref": "#/components/schemas/SituationDataRoutingDataset"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "intervals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "beginShapeIndex",
+                "endShapeIndex",
+                "direction"
+              ],
+              "properties": {
+                "beginShapeIndex": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "endShapeIndex": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "direction": {
+                  "type": "string",
+                  "const": "along_route"
+                }
+              }
+            }
           }
         }
       },
