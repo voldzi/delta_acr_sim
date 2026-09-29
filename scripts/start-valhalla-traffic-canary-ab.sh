@@ -61,7 +61,6 @@ ssh -t valhalla.home.cz '
   sudo install -o root -g root -m 0644 /home/voldzi/valhalla-owned-deploy/valhalla-traffic-canary-ab.service /etc/systemd/system/valhalla-traffic-canary-ab.service &&
   sudo systemctl daemon-reload &&
   sudo systemctl start valhalla-traffic-update.service &&
-  sudo systemctl reset-failed valhalla-traffic-canary-ab.service &&
   sudo systemctl start --no-block valhalla-traffic-canary-ab.service
 '
 
