@@ -30,6 +30,13 @@ between TMC-aligned endpoints). The TMC geometry is not a directed-edge
 oracle, but this disparity fails the v3 promotion gate. Do not repeat a v3
 traffic canary as a substitute for fixing and geographically validating the
 decoder. The graph-native work below is the next implementation path.
+The exact candidate edge geometries, read directly from the active graph,
+reproduced the sample result. A full shadow pass rejected 3,987 of 5,286
+v3 candidates for corridor divergence and left only 322 automated geographic
+passes. These 322 are not approved: the current search chose paths before
+the TMC corridor was considered, so a post-filter cannot recover the correct
+alternative or certify directional uniqueness. The native search must include
+road/corridor evidence during path finding, not merely after it.
 
 Implement a **separate, version-pinned, graph-native decoder** using the same
 Valhalla tiles as the serving instance. Decode once for each combination of

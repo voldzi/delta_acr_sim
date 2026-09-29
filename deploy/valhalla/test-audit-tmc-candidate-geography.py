@@ -41,6 +41,20 @@ class GeographyAuditTest(unittest.TestCase):
         struct.pack_into(">I", header, 0, 9994)
         self.assertEqual(module.shp_polylines(bytes(header)), [])
 
+    def test_directed_graph_shape_and_projection(self) -> None:
+        shapes = {1: [(14.0, 50.0), (14.001, 50.0)],
+                  2: [(14.001, 50.0), (14.002, 50.0)]}
+        path = module.connected_edge_shape([1, 2], shapes)
+        start = module.path_projection((14.0001, 50.0), path)
+        end = module.path_projection((14.0019, 50.0), path)
+        self.assertLess(start[0], 1)
+        self.assertLess(start[1], end[1])
+        self.assertLess(module.angular_difference(start[2], 90), 1)
+        with self.assertRaisesRegex(ValueError, "disconnected"):
+            module.connected_edge_shape([1, 3], {
+                **shapes, 3: [(14.01, 50.0), (14.011, 50.0)]
+            })
+
 
 if __name__ == "__main__":
     unittest.main()

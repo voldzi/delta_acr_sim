@@ -419,6 +419,22 @@ the divergent FRC/road classes with independent graph geometry and manual
 review before any further canary or live flag change. No private TMC geometry,
 message ID or coordinate belongs in Git or logs.
 
+The audit now also supports `--graph-shapes`, which reads the exact directed
+edge shapes from the serving graph with Valhalla's `GraphUtils`, then checks
+continuity, LRP ordering/bearings, endpoint snapping and TMC road proximity.
+On the same 62-route sample it reproduced the 39/62 corridor divergences
+without rerouting. A full read-only pass with `--graph-shapes --all-candidates
+--private-output data/valhalla/tmc/graph-corridor-shadow-20260929.json.gz`
+rechecked all 5,286 v3 candidates on the 29 September graph: 3,987 diverged
+from their linked TMC road between aligned endpoints, 847 had no comparable
+TMC road, 121 had misaligned TMC endpoints, 9 failed endpoint bearing, and
+only 322 passed the automated geographic gate. The private mode-0600 output
+is Git-ignored and **shadow-only**; it is neither independently adjudicated
+nor approved for live traffic. The result rules out bulk promotion of v3.
+The next implementation is a TMC-corridor-aware graph-native search that
+finds the correct directed path rather than merely filtering incorrect
+fastest-route candidates, followed by independent fixtures and map review.
+
 The following canary procedure is retained for historical recovery and a
 future independently validated decoder. **Do not run it for v3 while the
 geographic promotion gate above fails.** For an explicitly approved
