@@ -395,7 +395,34 @@ baseline-unmatched references. A deterministic FRC-stratified recheck of 62
 candidate routes repeated the same directed-edge sequence for all 62. This
 does not independently prove correct road identity or ETA accuracy.
 
-For an explicitly approved **pilot-only** route-time A/B check, the host has
+An additional read-only geographic challenge on 29 September compared
+FRC-stratified routes with the independently licensed TMC v11 WGS84 road
+shapes. Run `python3 deploy/valhalla/audit-tmc-candidate-geography.py --zip
+data/valhalla/tmc/LT_v11.zip --per-frc 8` from the SIM checkout. The script
+reads the protected SIM static and candidate audits only into memory, checks
+the exact graph/static revision and emits aggregate results only. A separate
+historical-baseline-ID comparison cohort uses the same current graph and TMC shapes:
+add `--audit-path
+/home/voldzi/valhalla-owned-deploy/baseline-edge-map-20260926.json.gz
+--historical-control`. Old edge IDs are never compared across graph releases.
+In the candidate cohort, 39 of 62 paths diverged over 100 m from the TMC
+road despite both ends aligning within 100 m; 3 stayed within 100 m, 18 had
+no comparable TMC road and 2 had misaligned ends. In the historical baseline
+ID control, the corresponding counts were 3 of 64 divergent, 37 within,
+22 without comparable road and 2 misaligned ends. The maximum-distance
+median was 322 m for comparable candidate paths versus 18 m for the control.
+This is strong evidence of a systematic candidate-corridor problem, not a
+manual adjudication of individual road direction; TMC road shapes may be
+generalized and the two cohorts are not pair-matched. **Do not promote the
+v3 candidate map or infer ETA improvement from its added coverage.** Investigate
+the divergent FRC/road classes with independent graph geometry and manual
+review before any further canary or live flag change. No private TMC geometry,
+message ID or coordinate belongs in Git or logs.
+
+The following canary procedure is retained for historical recovery and a
+future independently validated decoder. **Do not run it for v3 while the
+geographic promotion gate above fails.** For an explicitly approved
+**pilot-only** route-time A/B check, the host has
 insufficient free memory for a second simultaneous Valhalla instance. Use
 `bash scripts/start-valhalla-traffic-canary-ab.sh --check`, then `--diagnose`
 before `--start`

@@ -18,11 +18,18 @@ On 29 September the narrower HTTP route-candidate v3 matcher was re-audited
 against the newly active graph: 5,286 disjoint additions (74.21% potential
 combined static coverage), with 14,225 explicit rejections. A stratified
 62-route repeat agreed on directed-edge sequences for all 62, but it reused
-Valhalla routing and is not independent geographic ground truth. The pilot
-may compare route behavior with these candidates in a time-bounded,
-automatically rolled-back canary while the ordinary service is briefly
-stopped for host-memory safety. This is not authorization to switch the live
-updater flag, claim ETA accuracy, or promote v3/v7 nationally.
+Valhalla routing and is not independent geographic ground truth. The pilot's
+time-bounded, automatically rolled-back canary compared route behavior but
+did not authorize a live switch, an ETA-accuracy claim or national promotion
+of v3/v7.
+
+A subsequent independent TMC v11 road-geometry challenge found materially
+more corridor divergence in the FRC-stratified v3 candidates than in a
+historical-baseline-ID control (39/62 versus 3/64 paths diverged over 100 m
+between TMC-aligned endpoints). The TMC geometry is not a directed-edge
+oracle, but this disparity fails the v3 promotion gate. Do not repeat a v3
+traffic canary as a substitute for fixing and geographically validating the
+decoder. The graph-native work below is the next implementation path.
 
 Implement a **separate, version-pinned, graph-native decoder** using the same
 Valhalla tiles as the serving instance. Decode once for each combination of
