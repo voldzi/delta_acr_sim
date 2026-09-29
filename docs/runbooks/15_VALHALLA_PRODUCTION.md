@@ -370,6 +370,24 @@ rejects such costing disagreements and has its own cache version. The v2
 coverage figure must not be presented as v3 coverage until a v3 national audit
 has completed.
 
+On the 29 September pilot graph, run the v3 candidate audit without switching
+the active updater or setting `TRAFFIC_OPENLR_ROUTE_FALLBACK=true`. The tested
+v3 script is staged separately at
+`/home/voldzi/valhalla-owned-deploy/traffic-update-shadow-v3-20260929.py`.
+From the SIM checkout on the operator Mac, run
+`bash scripts/start-valhalla-shadow-audit-20260929.sh --check` first and then
+`bash scripts/start-valhalla-shadow-audit-20260929.sh --start`. The latter
+opens a synthetic SIM vehicle lease, installs a root-owned shadow copy, and
+starts a low-priority systemd audit; it requires the operator's server sudo
+authentication. It does not modify the live timer, updater, traffic archive or
+SIM traffic report. Inspect
+`journalctl -u valhalla-openlr-route-audit-v3-20260929.service --no-pager`
+and the resulting mode-0600
+`/srv/valhalla/traffic-cache/openlr-route-candidate-audit-*.json.gz`.
+Check dataset/static revision, candidate overlap rejection, deterministic
+independent route rechecks and geographically reviewed wrong-road cases before
+any isolated canary. A higher candidate count is not an ETA-accuracy result.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
