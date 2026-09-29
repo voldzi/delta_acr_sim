@@ -79,6 +79,16 @@ The normal unattended path is:
 sudo /srv/valhalla/update-tools/weekly-update.sh run
 ```
 
+The Geofabrik `*-latest.osm.pbf` endpoint may return a dated generation in an
+HTTP `Location` header. The updater accepts only the expected dated filename on
+`download.geofabrik.de`, reconstructs its HTTPS URL, and downloads both the PBF
+and its before/after MD5 over HTTPS. Never enable generic HTTP redirects to
+work around a failed weekly build. For the 2026-09-27 failure, verify the
+installed updater version, run `bash -n` on the replacement, install just
+`weekly-update.sh`, then start the weekly service and monitor `last-attempt.env`
+through download, build, activation and route health. A stale healthcheck does
+not by itself mean the current routing process is unavailable.
+
 ## Adaptive TPEG2 live traffic
 
 Deploy SIM first so `/srv/sim/.env` contains a generated
@@ -386,6 +396,15 @@ geometry/road-based references from the upstream
 [DATEX II FCD predefined-location catalogue](https://registr.dopravniinfo.cz/en/sources/cz-ndic_d2-pls-fcd-v1.1/).
 The TPEG pilot documents the latter as a separate ŘSD/NDIC source with its own
 subscription process. Obtain the source and usage rights before adding it.
+On 29 September 2026, the ŘSD subscriber portal showed acceptance of the TMC
+licence for subscriber 6596B9DA and listed `TMC lokační tabulka v11.0` as a
+static PULL ZIP source, but showed no active subscription. The source description
+requires a signed licence and a separate order form sent to
+`mobilitydata@rsd.cz` for each new version. Licence approval alone is not
+evidence that the ZIP is downloadable or that its contents supply an unambiguous
+Valhalla edge path. Keep the traffic quality gate unchanged until the actual
+versioned archive is obtained, its terms and geometry inspected, and the
+matcher is tested offline.
 Acceptance requires a reviewed match sample across road classes and directions,
 explicit rejection of ambiguous parallel roads and detours, matched-flow as
 well as static-segment coverage, route-time comparisons on affected and

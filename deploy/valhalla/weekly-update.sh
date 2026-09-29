@@ -344,37 +344,57 @@ download_source_consistently() {
   local partial_file="${source_file}.part"
   local checksum_before="${checksum_file}.before"
   local checksum_after="${checksum_file}.after"
+  local headers_file="${checksum_file}.headers"
   local expected_checksum
   local download_url
   local resolved_url
+  local redirect_url
+  local response_code
+  local source_name
+  local source_stem
   local attempt
 
   for ((attempt = 1; attempt <= SOURCE_DOWNLOAD_ATTEMPTS; attempt++)); do
-    rm -f "${source_file}" "${partial_file}" "${checksum_file}" "${checksum_before}" "${checksum_after}"
+    rm -f "${source_file}" "${partial_file}" "${checksum_file}" "${checksum_before}" "${checksum_after}" "${headers_file}"
     log "Downloading ${country} source generation (attempt ${attempt}/${SOURCE_DOWNLOAD_ATTEMPTS})."
-    if ! resolved_url=$(curl -fLsSI --retry 5 --retry-delay 10 --no-progress-meter \
-      -o /dev/null -w '%{url_effective}' "${source_url}"); then
+    if ! response_code=$(curl -fsSI --proto '=https' --max-redirs 0 --retry 5 --retry-delay 10 --no-progress-meter \
+      -D "${headers_file}" -o /dev/null -w '%{http_code}' "${source_url}"); then
       log "WARNING: Could not resolve a ${country} Geofabrik mirror."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
+    case "${response_code}" in
+      200) resolved_url=${source_url} ;;
+      301|302|303|307|308)
+        redirect_url=$(awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}' "${headers_file}" | tail -n 1)
+        source_name=${source_url##*/}
+        source_stem=${source_name%-latest.osm.pbf}
+        case "${redirect_url}" in
+          "http://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf|"https://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf) ;;
+          *) fail "Unexpected ${country} Geofabrik redirect target." ;;
+        esac
+        [[ "${redirect_url##*/}" =~ ^${source_stem}-[0-9]{6}\.osm\.pbf$ ]] || fail "Unexpected ${country} Geofabrik generation name."
+        resolved_url="https://download.geofabrik.de/europe/${redirect_url##*/}"
+        ;;
+      *) fail "Unexpected ${country} Geofabrik response: ${response_code}" ;;
+    esac
     [[ "${resolved_url}" == https://* ]] || fail "Resolved ${country} source URL is not HTTPS: ${resolved_url}"
     download_url=${resolved_url}
     log "Using one mirror for ${country} PBF and checksum: ${resolved_url}"
-    if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
+    if ! curl -fL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 10 --no-progress-meter \
       -o "${checksum_before}" "${resolved_url}.md5"; then
       log "WARNING: Could not fetch the initial ${country} checksum."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
     expected_checksum=$(awk 'NR == 1 {print $1}' "${checksum_before}")
-    if ! curl -fL --retry 5 --retry-delay 15 --no-progress-meter \
+    if ! curl -fL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 15 --no-progress-meter \
       -o "${partial_file}" "${download_url}"; then
       log "WARNING: Could not download the complete ${country} source."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
       continue
     fi
-    if ! curl -fL --retry 5 --retry-delay 10 --no-progress-meter \
+    if ! curl -fL --proto '=https' --proto-redir '=https' --retry 5 --retry-delay 10 --no-progress-meter \
       -o "${checksum_after}" "${resolved_url}.md5"; then
       log "WARNING: Could not fetch the final ${country} checksum."
       (( attempt == SOURCE_DOWNLOAD_ATTEMPTS )) || sleep "${SOURCE_RETRY_DELAY_SECONDS}"
@@ -390,7 +410,7 @@ download_source_consistently() {
     fi
     mv "${partial_file}" "${source_file}"
     mv "${checksum_before}" "${checksum_file}"
-    rm -f "${checksum_after}"
+    rm -f "${checksum_after}" "${headers_file}"
     DOWNLOADED_SOURCE_URL=${resolved_url}
     return 0
   done
