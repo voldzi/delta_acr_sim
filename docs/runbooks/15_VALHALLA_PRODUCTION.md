@@ -492,6 +492,23 @@ values across an expiry boundary (a code-and-journal inference; no route-level
 stale-speed usage was measured). An expiry-deadline correction is prepared in
 the repository but is not installed until a controlled operator deployment.
 
+For that controlled deployment, run
+`bash scripts/install-valhalla-traffic-expiry-guard.sh --check` followed by
+`--install` from the operator checkout. The latter requires server sudo,
+stops only the updater timer while the current updater finishes, preserves
+`traffic-update.py.before-expiry-20260929`, installs the reviewed script,
+starts one active-lease update and restores the timer in an exit trap. It does
+not restart the Valhalla container, alter the graph or enable candidate edge
+mapping. If the first update fails, the helper restores the prior script and
+starts the timer. Afterward inspect `last-applied.json` for a finite
+`nextRecomputeAtEpoch`, verify an unchanged revision is re-evaluated at that
+deadline, observe `appliedFlowCount=0` during a fully expired gap, and confirm
+the following revision restores current speeds. Also verify `/status`, an
+actual car route, SIM traffic status and the weekly/traffic timers. To roll
+back manually, stop the traffic timer, reinstall that preserved backup over
+`/srv/valhalla/update-tools/traffic-update.py`, and restart only the traffic
+timer/service. Do not remove the backup during observation.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
