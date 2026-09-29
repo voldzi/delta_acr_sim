@@ -397,7 +397,8 @@ does not independently prove correct road identity or ETA accuracy.
 
 For an explicitly approved **pilot-only** route-time A/B check, the host has
 insufficient free memory for a second simultaneous Valhalla instance. Use
-`bash scripts/start-valhalla-traffic-canary-ab.sh --check`, then `--start`
+`bash scripts/start-valhalla-traffic-canary-ab.sh --check`, then `--diagnose`
+before `--start`
 from the SIM checkout on the operator Mac. The start helper uploads a tested
 one-shot unit and prompts for server sudo. The unit requires the exact audited
 graph and matching SIM/live traffic revisions. It stops only the traffic timer
@@ -414,6 +415,21 @@ do not start another canary: inspect the unit and run the idempotent
 `sudo /srv/valhalla/update-tools/traffic-canary-rollback.sh` before diagnosis.
 This controlled pilot outage is not a production rollout and route-time
 differences are not measured ETA accuracy against observed journeys.
+
+The first two pilot attempts on 29 September stopped safely before the
+service swap: no fresh flow matched the 5,286 candidate references, even
+though the ordinary mapper applied 17,458 flows to its baseline map in one
+snapshot. The `--diagnose` mode is read-only with respect to the serving
+traffic archive, timer and Valhalla container. It prints aggregate counts
+only: total live flow records, candidate-ID intersections, valid speeds and
+fresh observations, plus invalid-speed, timestamp, future, stale and expired
+reasons. It never prints message IDs, coordinates, provider payloads or
+credentials. If `candidateIdRecords=0`, another immediate live A/B run cannot
+evaluate the new map; investigate whether the provider supplies dynamic
+flows for those references. If IDs intersect but `candidateFreshRecords=0`,
+investigate source timestamps, expiry or speed availability. No diagnostic
+count is evidence of ETA accuracy, and this mode does not enable candidate
+edges in the ordinary updater.
 
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),

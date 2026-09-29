@@ -108,6 +108,53 @@ def select_requests(static_feed: dict[str, Any], dynamic_feed: dict[str, Any], a
     return requests[:16]
 
 
+def flow_diagnostics(feed: dict[str, Any], audit: dict[str, Any], traffic: Any,
+                     max_age_seconds: int, *, now: float | None = None) -> dict[str, int]:
+    """Count candidate-flow rejection reasons without exposing licensed records."""
+    instant = time.time() if now is None else now
+    candidate_ids = set(audit["mapping"])
+    counts = {
+        "totalFlowRecords": 0,
+        "candidateIdRecords": 0,
+        "candidateValidSpeedRecords": 0,
+        "candidateFreshRecords": 0,
+        "candidateInvalidSpeedRecords": 0,
+        "candidateInvalidObservedAtRecords": 0,
+        "candidateFutureRecords": 0,
+        "candidateStaleRecords": 0,
+        "candidateExpiredRecords": 0,
+    }
+    for flow in feed.get("flows", []):
+        if not isinstance(flow, dict):
+            continue
+        counts["totalFlowRecords"] += 1
+        if str(flow.get("messageId", "")) not in candidate_ids:
+            continue
+        counts["candidateIdRecords"] += 1
+        try:
+            speed = float(flow["averageSpeedKph"])
+        except (KeyError, TypeError, ValueError):
+            counts["candidateInvalidSpeedRecords"] += 1
+            continue
+        if not math.isfinite(speed) or speed <= 0:
+            counts["candidateInvalidSpeedRecords"] += 1
+            continue
+        counts["candidateValidSpeedRecords"] += 1
+        observed = traffic.parse_iso_timestamp(flow.get("observedAt"))
+        valid_until = traffic.parse_iso_timestamp(flow.get("validUntil"))
+        if observed is None:
+            counts["candidateInvalidObservedAtRecords"] += 1
+        elif observed > instant:
+            counts["candidateFutureRecords"] += 1
+        elif instant - observed > max_age_seconds:
+            counts["candidateStaleRecords"] += 1
+        elif valid_until is not None and valid_until < instant:
+            counts["candidateExpiredRecords"] += 1
+        else:
+            counts["candidateFreshRecords"] += 1
+    return counts
+
+
 def route_summary(body: Any) -> dict[str, Any] | None:
     if not isinstance(body, dict):
         return None
@@ -216,9 +263,12 @@ def prepare(traffic: Any, config: dict[str, str], audit: dict[str, Any], url: st
         raise RuntimeError("candidate edge ownership is not unique")
     if candidate_edges & active_edges:
         raise RuntimeError("candidate edges overlap the active baseline traffic archive")
-    speeds, flow_count, _ = traffic.current_edge_speeds(feed, audit, int(feed.get("maxAgeSeconds", 1800)))
-    if not speeds or flow_count <= 0:
-        raise RuntimeError("no fresh candidate flows are available")
+    max_age_seconds = int(feed.get("maxAgeSeconds", 1800))
+    diagnostics = flow_diagnostics(feed, audit, traffic, max_age_seconds)
+    print(json.dumps({"pilotFlowDiagnostics": diagnostics}, sort_keys=True), flush=True)
+    speeds, flow_count, _ = traffic.current_edge_speeds(feed, audit, max_age_seconds)
+    if not speeds or flow_count <= 0 or diagnostics["candidateFreshRecords"] == 0:
+        raise RuntimeError("no fresh candidate flows are available; see aggregate flow diagnostics")
     requests = select_requests(static_feed, feed, audit, traffic)
     if len(requests) < 4:
         raise RuntimeError("not enough fresh, geographically stratified candidate routes")
@@ -230,7 +280,7 @@ def prepare(traffic: Any, config: dict[str, str], audit: dict[str, Any], url: st
     return requests, applied, dynamic
 
 
-def run() -> int:
+def run(*, diagnose_flows: bool = False) -> int:
     if os.geteuid() != 0:
         raise RuntimeError("this isolated pilot test requires root to preserve automatic rollback")
     if Path("/srv/valhalla/current").resolve().as_posix() != RELEASE:
@@ -259,6 +309,18 @@ def run() -> int:
     if not image.startswith("ghcr.io/valhalla/valhalla-scripted:3.8.3@sha256:"):
         raise RuntimeError("unexpected Valhalla image")
     wait_for_status(traffic, url)
+    if diagnose_flows:
+        feed_url = traffic.required(config, "SIM_TRAFFIC_FEED_BASE_URL").rstrip("/")
+        token = traffic.required(config, "SIM_TRAFFIC_CONTROL_TOKEN")
+        status, feed = traffic.request_json(f"{feed_url}/feed", token=token)
+        if status != 200 or not isinstance(feed, dict):
+            raise RuntimeError("active SIM traffic feed is unavailable")
+        if (traffic.routing_dataset(url) != DATASET or
+            feed.get("staticRevision") != audit.get("staticRevision")):
+            raise RuntimeError("feed, audit or routing graph revision mismatch")
+        diagnostics = flow_diagnostics(feed, audit, traffic, int(feed.get("maxAgeSeconds", 1800)))
+        print(json.dumps({"pilotFlowDiagnostics": diagnostics}, sort_keys=True), flush=True)
+        return 0
     MARKER.touch(mode=0o600, exist_ok=False)
     os.chmod(MARKER, 0o600)
     try:
@@ -301,7 +363,9 @@ def run() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(run())
+        if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] != "--diagnose-flows"):
+            raise RuntimeError("usage: traffic-canary-ab.py [--diagnose-flows]")
+        raise SystemExit(run(diagnose_flows=len(sys.argv) == 2))
     except Exception as error:
         print(f"Pilot A/B test failed safely: {error}", file=sys.stderr, flush=True)
         raise SystemExit(1)

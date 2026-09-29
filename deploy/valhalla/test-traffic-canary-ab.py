@@ -58,6 +58,26 @@ audit = {"mapping": {item: [] for item in ("a", "b", "c", "d", "stale")}}
 requests = canary.select_requests(static, dynamic, audit, TrafficStub())
 assert len(requests) == 4
 
+diagnostic_feed = {"flows": [
+    {"messageId": "other", "averageSpeedKph": 40, "observedAt": now - 10},
+    {"messageId": "a", "averageSpeedKph": 40, "observedAt": now - 10},
+    {"messageId": "b", "averageSpeedKph": None, "observedAt": now - 10},
+    {"messageId": "c", "averageSpeedKph": 35, "observedAt": now - 3600},
+    {"messageId": "d", "averageSpeedKph": 30, "observedAt": now + 30},
+    {"messageId": "e", "averageSpeedKph": 25, "observedAt": now - 10, "validUntil": now - 1},
+    {"messageId": "f", "averageSpeedKph": 20},
+]}
+diagnostics = canary.flow_diagnostics(
+    diagnostic_feed, {"mapping": {item: [] for item in "abcdef"}}, TrafficStub(), 1800, now=now
+)
+assert diagnostics == {
+    "totalFlowRecords": 7, "candidateIdRecords": 6,
+    "candidateValidSpeedRecords": 5, "candidateFreshRecords": 1,
+    "candidateInvalidSpeedRecords": 1, "candidateInvalidObservedAtRecords": 1,
+    "candidateFutureRecords": 1, "candidateStaleRecords": 1,
+    "candidateExpiredRecords": 1,
+}
+
 baseline = [
     {"time": 100, "length": 1.2, "shape": "one"},
     {"time": 200, "length": 2.0, "shape": "two"},

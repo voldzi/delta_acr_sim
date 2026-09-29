@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 mode="${1:---check}"
-if [[ "${mode}" != '--check' && "${mode}" != '--start' ]]; then
-  echo 'Usage: start-valhalla-traffic-canary-ab.sh [--check|--start]' >&2
+if [[ "${mode}" != '--check' && "${mode}" != '--start' && "${mode}" != '--diagnose' ]]; then
+  echo 'Usage: start-valhalla-traffic-canary-ab.sh [--check|--diagnose|--start]' >&2
   exit 64
 fi
 
@@ -27,7 +27,11 @@ if [[ "${mode}" == '--check' ]]; then
   exit 0
 fi
 
-for file in traffic-canary-ab.py traffic-canary-rollback.sh valhalla-traffic-canary-ab.service; do
+files=(traffic-canary-ab.py)
+if [[ "${mode}" == '--start' ]]; then
+  files+=(traffic-canary-rollback.sh valhalla-traffic-canary-ab.service)
+fi
+for file in "${files[@]}"; do
   scp "${root}/deploy/valhalla/${file}" "valhalla.home.cz:/home/voldzi/valhalla-owned-deploy/${file}"
   local_hash="$(shasum -a 256 "${root}/deploy/valhalla/${file}" | awk '{print $1}')"
   # The filename is from the fixed list above; client-side expansion is intended.
@@ -54,6 +58,14 @@ curl -fsS --max-time 35 \
   --data '{"profileId":"car","from":{"lon":14.42076,"lat":50.08804},"to":{"lon":14.4461,"lat":50.0755},"includeTraffic":true,"alternatives":1}' \
   http://127.0.0.1:5020/situation-data/api/v1/routing/route
 REMOTE
+
+if [[ "${mode}" == '--diagnose' ]]; then
+  ssh -t valhalla.home.cz '
+    sudo install -o root -g root -m 0755 /home/voldzi/valhalla-owned-deploy/traffic-canary-ab.py /srv/valhalla/update-tools/traffic-canary-ab.py &&
+    sudo python3 /srv/valhalla/update-tools/traffic-canary-ab.py --diagnose-flows
+  '
+  exit 0
+fi
 
 ssh -t valhalla.home.cz '
   sudo install -o root -g root -m 0755 /home/voldzi/valhalla-owned-deploy/traffic-canary-ab.py /srv/valhalla/update-tools/traffic-canary-ab.py &&
