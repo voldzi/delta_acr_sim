@@ -454,6 +454,29 @@ or SIM's permitted five-minute refresh phase repeatedly observes it just
 after expiry. Do not shorten provider polling below the subscriber-agreed
 cadence or extend expiry without independent source-contract evidence.
 
+For a bounded temporal comparison run
+`bash scripts/start-valhalla-traffic-cohort-monitor.sh --check` and then
+`--start` from the SIM checkout. The second command requires operator sudo on
+the Valhalla host. It opens one ordinary SIM vehicle-traffic lease and starts
+a low-priority, 13-minute systemd job; it does **not** stop the traffic timer,
+restart Valhalla, edit `traffic.tar`, alter provider polling configuration or
+enable candidate edges. The job requests the authenticated internal SIM feed
+every 30 seconds. SIM's existing five-minute dynamic cache continues to
+govern upstream TPEG2 polls; do not shorten it without checking subscriber
+terms. The job verifies the immutable graph, static revision and disjoint
+candidate/baseline map before sampling. It stores only aggregate counts and
+timestamp-age medians for each cohort at
+`/srv/valhalla/state/traffic-cohort-monitor-20260929.json` (mode 0600).
+It never stores or logs provider records, message IDs, coordinates or tokens.
+Inspect `journalctl -u valhalla-traffic-cohort-monitor-20260929.service -n 30
+--no-pager`; the protected report is read by the operator after completion.
+`newDynamicRevision` distinguishes a changed data snapshot from repeated
+reads of one cached snapshot. If candidate `freshCount` becomes positive only
+just after a revision change, investigate the refresh phase and remaining
+validity window; if it stays zero across at least two revision transitions,
+investigate source validity semantics before any live A/B attempt. Even a
+positive count does not establish correct road direction or ETA accuracy.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
