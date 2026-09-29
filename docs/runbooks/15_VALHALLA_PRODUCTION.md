@@ -396,15 +396,52 @@ geometry/road-based references from the upstream
 [DATEX II FCD predefined-location catalogue](https://registr.dopravniinfo.cz/en/sources/cz-ndic_d2-pls-fcd-v1.1/).
 The TPEG pilot documents the latter as a separate ŘSD/NDIC source with its own
 subscription process. Obtain the source and usage rights before adding it.
-On 29 September 2026, the ŘSD subscriber portal showed acceptance of the TMC
-licence for subscriber 6596B9DA and listed `TMC lokační tabulka v11.0` as a
-static PULL ZIP source, but showed no active subscription. The source description
-requires a signed licence and a separate order form sent to
-`mobilitydata@rsd.cz` for each new version. Licence approval alone is not
-evidence that the ZIP is downloadable or that its contents supply an unambiguous
-Valhalla edge path. Keep the traffic quality gate unchanged until the actual
-versioned archive is obtained, its terms and geometry inspected, and the
-matcher is tested offline.
+On 29 September 2026, the ŘSD subscriber portal confirmed active subscription
+`2C713396` to `TMC lokační tabulka v11.0`. The licensed ZIP was downloaded and
+verified locally: SHA-256
+`820b66b27f941e95aaa7817a12fbe5e643cbe3305987e312124e448bd2e2926d`.
+Keep it out of Git and public artifacts; the local private copy belongs under
+`data/valhalla/tmc/LT_v11.zip` (ignored by Git, mode 600). The table's own
+metadata identifies `CID=11`, `TABCD=25`, version `11.0`. It contains 35,861
+point, 252 segment and 8,778 road locations. The included technical document
+defines positive and negative offset links and WGS84 point centres, but the
+KML line geometries do not provide an authoritative directed Valhalla edge
+sequence. No TMC-derived live-speed mapping is enabled.
+
+Read-only comparison of the private ZIP with SIM's 29 September normalized
+TPEG2 static cache (`staticRevision=10b52da1cef6b14e56c112ce1b78770cccaf6fd77ae96e2e1a01d719e1e01a08`)
+found that all 55,150 source references resolve to a TMC **point** with the
+expected country/table number. The distance from each point to the nearer
+OpenLR endpoint had p50=7 m, p90=93 m, p99=1,564 m. This validates reference
+identity, not full path or carriageway direction. Reproduce only aggregate
+results, without saving or printing source records:
+
+Against the revision-matched conservative baseline of 35,639 mapped segments,
+the TMC-point-to-nearest-endpoint separation was p50/p90/p99 = 6/66/290 m
+for mapped references, but 8/174/2,565 m for the remaining references. This
+supports treating the table as an independent plausibility signal. It also
+shows why merely snapping unmatched points to roads would be unsafe.
+
+```bash
+ssh -o BatchMode=yes docker.home.cz \
+  'docker exec csm-sim-situation-data-api cat /valhalla-traffic-cache/static-segments.json.gz' | \
+  python3 deploy/valhalla/audit-tmc-location-table.py \
+    --zip data/valhalla/tmc/LT_v11.zip --static-cache -
+```
+
+For baseline comparison, add `--baseline-cache /path/to/a/private,
+revision-matched/openlr-edge-map.json.gz`. The audit rejects a mismatched
+static revision and emits counts and quantiles only.
+
+The licensed table must never be embedded in the public API, repository,
+container image or a traffic mapping cache exported to COP. Before any
+TMC-assisted mapper is activated, demonstrate a unique directed graph path
+for each new location using road identity, OpenLR bearings/length and TMC
+direction/offset links; reject missing, ambiguous, parallel-carriageway and
+large-displacement cases. Repeat independent graph and route-time audits on
+both directions and varied road classes. Preserve the current conservative
+OpenLR mapping as rollback and do not convert the 100% reference-identity
+result into a claimed 100% speed coverage.
 Acceptance requires a reviewed match sample across road classes and directions,
 explicit rejection of ambiguous parallel roads and detours, matched-flow as
 well as static-segment coverage, route-time comparisons on affected and

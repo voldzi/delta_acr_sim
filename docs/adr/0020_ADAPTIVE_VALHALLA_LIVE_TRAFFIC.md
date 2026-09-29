@@ -199,6 +199,20 @@ the shortest-distance auto route and rejects any difference in the directed
 edge sequence. This is a conservative ambiguity gate, not a substitute for a
 full OpenLR decoder with specialized candidate ranking and distance costing.
 
+## Licensed Czech TMC v11.0 reference table (29 September 2026)
+
+The approved ŘSD subscription provides a static location table, not a stream
+of observed speeds and not a directed Valhalla graph-edge catalogue. Its
+`CID=11`, `TABCD=25` point codes match all 55,150 references in the current
+SIM TPEG2 static snapshot. The table is therefore accepted as a private,
+read-only reference and quality-control input, **not** as an automatic live
+mapper or as a replacement for the OpenLR safety gates above. The raw ZIP must
+remain outside Git, container images and public API responses. A version/hash
+change requires another aggregate audit. Directional graph matching and
+independent road-time acceptance are required before a future ADR may permit
+TMC-assisted live speed application. See the production runbook for the
+licensed archive identity, audit command and acceptance criteria.
+
 ## Rollback
 
 1. Set `VALHALLA_TRAFFIC_ENABLED=false` and recreate `situation-data-api`.
