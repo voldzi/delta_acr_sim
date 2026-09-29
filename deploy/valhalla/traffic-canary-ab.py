@@ -123,6 +123,10 @@ def flow_diagnostics(feed: dict[str, Any], audit: dict[str, Any], traffic: Any,
         "candidateFutureRecords": 0,
         "candidateStaleRecords": 0,
         "candidateExpiredRecords": 0,
+        "candidateExpiryBeforeObservationRecords": 0,
+        "candidateExpiredWithin5MinutesRecords": 0,
+        "candidateExpiredWithin30MinutesRecords": 0,
+        "candidateExpiredOver30MinutesRecords": 0,
     }
     for flow in feed.get("flows", []):
         if not isinstance(flow, dict):
@@ -150,6 +154,15 @@ def flow_diagnostics(feed: dict[str, Any], audit: dict[str, Any], traffic: Any,
             counts["candidateStaleRecords"] += 1
         elif valid_until is not None and valid_until < instant:
             counts["candidateExpiredRecords"] += 1
+            if valid_until < observed:
+                counts["candidateExpiryBeforeObservationRecords"] += 1
+            expiry_age = instant - valid_until
+            if expiry_age <= 300:
+                counts["candidateExpiredWithin5MinutesRecords"] += 1
+            elif expiry_age <= 1800:
+                counts["candidateExpiredWithin30MinutesRecords"] += 1
+            else:
+                counts["candidateExpiredOver30MinutesRecords"] += 1
         else:
             counts["candidateFreshRecords"] += 1
     return counts

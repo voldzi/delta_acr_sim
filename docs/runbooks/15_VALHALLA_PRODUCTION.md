@@ -423,13 +423,26 @@ snapshot. The `--diagnose` mode is read-only with respect to the serving
 traffic archive, timer and Valhalla container. It prints aggregate counts
 only: total live flow records, candidate-ID intersections, valid speeds and
 fresh observations, plus invalid-speed, timestamp, future, stale and expired
-reasons. It never prints message IDs, coordinates, provider payloads or
+reasons. Expired records are bucketed by elapsed time (up to five minutes,
+up to 30 minutes, older) and counted separately if expiry predates the
+observation. It never prints message IDs, coordinates, provider payloads or
 credentials. If `candidateIdRecords=0`, another immediate live A/B run cannot
 evaluate the new map; investigate whether the provider supplies dynamic
 flows for those references. If IDs intersect but `candidateFreshRecords=0`,
 investigate source timestamps, expiry or speed availability. No diagnostic
 count is evidence of ETA accuracy, and this mode does not enable candidate
 edges in the ordinary updater.
+
+The first aggregate diagnosis after those attempts saw 22,220 dynamic flow
+records. Exactly 1,135 matched candidate IDs and all 1,135 had valid speed
+and observation timestamps, but all 1,135 had already passed `validUntil`;
+none could be applied. This rules out an ID mismatch or missing speed as the
+immediate reason for the aborted A/B check. Do not ignore `validUntil` to
+force a comparison. Next determine, using aggregate-only expiry/observation
+age statistics and a fresh provider snapshot, whether these are superseded
+messages or a source timestamp/contract problem. Until that is resolved,
+potential static coverage (74.21%) must not be represented as live-flow or
+ETA coverage.
 
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),

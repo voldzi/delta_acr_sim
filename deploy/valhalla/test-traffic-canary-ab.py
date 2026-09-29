@@ -66,16 +66,21 @@ diagnostic_feed = {"flows": [
     {"messageId": "d", "averageSpeedKph": 30, "observedAt": now + 30},
     {"messageId": "e", "averageSpeedKph": 25, "observedAt": now - 10, "validUntil": now - 1},
     {"messageId": "f", "averageSpeedKph": 20},
+    {"messageId": "g", "averageSpeedKph": 20, "observedAt": now - 10, "validUntil": now - 3600},
+    {"messageId": "h", "averageSpeedKph": 20, "observedAt": now - 10, "validUntil": now - 600},
 ]}
 diagnostics = canary.flow_diagnostics(
-    diagnostic_feed, {"mapping": {item: [] for item in "abcdef"}}, TrafficStub(), 1800, now=now
+    diagnostic_feed, {"mapping": {item: [] for item in "abcdefgh"}}, TrafficStub(), 1800, now=now
 )
 assert diagnostics == {
-    "totalFlowRecords": 7, "candidateIdRecords": 6,
-    "candidateValidSpeedRecords": 5, "candidateFreshRecords": 1,
+    "totalFlowRecords": 9, "candidateIdRecords": 8,
+    "candidateValidSpeedRecords": 7, "candidateFreshRecords": 1,
     "candidateInvalidSpeedRecords": 1, "candidateInvalidObservedAtRecords": 1,
     "candidateFutureRecords": 1, "candidateStaleRecords": 1,
-    "candidateExpiredRecords": 1,
+    "candidateExpiredRecords": 3, "candidateExpiryBeforeObservationRecords": 2,
+    "candidateExpiredWithin5MinutesRecords": 1,
+    "candidateExpiredWithin30MinutesRecords": 1,
+    "candidateExpiredOver30MinutesRecords": 1,
 }
 
 baseline = [
