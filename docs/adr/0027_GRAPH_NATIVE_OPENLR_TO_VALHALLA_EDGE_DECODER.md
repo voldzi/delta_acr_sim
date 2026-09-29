@@ -14,6 +14,16 @@ GraphReader experiment produced 7,472 disjoint additional candidates, but
 independent checks still found wrong or divergent paths. Candidate count is
 not acceptance. No new v7 match may be applied live merely by enabling a flag.
 
+On 29 September the narrower HTTP route-candidate v3 matcher was re-audited
+against the newly active graph: 5,286 disjoint additions (74.21% potential
+combined static coverage), with 14,225 explicit rejections. A stratified
+62-route repeat agreed on directed-edge sequences for all 62, but it reused
+Valhalla routing and is not independent geographic ground truth. The pilot
+may compare route behavior with these candidates in a time-bounded,
+automatically rolled-back canary while the ordinary service is briefly
+stopped for host-memory safety. This is not authorization to switch the live
+updater flag, claim ETA accuracy, or promote v3/v7 nationally.
+
 Implement a **separate, version-pinned, graph-native decoder** using the same
 Valhalla tiles as the serving instance. Decode once for each combination of
 `routingDataset`, `staticRevision`, TMC table version/hash and decoder version;

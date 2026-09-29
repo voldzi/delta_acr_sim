@@ -388,6 +388,33 @@ Check dataset/static revision, candidate overlap rejection, deterministic
 independent route rechecks and geographically reviewed wrong-road cases before
 any isolated canary. A higher candidate count is not an ETA-accuracy result.
 
+The 29 September v3 shadow audit completed on the new graph with 5,286
+additional disjoint candidate references beyond 35,639 baseline matches,
+or 74.21% **potential** static coverage. It rejected 14,225 of the 19,511
+baseline-unmatched references. A deterministic FRC-stratified recheck of 62
+candidate routes repeated the same directed-edge sequence for all 62. This
+does not independently prove correct road identity or ETA accuracy.
+
+For an explicitly approved **pilot-only** route-time A/B check, the host has
+insufficient free memory for a second simultaneous Valhalla instance. Use
+`bash scripts/start-valhalla-traffic-canary-ab.sh --check`, then `--start`
+from the SIM checkout on the operator Mac. The start helper uploads a tested
+one-shot unit and prompts for server sudo. The unit requires the exact audited
+graph and matching SIM/live traffic revisions. It stops only the traffic timer
+and ordinary Valhalla container, measures baseline routes, runs a temporary
+network-isolated Valhalla container with a separate traffic archive and no
+published port, measures the same routes, then restores the ordinary container
+and timer. `ExecStopPost` repeats the rollback after interruption or timeout.
+The ordinary `/run/valhalla-traffic/traffic.tar` is never rewritten by the
+test. Its aggregate report is
+`/srv/valhalla/state/traffic-canary-ab-20260929.json` (mode 0600); inspect
+`journalctl -u valhalla-traffic-canary-ab.service --no-pager` and verify
+ordinary Valhalla `/status` plus a SIM car route afterward. If recovery fails,
+do not start another canary: inspect the unit and run the idempotent
+`sudo /srv/valhalla/update-tools/traffic-canary-rollback.sh` before diagnosis.
+This controlled pilot outage is not a production rollout and route-time
+differences are not measured ETA accuracy against observed journeys.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where

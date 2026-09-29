@@ -1,0 +1,16 @@
+[Unit]
+Description=One-shot isolated pilot A/B check for Valhalla candidate live speeds
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /srv/valhalla/update-tools/traffic-canary-ab.py
+ExecStopPost=/srv/valhalla/update-tools/traffic-canary-rollback.sh
+TimeoutStartSec=900
+TimeoutStopSec=210
+Nice=10
+CPUWeight=20
+IOWeight=20
+
+# The test is manually dispatched and has no timer or restart policy.
