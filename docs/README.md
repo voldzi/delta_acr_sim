@@ -44,6 +44,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [ADR 0025: úzce minimalizovaný interní COP chat](adr/0025_COP_INTERNAL_MINIMIZED_AI_ROUTING.md)
 - [`adr/0024_SHARED_AI_ROUTER_SERVICE.md`](adr/0024_SHARED_AI_ROUTER_SERVICE.md)
 - [`adr/0026_SEPARATE_COP_BYOK_AND_SIM_IZS_AI_BILLING.md`](adr/0026_SEPARATE_COP_BYOK_AND_SIM_IZS_AI_BILLING.md)
+- [`adr/0027_GRAPH_NATIVE_OPENLR_TO_VALHALLA_EDGE_DECODER.md`](adr/0027_GRAPH_NATIVE_OPENLR_TO_VALHALLA_EDGE_DECODER.md)
 - [`runbooks/16_AI_ROUTER_PRODUCTION.md`](runbooks/16_AI_ROUTER_PRODUCTION.md)
 
 ## Machine-Readable API Contract

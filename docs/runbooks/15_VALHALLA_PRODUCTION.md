@@ -322,6 +322,8 @@ including conservative whole-edge offset trimming, but does not implement
 them all. Do not install or activate the
 probe. The validated live baseline remains `openlr-trace-v2` until those gates
 pass and a fresh graph-specific audit is repeated after each weekly map build.
+The implementation and acceptance contract for the graph-native decoder is
+[ADR 0027](../adr/0027_GRAPH_NATIVE_OPENLR_TO_VALHALLA_EDGE_DECODER.md).
 
 An isolated route-candidate prototype is now included in the updater, but is
 **disabled by default** with `TRAFFIC_OPENLR_ROUTE_FALLBACK=false`. A bounded
