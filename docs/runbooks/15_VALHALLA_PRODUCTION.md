@@ -444,6 +444,16 @@ messages or a source timestamp/contract problem. Until that is resolved,
 potential static coverage (74.21%) must not be represented as live-flow or
 ETA coverage.
 
+A second diagnosis saw 21,359 dynamic records, 1,049 candidate-ID matches,
+1,049 valid speeds and observations, but again zero fresh candidates. All
+1,049 had expired within the preceding five minutes, none before its own
+observation. The serving baseline still applied 15,215 fresh flows in a
+nearby snapshot and continued routing normally. The remaining question is
+whether the candidate cohort has a systematically shorter validity window,
+or SIM's permitted five-minute refresh phase repeatedly observes it just
+after expiry. Do not shorten provider polling below the subscriber-agreed
+cadence or extend expiry without independent source-contract evidence.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
