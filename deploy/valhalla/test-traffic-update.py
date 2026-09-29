@@ -9,6 +9,7 @@ import struct
 import tarfile
 import tempfile
 import threading
+import time
 from types import SimpleNamespace
 
 MODULE_PATH = Path(__file__).with_name("traffic-update.py")
@@ -414,6 +415,35 @@ def main() -> None:
     feed = {"flows": [{"messageId": "flow-1", "averageSpeedKph": 24, "validUntil": now}]}
     speeds, flow_count, _ = traffic.current_edge_speeds(feed, mapping, 10**10)
     assert flow_count == 1 and list(speeds) == [graph_id(1, 50594, 2)]
+    instant = time.time()
+    expiry_feed = {"flows": [
+        {"messageId": "flow-1", "averageSpeedKph": 24,
+         "observedAt": "2099-01-01T00:00:00Z", "validUntil": "2099-01-01T00:01:00Z"},
+    ]}
+    assert traffic.next_flow_recompute_epoch(expiry_feed, mapping, 1800, instant) == instant + 1800
+    observed = "2026-09-29T16:00:00Z"
+    valid_until = "2026-09-29T16:04:00Z"
+    expiry_feed["flows"][0].update({"observedAt": observed, "validUntil": valid_until})
+    observed_epoch = traffic.parse_iso_timestamp(observed)
+    expiry_epoch = traffic.parse_iso_timestamp(valid_until)
+    assert observed_epoch is not None and expiry_epoch is not None
+    assert traffic.next_flow_recompute_epoch(
+        expiry_feed, mapping, 1800, observed_epoch + 60
+    ) == expiry_epoch
+    assert traffic.revision_recompute_epoch({"nextRecomputeAtEpoch": "invalid"}) == 0
+    revision_state = {
+        "routingDataset": "dataset", "staticRevision": "static", "dynamicRevision": "dynamic",
+        "matcherVersion": "matcher", "nextRecomputeAtEpoch": expiry_epoch,
+    }
+    assert traffic.reusable_traffic_revision(
+        revision_state, "dataset", "static", "dynamic", "matcher", expiry_epoch - 1
+    )
+    assert not traffic.reusable_traffic_revision(
+        revision_state, "dataset", "static", "dynamic", "matcher", expiry_epoch
+    )
+    assert not traffic.reusable_traffic_revision(
+        revision_state, "dataset", "static", "changed", "matcher", expiry_epoch - 1
+    )
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -430,6 +460,14 @@ def main() -> None:
         revision = root / "last-applied.json"
         revision.write_text(json.dumps({"appliedAtEpoch": 1}))
         assert traffic.clear_expired_runtime(root, 1)
+        with archive.open("rb") as stream:
+            stream.seek(offset)
+            assert struct.unpack("<Q", stream.read(8))[0] == 0
+        traffic.apply_speeds(archive, state, speeds)
+        revision.write_text(json.dumps({"appliedAtEpoch": time.time(), "nextRecomputeAtEpoch": time.time() + 60}))
+        assert not traffic.clear_expired_runtime(root, 1800)
+        revision.write_text(json.dumps({"appliedAtEpoch": time.time(), "nextRecomputeAtEpoch": time.time() - 1}))
+        assert traffic.clear_expired_runtime(root, 1800)
         with archive.open("rb") as stream:
             stream.seek(offset)
             assert struct.unpack("<Q", stream.read(8))[0] == 0

@@ -106,6 +106,19 @@ Replacing the runtime archive invalidates both `applied-edges.json` and
 `last-applied.json`. Revision-based no-op optimization is allowed only when the
 archive, revision marker, and applied-edge state all exist together.
 
+The 29 September aggregate cohort pilot exposed an additional validity
+boundary: the normalized dynamic revision can remain unchanged after all
+observations in it have expired. The existing revision-only no-op then skips
+the validity filter, potentially retaining previously written speeds until a
+new revision arrives. A prepared updater correction records the earliest
+expiry or maximum-age deadline of applied mapped flows in `last-applied.json`.
+The no-op is allowed only before that deadline; when it is reached, the same
+revision must be filtered again and expired records cleared from the memory
+archive. If the SIM feed is unavailable or the activity lease has expired,
+the same deadline triggers fail-closed clearing, not an extended validity
+window. This correction does not increase upstream polling cadence or change
+the graph matcher, and requires a separate controlled install and live check.
+
 ## Release coupling and availability
 
 Every weekly Valhalla build creates a fresh traffic skeleton with

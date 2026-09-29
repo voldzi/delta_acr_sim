@@ -911,6 +911,57 @@ def current_edge_speeds(
     return selected, applied_flows, observed_iso
 
 
+def next_flow_recompute_epoch(
+    feed: dict[str, Any], mapping: dict[str, Any], max_age_seconds: int, now: float | None = None
+) -> float:
+    """Return the first time a currently usable mapped speed may become invalid."""
+    instant = time.time() if now is None else now
+    next_due = instant + max_age_seconds
+    edge_map = mapping.get("mapping", {})
+    for flow in feed.get("flows", []):
+        if not isinstance(flow, dict) or not edge_map.get(str(flow.get("messageId", ""))):
+            continue
+        try:
+            speed = float(flow["averageSpeedKph"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not math.isfinite(speed) or speed <= 0:
+            continue
+        observed = parse_iso_timestamp(flow.get("observedAt"))
+        valid_until = parse_iso_timestamp(flow.get("validUntil"))
+        if observed is not None and instant - observed > max_age_seconds:
+            continue
+        if valid_until is not None and valid_until < instant:
+            continue
+        if observed is not None:
+            next_due = min(next_due, observed + max_age_seconds)
+        if valid_until is not None:
+            next_due = min(next_due, valid_until)
+    return next_due
+
+
+def revision_recompute_epoch(revision: dict[str, Any]) -> float:
+    try:
+        value = float(revision.get("nextRecomputeAtEpoch", 0) or 0)
+        return value if math.isfinite(value) and value > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def reusable_traffic_revision(
+    revision: dict[str, Any], dataset: str, static_revision: str,
+    dynamic_revision: str, matcher_version: str, now: float | None = None,
+) -> bool:
+    instant = time.time() if now is None else now
+    return (
+        revision.get("routingDataset") == dataset
+        and revision.get("staticRevision") == static_revision
+        and revision.get("dynamicRevision") == dynamic_revision
+        and revision.get("matcherVersion") == matcher_version
+        and revision_recompute_epoch(revision) > instant
+    )
+
+
 def parse_iso_timestamp(value: Any) -> float | None:
     if not isinstance(value, str) or not value:
         return None
@@ -986,9 +1037,14 @@ def clear_expired_runtime(runtime_dir: Path, max_age_seconds: int) -> bool:
     try:
         revision = json.loads(revision_path.read_text(encoding="utf-8"))
         applied_at = float(revision.get("appliedAtEpoch", 0))
+        next_due = revision_recompute_epoch(revision)
     except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
         applied_at = state_path.stat().st_mtime
-    if applied_at > 0 and time.time() - applied_at <= max_age_seconds:
+        next_due = 0
+    instant = time.time()
+    if next_due > 0 and instant < next_due:
+        return False
+    if next_due <= 0 and applied_at > 0 and instant - applied_at <= max_age_seconds:
         return False
     lock_path = runtime_dir / "update.lock"
     lock_path.touch(mode=0o600, exist_ok=True)
@@ -996,7 +1052,7 @@ def clear_expired_runtime(runtime_dir: Path, max_age_seconds: int) -> bool:
         fcntl.flock(lock, fcntl.LOCK_EX)
         apply_speeds(archive, state_path, {})
     revision_path.unlink(missing_ok=True)
-    print("Cleared expired Valhalla live speeds while the SIM activity lease is idle.", flush=True)
+    print("Cleared expired Valhalla live speeds while the feed is unavailable or idle.", flush=True)
     return True
 
 
@@ -1016,7 +1072,11 @@ def run(config: dict[str, str]) -> int:
         raise RuntimeError("TRAFFIC_OPENLR_ROUTE_FALLBACK is not approved for live speeds; use read-only audits")
     matcher_version = ROUTE_MATCHER_VERSION if allow_route_fallback else MATCHER_VERSION
 
-    status, feed = request_json(f"{feed_base_url.rstrip('/')}/feed", token=token)
+    try:
+        status, feed = request_json(f"{feed_base_url.rstrip('/')}/feed", token=token)
+    except (OSError, RuntimeError, TimeoutError):
+        clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
+        raise
     if status == 204:
         clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
         return 0
@@ -1037,10 +1097,7 @@ def run(config: dict[str, str]) -> int:
         path.exists()
         and archive.exists()
         and state_path.exists()
-        and revision_state.get("routingDataset") == dataset
-        and revision_state.get("staticRevision") == static_revision
-        and revision_state.get("dynamicRevision") == dynamic_revision
-        and revision_state.get("matcherVersion") == matcher_version
+        and reusable_traffic_revision(revision_state, dataset, static_revision, dynamic_revision, matcher_version)
     ):
         return 0
     if path.exists():
@@ -1071,6 +1128,7 @@ def run(config: dict[str, str]) -> int:
 
     ensure_runtime_archive(archive, skeleton)
     max_age = int(feed.get("maxAgeSeconds", config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
+    next_recompute_at = next_flow_recompute_epoch(feed, mapping, max_age)
     speeds, applied_flows, source_observed = current_edge_speeds(feed, mapping, max_age)
     lock_path = runtime_dir / "update.lock"
     lock_path.touch(mode=0o600, exist_ok=True)
@@ -1107,6 +1165,7 @@ def run(config: dict[str, str]) -> int:
                 "dynamicRevision": dynamic_revision,
                 "matcherVersion": matcher_version,
                 "appliedAtEpoch": time.time(),
+                "nextRecomputeAtEpoch": next_recompute_at,
             }
         ),
         encoding="utf-8",

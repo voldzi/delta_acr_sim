@@ -477,6 +477,21 @@ validity window; if it stays zero across at least two revision transitions,
 investigate source validity semantics before any live A/B attempt. Even a
 positive count does not establish correct road direction or ETA accuracy.
 
+The 29 September monitor finished successfully after 13 minutes: 27 samples,
+three dynamic-revision transitions, 20 samples with fresh candidate flows and
+seven samples where **both** baseline and candidate cohorts had zero fresh
+flows. The three observed zero windows lasted approximately 61, 64 and 101
+seconds between sampled endpoints; their exact start/end are bounded by the
+30-second sampling interval. Fresh candidate counts after refresh were 959,
+1,007, 1,031 and 994. The ordinary Valhalla remained healthy, its timer
+active and a car route returned HTTP 200. This proves a live-flow window for
+some candidates, not accurate matching or better ETA. One ordinary updater
+request received HTTP 502 during the third gap, then recovered at the next
+revision. The active updater's revision-only fast path can retain old edge
+values across an expiry boundary (a code-and-journal inference; no route-level
+stale-speed usage was measured). An expiry-deadline correction is prepared in
+the repository but is not installed until a controlled operator deployment.
+
 The [TFP static feed](https://tpeg.dopravniinfo.cz/technical/sources/tpeg2-pls-tfp)
 uses [OpenLR and TMC location references](https://tpeg.dopravniinfo.cz/technical/formats/tpeg2-tfp),
 not an already matched Valhalla edge path. The current mapper deliberately applies speeds only where
