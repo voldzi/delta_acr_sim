@@ -435,6 +435,25 @@ The next implementation is a TMC-corridor-aware graph-native search that
 finds the correct directed path rather than merely filtering incorrect
 fastest-route candidates, followed by independent fixtures and map review.
 
+An isolated first graph-native corridor probe now exists in
+`deploy/valhalla/openlr-graph-probe.cc` (`--corridor-stream`) and
+`decode-openlr-tmc-corridor.py`. It constrains every traversed directed edge
+to the licensed TMC road geometry during search, reuses the existing bounded
+OpenLR endpoint/offset checks, and independently reads the returned graph-edge
+shapes. On a deterministic FRC-stratified 62-reference v3 sample from graph
+`sim-routing-2026-09-29-1790679143`, it found **3 paths**, all 3 passing the
+independent geometric check; 37 had no corridor path, 18 no comparable TMC
+road, 3 a reference outside that road and 1 no valid endpoint. This is a
+feasibility probe, **not** a released mapping or ETA improvement: it sampled
+only previously proposed v3 references, does not prove uniqueness among
+alternative directed paths or turn-cost equivalence, and lacks independent
+manual road-direction adjudication. The ordinary traffic updater, timer and
+Valhalla runtime were not changed; the test binary was placed only in the
+container's temporary directory. Do not enable the route-fallback flag or
+promote even these 3 paths. Next gate: deterministic ambiguity detection,
+cross-version fixtures, adjudicated stratified precision and an isolated
+same-flow route-time canary with rollback.
+
 The following canary procedure is retained for historical recovery and a
 future independently validated decoder. **Do not run it for v3 while the
 geographic promotion gate above fails.** For an explicitly approved

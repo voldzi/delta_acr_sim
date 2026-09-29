@@ -38,6 +38,14 @@ the TMC corridor was considered, so a post-filter cannot recover the correct
 alternative or certify directional uniqueness. The native search must include
 road/corridor evidence during path finding, not merely after it.
 
+An initial separate C++/Python shadow probe now applies the TMC corridor
+inside a bounded native directed-edge search. Its first 62-reference,
+FRC-stratified v3 sample found 3 candidate paths, independently confirmed to
+follow the TMC geometry in the correct LRP order and bearing. This narrow
+feasibility result does not satisfy the ADR's uniqueness, precision,
+turn-restriction or canary gates. No live traffic mapping changes follow from
+it; ambiguous and unmatched references retain the established fallback.
+
 Implement a **separate, version-pinned, graph-native decoder** using the same
 Valhalla tiles as the serving instance. Decode once for each combination of
 `routingDataset`, `staticRevision`, TMC table version/hash and decoder version;
