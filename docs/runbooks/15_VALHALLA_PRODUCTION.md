@@ -652,6 +652,40 @@ unaffected corridors, and a rollback to the current traffic cache. Until then
 `degraded` is an accurate signal; the normal Valhalla speed hierarchy still
 serves unmatched roads.
 
+On 30 September 2026 the approved ŘSD DATEX II FCD predefined-location archive
+was checked privately as `data/valhalla/fcd/PLSFCD.zip` (ignored by Git, mode
+0600; SHA-256
+`69c49522102d62cf9b32f1de79fd35d9159c3ec3f372f9038e68e34f12ff2b49`).
+Its `pls_FCD_260601.xml` contains 55,141 linear locations with OpenLR and
+Global Network 26.06 section references. Against SIM's active 55,150-segment
+TPEG2 static revision, 54,788 PLS locations had a candidate sharing a primary
+or secondary TMC point whose two OpenLR endpoints were both within 50 m;
+the best candidate's maximum endpoint separation had p50=0.8 m and p99=20.5 m.
+Only 12,292 had a unique candidate under that 50 m test. These are
+identity/geometry checks, not a unique directed Valhalla edge path. The
+[TPEG pilot source mapping](https://tpeg.dopravniinfo.cz/pilot/) confirms that
+this DATEX II PLS source is republished as the TPEG2 static catalogue already
+consumed by SIM. Its additional GN section IDs require the corresponding
+versioned Global Network geometry and rights, or an independently validated
+OpenLR decoder for the active Valhalla graph. Do not enable candidate speeds
+from endpoint proximity alone.
+
+The same live check exposed a separate availability limit. A road request
+opened the normal 15-minute lease. At 08:33 UTC the updater applied 20,663
+flows to 178,943 edges, but its next run at 08:34 found zero still-valid
+mapped flows. A later 29,715-record snapshot had a median of only 178 seconds
+until `validUntil` although SIM's configured provider refresh interval is
+300 seconds. Preserve the provider expiry and subscriber polling cadence;
+expired speeds must be cleared. The [pilot protocol](https://tpeg.dopravniinfo.cz/technical/protocol)
+requires conditional requests and says the recommended cadence is provided at
+onboarding. Check timestamp/cadence behavior with the source operator before
+changing the interval. Between 08:19 and 08:24 UTC the SIM web gateway also
+returned intermittent HTTP 502 because Docker DNS timed out resolving
+`situation-data-api`; it recovered at 08:25. Check that gateway's DNS and logs
+separately from provider freshness. Outside an active vehicle lease the public
+traffic state is `idle`; a newly activated lease with only an old report is
+`warming`, while report counts and timestamps remain historical diagnostics.
+
 The SIM static-feed parser now retains OpenLR FRC, FOW, bearing, lowest FRC to
 next point, distance-to-next and driving-direction metadata alongside the
 reference coordinates for the internal traffic feed. A 25 September 2026
