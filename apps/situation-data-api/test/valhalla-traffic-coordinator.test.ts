@@ -101,6 +101,35 @@ describe("ValhallaTrafficCoordinator", () => {
     expect((await coordinator.status()).state).toBe("idle");
     coordinator.activate();
     expect((await coordinator.status()).state).toBe("warming");
+
+    await coordinator.report({
+      routingDataset: "sim-routing-test",
+      staticRevision: "static-1",
+      dynamicRevision: "dynamic-3",
+      status: "current",
+      updatedAt: "2026-09-30T08:00:00Z",
+      mappedSegmentCount: 10,
+      mappedEdgeCount: 20,
+      appliedFlowCount: 8,
+      appliedEdgeCount: 17,
+      mappingCoveragePercent: 80
+    });
+    expect((await coordinator.status()).state).toBe("warming");
+    await coordinator.report({
+      routingDataset: "sim-routing-test",
+      staticRevision: "static-1",
+      dynamicRevision: "dynamic-4",
+      status: "current",
+      updatedAt: new Date().toISOString(),
+      mappedSegmentCount: 10,
+      mappedEdgeCount: 20,
+      appliedFlowCount: 8,
+      appliedEdgeCount: 17,
+      mappingCoveragePercent: 80
+    });
+    expect((await coordinator.status()).state).toBe("current");
+    vi.setSystemTime(new Date("2026-09-30T08:27:00Z"));
+    expect((await coordinator.status()).state).toBe("stale");
   });
 });
 
