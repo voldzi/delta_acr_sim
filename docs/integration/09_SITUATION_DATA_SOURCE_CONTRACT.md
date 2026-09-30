@@ -465,6 +465,11 @@ spustí obnovu na pozadí; během aktivity se rychlosti obnovují nejvýše jedn
 pět minut. Požadavek bez `departureTime` používá Valhalla `date_time.type=0`, aby
 byly current speeds zahrnuty do ceny i ETA. Stav je v
 `traffic.liveSpeeds`; pěší a cyklistické profily tento mechanismus neaktivují.
+`state=idle` znamená, že neprobíhá silniční lease; `warming` označuje nově
+aktivovanou lease čekající na aktuální report updateru. `degraded` platí pro
+nedávný neúspěšný cyklus během aktivní lease. Čas `updatedAt`, `ageSeconds` a
+počty použitých toků mohou pocházet z posledního historického reportu; bez
+kontroly stáří nejde o doklad aktuálních rychlostí.
 Podrobná vazba na graf, úložiště a rollback jsou v
 [ADR 0020](../adr/0020_ADAPTIVE_VALHALLA_LIVE_TRAFFIC.md).
 

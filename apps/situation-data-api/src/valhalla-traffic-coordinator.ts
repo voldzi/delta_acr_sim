@@ -102,12 +102,14 @@ export class ValhallaTrafficCoordinator {
     const activeUntilMs = this.activeUntilMs();
     const reportTimestamp = this.lastReport ? Date.parse(this.lastReport.updatedAt) : NaN;
     const ageSeconds = Number.isFinite(reportTimestamp) ? Math.max(0, Math.round((Date.now() - reportTimestamp) / 1000)) : undefined;
+    const active = this.isActive();
+    const recentReport = ageSeconds !== undefined && ageSeconds <= this.config.tpeg2DynamicCacheTtlSeconds * 2;
     let state: ValhallaTrafficState;
-    if (this.lastReport?.status === "degraded") state = "degraded";
-    else if (ageSeconds !== undefined && ageSeconds <= this.config.tpeg2DynamicCacheTtlSeconds * 2) state = "current";
-    else if (ageSeconds !== undefined && ageSeconds <= this.config.valhallaTrafficMaxAgeSeconds) state = "stale";
-    else if (this.isActive()) state = "warming";
-    else state = "idle";
+    if (this.lastReport?.status === "current" && recentReport && this.lastReport.appliedEdgeCount > 0) state = "current";
+    else if (!active) state = "idle";
+    else if (!this.lastReport || ageSeconds === undefined || ageSeconds > this.config.valhallaTrafficMaxAgeSeconds) state = "warming";
+    else if (this.lastReport.status === "degraded") state = recentReport ? "degraded" : "warming";
+    else state = "stale";
     return {
       enabled: true,
       state,

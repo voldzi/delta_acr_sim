@@ -9,6 +9,7 @@ import { ValhallaTrafficCoordinator } from "../src/valhalla-traffic-coordinator.
 const directories: string[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
@@ -59,6 +60,47 @@ describe("ValhallaTrafficCoordinator", () => {
       mappingCoveragePercent: 80
     });
     expect(await coordinator.status()).toEqual(expect.objectContaining({ state: "current", appliedEdgeCount: 17 }));
+  });
+
+  it("does not present an old idle report as a current failure after a new road request", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-30T08:00:00Z"));
+    const directory = await mkdtemp(join(tmpdir(), "sim-valhalla-traffic-"));
+    directories.push(directory);
+    const coordinator = new ValhallaTrafficCoordinator(config(directory), {} as Tpeg2Source);
+    await coordinator.report({
+      routingDataset: "sim-routing-test",
+      staticRevision: "static-1",
+      dynamicRevision: "dynamic-1",
+      status: "degraded",
+      updatedAt: "2026-09-29T16:44:23Z",
+      mappedSegmentCount: 10,
+      mappedEdgeCount: 20,
+      appliedFlowCount: 0,
+      appliedEdgeCount: 0,
+      mappingCoveragePercent: 80
+    });
+    expect((await coordinator.status()).state).toBe("idle");
+    coordinator.activate();
+    expect((await coordinator.status()).state).toBe("warming");
+
+    await coordinator.report({
+      routingDataset: "sim-routing-test",
+      staticRevision: "static-1",
+      dynamicRevision: "dynamic-2",
+      status: "degraded",
+      updatedAt: new Date().toISOString(),
+      mappedSegmentCount: 10,
+      mappedEdgeCount: 20,
+      appliedFlowCount: 0,
+      appliedEdgeCount: 0,
+      mappingCoveragePercent: 80
+    });
+    expect((await coordinator.status()).state).toBe("degraded");
+    vi.setSystemTime(new Date("2026-09-30T08:16:00Z"));
+    expect((await coordinator.status()).state).toBe("idle");
+    coordinator.activate();
+    expect((await coordinator.status()).state).toBe("warming");
   });
 });
 
