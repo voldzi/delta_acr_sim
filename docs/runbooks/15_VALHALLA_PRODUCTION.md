@@ -682,9 +682,10 @@ onboarding. Check timestamp/cadence behavior with the source operator before
 changing the interval. Between 08:19 and 08:24 UTC the SIM web gateway also
 returned intermittent HTTP 502 because Docker DNS timed out resolving
 `situation-data-api`; it recovered at 08:25. Check that gateway's DNS and logs
-separately from provider freshness. Outside an active vehicle lease the public
-traffic state is `idle`; a newly activated lease with only an old report is
-`warming`, while report counts and timestamps remain historical diagnostics.
+separately from provider freshness. Without an active vehicle lease and a
+recently applied speed the public traffic state is `idle`; a newly activated
+lease with only an old report is `warming`, while report counts and timestamps
+remain historical diagnostics.
 
 The SIM static-feed parser now retains OpenLR FRC, FOW, bearing, lowest FRC to
 next point, distance-to-next and driving-direction metadata alongside the

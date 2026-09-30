@@ -6949,7 +6949,7 @@
           },
           "state": {
             "type": "string",
-            "description": "Current overlay state: idle outside an active vehicle lease, warming while a new lease awaits a recent updater report, and degraded only for a recent failed update during an active lease. The remaining report fields can describe the last historical update; use ageSeconds and updatedAt before interpreting them as current speeds.",
+            "description": "Current overlay state: idle when there is no active vehicle lease or recent applied speed, warming while a new lease awaits an updater report, and degraded only for a recent failed update during an active lease. A recently applied speed can remain current briefly after the lease ends. The remaining report fields can describe the last historical update; use ageSeconds and updatedAt before interpreting them as current speeds.",
             "enum": [
               "DRAFT",
               "READY",
