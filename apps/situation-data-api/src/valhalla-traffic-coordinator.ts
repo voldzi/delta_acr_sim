@@ -50,6 +50,7 @@ export interface ValhallaTrafficFeed extends Tpeg2TrafficSnapshot {
 
 export class ValhallaTrafficCoordinator {
   private lastVehicleRequestAtMs?: number;
+  private leaseStartedAtMs?: number;
   private lastReport?: ValhallaTrafficUpdateReport;
   private reportLoaded = false;
   private persistedStaticRevision?: string;
@@ -63,7 +64,9 @@ export class ValhallaTrafficCoordinator {
 
   activate(): void {
     if (!this.available()) return;
-    this.lastVehicleRequestAtMs = Date.now();
+    const now = Date.now();
+    if (!this.isActive()) this.leaseStartedAtMs = now;
+    this.lastVehicleRequestAtMs = now;
   }
 
   isAuthorized(value: string | undefined): boolean {
@@ -107,7 +110,10 @@ export class ValhallaTrafficCoordinator {
     let state: ValhallaTrafficState;
     if (this.lastReport?.status === "current" && recentReport && this.lastReport.appliedEdgeCount > 0) state = "current";
     else if (!active) state = "idle";
-    else if (!this.lastReport || ageSeconds === undefined || ageSeconds > this.config.valhallaTrafficMaxAgeSeconds) state = "warming";
+    else if (
+      !this.lastReport || ageSeconds === undefined || ageSeconds > this.config.valhallaTrafficMaxAgeSeconds ||
+      (this.leaseStartedAtMs !== undefined && reportTimestamp < this.leaseStartedAtMs)
+    ) state = "warming";
     else if (this.lastReport.status === "degraded") state = recentReport ? "degraded" : "warming";
     else state = "stale";
     return {
