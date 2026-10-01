@@ -9356,7 +9356,7 @@
       },
       "SituationDataTpeg2SourceTiming": {
         "type": "object",
-        "description": "Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh; nextRefreshAt respects the agreed upstream minimum interval.",
+        "description": "Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh. nextRefreshAt respects the configured upstream and monotonic minimum interval; opted-in adaptive Last-Modified scheduling may only delay the next request and never changes source observation or expiry.",
         "required": [
           "freshFlowCount",
           "expiredFlowCount",

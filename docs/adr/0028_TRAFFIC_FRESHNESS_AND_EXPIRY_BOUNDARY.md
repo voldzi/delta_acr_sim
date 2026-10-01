@@ -38,10 +38,22 @@ token or URL. Failure to write it prevents provider requests. Static content
 normally has a 24-hour in-memory TTL; a restart without restored static content
 may reload it after the 300-second quota floor rather than waiting a day.
 
-`SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED=false` is an opt-in experiment.
-It may align TFP starts to a validated HTTP Last-Modified phase plus a
-10-second margin, without violating the request floor. It remains disabled
-until observation confirms the header's publication meaning and cadence.
+`SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED=false` remains opt-in. The
+October 1 acceptance trace found successive Last-Modified generations
+303–304 seconds apart; 300-second starts subsequently returned a 304 and
+expired generations. The revised policy re-anchors on each distinct valid
+header, adds a 15-second publication margin and, after two consecutive
+unskipped observations, uses the median of up to five intervals in
+`[configured minimum, configured minimum + 60 seconds]`. It never requests
+earlier than the monotonic/configured floor. Skipped/implausible intervals
+reset the estimate; missing, invalid, future or more-than-two-period-old
+headers use start-based cadence. Regressing headers reset the estimate and
+cannot drive that request's next slot. A 304 may reuse the prior header but
+never renews a measurement, content age or expiry. This is a bounded timing
+hint, not proof of publication semantics or a guarantee of fresh content.
+Activation and three-generation observation are recorded separately from
+synthetic tests. Rollback sets only the opt-in flag to false and recreates
+only situation-data-api; quota persistence and expiry protections remain.
 Measurement timestamps must never be substituted for publication time.
 
 ## Flow validity and local expiration
