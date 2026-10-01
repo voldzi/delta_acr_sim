@@ -32,6 +32,15 @@ def make_archive(path: Path, level: int, tile_id: int, edges: int) -> None:
         archive.addfile(info, BytesIO(header + b"\0" * (edges * 8)))
 
 
+def acknowledged_revision(applied: float, deadline: float) -> dict:
+    return {"routingDataset": "dataset", "staticRevision": "static", "dynamicRevision": "dynamic",
+            "matcherVersion": "matcher", "appliedAtEpoch": applied, "nextRecomputeAtEpoch": deadline,
+            "report": {"routingDataset": "dataset", "staticRevision": "static", "dynamicRevision": "dynamic",
+                       "status": "current", "updatedAt": traffic.utc_iso(applied), "usableUntil": traffic.utc_iso(deadline),
+                       "overlayGeneration": "synthetic-generation", "mappedSegmentCount": 1, "mappedEdgeCount": 1,
+                       "appliedFlowCount": 1, "appliedEdgeCount": 1, "mappingCoveragePercent": 100}}
+
+
 def main() -> None:
     protocol = traffic.GraphPathClient.__new__(traffic.GraphPathClient)
     protocol._lock = threading.Lock()
@@ -431,18 +440,15 @@ def main() -> None:
         expiry_feed, mapping, 1800, observed_epoch + 60
     ) == expiry_epoch
     assert traffic.revision_recompute_epoch({"nextRecomputeAtEpoch": "invalid"}) == 0
-    revision_state = {
-        "routingDataset": "dataset", "staticRevision": "static", "dynamicRevision": "dynamic",
-        "matcherVersion": "matcher", "nextRecomputeAtEpoch": expiry_epoch,
-    }
+    revision_state = acknowledged_revision(observed_epoch, expiry_epoch)
     assert traffic.reusable_traffic_revision(
-        revision_state, "dataset", "static", "dynamic", "matcher", expiry_epoch - 1
+        revision_state, "dataset", "static", "dynamic", "matcher", expiry_epoch - 1, edge_ledger=[1]
     )
     assert not traffic.reusable_traffic_revision(
-        revision_state, "dataset", "static", "dynamic", "matcher", expiry_epoch
+        revision_state, "dataset", "static", "dynamic", "matcher", expiry_epoch, edge_ledger=[1]
     )
     assert not traffic.reusable_traffic_revision(
-        revision_state, "dataset", "static", "changed", "matcher", expiry_epoch - 1
+        revision_state, "dataset", "static", "changed", "matcher", expiry_epoch - 1, edge_ledger=[1]
     )
 
     with tempfile.TemporaryDirectory() as directory:
@@ -464,9 +470,10 @@ def main() -> None:
             stream.seek(offset)
             assert struct.unpack("<Q", stream.read(8))[0] == 0
         traffic.apply_speeds(archive, state, speeds)
-        revision.write_text(json.dumps({"appliedAtEpoch": time.time(), "nextRecomputeAtEpoch": time.time() + 60}))
+        now = time.time()
+        revision.write_text(json.dumps(acknowledged_revision(now, now + 60)))
         assert not traffic.clear_expired_runtime(root, 1800)
-        revision.write_text(json.dumps({"appliedAtEpoch": time.time(), "nextRecomputeAtEpoch": time.time() - 1}))
+        revision.write_text(json.dumps(acknowledged_revision(now - 10, now - 1)))
         assert traffic.clear_expired_runtime(root, 1800)
         with archive.open("rb") as stream:
             stream.seek(offset)

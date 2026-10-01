@@ -314,16 +314,16 @@ one edge without a documented priority, freshness, direction and confidence
 policy. Evaluate ETA against independent measured trips and compare route
 changes, not merely the count of matched segments.
 
-Completing the maintainer's algorithm still requires a special distance-only
-Valhalla costing with hierarchy-aware traversal and ranked FRC/FOW candidates,
-`EdgeSegment` begin/end fractions, and independent wrong-road/parallel-road
-acceptance. The current graph probe approximates some of these checks,
+Full promotion still requires hierarchy-aware traversal, independent
+wrong-road/parallel-road acceptance and the baseline ownership gate. The
+earlier graph probe approximates some of these checks,
 including conservative whole-edge offset trimming, but does not implement
-them all. Do not install or activate the
-probe. The validated live baseline remains `openlr-trace-v2` until those gates
+them all. The separate bounded offline native v1 is implemented and tested
+below; it is not a released nationwide mapping. Do not install or activate the
+exploratory probe. Keep the approved live baseline `openlr-trace-v2` until those gates
 pass and a fresh graph-specific audit is repeated after each weekly map build.
 The implementation and acceptance contract for the graph-native decoder is
-[ADR 0027](../adr/0027_GRAPH_NATIVE_OPENLR_TO_VALHALLA_EDGE_DECODER.md).
+[ADR 0029](../adr/0029_GRAPH_NATIVE_OPENLR_TO_VALHALLA_EDGE_DECODER.md).
 
 An isolated route-candidate prototype is now included in the updater, but is
 **disabled by default** with `TRAFFIC_OPENLR_ROUTE_FALLBACK=false`. A bounded
@@ -453,6 +453,153 @@ container's temporary directory. Do not enable the route-fallback flag or
 promote even these 3 paths. Next gate: deterministic ambiguity detection,
 cross-version fixtures, adjudicated stratified precision and an isolated
 same-flow route-time canary with rollback.
+
+### Offline native candidate decoder v1 (1 October 2026)
+
+The separate implementation now exists in
+`deploy/valhalla/openlr-native-decoder.cc`, `openlr-native-core.h` and
+`openlr-native-client.py`, with a pinned Valhalla 3.8.3 helper build definition
+`Dockerfile.openlr-native-builder`. It uses native Loki correlation and
+AutoCost access/turn checks plus bounded exhaustive directed-path search;
+it is not an ordinary fastest-route query, the previous experimental probe,
+or a complete hierarchy-aware A* decoder. This work did not install a new
+mapping, restart the serving Valhalla, or change live traffic selection.
+
+From the SIM checkout, with the prepared 3.8.3 builder image available:
+
+```bash
+bash scripts/test-valhalla-openlr-native.sh
+```
+
+An optional first argument selects another prepared builder image; the script
+still verifies Valhalla 3.8.3. It mounts only source read-only, disables network,
+limits the disposable container to 2 CPUs/2 GiB/128 processes and removes it
+after testing. The initial full run passed 63 checks/test cases; strict
+corridor-entry, owned-process lifecycle and output-path regressions raise the suite to **69**:
+20 C++ core, 17 client test methods, 30 actual flat-graph cases and 2 actual hierarchy cases.
+Synthetic OSM PBFs were really built into native Valhalla graphs. Tested cases
+include wrong-way one-way roads, competing paths, same-edge/multiple LRPs,
+offsets, LFRCNP, ramps/roundabouts, forbidden turns, node barriers, disconnected
+overpasses, partial/full ownership, native byte-bearing round-trip, TMC-like
+search corridors, blocked unhashed tile fallback, final graph mutation,
+timeout child cleanup, owned-group SIGKILL escalation after SIGTERM grace and
+bounded Darwin group-exit permission races.
+Output-path regressions also protect inputs/helper/configuration against direct,
+symbolic-link and hard-link aliases and reject resolved runtime paths.
+No real licensed records are used by the fixture suite. Successful tests are
+offline evidence, not real-road directional acceptance or ETA accuracy.
+
+#### Private audit invocation
+
+Run only in an isolated, resource-limited offline container with the chosen
+immutable graph and private inputs mounted read-only and a separate protected
+output directory. Do not mount a root filesystem or give the container live
+traffic write access. For example, **inside that container**:
+
+```bash
+python3 /tools/openlr-native-client.py \
+  --helper /usr/local/bin/openlr-native-decoder \
+  --graph-config /graph/valhalla.json \
+  --routing-dataset "$ROUTING_DATASET" \
+  --graph-sha256 "$GRAPH_SHA256" \
+  --static-cache /inputs/static-segments.json.gz \
+  --corridor-cache /inputs/tmc-corridors.json.gz \
+  --output /audit/native-candidate-audit.json.gz
+```
+
+The operator must supply the actual dataset label and SHA256 of the immutable
+`mjolnir.tile_extract`, not copy a hash from an earlier graph. The decoder
+disables unhashed tile-directory, remote-tile and live-traffic fallbacks,
+checks graph identity before/after the batch and size/mtime before each request.
+The client's successful close confirms final full-hash verification before
+writing an audit. No provider token, API call or production sudo is needed by
+this offline CLI once private authorized snapshots have been prepared.
+
+The static gzip JSON is `{staticRevision, segments}` in SIM's normalized TPEG
+shape, with ordered `coordinates`/`openlr.points` and unique `messageId`.
+The strict native per-request protocol is specified in
+[ADR 0029](../adr/0029_GRAPH_NATIVE_OPENLR_TO_VALHALLA_EDGE_DECODER.md#private-helper-and-audit-contracts).
+It echoes a request ID, exact graph identity and corridor revision; byte
+bearings are converted by the client, and the final 180° reversal occurs only
+in the native decoder. Do not send a licensed ZIP or raw provider XML directly.
+
+The corridor gzip JSON has exactly:
+
+```json
+{
+  "contractVersion": "sim-tmc-corridors-v1",
+  "revision": "<canonical payload SHA256>",
+  "tmcVersion": "11.0",
+  "tmcSha256": "<authorized TMC table SHA256>",
+  "corridors": {
+    "<normalized reference ID>": {
+      "toleranceMeters": 30,
+      "parts": [[[14.0, 50.0], [14.003, 50.0]]]
+    }
+  }
+}
+```
+
+The coordinates/ID above are illustrative synthetic values. `revision` is
+SHA256 of UTF-8 JSON `{tmcVersion,tmcSha256,corridors}` with sorted keys and
+separators `(',', ':')`; the client verifies the hash. Each corridor allows
+1–16 parts, at least two points per part, at most 512 points total, tolerance
+10–100 m. The native search checks clipped/full edge intervals before path
+selection, sampling at most every 10 m with a conservative 6 m inward margin.
+Without a comparable corridor in this mode, the reference is rejected as
+`missing_corridor`. Omitting `--corridor-cache` is permitted only for pure
+OpenLR candidate investigation, never as a promotion fallback.
+
+The extraction pipeline remains responsible for the table's real hash,
+authorization, country/table/location membership, road linkage and provenance;
+the client does not reopen the licensed ZIP or prove those facts. No automatic
+licensed-table-to-corridor extraction/deployment is implied by this CLI.
+Spatial agreement cannot certify road direction. TMC version/hash and derived
+geometry/tolerance enter the verified cache identity.
+
+#### Fail-closed output and remaining gates
+
+The audit is mode-0600 gzip JSON, with aggregate counts/identities and private
+`intervalCandidates`/`mapping`; stdout excludes both maps, IDs and geometry.
+The client checks `--output` before reading inputs or starting its helper:
+it must be a separate `*.json.gz`, outside `/run` and `/var/run` including
+resolved symbolic-link variants, and must not alias the static/corridor inputs,
+helper or graph configuration (resolved path or existing hard-link identity).
+The accepted output is still saved atomically with mode 0600. Retain the
+isolated container and read-only graph/input mounts; path checks are not a
+replacement for that isolation.
+Every artifact explicitly has **`approvedForLive=false`**. `matched` means a
+candidate interval path, not a fresh flow or usable ETA. Full-edge candidates
+are separate; a foreign partial claim blocks a full-edge claim too. Native v1
+does not implement approved partial live-speed encoding or cross-baseline
+ownership/selection.
+
+V1 supports 2–16 LRPs and same-edge intervals on hierarchy levels 0–2.
+Required hierarchy transitions, complex/conditional restrictions, FOW 0/5/7
+and `againstDrivingDirection=true` fail explicitly rather than being guessed.
+Search bounds are 20 m cutoff, 2 m node snap, 34° heading tolerance, 8
+candidates per LRP, 64 pairs, 64 path edges and 50,000 expansions per pair;
+DNP is 1–20,000 m with fixed `max(35 m, 10%)` tolerance. Exhaustion is
+`search_limit`, not a unique result. The client rejects malformed/uncorrelated
+responses and uses a 30-second deadline, including partial-line timeouts.
+Each helper owns a new POSIX process group. Protocol failure sends TERM to that
+group only, permits one second before KILL, and reaps the direct child. Wrappers
+must not detach subprocesses into different sessions; a GNU `timeout` wrapper
+should use `--foreground`. Docker cleanup remains the wrapper's responsibility
+and must identify only its own container, not other services.
+No HTTP route or nearest-road fallback is present.
+
+Before any live selection, obtain a deterministic real immutable-graph shadow
+batch, compare every candidate claim against the current graph-specific
+approved baseline (including relevant partial provenance), and resolve missing
+ownership evidence without assuming it is free. The existing accepted baseline
+must not be reduced or overwritten. Then complete independent stratified map
+and direction adjudication, same-flow route tests and separately approved canary
+with rollback. The offline client does not perform these remaining steps.
+Do not enable `TRAFFIC_OPENLR_ROUTE_FALLBACK`, replace a live cache with this
+artifact or report its candidate count as traffic coverage/ETA accuracy.
+
+#### Historical canary procedure (not native v1 activation)
 
 The following canary procedure is retained for historical recovery and a
 future independently validated decoder. **Do not run it for v3 while the
@@ -821,6 +968,25 @@ X5 UUID `2f93f595-b61b-4eea-9054-7afa9b275b5b` before recreating only that
 service; do not use a stack-wide deployment or change `.env`, provider token,
 API URLs, network or database. Keep the preceding image for rollback.
 
+For the first deployment from a version without persisted provider quota,
+build and test the image before stopping the old service. Verify the X5 mount
+and UUID again, stop only `situation-data-api`, and confirm its container has
+`State.Running=false`. Then, on `docker.home.cz` in `/srv/sim`:
+
+```bash
+docker compose run -T --rm --no-deps --entrypoint node situation-data-api \
+  --input-type=module - < deploy/valhalla/seed-provider-request-timing.mjs
+docker compose up -d --no-deps situation-data-api
+```
+
+Start the new service only after `gateSeeded=true`, UID matching the runtime
+and mode `600` are verified. The helper rejects invalid/symlink metadata,
+requires the existing separate `/valhalla-traffic-cache` mount, and reserves
+at least 300 seconds for static, TFP and TEC without shortening longer gates.
+Initial warming is expected. Do not delete the file to accelerate loading.
+An old-version rollback must also wait until the reserved request deadline;
+the old process cannot enforce this new metadata itself.
+
 Then, from the SIM checkout on the Mac, run:
 
 ```bash
@@ -837,7 +1003,50 @@ under a root-only `update-tools/reliability-backup-*` directory. It patches
 `valhalla-traffic-expiry.service`. Valhalla is not restarted. Install failure
 restores the previous maintenance files and timer state.
 
+The final updater also rejects legacy/unbounded deadline metadata, marks
+archive writes in progress before mutation, and clears all `.gph` speed records
+in 64 KiB blocks without replacing the mmap inode. A reused degraded generation
+requires an exact empty ledger and no usable positive flow in the entire feed;
+mixed-expiry cohorts must be recalculated. With missing dataset identities,
+only an exact local completed-clear proof is retained, never an invented SIM
+acknowledgement. See ADR 0028 for its invalidation rules. The minute timer and
+the provider's minimum cadence are unchanged by these optimizations.
+
+Before a positive write, the updater sends a degraded zero generation to SIM
+and verifies it through the existing internal status operation. HTTP 204 by
+itself is not proof that SIM accepted the generation. Exact identity and zero
+counts must match before the archive is touched; all network calls are outside
+its lock. A timeout, mismatch or concurrent guard clear aborts the positive
+update safely. The next ordinary minute timer may retry. Do not bypass the
+gate by forcing a current report or writing the traffic archive manually.
+
 ### Live acceptance
+
+The bounded verifier runs inside the situation service without copying its
+control token or printing source records:
+
+```bash
+docker exec -i csm-sim-situation-data-api node --input-type=module - \
+  < scripts/verify-valhalla-traffic-reliability.mjs
+```
+
+It checks localhost health, unauthenticated denial, a fixed synthetic Prague
+car route, acknowledged generation/deadline/dataset and aggregate feed timing.
+Exit 0 is one technical sample, exit 2 is an explicit transition (including
+warming), and exit 1 is a failure. Every output has `fullAcceptance=false`:
+three-cycle and expiry/idle evidence below remain separate requirements.
+
+For an aggregate-only physical scan, run the inspector inside Valhalla:
+
+```bash
+docker exec -i valhalla python3 - < deploy/valhalla/inspect-traffic-archive.py
+```
+
+It uses the shared archive lock and counts only `.gph` speed records, excluding
+TAR index metadata. No reference IDs, coordinates, raw provider records or
+credentials are printed. A scan can briefly delay a write; use it for bounded
+acceptance, not continuous polling. After expiry, require both zero nonzero
+speed records and an empty ledger, plus a non-current SIM route/status sample.
 
 1. Verify the updater hash and `true healthy` Valhalla state against the checked
    release. Run the established healthcheck and a finite car route. Record the
