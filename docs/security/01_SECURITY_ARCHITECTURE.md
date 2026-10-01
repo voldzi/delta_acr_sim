@@ -85,3 +85,17 @@ Missing/invalid timestamps or a corrupt applied-edge ledger fail closed. A
 provider/report outage removes live-speed authority without exposing raw data
 or replacing the traffic feed with a public browser integration. See
 [ADR 0028](../adr/0028_TRAFFIC_FRESHNESS_AND_EXPIRY_BOUNDARY.md).
+## Consented Jízda measurements
+
+The dedicated COP bearer authenticates the service, not a claimed client user.
+COP derives UTC-day pseudonyms from authenticated users, verifies separate
+revocable consent and strips sensitive journey endpoints. SIM HMACs those
+pseudonyms, strictly rejects unknown fields and never persists raw GPS.
+No browser Origin, mobile-held SIM token, arbitrary identity, free text,
+private incident/message data, direct provider fallback or AI export is allowed.
+Derived measurements are pseudonymous, not automatically anonymous. The
+five-contributor threshold cannot certify distinct people; COP is responsible
+for integrity. Outputs remain shadow-only and do not alter traffic speeds.
+Separate database/runtime rights, 7-day retention, revocation, backup cleanup
+and activation gates are defined in
+[the Jízda contract](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).

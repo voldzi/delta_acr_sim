@@ -39,6 +39,13 @@ SPECS = [
     path_prefix: "/situation-data/api/v1"
   },
   {
+    key: "driverMeasurements",
+    prefix: "DriverMeasurements",
+    tag_prefix: "Driver Measurements",
+    file: "openapi/fragments/driver-measurements-v1.openapi.json",
+    path_prefix: "/situation-data/api/v1"
+  },
+  {
     key: "aiRouter",
     prefix: "AiRouter",
     tag_prefix: "AI Router",

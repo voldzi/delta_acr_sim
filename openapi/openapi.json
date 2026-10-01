@@ -4668,6 +4668,469 @@
         }
       }
     },
+    "/situation-data/api/v1/internal/driver-measurements/v1/batches": {
+      "post": {
+        "operationId": "driverMeasurements_ingestDriverMeasurementBatch",
+        "tags": [
+          "Driver Measurements: Driver Measurements"
+        ],
+        "summary": "Ingest explicitly consented Jizda GPS via COP backend only",
+        "security": [
+          {
+            "driverMeasurementCopBearer": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Receipt. etaAccepted=false also when duplicate observationId was already retained.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsReceipt"
+                }
+              }
+            },
+            "headers": {
+              "X-Idempotent-Replay": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid strict input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "COP service authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Consent missing/revoked or browser forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Batch identity conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 1 MiB; payload is not echoed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded service/contributor/concurrency limit; retry with original identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Disabled, storage unavailable, graph changed or map matcher unavailable; no alternate provider fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriverMeasurementsBatch"
+              }
+            }
+          }
+        },
+        "description": "Default disabled, shadow_only. 1 MiB request-body limit. Strict unknown-key rejection; 3–120 points, span <=600 seconds, age <=24 hours, future tolerance 30 seconds, strictly increasing UTC timestamps, one contributor UTC day. Idempotent batchId and sample pair dedupe. 120 requests/minute per instance (configurable), 2 new batches/contributor/minute and 4 in-flight matching operations. Raw GPS is transient only. No private incident/message/free-text context. Retention 7 days for derived pseudonymous measurements."
+      }
+    },
+    "/situation-data/api/v1/internal/driver-measurements/v1/aggregates": {
+      "get": {
+        "operationId": "driverMeasurements_getDriverMeasurementAggregates",
+        "tags": [
+          "Driver Measurements: Driver Measurements"
+        ],
+        "summary": "Read contributor-balanced, graph-scoped shadow aggregates",
+        "security": [
+          {
+            "driverMeasurementCopBearer": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful internal operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsAggregates"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid strict input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "COP service authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Consent missing/revoked or browser forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Batch identity conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 1 MiB; payload is not echoed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded service/contributor/concurrency limit; retry with original identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Disabled, storage unavailable, graph changed or map matcher unavailable; no alternate provider fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "UTC ISO timestamp, at most 7 days old; defaults to preceding 24 hours. Unknown parameters rejected.",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+            }
+          }
+        ]
+      }
+    },
+    "/situation-data/api/v1/internal/driver-measurements/v1/quality": {
+      "get": {
+        "operationId": "driverMeasurements_getDriverMeasurementQuality",
+        "tags": [
+          "Driver Measurements: Driver Measurements"
+        ],
+        "summary": "Read intake rejections and client-reported ETA comparison",
+        "security": [
+          {
+            "driverMeasurementCopBearer": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful internal operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsQuality"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid strict input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "COP service authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Consent missing/revoked or browser forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Batch identity conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 1 MiB; payload is not echoed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded service/contributor/concurrency limit; retry with original identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Disabled, storage unavailable, graph changed or map matcher unavailable; no alternate provider fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/situation-data/api/v1/internal/driver-measurements/v1/contributions": {
+      "delete": {
+        "operationId": "driverMeasurements_revokeDriverContributions",
+        "tags": [
+          "Driver Measurements: Driver Measurements"
+        ],
+        "summary": "Delete one daily pseudonym and reject queued uploads for 7 days",
+        "security": [
+          {
+            "driverMeasurementCopBearer": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful internal operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsRevoked"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid strict input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "COP service authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Consent missing/revoked or browser forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Batch identity conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 1 MiB; payload is not echoed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded service/contributor/concurrency limit; retry with original identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Disabled, storage unavailable, graph changed or map matcher unavailable; no alternate provider fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriverMeasurementsRevoke"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ai-router/models": {
       "get": {
         "tags": [
@@ -16311,6 +16774,632 @@
         },
         "additionalProperties": false
       },
+      "DriverMeasurementsPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sampleId",
+          "observedAt",
+          "lat",
+          "lon",
+          "horizontalAccuracyM",
+          "speedMps",
+          "speedAccuracyMps",
+          "headingDeg",
+          "headingAccuracyDeg",
+          "positionSource",
+          "motion",
+          "reducedAccuracy"
+        ],
+        "properties": {
+          "sampleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "horizontalAccuracyM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "speedMps": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 70
+          },
+          "speedAccuracyMps": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "headingDeg": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 359.999999
+          },
+          "headingAccuracyDeg": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 180
+          },
+          "positionSource": {
+            "type": "string",
+            "enum": [
+              "gps",
+              "estimated",
+              "simulated"
+            ]
+          },
+          "motion": {
+            "type": "string",
+            "enum": [
+              "driving",
+              "traffic_stop",
+              "personal_stop",
+              "paused",
+              "unknown"
+            ]
+          },
+          "reducedAccuracy": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DriverMeasurementsConsent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "grantedAt",
+          "attestation"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": [
+              "traffic-quality-v1"
+            ]
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "attestation": {
+            "type": "string",
+            "enum": [
+              "cop-driver-consent-v1"
+            ]
+          }
+        }
+      },
+      "DriverMeasurementsEta": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observationId",
+          "routingDataset",
+          "predictedDurationSeconds",
+          "actualDurationSeconds",
+          "plannedDistanceM",
+          "actualDistanceM",
+          "personalStopSeconds",
+          "estimatedSeconds",
+          "offRoute",
+          "completedAt"
+        ],
+        "properties": {
+          "observationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "routingDataset": {
+            "type": "string",
+            "pattern": "^sim-routing-\\d{4}-\\d{2}-\\d{2}-\\d+$"
+          },
+          "predictedDurationSeconds": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "actualDurationSeconds": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "plannedDistanceM": {
+            "type": "number",
+            "minimum": 100,
+            "maximum": 2000000
+          },
+          "actualDistanceM": {
+            "type": "number",
+            "minimum": 100,
+            "maximum": 2000000
+          },
+          "personalStopSeconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "estimatedSeconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "offRoute": {
+            "type": "boolean"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          }
+        }
+      },
+      "DriverMeasurementsBatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "batchId",
+          "contributorIdDay",
+          "contributorDay",
+          "consent",
+          "vehicleClass",
+          "points"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-measurements-v1"
+            ]
+          },
+          "batchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contributorIdDay": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          },
+          "contributorDay": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/DriverMeasurementsConsent"
+          },
+          "vehicleClass": {
+            "type": "string",
+            "enum": [
+              "passenger_car"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 120,
+            "items": {
+              "$ref": "#/components/schemas/DriverMeasurementsPoint"
+            }
+          },
+          "eta": {
+            "$ref": "#/components/schemas/DriverMeasurementsEta"
+          }
+        }
+      },
+      "DriverMeasurementsReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "batchId",
+          "receivedAt",
+          "acceptedIntervalCount",
+          "deduplicatedIntervalCount",
+          "rejectionCounts",
+          "etaAccepted",
+          "applicationMode",
+          "rawPositionsStored"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-measurements-v1"
+            ]
+          },
+          "batchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "acceptedIntervalCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deduplicatedIntervalCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rejectionCounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "etaAccepted": {
+            "type": "boolean"
+          },
+          "applicationMode": {
+            "type": "string",
+            "enum": [
+              "shadow_only"
+            ]
+          },
+          "rawPositionsStored": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        }
+      },
+      "DriverMeasurementsAggregate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dataset",
+          "directedEdgeId",
+          "windowStart",
+          "attestedContributorCount",
+          "intervalCount",
+          "medianSpeedKph",
+          "p10SpeedKph",
+          "p90SpeedKph",
+          "usableUntil",
+          "state"
+        ],
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "pattern": "^sim-routing-\\d{4}-\\d{2}-\\d{2}-\\d+$"
+          },
+          "directedEdgeId": {
+            "type": "string",
+            "pattern": "^\\d+$"
+          },
+          "windowStart": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "attestedContributorCount": {
+            "type": "integer",
+            "minimum": 5
+          },
+          "intervalCount": {
+            "type": "integer",
+            "minimum": 10
+          },
+          "medianSpeedKph": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 252
+          },
+          "p10SpeedKph": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 252
+          },
+          "p90SpeedKph": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 252
+          },
+          "usableUntil": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "current",
+              "historical"
+            ]
+          }
+        }
+      },
+      "DriverMeasurementsAggregates": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "applicationMode",
+          "routingDataset",
+          "generatedAt",
+          "source",
+          "items",
+          "limits",
+          "independentContributorsVerified"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-measurements-v1"
+            ]
+          },
+          "applicationMode": {
+            "type": "string",
+            "enum": [
+              "shadow_only"
+            ]
+          },
+          "routingDataset": {
+            "type": "string",
+            "pattern": "^sim-routing-\\d{4}-\\d{2}-\\d{2}-\\d+$"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "jizda_consented_gps"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/DriverMeasurementsAggregate"
+            }
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "minimumAttestedContributors",
+              "minimumIntervals",
+              "maximumRows"
+            ],
+            "properties": {
+              "minimumAttestedContributors": {
+                "type": "integer",
+                "enum": [
+                  5
+                ]
+              },
+              "minimumIntervals": {
+                "type": "integer",
+                "enum": [
+                  10
+                ]
+              },
+              "maximumRows": {
+                "type": "integer",
+                "enum": [
+                  1000
+                ]
+              }
+            }
+          },
+          "independentContributorsVerified": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        }
+      },
+      "DriverMeasurementsEtaQuality": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dataset",
+          "windowStart",
+          "attestedContributorCount",
+          "observationCount",
+          "medianAbsoluteErrorSeconds",
+          "medianAbsoluteErrorPercent"
+        ],
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "pattern": "^sim-routing-\\d{4}-\\d{2}-\\d{2}-\\d+$"
+          },
+          "windowStart": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          },
+          "attestedContributorCount": {
+            "type": "integer",
+            "minimum": 5
+          },
+          "observationCount": {
+            "type": "integer",
+            "minimum": 10
+          },
+          "medianAbsoluteErrorSeconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400
+          },
+          "medianAbsoluteErrorPercent": {
+            "type": "number",
+            "minimum": 0,
+            "description": "100 * abs(actual-predicted) / predicted, contributor-balanced median; client-reported, not ground truth."
+          }
+        }
+      },
+      "DriverMeasurementsQuality": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "applicationMode",
+          "etaEvidence",
+          "summary"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-measurements-v1"
+            ]
+          },
+          "applicationMode": {
+            "type": "string",
+            "enum": [
+              "shadow_only"
+            ]
+          },
+          "etaEvidence": {
+            "type": "string",
+            "enum": [
+              "client_reported_not_ground_truth"
+            ]
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "retainedBatchCount",
+              "lastAcceptedAt",
+              "acceptedIntervalCount",
+              "rejectionCounts",
+              "eta"
+            ],
+            "properties": {
+              "retainedBatchCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lastAcceptedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+              },
+              "acceptedIntervalCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rejectionCounts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "eta": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/DriverMeasurementsEtaQuality"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DriverMeasurementsRevoke": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "contributorIdDay"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-measurements-v1"
+            ]
+          },
+          "contributorIdDay": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          }
+        }
+      },
+      "DriverMeasurementsRevoked": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "deletedBatchCount"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-measurements-v1"
+            ]
+          },
+          "deletedBatchCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "DriverMeasurementsError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message",
+              "correlationId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "correlationId": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "AiRouterAiRouterPolicy": {
         "type": "object",
         "required": [
@@ -20377,6 +21466,11 @@
         "scheme": "bearer",
         "bearerFormat": "opaque service token",
         "description": "Scoped per-backend service identity. Audience csm-sim-geo-routing-v1; scope geo-routing:route."
+      },
+      "driverMeasurementCopBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Dedicated COP backend credential. Never in Jizda/mobile/browser. Browser Origin prohibited. Client cannot select service owner."
       },
       "aiRouterBearer": {
         "type": "http",
