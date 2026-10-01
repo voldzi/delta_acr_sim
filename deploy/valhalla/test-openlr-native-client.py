@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import copy
+import contextlib
 import gzip
 import hashlib
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
 import signal
@@ -42,6 +44,31 @@ def response():
 
 
 class ClientContractTests(unittest.TestCase):
+    def test_aggregate_progress_is_optional_bounded_and_redacted(self):
+        with tempfile.TemporaryDirectory(prefix="sim-openlr-client-") as work:
+            static_path, output = Path(work) / "static.json.gz", Path(work) / "audit.json.gz"
+            client.private_json(static_path, {"staticRevision": REVISION,
+                "segments": [segment("private-one"), segment("private-two"), segment("private-three")]})
+            args = argparse.Namespace(helper=Path(sys.executable), graph_config=ROOT / "test-openlr-native-fake-helper.py",
+                routing_dataset="matched", graph_sha256=GRAPH, static_cache=static_path, output=output, progress_every=1)
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                report = client.run(args)
+            progress = [json.loads(line) for line in stderr.getvalue().splitlines()]
+            self.assertEqual([row["processedReferenceCount"] for row in progress], [1, 2])
+            self.assertNotIn("private-", stderr.getvalue() + json.dumps(report))
+            args.progress_every = 0
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr): client.run(args)
+            self.assertEqual(stderr.getvalue(), "")
+
+    def test_invalid_progress_is_refused_before_input_or_helper(self):
+        for value in (-1, 10001, True, 1.5):
+            args = argparse.Namespace(helper=Path("helper"), graph_config=Path("config"),
+                static_cache=Path("missing.json.gz"), output=Path("audit.json.gz"), progress_every=value)
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "aggregate progress"):
+                client.run(args)
+
     def test_tpeg_byte_bearings_and_offsets(self):
         source = segment()
         source["openlr"]["positiveOffsetMeters"] = 12

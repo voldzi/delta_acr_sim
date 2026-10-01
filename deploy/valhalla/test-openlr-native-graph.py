@@ -236,10 +236,8 @@ def run(helper: Path, work: Path, hierarchy: bool = False) -> None:
     submit("unknown field", unknown, {"invalid_reference"})
     unsupported_form = linear((14.0005, 50.), (14.0055, 50.)); unsupported_form["lrps"][0]["fow"] = 0
     submit("undefined form explicitly unsupported", unsupported_form, {"unsupported_fow"})
-    if hierarchy:
-        requests = []
-        submit("hierarchy same-edge supported", linear((14.0005, 50.), (14.0055, 50.)), {"matched"})
-        submit("unimplemented hierarchy transitions fail closed", linear((14.1202, 50.), (14.1258, 50.)), {"unsupported_hierarchy"})
+    # Exercise the entire directed/corridor/restriction contract both with and
+    # without road hierarchy, not only a successful same-edge reference.
     results = []
     extra_checks = {}
     try:
@@ -256,8 +254,12 @@ def run(helper: Path, work: Path, hierarchy: bool = False) -> None:
             assert result["status"] in expected, (label, result, expected)
             if result["status"] == "matched":
                 assert result["intervals"] and all(0 <= i["beginFraction"] < i["endFraction"] <= 1 for i in result["intervals"])
-                assert result["decoderVersion"] == "openlr-native-v1"
+                assert result["decoderVersion"] == "openlr-native-v2"
             results.append(result)
+        if hierarchy:
+            mixed = results[[label for label, _, _ in requests].index("LFRCNP permits tertiary path")]
+            assert len({interval["edgeId"] & 7 for interval in mixed["intervals"]}) >= 2
+            extra_checks["real multi-level directed path"] = "matched"
         if not hierarchy:
             assert math.isclose(results[0]["lengthMeters"] - results[1]["lengthMeters"], 30, abs_tol=.001)
             assert results[0]["intervals"][0]["edgeId"] == results[1]["intervals"][0]["edgeId"]

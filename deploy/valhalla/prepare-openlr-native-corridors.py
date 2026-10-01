@@ -22,7 +22,8 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parent
-MAX_SEGMENTS = 240
+DEFAULT_MAX_SEGMENTS = 240
+MAX_SEGMENTS = 100_000
 MAX_SOURCE_SEGMENTS = 100_000
 MAX_STATIC_BYTES = 256 * 1024 * 1024
 MAX_PARTS = 16
@@ -99,7 +100,7 @@ def stratified_subset(groups: dict[int, list[dict[str, Any]]], maximum: int) -> 
 
 
 def prepare(feed: Any, roads: dict[str, Any], point_roads: dict[str, str], tmc_sha256: str,
-            maximum: int = MAX_SEGMENTS, tolerance_meters: float = 100) -> tuple[dict, dict, dict]:
+            maximum: int = DEFAULT_MAX_SEGMENTS, tolerance_meters: float = 100) -> tuple[dict, dict, dict]:
     if (type(maximum) is not int or not 1 <= maximum <= MAX_SEGMENTS or
         not native.finite_number(tolerance_meters) or not 10 <= tolerance_meters <= 100):
         raise ValueError("Invalid offline preparation bounds")
@@ -203,7 +204,8 @@ def main() -> int:
     parser.add_argument("--tmc-zip", type=Path, required=True)
     parser.add_argument("--output-static", type=Path, required=True)
     parser.add_argument("--output-corridors", type=Path, required=True)
-    parser.add_argument("--max-segments", type=int, default=MAX_SEGMENTS)
+    parser.add_argument("--max-segments", type=int, default=DEFAULT_MAX_SEGMENTS,
+                        help="Default: stratified 240-reference probe. Explicit national batch ceiling: 100000.")
     parser.add_argument("--tolerance-meters", type=float, default=100)
     args = parser.parse_args()
     try:

@@ -18,11 +18,12 @@ from pathlib import Path
 import select
 import signal
 import subprocess
+import sys
 import threading
 import time
 from typing import Any
 
-DECODER_VERSION = "openlr-native-v1"
+DECODER_VERSION = "openlr-native-v2"
 
 
 def hash_value(value: str) -> bool:
@@ -267,6 +268,9 @@ def validate_audit_output(args: argparse.Namespace) -> None:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     validate_audit_output(args)
+    progress_every = getattr(args, "progress_every", 0)
+    if type(progress_every) is not int or not 0 <= progress_every <= 10000:
+        raise ValueError("Invalid aggregate progress interval")
     with gzip.open(args.static_cache, "rt", encoding="utf-8") as stream:
         feed = json.load(stream)
     if not isinstance(feed, dict) or not isinstance(feed.get("segments"), list) or not hash_value(feed.get("staticRevision", "")):
@@ -293,7 +297,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     intervals, owners = {}, {}
     source_ids = set()
     try:
-        for segment in feed["segments"]:
+        for index, segment in enumerate(feed["segments"]):
+            if progress_every and index and index % progress_every == 0:
+                print(json.dumps({"event": "native_audit_progress", "processedReferenceCount": index,
+                                  "sourceReferenceCount": len(feed["segments"]),
+                                  "resultCounts": dict(sorted(counts.items()))}), file=sys.stderr, flush=True)
             message_id = str(segment.get("messageId", "")) if isinstance(segment, dict) else ""
             if not message_id or message_id in source_ids:
                 raise ValueError("Missing or duplicated reference identity")
@@ -356,5 +364,7 @@ if __name__ == "__main__":
     parser.add_argument("--static-cache", type=Path, required=True)
     parser.add_argument("--corridor-cache", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--progress-every", type=int, default=0,
+                        help="Optional aggregate-only stderr progress interval (0–10000).")
     args = parser.parse_args()
     print(json.dumps(run(args), sort_keys=True))

@@ -15,4 +15,7 @@ docker run --rm --platform linux/amd64 --network none --cpus 2 --memory 2g --pid
     python3 /src/test-openlr-native-client.py
     python3 /src/test-openlr-native-graph.py --helper /tmp/openlr-native-decoder
     python3 /src/test-openlr-native-graph.py --helper /tmp/openlr-native-decoder --hierarchy
+    python3 /src/test-prepare-openlr-native-corridors.py
+    python3 /src/test-review-native-directions.py
+    python3 /src/test-review-native-baseline.py
   '

@@ -147,6 +147,9 @@ class NativeCorridorPreparationTests(unittest.TestCase):
         self.assertEqual(report["omittedEligibleReferenceCount"], 80)
         self.assertEqual({values["selected"] for values in report["byFrc"].values()}, {30})
         self.assertEqual(len({s["messageId"] for s in static["segments"]}), 240)
+        national, _, national_report = prepare.prepare(feed(*members), {"301": ROAD}, {"101": "301"}, TMC_HASH, maximum=100000)
+        self.assertEqual(len(national["segments"]), 320)
+        self.assertEqual(national_report["omittedEligibleReferenceCount"], 0)
 
     def test_sparse_strata_redistribute_quota_without_duplicates(self):
         members = [segment("one", 0)] + [segment(f"many-{index:03}", 6) for index in range(20)]
@@ -156,7 +159,7 @@ class NativeCorridorPreparationTests(unittest.TestCase):
         self.assertEqual(len({s["messageId"] for s in static["segments"]}), 10)
 
     def test_identity_and_bound_errors_fail_closed(self):
-        for maximum, tolerance in ((0, 100), (241, 100), (True, 100), (240, 101), (240, 9), (240, float("inf")), (240, True)):
+        for maximum, tolerance in ((0, 100), (100001, 100), (True, 100), (240, 101), (240, 9), (240, float("inf")), (240, True)):
             with self.subTest(maximum=maximum, tolerance=tolerance), self.assertRaises(ValueError):
                 prepare.prepare(feed(segment()), {"301": ROAD}, {"101": "301"}, TMC_HASH, maximum, tolerance)
         with self.assertRaisesRegex(ValueError, "Duplicated"):

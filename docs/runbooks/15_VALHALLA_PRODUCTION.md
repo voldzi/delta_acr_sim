@@ -454,7 +454,7 @@ promote even these 3 paths. Next gate: deterministic ambiguity detection,
 cross-version fixtures, adjudicated stratified precision and an isolated
 same-flow route-time canary with rollback.
 
-### Offline native candidate decoder v1 (1 October 2026)
+### Offline hierarchy-aware native candidate decoder v2 (1 October 2026)
 
 The separate implementation now exists in
 `deploy/valhalla/openlr-native-decoder.cc`, `openlr-native-core.h` and
@@ -462,7 +462,9 @@ The separate implementation now exists in
 `Dockerfile.openlr-native-builder`. It uses native Loki correlation and
 AutoCost access/turn checks plus bounded exhaustive directed-path search;
 it is not an ordinary fastest-route query, the previous experimental probe,
-or a complete hierarchy-aware A* decoder. This work did not install a new
+or an ordinary fastest-route A* decoder. V2 expands explicit reciprocal
+road-hierarchy node copies while keeping the native edge IDs and turn checks.
+This work did not install a new
 mapping, restart the serving Valhalla, or change live traffic selection.
 
 From the SIM checkout, with the prepared 3.8.3 builder image available:
@@ -475,8 +477,12 @@ An optional first argument selects another prepared builder image; the script
 still verifies Valhalla 3.8.3. It mounts only source read-only, disables network,
 limits the disposable container to 2 CPUs/2 GiB/128 processes and removes it
 after testing. The initial full run passed 63 checks/test cases; strict
-corridor-entry, owned-process lifecycle and output-path regressions raise the suite to **69**:
-20 C++ core, 17 client test methods, 30 actual flat-graph cases and 2 actual hierarchy cases.
+corridor-entry, owned-process lifecycle, output-path and full hierarchy
+regressions raise the core/helper suite to **97**:
+20 C++ core, 19 client test methods, 30 actual flat-graph cases and 28 actual hierarchy checks.
+The same isolated command also runs 11 corridor preparation, 9 independent
+direction and 11 baseline-ownership tests (**128** checks in total). Separate
+aggregate cohort and collector tests add 4 and 5 checks respectively.
 Synthetic OSM PBFs were really built into native Valhalla graphs. Tested cases
 include wrong-way one-way roads, competing paths, same-edge/multiple LRPs,
 offsets, LFRCNP, ramps/roundabouts, forbidden turns, node barriers, disconnected
@@ -570,12 +576,13 @@ isolated container and read-only graph/input mounts; path checks are not a
 replacement for that isolation.
 Every artifact explicitly has **`approvedForLive=false`**. `matched` means a
 candidate interval path, not a fresh flow or usable ETA. Full-edge candidates
-are separate; a foreign partial claim blocks a full-edge claim too. Native v1
-does not implement approved partial live-speed encoding or cross-baseline
-ownership/selection.
+are separate; a foreign partial claim blocks a full-edge claim too. Native v2
+does not implement approved partial live-speed encoding or live map selection.
+The separate `review-native-baseline.py` implements a conservative offline
+ownership gate against the current active map, never an activation command.
 
-V1 supports 2–16 LRPs and same-edge intervals on hierarchy levels 0–2.
-Required hierarchy transitions, complex/conditional restrictions, FOW 0/5/7
+V2 supports 2–16 LRPs and explicit reciprocal transitions on road hierarchy
+levels 0–2. Missing/inconsistent transitions, complex/conditional restrictions, FOW 0/5/7
 and `againstDrivingDirection=true` fail explicitly rather than being guessed.
 Search bounds are 20 m cutoff, 2 m node snap, 34° heading tolerance, 8
 candidates per LRP, 64 pairs, 64 path edges and 50,000 expansions per pair;
@@ -589,13 +596,14 @@ should use `--foreground`. Docker cleanup remains the wrapper's responsibility
 and must identify only its own container, not other services.
 No HTTP route or nearest-road fallback is present.
 
-Before any live selection, obtain a deterministic real immutable-graph shadow
-batch, compare every candidate claim against the current graph-specific
-approved baseline (including relevant partial provenance), and resolve missing
-ownership evidence without assuming it is free. The existing accepted baseline
-must not be reduced or overwritten. Then complete independent stratified map
-and direction adjudication, same-flow route tests and separately approved canary
-with rollback. The offline client does not perform these remaining steps.
+The October 1 national v2 batch, exact replay, independent directed-shape
+challenge and current-baseline ownership review are complete. They leave 427
+disjoint candidates, not a live map. The active baseline was not reduced or
+overwritten. Before selection, resolve any missing relevant partial provenance
+without assuming it is free; complete human stratified map/carriageway review,
+same-flow route tests and separately approved isolated canary with rollback.
+The [detailed evidence and commands](../archive/audits/2026-10-01_VALHALLA_NATIVE_V2_AND_ADAPTIVE_TIMING.md)
+distinguish completed offline gates from remaining live acceptance.
 Do not enable `TRAFFIC_OPENLR_ROUTE_FALLBACK`, replace a live cache with this
 artifact or report its candidate count as traffic coverage/ETA accuracy.
 
@@ -1114,6 +1122,11 @@ changes expiry, or uses fetch time as measurement time. Bad/regressing/old
 hints revert to start-based scheduling. The October 1 trace observed 303–304
 second generations and stale responses after 300-second start drift. This
 supports a monitored opt-in trial, not a continuous freshness guarantee.
+At most one second of near-boundary timer lateness delays the nominal slot to
+the request floor rather than skipping a full generation. A four-millisecond
+late start exposed this case live. Existing durable reservations are preserved
+across restart, including longer backoff; never delete or shorten the timing
+file to accelerate acceptance.
 Confirm three consecutive distinct generations, source observation/expiry,
 request starts at least 300 seconds apart, positive application and local
 expiry after enabling. Synthetic two-hour drift tests alone are not live

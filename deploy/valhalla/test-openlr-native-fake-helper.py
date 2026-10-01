@@ -31,7 +31,7 @@ for line in sys.stdin:
         continue
     if mode == "stop":
         sys.exit(1)
-    result = {"requestId": request["requestId"], "decoderVersion": "openlr-native-v1",
+    result = {"requestId": request["requestId"], "decoderVersion": "openlr-native-v2",
               "routingDataset": mode, "graphSha256": graph_hash, "corridorRevision": request.get("corridor", {}).get("revision", ""),
               "status": "unmatched", "expansions": 1}
     if mode == "wrong_identity":

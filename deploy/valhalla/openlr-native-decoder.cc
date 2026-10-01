@@ -27,7 +27,7 @@ using sim_openlr::Candidate;
 using sim_openlr::Edge;
 using sim_openlr::Path;
 struct UnsupportedHierarchy : std::runtime_error {
-  UnsupportedHierarchy() : std::runtime_error("hierarchy transition requires native expansion") {}
+  UnsupportedHierarchy() : std::runtime_error("hierarchy transition unavailable or inconsistent") {}
 };
 
 std::string file_sha256(const fs::path& path) {
@@ -140,6 +140,57 @@ uint32_t lowest_mask(unsigned declared) {
 }
 
 class NativeGraph {
+  // Only explicit, reciprocal road-hierarchy transitions identify copies of
+  // the same intersection. Geographic proximity never establishes topology.
+  // Canonical IDs make cycle/merge/uniqueness checks invariant to node level;
+  // actual directed edge IDs are retained for traffic archive addressing.
+  std::map<uint64_t, std::vector<GraphId>> equivalent_nodes_cache;
+  std::vector<GraphId> equivalent_nodes(GraphId origin) {
+    auto cached = equivalent_nodes_cache.find(origin.value);
+    if (cached != equivalent_nodes_cache.end()) return cached->second;
+    std::vector<GraphId> copies{origin};
+    std::set<unsigned> levels;
+    for (size_t index = 0; index < copies.size(); ++index) {
+      const GraphId id = copies[index];
+      if (id.level() > 2 || !levels.insert(id.level()).second) throw UnsupportedHierarchy();
+      auto tile = reader.GetGraphTile(id);
+      if (!tile || id.id() >= tile->header()->nodecount()) throw UnsupportedHierarchy();
+      const auto* node = tile->node(id);
+      if (node->transition_count() > 2 ||
+          uint64_t(node->transition_index()) + node->transition_count() > tile->header()->transitioncount())
+        throw UnsupportedHierarchy();
+      for (uint32_t i = 0; i < node->transition_count(); ++i) {
+        const auto* transition = tile->transition(node->transition_index() + i);
+        const GraphId target = transition->endnode();
+        if (!target.is_valid() || target.level() > 2 || target.level() == id.level() ||
+            transition->up() != (target.level() < id.level())) throw UnsupportedHierarchy();
+        auto target_tile = reader.GetGraphTile(target);
+        if (!target_tile || target.id() >= target_tile->header()->nodecount()) throw UnsupportedHierarchy();
+        const auto* target_node = target_tile->node(target);
+        if (target_node->transition_count() > 2 ||
+            uint64_t(target_node->transition_index()) + target_node->transition_count() > target_tile->header()->transitioncount() ||
+            node->latlng(tile->header()->base_ll()).Distance(
+              target_node->latlng(target_tile->header()->base_ll())) > 1.) throw UnsupportedHierarchy();
+        bool reciprocal = false;
+        for (uint32_t j = 0; j < target_node->transition_count(); ++j) {
+          const auto* reverse = target_tile->transition(target_node->transition_index() + j);
+          if (reverse->endnode() == id && reverse->up() != transition->up()) reciprocal = true;
+        }
+        if (!reciprocal) throw UnsupportedHierarchy();
+        if (std::find(copies.begin(), copies.end(), target) == copies.end()) {
+          if (copies.size() >= 3) throw UnsupportedHierarchy();
+          copies.push_back(target);
+        }
+      }
+    }
+    std::sort(copies.begin(), copies.end(), [](const GraphId& a, const GraphId& b) { return a.value < b.value; });
+    // Bounded independent of nationwide request count; clearing does not
+    // change canonical identity, which is recomputed from the immutable graph.
+    if (equivalent_nodes_cache.size() > 32768) equivalent_nodes_cache.clear();
+    for (const auto& id : copies) equivalent_nodes_cache[id.value] = copies;
+    return copies;
+  }
+  uint64_t canonical_node(GraphId id) { return equivalent_nodes(id).front().value; }
 public:
   GraphReader& reader;
   valhalla::sif::cost_ptr_t cost;
@@ -161,27 +212,23 @@ public:
     const auto* native = tile->directededge(id);
     const auto nodes = reader.GetDirectedEdgeNodes(tile, native);
     if (!nodes.first.is_valid() || !nodes.second.is_valid()) throw std::runtime_error("edge nodes unavailable");
-    return {id.value, nodes.first.value, nodes.second.value, double(native->length()),
+    return {id.value, canonical_node(nodes.first), canonical_node(nodes.second), double(native->length()),
             unsigned(native->classification()), native->is_shortcut() ||
             native->access_restriction() || native->part_of_complex_restriction() ||
             native->start_restriction() || native->end_restriction()};
   }
   std::vector<Edge> outgoing(uint64_t node_value) {
-    const GraphId node_id(node_value);
-    auto tile = reader.GetGraphTile(node_id);
-    if (!tile || node_id.id() >= tile->header()->nodecount()) throw std::runtime_error("node unavailable");
-    const auto* node = tile->node(node_id);
-    // Same-edge references work on all road hierarchy levels. Multi-edge
-    // paths are accepted only when the traversed graph does not require
-    // a transition. Ignoring transitions would falsely certify uniqueness.
-    if (node->transition_count()) throw UnsupportedHierarchy();
-    if (!cost->Allowed(node)) return {};
     std::vector<Edge> output;
-    for (uint32_t index = node->edge_index(); index < node->edge_index() + node->edge_count(); ++index) {
-      const GraphId id(node_id.tileid(), node_id.level(), index);
-      const auto* native = tile->directededge(id);
-      if (native->is_shortcut() || !cost->Allowed(native, tile, valhalla::sif::kDisallowShortcut)) continue;
-      output.push_back(edge(id.value));
+    for (const auto& node_id : equivalent_nodes(GraphId(node_value))) {
+      auto tile = reader.GetGraphTile(node_id);
+      const auto* node = tile->node(node_id);
+      if (!cost->Allowed(node)) return {}; // No barrier bypass via another level.
+      for (uint32_t index = node->edge_index(); index < node->edge_index() + node->edge_count(); ++index) {
+        const GraphId id(node_id.tileid(), node_id.level(), index);
+        const auto* native = tile->directededge(id);
+        if (native->is_shortcut() || !cost->Allowed(native, tile, valhalla::sif::kDisallowShortcut)) continue;
+        output.push_back(edge(id.value));
+      }
     }
     std::sort(output.begin(), output.end(), [](const Edge& a, const Edge& b) { return a.id < b.id; });
     return output;
@@ -194,8 +241,16 @@ public:
     const auto* native = tile->directededge(next);
     const auto nodes = reader.GetDirectedEdgeNodes(tile, native);
     auto node_tile = reader.GetGraphTile(nodes.first);
-    if (!node_tile || !cost->Allowed(node_tile->node(nodes.first)) || previous->endnode() != nodes.first ||
+    if (!node_tile || !cost->Allowed(node_tile->node(nodes.first)) ||
+        canonical_node(previous->endnode()) != canonical_node(nodes.first) ||
         reader.GetOpposingEdgeId(incoming) == next || native->is_shortcut()) return false;
+    for (const auto& id : equivalent_nodes(nodes.first)) {
+      auto copy_tile = reader.GetGraphTile(id);
+      if (!cost->Allowed(copy_tile->node(id))) return false;
+    }
+    // As in Valhalla 3.8.3 BidirectionalAStar::Expand, preserve the incoming
+    // EdgeLabel across the transition. Native localedgeidx/restriction masks
+    // are intersection-wide, not regenerated per hierarchy level.
     const valhalla::sif::EdgeLabel predecessor(
       valhalla::baldr::kInvalidLabel, incoming, previous, {}, 0,
       valhalla::sif::TravelMode::kDrive, 0, valhalla::baldr::kInvalidRestriction,

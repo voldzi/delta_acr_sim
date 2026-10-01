@@ -14,7 +14,7 @@
 #include <vector>
 
 namespace sim_openlr {
-constexpr const char* kDecoderVersion = "openlr-native-v1";
+constexpr const char* kDecoderVersion = "openlr-native-v2";
 constexpr double kFractionEpsilon = 1e-7;
 struct Candidate {
   uint64_t edge;

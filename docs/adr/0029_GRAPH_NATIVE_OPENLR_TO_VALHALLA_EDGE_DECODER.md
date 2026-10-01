@@ -1,6 +1,6 @@
 # ADR 0029 Graph native OpenLR decoder for Valhalla traffic
 
-Status: offline candidate decoder v1 implemented; live mapping and activation gated
+Status: hierarchy-aware offline candidate decoder v2 implemented; live mapping and activation gated
 Date: 2026-09-29
 Updated: 2026-10-01
 Owner: SIM / Valhalla
@@ -175,7 +175,7 @@ samples each shape segment no more than 10 m apart with a conservative 6 m
 margin inside the declared tolerance. A spatial corridor is evidence of road
 proximity, not an independent certificate of direction, source truth or ETA.
 
-Responses echo `requestId`, `decoderVersion=openlr-native-v1`,
+Responses echo `requestId`, `decoderVersion=openlr-native-v2`,
 `routingDataset`, `graphSha256` and `corridorRevision` (empty string when no
 corridor was supplied), plus `status` and `expansions`. A `matched` response
 also has `lengthMeters`, ordered `intervals` with exactly `edgeId`,
@@ -223,12 +223,20 @@ the accepted private output still uses an atomic mode-0600 replacement.
 This path preflight complements, rather than replaces, the required isolated
 container and read-only graph/input mounts.
 
-### Fail-closed v1 boundary
+### Fail-closed v2 boundary
 
-- Same-edge intervals work on hierarchy levels 0–2. Multi-edge paths requiring
-  a hierarchy transition return `unsupported_hierarchy`; ignoring transitions
-  would falsely certify uniqueness. Complex/conditional access restrictions
-  are rejected as `unsupported_restriction`, rather than approximated.
+- Explicit road-hierarchy transitions on levels 0–2 are expanded. Reciprocal
+  transition IDs, direction, bounds, unique level copies and coordinates within
+  1 m are required; geographical proximity never invents an intersection.
+  Their minimum graph ID is canonical only for node/cycle/merge checks. Actual
+  directed edge IDs and fractions remain unchanged. All copies' node access
+  is respected; native incoming local-edge indices/turn masks are retained
+  across transitions, as in pinned Valhalla 3.8.3 native expansion. Shortcuts
+  are excluded; missing/inconsistent transitions return `unsupported_hierarchy`.
+  At most three copies and a bounded 32,768-entry cache limit memory. The
+  complete directed/corridor test fixture now also runs with hierarchy enabled,
+  and explicitly asserts a matched path spans at least two road levels.
+  Complex/conditional access restrictions remain `unsupported_restriction`.
 - FOW 0/5/7 and `againstDrivingDirection=true` have explicit unsupported
   results. Cyclic references and unsupported joins are not silently routed.
   The fixed adjacent-class FRC/LFRCNP interpretation is versioned candidate
@@ -256,21 +264,32 @@ container and read-only graph/input mounts.
 
 ### Outstanding promotion work
 
-The audit's ownership check covers only references decoded in that batch.
-Before selecting additions, compare all their intervals/claims with the
-**current graph-specific approved baseline**, including its partial claims
-where available. A native candidate must not overwrite a baseline reference's
-edge or reduce the accepted baseline set. This cross-baseline merge and an
-accepted map selector are not implemented by the offline v1 client.
-Missing baseline interval provenance that could affect a candidate is an
-unresolved gate, not permission to assume the edge is unclaimed.
+The October 1 v2 batch and identical full replay are complete: 40,684
+eligible references processed, 14,466 explicitly rejected during independent
+corridor preparation, no sampling omissions from the 55,150-reference source.
+Independent exact directed geometry review and conservative current-baseline
+ownership review are also implemented as separate Python tools. Every baseline
+edge ID is treated as an entire owned edge; any candidate interval touching it
+is denied. Already active reference IDs are never replaced. Cross-candidate
+claims are recomputed, including partial claims by rejected references.
+The separately hashed direction verdict snapshot is bound to the native audit;
+all generated artifacts are private and still `approvedForLive=false`.
 
-A real immutable-graph shadow batch, repeated deterministic output,
-independent stratified map/direction adjudication, unsupported-class review,
-same-flow route comparison and an explicitly approved canary remain
-outstanding. A successful helper build, synthetic test or corridor match is
-not this acceptance. Do not enable `TRAFFIC_OPENLR_ROUTE_FALLBACK`, copy this
-candidate map over a live cache, or use candidate counts as ETA accuracy.
+The result is 427 disjoint canary candidates (2,870 whole directed edges),
+not an accepted live-map selector. Independent review rejected 146 native
+paths for bearing/order mismatch and deferred 70 nonzero-offset paths. These
+rejections do not independently establish defects in the existing baseline:
+the tested geometries were native candidate paths, not baseline paths.
+See the [national v2 and timing evidence](../archive/audits/2026-10-01_VALHALLA_NATIVE_V2_AND_ADAPTIVE_TIMING.md)
+for complete accounting and reproducibility.
+
+Human geographic/carriageway adjudication of a stratified sample, unsupported
+class calibration, same-flow route comparison and an explicitly approved
+isolated canary remain outstanding. Missing baseline interval provenance that
+could affect an addition remains a gate, never permission to assume it is free.
+A successful native build, automated corridor/bearing check or fresh flow does
+not establish ETA accuracy. Do not enable `TRAFFIC_OPENLR_ROUTE_FALLBACK`, copy
+the private candidate map over a live cache or publish these counts as accuracy.
 
 ## Implementation sequence
 
