@@ -223,6 +223,7 @@ scp \
   "${source_dir}/weekly-update.sh" \
   "${source_dir}/valhalla-traffic-update.service" \
   "${source_dir}/valhalla-traffic-update.timer" \
+  "${source_dir}/valhalla-traffic-expiry.service" \
   "${server}:${remote_deploy}/"
 
 control_token=$(ssh docker.home.cz "sed -n 's/^VALHALLA_TRAFFIC_CONTROL_TOKEN=//p' /srv/sim/.env | tail -1")

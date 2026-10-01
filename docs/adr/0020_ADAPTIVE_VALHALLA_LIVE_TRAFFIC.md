@@ -24,6 +24,13 @@ or as a runtime dependency of Valhalla.
 
 ## Decision
 
+The freshness, scheduling, expiry and cache rules below are strengthened by
+[ADR 0028](0028_TRAFFIC_FRESHNESS_AND_EXPIRY_BOUNDARY.md). In particular,
+completion-based polling and update-time-only route cache keys are superseded
+by start-based provider scheduling, an independent expiry guard and absolute
+overlay deadlines. ADR 0028 records the new implementation and live acceptance
+status; it does not authorize a different graph matcher.
+
 SIM owns a sliding road-activity lease and an authenticated internal normalized
 feed:
 

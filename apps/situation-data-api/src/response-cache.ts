@@ -6,12 +6,13 @@ export interface SharedResponseCacheStore {
   isAvailable(): boolean;
 }
 
-export interface ManagedResponseCacheOptions {
+export interface ManagedResponseCacheOptions<T = unknown> {
   ttlMs: number;
   staleIfErrorMs: number;
   maxEntries: number;
   sharedStore?: SharedResponseCacheStore;
   sharedKeyPrefix?: string;
+  usableUntilMs?: (value: T) => number | undefined;
 }
 
 export interface ManagedResponseCacheStats {
@@ -38,6 +39,14 @@ export interface ManagedResponseCacheStats {
 
 export interface ManagedResponseCacheLoadOptions {
   ttlMs?: number;
+  usableUntilMs?: number;
+}
+
+export class ResponseCacheValueExpiredError extends Error {
+  constructor() {
+    super("The response's source data expired before it could be returned.");
+    this.name = "ResponseCacheValueExpiredError";
+  }
 }
 
 interface CacheEntry<T> {
@@ -73,12 +82,12 @@ export class ManagedResponseCache<T> {
   private lastSuccessAtMs: number | undefined;
   private lastErrorAtMs: number | undefined;
 
-  constructor(private readonly options: ManagedResponseCacheOptions) {}
+  constructor(private readonly options: ManagedResponseCacheOptions<T>) {}
 
   async getOrLoad(key: string, loader: () => Promise<T>, loadOptions: ManagedResponseCacheLoadOptions = {}): Promise<T> {
     const now = Date.now();
     const entry = this.entries.get(key);
-    if (entry && entry.expiresAtMs > now) {
+    if (entry && entry.expiresAtMs > now && this.isUsable(entry.value, loadOptions.usableUntilMs)) {
       this.counters.hits += 1;
       this.touchEntry(key, entry, now);
       return entry.value;
@@ -91,7 +100,7 @@ export class ManagedResponseCache<T> {
     }
 
     const sharedEntry = await this.readSharedEntry(key);
-    if (sharedEntry && sharedEntry.expiresAtMs > Date.now()) {
+    if (sharedEntry && sharedEntry.expiresAtMs > Date.now() && this.isUsable(sharedEntry.value, loadOptions.usableUntilMs)) {
       this.counters.hits += 1;
       this.counters.sharedHits += 1;
       this.storeEntry(key, sharedEntry.value, sharedEntry.expiresAtMs, sharedEntry.staleUntilMs);
@@ -107,21 +116,23 @@ export class ManagedResponseCache<T> {
     this.counters.misses += 1;
     const refresh = loader()
       .then(async (value) => {
+        if (!this.isUsable(value, loadOptions.usableUntilMs)) throw new ResponseCacheValueExpiredError();
         this.counters.refreshes += 1;
         this.lastSuccessAtMs = Date.now();
-        await this.store(key, value, loadOptions.ttlMs);
+        await this.store(key, value, loadOptions);
+        if (!this.isUsable(value, loadOptions.usableUntilMs)) throw new ResponseCacheValueExpiredError();
         return value;
       })
       .catch((error) => {
         this.counters.errors += 1;
         this.lastErrorAtMs = Date.now();
         const staleEntry = this.entries.get(key);
-        if (staleEntry && staleEntry.staleUntilMs > Date.now()) {
+        if (staleEntry && staleEntry.staleUntilMs > Date.now() && this.isUsable(staleEntry.value, loadOptions.usableUntilMs)) {
           this.counters.staleHits += 1;
           this.touchEntry(key, staleEntry, Date.now());
           return staleEntry.value;
         }
-        if (sharedEntry && sharedEntry.staleUntilMs > Date.now()) {
+        if (sharedEntry && sharedEntry.staleUntilMs > Date.now() && this.isUsable(sharedEntry.value, loadOptions.usableUntilMs)) {
           this.counters.sharedStaleHits += 1;
           this.storeEntry(key, sharedEntry.value, sharedEntry.expiresAtMs, sharedEntry.staleUntilMs);
           return sharedEntry.value;
@@ -154,12 +165,24 @@ export class ManagedResponseCache<T> {
     return stats;
   }
 
-  private async store(key: string, value: T, ttlMs = this.options.ttlMs): Promise<void> {
+  private async store(key: string, value: T, loadOptions: ManagedResponseCacheLoadOptions): Promise<void> {
     const now = Date.now();
-    const expiresAtMs = now + Math.max(0, ttlMs);
-    const staleUntilMs = expiresAtMs + Math.max(0, this.options.staleIfErrorMs);
+    const deadline = this.usableUntil(value, loadOptions.usableUntilMs);
+    const expiresAtMs = Math.min(now + Math.max(0, loadOptions.ttlMs ?? this.options.ttlMs), deadline);
+    const staleUntilMs = Math.min(expiresAtMs + Math.max(0, this.options.staleIfErrorMs), deadline);
     this.storeEntry(key, value, expiresAtMs, staleUntilMs);
     await this.writeSharedEntry(key, { value, expiresAtMs, staleUntilMs });
+  }
+
+  private usableUntil(value: T, requestDeadline?: number): number {
+    const valueDeadline = this.options.usableUntilMs?.(value);
+    if ((requestDeadline !== undefined && !Number.isFinite(requestDeadline)) ||
+        (valueDeadline !== undefined && !Number.isFinite(valueDeadline))) return 0;
+    return Math.min(requestDeadline ?? Infinity, valueDeadline ?? Infinity);
+  }
+
+  private isUsable(value: T, requestDeadline?: number): boolean {
+    return this.usableUntil(value, requestDeadline) > Date.now();
   }
 
   private storeEntry(key: string, value: T, expiresAtMs: number, staleUntilMs: number): void {

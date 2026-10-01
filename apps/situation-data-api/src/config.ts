@@ -86,6 +86,7 @@ export interface SituationDataConfig {
   tpeg2BaseUrl: string;
   tpeg2ApiToken?: string;
   tpeg2DynamicCacheTtlSeconds: number;
+  tpeg2AlignToLastModified?: boolean;
   tpeg2StaticCacheTtlSeconds: number;
   tpeg2RequestTimeoutMs: number;
   tpeg2MaxRecords: number;
@@ -237,6 +238,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     tpeg2BaseUrl: process.env.TPEG2_BASE_URL ?? "https://online.ceda.cz",
     tpeg2ApiToken: emptyToUndefined(process.env.TPEG2_API_TOKEN),
     tpeg2DynamicCacheTtlSeconds: Math.max(300, parseInteger(process.env.SITUATION_DATA_TPEG2_DYNAMIC_CACHE_TTL_SECONDS, 300)),
+    tpeg2AlignToLastModified: parseBoolean(process.env.SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED, false),
     tpeg2StaticCacheTtlSeconds: Math.max(3600, parseInteger(process.env.SITUATION_DATA_TPEG2_STATIC_CACHE_TTL_SECONDS, 86400)),
     tpeg2RequestTimeoutMs: Math.max(10000, parseInteger(process.env.TPEG2_REQUEST_TIMEOUT_MS, 120000)),
     tpeg2MaxRecords: Math.max(1000, parseInteger(process.env.TPEG2_MAX_RECORDS, 50000)),

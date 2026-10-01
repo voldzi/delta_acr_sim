@@ -410,17 +410,17 @@ def main() -> None:
             traffic.directed_single_edge_candidate = original_direct
             traffic.post_report = original_report
 
-    now = "2099-01-01T00:00:00Z"
-    mapping = {"mapping": {"flow-1": [{"id": graph_id(1, 50594, 2), "baselineSpeedKph": 80}]}}
-    feed = {"flows": [{"messageId": "flow-1", "averageSpeedKph": 24, "validUntil": now}]}
-    speeds, flow_count, _ = traffic.current_edge_speeds(feed, mapping, 10**10)
-    assert flow_count == 1 and list(speeds) == [graph_id(1, 50594, 2)]
     instant = time.time()
+    mapping = {"mapping": {"flow-1": [{"id": graph_id(1, 50594, 2), "baselineSpeedKph": 80}]}}
+    feed = {"flows": [{"messageId": "flow-1", "averageSpeedKph": 24,
+                       "observedAt": traffic.utc_iso(instant), "validUntil": traffic.utc_iso(instant + 60)}]}
+    speeds, flow_count, _ = traffic.current_edge_speeds(feed, mapping, 1800, instant)
+    assert flow_count == 1 and list(speeds) == [graph_id(1, 50594, 2)]
     expiry_feed = {"flows": [
         {"messageId": "flow-1", "averageSpeedKph": 24,
          "observedAt": "2099-01-01T00:00:00Z", "validUntil": "2099-01-01T00:01:00Z"},
     ]}
-    assert traffic.next_flow_recompute_epoch(expiry_feed, mapping, 1800, instant) == instant + 1800
+    assert traffic.next_flow_recompute_epoch(expiry_feed, mapping, 1800, instant) == instant
     observed = "2026-09-29T16:00:00Z"
     valid_until = "2026-09-29T16:04:00Z"
     expiry_feed["flows"][0].update({"observedAt": observed, "validUntil": valid_until})

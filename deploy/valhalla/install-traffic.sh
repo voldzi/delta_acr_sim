@@ -56,6 +56,7 @@ install -m 0755 "${SOURCE_DIR}/weekly-update.sh" "${BASE_DIR}/update-tools/weekl
 install -m 0644 "${SOURCE_DIR}/docker-compose.yml" "${BASE_DIR}/docker-compose.yml"
 install -m 0644 "${SOURCE_DIR}/valhalla-traffic-update.service" /etc/systemd/system/valhalla-traffic-update.service
 install -m 0644 "${SOURCE_DIR}/valhalla-traffic-update.timer" /etc/systemd/system/valhalla-traffic-update.timer
+install -m 0644 "${SOURCE_DIR}/valhalla-traffic-expiry.service" /etc/systemd/system/valhalla-traffic-expiry.service
 
 traffic_env=$(mktemp)
 trap 'rm -f -- "${traffic_env}" "${build_config:-}" "${compose_backup}" "${config_backup}"' EXIT
@@ -107,7 +108,7 @@ config.setdefault("mjolnir", {})["traffic_extract"] = "/traffic/traffic.tar"
 path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 PY
 
-systemctl stop valhalla-traffic-update.timer valhalla-traffic-update.service 2>/dev/null || true
+systemctl stop valhalla-traffic-update.timer valhalla-traffic-update.service valhalla-traffic-expiry.service 2>/dev/null || true
 docker compose -f "${BASE_DIR}/docker-compose.yml" stop valhalla >/dev/null
 install -m 0644 "${current}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
 rm -f /run/valhalla-traffic/applied-edges.json /run/valhalla-traffic/last-applied.json
@@ -142,6 +143,7 @@ python3 "${BASE_DIR}/update-tools/validate-response.py" route "${BASE_DIR}/state
 
 systemctl daemon-reload
 systemctl enable --now valhalla-traffic-update.timer
+systemctl enable --now valhalla-traffic-expiry.service
 systemctl reset-failed valhalla-traffic-update.service || true
 rollback_armed=false
 rm -f "${BASE_DIR}/state/traffic-install-failure.log"

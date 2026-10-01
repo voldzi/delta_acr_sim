@@ -73,3 +73,15 @@ roli, token, projekt a audit; jen syntetické či zveřejněné agregáty.
 ## Zákazy
 
 Systém nesmí obsahovat reálná operační data, secrets v repozitáři, targeting, navádění nebo bojové workflow.
+
+## Traffic freshness security boundary
+
+The internal Valhalla feed/report/status retain their existing bearer boundary.
+Additive `overlayGeneration`, `usableUntil` and `sourceTiming` metadata do not
+contain provider keys, source XML or private road geometry. The host commits
+deadline and report state before network acknowledgement; SIM rejects obsolete
+report ordering and never extends a live speed based on HTTP 304 or report age.
+Missing/invalid timestamps or a corrupt applied-edge ledger fail closed. A
+provider/report outage removes live-speed authority without exposing raw data
+or replacing the traffic feed with a public browser integration. See
+[ADR 0028](../adr/0028_TRAFFIC_FRESHNESS_AND_EXPIRY_BOUNDARY.md).

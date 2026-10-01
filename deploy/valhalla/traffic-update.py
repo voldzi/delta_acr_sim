@@ -26,6 +26,7 @@ import sys
 import tarfile
 import threading
 import time
+import uuid
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -863,18 +864,24 @@ def traffic_tile_offsets(archive: Path) -> dict[int, tuple[int, int]]:
     return result
 
 
-def read_previous_edges(path: Path) -> list[int]:
+def read_edge_ledger(path: Path) -> list[int] | None:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-        return [int(item) for item in value] if isinstance(value, list) else []
+        if not isinstance(value, list) or any(type(item) is not int or item < 0 or item >= 2**64 for item in value):
+            return None
+        return value
     except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
-        return []
+        return None
+
+
+def read_previous_edges(path: Path) -> list[int]:
+    return read_edge_ledger(path) or []
 
 
 def current_edge_speeds(
-    feed: dict[str, Any], mapping: dict[str, Any], max_age_seconds: int
+    feed: dict[str, Any], mapping: dict[str, Any], max_age_seconds: int, now: float | None = None
 ) -> tuple[dict[int, tuple[float, float]], int, str | None]:
-    now = time.time()
+    now = time.time() if now is None else now
     selected: dict[int, tuple[float, float]] = {}
     applied_flows = 0
     latest_observed: float | None = None
@@ -888,13 +895,9 @@ def current_edge_speeds(
             continue
         if not math.isfinite(speed) or speed <= 0:
             continue
-        observed_text = flow.get("observedAt")
-        observed = parse_iso_timestamp(observed_text)
-        valid_until = parse_iso_timestamp(flow.get("validUntil"))
-        if observed is not None and now - observed > max_age_seconds:
+        if flow_deadline(flow, max_age_seconds, now) is None:
             continue
-        if valid_until is not None and valid_until < now:
-            continue
+        observed = parse_iso_timestamp(flow.get("observedAt"))
         edges = edge_map.get(str(flow.get("messageId", "")), [])
         if not edges:
             continue
@@ -916,7 +919,8 @@ def next_flow_recompute_epoch(
 ) -> float:
     """Return the first time a currently usable mapped speed may become invalid."""
     instant = time.time() if now is None else now
-    next_due = instant + max_age_seconds
+    next_due = instant
+    deadlines: list[float] = []
     edge_map = mapping.get("mapping", {})
     for flow in feed.get("flows", []):
         if not isinstance(flow, dict) or not edge_map.get(str(flow.get("messageId", ""))):
@@ -927,17 +931,28 @@ def next_flow_recompute_epoch(
             continue
         if not math.isfinite(speed) or speed <= 0:
             continue
-        observed = parse_iso_timestamp(flow.get("observedAt"))
-        valid_until = parse_iso_timestamp(flow.get("validUntil"))
-        if observed is not None and instant - observed > max_age_seconds:
-            continue
-        if valid_until is not None and valid_until < instant:
-            continue
-        if observed is not None:
-            next_due = min(next_due, observed + max_age_seconds)
-        if valid_until is not None:
-            next_due = min(next_due, valid_until)
-    return next_due
+        deadline = flow_deadline(flow, max_age_seconds, instant)
+        if deadline is not None:
+            deadlines.append(deadline)
+    return min(deadlines) if deadlines else next_due
+
+
+def flow_deadline(flow: dict[str, Any], max_age_seconds: int, now: float) -> float | None:
+    """One fail-closed timestamp policy shared by application and expiry guard.
+
+    Missing expiry is bounded by observation + max age. A supplied malformed
+    expiry is never silently replaced, nor is receive time an observation.
+    """
+    observed = parse_iso_timestamp(flow.get("observedAt"))
+    if observed is None or observed > now + 30 or max_age_seconds <= 0:
+        return None
+    deadline = min(observed + max_age_seconds, now + max_age_seconds)
+    if "validUntil" in flow:
+        expiry = parse_iso_timestamp(flow["validUntil"])
+        if expiry is None or expiry < observed:
+            return None
+        deadline = min(deadline, expiry)
+    return deadline if deadline > now else None
 
 
 def revision_recompute_epoch(revision: dict[str, Any]) -> float:
@@ -968,23 +983,44 @@ def parse_iso_timestamp(value: Any) -> float | None:
     try:
         parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.timestamp()
-    except ValueError:
+            return None
+        timestamp = parsed.timestamp()
+        return timestamp if math.isfinite(timestamp) else None
+    except (ValueError, OverflowError):
         return None
 
 
 def apply_speeds(archive: Path, state_path: Path, speeds: dict[int, tuple[float, float]]) -> int:
     offsets = traffic_tile_offsets(archive)
-    previous = read_previous_edges(state_path)
+    ledger = read_edge_ledger(state_path)
+    previous = ledger or []
     # Persist the superset before touching the mmap-backed archive. If the
     # process is interrupted, the next run can still clear every possibly
     # modified record.
-    state_path.write_text(json.dumps(sorted(set(previous) | set(speeds))), encoding="utf-8")
-    os.chmod(state_path, 0o600)
+    if ledger is not None:
+        atomic_json_state(state_path, sorted(set(previous) | set(speeds)))
     touched_tiles: set[int] = set()
     applied = 0
     with archive.open("r+b", buffering=0) as stream:
+        if ledger is None:
+            # A lost/truncated ledger cannot prove which mmap records were
+            # touched. Clear every speed record IN PLACE, preserving the inode
+            # mapped by Valhalla, before accepting a new generation.
+            zeros = bytes(64 * 1024)
+            for tile_graph, (tile_offset, tile_size) in offsets.items():
+                remaining = tile_size - TRAFFIC_HEADER_SIZE
+                if remaining < 0 or remaining % TRAFFIC_SPEED_SIZE:
+                    raise RuntimeError("Traffic archive contains an invalid tile size")
+                stream.seek(tile_offset + TRAFFIC_HEADER_SIZE)
+                while remaining:
+                    count = min(remaining, len(zeros))
+                    stream.write(zeros[:count])
+                    remaining -= count
+                touched_tiles.add(tile_graph)
+            # Keep a missing/corrupt ledger invalid until the global clear is
+            # complete. A crash halfway through clearing must trigger the same
+            # recovery again, not leave an apparently valid empty ledger.
+            atomic_json_state(state_path, sorted(speeds))
         for graph_id in previous:
             location = edge_record_location(graph_id, offsets)
             if location is not None:
@@ -1006,8 +1042,7 @@ def apply_speeds(archive: Path, state_path: Path, speeds: dict[int, tuple[float,
             tile_offset, _ = offsets[tile_graph]
             stream.seek(tile_offset + 8)
             stream.write(struct.pack("<Q", timestamp))
-    state_path.write_text(json.dumps(sorted(speeds)), encoding="utf-8")
-    os.chmod(state_path, 0o600)
+    atomic_json_state(state_path, sorted(speeds))
     return applied
 
 
@@ -1024,36 +1059,107 @@ def edge_record_location(graph_id: int, offsets: dict[int, tuple[int, int]]) -> 
     return record_offset, tile_graph
 
 
-def post_report(feed_base_url: str, token: str, report: dict[str, Any]) -> None:
-    request_json(f"{feed_base_url.rstrip('/')}/report", token=token, payload=report, timeout=30)
+def post_report(feed_base_url: str, token: str, report: dict[str, Any], timeout: int = 30) -> None:
+    status, _ = request_json(f"{feed_base_url.rstrip('/')}/report", token=token, payload=report, timeout=timeout)
+    if status != 204:
+        raise RuntimeError(f"SIM did not accept traffic report (HTTP {status})")
 
 
-def clear_expired_runtime(runtime_dir: Path, max_age_seconds: int) -> bool:
+def read_json_state(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+        return {}
+
+
+def atomic_json_state(path: Path, value: Any) -> None:
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as stream:
+            os.chmod(temporary, 0o600)
+            json.dump(value, stream, separators=(",", ":"), allow_nan=False)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def utc_iso(epoch: float | None = None) -> str:
+    return datetime.fromtimestamp(time.time() if epoch is None else epoch, timezone.utc).isoformat(
+        timespec="microseconds"
+    ).replace("+00:00", "Z")
+
+
+def deliver_pending_report(config: dict[str, str], runtime_dir: Path, timeout: int = 30) -> bool:
+    """Network is outside the archive lock; an old response cannot delete a newer report."""
+    path = runtime_dir / "pending-report.json"
+    report = read_json_state(path)
+    if not report:
+        return False
+    post_report(required(config, "SIM_TRAFFIC_FEED_BASE_URL"), required(config, "SIM_TRAFFIC_CONTROL_TOKEN"),
+                report, timeout=timeout)
+    with (runtime_dir / "update.lock").open("r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if read_json_state(path).get("overlayGeneration") == report.get("overlayGeneration"):
+            path.unlink(missing_ok=True)
+    return True
+
+
+def clear_expired_runtime(runtime_dir: Path, max_age_seconds: int, force: bool = False) -> bool:
     archive = runtime_dir / "traffic.tar"
     state_path = runtime_dir / "applied-edges.json"
     revision_path = runtime_dir / "last-applied.json"
-    if not archive.exists() or not state_path.exists():
+    if not archive.exists():
         return False
-    try:
-        revision = json.loads(revision_path.read_text(encoding="utf-8"))
-        applied_at = float(revision.get("appliedAtEpoch", 0))
-        next_due = revision_recompute_epoch(revision)
-    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
-        applied_at = state_path.stat().st_mtime
-        next_due = 0
-    instant = time.time()
-    if next_due > 0 and instant < next_due:
-        return False
-    if next_due <= 0 and applied_at > 0 and instant - applied_at <= max_age_seconds:
+    # No valid deadline is unsafe, even when the archive was written recently.
+    # Recheck inside the lock: an updater may install a new generation meanwhile.
+    if not force and read_edge_ledger(state_path) is not None and revision_recompute_epoch(read_json_state(revision_path)) > time.time():
         return False
     lock_path = runtime_dir / "update.lock"
     lock_path.touch(mode=0o600, exist_ok=True)
     with lock_path.open("r+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        revision = read_json_state(revision_path)
+        ledger = read_edge_ledger(state_path)
+        if not force and ledger is not None and (revision_recompute_epoch(revision) > time.time() or not ledger):
+            return False
         apply_speeds(archive, state_path, {})
-    revision_path.unlink(missing_ok=True)
+        instant = time.time()
+        previous_report = revision.get("report", {})
+        if isinstance(previous_report, dict) and previous_report.get("routingDataset"):
+            report = {**previous_report, "status": "degraded", "updatedAt": utc_iso(instant),
+                      "usableUntil": utc_iso(instant), "overlayGeneration": uuid.uuid4().hex,
+                      "appliedFlowCount": 0, "appliedEdgeCount": 0,
+                      "detail": "Live speeds expired; routing uses non-current speeds."}
+            atomic_json_state(runtime_dir / "pending-report.json", report)
+            revision["report"] = report
+        revision.update({"appliedAtEpoch": instant, "nextRecomputeAtEpoch": instant})
+        atomic_json_state(revision_path, revision)
     print("Cleared expired Valhalla live speeds while the feed is unavailable or idle.", flush=True)
     return True
+
+
+def expiry_report_loop(config: dict[str, str], runtime_dir: Path, stop: threading.Event) -> None:
+    """A blocked DNS/socket cannot delay the independent local expiry loop."""
+    while not stop.is_set():
+        delay = 1
+        if (runtime_dir / "pending-report.json").exists():
+            try:
+                deliver_pending_report(config, runtime_dir, timeout=2)
+            except (OSError, RuntimeError, TimeoutError, ValueError):
+                delay = 15
+        stop.wait(delay)
+
+
+def watch_expiry(config: dict[str, str]) -> int:
+    """Low-write, local deadline guard, independent of all network latency."""
+    runtime_dir = Path(config.get("TRAFFIC_RUNTIME_DIR", "/run/valhalla-traffic"))
+    max_age = int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800"))
+    stop = threading.Event()
+    threading.Thread(target=expiry_report_loop, args=(config, runtime_dir, stop), daemon=True).start()
+    while True:
+        clear_expired_runtime(runtime_dir, max_age)
+        time.sleep(1)
 
 
 def run(config: dict[str, str]) -> int:
@@ -1063,6 +1169,7 @@ def run(config: dict[str, str]) -> int:
     cache_dir = Path(config.get("TRAFFIC_MAPPING_CACHE_DIR", "/srv/valhalla/traffic-cache"))
     runtime_dir = Path(config.get("TRAFFIC_RUNTIME_DIR", "/run/valhalla-traffic"))
     skeleton = Path(config.get("TRAFFIC_SKELETON", "/srv/valhalla/current/traffic-skeleton.tar"))
+    release_target = skeleton.resolve().parent
     archive = runtime_dir / "traffic.tar"
     state_path = runtime_dir / "applied-edges.json"
     revision_state_path = runtime_dir / "last-applied.json"
@@ -1071,16 +1178,17 @@ def run(config: dict[str, str]) -> int:
     if allow_route_fallback:
         raise RuntimeError("TRAFFIC_OPENLR_ROUTE_FALLBACK is not approved for live speeds; use read-only audits")
     matcher_version = ROUTE_MATCHER_VERSION if allow_route_fallback else MATCHER_VERSION
-
+    clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
     try:
         status, feed = request_json(f"{feed_base_url.rstrip('/')}/feed", token=token)
-    except (OSError, RuntimeError, TimeoutError):
+    except (OSError, RuntimeError, TimeoutError, ValueError):
         clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
         raise
     if status == 204:
         clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
         return 0
     if status != 200 or not isinstance(feed, dict) or feed.get("contractVersion") != "sim-valhalla-live-traffic-feed-v1":
+        clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
         raise RuntimeError("SIM returned an invalid Valhalla traffic feed")
     dataset = routing_dataset(valhalla_url)
     static_revision = str(feed.get("staticRevision", ""))
@@ -1097,8 +1205,10 @@ def run(config: dict[str, str]) -> int:
         path.exists()
         and archive.exists()
         and state_path.exists()
+        and read_edge_ledger(state_path) is not None
         and reusable_traffic_revision(revision_state, dataset, static_revision, dynamic_revision, matcher_version)
     ):
+        deliver_pending_report(config, runtime_dir)
         return 0
     if path.exists():
         mapping = read_gzip_json(path)
@@ -1127,50 +1237,61 @@ def run(config: dict[str, str]) -> int:
         dynamic_revision = str(feed.get("dynamicRevision", ""))
 
     ensure_runtime_archive(archive, skeleton)
-    max_age = int(feed.get("maxAgeSeconds", config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
-    next_recompute_at = next_flow_recompute_epoch(feed, mapping, max_age)
-    speeds, applied_flows, source_observed = current_edge_speeds(feed, mapping, max_age)
-    lock_path = runtime_dir / "update.lock"
-    lock_path.touch(mode=0o600, exist_ok=True)
-    with lock_path.open("r+") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        applied_edges = apply_speeds(archive, state_path, speeds)
+    max_age = min(int(feed.get("maxAgeSeconds", config.get("TRAFFIC_MAX_AGE_SECONDS", "1800"))),
+                  int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
     source_count = int(mapping.get("sourceSegmentCount", 0))
     mapped_count = int(mapping.get("mappedSegmentCount", 0))
     mapped_edge_count = len({int(edge["id"]) for edges in mapping.get("mapping", {}).values() for edge in edges})
     coverage = round(100 * mapped_count / source_count, 2) if source_count else 0
-    report_status = "current" if coverage >= 50 and applied_edges > 0 else "degraded"
-    report = {
-        "routingDataset": dataset,
-        "staticRevision": static_revision,
-        "dynamicRevision": dynamic_revision,
-        "status": report_status,
-        "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "mappedSegmentCount": mapped_count,
-        "mappedEdgeCount": mapped_edge_count,
-        "appliedFlowCount": applied_flows,
-        "appliedEdgeCount": applied_edges,
-        "mappingCoveragePercent": coverage,
-    }
-    if source_observed:
-        report["sourceObservedAt"] = source_observed
-    if report_status != "current":
-        report["detail"] = "No sufficiently covered set of fresh mapped TPEG2 speeds was available."
-    post_report(feed_base_url, token, report)
-    revision_state_path.write_text(
-        json.dumps(
-            {
+    lock_path = runtime_dir / "update.lock"
+    lock_path.touch(mode=0o600, exist_ok=True)
+    with lock_path.open("r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if skeleton.resolve().parent != release_target:
+            raise RuntimeError("Routing release changed while preparing traffic; no speeds applied")
+        instant = time.time()
+        next_recompute_at = next_flow_recompute_epoch(feed, mapping, max_age, instant)
+        speeds, applied_flows, source_observed = current_edge_speeds(feed, mapping, max_age, instant)
+        applied_edges = apply_speeds(archive, state_path, speeds)
+        # A slow archive write may itself cross the deadline. Never publish
+        # current status for a generation that is expired at commit time.
+        instant = time.time()
+        if applied_edges and instant >= next_recompute_at:
+            apply_speeds(archive, state_path, {})
+            applied_edges = applied_flows = 0
+            instant = time.time()
+        if not applied_edges:
+            next_recompute_at = instant
+        report_status = "current" if coverage >= 50 and applied_edges > 0 else "degraded"
+        report = {
+            "routingDataset": dataset,
+            "staticRevision": static_revision,
+            "dynamicRevision": dynamic_revision,
+            "status": report_status,
+            "updatedAt": utc_iso(instant),
+            "usableUntil": utc_iso(next_recompute_at),
+            "overlayGeneration": uuid.uuid4().hex,
+            "mappedSegmentCount": mapped_count,
+            "mappedEdgeCount": mapped_edge_count,
+            "appliedFlowCount": applied_flows,
+            "appliedEdgeCount": applied_edges,
+            "mappingCoveragePercent": coverage,
+        }
+        if source_observed:
+            report["sourceObservedAt"] = source_observed
+        if report_status != "current":
+            report["detail"] = "No sufficiently covered set of fresh mapped TPEG2 speeds was available."
+        atomic_json_state(revision_state_path, {
                 "routingDataset": dataset,
                 "staticRevision": static_revision,
                 "dynamicRevision": dynamic_revision,
                 "matcherVersion": matcher_version,
-                "appliedAtEpoch": time.time(),
+                "appliedAtEpoch": instant,
                 "nextRecomputeAtEpoch": next_recompute_at,
-            }
-        ),
-        encoding="utf-8",
-    )
-    os.chmod(revision_state_path, 0o600)
+                "report": report,
+        })
+        atomic_json_state(runtime_dir / "pending-report.json", report)
+    deliver_pending_report(config, runtime_dir)
     print(json.dumps(report, separators=(",", ":")), flush=True)
     return 0
 
@@ -1395,6 +1516,7 @@ def main() -> int:
     parser.add_argument("--audit-route-fallback", action="store_true")
     parser.add_argument("--audit-direct-matcher", action="store_true")
     parser.add_argument("--audit-graph-matcher", action="store_true")
+    parser.add_argument("--watch-expiry", action="store_true")
     parser.add_argument("--static-cache-file", type=Path)
     parser.add_argument("--baseline-file", type=Path)
     parser.add_argument("--audit-output-dir", type=Path)
@@ -1403,6 +1525,8 @@ def main() -> int:
     args = parser.parse_args()
     config = {**load_env(args.env), **os.environ}
     try:
+        if args.watch_expiry:
+            return watch_expiry(config)
         if args.audit_direct_matcher:
             return audit_direct_matcher(config, args.static_cache_file, args.baseline_file, args.audit_output_dir)
         if args.audit_graph_matcher:

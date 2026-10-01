@@ -1202,8 +1202,48 @@ components:
             type: object
             required: [messageId, observedAt]
             additionalProperties: true
+        sourceTiming:
+          $ref: "#/components/schemas/Tpeg2SourceTiming"
+    Tpeg2SourceTiming:
+      type: object
+      description: Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh; nextRefreshAt respects the agreed upstream minimum interval.
+      required: [freshFlowCount, expiredFlowCount, invalidTimestampFlowCount]
+      additionalProperties: false
+      properties:
+        requestStartedAt:
+          type: string
+          format: date-time
+        lastCheckedAt:
+          type: string
+          format: date-time
+        lastChangedAt:
+          type: string
+          format: date-time
+        upstreamLastModifiedAt:
+          type: string
+          format: date-time
+        nextRefreshAt:
+          type: string
+          format: date-time
+        requestDurationMs:
+          type: number
+          minimum: 0
+        lastResponseStatus:
+          type: integer
+        freshFlowCount:
+          type: integer
+          minimum: 0
+        expiredFlowCount:
+          type: integer
+          minimum: 0
+        invalidTimestampFlowCount:
+          type: integer
+          minimum: 0
+        lastError:
+          type: string
     ValhallaTrafficUpdateReport:
       type: object
+      description: Acknowledgment of the applied archive. New updaters send overlayGeneration on every apply or clear and usableUntil as the earliest deadline of the applied speeds. A legacy current report without both fields remains accepted for compatibility but cannot establish current status. Reports more than 30 seconds in the future or with malformed timestamps are rejected; older or equal-timestamp reports cannot overwrite a newer acknowledgment.
       required: [routingDataset, staticRevision, dynamicRevision, status, updatedAt, mappedSegmentCount, mappedEdgeCount, appliedFlowCount, appliedEdgeCount, mappingCoveragePercent]
       properties:
         routingDataset:
@@ -1221,6 +1261,16 @@ components:
         sourceObservedAt:
           type: string
           format: date-time
+        overlayGeneration:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]+$"
+          description: Opaque generation of the applied archive, including an expiry clear on the same provider revision.
+        usableUntil:
+          type: string
+          format: date-time
+          description: Earliest validity deadline of any applied speed. Equal to updatedAt for a degraded clear. No live-derived cached ETA may be served at or after this deadline.
         mappedSegmentCount:
           type: integer
         mappedEdgeCount:
@@ -1235,6 +1285,7 @@ components:
           type: string
     ValhallaTrafficStatus:
       type: object
+      description: Current requires an acknowledged overlay generation and a future usableUntil. Once the deadline is reached the state becomes stale even if no new provider revision or updater report has arrived. Historical counts do not establish current road coverage or ETA accuracy.
       required: [enabled, state]
       properties:
         enabled:
@@ -1252,6 +1303,13 @@ components:
           type: string
           format: date-time
         sourceObservedAt:
+          type: string
+          format: date-time
+        overlayGeneration:
+          type: string
+          minLength: 1
+          maxLength: 128
+        usableUntil:
           type: string
           format: date-time
         ageSeconds:
