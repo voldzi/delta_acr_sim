@@ -3,9 +3,8 @@ Description=Adaptive Valhalla live-traffic lease poll
 
 [Timer]
 OnBootSec=2min
-OnUnitInactiveSec=60s
-RandomizedDelaySec=5s
-AccuracySec=5s
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
 Persistent=false
 Unit=valhalla-traffic-update.service
 

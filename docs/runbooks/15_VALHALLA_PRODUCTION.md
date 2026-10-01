@@ -288,3 +288,77 @@ SIM deployment and recreate `situation-data-api`. To roll back the operation,
 restore the previous SIM image/commit; do not change the active Valhalla release
 unless Valhalla canaries themselves fail. Technical idempotency snapshots under
 the SIM data volume can remain in place during rollback.
+
+## Traffic freshness release
+
+The implementation in [ADR 0028](../adr/0028_TRAFFIC_FRESHNESS_AND_EXPIRY_BOUNDARY.md)
+adds start-based independent TFP refresh, a local expiry guard, monotonic report
+generations and absolute route-cache deadlines. Local verification is not live
+acceptance. The established conservative map stays active; native decoder
+candidate counts must not be reported as ETA accuracy.
+
+Deploy the additive SIM situation-data-api contract first. Preserve unrelated
+host changes and the current deployment branch. Verify the separately mounted
+X5 UUID `2f93f595-b61b-4eea-9054-7afa9b275b5b` before recreating only that
+service; do not use a stack-wide deployment or change `.env`, provider token,
+API URLs, network or database. Keep the preceding image for rollback.
+
+Then, from the SIM checkout on the Mac, run:
+
+```bash
+bash scripts/install-valhalla-traffic-reliability.sh --check
+bash scripts/install-valhalla-traffic-reliability.sh --install
+```
+
+The installer uses the existing SSH identity and asks for the operator's sudo
+authentication. It refuses a changed graph, active weekly build or canary.
+It verifies Python and unit syntax, pauses only the traffic timer, waits for
+an ongoing traffic update without killing it, and backs up maintenance files
+under a root-only `update-tools/reliability-backup-*` directory. It patches
+`traffic-update.py`, `weekly-update.sh` archive locking, the calendar timer and
+`valhalla-traffic-expiry.service`. Valhalla is not restarted. Install failure
+restores the previous maintenance files and timer state.
+
+### Live acceptance
+
+1. Verify the updater hash and `true healthy` Valhalla state against the checked
+   release. Run the established healthcheck and a finite car route. Record the
+   active symlink and dataset before and after; they must not change.
+2. Trigger one ordinary SIM road route to retain the vehicle lease. Observe
+   three or more TFP cycles through authenticated internal feed/status and
+   journals. Record request starts, response duration, last check, actual
+   content change, HTTP status, source observation and usable-flow counts.
+   Starts must remain at least 300 seconds apart, without accumulated download
+   duration or one-minute poll drift. A TEC error must not discard fresh TFP.
+3. Observe a generation with positive fresh flow/edge counts and an absolute
+   `usableUntil`. After that deadline, the archive must contain no expired
+   applied records, SIM status must not be current and cached live-derived
+   travel times must not be returned. The one-second guard plus bounded local
+   write/report latency is measured, not assumed to be a hard real-time SLA.
+4. Let the lease expire; provider refresh stops, basic routing continues and
+   traffic becomes idle/stale without fabricated timestamps. Confirm walking
+   and bicycle requests do not extend it.
+5. Inspect guard memory/CPU, disk and X5 timing-file permissions. The guard
+   writes only memory-backed runtime state; cadence metadata and normalized SIM
+   cache stay on X5. No licensed content, edge maps or tokens go in public logs.
+
+The phase experiment `SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED` remains false.
+Enable it separately only after HTTP Last-Modified is shown to track regular
+publication. Its synthetic timing tests are not proof about the live provider.
+
+### Traffic rollback
+
+Run the installed root-only
+`/srv/valhalla/update-tools/rollback-traffic-reliability.sh` with the exact
+backup path printed by the installer. It stops only traffic units, clears the
+archive in place under the shared lock, and requires SIM acknowledgement of
+the degraded generation before restoring the maintenance files. If that
+acknowledgement fails, it retains the new expiry protection for retry. It
+restores the previous timer/guard state recorded in the backup. Keep SIM's
+deadline checks active. Do not recreate the Valhalla container, switch the
+graph or delete map releases.
+
+If the SIM service itself must be rolled back, first disable live traffic use
+and clear the archive, then restore only the previous situation-data-api image.
+Rolling SIM back while old current speeds are retained would reintroduce the
+deadline gap. Retain the backup until joint freshness acceptance is complete.

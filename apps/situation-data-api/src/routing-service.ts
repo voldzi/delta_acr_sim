@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { SituationDataConfig } from "./config.js";
 import { DemElevationSampler, type DemTileRef } from "./dem-elevation-sampler.js";
-import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import { ManagedResponseCache, ResponseCacheValueExpiredError, type ManagedResponseCacheStats } from "./response-cache.js";
 import {
   createSituationDataSources,
   fetchRoadSrtiLodEvents,
@@ -705,6 +705,7 @@ interface ValhallaManeuver {
 interface ValhallaRouteRequestOptions {
   alternates?: number;
   linearCostFactors?: ValhallaLinearCostFactor[];
+  liveSpeeds?: ValhallaTrafficPublicStatus;
 }
 
 interface ValhallaLinearCostFactor {
@@ -930,7 +931,8 @@ export class RoutingService {
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
-      maxEntries: config.routingCacheMaxEntries
+      maxEntries: config.routingCacheMaxEntries,
+      usableUntilMs: liveRouteUsableUntilMs
     });
     this.isochroneCache = new ManagedResponseCache<RoutingIsochroneResponse>({
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
@@ -1016,10 +1018,15 @@ export class RoutingService {
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     const request = this.normalizeRouteRequest(raw, 1);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
-    const trafficRevision = getRoutingProfile(request.profileId).transportMode === "road"
-      ? (await this.valhallaTraffic?.status())?.updatedAt ?? "no-overlay"
-      : "non-road";
-    return this.routeCache.getOrLoad(`route:${trafficRevision}:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+    const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
+    const cache = routingTrafficCachePolicy(traffic);
+    try {
+      const response = await this.routeCache.getOrLoad(`route:${cache.revision}:${stablePayload(request)}`, () => this.computeRouteResponse(request), cache);
+      return await this.checkedTrafficRoute(response);
+    } catch (error) {
+      if (error instanceof ResponseCacheValueExpiredError) throw new RoutingError(503, "ROUTING_TRAFFIC_EXPIRED", error.message);
+      throw error;
+    }
   }
 
   async exactRoute(profileId: "walking" | "bicycle", locations: RoutingCoordinate[]): Promise<ExactRoutingResult> {
@@ -1076,10 +1083,15 @@ export class RoutingService {
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
-    const trafficRevision = getRoutingProfile(request.profileId).transportMode === "road"
-      ? (await this.valhallaTraffic?.status())?.updatedAt ?? "no-overlay"
-      : "non-road";
-    return this.routeCache.getOrLoad(`alternatives:${trafficRevision}:${stablePayload(request)}`, () => this.computeRouteResponse(request));
+    const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
+    const cache = routingTrafficCachePolicy(traffic);
+    try {
+      const response = await this.routeCache.getOrLoad(`alternatives:${cache.revision}:${stablePayload(request)}`, () => this.computeRouteResponse(request), cache);
+      return await this.checkedTrafficRoute(response);
+    } catch (error) {
+      if (error instanceof ResponseCacheValueExpiredError) throw new RoutingError(503, "ROUTING_TRAFFIC_EXPIRED", error.message);
+      throw error;
+    }
   }
 
   async isochrone(raw: RoutingIsochroneRequest): Promise<RoutingIsochroneResponse> {
@@ -1109,6 +1121,7 @@ export class RoutingService {
         }
         warnings.push("Valhalla returned no route candidates; falling back to local OSM/PostGIS routing.");
       } catch (error) {
+        if (error instanceof RoutingError && error.code === "ROUTING_TRAFFIC_CHANGED") throw error;
         const message = error instanceof Error ? error.message : "Valhalla routing failed.";
         if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
           warnings.push(`Valhalla routing failed: ${message}`);
@@ -1183,7 +1196,8 @@ export class RoutingService {
     routes: RoutingRoute[],
     warnings: string[],
     backend: "valhalla" | "osm-postgis-graph" = "osm-postgis-graph",
-    trafficContext?: RoutingTrafficContext
+    trafficContext?: RoutingTrafficContext,
+    usedLiveSpeeds?: ValhallaTrafficPublicStatus
   ): Promise<RoutingRouteResponse> {
     const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
     const analyzed = await this.annotateRouteAnalysis(trafficRoutes, request, trafficContext);
@@ -1213,7 +1227,10 @@ export class RoutingService {
         )
       : analyzed;
     const primaryRoute = analysisRoutes.find((route) => route.rank === 1) ?? analysisRoutes[0];
-    const traffic = routingTrafficSummary(trafficContext, analysisRoutes, await this.valhallaTraffic?.status());
+    // Only the captured road-engine request can attest that its ETA used this
+    // overlay. Walking, local graph and direct fallback routes must not inherit
+    // a current status merely because traffic is active elsewhere in SIM.
+    const traffic = routingTrafficSummary(trafficContext, analysisRoutes, usedLiveSpeeds);
     const responseWarnings = [...warnings];
     const requestedRouteCount = requestedRouteCountFromQuery(request);
     if (requestedRouteCount && requestedRouteCount > analysisRoutes.length) {
@@ -1253,11 +1270,18 @@ export class RoutingService {
     request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
     trafficContext?: RoutingTrafficContext
   ): Promise<RoutingRouteResponse> {
-    const response = await requestValhallaRoute(this.config, profile, request, trafficContext);
+    let liveSpeeds = profile.transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
+    if (liveTrafficIsUsable(liveSpeeds)) {
+      const dataset = await requestValhallaStatus(this.config).then(routingDatasetFromStatus).catch(() => undefined);
+      if (!dataset || dataset.version !== liveSpeeds!.routingDataset) {
+        liveSpeeds = { ...liveSpeeds!, state: "warming", detail: "The acknowledged traffic overlay does not match the active routing dataset." };
+      }
+    }
+    const response = await requestValhallaRoute(this.config, profile, request, trafficContext, { liveSpeeds });
     const warnings = valhallaWarnings(response);
     let routes = valhallaRoutes(profile, request, response, request.alternatives);
     if (routes.length > 0 && routes.length < request.alternatives) {
-      const augmented = await this.computeValhallaPenaltyAlternatives(profile, request, trafficContext, routes, request.alternatives);
+      const augmented = await this.computeValhallaPenaltyAlternatives(profile, request, trafficContext, routes, request.alternatives, liveSpeeds);
       routes = augmented.routes;
       warnings.push(...augmented.warnings);
     }
@@ -1272,7 +1296,26 @@ export class RoutingService {
         }))
       );
     }
-    return this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla", trafficContext);
+    const result = await this.routeResponse(generatedAt, profile, request, routes, warnings, "valhalla", trafficContext, liveSpeeds);
+    return this.checkedTrafficRoute(result);
+  }
+
+  private async checkedTrafficRoute(result: RoutingRouteResponse): Promise<RoutingRouteResponse> {
+    const liveSpeeds = result.traffic.liveSpeeds;
+    if (liveSpeeds?.state === "current") {
+      let latest = await this.valhallaTraffic?.status();
+      if (!liveTrafficIsUsable(liveSpeeds) || latest?.state !== "current" || latest.overlayGeneration !== liveSpeeds.overlayGeneration) {
+        throw new RoutingError(503, "ROUTING_TRAFFIC_CHANGED", "Live traffic changed or expired while the route was being calculated; retry the request.");
+      }
+      const dataset = await requestValhallaStatus(this.config).then(routingDatasetFromStatus).catch(() => undefined);
+      latest = await this.valhallaTraffic?.status();
+      if (!dataset || !liveTrafficIsUsable(liveSpeeds) || latest?.state !== "current" ||
+        latest.overlayGeneration !== liveSpeeds.overlayGeneration || dataset.version !== liveSpeeds.routingDataset ||
+        latest.routingDataset !== liveSpeeds.routingDataset) {
+        throw new RoutingError(503, "ROUTING_TRAFFIC_CHANGED", "The routing dataset changed or could not be verified for this live-traffic ETA; retry the request.");
+      }
+    }
+    return result;
   }
 
   private async valhallaRoadAttributes(
@@ -1314,7 +1357,8 @@ export class RoutingService {
     request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
     trafficContext: RoutingTrafficContext | undefined,
     initialRoutes: RoutingRoute[],
-    requestedRouteCount: number
+    requestedRouteCount: number,
+    liveSpeeds?: ValhallaTrafficPublicStatus
   ): Promise<{ routes: RoutingRoute[]; warnings: string[] }> {
     const routes = [...initialRoutes];
     const warnings: string[] = [];
@@ -1331,6 +1375,7 @@ export class RoutingService {
       try {
         const response = await requestValhallaRoute(this.config, profile, request, trafficContext, {
           alternates: 0,
+          liveSpeeds,
           linearCostFactors: [{ coordinates: primaryRoute.geometry.coordinates, factor }]
         });
         const candidate = response.trip ? valhallaRoute(profile, request, response.trip, routes.length + 1) : undefined;
@@ -2845,7 +2890,7 @@ function routingTrafficSummary(
   const hardExclusionApplied = Boolean(context?.hardExclusionsApplied.length) || incidents.some((incident) => incident.action === "hard_exclusion_applied");
   const sourceStatus = combinedTrafficSourceStatus(context?.sourceStatus ?? "disabled", liveSpeeds);
   return {
-    trafficAware: Boolean(context && context.sourceStatus === "ok") || liveSpeeds?.state === "current" || liveSpeeds?.state === "stale",
+    trafficAware: Boolean(context && context.sourceStatus === "ok") || liveTrafficIsUsable(liveSpeeds),
     sourceIds: [...(context && context.sourceStatus !== "disabled" ? (["road_srti_lod"] as const) : []), ...(liveSpeeds?.enabled ? (["tpeg2"] as const) : [])],
     sourceStatus,
     corridorRadiusM: TRAFFIC_ROUTE_CORRIDOR_RADIUS_M,
@@ -2930,6 +2975,30 @@ export function valhallaDepartureTimePayload(
 ): { date_time?: { type: 0 } | { type: 1; value: string } } {
   if (departureTime) return { date_time: { type: 1, value: departureTime.slice(0, 16) } };
   return currentTrafficEnabled ? { date_time: { type: 0 } } : {};
+}
+
+export function routingTrafficCachePolicy(status?: ValhallaTrafficPublicStatus): { revision: string; usableUntilMs?: number } {
+  if (!status) return { revision: "no-overlay" };
+  return {
+    revision: JSON.stringify([status.routingDataset ?? null, status.overlayGeneration ?? status.updatedAt ?? "no-generation", status.state, status.usableUntil ?? null]),
+    ...(status.state === "current" ? { usableUntilMs: liveTrafficIsUsable(status) ? Date.parse(status.usableUntil!) : 0 } : {})
+  };
+}
+
+export function valhallaTrafficSpeedTypes(status?: ValhallaTrafficPublicStatus): string[] {
+  // https://valhalla.github.io/valhalla/api/route/api-reference/#costing-options
+  return ["freeflow", "constrained", "predicted", ...(liveTrafficIsUsable(status) ? ["current"] : [])];
+}
+
+function liveTrafficIsUsable(status?: ValhallaTrafficPublicStatus): boolean {
+  return status?.state === "current" && Boolean(status.overlayGeneration) &&
+    typeof status.routingDataset === "string" && status.routingDataset.length > 0 &&
+    typeof status.usableUntil === "string" && Date.parse(status.usableUntil) > Date.now();
+}
+
+function liveRouteUsableUntilMs(response: RoutingRouteResponse): number | undefined {
+  const status = response.traffic.liveSpeeds;
+  return status?.state === "current" ? (status.usableUntil ? Date.parse(status.usableUntil) : 0) : undefined;
 }
 
 function isHardExclusionCandidate(event: RoutingTrafficEvent): boolean {
@@ -3023,7 +3092,12 @@ async function requestValhallaRoute(
 ): Promise<ValhallaRouteResponse> {
   const costing = effectiveValhallaCosting(profile, request.vehicle);
   const recostings = valhallaRecostings(costing);
-  const departureTime = valhallaDepartureTimePayload(request.departureTime, config.valhallaTrafficEnabled && profile.transportMode === "road");
+  const currentTrafficEnabled = config.valhallaTrafficEnabled && profile.transportMode === "road" && liveTrafficIsUsable(options.liveSpeeds);
+  const departureTime = valhallaDepartureTimePayload(request.departureTime, currentTrafficEnabled);
+  const costingOptions = valhallaCostingOptions(profile, request.avoid, request.vehicle);
+  if (costing === "auto" || costing === "truck") {
+    costingOptions[costing] = { ...costingOptions[costing], speed_types: valhallaTrafficSpeedTypes(options.liveSpeeds) };
+  }
   const snapLimitM = config.routingMaxSnapDistanceM;
   const orderedLocations = [request.from, ...(request.via ?? []), request.to];
   const payload = {
@@ -3036,7 +3110,7 @@ async function requestValhallaRoute(
       search_cutoff: snapLimitM
     })),
     costing,
-    costing_options: valhallaCostingOptions(profile, request.avoid, request.vehicle),
+    costing_options: costingOptions,
     ...valhallaTrafficAvoidancePayload(trafficContext),
     ...valhallaLinearCostFactorsPayload(options.linearCostFactors),
     ...departureTime,
@@ -3697,8 +3771,8 @@ function valhallaCostingOptions(
   profile: RoutingProfile,
   avoid: RoutingAvoid[],
   vehicle?: RoutingRouteRequest["vehicle"]
-): Record<string, Record<string, boolean | number>> {
-  const options: Record<string, Record<string, boolean | number>> = {};
+): Record<string, Record<string, boolean | number | string[]>> {
+  const options: Record<string, Record<string, boolean | number | string[]>> = {};
   const costing = effectiveValhallaCosting(profile, vehicle);
   const base: Record<string, boolean | number> = {};
   if (avoid.includes("bridge")) {

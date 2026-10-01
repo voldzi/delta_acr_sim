@@ -163,8 +163,11 @@ unexpected_failure() {
     local restart_status=1
     local validation_status=1
     if (( switch_status == 0 )); then
-      recreate_production
-      restart_status=$?
+      prepare_runtime_traffic "${ACTIVATION_PREVIOUS_TARGET}"
+      if (( $? == 0 )); then
+        recreate_production
+        restart_status=$?
+      fi
     fi
     if (( restart_status == 0 )); then
       validate_release_profile "${ACTIVATION_PREVIOUS_TARGET}" "${ACTIVATION_BASE_URL}"
@@ -612,16 +615,20 @@ recreate_production() {
   docker compose -f "${COMPOSE_FILE}" up -d --force-recreate --no-deps valhalla >/dev/null
 }
 
-prepare_runtime_traffic() {
+prepare_runtime_traffic() (
   local target=$1
   install -d -m 0755 /run/valhalla-traffic
-  rm -f /run/valhalla-traffic/applied-edges.json /run/valhalla-traffic/last-applied.json
+  # Serialize archive replacement with the updater and independent expiry guard.
+  exec 200>/run/valhalla-traffic/update.lock
+  chmod 0600 /run/valhalla-traffic/update.lock
+  flock -x 200
+  rm -f /run/valhalla-traffic/applied-edges.json /run/valhalla-traffic/last-applied.json /run/valhalla-traffic/pending-report.json
   if [[ -s "${target}/traffic-skeleton.tar" ]]; then
     install -m 0644 "${target}/traffic-skeleton.tar" /run/valhalla-traffic/traffic.tar
   else
     rm -f /run/valhalla-traffic/traffic.tar
   fi
-}
+)
 
 validate_release_profile() {
   local target=$1
@@ -674,8 +681,8 @@ activate_release() {
     recreate_production >/dev/null 2>&1 || true
     fail "Could not atomically switch the current release link."
   }
-  prepare_runtime_traffic "${STAGE_DIR}"
   ACTIVATION_SWITCHED=1
+  prepare_runtime_traffic "${STAGE_DIR}"
   if ! recreate_production; then
     rollback_to "${previous}" "${base_url}"
     fail "New production release could not start; previous release restored."

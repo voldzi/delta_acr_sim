@@ -111,6 +111,7 @@
 - `TPEG2_BASE_URL`
 - `TPEG2_API_TOKEN` (tajný údaj, pouze server-side)
 - `SITUATION_DATA_TPEG2_DYNAMIC_CACHE_TTL_SECONDS` (minimum a výchozí hodnota 300 s)
+- `SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED` (výchozí `false`; experimentální fáze publikace podle HTTP hlavičky, nikoli času měření; zapnout až po ověření cadence)
 - `SITUATION_DATA_TPEG2_STATIC_CACHE_TTL_SECONDS` (výchozí hodnota 86400 s)
 - `TPEG2_REQUEST_TIMEOUT_MS`
 - `TPEG2_MAX_RECORDS`

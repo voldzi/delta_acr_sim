@@ -1,0 +1,23 @@
+[Unit]
+Description=Clear expired Valhalla live speeds independently of provider fetches
+After=docker.service
+ConditionPathExists=/srv/valhalla/.traffic.env
+
+[Service]
+Type=simple
+EnvironmentFile=/srv/valhalla/.traffic.env
+ExecStart=/usr/bin/python3 /srv/valhalla/update-tools/traffic-update.py --watch-expiry
+Restart=on-failure
+RestartSec=5s
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=20%
+MemoryMax=256M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/valhalla-traffic
+
+[Install]
+WantedBy=multi-user.target
