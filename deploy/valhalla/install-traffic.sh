@@ -59,6 +59,13 @@ install -m 0644 "${SOURCE_DIR}/valhalla-traffic-update.timer" /etc/systemd/syste
 install -m 0644 "${SOURCE_DIR}/valhalla-traffic-expiry.service" /etc/systemd/system/valhalla-traffic-expiry.service
 
 traffic_env=$(mktemp)
+# Preserve this reviewed selection pointer across maintenance reinstalls.
+# Ownership and graph identities remain verified by the updater; a candidate
+# is never promoted just because this setting exists.
+reviewed_native_map=''
+if [[ -r "${BASE_DIR}/.traffic.env" ]]; then
+  reviewed_native_map=$(sed -n 's/^TRAFFIC_NATIVE_REVIEWED_MAP=//p' "${BASE_DIR}/.traffic.env" | tail -1)
+fi
 trap 'rm -f -- "${traffic_env}" "${build_config:-}" "${compose_backup}" "${config_backup}"' EXIT
 {
   printf 'SIM_TRAFFIC_FEED_BASE_URL=%s\n' "${SIM_TRAFFIC_FEED_BASE_URL}"
@@ -69,6 +76,7 @@ trap 'rm -f -- "${traffic_env}" "${build_config:-}" "${compose_backup}" "${confi
   printf 'TRAFFIC_SKELETON=%s/current/traffic-skeleton.tar\n' "${BASE_DIR}"
   printf 'TRAFFIC_MAPPING_WORKERS=2\n'
   printf 'TRAFFIC_OPENLR_ROUTE_FALLBACK=false\n'
+  if [[ -n "$reviewed_native_map" ]]; then printf 'TRAFFIC_NATIVE_REVIEWED_MAP=%s\n' "$reviewed_native_map"; fi
   printf 'TRAFFIC_MAX_AGE_SECONDS=1800\n'
 } >"${traffic_env}"
 install -m 0600 "${traffic_env}" "${BASE_DIR}/.traffic.env"

@@ -291,6 +291,34 @@ A successful native build, automated corridor/bearing check or fresh flow does
 not establish ETA accuracy. Do not enable `TRAFFIC_OPENLR_ROUTE_FALLBACK`, copy
 the private candidate map over a live cache or publish these counts as accuracy.
 
+### October 1 same-flow pilot and first-wave selector
+
+The isolated Python Actor pilot is now implemented and its 20:52 CEST run
+passed: 13 forward routes across FRC 1–7 use new edges with unchanged route
+shapes and changed durations; walking/bicycle and unaffected-route controls
+are unchanged. Reverse paths can legitimately use added edges (for example
+via a detour), so this experiment is not independent geographic adjudication.
+The entire 427-reference cohort remains unapproved. A stronger 21:27 CEST
+comparison binds each route to its own reference's directed edges: all 10
+forward routes use their own target edges with identical shapes and changed
+durations; all 10 reverse routes have zero target-edge use and unchanged times.
+Walking/bicycle and unaffected controls remain unchanged. Only this second
+proof is eligible for the first-wave selector, not the earlier neighbouring-edge
+intersection evidence.
+
+A separate opt-in live selector is implemented but **not yet installed or
+enabled**. Operator geographic acceptance of the 10 target-evidenced references is a
+mandatory prerequisite; an automated pilot cannot create that attestation.
+Root creates a private acceptance manifest bound to the exact canary,
+candidate, graph, static revision and immutable baseline. Only those tested
+same-shape forward references can enter this first wave. All existing baseline
+references and edge ownership remain untouched. Runtime reuse is keyed by the
+selection fingerprint; graph/static rotation selects the ordinary baseline,
+and same-graph corruption clears live speeds and fails closed. Explicit
+rollback clears the archive and removes the selection pointer without serving
+container restart. See the production runbook for the operator installation
+and post-install live acceptance, which remain pending.
+
 ## Implementation sequence
 
 1. **Offline core (v1 complete, bounded scope above):** keep the exploratory

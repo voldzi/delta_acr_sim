@@ -121,6 +121,7 @@
 - `VALHALLA_TRAFFIC_MAX_AGE_SECONDS` (výchozí 1800 s)
 - `VALHALLA_TRAFFIC_CACHE_HOST_DIR` (produkčně X5)
 - `VALHALLA_TRAFFIC_CACHE_DIR`
+- `TRAFFIC_NATIVE_REVIEWED_MAP` (pouze `/srv/valhalla/.traffic.env` na routovacím hostu; výchozí prázdné. Ukazuje na soukromý root-owned manifest schválených celých směrových hran, nikdy na kandidátní audit. Při změně grafu/statické revize se použije původní baseline; geografické schválení, instalace a rollback viz [provozní příručka](15_VALHALLA_PRODUCTION.md).)
 - `SITUATION_DATA_WEATHER_RADAR_CACHE_HOST_DIR` (obnovitelná cache, produkčně X5)
 - `OSM_IMPORT_HOST_DIR` (stažitelný PBF a pracovní prostor importu, produkčně X5)
 - `APRS_IS_CALLSIGN` (schválená identita pouze pro příjem; bez ní je APRS vrstva vypnutá)

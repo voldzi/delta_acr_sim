@@ -1152,3 +1152,56 @@ If the SIM service itself must be rolled back, first disable live traffic use
 and clear the archive, then restore only the previous situation-data-api image.
 Rolling SIM back while old current speeds are retained would reintroduce the
 deadline gap. Retain the backup until joint freshness acceptance is complete.
+
+### Reviewed native v2 first-wave selection
+
+`scripts/run-valhalla-native-canary.sh --start` runs a bounded, isolated Python
+Actor A/B comparison on the exact September 29 graph. It does not stop serving
+Valhalla, change its map, open ports or contact a provider directly. A single
+synthetic vehicle route activates the ordinary finite SIM lease; shared quota
+gates remain intact. Snapshot capture waits at most 24 attempts spaced 15 s.
+The sidecar has no network, a read-only graph, 1 CPU, 1.5 GiB memory, a 256 MiB
+temporary filesystem and a 180-second hard bound. Only its own Docker CID is
+cleaned up. Private licensed inputs, route identities and report stay 0600.
+
+The October 1 21:27 CEST proof passed 10 forward and 10 reverse routes over
+classes 1–6, plus walking/bicycle controls. Every forward route used its own
+reference's target edges, with identical shapes and changed times. Every reverse
+route had zero target-edge use and unchanged shape/time. This supersedes the
+earlier 20:52 proof for promotion; an intersection with a neighbour's new edge
+does not qualify a reference. Neither proof establishes correct carriageways.
+Human geographic review therefore remains mandatory, and the report itself
+has `approvedForLive=false`. See the appended A/B evidence in the
+[acceptance record](../archive/audits/2026-10-01_VALHALLA_NATIVE_V2_AND_ADAPTIVE_TIMING.md).
+
+After an operator actually reviews the **10 target-evidenced references**, the root-only
+`deploy/valhalla/install-native-reviewed-map.sh --geographic-review-confirmed`
+can install a first wave, not all 427. The script and its dependencies must be
+staged under `/home/voldzi/valhalla-owned-deploy/native-canary-v2-20261001`.
+The pinned proof and candidate hashes, graph hash and baseline hash must match.
+It leaves the baseline cache untouched and writes a root-owned 0600 acceptance
+artifact, `native-reviewed-<fingerprint>.json`, under the mapping cache.
+`TRAFFIC_NATIVE_REVIEWED_MAP` in `/srv/valhalla/.traffic.env` selects it.
+The default is unset. Do not set this to any shadow/audit/candidate artifact.
+
+The updater verifies root-only ownership, strict acceptance schema, geographic
+attestation, graph inode/size/mtime/ctime identity, baseline SHA and every
+whole-edge/reference ownership claim. The selection fingerprint changes the
+runtime matcher identity, preventing old speed reuse during activation or
+rollback even for the same dynamic feed. A new graph or static revision uses
+its ordinary baseline automatically; it does not rematch or promote the old
+selection. Same-graph corruption clears the traffic archive and fails closed.
+
+Only the traffic timer/updater are briefly paused for installation. Serving
+Valhalla and its independent expiry guard remain running. The installer backs
+up only the updater and protected traffic environment and restores them on
+failure, clearing live speeds first. For a deliberate return to baseline, run
+the same staged root-only script with `--rollback`; this removes the pointer,
+clears live speeds and recomputes using baseline without container restart.
+Do not restore a pre-expiry-protection image or delete provider quota files.
+
+Configuration installation while the feed is idle is **not** positive live
+acceptance. Subsequently require fresh application, the fingerprinted matcher
+in runtime state, expected edge/flow counts, healthy routing, no wrong-road
+reports and measured expiry clearing. No unchanged/expired speed is relabelled
+as fresh, and no ETA-accuracy percentage follows from this comparison.

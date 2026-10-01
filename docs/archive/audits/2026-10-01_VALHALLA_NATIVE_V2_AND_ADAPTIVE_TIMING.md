@@ -269,3 +269,116 @@ to `0755`, and its SHA256 matches the published source:
 `c57c8b7367fe641b954ee225813e950fcf310df5e4cf33677e1b3bf5e26a80f7`.
 This metadata-only correction did not restart ordinary Valhalla or activate
 the native candidate map.
+
+## Subsequent authorized same-flow A/B pilot, 20:52 CEST
+
+After the deployment request, `scripts/run-valhalla-native-canary.sh --start`
+staged a new graph-native pilot, not the historical v3 canary. Ordinary
+Valhalla stayed running with its original September 29 start time, healthy
+and restart count zero. No serving traffic archive or map cache was changed.
+The isolated sidecar was network-disabled, read-only except its private
+result directory and temporary traffic copy, bounded to 1 CPU / 1.5 GiB and
+180 seconds. It used the pinned image's Python Actor with a fixed local
+departure time and the same normalized SIM snapshot for both variants.
+
+The initial snapshot was expired: 45 candidate records had validity ending
+20:46:33 CEST. The pilot did not lengthen expiry or bypass quota. It waited
+for the scheduled refresh at 20:51:55 CEST. The subsequent valid snapshot
+enabled the comparison, completed at **20:52:47.705559 CEST**.
+
+| Check | Observed result |
+| --- | --- |
+| Existing baseline applied edges in private copy | 56,255 |
+| New candidate fresh flow records | 50 |
+| New candidate applied directed edges | 311 |
+| Forward routes, FRC 1–7 | 13/13 paired, using added edges |
+| Forward shapes changed | 0 |
+| Forward duration changes | 13; range -78.419 to +13.285 seconds |
+| Reverse routes | 13/13 paired; 0 shape changes |
+| Reverse duration delta range | -56.174 to 0 seconds |
+| Walking / bicycle controls | Both paired, identical shape and time |
+| Routes using no added edge in either variant | Identical shape and time |
+| Snapshot valid at completion | Yes |
+| Automated pilot passed | Yes |
+| Geographic / live approval | Still false / required |
+
+Reverse-duration changes were observed on routes using added directed edges;
+these may be lawful detours, but do not independently establish carriageway
+correctness. Do not describe this as all opposite-direction routes unchanged.
+This is evidence of functional current-speed consumption, not ETA accuracy.
+
+Private report SHA256:
+`4dbea53c60d4d62a814ed17e1928b2a32f13662444fd64cfc90cbe5004426984`.
+Candidate artifact SHA256:
+`5d6b5799178391ad04a5b37a16ce69dc9b6e1db7554ee02e14c302ce917b0029`.
+Both remain in operator-only directories / ignored local data, never Git.
+
+The launcher returned status 1 **after** the successful report because its
+EXIT cleanup used `read` on Docker's non-newline-terminated CID file under
+`set -e`. This did not invalidate the completed Actor comparison or leave a
+container running. The cleanup was fixed to consume that case; its own empty
+control directory was removed after verifying the container was absent.
+The private report was independently recovered and checked. The corrected
+launcher had syntax/fixture verification at that point. A second live computation
+was subsequently completed as recorded below.
+
+The separate reviewed first-wave selector and rollback are prepared. It can
+accept only the 10 target-evidenced, same-shape forward references after **actual
+operator geographic review**, not all 427. It is not installed/activated yet.
+The limited maintenance key cannot perform that protected install; the
+operator must run the staged root-only installer after the geographic gate.
+Nine new pilot tests, thirteen selector/promotion tests, the existing updater
+suite, 37 expiry tests, physical-inspection test and skeleton checks passed.
+No REST contract changed; binding OpenAPI remains unchanged.
+
+The selector suite includes complete synthetic speed-archive activation and
+rollback for the same dynamic revision: the baseline cache stays byte-identical,
+the runtime matcher changes, and the added edge is physically zero after return.
+The application's full 300 tests, typecheck and build passed again after the
+deployment tooling changes. Installed runtime updater hash still remains
+`372b591ecea8cc5760a79f062a9c3c0590cb2bc054ba6d77d6f1f21b257a41a6`;
+new `49d9fc32f945a201290d777cb868b55e19c4bfb99ac806e62cfa32279a3f8289`
+is only staged. The local Python Actor reports version 3.8.3, matching the
+serving image. Serving Valhalla remains healthy with restart count zero.
+
+`scripts/prepare-native-geographic-review.py` generated an ignored 0600
+operator sheet with 10 numbered target-evidenced sketches and optional user-clicked OSM links.
+It makes no network requests automatically and grants no approval. The sketches
+show source point order and candidate direction but omit surrounding roads;
+the operator must independently establish the actual road/carriageway before
+using the installer confirmation flag. This is not a public dataset export.
+
+### Target-specific proof, 21:27 CEST
+
+The second isolated same-snapshot Actor 3.8.3 computation completed at
+2026-10-01 19:27:47 UTC. Its private report SHA-256 is
+`faa70eef659aaf91029e41b2c2fcdac65bead2c14a99a07447b3c5aada714d70`.
+It is the only pinned promotion proof; the previous 13-route report is historical.
+
+| Check | Result |
+| --- | --- |
+| Baseline applied directed edges | 45,286 |
+| Candidate fresh records / directed edges | 40 / 231 |
+| Forward routes using their own target edges | 10/10, FRC 1–6 |
+| Forward shape changes | 0 |
+| Forward time changes | 10; -107.471 to +40.500 seconds |
+| Reverse routes using target edges | 0/10 |
+| Reverse shape / time changes | 0 / 0 |
+| Walking, bicycle and unaffected controls | Unchanged shape/time |
+| Snapshot still valid at completion | Yes |
+| Geographic review / live approval | Still required / false |
+
+The launcher returned status 2 after this successful computation because its
+source was edited during execution and Bash resumed reading at a shifted offset.
+The private report was independently recovered and verified; no pilot container
+remained and serving Valhalla stayed healthy with zero restarts. The launcher
+now parses its full `main` body before executing it. Syntax/local tests verify
+that repair; another live run has not been performed merely to retest transport.
+
+Promotion requires positive reference-specific target-edge evidence, not an
+intersection with any neighbouring addition. The builder pins this report and
+Actor version 3.8.3. A private 10-section review sheet is available locally at
+`data/valhalla/tmc/native-first-wave-target-review-20261001.html` (ignored, 0600).
+The operator-only installer remains staged, not installed. This proves that
+current segment speeds can change route duration; it does not measure ETA
+accuracy against actual journeys.

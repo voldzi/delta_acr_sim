@@ -85,3 +85,17 @@ Missing/invalid timestamps or a corrupt applied-edge ledger fail closed. A
 provider/report outage removes live-speed authority without exposing raw data
 or replacing the traffic feed with a public browser integration. See
 [ADR 0028](../adr/0028_TRAFFIC_FRESHNESS_AND_EXPIRY_BOUNDARY.md).
+
+Reviewed native additions are a separate operator-controlled boundary. Neither
+the shadow decoder nor an A/B pass creates geographic approval. The optional
+selection is a bounded, root-owned 0600 regular file opened without symlink
+following; strict acceptance, baseline hash, exact graph file identity and all
+directed-edge ownership claims are checked before use. A graph/static change
+returns to baseline; same-graph corruption clears the archive and fails closed.
+The first-wave builder accepts only the 10 privately target-evidenced forward paths
+after actual operator geographic review. Audit records, shapes and the review
+sheet stay private and are never sent to COP public clients or included in Git.
+The isolated pilot has no network and no production-writable graph/traffic
+mount; only its own temporary archive and result directory are writable. No
+provider credentials are transferred, and the normalized snapshot is fetched
+only through SIM's existing authenticated internal boundary.

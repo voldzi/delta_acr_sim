@@ -20,6 +20,7 @@ import re
 import os
 from pathlib import Path
 import shutil
+import stat as stat_module
 import struct
 import subprocess
 import sys
@@ -840,6 +841,87 @@ def read_gzip_json(path: Path) -> Any:
         return json.load(stream)
 
 
+def reviewed_native_selection(config: dict[str, str], dataset: str, static_revision: str,
+                              release: Path, baseline_path: Path) -> tuple[dict[str, Any] | None, str]:
+    """Explicit, root-owned reviewed addition. Never promotes an audit artifact.
+
+    A new weekly graph falls back to its ordinary baseline. A damaged approval
+    on the same graph fails closed; the independent expiry guard stays active.
+    Only exact whole-edge additions, disjoint from ALL baseline claims, enter.
+    """
+    setting = config.get("TRAFFIC_NATIVE_REVIEWED_MAP", "")
+    if not setting:
+        return None, MATCHER_VERSION
+    path = Path(setting)
+    if (not path.is_absolute() or path.is_symlink() or
+            path.parent != Path(config.get("TRAFFIC_MAPPING_CACHE_DIR", "/srv/valhalla/traffic-cache")) or
+            not re.fullmatch(r"native-reviewed-[0-9a-f]{20}\.json", path.name)):
+        raise RuntimeError("Invalid reviewed native selection path")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        stat = os.fstat(stream.fileno())
+        if (not stat_module.S_ISREG(stat.st_mode) or stat.st_uid != 0 or
+                stat.st_mode & 0o077 or stat.st_size > 8 * 1024 * 1024):
+            raise RuntimeError("Reviewed native selection must be a private root-owned file")
+        raw = stream.read(8 * 1024 * 1024 + 1)
+    if len(raw) > 8 * 1024 * 1024:
+        raise RuntimeError("Reviewed native selection exceeded size bound")
+    selection = json.loads(raw)
+    expected = {"contractVersion", "approvedForLive", "geographicAttestation", "routingDataset", "staticRevision",
+                "releaseTarget", "graphIdentity", "graphSha256", "baselineSha256", "candidateSha256",
+                "canarySha256", "acceptedAt", "mapping"}
+    if (not isinstance(selection, dict) or set(selection) != expected or
+            selection["contractVersion"] != "sim-native-reviewed-live-map-v1" or selection["approvedForLive"] is not True or
+            selection["geographicAttestation"] != "operator-geographic-review-v1" or
+            parse_iso_timestamp(selection["acceptedAt"]) is None or
+            any(not isinstance(selection[name], str) or not re.fullmatch(r"[0-9a-f]{64}", selection[name])
+                for name in ("graphSha256", "baselineSha256", "candidateSha256", "canarySha256"))):
+        raise RuntimeError("Reviewed native selection has no valid acceptance")
+    if selection["routingDataset"] != dataset or selection["staticRevision"] != static_revision:
+        print("Reviewed native selection does not apply to the active graph/static revision; using baseline.", flush=True)
+        return None, MATCHER_VERSION
+    graph = release / "valhalla_tiles.tar"
+    graph_stat = graph.stat()
+    identity = {"device": graph_stat.st_dev, "inode": graph_stat.st_ino, "size": graph_stat.st_size,
+                "mtimeNs": graph_stat.st_mtime_ns, "ctimeNs": graph_stat.st_ctime_ns}
+    if selection["releaseTarget"] != str(release) or selection["graphIdentity"] != identity:
+        raise RuntimeError("Reviewed native graph identity changed")
+    with baseline_path.open("rb") as stream:
+        baseline_hash = hashlib.file_digest(stream, "sha256").hexdigest()
+    if baseline_hash != selection["baselineSha256"]:
+        raise RuntimeError("Reviewed native baseline identity changed")
+    baseline = read_gzip_json(baseline_path)
+    if (baseline.get("matcherVersion") != MATCHER_VERSION or baseline.get("routingDataset") != dataset or
+            baseline.get("staticRevision") != static_revision or not isinstance(baseline.get("mapping"), dict)):
+        raise RuntimeError("Reviewed native baseline contract mismatch")
+    owned = {int(edge["id"]) for edges in baseline["mapping"].values() for edge in edges}
+    mapping = selection["mapping"]
+    if not isinstance(mapping, dict) or not 1 <= len(mapping) <= 427:
+        raise RuntimeError("Reviewed native selection size invalid")
+    for ident, edges in mapping.items():
+        if not isinstance(ident, str) or not ident or ident in baseline["mapping"] or not isinstance(edges, list) or not 1 <= len(edges) <= 1024:
+            raise RuntimeError("Reviewed native reference conflict")
+        for edge in edges:
+            if (not isinstance(edge, dict) or set(edge) != {"id"} or type(edge["id"]) is not int or
+                    not 0 <= edge["id"] < 2**46 or edge["id"] & 7 > 2 or edge["id"] in owned):
+                raise RuntimeError("Reviewed native directed edge conflict")
+            owned.add(edge["id"])
+    fingerprint = hashlib.sha256(raw).hexdigest()
+    if path.name != f"native-reviewed-{fingerprint[:20]}.json":
+        raise RuntimeError("Reviewed native filename fingerprint mismatch")
+    return selection, f"openlr-trace-v2+native-reviewed-v2-{fingerprint[:20]}"
+
+
+def merge_reviewed_native(baseline: dict[str, Any], selection: dict[str, Any] | None,
+                          matcher_version: str) -> dict[str, Any]:
+    if selection is None:
+        return baseline
+    mapping = {**baseline["mapping"], **selection["mapping"]}
+    if len(mapping) > int(baseline["sourceSegmentCount"]):
+        raise RuntimeError("Reviewed native additions exceed source reference count")
+    return {**baseline, "matcherVersion": matcher_version, "mapping": mapping, "mappedSegmentCount": len(mapping)}
+
+
 def ensure_runtime_archive(runtime_archive: Path, skeleton: Path) -> None:
     runtime_archive.parent.mkdir(parents=True, exist_ok=True)
     if runtime_archive.exists():
@@ -1386,7 +1468,7 @@ def run(config: dict[str, str]) -> int:
     allow_route_fallback = config.get("TRAFFIC_OPENLR_ROUTE_FALLBACK", "false").lower() == "true"
     if allow_route_fallback:
         raise RuntimeError("TRAFFIC_OPENLR_ROUTE_FALLBACK is not approved for live speeds; use read-only audits")
-    matcher_version = ROUTE_MATCHER_VERSION if allow_route_fallback else MATCHER_VERSION
+    matcher_version = MATCHER_VERSION
     clear_expired_runtime(runtime_dir, int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")))
     try:
         status, feed = request_json(f"{feed_base_url.rstrip('/')}/feed", token=token)
@@ -1406,7 +1488,15 @@ def run(config: dict[str, str]) -> int:
     dynamic_revision = str(feed.get("dynamicRevision", ""))
     if not static_revision or not dynamic_revision:
         raise RuntimeError("SIM traffic feed has no revision identifiers")
-    path = mapping_path(cache_dir, dataset, static_revision, matcher_version)
+    # The accepted baseline cache is immutable. Selection fingerprints belong
+    # only in runtime generations, so activation/rollback cannot reuse speeds
+    # from a different selection even when the dynamic feed is unchanged.
+    path = mapping_path(cache_dir, dataset, static_revision, MATCHER_VERSION)
+    try:
+        selection, matcher_version = reviewed_native_selection(config, dataset, static_revision, release_target, path)
+    except (OSError, ValueError, RuntimeError):
+        clear_expired_runtime(runtime_dir, max_age, force=True)
+        raise
     mapping_built = False
     try:
         revision_state = json.loads(revision_state_path.read_text(encoding="utf-8"))
@@ -1426,7 +1516,7 @@ def run(config: dict[str, str]) -> int:
         return 0
     if path.exists():
         mapping = read_gzip_json(path)
-        if mapping.get("matcherVersion") != matcher_version:
+        if mapping.get("matcherVersion") != MATCHER_VERSION:
             raise RuntimeError("Traffic mapping cache was built by a different matcher")
     else:
         query = urlencode({"includeStatic": "true"})
@@ -1438,6 +1528,8 @@ def run(config: dict[str, str]) -> int:
         mapping = build_mapping(valhalla_url, dataset, static_revision, static_feed["segments"], workers, allow_route_fallback)
         write_gzip_json(path, mapping)
         mapping_built = True
+
+    mapping = merge_reviewed_native(mapping, selection, matcher_version)
 
     if mapping_built:
         latest_status, latest_feed = request_json(f"{feed_base_url.rstrip('/')}/feed", token=token)
@@ -1770,6 +1862,7 @@ def main() -> int:
     parser.add_argument("--audit-direct-matcher", action="store_true")
     parser.add_argument("--audit-graph-matcher", action="store_true")
     parser.add_argument("--watch-expiry", action="store_true")
+    parser.add_argument("--clear-live-speeds", action="store_true", help="Operator rollback: physically clear the current speed archive without network access")
     parser.add_argument("--static-cache-file", type=Path)
     parser.add_argument("--baseline-file", type=Path)
     parser.add_argument("--audit-output-dir", type=Path)
@@ -1778,6 +1871,10 @@ def main() -> int:
     args = parser.parse_args()
     config = {**load_env(args.env), **os.environ}
     try:
+        if args.clear_live_speeds:
+            clear_expired_runtime(Path(config.get("TRAFFIC_RUNTIME_DIR", "/run/valhalla-traffic")),
+                                 int(config.get("TRAFFIC_MAX_AGE_SECONDS", "1800")), force=True)
+            return 0
         if args.watch_expiry:
             return watch_expiry(config)
         if args.audit_direct_matcher:
