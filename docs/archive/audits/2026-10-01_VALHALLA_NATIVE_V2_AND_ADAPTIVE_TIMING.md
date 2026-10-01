@@ -256,3 +256,16 @@ Map build/activation and healthcheck results were successful; the expiry guard
 was active with success status. The current symlink and dataset were unchanged.
 The weekly timer remained active with next scheduled build October 4,
 00:42:12 UTC. Valhalla had 32 GiB free. No experiment was running or selected.
+
+The final read-only service inspection confirmed `ExecStartPre` invokes
+`valhalla-codex-maintenance prune-old-releases` before each weekly build.
+The installed weekly updater matches the repository SHA256
+`07bd5e3c6f93f5a94cc36443a4d1f7627316b96e23562527a3e25f42e208e8e2`.
+This verifies the pre-build cleanup is installed; it is not a guarantee that
+future source sizes will fit the disk.
+
+The private offline wrapper's deployed executable permission was corrected
+to `0755`, and its SHA256 matches the published source:
+`c57c8b7367fe641b954ee225813e950fcf310df5e4cf33677e1b3bf5e26a80f7`.
+This metadata-only correction did not restart ordinary Valhalla or activate
+the native candidate map.
