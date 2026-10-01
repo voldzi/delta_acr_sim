@@ -152,6 +152,16 @@ actual HTTP start and content-change times, verify a fresh apply and expiry
 clear, verify idle behavior and ordinary road routing, and confirm X5 mount
 and updater hashes. This is freshness acceptance, not measured ETA accuracy.
 Native OpenLR activation still requires ADR 0029's graph and geographic gates.
+
+The opt-in adaptive publication clock also handles at most one second of
+near-boundary timer lateness: if a nominal phase is just before the configured
+request floor, the next request is delayed to that floor instead of skipping
+another entire publication period. It never requests before that floor,
+shortens an existing durable reservation, changes source observation/expiry
+or catches up a large phase miss. The live October 1 trace demonstrated the
+bug with a four-millisecond late start; synthetic boundary regressions cover
+1, 4, 999, 1000 and 1001 milliseconds. Larger misses retain ordinary phase
+selection. No continuous source-freshness guarantee follows from this policy.
 The [1 October deployment evidence](../archive/audits/2026-10-01_VALHALLA_TRAFFIC_RELIABILITY_ACCEPTANCE.md)
 records current generations, physical zeroing after expiry, ordinary routing,
 three observed eligible TFP starts and independently confirmed natural idle.
