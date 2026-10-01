@@ -1205,3 +1205,13 @@ acceptance. Subsequently require fresh application, the fingerprinted matcher
 in runtime state, expected edge/flow counts, healthy routing, no wrong-road
 reports and measured expiry clearing. No unchanged/expired speed is relabelled
 as fresh, and no ETA-accuracy percentage follows from this comparison.
+
+October 1 live state: the operator installed the first wave with geographic
+confirmation. The 19:54 UTC updater used
+`openlr-trace-v2+native-reviewed-v2-c73c57a36b97413e92b0`, mapping 35,649
+references and 305,028 directed edges. Of 67 newly selected edges, 28 had
+active fresh speeds in the inspected generation. The subsequent SIM synthetic
+vehicle route passed current-generation/dataset/validity checks with HTTP 200;
+Valhalla remained healthy and was not restarted. This is a limited first-wave
+technical acceptance, not approval of all 427 candidates or measured ETA accuracy.
+See the [live acceptance record](../archive/audits/2026-10-01_VALHALLA_NATIVE_V2_AND_ADAPTIVE_TIMING.md).

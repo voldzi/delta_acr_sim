@@ -317,7 +317,13 @@ selection fingerprint; graph/static rotation selects the ordinary baseline,
 and same-graph corruption clears live speeds and fails closed. Explicit
 rollback clears the archive and removes the selection pointer without serving
 container restart. See the production runbook for the operator installation
-and post-install live acceptance, which remain pending.
+and post-install live acceptance. Subsequent October 1 operator installation
+and bounded live acceptance are now recorded in the production runbook/audit:
+10 references / 67 edges selected, 28 new edges received actual fresh speeds,
+SIM current-generation route passed, and physical speeds/ledger cleared after
+natural expiration. The above pending state describes preparation before that
+operator installation, not the current first-wave deployment. Remaining
+candidates and independent ETA accuracy remain unapproved/unmeasured.
 
 ## Implementation sequence
 

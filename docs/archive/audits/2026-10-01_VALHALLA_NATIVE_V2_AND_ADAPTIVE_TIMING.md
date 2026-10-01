@@ -382,3 +382,49 @@ Actor version 3.8.3. A private 10-section review sheet is available locally at
 The operator-only installer remains staged, not installed. This proves that
 current segment speeds can change route duration; it does not measure ETA
 accuracy against actual journeys.
+
+### Operator installation and live application, 21:54–21:55 CEST
+
+The operator executed the staged root installer with
+`--geographic-review-confirmed`. This records operator attestation; it is not
+independent evidence of observed journey-time accuracy. Installed updater SHA-256
+matches `49d9fc32f945a201290d777cb868b55e19c4bfb99ac806e62cfa32279a3f8289`.
+Serving Valhalla remained healthy with restart count zero; update timer and the
+independent expiry service remained active, and updater runs succeeded.
+
+The first fresh vehicle lease was requested through SIM at 19:53:13 UTC.
+Its initial response was correctly `warming`, not positive acceptance. At
+19:54:06 UTC the updater applied the reviewed selection:
+
+| Live application check | Observed result |
+| --- | --- |
+| Runtime matcher | `openlr-trace-v2+native-reviewed-v2-c73c57a36b97413e92b0` |
+| Mapped reference segments | 35,649 (baseline 35,639 + 10) |
+| Mapped directed edges | 305,028 (baseline 304,961 + 67) |
+| Applied fresh flows / directed edges | 4,810 / 39,295 |
+| New reviewed edges in active ledger | 28 of 67 |
+| Source observation / usable until | 19:51:01 / 19:56:56 UTC |
+
+The 19:55:11 UTC SIM verifier returned `technical_sample_pass`: synthetic
+Prague car route HTTP 200, active current generation acknowledged by SIM,
+matching September 29 dataset, bounded validity and unauthorized control
+requests rejected with HTTP 401. Route output was 5,618 m / 805 seconds; this
+is a smoke result, not a paired accuracy comparison with the earlier warming
+response. Provider returned 7,043 fresh records, no invalid timestamps and no
+provider error. No raw records, reference IDs or geometry were disclosed.
+Natural expiration/physical clearing is recorded separately below.
+
+At 19:55:36 UTC, read-only physical inspection found exactly 39,295 nonzero
+speed records and 39,295 ledger entries, matching the report. The generation
+deadline was 19:56:56 UTC. The independent expiry service logged its natural
+clear at 19:57:03 UTC (approximately seven seconds after the deadline). At
+19:57:32 UTC, inspection confirmed **zero** nonzero speed records and an empty
+edge ledger, with `degraded`/zero-applied state; no source timestamps or validity
+were extended. Serving Valhalla still reported healthy with restart count zero.
+The SIM route acceptance prevents expired generations being presented as
+current; this record does not claim zero physical-clearing latency.
+
+This completes the bounded first-wave deployment check: installed identity,
+fingerprinted matcher, real new-edge application, SIM route acceptance and
+natural expiry clearing. It is not national rollout of the other 417 references,
+long-term provider availability, or independently measured ETA accuracy.
