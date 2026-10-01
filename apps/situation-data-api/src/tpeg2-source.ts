@@ -466,7 +466,14 @@ export class Tpeg2Source {
     const publicationMarginMs = 15000;
     const anchor = modifiedAt + publicationMarginMs;
     const earliest = Math.max(startedAt + intervalMs, Date.now() + 1);
-    const next = anchor + Math.max(0, Math.ceil((earliest - anchor) / publicationIntervalMs)) * publicationIntervalMs;
+    const phasedNext = anchor + Math.max(0, Math.ceil((earliest - anchor) / publicationIntervalMs)) * publicationIntervalMs;
+    const previousSlot = phasedNext - publicationIntervalMs;
+    // A timer can start a few milliseconds after its phase. Rounding that
+    // boundary up to another full publication period loses a usable cycle.
+    // Delay that near-boundary slot to the hard floor instead, never shorten
+    // the floor or make a catch-up request. Larger phase misses stay bounded
+    // by the ordinary phased policy; this is not a freshness guarantee.
+    const next = previousSlot <= earliest && earliest - previousSlot <= 1000 ? earliest : phasedNext;
     state.nextAttemptAtMs = next;
     state.nextAttemptMonotonicMs = startedMonotonic + (next - startedAt);
     state.restartNextAttemptAtMs = next;

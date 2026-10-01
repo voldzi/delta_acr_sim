@@ -618,6 +618,26 @@ describe("TPEG2 independent refresh scheduling", () => {
     }
   );
 
+  it.each([1, 4, 999, 1000])("does not skip a full generation when the timer is %s ms late", async (latenessMs) => {
+    seedClock();
+    await vi.advanceTimersByTimeAsync(latenessMs);
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) =>
+      new Response(pathOf(input).endsWith("tfp-dynamic") ? flowXml() : document("TFP", ""),
+        { headers: { "Last-Modified": new Date(initialTime - 15000).toUTCString() } })));
+    const snapshot = await source({ tpeg2AlignToLastModified: true }).trafficSnapshot();
+    expect(snapshot.sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + latenessMs + 300000).toISOString());
+  });
+
+  it("does not treat a larger phase miss as near-boundary timer jitter", async () => {
+    seedClock();
+    await vi.advanceTimersByTimeAsync(1001);
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) =>
+      new Response(pathOf(input).endsWith("tfp-dynamic") ? flowXml() : document("TFP", ""),
+        { headers: { "Last-Modified": new Date(initialTime - 15000).toUTCString() } })));
+    const snapshot = await source({ tpeg2AlignToLastModified: true }).trafficSnapshot();
+    expect(snapshot.sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + 600000).toISOString());
+  });
+
   it("keeps phase alignment disabled unless explicitly configured", async () => {
     seedClock();
     vi.stubGlobal(
