@@ -342,9 +342,22 @@ restores the previous maintenance files and timer state.
    writes only memory-backed runtime state; cadence metadata and normalized SIM
    cache stay on X5. No licensed content, edge maps or tokens go in public logs.
 
-The phase experiment `SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED` remains false.
-Enable it separately only after HTTP Last-Modified is shown to track regular
-publication. Its synthetic timing tests are not proof about the live provider.
+`SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED` is opt-in, default false. The
+revised policy re-anchors each valid generation and learns a bounded median
+cadence from two or more consecutive unskipped Last-Modified changes, with a
+15-second margin. It never shortens the configured/monotonic request floor,
+changes expiry, or uses fetch time as measurement time. Bad/regressing/old
+hints revert to start-based scheduling. The October 1 trace observed 303–304
+second generations and stale responses after 300-second start drift. This
+supports a monitored opt-in trial, not a continuous freshness guarantee.
+Confirm three consecutive distinct generations, source observation/expiry,
+request starts at least 300 seconds apart, positive application and local
+expiry after enabling. Synthetic two-hour drift tests alone are not live
+provider evidence. Roll back timing by setting the flag false and recreating
+only situation-data-api, retaining its persisted quota gate on X5.
+The [1 October acceptance record](../archive/audits/2026-10-01_VALHALLA_TRAFFIC_RELIABILITY_ACCEPTANCE.md)
+separates installed-release, expiry, cadence and idle checks from observed
+source freshness gaps. HTTP 200/304 does not guarantee usable flow records.
 
 ### Traffic rollback
 

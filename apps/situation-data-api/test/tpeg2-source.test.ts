@@ -593,10 +593,10 @@ describe("TPEG2 independent refresh scheduling", () => {
     const value = source({ tpeg2AlignToLastModified: true });
     value.retainTrafficUntil(initialTime + 1000000);
     await vi.advanceTimersByTimeAsync(40000);
-    expect((await value.trafficSnapshot()).sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + 311000).toISOString());
+    expect((await value.trafficSnapshot()).sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + 316000).toISOString());
     await vi.advanceTimersByTimeAsync(311000);
     await vi.advanceTimersByTimeAsync(300000);
-    expect(started.map((time) => time - initialTime)).toEqual([0, 311000, 611000]);
+    expect(started.map((time) => time - initialTime)).toEqual([0, 316000, 616000]);
     expect(started.slice(1).every((time, index) => time - started[index]! >= 300000)).toBe(true);
   });
 
@@ -631,5 +631,54 @@ describe("TPEG2 independent refresh scheduling", () => {
     );
     const snapshot = await source().trafficSnapshot();
     expect(snapshot.sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + 300000).toISOString());
+  });
+
+  it("tracks 303–304 second publication drift for two hours without renewing source expiry or increasing quota", async () => {
+    seedClock();
+    const started: number[] = [];
+    const generations: number[] = [];
+    const firstModifiedAt = initialTime - 299000;
+    const period = 304000;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (!pathOf(input).endsWith("tfp-dynamic")) return new Response(document("TFP", ""));
+      started.push(Date.now());
+      const modifiedAt = firstModifiedAt + Math.floor((Date.now() - firstModifiedAt) / period) * period;
+      generations.push(modifiedAt);
+      const expiry = new Date(modifiedAt + 240000).toISOString();
+      return new Response(document("TFP", `<mmt><optionMMCPartLink><messageID>42</messageID><partID>2</partID>
+        <messageExpiryTime>${expiry}</messageExpiryTime></optionMMCPartLink></mmt>
+        <method><optionFlowStatus><startTime>${new Date(modifiedAt).toISOString()}</startTime>
+        <status><averageSpeed>50</averageSpeed></status></optionFlowStatus></method>`),
+        { headers: { "Last-Modified": new Date(modifiedAt).toUTCString() } });
+    }));
+    const value = source({ tpeg2AlignToLastModified: true });
+    value.retainTrafficUntil(initialTime + 7200000);
+    await vi.advanceTimersByTimeAsync(7200000);
+    expect(started.length).toBeGreaterThan(20);
+    expect(started.slice(1).every((time, index) => time - started[index]! >= 300000)).toBe(true);
+    expect(started.slice(2).every((time, index) => time - generations[index + 2]! < 60000)).toBe(true);
+    expect(started.slice(-10).map((time, i, all) => i ? time - all[i - 1]! : 0).slice(1)).toEqual(Array(9).fill(period));
+    const snapshot = await value.trafficSnapshot();
+    expect(snapshot.flows[0]?.validUntil).toBe(new Date(generations.at(-1)! + 240000).toISOString());
+    expect(new Date(snapshot.flows[0]!.observedAt).getTime()).toBe(generations.at(-1));
+    await vi.advanceTimersByTimeAsync(1000000);
+    expect(started.length).toBeLessThanOrEqual(25); // no idle background polling
+  });
+
+  it("does not align to regressing or very old publication hints", async () => {
+    seedClock();
+    let requests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (!pathOf(input).endsWith("tfp-dynamic")) return new Response(document("TFP", ""));
+      const modifiedAt = ++requests === 1 ? initialTime - 10000 : initialTime - 20000;
+      return new Response(flowXml(),
+        { headers: { "Last-Modified": new Date(modifiedAt).toUTCString() } });
+    }));
+    const value = source({ tpeg2AlignToLastModified: true });
+    await value.trafficSnapshot();
+    await vi.advanceTimersByTimeAsync(305000);
+    expect((await value.trafficSnapshot()).sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + 605000).toISOString());
+    await vi.advanceTimersByTimeAsync(1000000);
+    expect((await value.trafficSnapshot()).sourceTiming?.nextRefreshAt).toBe(new Date(initialTime + 1605000).toISOString());
   });
 });

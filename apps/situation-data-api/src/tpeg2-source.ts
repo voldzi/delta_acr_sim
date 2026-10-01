@@ -233,7 +233,8 @@ export class Tpeg2Source {
   private readonly tecFeed: ConditionalFeedState<Tpeg2EventRecord[]> = {};
   private staticRevision?: string;
   private dynamicRevision?: string;
-  private dynamicPublicationPhaseMs?: number;
+  private dynamicPublicationModifiedMs?: number;
+  private readonly dynamicPublicationIntervalsMs: number[] = [];
   private trafficUntilMs = 0;
   private trafficTimer?: ReturnType<typeof setTimeout>;
   private disposed = false;
@@ -437,16 +438,35 @@ export class Tpeg2Source {
     intervalMs: number,
     lastModified: string | null
   ): void {
-    // Last-Modified is useful as a publication phase only after the operator
-    // verifies its cadence against actual releases. It cannot prove that alone.
+    // Opt-in publication hint only: source timestamps/expiry remain the sole
+    // freshness authority. Re-anchor on every distinct generation, not on the
+    // first response forever (the observed provider cadence is 303–304 s).
     if (!this.config.tpeg2AlignToLastModified || !path.endsWith("tfp-dynamic") || !lastModified) return;
     const modifiedAt = Date.parse(lastModified);
-    if (!Number.isFinite(modifiedAt) || modifiedAt < 0 || modifiedAt > Date.now()) return;
-    this.dynamicPublicationPhaseMs ??= modifiedAt;
-    const publicationMarginMs = 10000;
-    const anchor = this.dynamicPublicationPhaseMs + publicationMarginMs;
+    if (!Number.isFinite(modifiedAt) || modifiedAt < 0 || modifiedAt > Date.now() || Date.now() - modifiedAt > intervalMs * 2) return;
+    if (this.dynamicPublicationModifiedMs !== undefined && modifiedAt < this.dynamicPublicationModifiedMs) {
+      this.dynamicPublicationIntervalsMs.length = 0;
+      this.dynamicPublicationModifiedMs = modifiedAt;
+      return; // A regressing hint must not drive the request clock.
+    }
+    if (this.dynamicPublicationModifiedMs !== undefined && modifiedAt > this.dynamicPublicationModifiedMs) {
+      const delta = modifiedAt - this.dynamicPublicationModifiedMs;
+      // Do not infer a publication interval from skipped generations. This
+      // bounded estimate can only delay requests, never exceed provider quota.
+      if (delta >= intervalMs && delta <= intervalMs + 60000) {
+        this.dynamicPublicationIntervalsMs.push(delta);
+        if (this.dynamicPublicationIntervalsMs.length > 5) this.dynamicPublicationIntervalsMs.shift();
+      } else {
+        this.dynamicPublicationIntervalsMs.length = 0;
+      }
+    }
+    this.dynamicPublicationModifiedMs = modifiedAt;
+    const intervals = [...this.dynamicPublicationIntervalsMs].sort((a, b) => a - b);
+    const publicationIntervalMs = intervals.length >= 2 ? intervals[Math.floor(intervals.length / 2)]! : intervalMs;
+    const publicationMarginMs = 15000;
+    const anchor = modifiedAt + publicationMarginMs;
     const earliest = Math.max(startedAt + intervalMs, Date.now() + 1);
-    const next = anchor + Math.max(0, Math.ceil((earliest - anchor) / intervalMs)) * intervalMs;
+    const next = anchor + Math.max(0, Math.ceil((earliest - anchor) / publicationIntervalMs)) * publicationIntervalMs;
     state.nextAttemptAtMs = next;
     state.nextAttemptMonotonicMs = startedMonotonic + (next - startedAt);
     state.restartNextAttemptAtMs = next;
@@ -560,7 +580,7 @@ export class Tpeg2Source {
         state.lastCheckedAtMs = Date.now();
         state.lastError = undefined;
         state.failureCount = 0;
-        this.alignDynamicRefresh(path, state, startedAt, startedMonotonic, intervalMs, response.headers.get("last-modified"));
+        this.alignDynamicRefresh(path, state, startedAt, startedMonotonic, intervalMs, response.headers.get("last-modified") ?? state.lastModified ?? null);
         return;
       }
       if (!response.ok || !response.body) {
