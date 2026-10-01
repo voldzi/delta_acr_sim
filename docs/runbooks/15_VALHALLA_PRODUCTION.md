@@ -1036,6 +1036,43 @@ Exit 0 is one technical sample, exit 2 is an explicit transition (including
 warming), and exit 1 is a failure. Every output has `fullAcceptance=false`:
 three-cycle and expiry/idle evidence below remain separate requirements.
 
+Use the finite aggregate observer to record consecutive active request starts
+and natural idle without issuing further car routes:
+
+```bash
+docker exec -i csm-sim-situation-data-api node --input-type=module - \
+  < scripts/observe-valhalla-traffic-reliability.mjs
+```
+
+It reads only localhost status/feed and the initialized timing-only quota
+file. Active feed GET can invoke the normal gated provider/cache path; it
+does not create a road lease or bypass the provider request floor. Idle feed
+returns 204 before that path. The observer uses 30-second samples, a monotonic
+20-minute budget, bounded HTTP/body/quota reads and a CLI watchdog. Three
+captured starts at least 300 seconds apart and two idle checkpoints at least
+60 seconds apart with unchanged quota are required. Missing quota entries,
+invalid counts or provider failures cannot become successful evidence.
+Other vehicle requests may extend the shared lease; the result then remains
+explicitly incomplete rather than forcing idle. Exit 0 is this bounded
+observation only, exit 2 is incomplete and exit 1 is failure. It does not
+certify physical clearing, geographic matches or ETA accuracy.
+
+Once the lease is naturally idle, verify non-road routing separately:
+
+```bash
+docker exec -i csm-sim-situation-data-api node --input-type=module - \
+  < scripts/verify-valhalla-traffic-idle.mjs
+```
+
+This helper refuses a non-idle preflight without sending a route. It sends
+only fixed synthetic walking/bicycle requests, never a car request, and
+requires Valhalla responses, unchanged lease/user-request timestamps,
+an empty idle feed and unchanged quota. Its monotonic whole-run budget and
+CLI watchdog are 60 seconds, with at most 15 seconds per operation. Both
+helpers sanitize output and need the already configured control token only
+inside the container; do not copy or print it. Their synthetic tests include
+clock regressions, time-budget failures and private-error redaction.
+
 For an aggregate-only physical scan, run the inspector inside Valhalla:
 
 ```bash
@@ -1072,6 +1109,9 @@ speed records and an empty ledger, plus a non-current SIM route/status sample.
 The phase experiment `SITUATION_DATA_TPEG2_ALIGN_TO_LAST_MODIFIED` remains false.
 Enable it separately only after HTTP Last-Modified is shown to track regular
 publication. Its synthetic timing tests are not proof about the live provider.
+The [1 October acceptance record](../archive/audits/2026-10-01_VALHALLA_TRAFFIC_RELIABILITY_ACCEPTANCE.md)
+separates installed-release, expiry, cadence and idle checks from observed
+source freshness gaps. HTTP 200/304 does not guarantee usable flow records.
 
 ### Traffic rollback
 

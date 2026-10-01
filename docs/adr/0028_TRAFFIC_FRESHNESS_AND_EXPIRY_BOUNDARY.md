@@ -1,6 +1,6 @@
 # ADR 0028 Traffic freshness and expiry boundary
 
-Status: initial SIM and Valhalla reliability release deployed and smoke-tested; final updater hardening and joint live acceptance pending.
+Status: final SIM and Valhalla reliability release installed; bounded generation, expiry, request-floor and natural-idle checks verified; continuous source availability and native mapping remain gated.
 Date: 2026-10-01
 Owner: SIM and Valhalla application maintenance.
 
@@ -140,6 +140,11 @@ actual HTTP start and content-change times, verify a fresh apply and expiry
 clear, verify idle behavior and ordinary road routing, and confirm X5 mount
 and updater hashes. This is freshness acceptance, not measured ETA accuracy.
 Native OpenLR activation still requires ADR 0029's graph and geographic gates.
+The [1 October deployment evidence](../archive/audits/2026-10-01_VALHALLA_TRAFFIC_RELIABILITY_ACCEPTANCE.md)
+records current generations, physical zeroing after expiry, ordinary routing,
+three observed eligible TFP starts and independently confirmed natural idle.
+It also records all-expired provider snapshots: local deadline safety does not
+guarantee continuous fresh-source availability or improved ETA.
 
 ## Deployment and rollback
 
