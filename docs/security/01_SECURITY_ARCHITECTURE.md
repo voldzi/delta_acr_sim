@@ -99,3 +99,18 @@ The isolated pilot has no network and no production-writable graph/traffic
 mount; only its own temporary archive and result directory are writable. No
 provider credentials are transferred, and the normalized snapshot is fetched
 only through SIM's existing authenticated internal boundary.
+
+## Consented Jízda measurements
+
+The dedicated COP bearer authenticates the service, not a claimed client user.
+COP derives UTC-day pseudonyms from authenticated users, verifies separate
+revocable consent and strips sensitive journey endpoints. SIM HMACs those
+pseudonyms, strictly rejects unknown fields and never persists raw GPS.
+No browser Origin, mobile-held SIM token, arbitrary identity, free text,
+private incident/message data, direct provider fallback or AI export is allowed.
+Derived measurements are pseudonymous, not automatically anonymous. The
+five-contributor threshold cannot certify distinct people; COP is responsible
+for integrity. Outputs remain shadow-only and do not alter traffic speeds.
+Separate database/runtime rights, 7-day retention, revocation, backup cleanup
+and activation gates are defined in
+[the Jízda contract](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).

@@ -8,6 +8,7 @@ import { ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { registerGeoRoutingRoutes } from "./geo-routing.js";
+import { registerDriverMeasurementRoutes } from "./driver-measurements.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
@@ -55,6 +56,7 @@ export interface SituationDataAppContext {
   routing: RoutingService;
   valhallaTraffic: ValhallaTrafficCoordinator;
   searchData: SearchDataService;
+  driverMeasurements: { close: () => Promise<void> };
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -88,7 +90,8 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     transitStatic,
     routing,
     valhallaTraffic,
-    searchData
+    searchData,
+    driverMeasurements: { close: async () => undefined }
   };
   const app = express();
 
@@ -103,6 +106,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerRoutingRoutes(app, context);
   registerValhallaTrafficRoutes(app, context);
   registerGeoRoutingRoutes(app, config, routing);
+  context.driverMeasurements = registerDriverMeasurementRoutes(app, config);
   registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);
 

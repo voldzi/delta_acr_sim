@@ -4,6 +4,22 @@
 
 ## Proměnné
 
+### Dobrovolná měření Jízdy
+
+- `DRIVER_MEASUREMENTS_ENABLED=false` výchozí; pouze `true` aktivuje příjem.
+- `DRIVER_MEASUREMENTS_DATABASE_URL`: vyhrazená PostgreSQL DB přes HAProxy;
+  runtime bez DDL, migrační SQL `deploy/driver-measurements/schema.sql`.
+- `DRIVER_MEASUREMENTS_COP_TOKEN`: oddělený vysokonáhodný službový token, ≥32 znaků.
+- `DRIVER_MEASUREMENTS_HASH_SECRET`: oddělený vysokonáhodný HMAC secret, ≥32 znaků.
+- `DRIVER_MEASUREMENTS_RATE_PER_MINUTE=120`: 1–600 požadavků/min/instanci.
+
+Compose předává hodnoty pouze situation-data-api; deployment je zachovává
+z existujícího `.env`, negeneruje ani nepředává nové tokeny automaticky.
+Aktivace, retence, revokace a rollback jsou v
+[kontraktu Jízdy](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).
+
+### Ostatní proměnné
+
 - `SIM_SOURCE_SYSTEM_ID`
 - `SIM_ADAPTER_VERSION`
 - `SIM_PUBLISHER_MODE`

@@ -35,3 +35,9 @@ docs/archive/openapi-yaml/
 ```
 
 New API behavior should update `openapi/openapi.json` as the binding artifact.
+
+The additive consented Jízda intake is generated from
+`fragments/driver-measurements-v1.openapi.json`. Its authenticated backend-only
+paths are under `/situation-data/api/v1/internal/driver-measurements/v1`.
+See `docs/integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md` for consent,
+strict typing, quality/retention gates and default-disabled shadow-only rollout.
