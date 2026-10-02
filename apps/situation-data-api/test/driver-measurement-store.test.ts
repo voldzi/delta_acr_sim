@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PostgresDriverMeasurementStore } from "../src/driver-measurement-store.js";
@@ -8,6 +9,7 @@ import { DRIVER_CONTRACT, type DriverBatch, type DriverInterval, type DriverRece
 const url=process.env.DRIVER_MEASUREMENTS_TEST_DATABASE_URL;
 describe.skipIf(!url)("driver measurement PostgreSQL persistence",()=>{
   let admin:Pool,store:PostgresDriverMeasurementStore;
+  const runtimePassword=randomBytes(24).toString("hex");
   const dataset="sim-routing-2026-09-29-1790679143";
   const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
   const contributor=(n:number)=>String(n).padStart(64,"0");
@@ -21,10 +23,10 @@ describe.skipIf(!url)("driver measurement PostgreSQL persistence",()=>{
     admin=new Pool({connectionString:url});
     const sql=await readFile(new URL("../../../deploy/driver-measurements/schema.sql",import.meta.url),"utf8");
     await admin.query(sql);await admin.query(sql);
-    await admin.query("CREATE ROLE sim_driver_test_runtime LOGIN");
+    await admin.query(`CREATE ROLE sim_driver_test_runtime LOGIN PASSWORD '${runtimePassword}'`);
     await admin.query("GRANT USAGE ON SCHEMA public TO sim_driver_test_runtime");
     await admin.query("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO sim_driver_test_runtime");
-    const runtime=new URL(url!);runtime.username="sim_driver_test_runtime";
+    const runtime=new URL(url!);runtime.username="sim_driver_test_runtime";runtime.password=runtimePassword;
     store=new PostgresDriverMeasurementStore(runtime.toString());
   });
   beforeEach(async()=>{await admin.query("TRUNCATE driver_measurement_receipts,driver_measurement_revocations CASCADE");});
@@ -71,8 +73,22 @@ describe.skipIf(!url)("driver measurement PostgreSQL persistence",()=>{
     expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_intervals")).rows[0].n).toBe(0);
     expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_eta")).rows[0].n).toBe(0);
   });
+  it("removes a revoked driver from published aggregates and fences a racing submission",async()=>{
+    for(let n=1;n<=5;n++)await store.commit("cop",contributor(n),"a".repeat(64),payload(n),intervals(n),receipt(n));
+    const since="2026-10-01T11:00:00.000Z", at="2026-10-01T12:03:00.000Z";
+    expect(await store.aggregates(dataset,since,at)).toHaveLength(1);
+    const raced=await Promise.allSettled([
+      store.commit("cop",contributor(5),"b".repeat(64),payload(6),intervals(6),receipt(6)),
+      store.revoke("cop",contributor(5))
+    ]);
+    expect(raced[1]?.status).toBe("fulfilled");
+    expect(await store.aggregates(dataset,since,at)).toHaveLength(0);
+    await expect(store.commit("cop",contributor(5),"c".repeat(64),payload(7),intervals(7),receipt(7)))
+      .rejects.toThrow("DRIVER_CONSENT_REVOKED");
+    expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_receipts WHERE contributor_hash=$1",[contributor(5)])).rows[0].n).toBe(0);
+  });
   it("runtime cannot create tables; expired rows are excluded and purged",async()=>{
-    const runtime=new URL(url!);runtime.username="sim_driver_test_runtime";const p=new Pool({connectionString:runtime.toString()});
+    const runtime=new URL(url!);runtime.username="sim_driver_test_runtime";runtime.password=runtimePassword;const p=new Pool({connectionString:runtime.toString()});
     try{await expect(p.query("CREATE TABLE forbidden_driver_test(id int)")).rejects.toThrow();}finally{await p.end();}
     await store.commit("cop",contributor(1),"a".repeat(64),payload(1),intervals(1),receipt(1));
     await admin.query("UPDATE driver_measurement_receipts SET expires_at=now()-interval '1 minute'");

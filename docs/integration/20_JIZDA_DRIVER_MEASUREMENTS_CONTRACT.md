@@ -345,6 +345,12 @@ expirace, kaskádové smazání a absence GPS polí v uloženém receipt.
 Před aktivací chybí reálná akceptace COP/Jízdy, produkční DB/klíče a zátěžový
 test. Před využitím do navigace navíc nezávislé vzorky souběžných vozovek,
 opakovaného průjezdu, kolon, měst a dálnic a kontrolovaný experiment ETA.
+
+Dodatečný integrační test nad izolovaným PostgreSQL 18 dne 2. 10. 2026
+ověřil i agregaci po odvolání při současně odesílané dávce: příspěvek po
+revokaci v souhrnu nezůstane a pozdní zápis denního pseudonymu je odmítnut.
+Šest DB testů prošlo; opravena byla pouze testovací autentizace omezené role.
+Test neprokazuje chování produkční databáze, skutečné Valhally ani iPhonu.
 Zdroj algoritmického rozhraní:
 [oficiální Valhalla Map Matching](https://valhalla.github.io/valhalla/api/map-matching/).
 
