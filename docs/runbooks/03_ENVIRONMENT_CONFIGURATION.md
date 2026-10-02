@@ -7,6 +7,9 @@
 ### Dobrovolná měření Jízdy
 
 - `DRIVER_MEASUREMENTS_ENABLED=false` výchozí; pouze `true` aktivuje příjem.
+- `DRIVER_MEASUREMENTS_REVOCATION_ENABLED=false`: oddělený režim pouze mazání.
+  Při rollbacku příjmu nastavte `true` a zachovejte DB/token/HMAC konfiguraci;
+  příjem a čtení souhrnů zůstanou vypnuté. Režim aktivuje i retenční úklid DB.
 - `DRIVER_MEASUREMENTS_DATABASE_URL`: vyhrazená PostgreSQL DB přes HAProxy;
   runtime bez DDL, migrační SQL `deploy/driver-measurements/schema.sql`.
 - `DRIVER_MEASUREMENTS_COP_TOKEN`: oddělený vysokonáhodný službový token, ≥32 znaků.

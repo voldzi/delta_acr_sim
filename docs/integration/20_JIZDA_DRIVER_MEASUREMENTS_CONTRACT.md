@@ -243,14 +243,18 @@ fyzické smazání proběhne až po obnovení. Zálohy a revokace v zálohách m
 oddělenou správcovskou retenční/deletion politiku, nejsou pokryty pouhým TTL.
 
 1. Založit vyhrazenou DB a runtime účet přes HAProxy, aplikovat migraci.
-2. Doplnit bezpečně pět `DRIVER_MEASUREMENTS_*` proměnných podle `.env.example`.
+2. Doplnit bezpečně `DRIVER_MEASUREMENTS_*` proměnné podle `.env.example`.
 3. Nasadit pouze situation-data-api, příjem ještě ponechat `false`.
 4. Společně COP/Jízda/SIM ověřit souhlas, minimalizaci, outbox/retry, skutečný
    payload a odvolání. Teprve potom `DRIVER_MEASUREMENTS_ENABLED=true` pro pilot.
 5. Ověřit syntetické dávky a GPS pilot, chráněné agregáty, health a běžné
    mapy/routing; neslibovat živou optimalizaci ETA.
-6. Návrat: `DRIVER_MEASUREMENTS_ENABLED=false`, restart pouze situation-data-api;
-   zastavit COP odesílání. DB nechat úklidu/revokacím, žádná změna traffic mapy.
+6. Návrat: `DRIVER_MEASUREMENTS_ENABLED=false`,
+   `DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true`, restart pouze situation-data-api;
+   zastavit COP odesílání, zachovat DB/token/HMAC pro mazání a retenční úklid.
+   Režim revokace povoluje pouze autentizovaný DELETE, nikoli čtení souhrnů
+   nebo nové dávky a nepotřebuje Valhalla matcher. Při výpadku DB COP ponechá
+   trvalou frontu mazání; nesmí oznámit dokončené smazání. Žádná změna traffic mapy.
 
 Tento implementační krok neprovisionuje produkční DB, nepředává službové
 tokeny, nemění síť a neaktivuje odesílání skutečných jízd.
