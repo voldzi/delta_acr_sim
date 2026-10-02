@@ -354,6 +354,7 @@
           "Driver Measurements"
         ],
         "summary": "Delete one daily pseudonym and reject queued uploads for 7 days",
+        "description": "Available with enabled intake or the independent default-off DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true mode. Dedicated authentication, database and HMAC configuration remain required. Revocation-only mode enables neither batch intake nor aggregate reads and does not require map matching. Storage failure returns 503, not a successful deletion receipt.",
         "security": [
           {
             "driverMeasurementCopBearer": []

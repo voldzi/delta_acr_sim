@@ -44,3 +44,10 @@ Rollback disables the intake and restarts only Situation Data API, leaving
 normal routing/provider layers untouched. Data remains subject to retention
 and revocation including an operator-managed backup deletion policy.
 See [integration contract](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).
+
+Amendment 2 Oct 2026: intake rollback must not block retained-data deletion.
+The independent default-off `DRIVER_MEASUREMENTS_REVOCATION_ENABLED` allows
+only authenticated DELETE and retention cleanup with dedicated credentials;
+it does not enable collection, reads, map matching or traffic promotion.
+Both flags default false. Storage errors retain pending COP deletion and never
+report successful erasure. Keep HMAC/token/database configuration during rollback.

@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe,it,expect,vi } from "vitest";
-import { DRIVER_CONTRACT,DriverMeasurementError,deriveDriverIntervals,parseDriverBatch,registerDriverMeasurementRoutes,ValhallaDriverMatcher,
+import { DRIVER_CONTRACT,DriverMeasurementError,deriveDriverIntervals,driverSettings,parseDriverBatch,registerDriverMeasurementRoutes,ValhallaDriverMatcher,
   type DriverBatch,type DriverMatch,type DriverStore,type DriverReceipt } from "../src/driver-measurements.js";
 import type { SituationDataConfig } from "../src/config.js";
 
@@ -17,6 +17,16 @@ const match=():DriverMatch=>({dataset,points:[0,1,2].map(i=>({edgeId:"8",fractio
 function eta(b:DriverBatch) {b.eta={observationId:"00000000-0000-4000-8000-000000000099",routingDataset:dataset,predictedDurationSeconds:100,actualDurationSeconds:120,plannedDistanceM:1000,actualDistanceM:1010,personalStopSeconds:0,estimatedSeconds:0,offRoute:false,completedAt:new Date(now-10000).toISOString()};return b;}
 
 describe("driver measurements validation and derivation",()=>{
+  it("validates revocation-only credentials and keeps flags default off",()=>{
+    try {
+      vi.stubEnv("DRIVER_MEASUREMENTS_ENABLED","false");vi.stubEnv("DRIVER_MEASUREMENTS_REVOCATION_ENABLED","false");
+      vi.stubEnv("DRIVER_MEASUREMENTS_DATABASE_URL","");vi.stubEnv("DRIVER_MEASUREMENTS_COP_TOKEN","");vi.stubEnv("DRIVER_MEASUREMENTS_HASH_SECRET","");
+      expect(driverSettings()).toMatchObject({enabled:false,revocationEnabled:false});
+      vi.stubEnv("DRIVER_MEASUREMENTS_REVOCATION_ENABLED","true");expect(()=>driverSettings()).toThrow("Invalid driver-measurement configuration");
+      vi.stubEnv("DRIVER_MEASUREMENTS_DATABASE_URL","postgresql://synthetic.invalid/test");vi.stubEnv("DRIVER_MEASUREMENTS_COP_TOKEN",token);vi.stubEnv("DRIVER_MEASUREMENTS_HASH_SECRET","s".repeat(40));
+      expect(driverSettings()).toMatchObject({enabled:false,revocationEnabled:true});
+    } finally {vi.unstubAllEnvs();}
+  });
   it("accepts strict measured input, no coercion, ordered GPS",()=>{expect(parseDriverBatch(batch(),now)).toEqual(batch());});
   it("rejects unknown keys recursively and personal data",()=>{
     for(const change of [(b:any)=>b.name="person",(b:any)=>b.points[0].registration="plate",(b:any)=>b.consent.user="user",(b:any)=>{eta(b);b.eta.routeText="home";}]) {
@@ -63,13 +73,13 @@ describe("driver measurements validation and derivation",()=>{
   });
 });
 
-function fixture(options:{enabled?:boolean;rate?:number}={}) {
+function fixture(options:{enabled?:boolean;revocationEnabled?:boolean;rate?:number}={}) {
   const saved=new Map<string,{hash:string;receipt:DriverReceipt}>(), revoked=new Set<string>();
   const store:DriverStore={lookup:vi.fn(async(_owner,id,hash)=>{const p=saved.get(id);if(p&&p.hash!==hash)throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");return p?.receipt;}),
     commit:vi.fn(async(_owner,contributor,hash,b,intervals,r)=>{if(revoked.has(contributor))throw new DriverMeasurementError(403,"DRIVER_CONSENT_REVOKED");saved.set(b.batchId,{hash,receipt:r});return r;}),
     aggregates:vi.fn(async()=>[]),quality:vi.fn(async()=>({acceptedIntervalCount:2})),revoke:vi.fn(async(_owner,hash)=>{revoked.add(hash);saved.clear();return 1;}),close:vi.fn(async()=>{})};
   const matcher={match:vi.fn(async()=>match()),dataset:vi.fn(async()=>dataset)},app=express();app.use(express.json({limit:"1mb"}));
-  registerDriverMeasurementRoutes(app,{} as SituationDataConfig,{enabled:options.enabled??true,token,hashSecret:"s".repeat(40),ratePerMinute:options.rate??120},{store,matcher,now:()=>now});
+  registerDriverMeasurementRoutes(app,{} as SituationDataConfig,{enabled:options.enabled??true,revocationEnabled:options.revocationEnabled,token,hashSecret:"s".repeat(40),ratePerMinute:options.rate??120},{store,matcher,now:()=>now});
   return {app,store,matcher};
 }
 const path="/api/v1/internal/driver-measurements/v1";
@@ -84,6 +94,25 @@ describe("driver measurements HTTP boundary",()=>{
     expect((await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).set("Origin","https://cop.example").send(batch())).status).toBe(403);});
   it("disabled intake does not affect other routes",async()=>{const {app}=fixture({enabled:false});app.get("/health/live",(_,r)=>r.json({status:"ok"}));
     expect((await request(app).get("/health/live")).status).toBe(200);expect((await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(batch())).status).toBe(503);});
+  it("rollback can retain authenticated deletion only, without matching or reads",async()=>{
+    const {app,store,matcher}=fixture({enabled:false,revocationEnabled:true});
+    const deletion={contractVersion:DRIVER_CONTRACT,contributorIdDay:batch().contributorIdDay};
+    expect((await request(app).delete(`${path}/contributions`).send(deletion)).status).toBe(401);
+    expect((await request(app).delete(`${path}/contributions`).set("Authorization",`Bearer ${token}`).set("Origin","https://cop.example").send(deletion)).status).toBe(403);
+    const result=await request(app).delete(`${path}/contributions`).set("Authorization",`Bearer ${token}`).send(deletion);
+    expect(result.status).toBe(200);expect(result.body.deletedBatchCount).toBe(1);
+    expect(store.revoke).toHaveBeenCalledTimes(1);
+    expect((await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(batch())).status).toBe(503);
+    for(const endpoint of ["quality","aggregates"])expect((await request(app).get(`${path}/${endpoint}`).set("Authorization",`Bearer ${token}`)).status).toBe(503);
+    expect(matcher.match).not.toHaveBeenCalled();expect(matcher.dataset).not.toHaveBeenCalled();
+  });
+  it("deletion remains default disabled and storage failure cannot report success",async()=>{
+    const deletion={contractVersion:DRIVER_CONTRACT,contributorIdDay:batch().contributorIdDay};
+    const off=fixture({enabled:false});expect((await request(off.app).delete(`${path}/contributions`).set("Authorization",`Bearer ${token}`).send(deletion)).status).toBe(503);
+    const rollback=fixture({enabled:false,revocationEnabled:true});(rollback.store.revoke as any).mockRejectedValue(new Error("private DB detail"));
+    const result=await request(rollback.app).delete(`${path}/contributions`).set("Authorization",`Bearer ${token}`).send(deletion);
+    expect(result.status).toBe(503);expect(JSON.stringify(result.body)).not.toContain("private DB detail");
+  });
   it("uses authenticated COP identity, no raw positions in persistence, and exact replay",async()=>{
     const {app,store,matcher}=fixture();const a=await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(batch());
     expect(a.status).toBe(200);expect(a.body.acceptedIntervalCount).toBe(2);expect(a.body.rawPositionsStored).toBe(false);

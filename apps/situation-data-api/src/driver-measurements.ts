@@ -187,13 +187,14 @@ export class ValhallaDriverMatcher implements DriverMatcher {
   }
 }
 
-export interface DriverSettings { enabled: boolean; databaseUrl?: string; token?: string; hashSecret?: string; ratePerMinute: number }
+export interface DriverSettings { enabled: boolean; revocationEnabled?: boolean; databaseUrl?: string; token?: string; hashSecret?: string; ratePerMinute: number }
 export function driverSettings(): DriverSettings {
   const enabled=process.env.DRIVER_MEASUREMENTS_ENABLED==="true";
+  const revocationEnabled=process.env.DRIVER_MEASUREMENTS_REVOCATION_ENABLED==="true";
   const databaseUrl=process.env.DRIVER_MEASUREMENTS_DATABASE_URL, token=process.env.DRIVER_MEASUREMENTS_COP_TOKEN, hashSecret=process.env.DRIVER_MEASUREMENTS_HASH_SECRET;
   const ratePerMinute=Number(process.env.DRIVER_MEASUREMENTS_RATE_PER_MINUTE ?? 120);
-  if (enabled && (!databaseUrl || !token || token.length<32 || !hashSecret || hashSecret.length<32 || !Number.isInteger(ratePerMinute) || ratePerMinute<1 || ratePerMinute>600)) throw new Error("Invalid driver-measurement configuration");
-  return { enabled,databaseUrl,token,hashSecret,ratePerMinute };
+  if ((enabled || revocationEnabled) && (!databaseUrl || !token || token.length<32 || !hashSecret || hashSecret.length<32 || !Number.isInteger(ratePerMinute) || ratePerMinute<1 || ratePerMinute>600)) throw new Error("Invalid driver-measurement configuration");
+  return { enabled,revocationEnabled,databaseUrl,token,hashSecret,ratePerMinute };
 }
 
 export function registerDriverMeasurementRoutes(app: Express, config: SituationDataConfig, settings=driverSettings(),
@@ -204,18 +205,19 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     const tooLarge=!!error && typeof error==="object" && "type" in error && error.type==="entity.too.large";
     problem(req,res,tooLarge?413:400,tooLarge?"DRIVER_PAYLOAD_TOO_LARGE":"DRIVER_MEASUREMENT_INVALID","Invalid driver measurement payload.");
   });
-  const store=dependencies?.store ?? (settings.enabled ? new PostgresDriverMeasurementStore(settings.databaseUrl!) : undefined);
+  const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled) ? new PostgresDriverMeasurementStore(settings.databaseUrl!) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
   let minute=0, requests=0, inflight=0;
   const contributors=new Map<string,{at:number; count:number}>();
   const hashContributor=(id:string)=>createHmac("sha256",settings.hashSecret!).update(`cop:${id}`).digest("hex");
-  function auth(req:Request,res:Response): boolean {
+  function auth(req:Request,res:Response,revocationOnly=false): boolean {
     res.set("Cache-Control","no-store");
     if (req.get("origin")) { problem(req,res,403,"BROWSER_ACCESS_FORBIDDEN","Backend service access only."); return false; }
     const actual=Buffer.from(req.get("authorization")??""), expected=Buffer.from(`Bearer ${settings.token??""}`);
     if (!settings.token || actual.length!==expected.length || !timingSafeEqual(actual,expected)) { problem(req,res,401,"UNAUTHORIZED","COP measurement service authentication required."); return false; }
-    if (!settings.enabled || !store || !matcher) { problem(req,res,503,"DRIVER_MEASUREMENTS_DISABLED","Driver measurement intake is disabled."); return false; }
+    const allowed=revocationOnly ? settings.enabled || settings.revocationEnabled : settings.enabled;
+    if (!allowed || !store || (!revocationOnly && !matcher)) { problem(req,res,503,"DRIVER_MEASUREMENTS_DISABLED","Driver measurement operation is disabled."); return false; }
     const m=Math.floor(now()/60000); if (m!==minute) {minute=m;requests=0;}
     if (++requests>settings.ratePerMinute) { res.set("Retry-After","60"); problem(req,res,429,"DRIVER_RATE_LIMITED","Retry later without changing the batch identity."); return false; }
     return true;
@@ -267,7 +269,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     catch(error) { failure(req,res,error); }
   });
   app.delete(`${PREFIX}/contributions`,async(req,res)=>{
-    if (!auth(req,res)) return;
+    if (!auth(req,res,true)) return;
     try {
       const raw=object(req.body,["contractVersion","contributorIdDay"]);
       if (raw.contractVersion!==DRIVER_CONTRACT) invalid();
