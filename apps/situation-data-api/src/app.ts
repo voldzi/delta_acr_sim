@@ -95,7 +95,9 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   };
   const app = express();
 
-  app.use(createHttpRequestTracingMiddleware("csm-sim-situation-data-api"));
+  const traceRequest=createHttpRequestTracingMiddleware("csm-sim-situation-data-api");
+  // This privacy-sensitive route exports no caller headers, IP or query string.
+  app.use((req,res,next)=>req.path.startsWith("/api/v1/internal/driver-measurements/") ? next() : traceRequest(req,res,next));
   app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
 

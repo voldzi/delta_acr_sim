@@ -50,6 +50,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`adr/0030_CONSENTED_DRIVER_MEASUREMENTS.md`](adr/0030_CONSENTED_DRIVER_MEASUREMENTS.md)
 - [`integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md`](integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md)
 - [`runbooks/16_AI_ROUTER_PRODUCTION.md`](runbooks/16_AI_ROUTER_PRODUCTION.md)
+- [`runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md`](runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md)
 
 ## Machine-Readable API Contract
 

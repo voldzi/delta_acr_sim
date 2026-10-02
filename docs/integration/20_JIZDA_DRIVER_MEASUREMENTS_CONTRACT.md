@@ -38,6 +38,9 @@ COP vytvoří pro každého uživatele **stabilní pseudonym jen v rámci UTC dn
 HMAC nad ověřeným interním uživatelem a UTC dnem, odděleným tajemstvím COP.
 Klient nesmí zvolit cizí identitu. Pseudonym má 32–128 znaků `[A-Za-z0-9_-]`.
 SIM jej znovu HMACuje svým tajemstvím; do databáze nepíše původní pseudonym.
+DB rovněž HMACuje UUID dávky a ETA; původní UUID vrací pouze v odpovědi/replay.
+HTTP tracing této interní cesty je vypnutý. Produkční retence, secrets a rollback
+jsou v [runbooku 17](../runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md).
 Po půlnoci dávku rozdělte. Neukládejte identitu uživatele do `batchId` či UUID.
 
 Atestace neprokazuje skutečný souhlas, nezávislou osobu, správný čas telefonu

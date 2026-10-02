@@ -2,7 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SIM consented Jizda measurements",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "description": "COP backend only, shadow_only. Raw GPS and original request identifiers are not persisted; storage uses namespaced HMAC identifiers. Intake may remain disabled while authenticated deletion stays enabled."
   },
   "paths": {
     "/internal/driver-measurements/v1/batches": {

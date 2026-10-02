@@ -51,3 +51,10 @@ only authenticated DELETE and retention cleanup with dedicated credentials;
 it does not enable collection, reads, map matching or traffic promotion.
 Both flags default false. Storage errors retain pending COP deletion and never
 report successful erasure. Keep HMAC/token/database configuration during rollback.
+
+Production amendment 2 Oct 2026: dedicate PostgreSQL via HAProxy and an opt-in
+internal Docker bridge shared only with COP API. Persist namespaced HMAC UUIDs,
+never raw request IDs; omit measurement HTTP tracing. Run independent retention
+cleanup even during API downtime. Restored measurement databases must be purged
+in quarantine before reconnecting; physical cluster backup expiry needs separate
+backup-owner confirmation. See production runbook 17. Collection remains off.

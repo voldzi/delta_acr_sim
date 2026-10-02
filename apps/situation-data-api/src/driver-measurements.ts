@@ -205,7 +205,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     const tooLarge=!!error && typeof error==="object" && "type" in error && error.type==="entity.too.large";
     problem(req,res,tooLarge?413:400,tooLarge?"DRIVER_PAYLOAD_TOO_LARGE":"DRIVER_MEASUREMENT_INVALID","Invalid driver measurement payload.");
   });
-  const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled) ? new PostgresDriverMeasurementStore(settings.databaseUrl!) : undefined);
+  const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
   let minute=0, requests=0, inflight=0;
@@ -230,7 +230,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     if (!auth(req,res)) return;
     try {
       const batch=parseDriverBatch(req.body,now());
-      const digest=createHash("sha256").update(JSON.stringify(batch)).digest("hex");
+      const digest=createHmac("sha256",settings.hashSecret!).update(`request:${JSON.stringify(batch)}`).digest("hex");
       const replay=await store!.lookup("cop",batch.batchId,digest);
       if (replay) {res.set("X-Idempotent-Replay","true");res.json(replay);return;}
       const contributor=hashContributor(batch.contributorIdDay);

@@ -27,7 +27,7 @@ describe.skipIf(!url)("driver measurement PostgreSQL persistence",()=>{
     await admin.query("GRANT USAGE ON SCHEMA public TO sim_driver_test_runtime");
     await admin.query("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO sim_driver_test_runtime");
     const runtime=new URL(url!);runtime.username="sim_driver_test_runtime";runtime.password=runtimePassword;
-    store=new PostgresDriverMeasurementStore(runtime.toString());
+    store=new PostgresDriverMeasurementStore(runtime.toString(),"synthetic-storage-secret-".repeat(2));
   });
   beforeEach(async()=>{await admin.query("TRUNCATE driver_measurement_receipts,driver_measurement_revocations CASCADE");});
   afterAll(async()=>{await store?.close();await admin?.query("DROP OWNED BY sim_driver_test_runtime");await admin?.query("DROP ROLE sim_driver_test_runtime");await admin?.end();});
@@ -41,6 +41,11 @@ describe.skipIf(!url)("driver measurement PostgreSQL persistence",()=>{
     expect(duplicate.acceptedIntervalCount).toBe(0);expect(duplicate.deduplicatedIntervalCount).toBe(2);expect(duplicate.etaAccepted).toBe(false);
     const persisted=await admin.query("SELECT row_to_json(r)::text AS json FROM driver_measurement_receipts r");
     expect(persisted.rows.map(r=>r.json).join()).not.toMatch(/\"(lat|lon|points|contributorIdDay|sampleId)\"/);
+    const all=await admin.query(`SELECT row_to_json(r)::text AS json FROM driver_measurement_receipts r
+      UNION ALL SELECT row_to_json(i)::text FROM driver_measurement_intervals i
+      UNION ALL SELECT row_to_json(e)::text FROM driver_measurement_eta e`);
+    const serialized=all.rows.map(r=>r.json).join();
+    for(const requestId of [id(1),id(2),id(1001),"a".repeat(40)])expect(serialized).not.toContain(`"${requestId}"`);
     expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_eta")).rows[0].n).toBe(1);
   });
   it("requires five attested contributors and ten intervals, balances oversampling, fences dataset",async()=>{

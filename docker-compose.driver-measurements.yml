@@ -1,0 +1,15 @@
+# Opt-in overlay. No published port; retain the ordinary provider network.
+services:
+  sim-web:
+    volumes:
+      - ./apps/simulator-web/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+  situation-data-api:
+    image: ${DRIVER_MEASUREMENTS_IMAGE:?Pin the reviewed image}
+    networks:
+      default: {}
+      driver-measurements-internal:
+        aliases: [sim-driver-measurements]
+networks:
+  driver-measurements-internal:
+    external: true
+    name: cop_sim_driver_measurements_internal

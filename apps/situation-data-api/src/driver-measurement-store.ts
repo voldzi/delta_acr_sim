@@ -1,26 +1,40 @@
 import { Pool } from "pg";
+import { createHmac } from "node:crypto";
 import { DriverMeasurementError, type DriverBatch, type DriverInterval, type DriverReceipt, type DriverStore } from "./driver-measurements.js";
 
 /** Dedicated database only; no DDL or raw position persistence in the runtime. */
 export class PostgresDriverMeasurementStore implements DriverStore {
   private pool: Pool;
   private timer: ReturnType<typeof setInterval>;
-  constructor(url: string) {
+  constructor(url: string, private hashSecret: string) {
+    if (hashSecret.length < 32) throw new Error("Invalid driver storage secret");
     this.pool=new Pool({connectionString:url,max:4,connectionTimeoutMillis:1500,statement_timeout:5000,idleTimeoutMillis:10000});
     this.pool.on("error",()=>{ /* No connection string/error payload is logged. */ });
     this.timer=setInterval(()=>{void this.cleanup().catch(()=>undefined);},60000); this.timer.unref();
   }
+  private key(owner:string,kind:string,value:string):string {
+    return createHmac("sha256",this.hashSecret).update(`${owner}:${kind}:${value}`).digest("hex");
+  }
+  private id(owner:string,kind:string,value:string):string {
+    const h=this.key(owner,kind,value);
+    return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`;
+  }
   async lookup(owner:string,batchId:string,hash:string):Promise<DriverReceipt|undefined> {
-    const r=await this.pool.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,batchId]);
+    const r=await this.pool.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,this.id(owner,"batch",batchId)]);
     if (!r.rowCount) return undefined;
     if (r.rows[0].request_hash!==hash) throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");
-    return r.rows[0].receipt;
+    return {...r.rows[0].receipt,batchId};
   }
   private async cleanup():Promise<void> {
     await this.pool.query("DELETE FROM driver_measurement_receipts WHERE expires_at<=now()");
     await this.pool.query("DELETE FROM driver_measurement_revocations WHERE expires_at<=now()");
   }
   async commit(owner:string,contributor:string,hash:string,batch:DriverBatch,intervals:DriverInterval[],receipt:DriverReceipt):Promise<DriverReceipt> {
+    const externalBatchId=batch.batchId;
+    batch={...batch,batchId:this.id(owner,"batch",externalBatchId),
+      ...(batch.eta ? {eta:{...batch.eta,observationId:this.id(owner,"eta",batch.eta.observationId)}} : {})};
+    receipt={...receipt,batchId:batch.batchId};
+    intervals=intervals.map(i=>({...i,key:this.key(owner,"interval",i.key)}));
     const client=await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -33,7 +47,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       const old=await client.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2",[owner,batch.batchId]);
       if (old.rowCount) {
         if (old.rows[0].request_hash!==hash) throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");
-        await client.query("COMMIT"); return old.rows[0].receipt;
+        await client.query("COMMIT"); return {...old.rows[0].receipt,batchId:externalBatchId};
       }
       await client.query("INSERT INTO driver_measurement_receipts(owner,batch_id,contributor_hash,request_hash,received_at,expires_at,receipt) VALUES($1,$2,$3,$4,now(),now()+interval '7 days',$5)",[owner,batch.batchId,contributor,hash,JSON.stringify(receipt)]);
       // One bounded bulk statement rather than one database round trip per GPS pair.
@@ -51,7 +65,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
         result.etaAccepted=(insertedEta.rowCount??0)>0;
       }
       await client.query("UPDATE driver_measurement_receipts SET receipt=$3 WHERE owner=$1 AND batch_id=$2",[owner,batch.batchId,JSON.stringify(result)]);
-      await client.query("COMMIT"); return result;
+      await client.query("COMMIT"); return {...result,batchId:externalBatchId};
     } catch(error) { await client.query("ROLLBACK").catch(()=>undefined); throw error; }
     finally {client.release();}
   }
