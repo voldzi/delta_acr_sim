@@ -10,7 +10,7 @@ if(db.protocol!=='postgresql:' || db.hostname!=='haproxy.home.cz' || db.port!=='
 function load(path){
   if((statSync(path).mode&0o777)!==0o600)throw new Error('Production secrets must be mode 600');
   const text=readFileSync(path,'utf8'), values=new Map();
-  for(const line of text.split('\n')){const m=line.match(/^([A-Z0-9_]+)=(.*)$/);if(m){if(values.has(m[1]))throw new Error('Duplicate environment key');values.set(m[1],m[2]);}}
+  for(const line of text.split('\n')){const m=line.match(/^([A-Z0-9_]+)=(.*)$/);if(m){if(values.has(m[1]) && /^(?:COP_)?DRIVER_MEASUREMENTS_|^COMPOSE_FILE$/.test(m[1]))throw new Error('Duplicate measurement environment key');values.set(m[1],m[2]);}}
   return {path,text,values};
 }
 const sim=load('/srv/sim/.env'),cop=load('/srv/cop/.env');
