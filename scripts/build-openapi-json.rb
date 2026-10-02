@@ -348,6 +348,8 @@ def build_document
   add_health_path(doc, "/tak-gateway/health/ready", "TAK Gateway", "takGateway_health_ready")
 
   doc["components"]["schemas"]["SituationDataRoutingStep"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/navigation-step.schema.json")))
+  # Preserve the active traffic timing contract instead of its archived wording.
+  doc["components"]["schemas"]["SituationDataTpeg2SourceTiming"]["description"] = "Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh. nextRefreshAt respects the configured upstream and monotonic minimum interval; opted-in adaptive Last-Modified scheduling may only delay the next request and never changes source observation or expiry."
   doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["steps"]["items"] = { "$ref" => "#/components/schemas/SituationDataRoutingStep" }
 
   doc["components"]["schemas"]["SituationDataRoadMatchEvidence"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/road-match.schema.json")))
