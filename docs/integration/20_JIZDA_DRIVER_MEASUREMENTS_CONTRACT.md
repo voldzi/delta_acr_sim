@@ -292,6 +292,27 @@ a skeleton prošly. Testovací DB byla odstraněna bez persistentního volume.
 
 ## Ověření a společná akceptace
 
+### Integrační větev pro nasazení 2. 10. 2026
+
+`codex/driver-measurements-integration` vychází z přesného serverového
+commitu `d7fc650bd27fc6dff36db166f80e11f623ab1415`. Obsahuje pouze příjem
+měření a jeho provisioning; nejde o nasazení celé vývojové větve Valhally.
+Stávající routing implementace a testy zůstaly zachované. Strukturální
+porovnání OpenAPI potvrdilo beze změn všechny dosavadní paths a schemas;
+přibyly čtyři interní measurement endpointy.
+
+Úplný typecheck, build, OpenAPI a skeleton prošly; regresní běh má
+332 úspěšných testů a 5 explicitně přeskočených DB testů bez test URL.
+Stejných 5 DB testů bylo v tomto kontrolním kroku samostatně úspěšně
+provedeno v izolované dočasné PostgreSQL nad původním measurement commitem.
+To není produkční DB akceptace ani důkaz skutečného GPS provozu.
+
+Serverový checkout obsahuje lokální observability změnu a privátní
+deployment overlay konfigurace. Při nasazení je zachovejte, nepoužívejte
+reset, celkové Compose restartování ani přepis `.env`. Nové parametry mají
+zůstat vypnuté do společné akceptace. Před nasazením zopakujte kontrolu
+serverového HEAD a provozního image; při změně základu znovu integrujte.
+
 Lokální fixture/HTTP testy: přísný kontrakt, souhlas, Origin/auth, čas/UUID,
 estimated GPS, směr/přesnosti/rychlost, grafová rotace a částečná hrana,
 idempotence, 429, výpadek DB/matcheru, revokace a izolace ostatních endpointů.
