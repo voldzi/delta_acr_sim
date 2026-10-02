@@ -23,6 +23,8 @@ const cs=cop.values.get('COP_DRIVER_MEASUREMENTS_HASH_SECRET')||randomBytes(32).
 if(ss.length<32 || cs.length<32)throw new Error('Unexpected HMAC secret');
 const files=(sim.values.get('COMPOSE_FILE')||'docker-compose.yml:docker-compose.x5.yml').split(':');
 if(!files.includes('docker-compose.driver-measurements.yml'))files.push('docker-compose.driver-measurements.yml');
+const copFiles=(cop.values.get('COMPOSE_FILE')||'docker-compose.yml').split(':');
+if(!copFiles.includes('docker-compose.driver-measurements.yml'))copFiles.push('docker-compose.driver-measurements.yml');
 function save(state,updates){
   const keys=new Set(Object.keys(updates));
   const body=state.text.split('\n').filter(line=>!keys.has(line.split('=',1)[0])).join('\n').trimEnd()+'\n'+Object.entries(updates).map(([k,v])=>`${k}=${v}`).join('\n')+'\n';
@@ -36,7 +38,7 @@ save(sim,{DRIVER_MEASUREMENTS_ENABLED:'false',DRIVER_MEASUREMENTS_REVOCATION_ENA
   DRIVER_MEASUREMENTS_IMAGE:`sim-situation-data-api:driver-${revision}`,COMPOSE_FILE:files.join(':')});
 save(cop,{COP_DRIVER_MEASUREMENTS_ENABLED:'false',COP_DRIVER_MEASUREMENTS_CLEANUP_ENABLED:'true',
   COP_DRIVER_MEASUREMENTS_SIM_URL:'http://sim-driver-measurements:4020/api/v1/internal/driver-measurements/v1',
-  COP_DRIVER_MEASUREMENTS_SIM_TOKEN:token,COP_DRIVER_MEASUREMENTS_HASH_SECRET:cs});
+  COP_DRIVER_MEASUREMENTS_SIM_TOKEN:token,COP_DRIVER_MEASUREMENTS_HASH_SECRET:cs,COMPOSE_FILE:copFiles.join(':')});
 const old=spawnSync('crontab',['-l'],{encoding:'utf8'});
 if(old.error || (old.status!==0 && !/no crontab/i.test(old.stderr)))throw new Error('Cannot read existing user cron');
 const cron=(old.stdout||'').split('\n').filter(x=>!x.includes('# csm-sim-driver-retention')).join('\n').trimEnd()+
