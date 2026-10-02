@@ -99,3 +99,9 @@ for integrity. Outputs remain shadow-only and do not alter traffic speeds.
 Separate database/runtime rights, 7-day retention, revocation, backup cleanup
 and activation gates are defined in
 [the Jízda contract](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).
+Production also HMACs batch/ETA UUIDs and request digests; measurement HTTP
+tracing is omitted. The dedicated internal bridge has no public measurement
+port and the web gateway rejects this path. Revocation and independent retention
+cleanup remain enabled while intake is disabled. Restore quarantine is mandatory;
+physical cluster backup expiry is not guaranteed by SQL deletion. See
+[production runbook 17](../runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md).

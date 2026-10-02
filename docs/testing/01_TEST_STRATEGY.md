@@ -34,3 +34,8 @@ test URL is supplied; report that separately from executed tests.
 Joint COP/Jízda consent/outbox and on-device acceptance, capacity/load testing
 and independent direction/ETA evaluation remain production gates. See
 [integration contract](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).
+
+The 2 Oct 2026 production-off rollout and separate PostgreSQL/fault evidence are
+recorded in [deployment acceptance](../archive/2026-10-02_DRIVER_MEASUREMENTS_DEPLOYMENT_ACCEPTANCE.md).
+Internal HTTP checks never turn on genuine journey collection. Restore guards
+must fail with a nonzero exit on a different database before truncation.
