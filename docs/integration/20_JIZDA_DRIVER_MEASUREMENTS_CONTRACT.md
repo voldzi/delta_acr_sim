@@ -317,6 +317,24 @@ reset, celkové Compose restartování ani přepis `.env`. Nové parametry mají
 zůstat vypnuté do společné akceptace. Před nasazením zopakujte kontrolu
 serverového HEAD a provozního image; při změně základu znovu integrujte.
 
+Společná lokální kontrola 2. 10. 2026 propojila skutečný COP
+`HttpDriverMeasurementSource` s HTTP hranicí SIM a izolovanou PostgreSQL 18.
+Použila syntetické body a stub matcher, nikoli skutečný mobilní OIDC token
+nebo GPS. Prošly: mobilní validace a serverové scoped UUID, příjem a receipt,
+idempotentní replay, oddělení dvou uživatelů se stejným klientským UUID,
+kaskádové smazání a odmítnutí opakovaného příspěvku po odvolání.
+Odhalená chyba COP původně převáděla i `DRIVER_CONSENT_REVOKED` na 503;
+po rozlišení tohoto konkrétního kódu vrací 403 a společný test prošel.
+Ostatní chyby službové autorizace zůstávají serverovým výpadkem, nikoli
+pokynem k resetování identity klienta.
+
+Oddělený test skutečného COP PostgreSQL consent store ověřil restart,
+izolaci dvou uživatelů, trvalou revokaci, blokaci regrant ve stejný UTC den,
+trvalou frontu dnů k mazání, další den po smazání, souběh send/revoke a
+fail-closed změnu HMAC tajemství. Dočasné databáze bez volumes byly odstraněny.
+Nejde o ověření oprávnění produkčního DB účtu, provozního propojení,
+privacy guardů na iPhonu ani přesnosti ETA; tyto gates nadále zůstávají.
+
 Lokální fixture/HTTP testy: přísný kontrakt, souhlas, Origin/auth, čas/UUID,
 estimated GPS, směr/přesnosti/rychlost, grafová rotace a částečná hrana,
 idempotence, 429, výpadek DB/matcheru, revokace a izolace ostatních endpointů.
