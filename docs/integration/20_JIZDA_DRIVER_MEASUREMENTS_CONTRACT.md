@@ -255,6 +255,41 @@ oddělenou správcovskou retenční/deletion politiku, nejsou pokryty pouhým TT
 Tento implementační krok neprovisionuje produkční DB, nepředává službové
 tokeny, nemění síť a neaktivuje odesílání skutečných jízd.
 
+### Operátorské založení databáze
+
+Na Macu s `psql`, VPN a přístupem správce použijte připravený skript:
+
+```bash
+PGUSER=postgres bash scripts/provision-driver-measurements-postgres.sh --check
+PGUSER=postgres bash scripts/provision-driver-measurements-postgres.sh --apply
+```
+
+Skript používá výhradně `haproxy.home.cz:5000`, databázi
+`sim_driver_measurements` a oddělené účty `driver_measurements_migrator`
+a `driver_measurements_runtime`. Heslo správce zadáte skrytě; potvrzení je
+`sim_driver_measurements`. Nevytváří token, nenastavuje serverový `.env`,
+nespouští služby a neaktivuje sběr. Privátní přihlašovací soubor s právy 600
+je `~/.config/csm-sim/driver-measurements-db-credentials.env`; nevkládejte jej
+do chatu ani Gitu. Do SIM patří pouze runtime URL, nikoli migration URL.
+
+Před změnou clusteru uloží vygenerované přístupy pro případ selhání migrace.
+Existující soubor nikdy nepřepisuje. Při částečném selhání jej zachovejte
+a dokončete migraci s jeho migration účtem; automaticky nemažte DB/role.
+`--recover` je pouze pro ztracený přihlašovací soubor a ověřený úplný stav
+obou izolovaných rolí a vlastnictví databáze; resetuje jejich hesla.
+Při jiné částečné konfiguraci skončí bez změny. Jeho použití na provozované
+DB vyžaduje koordinovanou rotaci runtime přístupu.
+
+Provisioning nezajišťuje denní cleanup při vypnuté službě ani politiku
+mazání v zálohách. Tyto provozní podmínky zůstávají před aktivací povinné.
+
+Ověření 2. 10. 2026: 33 testů měření prošlo, včetně 5 skutečných DB testů
+nad izolovaným dočasným PostgreSQL 18 a 5 mockovaných testů provisioning
+preflightu. Mockované testy neprokazují založení produkční DB; kontrolují
+read-only režim, zákaz jiného endpointu, požadavek administrátora, detekci
+existujících objektů a nevypisování hesla. Typecheck služby, OpenAPI sanity
+a skeleton prošly. Testovací DB byla odstraněna bez persistentního volume.
+
 ## Ověření a společná akceptace
 
 Lokální fixture/HTTP testy: přísný kontrakt, souhlas, Origin/auth, čas/UUID,
