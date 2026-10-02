@@ -306,7 +306,7 @@ porovnání OpenAPI potvrdilo beze změn všechny dosavadní paths a schemas;
 přibyly čtyři interní measurement endpointy.
 
 Úplný typecheck, build, OpenAPI a skeleton prošly; regresní běh má
-332 úspěšných testů a 5 explicitně přeskočených DB testů bez test URL.
+335 úspěšných testů a 5 explicitně přeskočených DB testů bez test URL.
 Stejných 5 DB testů bylo v tomto kontrolním kroku samostatně úspěšně
 provedeno v izolované dočasné PostgreSQL nad původním measurement commitem.
 To není produkční DB akceptace ani důkaz skutečného GPS provozu.
