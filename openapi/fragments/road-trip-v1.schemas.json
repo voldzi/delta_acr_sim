@@ -1,40 +1,251 @@
 {
+  "Capabilities": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "version",
+      "strictRoutesEnabled",
+      "availability",
+      "intents",
+      "vehicleFields",
+      "unsupportedFields",
+      "closures",
+      "graphMaxAgeSeconds",
+      "maxWaypoints",
+      "maxAlternatives",
+      "cachePolicy",
+      "emergencyExemption"
+    ],
+    "properties": {
+      "version": { "const": "sim-road-trip-capabilities-v1" },
+      "strictRoutesEnabled": { "type": "boolean" },
+      "availability": { "enum": ["disabled", "requires_runtime_validation"] },
+      "intents": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 3,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intent", "costing", "state"],
+          "properties": {
+            "intent": { "enum": ["car", "commercial_truck", "car_with_trailer"] },
+            "costing": { "enum": ["auto", "truck", "unsupported"] },
+            "state": { "enum": ["requires_runtime_validation", "unsupported"] }
+          }
+        }
+      },
+      "vehicleFields": { "type": "array", "uniqueItems": true, "items": { "enum": ["heightM", "widthM", "lengthM", "loadedWeightKg"] } },
+      "unsupportedFields": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": { "enum": ["trailer", "axleLoadKg", "axleCount", "depart_at", "approved_entrance"] }
+      },
+      "closures": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "state", "oneDirection"],
+        "properties": {
+          "mode": { "const": "reviewed_both_direction_polygons" },
+          "state": { "enum": ["unavailable", "requires_runtime_validation"] },
+          "oneDirection": { "const": "unsupported" }
+        }
+      },
+      "graphMaxAgeSeconds": { "type": "integer", "minimum": 1 },
+      "maxWaypoints": { "const": 12 },
+      "maxAlternatives": { "const": 3 },
+      "cachePolicy": { "const": "no_cache" },
+      "emergencyExemption": { "const": false }
+    }
+  },
   "Trip": {
-    "type":"object","additionalProperties":false,
-    "required":["version","requestId","intent","vehicle","departure","preferences","requirements","waypoints","destination"],
-    "properties":{
-      "version":{"const":"sim-road-trip-v1"},
-      "requestId":{"type":"string","format":"uuid"},
-      "intent":{"enum":["car","commercial_truck","car_with_trailer"]},
-      "vehicle":{"$ref":"#/components/schemas/Vehicle"},
-      "departure":{"$ref":"#/components/schemas/Departure"},
-      "preferences":{"type":"object","additionalProperties":false,"required":["avoidTolls","preferPaved"],"properties":{"avoidTolls":{"type":"boolean"},"preferPaved":{"type":"boolean"}}},
-      "requirements":{"type":"object","additionalProperties":false,"required":["roadClosures","legalAccess","vehicleLimits"],"properties":{"roadClosures":{"const":"mandatory"},"legalAccess":{"const":"mandatory"},"vehicleLimits":{"const":"mandatory"}}},
-      "waypoints":{"type":"array","maxItems":12,"items":{"$ref":"#/components/schemas/Waypoint"}},
-      "destination":{"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"enum":["road_point","approved_entrance"]},"entranceId":{"type":"string","minLength":1,"maxLength":128}},"allOf":[{"if":{"properties":{"kind":{"const":"approved_entrance"}}},"then":{"required":["entranceId"]},"else":{"not":{"required":["entranceId"]}}}]}
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["version", "requestId", "intent", "vehicle", "departure", "preferences", "requirements", "waypoints", "destination"],
+    "properties": {
+      "version": { "const": "sim-road-trip-v1" },
+      "requestId": { "type": "string", "format": "uuid" },
+      "intent": { "enum": ["car", "commercial_truck", "car_with_trailer"] },
+      "vehicle": { "$ref": "#/components/schemas/Vehicle" },
+      "departure": { "$ref": "#/components/schemas/Departure" },
+      "preferences": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["avoidTolls", "preferPaved"],
+        "properties": { "avoidTolls": { "type": "boolean" }, "preferPaved": { "type": "boolean" } }
+      },
+      "requirements": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["roadClosures", "legalAccess", "vehicleLimits"],
+        "properties": { "roadClosures": { "const": "mandatory" }, "legalAccess": { "const": "mandatory" }, "vehicleLimits": { "const": "mandatory" } }
+      },
+      "waypoints": { "type": "array", "maxItems": 12, "items": { "$ref": "#/components/schemas/Waypoint" } },
+      "destination": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind"],
+        "properties": { "kind": { "enum": ["road_point", "approved_entrance"] }, "entranceId": { "type": "string", "minLength": 1, "maxLength": 128 } },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "approved_entrance" } } },
+            "then": { "required": ["entranceId"] },
+            "else": { "not": { "required": ["entranceId"] } }
+          }
+        ]
+      }
     }
   },
-  "Vehicle":{
-    "type":"object","additionalProperties":false,"required":["heightM","widthM","lengthM","loadedWeightKg","trailer"],
-    "properties":{"heightM":{"type":"number","exclusiveMinimum":0,"maximum":8},"widthM":{"type":"number","exclusiveMinimum":0,"maximum":5},"lengthM":{"type":"number","exclusiveMinimum":0,"maximum":30},"loadedWeightKg":{"type":"number","exclusiveMinimum":0,"maximum":100000},"axleLoadKg":{"type":"number","exclusiveMinimum":0,"maximum":40000},"axleCount":{"type":"integer","minimum":2,"maximum":10},"trailer":{"$ref":"#/components/schemas/Trailer"}}
-  },
-  "Trailer":{"type":"object","additionalProperties":false,"required":["attached"],"properties":{"attached":{"type":"boolean"},"heightM":{"type":"number","exclusiveMinimum":0,"maximum":8},"widthM":{"type":"number","exclusiveMinimum":0,"maximum":5},"lengthM":{"type":"number","exclusiveMinimum":0,"maximum":30},"loadedWeightKg":{"type":"number","exclusiveMinimum":0,"maximum":100000},"axleCount":{"type":"integer","minimum":1,"maximum":5}},"allOf":[{"if":{"properties":{"attached":{"const":true}}},"then":{"required":["heightM","widthM","lengthM","loadedWeightKg","axleCount"]},"else":{"maxProperties":1}}]},
-  "Departure":{"type":"object","additionalProperties":false,"required":["mode"],"properties":{"mode":{"enum":["now","depart_at"]},"at":{"type":"string","format":"date-time","pattern":"Z$"}},"allOf":[{"if":{"properties":{"mode":{"const":"depart_at"}}},"then":{"required":["at"]},"else":{"maxProperties":1}}]},
-  "Coordinate":{"type":"object","additionalProperties":false,"required":["lat","lon"],"properties":{"lat":{"type":"number","minimum":-90,"maximum":90},"lon":{"type":"number","minimum":-180,"maximum":180},"label":{"type":"string","maxLength":80}}},
-  "Waypoint":{"type":"object","additionalProperties":false,"required":["type","point"],"properties":{"type":{"enum":["via","stop"]},"point":{"$ref":"#/components/schemas/Coordinate"}}},
-  "Assessment":{
-    "type":"object","additionalProperties":false,
-    "required":["version","requestId","requestHash","appliedHash","appliedTrip","engine","geometryHash","routingDataset","closures","vehicleLimits","waypoints","lastMile","validUntil","limitations"],
-    "properties":{
-      "version":{"const":"sim-road-trip-assessment-v1"},"requestId":{"type":"string","format":"uuid"},"requestHash":{"type":"string","pattern":"^[a-f0-9]{64}$"},"appliedHash":{"type":"string","pattern":"^[a-f0-9]{64}$"},"appliedTrip":{"$ref":"#/components/schemas/Trip"},
-      "engine":{"type":"object","additionalProperties":false,"required":["provider","version","costing","fallbackUsed"],"properties":{"provider":{"enum":["valhalla","osm-postgis-graph","direct_fallback"]},"version":{"type":"string"},"costing":{"enum":["auto","truck","unsupported"]},"fallbackUsed":{"type":"boolean"}}},
-      "geometryHash":{"type":"string","pattern":"^[a-f0-9]{64}$"},
-      "routingDataset":{"type":"object","additionalProperties":false,"required":["version","builtAt","sourceAgeSeconds","freshness"],"properties":{"version":{"type":"string"},"builtAt":{"type":"string","format":"date-time"},"sourceAgeSeconds":{"type":"number","minimum":0},"freshness":{"enum":["current","stale","unknown"]}}},
-      "closures":{"type":"object","additionalProperties":false,"required":["state","revision","observedAt","validUntil","appliedClosureCount","coverage"],"properties":{"state":{"enum":["applied","unsupported","unavailable"]},"revision":{"type":"string"},"observedAt":{"type":"string","format":"date-time"},"validUntil":{"type":"string","format":"date-time"},"appliedClosureCount":{"type":"integer","minimum":0},"coverage":{"enum":["authoritative_reviewed_snapshot","incomplete","unknown"]}}},
-      "vehicleLimits":{"type":"object","additionalProperties":false,"required":["state","appliedFields","coverage"],"properties":{"state":{"enum":["provider_costing_applied","partial","unsupported"]},"appliedFields":{"type":"array","uniqueItems":true,"items":{"type":"string"}},"coverage":{"const":"mapped_restrictions_incomplete"}}},
-      "waypoints":{"type":"object","additionalProperties":false,"required":["state","orderedCount"],"properties":{"state":{"enum":["applied","unsupported"]},"orderedCount":{"type":"integer","minimum":0,"maximum":12}}},
-      "lastMile":{"enum":["not_requested","not_routed"]},"validUntil":{"type":"string","format":"date-time"},"limitations":{"type":"array","items":{"type":"string"}}
+  "Vehicle": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["heightM", "widthM", "lengthM", "loadedWeightKg", "trailer"],
+    "properties": {
+      "heightM": { "type": "number", "exclusiveMinimum": 0, "maximum": 8 },
+      "widthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 5 },
+      "lengthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+      "loadedWeightKg": { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 },
+      "axleLoadKg": { "type": "number", "exclusiveMinimum": 0, "maximum": 40000 },
+      "axleCount": { "type": "integer", "minimum": 2, "maximum": 10 },
+      "trailer": { "$ref": "#/components/schemas/Trailer" }
     }
   },
-  "Roundabout":{"type":"object","additionalProperties":false,"required":["phase","source","countState"],"properties":{"phase":{"enum":["enter","exit"]},"source":{"const":"valhalla_maneuver"},"countState":{"enum":["provider_supplied","unknown"]},"exitCount":{"type":"integer","minimum":1},"exitRoadNames":{"type":"array","items":{"type":"string"}},"signNames":{"type":"array","items":{"type":"string"}}}}
+  "Trailer": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["attached"],
+    "properties": {
+      "attached": { "type": "boolean" },
+      "heightM": { "type": "number", "exclusiveMinimum": 0, "maximum": 8 },
+      "widthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 5 },
+      "lengthM": { "type": "number", "exclusiveMinimum": 0, "maximum": 30 },
+      "loadedWeightKg": { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 },
+      "axleCount": { "type": "integer", "minimum": 1, "maximum": 5 }
+    },
+    "allOf": [
+      {
+        "if": { "properties": { "attached": { "const": true } } },
+        "then": { "required": ["heightM", "widthM", "lengthM", "loadedWeightKg", "axleCount"] },
+        "else": { "maxProperties": 1 }
+      }
+    ]
+  },
+  "Departure": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["mode"],
+    "properties": { "mode": { "enum": ["now", "depart_at"] }, "at": { "type": "string", "format": "date-time", "pattern": "Z$" } },
+    "allOf": [{ "if": { "properties": { "mode": { "const": "depart_at" } } }, "then": { "required": ["at"] }, "else": { "maxProperties": 1 } }]
+  },
+  "Coordinate": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["lat", "lon"],
+    "properties": {
+      "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+      "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+      "label": { "type": "string", "maxLength": 80 }
+    }
+  },
+  "Waypoint": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["type", "point"],
+    "properties": { "type": { "enum": ["via", "stop"] }, "point": { "$ref": "#/components/schemas/Coordinate" } }
+  },
+  "Assessment": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "version",
+      "requestId",
+      "requestHash",
+      "appliedHash",
+      "appliedTrip",
+      "engine",
+      "geometryHash",
+      "routingDataset",
+      "closures",
+      "vehicleLimits",
+      "waypoints",
+      "lastMile",
+      "validUntil",
+      "limitations"
+    ],
+    "properties": {
+      "version": { "const": "sim-road-trip-assessment-v1" },
+      "requestId": { "type": "string", "format": "uuid" },
+      "requestHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+      "appliedHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+      "appliedTrip": { "$ref": "#/components/schemas/Trip" },
+      "engine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "version", "costing", "fallbackUsed"],
+        "properties": {
+          "provider": { "enum": ["valhalla", "osm-postgis-graph", "direct_fallback"] },
+          "version": { "type": "string" },
+          "costing": { "enum": ["auto", "truck", "unsupported"] },
+          "fallbackUsed": { "type": "boolean" }
+        }
+      },
+      "geometryHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+      "routingDataset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "builtAt", "sourceAgeSeconds", "freshness"],
+        "properties": {
+          "version": { "type": "string" },
+          "builtAt": { "type": "string", "format": "date-time" },
+          "sourceAgeSeconds": { "type": "number", "minimum": 0 },
+          "freshness": { "enum": ["current", "stale", "unknown"] }
+        }
+      },
+      "closures": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "revision", "observedAt", "validUntil", "appliedClosureCount", "coverage"],
+        "properties": {
+          "state": { "enum": ["applied", "unsupported", "unavailable"] },
+          "revision": { "type": "string" },
+          "observedAt": { "type": "string", "format": "date-time" },
+          "validUntil": { "type": "string", "format": "date-time" },
+          "appliedClosureCount": { "type": "integer", "minimum": 0 },
+          "coverage": { "enum": ["authoritative_reviewed_snapshot", "incomplete", "unknown"] }
+        }
+      },
+      "vehicleLimits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "appliedFields", "coverage"],
+        "properties": {
+          "state": { "enum": ["provider_costing_applied", "partial", "unsupported"] },
+          "appliedFields": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+          "coverage": { "const": "mapped_restrictions_incomplete" }
+        }
+      },
+      "waypoints": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["state", "orderedCount"],
+        "properties": { "state": { "enum": ["applied", "unsupported"] }, "orderedCount": { "type": "integer", "minimum": 0, "maximum": 12 } }
+      },
+      "lastMile": { "enum": ["not_requested", "not_routed"] },
+      "validUntil": { "type": "string", "format": "date-time" },
+      "limitations": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "Roundabout": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["phase", "source", "countState"],
+    "properties": {
+      "phase": { "enum": ["enter", "exit"] },
+      "source": { "const": "valhalla_maneuver" },
+      "countState": { "enum": ["provider_supplied", "unknown"] },
+      "exitCount": { "type": "integer", "minimum": 1 },
+      "exitRoadNames": { "type": "array", "items": { "type": "string" } },
+      "signNames": { "type": "array", "items": { "type": "string" } }
+    }
+  }
 }

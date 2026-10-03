@@ -52,6 +52,8 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`integration/21_JIZDA_ROUTING_SAFETY_CONTRACT.md`](integration/21_JIZDA_ROUTING_SAFETY_CONTRACT.md)
 - [`runbooks/16_AI_ROUTER_PRODUCTION.md`](runbooks/16_AI_ROUTER_PRODUCTION.md)
 - [`runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md`](runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md)
+- [`adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md`](adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md)
+- [`runbooks/18_STRICT_ROAD_TRIP_ROUTING.md`](runbooks/18_STRICT_ROAD_TRIP_ROUTING.md)
 
 ## Machine-Readable API Contract
 

@@ -1,4 +1,24 @@
 import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
+import {
+  activeClosures,
+  canonicalRoutingHash,
+  insideCoverage,
+  parseRoadTripRequest,
+  reviewedClosureSnapshot,
+  roadTripCapabilities,
+  roadTripRequestHash,
+  routingSafetyFromEnv,
+  snapshotDeadline,
+  verifyClosureGeometry,
+  ROAD_TRIP_FIELDS,
+  ROAD_TRIP_MAX_GRAPH_AGE_SECONDS,
+  RoadTripError,
+  type RoadTrip,
+  type RoadTripAssessment,
+  type RoadTripCapabilities,
+  type RoadTripRoundabout,
+  type RoutingSafetyOptions
+} from "./routing-safety.js";
 import { Pool } from "pg";
 import { createHash } from "node:crypto";
 import type { SituationDataConfig } from "./config.js";
@@ -43,6 +63,7 @@ export interface RoutingProfile {
 }
 
 export interface RoutingProfileCatalog {
+  capabilities: RoadTripCapabilities;
   contractVersion: "sim-routing-profile-catalog-v1";
   generatedAt: string;
   profiles: RoutingProfile[];
@@ -57,6 +78,7 @@ export interface RoutingCoordinate {
 }
 
 export interface RoutingRouteRequest {
+  trip?: RoadTrip;
   includeRoadAttributes?: boolean;
   vehicle?: {
     heightM?: number;
@@ -119,6 +141,7 @@ export interface RoutingFeature {
 }
 
 export interface RoutingRoute {
+  assessment?: RoadTripAssessment;
   routeId: string;
   profileId: RoutingProfileId;
   rank: number;
@@ -330,6 +353,7 @@ export interface RoutingRouteRecosting {
 }
 
 export interface RoutingStep {
+  roundabout?: RoadTripRoundabout;
   maneuverType?: number;
   roundaboutExitCount?: number;
   beginShapeIndex?: number;
@@ -584,6 +608,7 @@ interface DijkstraState {
 }
 
 interface ValhallaRouteResponse {
+  warnings?: Array<{ text?: string; code?: number } | string>;
   trip?: ValhallaTrip;
   alternates?: Array<{ trip?: ValhallaRouteResponse["trip"] }>;
   error?: string;
@@ -703,6 +728,8 @@ interface ValhallaManeuver {
 }
 
 interface ValhallaRouteRequestOptions {
+  maxSnapDistanceM?: number;
+  excludePolygons?: Array<Array<[number, number]>>;
   alternates?: number;
   linearCostFactors?: ValhallaLinearCostFactor[];
   liveSpeeds?: ValhallaTrafficPublicStatus;
@@ -926,7 +953,8 @@ export class RoutingService {
 
   constructor(
     private readonly config: SituationDataConfig,
-    private readonly valhallaTraffic?: ValhallaTrafficCoordinator
+    private readonly valhallaTraffic?: ValhallaTrafficCoordinator,
+    private readonly safety: RoutingSafetyOptions = routingSafetyFromEnv()
   ) {
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
@@ -955,6 +983,7 @@ export class RoutingService {
 
   listProfiles(): RoutingProfileCatalog {
     return {
+      capabilities: roadTripCapabilities(this.safety),
       contractVersion: "sim-routing-profile-catalog-v1",
       generatedAt: new Date().toISOString(),
       profiles: ROUTING_PROFILES,
@@ -1016,6 +1045,7 @@ export class RoutingService {
   }
 
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
+    if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 1);
     const request = this.normalizeRouteRequest(raw, 1);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
@@ -1080,13 +1110,18 @@ export class RoutingService {
   }
 
   async alternatives(raw: RoutingAlternativesRequest): Promise<RoutingRouteResponse> {
+    if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 2);
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
     const cache = routingTrafficCachePolicy(traffic);
     try {
-      const response = await this.routeCache.getOrLoad(`alternatives:${cache.revision}:${stablePayload(request)}`, () => this.computeRouteResponse(request), cache);
+      const response = await this.routeCache.getOrLoad(
+        `alternatives:${cache.revision}:${stablePayload(request)}`,
+        () => this.computeRouteResponse(request),
+        cache
+      );
       return await this.checkedTrafficRoute(response);
     } catch (error) {
       if (error instanceof ResponseCacheValueExpiredError) throw new RoutingError(503, "ROUTING_TRAFFIC_EXPIRED", error.message);
@@ -1102,6 +1137,125 @@ export class RoutingService {
   async nearestAccess(raw: RoutingNearestAccessRequest): Promise<RoutingNearestAccessResponse> {
     const request = this.normalizeNearestAccessRequest(raw);
     return this.nearestAccessCache.getOrLoad(`nearest:${stablePayload(request)}`, () => this.computeNearestAccessResponse(request));
+  }
+
+  private async strictRoadTrip(raw: RoutingRouteRequest, defaultAlternatives: number): Promise<RoutingRouteResponse> {
+    try {
+      const trip = parseRoadTripRequest(raw, defaultAlternatives);
+      if (!this.safety.enabled || !this.shouldUseValhalla())
+        throw new RoadTripError(
+          422,
+          "ROUTING_SAFETY_UNSUPPORTED",
+          "Strict trips require an accepted engine and reviewed closure source; the opt-in path is not activated."
+        );
+      // Freeze an independent snapshot before the first await. No cache/stale-on-error/fallback.
+      const input = structuredClone(raw),
+        hash = roadTripRequestHash(input);
+      const request = this.normalizeRouteRequest({ ...input, trip, via: trip.waypoints.map((w) => w.point) }, input.alternatives ?? defaultAlternatives);
+      // Legacy normalization trims labels; immutable safety identity must not.
+      request.from = input.from!;
+      request.to = input.to!;
+      request.via = trip.waypoints.map((w) => w.point);
+      const profile = getRoutingProfile("car");
+      const before = await requestValhallaStatus(this.config);
+      const version = cleanString(before.version);
+      if (!version || !this.safety.acceptedEngineVersions.includes(version))
+        throw new RoadTripError(422, "ROUTING_SAFETY_UNSUPPORTED", "This exact Valhalla build has not passed strict-routing acceptance.");
+      const dataset = routingDatasetFromStatus(before),
+        now = Date.now();
+      const age = (now - Date.parse(dataset.builtAt)) / 1000;
+      if (age < 0 || age > ROAD_TRIP_MAX_GRAPH_AGE_SECONDS)
+        throw new RoadTripError(503, "ROUTING_GRAPH_STALE", "Routing dataset is stale or has an invalid build timestamp.");
+      const snapshot = await reviewedClosureSnapshot(this.safety, dataset, now),
+        deadline = Math.min(snapshotDeadline(snapshot, now), Date.parse(dataset.builtAt) + ROAD_TRIP_MAX_GRAPH_AGE_SECONDS * 1000);
+      for (const p of [request.from, ...(request.via ?? []), request.to]) {
+        if (!insideCoverage([p.lon, p.lat], snapshot.bbox))
+          throw new RoadTripError(503, "ROUTING_CLOSURES_UNAVAILABLE", "A requested location is outside reviewed closure coverage.");
+      }
+      this.valhallaTraffic?.activate();
+      let liveSpeeds = await this.valhallaTraffic?.status();
+      if (liveTrafficIsUsable(liveSpeeds) && liveSpeeds!.routingDataset !== dataset.version) liveSpeeds = undefined;
+      const native = await requestValhallaRoute(this.config, profile, request, undefined, {
+        liveSpeeds,
+        maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
+        excludePolygons: activeClosures(snapshot, now).map((c) => c.polygon)
+      });
+      const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
+      if (!native.trip || trips.some((t) => !t)) throw new Error("Engine returned incomplete route variants.");
+      // In strict mode a warning can mean a restriction was clamped or omitted.
+      // Do not silently turn the provider's weakened request into acceptance.
+      if ((native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
+        throw new Error("Engine could not apply the exact request without warnings.");
+      for (const t of trips) {
+        assertValhallaRouteWaypointSnaps({ trip: t }, [request.from, ...(request.via ?? []), request.to], Math.min(25, this.config.routingMaxSnapDistanceM));
+        // Check even surplus engine alternatives before limiting the output count.
+        for (const leg of t!.legs ?? []) verifyClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot, now);
+      }
+      const routes = valhallaRoutes(profile, request, native, request.alternatives);
+      if (
+        routes.length !== trips.slice(0, request.alternatives).length ||
+        routes.length === 0 ||
+        routes.some((r) => r.status !== "ok" || r.quality.mode !== "engine_route")
+      )
+        throw new Error("Engine returned an unusable route variant.");
+      // All engine variants are checked, not only the primary or a straight OD corridor.
+      for (const route of routes) verifyClosureGeometry(route.geometry.coordinates, snapshot, now);
+      const result = await this.routeResponse(
+        new Date(now).toISOString(),
+        profile,
+        request,
+        routes,
+        valhallaWarnings(native),
+        "valhalla",
+        undefined,
+        liveSpeeds
+      );
+      await this.checkedTrafficRoute(result);
+      const after = await requestValhallaStatus(this.config),
+        afterDataset = routingDatasetFromStatus(after);
+      if (afterDataset.version !== dataset.version || afterDataset.builtAt !== dataset.builtAt || after.version !== version)
+        throw new RoadTripError(503, "ROUTING_SAFETY_CHANGED", "Graph or engine changed during routing.");
+      const latest = await reviewedClosureSnapshot(this.safety, dataset, Date.now());
+      if (canonicalRoutingHash(latest) !== canonicalRoutingHash(snapshot) || Date.now() >= deadline)
+        throw new RoadTripError(503, "ROUTING_SAFETY_CHANGED", "Closure revision or effective validity changed during routing.");
+      for (const route of result.routes) {
+        verifyClosureGeometry(route.geometry.coordinates, latest, Date.now());
+        route.assessment = {
+          version: "sim-road-trip-assessment-v1",
+          requestId: trip.requestId,
+          requestHash: hash,
+          appliedHash: hash,
+          appliedTrip: structuredClone(trip),
+          geometryHash: canonicalRoutingHash(route.geometry),
+          engine: { provider: "valhalla", version, costing: trip.intent === "car" ? "auto" : "truck", fallbackUsed: false },
+          routingDataset: { ...dataset, sourceAgeSeconds: Math.floor((Date.now() - Date.parse(dataset.builtAt)) / 1000), freshness: "current" },
+          closures: {
+            state: "applied",
+            revision: snapshot.revision,
+            observedAt: snapshot.observedAt,
+            validUntil: new Date(deadline).toISOString(),
+            appliedClosureCount: activeClosures(snapshot, now).length,
+            coverage: "authoritative_reviewed_snapshot"
+          },
+          vehicleLimits: { state: "provider_costing_applied", appliedFields: [...ROAD_TRIP_FIELDS], coverage: "mapped_restrictions_incomplete" },
+          waypoints: { state: "applied", orderedCount: trip.waypoints.length },
+          lastMile: "not_requested",
+          validUntil: new Date(deadline).toISOString(),
+          limitations: [
+            "Mapped restrictions are incomplete; provider costing is not an absolute guarantee of physical or legal passability.",
+            "Closure coverage is limited to the server-reviewed snapshot and its validity; live traffic speed data is not closure evidence.",
+            "Future road state, trailer/axle restrictions and approved entrances are not supported by this accepted path."
+          ]
+        };
+      }
+      result.coverage = { state: "covered", routingDataset: dataset, sourceAgeSeconds: Math.floor(age) };
+      result.features = result.routes.map((route) => routeFeature(route));
+      return result;
+    } catch (error) {
+      if (error instanceof RoadTripError) throw new RoutingError(error.status, error.code, error.message);
+      if (error instanceof RoutingError) throw error;
+      throw new RoutingError(502, "ROUTING_SAFETY_ENGINE_FAILED", "The engine could not satisfy the immutable safety request; no fallback was used.");
+    }
   }
 
   private async computeRouteResponse(
@@ -1199,6 +1353,10 @@ export class RoutingService {
     trafficContext?: RoutingTrafficContext,
     usedLiveSpeeds?: ValhallaTrafficPublicStatus
   ): Promise<RoutingRouteResponse> {
+    if (backend !== "valhalla" || routes.some((r) => r.quality.mode !== "engine_route")) {
+      // An advisory may survive a fallback, but a discarded engine exclusion may not.
+      trafficContext = trafficContext ? { ...trafficContext, hardExclusionsApplied: [] } : undefined;
+    }
     const trafficRoutes = rankRoutesByTrafficImpact(routes.map((route) => annotateRouteTraffic(route, trafficContext)));
     const analyzed = await this.annotateRouteAnalysis(trafficRoutes, request, trafficContext);
     const includeRoadAttributes = Boolean(
@@ -1221,7 +1379,12 @@ export class RoutingService {
                   vehicleRestrictionsState: "not_evaluated" as const,
                   speedLimits: [],
                   restrictions: [],
-                  tunnels: unknownTunnelAttributes(route.routeId, generatedAt, undefined, "Directed Valhalla graph attributes are unavailable for this route backend.")
+                  tunnels: unknownTunnelAttributes(
+                    route.routeId,
+                    generatedAt,
+                    undefined,
+                    "Directed Valhalla graph attributes are unavailable for this route backend."
+                  )
                 }
               }
         )
@@ -1272,7 +1435,9 @@ export class RoutingService {
   ): Promise<RoutingRouteResponse> {
     let liveSpeeds = profile.transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
     if (liveTrafficIsUsable(liveSpeeds)) {
-      const dataset = await requestValhallaStatus(this.config).then(routingDatasetFromStatus).catch(() => undefined);
+      const dataset = await requestValhallaStatus(this.config)
+        .then(routingDatasetFromStatus)
+        .catch(() => undefined);
       if (!dataset || dataset.version !== liveSpeeds!.routingDataset) {
         liveSpeeds = { ...liveSpeeds!, state: "warming", detail: "The acknowledged traffic overlay does not match the active routing dataset." };
       }
@@ -1307,12 +1472,23 @@ export class RoutingService {
       if (!liveTrafficIsUsable(liveSpeeds) || latest?.state !== "current" || latest.overlayGeneration !== liveSpeeds.overlayGeneration) {
         throw new RoutingError(503, "ROUTING_TRAFFIC_CHANGED", "Live traffic changed or expired while the route was being calculated; retry the request.");
       }
-      const dataset = await requestValhallaStatus(this.config).then(routingDatasetFromStatus).catch(() => undefined);
+      const dataset = await requestValhallaStatus(this.config)
+        .then(routingDatasetFromStatus)
+        .catch(() => undefined);
       latest = await this.valhallaTraffic?.status();
-      if (!dataset || !liveTrafficIsUsable(liveSpeeds) || latest?.state !== "current" ||
-        latest.overlayGeneration !== liveSpeeds.overlayGeneration || dataset.version !== liveSpeeds.routingDataset ||
-        latest.routingDataset !== liveSpeeds.routingDataset) {
-        throw new RoutingError(503, "ROUTING_TRAFFIC_CHANGED", "The routing dataset changed or could not be verified for this live-traffic ETA; retry the request.");
+      if (
+        !dataset ||
+        !liveTrafficIsUsable(liveSpeeds) ||
+        latest?.state !== "current" ||
+        latest.overlayGeneration !== liveSpeeds.overlayGeneration ||
+        dataset.version !== liveSpeeds.routingDataset ||
+        latest.routingDataset !== liveSpeeds.routingDataset
+      ) {
+        throw new RoutingError(
+          503,
+          "ROUTING_TRAFFIC_CHANGED",
+          "The routing dataset changed or could not be verified for this live-traffic ETA; retry the request."
+        );
       }
     }
     return result;
@@ -2980,7 +3156,12 @@ export function valhallaDepartureTimePayload(
 export function routingTrafficCachePolicy(status?: ValhallaTrafficPublicStatus): { revision: string; usableUntilMs?: number } {
   if (!status) return { revision: "no-overlay" };
   return {
-    revision: JSON.stringify([status.routingDataset ?? null, status.overlayGeneration ?? status.updatedAt ?? "no-generation", status.state, status.usableUntil ?? null]),
+    revision: JSON.stringify([
+      status.routingDataset ?? null,
+      status.overlayGeneration ?? status.updatedAt ?? "no-generation",
+      status.state,
+      status.usableUntil ?? null
+    ]),
     ...(status.state === "current" ? { usableUntilMs: liveTrafficIsUsable(status) ? Date.parse(status.usableUntil!) : 0 } : {})
   };
 }
@@ -2991,9 +3172,14 @@ export function valhallaTrafficSpeedTypes(status?: ValhallaTrafficPublicStatus):
 }
 
 function liveTrafficIsUsable(status?: ValhallaTrafficPublicStatus): boolean {
-  return status?.state === "current" && Boolean(status.overlayGeneration) &&
-    typeof status.routingDataset === "string" && status.routingDataset.length > 0 &&
-    typeof status.usableUntil === "string" && Date.parse(status.usableUntil) > Date.now();
+  return (
+    status?.state === "current" &&
+    Boolean(status.overlayGeneration) &&
+    typeof status.routingDataset === "string" &&
+    status.routingDataset.length > 0 &&
+    typeof status.usableUntil === "string" &&
+    Date.parse(status.usableUntil) > Date.now()
+  );
 }
 
 function liveRouteUsableUntilMs(response: RoutingRouteResponse): number | undefined {
@@ -3090,30 +3276,32 @@ async function requestValhallaRoute(
   trafficContext?: RoutingTrafficContext,
   options: ValhallaRouteRequestOptions = {}
 ): Promise<ValhallaRouteResponse> {
-  const costing = effectiveValhallaCosting(profile, request.vehicle);
+  const costing = effectiveValhallaCosting(profile, request.vehicle, request.trip);
   const recostings = valhallaRecostings(costing);
   const currentTrafficEnabled = config.valhallaTrafficEnabled && profile.transportMode === "road" && liveTrafficIsUsable(options.liveSpeeds);
   const departureTime = valhallaDepartureTimePayload(request.departureTime, currentTrafficEnabled);
-  const costingOptions = valhallaCostingOptions(profile, request.avoid, request.vehicle);
+  const costingOptions = valhallaCostingOptions(profile, request.avoid, request.vehicle, request.trip);
   if (costing === "auto" || costing === "truck") {
     costingOptions[costing] = { ...costingOptions[costing], speed_types: valhallaTrafficSpeedTypes(options.liveSpeeds) };
   }
-  const snapLimitM = config.routingMaxSnapDistanceM;
+  const snapLimitM = options.maxSnapDistanceM ?? config.routingMaxSnapDistanceM;
   const orderedLocations = [request.from, ...(request.via ?? []), request.to];
   const payload = {
-    locations: orderedLocations.map((location) => ({
+    locations: orderedLocations.map((location, index) => ({
       lat: location.lat,
       lon: location.lon,
       name: location.label,
-      type: "break",
+      type: request.trip && index > 0 && index < orderedLocations.length - 1 && request.trip.waypoints[index - 1]?.type === "via" ? "break_through" : "break",
       radius: snapLimitM,
       search_cutoff: snapLimitM
     })),
     costing,
     costing_options: costingOptions,
     ...valhallaTrafficAvoidancePayload(trafficContext),
+    ...(options.excludePolygons?.length ? { exclude_polygons: options.excludePolygons } : {}),
     ...valhallaLinearCostFactorsPayload(options.linearCostFactors),
     ...departureTime,
+    ...(request.trip ? { date_time: { type: 0 } } : {}),
     ...(recostings.length > 0 ? { recostings } : {}),
     alternates: Math.max(0, Math.min(2, options.alternates ?? request.alternatives - 1)),
     ...(request.includeElevationProfile
@@ -3148,8 +3336,8 @@ async function requestValhallaTraceAttributes(
   return requestValhallaJson<ValhallaTraceAttributesResponse>(config, "/trace_attributes", {
     encoded_polyline: encodeValhallaPolyline6(coordinates),
     shape_match: "edge_walk",
-    costing: effectiveValhallaCosting(profile, request.vehicle),
-    costing_options: valhallaCostingOptions(profile, request.avoid ?? [], request.vehicle),
+    costing: effectiveValhallaCosting(profile, request.vehicle, request.trip),
+    costing_options: valhallaCostingOptions(profile, request.avoid ?? [], request.vehicle, request.trip),
     units: "kilometers",
     filters: {
       action: "include",
@@ -3333,16 +3521,17 @@ export function roadAttributesFromTrace(
     knownSpeedLimitCoveragePercent: Math.round((knownLengthM / Math.max(1, fullLengthM)) * 10000) / 100,
     speedLimits,
     restrictions,
-    tunnels: tunnelMappingComplete && geometryMismatchCount === 0 && previousEnd === routeShape.length - 1
-      ? {
-          state: "known",
-          routeId,
-          source: "valhalla_trace_attributes.edge.tunnel",
-          routingDataset,
-          observedAt,
-          intervals: tunnelIntervals
-        }
-      : unknownTunnelAttributes(routeId, observedAt, routingDataset, "Tunnel flags or directed edge coverage are incomplete for this route.")
+    tunnels:
+      tunnelMappingComplete && geometryMismatchCount === 0 && previousEnd === routeShape.length - 1
+        ? {
+            state: "known",
+            routeId,
+            source: "valhalla_trace_attributes.edge.tunnel",
+            routingDataset,
+            observedAt,
+            intervals: tunnelIntervals
+          }
+        : unknownTunnelAttributes(routeId, observedAt, routingDataset, "Tunnel flags or directed edge coverage are incomplete for this route.")
   };
 }
 
@@ -3548,7 +3737,7 @@ function valhallaRoute(
       engine: "valhalla",
       ...(recostings.length > 0 ? { recostings } : {})
     },
-    ...(profile.transportMode === "road" ? { vehicleAssessment: vehicleAssessmentFor(profile, request.vehicle) } : {}),
+    ...(profile.transportMode === "road" ? { vehicleAssessment: vehicleAssessmentFor(profile, request.vehicle, request.trip) } : {}),
     navigation: {
       provider: "valhalla",
       requestedDepartureTime: request.departureTime,
@@ -3732,15 +3921,22 @@ function valhallaCosting(profileId: RoutingProfileId): string {
   }
 }
 
-function effectiveValhallaCosting(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"]): string {
+function effectiveValhallaCosting(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"], trip?: RoadTrip): string {
+  if (trip) return trip.intent === "car" ? "auto" : "truck";
   return profile.transportMode === "road" && vehicle && Object.keys(vehicle).length > 0 ? "truck" : valhallaCosting(profile.profileId);
 }
 
-function vehicleAssessmentFor(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"]): NonNullable<RoutingRoute["vehicleAssessment"]> {
+function vehicleAssessmentFor(
+  profile: RoutingProfile,
+  vehicle: RoutingRouteRequest["vehicle"],
+  trip?: RoadTrip
+): NonNullable<RoutingRoute["vehicleAssessment"]> {
+  if (trip)
+    vehicle = { heightM: trip.vehicle.heightM, widthM: trip.vehicle.widthM, lengthM: trip.vehicle.lengthM, weightTonnes: trip.vehicle.loadedWeightKg / 1000 };
   const fields = (["heightM", "widthM", "lengthM", "weightTonnes"] as const).filter((field) => vehicle?.[field] !== undefined);
   return {
     state: fields.length === 0 ? "not_evaluated" : fields.length === 4 ? "provider_costing_applied" : "partially_evaluated",
-    providerCosting: effectiveValhallaCosting(profile, vehicle) === "truck" ? "truck" : "auto",
+    providerCosting: effectiveValhallaCosting(profile, vehicle, trip) === "truck" ? "truck" : "auto",
     appliedFields: fields,
     limitations: [
       "Valhalla costing uses mapped restrictions only; this is not a guarantee of legal or physical passability.",
@@ -3770,10 +3966,11 @@ function parseOptionalVehicle(value: RoutingRouteRequest["vehicle"], profile: Ro
 function valhallaCostingOptions(
   profile: RoutingProfile,
   avoid: RoutingAvoid[],
-  vehicle?: RoutingRouteRequest["vehicle"]
+  vehicle?: RoutingRouteRequest["vehicle"],
+  trip?: RoadTrip
 ): Record<string, Record<string, boolean | number | string[]>> {
   const options: Record<string, Record<string, boolean | number | string[]>> = {};
-  const costing = effectiveValhallaCosting(profile, vehicle);
+  const costing = effectiveValhallaCosting(profile, vehicle, trip);
   const base: Record<string, boolean | number> = {};
   if (avoid.includes("bridge")) {
     base.exclude_bridges = true;
@@ -3814,6 +4011,24 @@ function valhallaCostingOptions(
     if (vehicle.widthM !== undefined) base.width = vehicle.widthM;
     if (vehicle.lengthM !== undefined) base.length = vehicle.lengthM;
     if (vehicle.weightTonnes !== undefined) base.weight = vehicle.weightTonnes;
+  }
+  if (trip) {
+    Object.assign(base, {
+      height: trip.vehicle.heightM,
+      width: trip.vehicle.widthM,
+      length: trip.vehicle.lengthM,
+      weight: trip.vehicle.loadedWeightKg / 1000,
+      ignore_restrictions: false,
+      ignore_oneways: false,
+      ignore_access: false,
+      ignore_closures: false,
+      ignore_non_vehicular_restrictions: false,
+      use_tracks: 0
+    });
+    if (trip.intent === "commercial_truck") base.hgv_no_access_penalty = 43200;
+    // Preferences are cost preferences, not invented legal exemptions.
+    if (trip.preferences.avoidTolls) base.use_tolls = 0;
+    if (trip.preferences.preferPaved) base.exclude_unpaved = true;
   }
   if (Object.keys(base).length > 0) {
     options[costing] = base;
@@ -3922,6 +4137,7 @@ export function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[numb
       const sign = maneuver.sign && typeof maneuver.sign === "object" ? maneuver.sign : undefined;
       steps.push({
         index: steps.length,
+        ...(maneuver.type === 26 || maneuver.type === 27 ? { roundabout: roundaboutFromManeuver(maneuver) } : {}),
         ...(Number.isInteger(maneuver.type) && Number(maneuver.type) >= 0 ? { maneuverType: maneuver.type } : {}),
         ...(Number.isInteger(maneuver.roundabout_exit_count) && Number(maneuver.roundabout_exit_count) > 0
           ? { roundaboutExitCount: maneuver.roundabout_exit_count }
@@ -3950,13 +4166,32 @@ export function valhallaSteps(legs: ValhallaLeg[], routeCoordinates: Array<[numb
   if (steps.length > 0) return steps;
   // Keep the existing summary-only route behavior when Valhalla supplies no maneuvers.
   // An invalid supplied maneuver still returned early above and is never guessed.
-  return [{
-    index: 0,
-    instructionLocalized: { cs: "Pokračujte po trase.", en: "Continue on the route." },
-    distanceM: Math.round(polylineDistanceM(routeCoordinates)),
-    durationSeconds: 0,
-    geometry: { type: "LineString", coordinates: routeCoordinates }
-  }];
+  return [
+    {
+      index: 0,
+      instructionLocalized: { cs: "Pokračujte po trase.", en: "Continue on the route." },
+      distanceM: Math.round(polylineDistanceM(routeCoordinates)),
+      durationSeconds: 0,
+      geometry: { type: "LineString", coordinates: routeCoordinates }
+    }
+  ];
+}
+
+export function roundaboutFromManeuver(maneuver: ValhallaManeuver): RoadTripRoundabout {
+  const exitCount = Number.isInteger(maneuver.roundabout_exit_count) && Number(maneuver.roundabout_exit_count) > 0 ? maneuver.roundabout_exit_count : undefined;
+  const exitRoadNames = maneuver.type === 27 ? (maneuver.street_names ?? []).flatMap((n) => cleanString(n) ?? []) : [];
+  const signNames = ["exit_branch_elements", "exit_toward_elements", "exit_name_elements"].flatMap((key) => {
+    const elements = maneuver.sign?.[key];
+    return Array.isArray(elements) ? elements.flatMap((e) => (e && typeof e === "object" ? (cleanString(e.text) ?? []) : [])) : [];
+  });
+  return {
+    phase: maneuver.type === 26 ? "enter" : "exit",
+    source: "valhalla_maneuver",
+    countState: exitCount === undefined ? "unknown" : "provider_supplied",
+    ...(exitCount === undefined ? {} : { exitCount }),
+    ...(exitRoadNames.length ? { exitRoadNames } : {}),
+    ...(signNames.length ? { signNames } : {})
+  };
 }
 
 function valhallaStepLanes(value: unknown[] | undefined): RoutingStepLane[] {
@@ -4063,7 +4298,7 @@ function valhallaLocateWarnings(response: ValhallaLocateLocation[]): string[] {
   );
 }
 
-function decodeValhallaPolyline6(value: string | undefined): Array<[number, number]> {
+export function decodeValhallaPolyline6(value: string | undefined): Array<[number, number]> {
   if (!value) {
     return [];
   }

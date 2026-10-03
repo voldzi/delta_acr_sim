@@ -348,6 +348,22 @@ def build_document
   add_health_path(doc, "/tak-gateway/health/ready", "TAK Gateway", "takGateway_health_ready")
 
   doc["components"]["schemas"]["SituationDataRoutingStep"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/navigation-step.schema.json")))
+  road_trip_schemas = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/road-trip-v1.schemas.json")))
+  road_trip_schemas.each { |name, schema| doc["components"]["schemas"]["RoadTrip#{name}"] = deep_transform(schema, "RoadTrip") }
+  doc["components"]["schemas"]["SituationDataRoutingStep"]["properties"]["roundabout"] = { "$ref" => "#/components/schemas/RoadTripRoundabout" }
+  doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["assessment"] = { "$ref" => "#/components/schemas/RoadTripAssessment" }
+  doc["components"]["schemas"]["SituationDataRoutingProfileCatalog"]["properties"]["capabilities"] = { "$ref" => "#/components/schemas/RoadTripCapabilities" }
+  trip_request = doc["components"]["schemas"]["SituationDataRoutingRouteRequest"]
+  trip_request["properties"]["trip"] = { "$ref" => "#/components/schemas/RoadTripTrip" }
+  trip_request["properties"]["via"] = { "type" => "array", "items" => { "$ref" => "#/components/schemas/SituationDataRoutingCoordinate" }, "description" => "Legacy ordered break locations. Do not combine with immutable trip." }
+  strict_properties = trip_request["properties"].transform_values { {} }
+  strict_properties.merge!({ "trip" => { "$ref" => "#/components/schemas/RoadTripTrip" }, "profileId" => { "const" => "car" }, "from" => { "$ref" => "#/components/schemas/RoadTripCoordinate" }, "to" => { "$ref" => "#/components/schemas/RoadTripCoordinate" }, "avoid" => { "contains" => { "const" => "road_closure" } }, "alternatives" => { "type" => "integer", "minimum" => 1, "maximum" => 3 } })
+  %w[via vehicle departureTime].each { |name| strict_properties.delete(name) }
+  trip_request["allOf"] = [{ "if" => { "required" => ["trip"] }, "then" => { "required" => %w[profileId from to avoid trip], "properties" => strict_properties, "additionalProperties" => false } }]
+  %w[route alternatives].each do |operation|
+    responses = doc["paths"]["/situation-data/api/v1/routing/#{operation}"]["post"]["responses"]
+    %w[400 422 502 503].each { |status| responses[status] = { "$ref" => "#/components/responses/SituationDataProblem" } unless responses.key?(status) }
+  end
   # Preserve the active traffic timing contract instead of its archived wording.
   doc["components"]["schemas"]["SituationDataTpeg2SourceTiming"]["description"] = "Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh. nextRefreshAt respects the configured upstream and monotonic minimum interval; opted-in adaptive Last-Modified scheduling may only delay the next request and never changes source observation or expiry."
   doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["steps"]["items"] = { "$ref" => "#/components/schemas/SituationDataRoutingStep" }

@@ -1,7 +1,7 @@
 # 21. Jízda–COP–SIM: aditivní bezpečnostní routing
 
-Stav: návrh wire polí pro společnou implementaci, nikoli aktivace klienta nebo
-potvrzení současných uzavírek. Základ API a `sim-routing-route-v1` zůstává.
+Stav: implementovaný opt-in kontrakt, výchozí stav vypnutý; nikoli aktivace klienta
+nebo potvrzení současných uzavírek. Základ API a `sim-routing-route-v1` zůstává.
 JSON schemas: `openapi/fragments/road-trip-v1.schemas.json`; COP je přebírá
 beze změny. SIM používá prefix `RoadTrip` v závazném OpenAPI.
 
@@ -13,6 +13,8 @@ uvedená ve schema required musí být předaná. Top-level `from`/`to` zůstáv
 legacy `via`, `vehicle`, `departureTime` se nesmějí kombinovat s `trip`.
 `profileId` musí být `car`: nový `intent` není emergency exemption.
 `avoid` musí obsahovat `road_closure`; neznámá nebo chybějící hodnota se odmítá.
+Známé `fire`/`flood` jsou v strict větvi 422 do samostatné akceptace zdroje;
+nelze je tiše vynechat. Varování enginu (včetně clamp) znamená 502 bez fallbacku.
 
 `trip` = version, requestId(UUID), intent(car/commercial_truck/car_with_trailer),
 vehicle(heightM/widthM/lengthM/loadedWeightKg/optional axleLoadKg,axleCount/trailer),
@@ -37,8 +39,10 @@ fallbackUsed, graph version/builtAt/age/freshness, closure revision/observation/
 validity/coverage/count, vehicle appliedFields/coverage, waypoint count a lastMile.
 V1 bezpečná varianta je jen `engine_route`, Valhalla, fallbackUsed=false.
 Neúplná OSM restriction coverage se vždy výslovně uvádí; není to garance průjezdu.
-Nový `/routing/capabilities` ukáže aktuálně dostupnou podporu jednotlivých intentů,
-polí a uzavírek; schema přijetí není důkaz podpory konkrétního runtime.
+Existující GET `/routing/profiles` má aditivní pole `capabilities` se schema
+`RoadTripCapabilities` a verzí `sim-road-trip-capabilities-v1`. Samostatný endpoint
+se nezavádí. `disabled` / `requires_runtime_validation` není tvrzení o zdraví
+zdroje; každý požadavek zvlášť ověří engine, graf a closure snapshot.
 
 - 400 `ROUTING_TRIP_INVALID`: struktura, rozsah nebo konflikt legacy polí.
 - 422 `ROUTING_SAFETY_UNSUPPORTED`: trailer/axle/departure/entrance či engine
@@ -82,3 +86,25 @@ reálná křižovatka a přístupová omezení musí projít společnou akceptac
 
 Měření Jízdy/shadow_only/secrets/intake flags ani live traffic writer nejsou
 součástí této změny. COP zajišťuje OIDC adapter a SDK, SIM engine validation.
+
+## Přesné mapování enginu a preference
+
+`car` používá `auto`, `commercial_truck` používá `truck`, nikoli emergency profile.
+Valhalla 3.8.3 AutoCost i TruckCost kontrolují height/width/length/weight.
+`loadedWeightKg / 1000` je jediný převod jednotek. `appliedFields` jsou přesně
+`heightM`, `widthM`, `lengthM`, `loadedWeightKg`. Axle/trailer se NEODVOZUJÍ z
+hmotnosti. Všechna ignore access/restriction/oneway/closure nastavení jsou false;
+truck `hgv_no_access_penalty=43200`. Pořadí bodů se neoptimalizuje: stop→break,
+via→break_through (leg boundary bez U-turn), oba se ověřují z geometrie každé
+vrácené varianty. Odvozené pomocné `via` není součástí requestHash.
+
+`avoidTolls=true` je preference `use_tolls=0`, nikoli zákaz všech mýtných silnic.
+`preferPaved=true` je konzervativní `exclude_unpaved=true`: engine nepovolí
+nezpevněný vnitřek trasy, start/cíl může mít nezpevněný úsek. Neznámý OSM surface
+není důkaz zpevnění. Žádný parametr nezakládá právo vjezdu na soukromou cestu.
+
+Zdroj pro přesnou verzi: [AutoCost 3.8.3](https://github.com/valhalla/valhalla/blob/3.8.3/src/sif/autocost.cc),
+[TruckCost 3.8.3](https://github.com/valhalla/valhalla/blob/3.8.3/src/sif/truckcost.cc).
+Roundabout typy jsou 26 enter / 27 exit; 25 je merge, ne kruhový objezd.
+ExitRoadNames bereme jen ze street_names skutečného exit manévru; chybějící
+název/count se nedoplňuje odhadem ani ze snímku jiné trasy.

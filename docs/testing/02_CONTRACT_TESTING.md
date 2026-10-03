@@ -21,3 +21,13 @@ Mock COP endpoint musí vracet úspěch, validaci, auth chyby, rate limit, serve
 ## Gates
 
 Contract test selhání blokuje změnu publisheru i změnu event schema.
+
+## Road-trip-v1
+
+`routing-safety.test.ts` ověřuje přesný sdílený schema kontrakt, neznámé klíče,
+legacy konflikty, jednotky/auto/truck intent, stop/via, variant geometry hashes,
+25m snap, obousměrné polygon exclusions i segment crossing bez vertexu uvnitř,
+closure mimo straight OD koridor, expiry/revocation/direction/revision/graph
+změny za běhu, chyby bez fallbacku a skutečné 26/27 roundabout metadata.
+Mock engine není geographic/live restriction acceptance. Testovací fixtures
+nejsou skutečné uzavírky a nesmějí se nahrát do běžného provideru.

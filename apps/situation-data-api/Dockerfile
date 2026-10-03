@@ -6,6 +6,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY packages/observability ./packages/observability
 COPY apps/situation-data-api ./apps/situation-data-api
+COPY openapi/fragments/road-trip-v1.schemas.json ./openapi/fragments/road-trip-v1.schemas.json
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/situation-data-api... build
 
@@ -17,6 +18,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=build /app/packages/observability ./packages/observability
 COPY --from=build /app/apps/situation-data-api ./apps/situation-data-api
+COPY --from=build /app/openapi ./openapi
 RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --prod --frozen-lockfile
 EXPOSE 4020
