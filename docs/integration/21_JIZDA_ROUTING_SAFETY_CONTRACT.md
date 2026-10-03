@@ -112,6 +112,14 @@ název/count se nedoplňuje odhadem ani ze snímku jiné trasy.
 
 ## Běžné knownClosures: částečné pokrytí, nikoli strict assessment
 
+Přechod stejné schválené geometrie na novou mapovou revizi může využít
+omezenou mechanickou kontrolu dle ADR 0032. COP stále ověřuje konkrétní
+dataset, revision, request/geometry hash a deadline; žádná výjimka pro starý
+graf. Neúspěch znamená 503 `ROUTING_KNOWN_CLOSURES_REVIEW_REQUIRED`, nikoli
+pokyn pro Apple/OpenAI či unconstrained routing fallback. Veřejné schema se
+nemění. Skutečný budoucí graf je přijat až po jeho skutečném probe, ne jen
+podle testu workflow na předchozím grafu.
+
 Závazné schema: `openapi/fragments/known-road-closures.schema.json`, komponenta
 `SituationDataKnownRoadClosures` v OpenAPI. Optional `routes[].knownClosures`
 a totožná hodnota v odpovídající route feature. `state=applied` znamená pouze

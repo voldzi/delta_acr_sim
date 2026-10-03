@@ -75,7 +75,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const transitStatic = new TransitStaticModelService(config);
   const tpeg2Source = sources.find((source): source is Tpeg2Source => source instanceof Tpeg2Source);
   const valhallaTraffic = new ValhallaTrafficCoordinator(config, tpeg2Source);
-  const routing = new RoutingService(config, valhallaTraffic, undefined, knownClosureOptionsFromEnv(tpeg2Source));
+  const routing = new RoutingService(config, valhallaTraffic, undefined, knownClosureOptionsFromEnv(tpeg2Source, config));
   const searchData = new SearchDataService(config);
   const context: SituationDataAppContext = {
     config,

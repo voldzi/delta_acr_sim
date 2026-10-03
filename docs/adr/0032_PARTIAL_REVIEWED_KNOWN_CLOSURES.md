@@ -28,10 +28,34 @@ geometrie uzavřené hrany. Směrový TMC/OpenLR mapping má vlastní akceptaci.
 Engine obdrží všechny revidované polygons, ne jen OD koridor; všechny native
 varianty/legs (včetně nadpočetných) a finální geometrie se ověří proti uzavírkám.
 Snap nejvýše 25 m. Není route cache ani unconstrained fallback. Chyba zdroje,
-změna grafu/sémantiky, revokace, deadline nebo engine warning odmítne celý
+neověřená změna grafu/sémantiky, revokace, deadline nebo engine warning odmítne celý
 výsledek. Čerstvé potvrzení úplného snapshotu platí nejvýše 10 minut; event
 onset ani staré datum editace není source observation. Absence ve čerstvém
 full snapshotu znamená odvolání té konkrétní události, ne úplnost ČR.
+
+### Mechanická návaznost na nový graf
+
+Pro tentýž individuálně schválený objekt lze v soukromém template výslovně
+schválit `graphProbe` (v1, dvoubodová centerline a OD mimo objekt). Při zjištění
+nového datasetu stávajícím routovacím dotazem se ověří aktuální úplný zdroj,
+nezměněný semantic hash, přesná engine verze a stáří grafu. Následuje map_snap
+stejného OSM way v obou směrech, baseline průjezd a vynucená objížďka. Každá
+constrained native varianta musí mít úplné indexované manévry, neprotínat
+schválený polygon a v nezávislém edge_walk nesmí obsahovat schválený OSM way
+(ani mimo polygon). Konečné source/graph/file fences odmítnou souběžnou změnu.
+
+Pilot je omezen na jeden objekt, konvexní čtyřúhelník, centerline do 250 m,
+OD 50–2000 m, native trasy do 20 km a nejvýše tři varianty v každém směru.
+Engine probes mají společný deadline nejvýše 10 s, jednotlivý request 5 s;
+sdílený source fetch stále používá existující kvótu a timeout. Souběžné probes
+se deduplikují; selhání se pro stejný vstup opakuje nejdříve za 60 s.
+V RAM se drží nejvýše čtyři vazby, nikdy routy nebo zdrojová data.
+
+Schvalovací soubor se nepřepisuje. Výsledek je pouze mechanická RAM vazba
+stejné revize/geometrie na konkrétní graf; změna zdroje, OSM identity,
+geometrie nebo chybějící anchors vyžaduje lidskou revizi. Restart procesů
+vyžádá novou kontrolu. Nepřibývá scheduler, provider poller ani automatické
+schválení nových uzavírek. Neúspěch vrátí 503 bez unconstrained fallbacku.
 
 ## Dopady a bezpečnost
 

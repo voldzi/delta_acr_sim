@@ -99,12 +99,12 @@ chybí; nikdy neodebírat trip/vehicle/closure requirement pro vynucení úspěc
 
 Template `sim-known-closure-reviews-v1`: version/revision/routingDataset/reviews;
 každý review má id/eventId/eventSemanticHash/osmWayId/reviewedAt/sourceUrl/
-scopeBasis/polygon, přesně bez dalších klíčů. `scopeBasis=source_both_direction`
+scopeBasis/polygon a případně výslovně schválený graphProbe, bez jiných klíčů. `scopeBasis=source_both_direction`
 vyžaduje skutečné both. `official_whole_structure_statement` vyžaduje
 individuálně ověřené uzavření celého objektu a source direction unknown.
 Runtime neumí sám dokázat obsah lidské revize; žádné automatické schvalování.
 Soubor <=1 MiB, 1–128 reviews, <=4096 polygon bodů; stejná geometrická pravidla
-jako strict. Změna grafu nebo události vyžaduje novou revizi; template není
+jako strict. Změna události vyžaduje novou revizi; neověřená změna grafu také. Template není
 časová autorita, tou je právě potvrzený úplný TEC snapshot. Událost může mít
 starý onset/edit time; nezaměňovat za cache confirmation.
 
@@ -123,3 +123,30 @@ Návrat: pouze vypnout known flag a recreate SDA s předchozím přijatým obraz
 zachovat všechny overlays, ostatní env/secrets, DB/revocation/cleanup.
 COP nesmí dříve uložený partial route/hash vydávat za stále platný.
 Nevypínat strict fail-closed ani měnit zdrojové směry pro dosažení zelené.
+
+### Aktualizace grafu bez přepsání schválení
+
+Volitelný `graphProbe` má přesně version=`sim-known-closure-graph-probe-v1`,
+shape (dva `[lon,lat]` body uvnitř polygonu), from a to (`[lon,lat]` mimo objekt).
+Anchors nejprve individuálně reviduje vlastník SIM. Nesmí se odvozovat z fuzzy
+GLR. Neslouží k rozšíření polygonu ani k nahrazení semantic hash. Omezení a
+mechanické kontroly viz ADR 0032. Bez anchors zůstane změna grafu 503.
+
+Po aktivaci grafu první běžný dotaz provede kontrolu na skutečném engine;
+při úspěchu dostane novou graph-bound revision bez změny schvalovacího souboru.
+Při chybě je odpovědný provozní vlastník SIM: zkontroluje aktuální zdroj, graf,
+engine a journal `known_closure_graph_revalidated`. Nesmí jen přepsat dataset.
+Ověřovací příkaz z checkoutu nasazené revize (neprovádí zápis do schválení):
+
+```bash
+ssh docker.home.cz 'docker exec -i csm-sim-situation-data-api node --input-type=module' < scripts/check-known-closure-graph.mjs
+```
+
+Používá existující provider kvótu; studený proces může legitimně selhat do
+dalšího povoleného source fetch. Neobcházet cadence ani retry pomocí změny hodin.
+Po pozitivní mechanické kontrole ověřit skutečné COP→SIM OD v obou směrech,
+všechny varianty/steps/roadAttributes a jednotné graph/hash/expiry vazby.
+Příkaz dokládá graph probe, nikoli sám přijetí COP ani přesnost ETA.
+Změněný zdroj/geometrie vyžaduje novou jednotlivou revizi; při naléhavém návratu
+použít poslední přijatý obraz a graf dle stávajícího release recovery, bez změny
+databáze, secrets nebo příznaků strict/měření. Nevypínat týdenní timer.

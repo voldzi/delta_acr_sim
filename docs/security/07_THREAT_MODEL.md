@@ -60,6 +60,14 @@ celý native request + nezávislá geometrie všech variants/legs, 25m snap,
 COP nezávisle váže identity/hashes/features; provider původ a ruční review
 zůstávají povinností provozního vlastníka. Public Git nesmí obsahovat raw TEC.
 
+Mechanická návaznost ADR 0032 nezmění schválené source semantics/polygon ani
+schvalovací soubor. Vyžaduje server-owned anchors a identitu stejného OSM
+objektu v obou směrech; constrained variants mají navíc nezávislý edge_walk
+zákaz tohoto objektu i mimo polygon. Finální source/graph/file fences,
+deduplikace, omezená RAM vazba a 60s failure cooldown brání neověřenému přenosu
+schválení i opakovanému zatěžování engine. Bez úspěchu zůstane 503 a lidská
+revize. Samotný syntetický test ani test starého grafu není přijetí nové mapy.
+
 Viz [ADR 0031](../adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md). Client trip ani
 atestace nesmí vytvořit autoritativní uzavírku. Closure source je oddělený,
 server-owned, graph-bound a time-limited; chyby/expiry/změny invalidují všechny

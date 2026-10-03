@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { canonicalRoutingHash, pointInRing, segmentsIntersect, RoadTripError } from "./routing-safety.js";
 import type { ExactRoutingDataset } from "./routing-service.js";
 import type { Tpeg2EventRecord, Tpeg2Source } from "./tpeg2-source.js";
+import type { SituationDataConfig } from "./config.js";
 
 export interface KnownClosureReviewSet {
   version: "sim-known-closure-reviews-v1";
@@ -16,6 +17,7 @@ export interface KnownClosureReviewSet {
     sourceUrl: string;
     scopeBasis: "source_both_direction" | "official_whole_structure_statement";
     polygon: Array<[number, number]>;
+    graphProbe?: { version: "sim-known-closure-graph-probe-v1"; shape: Array<[number, number]>; from: [number, number]; to: [number, number] };
   }>;
 }
 export interface KnownClosureSnapshot {
@@ -84,7 +86,17 @@ export function validateKnownReviewSet(raw: unknown, dataset: ExactRoutingDatase
   let vertices = 0;
   for (const r of set.reviews) {
     if (
-      !exact(r, ["id", "eventId", "eventSemanticHash", "osmWayId", "reviewedAt", "sourceUrl", "scopeBasis", "polygon"]) ||
+      !exact(r, [
+        "id",
+        "eventId",
+        "eventSemanticHash",
+        "osmWayId",
+        "reviewedAt",
+        "sourceUrl",
+        "scopeBasis",
+        "polygon",
+        ...(r.graphProbe ? ["graphProbe"] : [])
+      ]) ||
       ![r.id, r.eventId, r.osmWayId].every(text) ||
       !/^[0-9a-f]{64}$/.test(r.eventSemanticHash) ||
       !/^\d+$/.test(r.osmWayId) ||
@@ -102,6 +114,18 @@ export function validateKnownReviewSet(raw: unknown, dataset: ExactRoutingDatase
     )
       fail("ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "Malformed known-closure review; no partial exclusions are accepted.");
     const ring = r.polygon;
+    if (
+      r.graphProbe &&
+      (!exact(r.graphProbe, ["version", "shape", "from", "to"]) ||
+        r.graphProbe.version !== "sim-known-closure-graph-probe-v1" ||
+        !Array.isArray(r.graphProbe.shape) ||
+        r.graphProbe.shape.length !== 2 ||
+        [...r.graphProbe.shape, r.graphProbe.from, r.graphProbe.to].some(
+          (p) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite) || Math.abs(p[0]) > 180 || Math.abs(p[1]) > 90
+        ) ||
+        r.graphProbe.shape.some((p) => !pointInRing(p, ring)))
+    )
+      fail("ROUTING_KNOWN_CLOSURES_REVIEW_REQUIRED", "Invalid individually approved graph probe.");
     const area = ring.slice(1).reduce((s, p, i) => s + ring[i]![0] * p[1] - p[0] * ring[i]![1], 0);
     if (Math.abs(area) < 1e-12 || (vertices += ring.length) > 4096) fail("ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "Invalid or unbounded reviewed polygon.");
     for (let i = 0; i < ring.length - 1; i++)
@@ -189,7 +213,7 @@ export function verifyKnownClosureGeometry(shape: Array<[number, number]>, snaps
     )
       throw new RoadTripError(502, "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED", "A returned variant intersects a reviewed closure; no variants are returned.");
 }
-export function knownClosureOptionsFromEnv(source?: Tpeg2Source): KnownClosureOptions {
+export function knownClosureOptionsFromEnv(source?: Tpeg2Source, config?: SituationDataConfig): KnownClosureOptions {
   const path = process.env.ROUTING_KNOWN_CLOSURES_REVIEW_FILE;
   return {
     enabled: process.env.ROUTING_KNOWN_CLOSURES_ENABLED === "true",
@@ -203,7 +227,19 @@ export function knownClosureOptionsFromEnv(source?: Tpeg2Source): KnownClosureOp
         if ((await stat(path!)).size > 1048576) throw new Error();
         const json = await readFile(path!, "utf8");
         if (Buffer.byteLength(json) > 1048576) throw new Error();
-        return publishKnownClosureSnapshot(JSON.parse(json), await source!.knownClosureEvidence(), dataset, Date.now());
+        let reviews = JSON.parse(json) as KnownClosureReviewSet;
+        if (config && canonicalRoutingHash(reviews.routingDataset) !== canonicalRoutingHash(dataset)) {
+          const { verifiedGraphBinding } = await import("./known-closure-graph-rebind.js");
+          reviews = await verifiedGraphBinding(
+            path!,
+            json,
+            dataset,
+            config,
+            source!,
+            (process.env.ROUTING_KNOWN_CLOSURES_ENGINE_VERSIONS ?? "").split(",").map((v) => v.trim())
+          );
+        }
+        return publishKnownClosureSnapshot(reviews, await source!.knownClosureEvidence(), dataset, Date.now());
       } catch (e) {
         if (e instanceof RoadTripError) throw e;
         return fail("ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "Known closure source cannot be verified; no fallback used.");
