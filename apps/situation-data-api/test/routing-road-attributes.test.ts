@@ -147,7 +147,7 @@ describe("Valhalla directed route attributes", () => {
     ]);
   });
 
-  it("accepts only a duplicated terminal trace point from edge_walk", () => {
+  it("accepts a duplicated terminal trace point but not an interior repeat", () => {
     const result = roadAttributesFromTrace(
       {
         shape: encodeValhallaPolyline6([...shape, shape[shape.length - 1]!]),
@@ -172,5 +172,20 @@ describe("Valhalla directed route attributes", () => {
       "route-primary"
     );
     expect(middleDuplicate).toMatchObject({ state: "unavailable", speedLimits: [] });
+  });
+  it("binds a verified exact duplicate origin to index zero without shifting directed edges", () => {
+    const result=roadAttributesFromTrace({shape:encodeValhallaPolyline6([shape[0]!,...shape]),edges:[
+      {begin_shape_index:0,end_shape_index:2,speed_limit:50,tunnel:false},
+      {begin_shape_index:2,end_shape_index:3,speed_limit:30,tunnel:false}
+    ]},shape,dataset,observedAt,"origin-duplicate");
+    expect(result).toMatchObject({state:"ok",geometryMismatchCount:0,matchedEdgeCount:2});
+    expect(result.speedLimits.map(e=>[e.beginShapeIndex,e.endShapeIndex])).toEqual([[0,1],[1,2]]);
+    expect(result.tunnels).toMatchObject({state:"known",intervals:[]});
+  });
+  it("does not treat a merely nearby origin vertex as the verified exact duplicate", () => {
+    const result=roadAttributesFromTrace({shape:encodeValhallaPolyline6([shape[0]!,[shape[0]![0]+0.000001,shape[0]![1]],...shape.slice(1)]),edges:[
+      {begin_shape_index:0,end_shape_index:3,tunnel:false}
+    ]},shape,dataset,observedAt,"near-origin");
+    expect(result).toMatchObject({state:"unavailable",speedLimits:[],tunnels:{state:"unknown"}});
   });
 });

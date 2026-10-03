@@ -148,3 +148,9 @@ chyba: 503 `ROUTING_KNOWN_CLOSURES_UNAVAILABLE` nebo
 `ROUTING_KNOWN_CLOSURES_REVIEW_REQUIRED`; engine/geometry: 502
 `ROUTING_KNOWN_CLOSURES_ENGINE_FAILED`; budoucí odjezd: 422
 `ROUTING_KNOWN_CLOSURES_UNSUPPORTED`. Žádné přímé náhradní volání.
+
+Directed road attributes: ověřené přesné opakování prvního vertexu v
+Valhalla edge_walk může sdílet index0. Nejde o obecné slučování blízkých
+bodů/loopů; interior repeats stále potřebují vlastní forward index. Není-li
+celá trace geometry a edge coverage ověřitelná, attributes/tunnels zůstanou
+výslovně unavailable/unknown; known closure a navigation mají vlastní kontroly.

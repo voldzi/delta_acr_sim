@@ -3506,6 +3506,13 @@ export function roadAttributesFromTrace(
   const shapeMap: number[] = [];
   let searchFrom = 0;
   for (const [traceIndex, point] of traceShape.entries()) {
+    // Verified edge_walk can repeat the origin exactly. Only the first pair
+    // may reuse index zero; interior repeats still need distinct forward
+    // indices so a loop or a different nearby road cannot be collapsed.
+    if (traceIndex === 1 && shapeMap[0] === 0 && point[0] === traceShape[0]![0] && point[1] === traceShape[0]![1]) {
+      shapeMap.push(0);
+      continue;
+    }
     let matched = -1;
     for (let index = searchFrom; index < routeShape.length; index += 1) {
       if (haversineMeters(point, routeShape[index]!) <= 1) {
