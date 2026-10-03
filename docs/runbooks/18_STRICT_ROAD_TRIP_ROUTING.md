@@ -89,3 +89,37 @@ test a přesnost konkrétního kruhového objezdu zůstávají společnou akcept
 Návrat: vypnout strict flag a vrátit přijatý SDA obraz; neměnit DB/GPS/secrets
 ani traffic archive. COP/SDK musí přísné požadavky dál odmítat, pokud schopnosti
 chybí; nikdy neodebírat trip/vehicle/closure requirement pro vynucení úspěchu.
+
+## Samostatný běžný pilot známých uzavírek (ADR 0032)
+
+- `ROUTING_KNOWN_CLOSURES_ENABLED=false` výchozí.
+- `ROUTING_KNOWN_CLOSURES_ENGINE_VERSIONS` CSV přesných přijatých verzí.
+- `ROUTING_KNOWN_CLOSURES_REVIEW_FILE` absolutní cesta soukromého JSON v již
+  existujícím datovém mountu. Žádný nový veřejný port ani secrets.
+
+Template `sim-known-closure-reviews-v1`: version/revision/routingDataset/reviews;
+každý review má id/eventId/eventSemanticHash/osmWayId/reviewedAt/sourceUrl/
+scopeBasis/polygon, přesně bez dalších klíčů. `scopeBasis=source_both_direction`
+vyžaduje skutečné both. `official_whole_structure_statement` vyžaduje
+individuálně ověřené uzavření celého objektu a source direction unknown.
+Runtime neumí sám dokázat obsah lidské revize; žádné automatické schvalování.
+Soubor <=1 MiB, 1–128 reviews, <=4096 polygon bodů; stejná geometrická pravidla
+jako strict. Změna grafu nebo události vyžaduje novou revizi; template není
+časová autorita, tou je právě potvrzený úplný TEC snapshot. Událost může mít
+starý onset/edit time; nezaměňovat za cache confirmation.
+
+Nasazení: ověřit správný mount/UUID před změnou soukromých dat; build pouze SDA
+s OCI revision a oběma contract fragments. Nejprve known flag OFF, health,
+regrese měření a source parseru. Soukromý template nikdy necommitovat. Testovat
+reálné OD mimo excluded edge a snap radius v obou směrech: baseline edge
+obsahuje, constrained varianty jej neobsahují a neprotínají reviewed polygon,
+no warning/fallback, stejné grafy. Samostatně projít offline withdrawal,
+semantic/source/graph race a outage tests. COP musí před aktivací přijmout
+přesné schema, request normalization a synthetic fixture, validovat všechny
+raw variants/features. Teprve pak zapnout known flag; strict a measurement
+intake zůstávají OFF. Zaznamenat SHA/image ID, skutečné testy a neúplné coverage.
+
+Návrat: pouze vypnout known flag a recreate SDA s předchozím přijatým obrazem,
+zachovat všechny overlays, ostatní env/secrets, DB/revocation/cleanup.
+COP nesmí dříve uložený partial route/hash vydávat za stále platný.
+Nevypínat strict fail-closed ani měnit zdrojové směry pro dosažení zelené.

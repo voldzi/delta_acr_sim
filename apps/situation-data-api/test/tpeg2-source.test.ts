@@ -6,7 +6,7 @@ import type { SituationDataConfig } from "../src/config.js";
 import { Tpeg2Source, parseTpeg2Dynamic, parseTpeg2Static, parseTpeg2Tec } from "../src/tpeg2-source.js";
 
 const document = (type: "TFP" | "TEC", body: string) => `
-  <TPEGDocument timeStamp="2026-09-14T12:00:00Z" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  <TPEGDocument docType="fullRepository" timeStamp="2026-09-14T12:00:00Z" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:tfp="http://www.tisa.org/TPEG/TFP_1_1" xmlns:tec="http://www.tisa.org/TPEG/TEC_3_4">
     <ApplicationRootMessageML xsi:type="${type === "TFP" ? "tfp:TFPMessage" : "tec:TECMessage"}">${body}</ApplicationRootMessageML>
   </TPEGDocument>`;

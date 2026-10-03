@@ -72,8 +72,9 @@ s nezávislým route-geometry/edge auditem; polygon není selektivní jednosměr
 GraphId exclusion. One-direction closure bez ověřeného directed mechanismu
 znamená unsupported, nikoli rozšíření nebo tiché ignorování.
 
-III/44520, OSM 48835964, pin 50.1257919/17.3629376 je pouze podnět k ověření.
-V tomto změnovém balíku se nenastavuje žádná skutečná ani permanentní uzavírka.
+Konkrétní uzavírka se nesmí trvale hardcodovat z uživatelského podnětu.
+Soukromý revidovaný podklad, aktuální oficiální zdroj a skutečný engine test
+jsou podmínky aktivace běžné částečné větve popsané níže.
 
 ## Roundabouts
 
@@ -108,3 +109,42 @@ Zdroj pro přesnou verzi: [AutoCost 3.8.3](https://github.com/valhalla/valhalla/
 Roundabout typy jsou 26 enter / 27 exit; 25 je merge, ne kruhový objezd.
 ExitRoadNames bereme jen ze street_names skutečného exit manévru; chybějící
 název/count se nedoplňuje odhadem ani ze snímku jiné trasy.
+
+## Běžné knownClosures: částečné pokrytí, nikoli strict assessment
+
+Závazné schema: `openapi/fragments/known-road-closures.schema.json`, komponenta
+`SituationDataKnownRoadClosures` v OpenAPI. Optional `routes[].knownClosures`
+a totožná hodnota v odpovídající route feature. `state=applied` znamená pouze
+aplikaci uvedených individuálně revidovaných uzavírek; `coverage=incomplete`
+je povinné. Žádný `assessment` se ve větvi nevyrábí.
+
+Pole: version, state, coverage, revision, observedAt, validUntil,
+appliedClosureCount, geometryHash, requestHash, exclusions,
+routingDataset(version/builtAt), engine(provider/version/fallbackUsed=false),
+limitations. Exclusions mají closureId/sourceDirection/enforcedDirection/
+enforcementReason/reviewedGeometryHash. `sourceDirection=unknown` může mít
+pouze konzervativní whole-structure reason; nikdy se netvrdí zdrojový both.
+
+`requestHash` = SHA-256 canonical JSON celé `response.query`: rekurzivně
+seřazené klíče, beze změny array order a bez zaokrouhlování. SIM normalizuje
+profileId (default car), from/to/via souřadnice a trimmed labels, via default
+[], avoid default [], alternatives (route default 1, alternatives default 2,
+clamp 1–3). Undefined optional hodnoty nejsou v JSON; explicitní include flags
+zůstávají. COP musí před hash kontrolou ověřit skutečnou identity požadavku,
+nikoli jen důvěřovat přiloženému query. Dropped/unsupported options odmítá.
+
+`geometryHash` váže canonical GeoJSON konkrétní varianty; všechna metadata
+route features se musí shodovat. Každá raw native varianta se validuje před
+filtrováním. Všechny varianty sdílejí revision/exclusions/engine/dataset;
+count = počet unikátních exclusions. observedAt <= now < validUntil <=
+observedAt + 10 min a současně graph freshness deadline. Dataset přesně
+odpovídá coverage; graf nejvýše 10 dní, nikdy future. Chybějící pole není
+accepted. Hash neprokazuje sám původ/legal coverage; odpovědnost SIM publisheru.
+
+Tato cesta používá native engine bez route cache či fallbacku, snap <=25 m,
+pouze odjezd nyní. Strict trip nikdy nedowngradovat. Změna zdroje/grafu či
+expirace během výpočtu: 503 `ROUTING_KNOWN_CLOSURES_CHANGED`; source/review
+chyba: 503 `ROUTING_KNOWN_CLOSURES_UNAVAILABLE` nebo
+`ROUTING_KNOWN_CLOSURES_REVIEW_REQUIRED`; engine/geometry: 502
+`ROUTING_KNOWN_CLOSURES_ENGINE_FAILED`; budoucí odjezd: 422
+`ROUTING_KNOWN_CLOSURES_UNSUPPORTED`. Žádné přímé náhradní volání.

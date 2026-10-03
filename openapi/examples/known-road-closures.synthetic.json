@@ -1,0 +1,517 @@
+{
+  "synthetic": true,
+  "validationNow": "2026-10-03T12:00:00.000Z",
+  "endpoint": "alternatives",
+  "request": {
+    "from": {
+      "lon": 14.42,
+      "lat": 50.08
+    },
+    "to": {
+      "lon": 14.45,
+      "lat": 50.1
+    },
+    "profileId": "car",
+    "alternatives": 2,
+    "includeRoadAttributes": false,
+    "includeElevationProfile": false,
+    "includeWeatherOnRoute": false,
+    "includeHazardsOnRoute": false,
+    "includeTraffic": false
+  },
+  "response": {
+    "contractVersion": "sim-routing-route-v1",
+    "generatedAt": "2026-10-03T12:00:00.000Z",
+    "source": {
+      "sourceId": "routing_model",
+      "sourceType": "MODELLED_ROUTING",
+      "generatedAt": "2026-10-03T12:00:00.000Z",
+      "backend": "valhalla"
+    },
+    "query": {
+      "from": {
+        "lon": 14.42,
+        "lat": 50.08
+      },
+      "to": {
+        "lon": 14.45,
+        "lat": 50.1
+      },
+      "profileId": "car",
+      "alternatives": 2,
+      "includeRoadAttributes": false,
+      "includeElevationProfile": false,
+      "includeWeatherOnRoute": false,
+      "includeHazardsOnRoute": false,
+      "includeTraffic": false,
+      "via": [],
+      "avoid": []
+    },
+    "profile": {
+      "profileId": "car",
+      "label": "Car",
+      "labelLocalized": {
+        "cs": "Osobní vozidlo",
+        "en": "Car"
+      },
+      "transportMode": "road",
+      "descriptionLocalized": {
+        "cs": "Běžná silniční trasa pro osobní vozidlo.",
+        "en": "Standard road route for a passenger car."
+      },
+      "defaultSpeedKph": 55,
+      "maxSearchRadiusM": 800000,
+      "supportsAvoid": ["flood", "fire", "road_closure", "unpaved", "tunnel", "bridge"],
+      "notes": ["Uses local OSM road geometry. It does not yet enforce live closures as hard constraints."]
+    },
+    "traffic": {
+      "trafficAware": false,
+      "sourceIds": [],
+      "sourceStatus": "disabled",
+      "corridorRadiusM": 350,
+      "candidateCount": 0,
+      "incidentCount": 0,
+      "hardExclusionCandidateCount": 0,
+      "hardExclusionAppliedCount": 0,
+      "hardExclusionApplied": false,
+      "hard_exclusion_applied": false,
+      "softPenaltyCandidateCount": 0,
+      "delayPenaltySeconds": 0,
+      "warnings": [],
+      "limitations": [
+        "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+        "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+      ]
+    },
+    "quality": {
+      "mode": "engine_route",
+      "confidence": 0.9,
+      "graphEdgesScanned": 0,
+      "graphEdgesUsed": 2,
+      "routingModelVersion": "valhalla-v1",
+      "engine": "valhalla"
+    },
+    "routes": [
+      {
+        "routeId": "routing:car:valhalla:bfbe8c308f17a456acf57dcf",
+        "profileId": "car",
+        "rank": 1,
+        "status": "ok",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [14.42, 50.08],
+            [14.44, 50.09],
+            [14.45, 50.1]
+          ]
+        },
+        "distanceM": 2000,
+        "durationSeconds": 100,
+        "snap": {
+          "fromDistanceM": 0,
+          "toDistanceM": 0,
+          "from": {
+            "lon": 14.42,
+            "lat": 50.08
+          },
+          "to": {
+            "lon": 14.45,
+            "lat": 50.1
+          }
+        },
+        "steps": [
+          {
+            "index": 0,
+            "instructionLocalized": {
+              "cs": "Pokračujte po trase.",
+              "en": "Continue on the route."
+            },
+            "distanceM": 3130,
+            "durationSeconds": 0,
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [14.42, 50.08],
+                [14.44, 50.09],
+                [14.45, 50.1]
+              ]
+            }
+          }
+        ],
+        "warnings": [],
+        "traffic": {
+          "trafficAware": false,
+          "sourceStatus": "disabled",
+          "incidentCount": 0,
+          "delayPenaltySeconds": 0,
+          "hardExclusionCandidateCount": 0,
+          "hardExclusionApplied": false,
+          "hard_exclusion_applied": false,
+          "softPenaltyCandidateCount": 0,
+          "incidentsOnRoute": [],
+          "warnings": [],
+          "limitations": [
+            "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+            "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+          ]
+        },
+        "quality": {
+          "mode": "engine_route",
+          "confidence": 0.9,
+          "graphEdgesScanned": 0,
+          "graphEdgesUsed": 2,
+          "routingModelVersion": "valhalla-v1",
+          "engine": "valhalla"
+        },
+        "vehicleAssessment": {
+          "state": "not_evaluated",
+          "providerCosting": "auto",
+          "appliedFields": [],
+          "limitations": [
+            "Valhalla costing uses mapped restrictions only; this is not a guarantee of legal or physical passability.",
+            "Some vehicle dimensions were not supplied by the client."
+          ]
+        },
+        "navigation": {
+          "provider": "valhalla",
+          "enhancementFlags": ["date_time", "turn_lanes", "linear_references", "admin_crossings", "recostings", "adaptive_elevation_interval"],
+          "recostings": []
+        },
+        "knownClosures": {
+          "version": "sim-known-road-closures-v1",
+          "state": "applied",
+          "coverage": "incomplete",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observedAt": "2026-10-03T11:59:00.000Z",
+          "validUntil": "2026-10-03T12:09:00.000Z",
+          "appliedClosureCount": 1,
+          "geometryHash": "49e53bc429eebf6b8753b1c52c574f0c9d097b0f10dd9e153e63398ffce147ef",
+          "requestHash": "80a00a6cf536cc1f4a228b4dca789703c7ab9ab60e8abff283d8ed8841c45a35",
+          "exclusions": [
+            {
+              "closureId": "synthetic-bridge",
+              "sourceDirection": "unknown",
+              "enforcedDirection": "both",
+              "enforcementReason": "conservative_whole_structure_avoidance",
+              "reviewedGeometryHash": "66bbec17151c54e7cdd7746431123144d9b04bec2fd5f9097a0e414bb204a63e"
+            }
+          ],
+          "routingDataset": {
+            "version": "sim-routing-2026-09-29-1790679143",
+            "builtAt": "2026-09-29T10:52:23.000Z"
+          },
+          "engine": {
+            "provider": "valhalla",
+            "version": "3.8.3",
+            "fallbackUsed": false
+          },
+          "limitations": [
+            "Only individually reviewed current TEC closures are enforced; national closure completeness is not asserted.",
+            "Unknown source direction may be conservatively excluded in both directions only for an individually reviewed whole-structure closure; this can lengthen a detour.",
+            "Mapped vehicle limits, last-mile access and physical passability are not guaranteed."
+          ]
+        }
+      },
+      {
+        "routeId": "routing:car:valhalla:5df65d031af530f5e4d2f15f",
+        "profileId": "car",
+        "rank": 2,
+        "status": "ok",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [14.42, 50.08],
+            [14.43, 50.095],
+            [14.45, 50.1]
+          ]
+        },
+        "distanceM": 2000,
+        "durationSeconds": 100,
+        "snap": {
+          "fromDistanceM": 0,
+          "toDistanceM": 0,
+          "from": {
+            "lon": 14.42,
+            "lat": 50.08
+          },
+          "to": {
+            "lon": 14.45,
+            "lat": 50.1
+          }
+        },
+        "steps": [
+          {
+            "index": 0,
+            "instructionLocalized": {
+              "cs": "Pokračujte po trase.",
+              "en": "Continue on the route."
+            },
+            "distanceM": 3345,
+            "durationSeconds": 0,
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [14.42, 50.08],
+                [14.43, 50.095],
+                [14.45, 50.1]
+              ]
+            }
+          }
+        ],
+        "warnings": [],
+        "traffic": {
+          "trafficAware": false,
+          "sourceStatus": "disabled",
+          "incidentCount": 0,
+          "delayPenaltySeconds": 0,
+          "hardExclusionCandidateCount": 0,
+          "hardExclusionApplied": false,
+          "hard_exclusion_applied": false,
+          "softPenaltyCandidateCount": 0,
+          "incidentsOnRoute": [],
+          "warnings": [],
+          "limitations": [
+            "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+            "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+          ]
+        },
+        "quality": {
+          "mode": "engine_route",
+          "confidence": 0.9,
+          "graphEdgesScanned": 0,
+          "graphEdgesUsed": 2,
+          "routingModelVersion": "valhalla-v1",
+          "engine": "valhalla"
+        },
+        "vehicleAssessment": {
+          "state": "not_evaluated",
+          "providerCosting": "auto",
+          "appliedFields": [],
+          "limitations": [
+            "Valhalla costing uses mapped restrictions only; this is not a guarantee of legal or physical passability.",
+            "Some vehicle dimensions were not supplied by the client."
+          ]
+        },
+        "navigation": {
+          "provider": "valhalla",
+          "enhancementFlags": ["date_time", "turn_lanes", "linear_references", "admin_crossings", "recostings", "adaptive_elevation_interval"],
+          "recostings": []
+        },
+        "knownClosures": {
+          "version": "sim-known-road-closures-v1",
+          "state": "applied",
+          "coverage": "incomplete",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observedAt": "2026-10-03T11:59:00.000Z",
+          "validUntil": "2026-10-03T12:09:00.000Z",
+          "appliedClosureCount": 1,
+          "geometryHash": "a5f278036c665676c1169f897c6c2df41b2a567ae5f93426bec7ebf9804843a7",
+          "requestHash": "80a00a6cf536cc1f4a228b4dca789703c7ab9ab60e8abff283d8ed8841c45a35",
+          "exclusions": [
+            {
+              "closureId": "synthetic-bridge",
+              "sourceDirection": "unknown",
+              "enforcedDirection": "both",
+              "enforcementReason": "conservative_whole_structure_avoidance",
+              "reviewedGeometryHash": "66bbec17151c54e7cdd7746431123144d9b04bec2fd5f9097a0e414bb204a63e"
+            }
+          ],
+          "routingDataset": {
+            "version": "sim-routing-2026-09-29-1790679143",
+            "builtAt": "2026-09-29T10:52:23.000Z"
+          },
+          "engine": {
+            "provider": "valhalla",
+            "version": "3.8.3",
+            "fallbackUsed": false
+          },
+          "limitations": [
+            "Only individually reviewed current TEC closures are enforced; national closure completeness is not asserted.",
+            "Unknown source direction may be conservatively excluded in both directions only for an individually reviewed whole-structure closure; this can lengthen a detour.",
+            "Mapped vehicle limits, last-mile access and physical passability are not guaranteed."
+          ]
+        }
+      }
+    ],
+    "features": [
+      {
+        "type": "Feature",
+        "id": "routing:car:valhalla:bfbe8c308f17a456acf57dcf",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [14.42, 50.08],
+            [14.44, 50.09],
+            [14.45, 50.1]
+          ]
+        },
+        "properties": {
+          "profileId": "car",
+          "rank": 1,
+          "role": "primary",
+          "status": "ok",
+          "distanceM": 2000,
+          "durationSeconds": 100,
+          "quality": {
+            "mode": "engine_route",
+            "confidence": 0.9,
+            "graphEdgesScanned": 0,
+            "graphEdgesUsed": 2,
+            "routingModelVersion": "valhalla-v1",
+            "engine": "valhalla"
+          },
+          "navigation": {
+            "provider": "valhalla",
+            "enhancementFlags": ["date_time", "turn_lanes", "linear_references", "admin_crossings", "recostings", "adaptive_elevation_interval"],
+            "recostings": []
+          },
+          "traffic": {
+            "trafficAware": false,
+            "sourceStatus": "disabled",
+            "incidentCount": 0,
+            "delayPenaltySeconds": 0,
+            "hardExclusionCandidateCount": 0,
+            "hardExclusionApplied": false,
+            "hard_exclusion_applied": false,
+            "softPenaltyCandidateCount": 0,
+            "incidentsOnRoute": [],
+            "warnings": [],
+            "limitations": [
+              "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+              "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+            ]
+          },
+          "knownClosures": {
+            "version": "sim-known-road-closures-v1",
+            "state": "applied",
+            "coverage": "incomplete",
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observedAt": "2026-10-03T11:59:00.000Z",
+            "validUntil": "2026-10-03T12:09:00.000Z",
+            "appliedClosureCount": 1,
+            "geometryHash": "49e53bc429eebf6b8753b1c52c574f0c9d097b0f10dd9e153e63398ffce147ef",
+            "requestHash": "80a00a6cf536cc1f4a228b4dca789703c7ab9ab60e8abff283d8ed8841c45a35",
+            "exclusions": [
+              {
+                "closureId": "synthetic-bridge",
+                "sourceDirection": "unknown",
+                "enforcedDirection": "both",
+                "enforcementReason": "conservative_whole_structure_avoidance",
+                "reviewedGeometryHash": "66bbec17151c54e7cdd7746431123144d9b04bec2fd5f9097a0e414bb204a63e"
+              }
+            ],
+            "routingDataset": {
+              "version": "sim-routing-2026-09-29-1790679143",
+              "builtAt": "2026-09-29T10:52:23.000Z"
+            },
+            "engine": {
+              "provider": "valhalla",
+              "version": "3.8.3",
+              "fallbackUsed": false
+            },
+            "limitations": [
+              "Only individually reviewed current TEC closures are enforced; national closure completeness is not asserted.",
+              "Unknown source direction may be conservatively excluded in both directions only for an individually reviewed whole-structure closure; this can lengthen a detour.",
+              "Mapped vehicle limits, last-mile access and physical passability are not guaranteed."
+            ]
+          },
+          "warnings": [],
+          "styleHint": "routing-primary-v1"
+        }
+      },
+      {
+        "type": "Feature",
+        "id": "routing:car:valhalla:5df65d031af530f5e4d2f15f",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [14.42, 50.08],
+            [14.43, 50.095],
+            [14.45, 50.1]
+          ]
+        },
+        "properties": {
+          "profileId": "car",
+          "rank": 2,
+          "role": "alternative",
+          "status": "ok",
+          "distanceM": 2000,
+          "durationSeconds": 100,
+          "quality": {
+            "mode": "engine_route",
+            "confidence": 0.9,
+            "graphEdgesScanned": 0,
+            "graphEdgesUsed": 2,
+            "routingModelVersion": "valhalla-v1",
+            "engine": "valhalla"
+          },
+          "navigation": {
+            "provider": "valhalla",
+            "enhancementFlags": ["date_time", "turn_lanes", "linear_references", "admin_crossings", "recostings", "adaptive_elevation_interval"],
+            "recostings": []
+          },
+          "traffic": {
+            "trafficAware": false,
+            "sourceStatus": "disabled",
+            "incidentCount": 0,
+            "delayPenaltySeconds": 0,
+            "hardExclusionCandidateCount": 0,
+            "hardExclusionApplied": false,
+            "hard_exclusion_applied": false,
+            "softPenaltyCandidateCount": 0,
+            "incidentsOnRoute": [],
+            "warnings": [],
+            "limitations": [
+              "SRTI LOD events are currently consumed as representative points; precise segment-level hard closures require DATEX II linear references or Valhalla edge mapping.",
+              "Hard exclusion uses Valhalla exclude_locations only for closure-like candidates when the route request includes avoid=road_closure."
+            ]
+          },
+          "knownClosures": {
+            "version": "sim-known-road-closures-v1",
+            "state": "applied",
+            "coverage": "incomplete",
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observedAt": "2026-10-03T11:59:00.000Z",
+            "validUntil": "2026-10-03T12:09:00.000Z",
+            "appliedClosureCount": 1,
+            "geometryHash": "a5f278036c665676c1169f897c6c2df41b2a567ae5f93426bec7ebf9804843a7",
+            "requestHash": "80a00a6cf536cc1f4a228b4dca789703c7ab9ab60e8abff283d8ed8841c45a35",
+            "exclusions": [
+              {
+                "closureId": "synthetic-bridge",
+                "sourceDirection": "unknown",
+                "enforcedDirection": "both",
+                "enforcementReason": "conservative_whole_structure_avoidance",
+                "reviewedGeometryHash": "66bbec17151c54e7cdd7746431123144d9b04bec2fd5f9097a0e414bb204a63e"
+              }
+            ],
+            "routingDataset": {
+              "version": "sim-routing-2026-09-29-1790679143",
+              "builtAt": "2026-09-29T10:52:23.000Z"
+            },
+            "engine": {
+              "provider": "valhalla",
+              "version": "3.8.3",
+              "fallbackUsed": false
+            },
+            "limitations": [
+              "Only individually reviewed current TEC closures are enforced; national closure completeness is not asserted.",
+              "Unknown source direction may be conservatively excluded in both directions only for an individually reviewed whole-structure closure; this can lengthen a detour.",
+              "Mapped vehicle limits, last-mile access and physical passability are not guaranteed."
+            ]
+          },
+          "warnings": [],
+          "styleHint": "routing-alternative-v1"
+        }
+      }
+    ],
+    "warnings": ["Known reviewed closures only: other closures and mapped vehicle restrictions may be missing."],
+    "coverage": {
+      "state": "covered",
+      "routingDataset": {
+        "version": "sim-routing-2026-09-29-1790679143",
+        "builtAt": "2026-09-29T10:52:23.000Z"
+      }
+    }
+  }
+}

@@ -15,6 +15,7 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { RoutingError, RoutingService } from "./routing-service.js";
+import { knownClosureOptionsFromEnv } from "./known-road-closures.js";
 import { SearchDataService, type SearchEntityType, type SearchQueryRequest } from "./search-data.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
 import { allSourceDescriptors, createSituationDataSources, type SourceCacheStats } from "./sources.js";
@@ -74,7 +75,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   const transitStatic = new TransitStaticModelService(config);
   const tpeg2Source = sources.find((source): source is Tpeg2Source => source instanceof Tpeg2Source);
   const valhallaTraffic = new ValhallaTrafficCoordinator(config, tpeg2Source);
-  const routing = new RoutingService(config, valhallaTraffic);
+  const routing = new RoutingService(config, valhallaTraffic, undefined, knownClosureOptionsFromEnv(tpeg2Source));
   const searchData = new SearchDataService(config);
   const context: SituationDataAppContext = {
     config,

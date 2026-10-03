@@ -44,6 +44,7 @@ import type {
   SituationSeverity
 } from "./types.js";
 import type { ValhallaTrafficCoordinator, ValhallaTrafficPublicStatus } from "./valhalla-traffic-coordinator.js";
+import { knownClosureOptionsFromEnv, verifyKnownClosureGeometry, type KnownClosureOptions, type KnownClosuresAssessment } from "./known-road-closures.js";
 
 export type RoutingProfileId = "car" | "emergency_vehicle" | "large_emergency_vehicle" | "offroad_4x4" | "walking" | "bicycle" | "evacuation_walking";
 
@@ -142,6 +143,7 @@ export interface RoutingFeature {
 
 export interface RoutingRoute {
   assessment?: RoadTripAssessment;
+  knownClosures?: KnownClosuresAssessment;
   routeId: string;
   profileId: RoutingProfileId;
   rank: number;
@@ -954,7 +956,8 @@ export class RoutingService {
   constructor(
     private readonly config: SituationDataConfig,
     private readonly valhallaTraffic?: ValhallaTrafficCoordinator,
-    private readonly safety: RoutingSafetyOptions = routingSafetyFromEnv()
+    private readonly safety: RoutingSafetyOptions = routingSafetyFromEnv(),
+    private readonly knownClosures: KnownClosureOptions = knownClosureOptionsFromEnv()
   ) {
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
@@ -1047,6 +1050,7 @@ export class RoutingService {
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 1);
     const request = this.normalizeRouteRequest(raw, 1);
+    if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
     const cache = routingTrafficCachePolicy(traffic);
@@ -1113,6 +1117,7 @@ export class RoutingService {
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 2);
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
+    if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
     const cache = routingTrafficCachePolicy(traffic);
@@ -1137,6 +1142,112 @@ export class RoutingService {
   async nearestAccess(raw: RoutingNearestAccessRequest): Promise<RoutingNearestAccessResponse> {
     const request = this.normalizeNearestAccessRequest(raw);
     return this.nearestAccessCache.getOrLoad(`nearest:${stablePayload(request)}`, () => this.computeNearestAccessResponse(request));
+  }
+
+  private async knownClosureRoute(
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+  ): Promise<RoutingRouteResponse> {
+    // Deliberately outside the legacy route cache and fallback catch. A strict
+    // trip reaches strictRoadTrip first and can NEVER be downgraded here.
+    try {
+      if (!this.shouldUseValhalla()) throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "The accepted known-closure engine is unavailable.");
+      if (request.departureTime && request.departureTime !== "now")
+        throw new RoadTripError(422, "ROUTING_KNOWN_CLOSURES_UNSUPPORTED", "Known closures are accepted only for departure now.");
+      const profile = getRoutingProfile(request.profileId),
+        before = await requestValhallaStatus(this.config),
+        version = cleanString(before.version),
+        dataset = routingDatasetFromStatus(before);
+      if (!version || !this.knownClosures.acceptedEngineVersions.includes(version))
+        throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "This exact engine build has not passed known-closure acceptance.");
+      const age = (Date.now() - Date.parse(dataset.builtAt)) / 1000;
+      if (age < 0 || age > ROAD_TRIP_MAX_GRAPH_AGE_SECONDS)
+        throw new RoadTripError(503, "ROUTING_GRAPH_STALE", "Known closures require a current reviewed graph.");
+      const snapshot = await this.knownClosures.loadSnapshot(dataset, Date.now());
+      const deadline = Math.min(Date.parse(snapshot.validUntil), Date.parse(dataset.builtAt) + ROAD_TRIP_MAX_GRAPH_AGE_SECONDS * 1000);
+      if (deadline <= Date.now()) throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "Known closures expired before routing.");
+      this.valhallaTraffic?.activate();
+      let liveSpeeds = await this.valhallaTraffic?.status();
+      if (liveTrafficIsUsable(liveSpeeds) && liveSpeeds!.routingDataset !== dataset.version) liveSpeeds = undefined;
+      const native = await requestValhallaRoute(this.config, profile, request, undefined, {
+        liveSpeeds,
+        maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
+        excludePolygons: snapshot.closures.map((c) => c.polygon)
+      });
+      const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
+      if (!native.trip || trips.some((t) => !t) || (native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
+        throw new Error("Incomplete or weakened engine request");
+      for (const t of trips) {
+        assertValhallaRouteWaypointSnaps({ trip: t }, [request.from, ...(request.via ?? []), request.to], Math.min(25, this.config.routingMaxSnapDistanceM));
+        if (!t?.legs?.length) throw new Error("Missing engine legs");
+        for (const leg of t.legs) verifyKnownClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot);
+      }
+      let routes = valhallaRoutes(profile, request, native, request.alternatives);
+      if (
+        routes.length !== trips.slice(0, request.alternatives).length ||
+        !routes.length ||
+        routes.some((r) => r.status !== "ok" || r.quality.mode !== "engine_route")
+      )
+        throw new Error("Unusable engine geometry");
+      // Do not fabricate penalty alternatives using a second unconstrained call.
+      for (const r of routes) verifyKnownClosureGeometry(r.geometry.coordinates, snapshot);
+      if (request.includeRoadAttributes === true)
+        routes = await Promise.all(routes.map(async (r) => ({ ...r, roadAttributes: await this.valhallaRoadAttributes(r, profile, request, dataset) })));
+      const result = await this.routeResponse(
+        new Date().toISOString(),
+        profile,
+        request,
+        routes,
+        [...valhallaWarnings(native), "Known reviewed closures only: other closures and mapped vehicle restrictions may be missing."],
+        "valhalla",
+        undefined,
+        liveSpeeds
+      );
+      await this.checkedTrafficRoute(result);
+      const after = await requestValhallaStatus(this.config),
+        latest = await this.knownClosures.loadSnapshot(dataset, Date.now());
+      if (
+        after.version !== version ||
+        canonicalRoutingHash(routingDatasetFromStatus(after)) !== canonicalRoutingHash(dataset) ||
+        canonicalRoutingHash(latest) !== canonicalRoutingHash(snapshot) ||
+        Date.now() >= deadline
+      )
+        throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_CHANGED", "Graph, closure revision or effective validity changed during calculation; retry.");
+      for (const r of result.routes) {
+        verifyKnownClosureGeometry(r.geometry.coordinates, latest);
+        r.knownClosures = {
+          version: "sim-known-road-closures-v1",
+          state: "applied",
+          coverage: "incomplete",
+          revision: snapshot.revision,
+          observedAt: snapshot.observedAt,
+          validUntil: new Date(deadline).toISOString(),
+          appliedClosureCount: snapshot.closures.length,
+          geometryHash: canonicalRoutingHash(r.geometry),
+          requestHash: canonicalRoutingHash(result.query),
+          exclusions: snapshot.closures.map((c) => ({
+            closureId: c.id,
+            sourceDirection: c.sourceDirection,
+            enforcedDirection: c.enforcedDirection,
+            enforcementReason: c.enforcementReason,
+            reviewedGeometryHash: canonicalRoutingHash(c.polygon)
+          })),
+          routingDataset: dataset,
+          engine: { provider: "valhalla", version, fallbackUsed: false },
+          limitations: [
+            "Only individually reviewed current TEC closures are enforced; national closure completeness is not asserted.",
+            "Unknown source direction may be conservatively excluded in both directions only for an individually reviewed whole-structure closure; this can lengthen a detour.",
+            "Mapped vehicle limits, last-mile access and physical passability are not guaranteed."
+          ]
+        };
+      }
+      if (result.coverage) result.coverage.routingDataset = dataset;
+      result.features = result.routes.map((route) => routeFeature(route));
+      return result;
+    } catch (error) {
+      if (error instanceof RoadTripError) throw new RoutingError(error.status, error.code, error.message);
+      if (error instanceof RoutingError) throw error;
+      throw new RoutingError(502, "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED", "The known-closure route could not be verified; no fallback was used.");
+    }
   }
 
   private async strictRoadTrip(raw: RoutingRouteRequest, defaultAlternatives: number): Promise<RoutingRouteResponse> {
@@ -2515,6 +2626,7 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       quality: route.quality,
       navigation: route.navigation,
       traffic: route.traffic,
+      ...(route.knownClosures ? { knownClosures: route.knownClosures } : {}),
       warnings: route.warnings,
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
     }

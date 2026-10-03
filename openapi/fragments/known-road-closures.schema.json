@@ -1,0 +1,68 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "state",
+    "coverage",
+    "revision",
+    "observedAt",
+    "validUntil",
+    "appliedClosureCount",
+    "geometryHash",
+    "requestHash",
+    "exclusions",
+    "routingDataset",
+    "engine",
+    "limitations"
+  ],
+  "properties": {
+    "version": { "const": "sim-known-road-closures-v1" },
+    "state": { "const": "applied" },
+    "coverage": { "const": "incomplete" },
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "validUntil": { "type": "string", "format": "date-time" },
+    "appliedClosureCount": { "type": "integer", "minimum": 0, "maximum": 128 },
+    "geometryHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "requestHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of response.query serialized as JSON recursively sorting object keys, preserving array order and numeric values. COP additionally validates normalized query identity against the requested trip; a matching hash alone does not prove identity."
+    },
+    "exclusions": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["closureId", "sourceDirection", "enforcedDirection", "enforcementReason", "reviewedGeometryHash"],
+        "properties": {
+          "closureId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "sourceDirection": { "enum": ["both", "unknown"] },
+          "enforcedDirection": { "const": "both" },
+          "enforcementReason": { "enum": ["source_both_direction", "conservative_whole_structure_avoidance"] },
+          "reviewedGeometryHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        },
+        "oneOf": [
+          { "properties": { "sourceDirection": { "const": "both" }, "enforcementReason": { "const": "source_both_direction" } } },
+          { "properties": { "sourceDirection": { "const": "unknown" }, "enforcementReason": { "const": "conservative_whole_structure_avoidance" } } }
+        ]
+      }
+    },
+    "routingDataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "builtAt"],
+      "properties": { "version": { "type": "string", "minLength": 1 }, "builtAt": { "type": "string", "format": "date-time" } }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "version", "fallbackUsed"],
+      "properties": { "provider": { "const": "valhalla" }, "version": { "type": "string", "minLength": 1 }, "fallbackUsed": { "const": false } }
+    },
+    "limitations": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } }
+  },
+  "description": "Additive ordinary-routing evidence only; absence means unknown/not requested, never strict acceptance. observedAt is latest successful full snapshot confirmation, not event onset or physical observation. exclusions length equals appliedClosureCount and closureId values are unique. With unknown source direction, both-direction avoidance is explicitly conservative and requires individual review of an official whole-structure closure statement plus exact graph geometry. Every applied closure uses separately reviewed graph geometry and fresh full TEC membership. Coverage is always incomplete. Configured source/graph/engine/expiry failures return an error without a discarded-exclusion fallback."
+}

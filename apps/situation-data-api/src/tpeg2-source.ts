@@ -40,6 +40,8 @@ interface ParsedMessage {
   documentTimestamp?: string;
   values: Map<string, string[]>;
   codes: Map<string, string[]>;
+  codeTables: Map<string, string[]>;
+  elements: Set<string>;
   coordinates: ParsedCoordinate[];
   methods: ParsedMethod[];
 }
@@ -90,6 +92,17 @@ export interface Tpeg2EventRecord {
   unverified?: boolean;
   label: string;
   coordinates: Array<[number, number]>;
+  // Internal-only eligibility evidence, never a geometry approval by itself.
+  closureEvidence?: {
+    direction: "both" | "one_direction" | "unknown";
+    vehicleScope: "all" | "restricted";
+    laneRestricted: boolean;
+    verified: boolean;
+    roadClosed: boolean;
+    explicitValidity: boolean;
+    fuzzyGeometry: boolean;
+    semanticHash: string;
+  };
 }
 
 export interface Tpeg2TrafficSnapshot {
@@ -191,38 +204,104 @@ export async function parseTpeg2Dynamic(input: XmlInput): Promise<Tpeg2FlowRecor
   return records;
 }
 
-export async function parseTpeg2Tec(input: XmlInput): Promise<Tpeg2EventRecord[]> {
+export async function parseTpeg2Tec(input: XmlInput, requireFullRepository = false): Promise<Tpeg2EventRecord[]> {
   const records: Tpeg2EventRecord[] = [];
-  await parseMessages(input, (message) => {
-    if (message.type !== "TEC") {
-      return;
-    }
-    const messageId = firstEnding(message.values, "/messageID");
-    if (!messageId || firstEnding(message.values, "/cancelFlag") === "true") {
-      return;
-    }
-    const label = firstEnding(message.values, "/freeText/value")?.replace(/\s+/g, " ").trim();
-    const coordinates = decodeGlrCoordinates(message.coordinates);
-    const openLrFallback = decodeOpenLrCoordinates(message.coordinates);
-    const selectedCoordinates = coordinates.length > 0 ? coordinates : openLrFallback;
-    if (!label || selectedCoordinates.length === 0) {
-      return;
-    }
-    records.push({
-      messageId,
-      versionId: firstEnding(message.values, "/versionID"),
-      observedAt: firstEnding(message.values, "/messageGenerationTime") ?? message.documentTimestamp ?? new Date().toISOString(),
-      validFrom: firstEnding(message.values, "/startTime"),
-      validUntil: firstEnding(message.values, "/stopTime") ?? firstEnding(message.values, "/messageExpiryTime"),
-      effectCode: firstEnding(message.codes, "/effectCode"),
-      mainCauseCode: firstEnding(message.codes, "/mainCause"),
-      subCauseCode: firstEnding(message.codes, "/subCause"),
-      warningLevelCode: firstEnding(message.codes, "/warningLevel"),
-      unverified: firstEnding(message.values, "/unverifiedInformation") === "true",
-      label: label.slice(0, 500),
-      coordinates: selectedCoordinates
-    });
-  });
+  const identities = new Set<string>();
+  const values = (map: Map<string, string[]>, suffix: string) => [...map].filter(([k]) => k.endsWith(suffix)).flatMap(([, v]) => v);
+  await parseMessages(
+    input,
+    (message) => {
+      if (message.type !== "TEC") {
+        return;
+      }
+      const messageId = firstEnding(message.values, "/messageID");
+      const ids = values(message.values, "/messageID");
+      const cancellation = values(message.values, "/cancelFlag");
+      if (
+        requireFullRepository &&
+        (!messageId || ids.length !== 1 || identities.has(messageId) || cancellation.length !== 1 || !["true", "false"].includes(cancellation[0]!))
+      )
+        throw new Error("Ambiguous TEC identity or cancellation in full snapshot");
+      if (messageId) identities.add(messageId);
+      if (!messageId || cancellation[0] === "true") {
+        return;
+      }
+      const label = firstEnding(message.values, "/freeText/value")?.replace(/\s+/g, " ").trim();
+      const coordinates = decodeGlrCoordinates(message.coordinates);
+      const openLrFallback = decodeOpenLrCoordinates(message.coordinates);
+      const selectedCoordinates = coordinates.length > 0 ? coordinates : openLrFallback;
+      // Retain malformed/non-geographic identities internally: a missing field
+      // must not be mistaken for revocation from a complete TEC snapshot.
+      const starts = values(message.values, "/event/startTime");
+      const eventStops = values(message.values, "/event/stopTime");
+      const expiries = values(message.values, "/messageExpiryTime");
+      const stops = [...eventStops, ...expiries];
+      const validUntil =
+        stops.length && stops.every((v) => Number.isFinite(sourceTimestamp(v)))
+          ? stops.reduce((a, b) => (sourceTimestamp(a) < sourceTimestamp(b) ? a : b))
+          : undefined;
+      const directions = values(message.values, "/optionTMCLocationReferenceLink/bothDirections");
+      const verified = values(message.values, "/unverifiedInformation");
+      const evidence = {
+        direction:
+          directions.length && directions.every((v) => v === "true")
+            ? ("both" as const)
+            : directions.length && directions.every((v) => v === "false")
+              ? ("one_direction" as const)
+              : ("unknown" as const),
+        vehicleScope: [...message.elements].some((p) => p.includes("/vehicleRestriction")) ? ("restricted" as const) : ("all" as const),
+        laneRestricted: [...message.elements].some((p) =>
+          /\/(laneRestrictionType|numberOfLanes|causeLanes|causeOffset|lengthAffected|optionLinkedCause)(\/|$)/.test(p)
+        ),
+        verified: verified.length > 0 && verified.every((v) => v === "false"),
+        roadClosed:
+          values(message.codes, "/effectCode").length === 1 &&
+          firstEnding(message.codes, "/effectCode") === "7" &&
+          firstEnding(message.codeTables, "/effectCode") === "tec001_EffectCode",
+        explicitValidity:
+          cancellation.length === 1 &&
+          cancellation[0] === "false" &&
+          starts.length === 1 &&
+          Number.isFinite(sourceTimestamp(starts[0]!)) &&
+          eventStops.length === 1 &&
+          expiries.length === 1 &&
+          !!validUntil,
+        fuzzyGeometry: values(message.values, "/isFuzzyLine").some((v) => v !== "false")
+      };
+      const record: Tpeg2EventRecord = {
+        messageId,
+        versionId: firstEnding(message.values, "/versionID"),
+        observedAt: firstEnding(message.values, "/messageGenerationTime") ?? message.documentTimestamp ?? new Date().toISOString(),
+        validFrom: starts[0],
+        validUntil,
+        effectCode: firstEnding(message.codes, "/effectCode"),
+        mainCauseCode: firstEnding(message.codes, "/mainCause"),
+        subCauseCode: firstEnding(message.codes, "/subCause"),
+        warningLevelCode: firstEnding(message.codes, "/warningLevel"),
+        unverified: !evidence.verified,
+        label: label?.slice(0, 500) ?? "",
+        coordinates: selectedCoordinates
+      };
+      record.closureEvidence = {
+        ...evidence,
+        semanticHash: createHash("sha256")
+          .update(
+            JSON.stringify({
+              messageId,
+              versionId: record.versionId,
+              validFrom: record.validFrom,
+              validUntil,
+              coordinates: record.coordinates,
+              label: label ?? "",
+              evidence
+            })
+          )
+          .digest("hex")
+      };
+      records.push(record);
+    },
+    requireFullRepository
+  );
   return records;
 }
 
@@ -271,6 +350,13 @@ export class Tpeg2Source {
     this.trafficTimer = undefined;
   }
 
+  async knownClosureEvidence(): Promise<{ confirmedAt: string; records: Tpeg2EventRecord[] }> {
+    if (!this.config.tpeg2ApiToken) throw new Error("TPEG2 closure source is not configured");
+    await this.refreshTec();
+    if (!this.tecFeed.value || !this.tecFeed.lastCheckedAtMs || this.tecFeed.lastError) throw new Error("TPEG2 closure snapshot is unavailable");
+    return { confirmedAt: new Date(this.tecFeed.lastCheckedAtMs).toISOString(), records: structuredClone(this.tecFeed.value) };
+  }
+
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
     const fetchedAt = new Date().toISOString();
     if (!query.layers.includes("traffic")) {
@@ -295,6 +381,7 @@ export class Tpeg2Source {
     }
     const eventFeatures: SituationFeature[] = [];
     for (const event of this.tecFeed.value ?? []) {
+      if (!event.label || event.coordinates.length === 0) continue;
       if (!coordinatesIntersectBbox(event.coordinates, query.bbox)) {
         continue;
       }
@@ -393,7 +480,12 @@ export class Tpeg2Source {
     return this.fetchConditional(
       "/dev/tpeg/tec",
       this.tecFeed,
-      async (input) => (await parseTpeg2Tec(input)).slice(0, this.config.tpeg2MaxRecords),
+      async (input) => {
+        const records = await parseTpeg2Tec(input, true);
+        if (records.length > this.config.tpeg2MaxRecords) throw new Error("TPEG2 TEC snapshot exceeds the bounded complete-feed limit");
+        if (new Set(records.map((r) => r.messageId)).size !== records.length) throw new Error("TPEG2 TEC snapshot contains duplicate identities");
+        return records;
+      },
       this.dynamicIntervalMs(),
       () => true
     );
@@ -706,7 +798,7 @@ function interleaveTrafficFeatures(flow: SituationFeature[], events: SituationFe
   return result;
 }
 
-async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage) => void): Promise<void> {
+async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage) => void, requireFullRepository = false): Promise<void> {
   let documentTimestamp: string | undefined;
   let current: ParsedMessage | undefined;
   let currentMethod: ParsedMethod | undefined;
@@ -720,6 +812,12 @@ async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage
     names.push(tag.local);
     texts.push("");
     const attributes = Object.values(tag.attributes);
+    if (
+      requireFullRepository &&
+      names.length === 1 &&
+      (tag.local !== "TPEGDocument" || attributes.find((a) => a.local === "docType")?.value !== "fullRepository")
+    )
+      throw new Error("TPEG2 TEC requires a complete fullRepository document");
     if (tag.local === "TPEGDocument") {
       documentTimestamp = attributes.find((attribute) => attribute.local === "timeStamp")?.value;
     }
@@ -731,6 +829,8 @@ async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage
           documentTimestamp,
           values: new Map(),
           codes: new Map(),
+          codeTables: new Map(),
+          elements: new Set(),
           coordinates: [],
           methods: []
         };
@@ -738,8 +838,11 @@ async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage
     }
     if (!current) return;
     const relativePath = messagePath(names);
+    current.elements.add(relativePath);
     const code = attributes.find((attribute) => attribute.local === "code")?.value;
     if (code) addValue(current.codes, relativePath, code);
+    const table = attributes.find((attribute) => attribute.local === "table")?.value;
+    if (table) addValue(current.codeTables, relativePath, table);
     if (currentMethod && code) addValue(currentMethod.codes, relativePath, code);
     if (tag.local === "method") {
       currentMethod = { values: new Map(), codes: new Map() };
@@ -788,11 +891,15 @@ async function parseMessages(input: XmlInput, onMessage: (message: ParsedMessage
   });
 
   const decoder = new TextDecoder();
+  let bytes = 0;
   if (typeof input === "string") {
+    if (requireFullRepository && Buffer.byteLength(input) > 16 * 1024 * 1024) throw new Error("TPEG2 TEC document is too large");
     parser.write(input).close();
     return;
   }
   for await (const chunk of input) {
+    if (requireFullRepository && (bytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.byteLength) > 16 * 1024 * 1024)
+      throw new Error("TPEG2 TEC document is too large");
     parser.write(typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true }));
   }
   parser.write(decoder.decode()).close();

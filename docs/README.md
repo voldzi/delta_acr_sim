@@ -54,6 +54,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md`](runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md)
 - [`adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md`](adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md)
 - [`runbooks/18_STRICT_ROAD_TRIP_ROUTING.md`](runbooks/18_STRICT_ROAD_TRIP_ROUTING.md)
+- [ADR 0032: částečné revidované známé uzavírky](adr/0032_PARTIAL_REVIEWED_KNOWN_CLOSURES.md)
 
 ## Machine-Readable API Contract
 

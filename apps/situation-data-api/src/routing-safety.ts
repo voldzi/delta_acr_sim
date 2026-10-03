@@ -312,7 +312,7 @@ export function snapshotDeadline(s: ClosureSnapshot, now: number): number {
 export function insideCoverage(p: [number, number], b: ClosureSnapshot["bbox"]): boolean {
   return p[0] >= b.west && p[0] <= b.east && p[1] >= b.south && p[1] <= b.north;
 }
-function segmentsIntersect(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): boolean {
+export function segmentsIntersect(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): boolean {
   const cross = (p: number[], q: number[], r: number[]) => (q[0]! - p[0]!) * (r[1]! - p[1]!) - (q[1]! - p[1]!) * (r[0]! - p[0]!);
   const on = (p: number[], q: number[], r: number[]) =>
     Math.abs(cross(p, q, r)) < 1e-12 &&
@@ -322,7 +322,7 @@ function segmentsIntersect(a: [number, number], b: [number, number], c: [number,
     r[1]! <= Math.max(p[1]!, q[1]!);
   return (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) || on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b);
 }
-function pointInRing(p: [number, number], ring: Array<[number, number]>): boolean {
+export function pointInRing(p: [number, number], ring: Array<[number, number]>): boolean {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const a = ring[i]!,

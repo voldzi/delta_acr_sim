@@ -352,6 +352,8 @@ def build_document
   road_trip_schemas.each { |name, schema| doc["components"]["schemas"]["RoadTrip#{name}"] = deep_transform(schema, "RoadTrip") }
   doc["components"]["schemas"]["SituationDataRoutingStep"]["properties"]["roundabout"] = { "$ref" => "#/components/schemas/RoadTripRoundabout" }
   doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["assessment"] = { "$ref" => "#/components/schemas/RoadTripAssessment" }
+  doc["components"]["schemas"]["SituationDataKnownRoadClosures"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/known-road-closures.schema.json")))
+  doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["knownClosures"] = { "$ref" => "#/components/schemas/SituationDataKnownRoadClosures" }
   doc["components"]["schemas"]["SituationDataRoutingProfileCatalog"]["properties"]["capabilities"] = { "$ref" => "#/components/schemas/RoadTripCapabilities" }
   trip_request = doc["components"]["schemas"]["SituationDataRoutingRouteRequest"]
   trip_request["properties"]["trip"] = { "$ref" => "#/components/schemas/RoadTripTrip" }

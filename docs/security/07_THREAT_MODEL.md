@@ -48,6 +48,18 @@ Finální rizika závisí na zvoleném auth modelu, store, retenci auditů a run
 
 ## Immutable road trip boundary
 
+### Partial known closures
+
+ADR 0032 nezakládá úplnou bezpečnostní garanci. Hrozby: falešné both ze směrově
+neznámé fuzzy line, záměna cache confirmation za event onset, withdrawal z
+neúplného XML, engine ignorující polygon, variant escape mimo OD a source/graph
+race. Mitigace: fullRepository bounded parse s jednoznačnou identity/cancel,
+individuální graph-bound semantic review, samostatný conservative reason,
+celý native request + nezávislá geometrie všech variants/legs, 25m snap,
+10min deadline, dvojí snapshot/status fence a no cache/no fallback.
+COP nezávisle váže identity/hashes/features; provider původ a ruční review
+zůstávají povinností provozního vlastníka. Public Git nesmí obsahovat raw TEC.
+
 Viz [ADR 0031](../adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md). Client trip ani
 atestace nesmí vytvořit autoritativní uzavírku. Closure source je oddělený,
 server-owned, graph-bound a time-limited; chyby/expiry/změny invalidují všechny
