@@ -48,6 +48,20 @@ Finální rizika závisí na zvoleném auth modelu, store, retenci auditů a run
 
 ## Immutable road trip boundary
 
+### Typed mapped profiles
+
+ADR0033 řeší profile downgrade, vynechání voleb, záměnu jednotek/celkové
+soupravy, forged assessment, engine clamp a fiktivní last-mile. Strict schema
+bez coercion a unknown keys, whole-combination checks, přesný engine3.8.3,
+warnings=reject a route/feature/profile/query/geometry/deadline binding jsou
+nutné spolu s ADR0032. Driver declaration není blanket ignore_access.
+Missing actual dimensions, trailer-only bans/turning clearance, neznámé
+OSM omezení a nemapovaný poslední úsek mají explicitní limitations. Endpoint
+musí zůstat na native geometry, ne na připojené přímce. COP kontroluje stejné
+fences pro všechny variants a nesmí po chybě vybrat implicitní car/MapKit.
+Klientská deklarace ani canonical hash neprokazuje právní oprávnění vjezdu.
+Měření shadow_only a serverové secrets se nemění.
+
 ### Partial known closures
 
 ADR 0032 nezakládá úplnou bezpečnostní garanci. Hrozby: falešné both ze směrově

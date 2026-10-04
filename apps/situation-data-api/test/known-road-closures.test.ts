@@ -200,6 +200,80 @@ describe("known closure publisher", () => {
   });
 });
 describe("ordinary route engine fences", () => {
+  it("preserves explicit mapped alternatives on route as well as alternatives endpoint", async () => {
+    const f = await fixture();
+    const p = { version: "sim-mapped-road-profile-v1" as const, intent: "car" as const, coverageAcknowledged: "mapped_restrictions_incomplete" as const };
+    const response = await f.service.route({ ...request(), vehicleProfile: p });
+    expect(response.query.alternatives).toBe(2);
+    expect(response.routes).toHaveLength(2);
+    expect(f.payloads[0].alternates).toBe(1);
+  });
+  it("fails mapped profiles closed before engine calls when known closure path is disabled", async () => {
+    const f = await fixture();
+    f.options.enabled = false;
+    await expect(
+      f.service.route({
+        ...request(),
+        vehicleProfile: { version: "sim-mapped-road-profile-v1", intent: "car", coverageAcknowledged: "mapped_restrictions_incomplete" }
+      })
+    ).rejects.toMatchObject({ status: 503, code: "ROUTING_PROFILE_UNAVAILABLE" });
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+  it("returns a typed error rather than fabricating an unmapped final leg", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({
+            ...reply(),
+            trip: trip([
+              [14.42, 50.08],
+              [14.44, 50.09],
+              [14.451, 50.1]
+            ])
+          })
+    );
+    await expect(
+      f.service.route({
+        ...request(),
+        vehicleProfile: { version: "sim-mapped-road-profile-v1", intent: "road_legal_4x4", coverageAcknowledged: "mapped_restrictions_incomplete" }
+      })
+    ).rejects.toMatchObject({ status: 422, code: "ROUTING_TARGET_NOT_ROUTABLE" });
+  });
+  it.each(["car", "commercial_truck", "car_with_trailer", "road_legal_4x4"] as const)(
+    "applies mapped %s profile with the same closure/hash/feature fences",
+    async (intent) => {
+      const f = await fixture(),
+        v = { heightM: 3, widthM: 2.5, lengthM: 12, loadedWeightKg: 20000 };
+      const p = {
+        version: "sim-mapped-road-profile-v1" as const,
+        intent,
+        coverageAcknowledged: "mapped_restrictions_incomplete" as const,
+        ...(intent === "commercial_truck" || intent === "car_with_trailer"
+          ? {
+              vehicle: {
+                ...v,
+                ...(intent === "commercial_truck"
+                  ? { axleLoadKg: 8000, axleCount: 3 }
+                  : { trailer: { attached: true as const, heightM: 2.8, widthM: 2.4, lengthM: 6, loadedWeightKg: 4000 } })
+              }
+            }
+          : {})
+      };
+      const response = await f.service.alternatives({ ...request(), vehicleProfile: p });
+      for (const r of response.routes) {
+        expect(r.mappedProfileAssessment?.appliedProfile).toEqual(p);
+        expect(r.mappedProfileAssessment?.requestHash).toBe(r.knownClosures?.requestHash);
+        expect(r.mappedProfileAssessment?.geometryHash).toBe(r.knownClosures?.geometryHash);
+        expect(r.mappedProfileAssessment?.validUntil).toBe(r.knownClosures?.validUntil);
+        expect(response.features.find((x) => x.id === r.routeId)?.properties.mappedProfileAssessment).toEqual(r.mappedProfileAssessment);
+      }
+      const payload = f.payloads[0];
+      expect(payload.costing).toBe(intent === "commercial_truck" ? "truck" : "auto");
+      expect(payload.costing_options[payload.costing].ignore_access).toBe(false);
+      expect(payload.exclude_polygons).toHaveLength(1);
+    }
+  );
   it("ships an independently reproducible synthetic COP fixture with exact schema and hashes", () => {
     const fixture = JSON.parse(readFileSync(new URL("../../../openapi/examples/known-road-closures.synthetic.json", import.meta.url), "utf8"));
     const require = createRequire(import.meta.url),

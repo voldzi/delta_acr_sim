@@ -1,5 +1,14 @@
 import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
 import {
+  parseMappedProfile,
+  mappedCosting,
+  mappedCostOptions,
+  mappedAssessment,
+  mappedCapabilities,
+  type MappedRoadProfile,
+  type MappedProfileAssessment
+} from "./mapped-road-profile.js";
+import {
   activeClosures,
   canonicalRoutingHash,
   insideCoverage,
@@ -64,6 +73,7 @@ export interface RoutingProfile {
 }
 
 export interface RoutingProfileCatalog {
+  mappedProfiles: ReturnType<typeof mappedCapabilities>;
   capabilities: RoadTripCapabilities;
   contractVersion: "sim-routing-profile-catalog-v1";
   generatedAt: string;
@@ -79,6 +89,7 @@ export interface RoutingCoordinate {
 }
 
 export interface RoutingRouteRequest {
+  vehicleProfile?: MappedRoadProfile;
   trip?: RoadTrip;
   includeRoadAttributes?: boolean;
   vehicle?: {
@@ -175,6 +186,7 @@ export interface RoutingRoute {
     appliedFields: Array<"heightM" | "widthM" | "lengthM" | "weightTonnes">;
     limitations: string[];
   };
+  mappedProfileAssessment?: MappedProfileAssessment;
 }
 
 export interface RoutingRoadAttributes {
@@ -986,6 +998,7 @@ export class RoutingService {
 
   listProfiles(): RoutingProfileCatalog {
     return {
+      mappedProfiles: mappedCapabilities(this.knownClosures.enabled && this.shouldUseValhalla() && this.knownClosures.acceptedEngineVersions.includes("3.8.3")),
       capabilities: roadTripCapabilities(this.safety),
       contractVersion: "sim-routing-profile-catalog-v1",
       generatedAt: new Date().toISOString(),
@@ -1049,7 +1062,9 @@ export class RoutingService {
 
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 1);
-    const request = this.normalizeRouteRequest(raw, 1);
+    const request = this.normalizeRouteRequest(raw, raw?.vehicleProfile ? (raw.alternatives ?? 1) : 1);
+    if (request.vehicleProfile && !this.knownClosures.enabled)
+      throw new RoutingError(503, "ROUTING_PROFILE_UNAVAILABLE", "Mapped profiles require the accepted known-closure path; no legacy fallback.");
     if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
@@ -1117,6 +1132,8 @@ export class RoutingService {
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 2);
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
+    if (request.vehicleProfile && !this.knownClosures.enabled)
+      throw new RoutingError(503, "ROUTING_PROFILE_UNAVAILABLE", "Mapped profiles require the accepted known-closure path; no legacy fallback.");
     if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
@@ -1159,6 +1176,8 @@ export class RoutingService {
         dataset = routingDatasetFromStatus(before);
       if (!version || !this.knownClosures.acceptedEngineVersions.includes(version))
         throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "This exact engine build has not passed known-closure acceptance.");
+      if (request.vehicleProfile && version !== "3.8.3")
+        throw new RoadTripError(503, "ROUTING_PROFILE_UNAVAILABLE", "This exact mapped profile engine build is not accepted.");
       const age = (Date.now() - Date.parse(dataset.builtAt)) / 1000;
       if (age < 0 || age > ROAD_TRIP_MAX_GRAPH_AGE_SECONDS)
         throw new RoadTripError(503, "ROUTING_GRAPH_STALE", "Known closures require a current reviewed graph.");
@@ -1177,7 +1196,12 @@ export class RoutingService {
       if (!native.trip || trips.some((t) => !t) || (native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
         throw new Error("Incomplete or weakened engine request");
       for (const t of trips) {
-        assertValhallaRouteWaypointSnaps({ trip: t }, [request.from, ...(request.via ?? []), request.to], Math.min(25, this.config.routingMaxSnapDistanceM));
+        assertValhallaRouteWaypointSnaps(
+          { trip: t },
+          [request.from, ...(request.via ?? []), request.to],
+          Math.min(25, this.config.routingMaxSnapDistanceM),
+          !!request.vehicleProfile
+        );
         if (!t?.legs?.length) throw new Error("Missing engine legs");
         for (const leg of t.legs) verifyKnownClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot);
       }
@@ -1214,6 +1238,7 @@ export class RoutingService {
         throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_CHANGED", "Graph, closure revision or effective validity changed during calculation; retry.");
       for (const r of result.routes) {
         verifyKnownClosureGeometry(r.geometry.coordinates, latest);
+        if (request.vehicleProfile) r.mappedProfileAssessment = mappedAssessment(request, result.query, r, dataset, version, new Date(deadline).toISOString());
         r.knownClosures = {
           version: "sim-known-road-closures-v1",
           state: "applied",
@@ -2079,6 +2104,13 @@ export class RoutingService {
     raw: RoutingRouteRequest,
     alternatives: number
   ): Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest {
+    let vehicleProfile: MappedRoadProfile | undefined;
+    try {
+      vehicleProfile = parseMappedProfile(raw);
+    } catch (e) {
+      if (e instanceof RoadTripError) throw new RoutingError(e.status, e.code, e.message);
+      throw e;
+    }
     const profileId = parseProfileId(raw.profileId);
     const from = parseCoordinate(raw.from, "from");
     const to = parseCoordinate(raw.to, "to");
@@ -2098,6 +2130,7 @@ export class RoutingService {
       departureTime,
       avoid: parseAvoid(raw.avoid),
       vehicle: parseOptionalVehicle(raw.vehicle, profile),
+      ...(vehicleProfile ? { vehicleProfile } : {}),
       alternatives: Math.max(1, Math.min(3, alternatives))
     };
   }
@@ -2627,6 +2660,7 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       navigation: route.navigation,
       traffic: route.traffic,
       ...(route.knownClosures ? { knownClosures: route.knownClosures } : {}),
+      ...(route.mappedProfileAssessment ? { mappedProfileAssessment: route.mappedProfileAssessment } : {}),
       warnings: route.warnings,
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
     }
@@ -3388,11 +3422,11 @@ async function requestValhallaRoute(
   trafficContext?: RoutingTrafficContext,
   options: ValhallaRouteRequestOptions = {}
 ): Promise<ValhallaRouteResponse> {
-  const costing = effectiveValhallaCosting(profile, request.vehicle, request.trip);
+  const costing = effectiveValhallaCosting(profile, request.vehicle, request.trip, request.vehicleProfile);
   const recostings = valhallaRecostings(costing);
   const currentTrafficEnabled = config.valhallaTrafficEnabled && profile.transportMode === "road" && liveTrafficIsUsable(options.liveSpeeds);
   const departureTime = valhallaDepartureTimePayload(request.departureTime, currentTrafficEnabled);
-  const costingOptions = valhallaCostingOptions(profile, request.avoid, request.vehicle, request.trip);
+  const costingOptions = valhallaCostingOptions(profile, request.avoid, request.vehicle, request.trip, request.vehicleProfile);
   if (costing === "auto" || costing === "truck") {
     costingOptions[costing] = { ...costingOptions[costing], speed_types: valhallaTrafficSpeedTypes(options.liveSpeeds) };
   }
@@ -3435,7 +3469,7 @@ async function requestValhallaRoute(
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
-  assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM);
+  assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM, !!request.vehicleProfile);
   return body;
 }
 
@@ -3448,8 +3482,8 @@ async function requestValhallaTraceAttributes(
   return requestValhallaJson<ValhallaTraceAttributesResponse>(config, "/trace_attributes", {
     encoded_polyline: encodeValhallaPolyline6(coordinates),
     shape_match: "edge_walk",
-    costing: effectiveValhallaCosting(profile, request.vehicle, request.trip),
-    costing_options: valhallaCostingOptions(profile, request.avoid ?? [], request.vehicle, request.trip),
+    costing: effectiveValhallaCosting(profile, request.vehicle, request.trip, request.vehicleProfile),
+    costing_options: valhallaCostingOptions(profile, request.avoid ?? [], request.vehicle, request.trip, request.vehicleProfile),
     units: "kilometers",
     filters: {
       action: "include",
@@ -3856,7 +3890,7 @@ function valhallaRoute(
       engine: "valhalla",
       ...(recostings.length > 0 ? { recostings } : {})
     },
-    ...(profile.transportMode === "road" ? { vehicleAssessment: vehicleAssessmentFor(profile, request.vehicle, request.trip) } : {}),
+    ...(profile.transportMode === "road" ? { vehicleAssessment: vehicleAssessmentFor(profile, request.vehicle, request.trip, request.vehicleProfile) } : {}),
     navigation: {
       provider: "valhalla",
       requestedDepartureTime: request.departureTime,
@@ -4002,7 +4036,12 @@ function valhallaLocateEdgeDistanceM(point: RoutingCoordinate, edge: ValhallaLoc
   return Number.isFinite(reportedDistanceM) ? Math.max(geometricDistanceM, reportedDistanceM) : geometricDistanceM;
 }
 
-function assertValhallaRouteWaypointSnaps(response: ValhallaRouteResponse, locations: RoutingCoordinate[], maxSnapDistanceM: number): void {
+function assertValhallaRouteWaypointSnaps(
+  response: ValhallaRouteResponse,
+  locations: RoutingCoordinate[],
+  maxSnapDistanceM: number,
+  mappedProfile = false
+): void {
   const legs = response.trip?.legs ?? [];
   if (legs.length !== locations.length - 1) {
     throw new Error(`Valhalla route leg count ${legs.length} does not preserve ${locations.length} ordered locations.`);
@@ -4018,6 +4057,12 @@ function assertValhallaRouteWaypointSnaps(response: ValhallaRouteResponse, locat
     const requested = locations[index]!;
     const distanceM = haversineMeters([requested.lon, requested.lat], snapped[index]!);
     if (distanceM > maxSnapDistanceM) {
+      if (mappedProfile)
+        throw new RoadTripError(
+          422,
+          index === locations.length - 1 ? "ROUTING_TARGET_NOT_ROUTABLE" : "ROUTING_WAYPOINT_NOT_ROUTABLE",
+          "Requested coordinate exceeds accepted mapped endpoint tolerance; no fabricated final leg or profile downgrade."
+        );
       throw new Error(`Valhalla waypoint ${index} snap ${Math.round(distanceM)} m exceeds configured threshold ${Math.round(maxSnapDistanceM)} m.`);
     }
   }
@@ -4040,7 +4085,8 @@ function valhallaCosting(profileId: RoutingProfileId): string {
   }
 }
 
-function effectiveValhallaCosting(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"], trip?: RoadTrip): string {
+function effectiveValhallaCosting(profile: RoutingProfile, vehicle: RoutingRouteRequest["vehicle"], trip?: RoadTrip, mapped?: MappedRoadProfile): string {
+  if (mapped) return mappedCosting(mapped);
   if (trip) return trip.intent === "car" ? "auto" : "truck";
   return profile.transportMode === "road" && vehicle && Object.keys(vehicle).length > 0 ? "truck" : valhallaCosting(profile.profileId);
 }
@@ -4048,14 +4094,22 @@ function effectiveValhallaCosting(profile: RoutingProfile, vehicle: RoutingRoute
 function vehicleAssessmentFor(
   profile: RoutingProfile,
   vehicle: RoutingRouteRequest["vehicle"],
-  trip?: RoadTrip
+  trip?: RoadTrip,
+  mapped?: MappedRoadProfile
 ): NonNullable<RoutingRoute["vehicleAssessment"]> {
+  if (mapped?.vehicle)
+    vehicle = {
+      heightM: mapped.vehicle.heightM,
+      widthM: mapped.vehicle.widthM,
+      lengthM: mapped.vehicle.lengthM,
+      weightTonnes: mapped.vehicle.loadedWeightKg / 1000
+    };
   if (trip)
     vehicle = { heightM: trip.vehicle.heightM, widthM: trip.vehicle.widthM, lengthM: trip.vehicle.lengthM, weightTonnes: trip.vehicle.loadedWeightKg / 1000 };
   const fields = (["heightM", "widthM", "lengthM", "weightTonnes"] as const).filter((field) => vehicle?.[field] !== undefined);
   return {
     state: fields.length === 0 ? "not_evaluated" : fields.length === 4 ? "provider_costing_applied" : "partially_evaluated",
-    providerCosting: effectiveValhallaCosting(profile, vehicle, trip) === "truck" ? "truck" : "auto",
+    providerCosting: effectiveValhallaCosting(profile, vehicle, trip, mapped) === "truck" ? "truck" : "auto",
     appliedFields: fields,
     limitations: [
       "Valhalla costing uses mapped restrictions only; this is not a guarantee of legal or physical passability.",
@@ -4086,10 +4140,11 @@ function valhallaCostingOptions(
   profile: RoutingProfile,
   avoid: RoutingAvoid[],
   vehicle?: RoutingRouteRequest["vehicle"],
-  trip?: RoadTrip
+  trip?: RoadTrip,
+  mapped?: MappedRoadProfile
 ): Record<string, Record<string, boolean | number | string[]>> {
   const options: Record<string, Record<string, boolean | number | string[]>> = {};
-  const costing = effectiveValhallaCosting(profile, vehicle, trip);
+  const costing = effectiveValhallaCosting(profile, vehicle, trip, mapped);
   const base: Record<string, boolean | number> = {};
   if (avoid.includes("bridge")) {
     base.exclude_bridges = true;
@@ -4149,6 +4204,7 @@ function valhallaCostingOptions(
     if (trip.preferences.avoidTolls) base.use_tolls = 0;
     if (trip.preferences.preferPaved) base.exclude_unpaved = true;
   }
+  if (mapped) Object.assign(base, mappedCostOptions(mapped));
   if (Object.keys(base).length > 0) {
     options[costing] = base;
   }

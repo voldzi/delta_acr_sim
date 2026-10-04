@@ -8,6 +8,7 @@ COPY packages/observability ./packages/observability
 COPY apps/situation-data-api ./apps/situation-data-api
 COPY openapi/fragments/road-trip-v1.schemas.json ./openapi/fragments/road-trip-v1.schemas.json
 COPY openapi/fragments/known-road-closures.schema.json ./openapi/fragments/known-road-closures.schema.json
+COPY openapi/fragments/mapped-road-profile-v1.schemas.json ./openapi/fragments/mapped-road-profile-v1.schemas.json
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/situation-data-api... build
 

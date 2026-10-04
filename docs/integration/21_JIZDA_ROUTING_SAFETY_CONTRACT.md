@@ -1,5 +1,63 @@
 # 21. Jízda–COP–SIM: aditivní bezpečnostní routing
 
+## Běžné mapované profily (ADR 0033)
+
+Závazné schema `openapi/fragments/mapped-road-profile-v1.schemas.json` je
+vložené do OpenAPI s prefixem `MappedRoadProfile`. Příklady všech čtyř intentů
+jsou v `openapi/examples/mapped-road-profiles.synthetic.json`; jde o syntetické
+kontraktní fixtures, nikoli produkční navigaci. `vehicleProfile` je optional
+na obou route/alternatives endpoints; COP posílá explicitní `profileId=car`.
+SIM při vynechání profileId defaultuje car, nikdy emergency.
+
+Profile: version=`sim-mapped-road-profile-v1`, intent=`car|commercial_truck|
+car_with_trailer|road_legal_4x4`, coverageAcknowledged=`mapped_restrictions_incomplete`.
+Vehicle vyžaduje všechna `heightM,widthM,lengthM,loadedWeightKg`, pokud je přítomné;
+truck a trailer je vyžadují vždy. Hmotnost a délka popisují celou naloženou
+soupravu. Přívěs navíc vyžaduje `trailer.attached=true` a jeho čtyři parametry.
+Pouze truck má optional `axleLoadKg,axleCount`. Bounds jsou software bounds
+schema, ne právní limity: height<=5m,width<=3m,length<=25m,weight<=60000kg,
+axle<=40000kg,count2..20; všechny dimenze kladné. Celkové údaje nesmějí být
+menší než přívěs a axleLoad nesmí přesáhnout loadedWeight.
+
+Nepřijímat neznámé klíče, unit coercion, konfliktní legacy vehicle nebo strict
+trip. Alternatives1..3, via0..12, include flags skutečně boolean. Neznámá avoid
+hodnota/objekt znamená400. Známé fire/flood a jakýkoli explicitní departureTime
+jsou422 unsupported. Implicitní odjezd nyní se předá vynecháním departureTime.
+`driverDeclaredAuthorization=false` je přípustné; true je422 unsupported,
+ne příkaz ignorovat access. Všechny čtyři profily mají neúplné mapové pokrytí.
+
+`routes[].mappedProfileAssessment` = version, appliedProfile, profileHash,
+requestHash, geometryHash, state=applied, coverage=mapped_restrictions_incomplete,
+engine(provider=valhalla,version=3.8.3,costing=auto|truck,fallbackUsed=false),
+routingDataset, appliedFields, validUntil, lastMile a limitations. Totožný objekt
+je ve feature.properties; strict assessment se nesmí zaměnit za tento objekt.
+ProfileHash váže canonical celý profil; requestHash celý normalizovaný query,
+geometryHash GeoJSON varianty, algoritmus jako knownClosures. Engine/graf/
+deadline musejí odpovídat knownClosures stejné varianty. COP ověří vstupní
+identity, všechny varianty, feature copy a endpoint vzdálenost; hashes neřeší
+úplnost OSM omezení ani právní garanci. Klient nevytváří vlastní assessment.
+
+LastMile target jsou původní cílové souřadnice; mappedEndpoint skutečný poslední
+bod route geometry; distanceM je haversine sR=6371000m. Pouze přesná shoda dává
+mapped_target, ostatní<=25m target_guidance_only. Geometrie se neprodlužuje
+na cíl. Větší snap:422 ROUTING_TARGET_NOT_ROUTABLE, u jiného bodu
+ROUTING_WAYPOINT_NOT_ROUTABLE. Engine failure bez ověřitelné route:502;
+nedostupný profil/accepted path:503 ROUTING_PROFILE_UNAVAILABLE. Bez fallbacku.
+
+Catalog `mappedProfiles` má version=`sim-mapped-road-profile-capabilities-v1`,
+availability=`disabled|requires_runtime_validation`, čtyři intents/supportedFields/
+limitations, maxSnapDistanceM=25, strictGuarantees=false,
+driverDeclaredAuthorization=unsupported, unmappedLastMile=unsupported.
+Truck použije truck, ostatní auto; trailer-specific bans/turning clearance
+nejsou vyhodnocené. 4×4 má road-first preference, není obecná terénní navigace
+ani odstranění access omezení. Širší přání soukromého či nemapovaného vjezdu
+zůstává mimo akceptaci této etapy.
+
+Měření, tokeny, síť, live traffic/ETA a vypnutý strict režim se nemění.
+COP/SDK nesmí při400/422/502/503 zahodit profil a použít default car či MapKit.
+
+## Přísný trip — samostatná vypnutá větev
+
 Stav: implementovaný opt-in kontrakt, výchozí stav vypnutý; nikoli aktivace klienta
 nebo potvrzení současných uzavírek. Základ API a `sim-routing-route-v1` zůstává.
 JSON schemas: `openapi/fragments/road-trip-v1.schemas.json`; COP je přebírá

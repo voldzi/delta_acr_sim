@@ -1,5 +1,39 @@
 # 18. Přísný routing Jízda–COP–SIM
 
+## Mapované vehicleProfile (ADR 0033)
+
+Samostatná aditivní větev podporuje čtyři běžné profily bez aktivace strict
+trip. Schema, příklady a přesné chybové hranice jsou v integračním dokumentu21.
+Před vydáním: SDA typecheck/build/test (včetně izolované PostgreSQL), skeleton,
+OpenAPI build/check/validate/lint a `bash scripts/test-mapped-profile-engine.sh
+<pinned image s Valhalla3.8.3>`. Harness používá pouze vlastní syntetický graf,
+network=none a dočasné prostředky; vyžaduje předem sestavený SDA dist a lokální
+image s valhalla_build_config/build_tiles/service a python3. Kontroluje 52
+native route+edge_walk případů v obou směrech, včetně krajních software bounds.
+Syntetický průchod není garance správnosti konkrétního OSM maxweight/vjezdu.
+
+Nasazovat pouze SDA image s revision label. Zachovat současné Compose overlays,
+secrets, DB, síť a mounty; strict=false, driver intake=false, revocation=true.
+Catalog mappedProfiles availability je requires_runtime_validation pouze při
+enabled knownClosures a přijatém enginu; není dalším feature flagem. Stávající
+request bez vehicleProfile se nemění. Profilový request však vždy vyžaduje
+accepted knownClosures cestu, jinak503 bez legacy fallbacku.
+
+Před společnou COP aktivací ověřit všechny čtyři profily s mobile include flags
+a skutečným grafem/source snapshotem v obou směrech, všechny varianty, native
+maneuver indexy, source/graph/deadline fences a navazující road attributes.
+Odmítání neznámých avoid/conflict400, unsupported permission/future/hazard422,
+vzdálený snapped endpoint422; engine/source failure bez downgrade. COP musí
+ověřit přesnou kopii schématu, query/profile/geometry hashes a feature metadata.
+Skutečná navigace na iPhonu je zvláštní akceptace týmu Jízda.
+
+Návrat: obnovit předchozí SDA image pin, recreate pouze SDA, zachovat měřicí
+revocation/cleanup, DB a HMAC. COP při chybě nepřechází na car/MapKit; starý
+image nepodporuje nový typovaný kontrakt, proto zastavit jeho používání v COP
+a ověřit vrácený catalog. Neobnovovat starou DB. Širší nemapovaná 4×4 last mile
+a selektivní driver access permission stále unsupported; nelze je označit za
+hotovou navigaci ani zapnout pouhou změnou ignore_access.
+
 ## Výchozí stav a nasazení
 
 `ROUTING_STRICT_TRIPS_ENABLED=false`; nová cesta je opt-in, běžný klient se
@@ -43,16 +77,24 @@ Přesná struktura souboru `sim-reviewed-road-closures-v1`:
   "observedAt": "2026-10-03T11:59:00Z",
   "validUntil": "2026-10-03T12:10:00Z",
   "coverage": "authoritative_reviewed_snapshot",
-  "bbox": {"west": 14, "south": 50, "east": 15, "north": 51},
-  "closures": [{
-    "id": "SYNTHETIC-NOT-A-REAL-CLOSURE",
-    "status": "active",
-    "direction": "both",
-    "validFrom": "2026-10-03T11:00:00Z",
-    "validUntil": "2026-10-03T12:08:00Z",
-    "polygon": [[14.49,50.09],[14.51,50.09],[14.51,50.11],[14.49,50.11],[14.49,50.09]],
-    "source": {"authority": "synthetic-test", "reference": "fixture-only", "reviewedAt": "2026-10-03T11:58:00Z"}
-  }]
+  "bbox": { "west": 14, "south": 50, "east": 15, "north": 51 },
+  "closures": [
+    {
+      "id": "SYNTHETIC-NOT-A-REAL-CLOSURE",
+      "status": "active",
+      "direction": "both",
+      "validFrom": "2026-10-03T11:00:00Z",
+      "validUntil": "2026-10-03T12:08:00Z",
+      "polygon": [
+        [14.49, 50.09],
+        [14.51, 50.09],
+        [14.51, 50.11],
+        [14.49, 50.11],
+        [14.49, 50.09]
+      ],
+      "source": { "authority": "synthetic-test", "reference": "fixture-only", "reviewedAt": "2026-10-03T11:58:00Z" }
+    }
+  ]
 }
 ```
 

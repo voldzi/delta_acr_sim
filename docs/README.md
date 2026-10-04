@@ -55,6 +55,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md`](adr/0031_IMMUTABLE_FAIL_CLOSED_ROAD_TRIPS.md)
 - [`runbooks/18_STRICT_ROAD_TRIP_ROUTING.md`](runbooks/18_STRICT_ROAD_TRIP_ROUTING.md)
 - [ADR 0032: částečné revidované známé uzavírky](adr/0032_PARTIAL_REVIEWED_KNOWN_CLOSURES.md)
+- [ADR 0033: typované mapované vehicle profiles](adr/0033_MAPPED_VEHICLE_PROFILES.md)
 
 ## Machine-Readable API Contract
 

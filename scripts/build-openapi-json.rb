@@ -357,11 +357,20 @@ def build_document
   doc["components"]["schemas"]["SituationDataRoutingProfileCatalog"]["properties"]["capabilities"] = { "$ref" => "#/components/schemas/RoadTripCapabilities" }
   trip_request = doc["components"]["schemas"]["SituationDataRoutingRouteRequest"]
   trip_request["properties"]["trip"] = { "$ref" => "#/components/schemas/RoadTripTrip" }
+  mapped_schemas = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/mapped-road-profile-v1.schemas.json")))
+  mapped_schemas.each { |name, schema| doc["components"]["schemas"]["MappedRoadProfile#{name}"] = deep_transform(schema, "MappedRoadProfile") }
+  trip_request["properties"]["vehicleProfile"] = { "$ref" => "#/components/schemas/MappedRoadProfileProfile" }
+  doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["mappedProfileAssessment"] = { "$ref" => "#/components/schemas/MappedRoadProfileAssessment" }
+  doc["components"]["schemas"]["SituationDataRoutingProfileCatalog"]["properties"]["mappedProfiles"] = { "$ref" => "#/components/schemas/MappedRoadProfileCapabilities" }
   trip_request["properties"]["via"] = { "type" => "array", "items" => { "$ref" => "#/components/schemas/SituationDataRoutingCoordinate" }, "description" => "Legacy ordered break locations. Do not combine with immutable trip." }
   strict_properties = trip_request["properties"].transform_values { {} }
   strict_properties.merge!({ "trip" => { "$ref" => "#/components/schemas/RoadTripTrip" }, "profileId" => { "const" => "car" }, "from" => { "$ref" => "#/components/schemas/RoadTripCoordinate" }, "to" => { "$ref" => "#/components/schemas/RoadTripCoordinate" }, "avoid" => { "contains" => { "const" => "road_closure" } }, "alternatives" => { "type" => "integer", "minimum" => 1, "maximum" => 3 } })
-  %w[via vehicle departureTime].each { |name| strict_properties.delete(name) }
+  %w[via vehicle departureTime vehicleProfile].each { |name| strict_properties.delete(name) }
   trip_request["allOf"] = [{ "if" => { "required" => ["trip"] }, "then" => { "required" => %w[profileId from to avoid trip], "properties" => strict_properties, "additionalProperties" => false } }]
+  mapped_properties = trip_request["properties"].transform_values { {} }
+  %w[trip vehicle].each { |name| mapped_properties.delete(name) }
+  mapped_properties.merge!({ "profileId" => { "const" => "car" }, "vehicleProfile" => { "$ref" => "#/components/schemas/MappedRoadProfileProfile" }, "alternatives" => { "type" => "integer", "minimum" => 1, "maximum" => 3 } })
+  trip_request["allOf"] << { "if" => { "required" => ["vehicleProfile"] }, "then" => { "required" => %w[from to vehicleProfile], "properties" => mapped_properties, "additionalProperties" => false } }
   %w[route alternatives].each do |operation|
     responses = doc["paths"]["/situation-data/api/v1/routing/#{operation}"]["post"]["responses"]
     %w[400 422 502 503].each { |status| responses[status] = { "$ref" => "#/components/responses/SituationDataProblem" } unless responses.key?(status) }
