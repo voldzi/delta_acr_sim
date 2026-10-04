@@ -81,13 +81,21 @@ sudo /srv/valhalla/update-tools/weekly-update.sh run
 
 The Geofabrik `*-latest.osm.pbf` endpoint may return a dated generation in an
 HTTP `Location` header. The updater accepts only the expected dated filename on
-`download.geofabrik.de`, reconstructs its HTTPS URL, and downloads both the PBF
-and its before/after MD5 over HTTPS. Never enable generic HTTP redirects to
+`download.geofabrik.de` (also its exact relative path), reconstructs its HTTPS
+URL, or accepts the exact HTTPS `ftp5.gwdg.de/pub/misc/openstreetmap/download.geofabrik.de/<country>-latest.osm.pbf`
+mirror selected by Geofabrik. Both PBF and before/after MD5 use the SAME chosen
+node over HTTPS; the body still has to match the initial checksum. Other hosts,
+countries, ports, credentials, query strings and mirror paths are rejected.
+`python3 deploy/valhalla/test-geofabrik-redirect.py` tests this resolver offline.
+Never enable generic HTTP redirects to
 work around a failed weekly build. For the 2026-09-27 failure, verify the
 installed updater version, run `bash -n` on the replacement, install just
 `weekly-update.sh`, then start the weekly service and monitor `last-attempt.env`
 through download, build, activation and route health. A stale healthcheck does
-not by itself mean the current routing process is unavailable.
+not by itself mean the current routing process is unavailable. The 2026-10-04
+DE failure was a Geofabrik307 to the exact GWDG mirror, not a corrupt active
+graph. Installing this resolver does not activate a map: the full existing
+candidate, checksum, route/health and atomic activation gates remain necessary.
 
 ## Adaptive TPEG2 live traffic
 

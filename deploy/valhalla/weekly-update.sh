@@ -339,6 +339,25 @@ if digest != checksum:
 PY
 }
 
+resolve_geofabrik_redirect() {
+  local source_url=$1 redirect_url=$2 source_name source_stem
+  source_name=${source_url##*/}
+  source_stem=${source_name%-latest.osm.pbf}
+  case "${redirect_url}" in
+    "https://ftp5.gwdg.de/pub/misc/openstreetmap/download.geofabrik.de/${source_stem}-latest.osm.pbf")
+      # Exact Geofabrik-selected HTTPS mirror; PBF and checksums use the SAME node.
+      printf '%s\n' "${redirect_url}"
+      return 0
+      ;;
+    "/europe/${source_stem}-"*.osm.pbf|"http://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf|"https://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf)
+      [[ "${redirect_url##*/}" =~ ^${source_stem}-[0-9]{6}\.osm\.pbf$ ]] || return 1
+      printf 'https://download.geofabrik.de/europe/%s\n' "${redirect_url##*/}"
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 download_source_consistently() {
   local country=$1
   local source_url=$2
@@ -353,8 +372,6 @@ download_source_consistently() {
   local resolved_url
   local redirect_url
   local response_code
-  local source_name
-  local source_stem
   local attempt
 
   for ((attempt = 1; attempt <= SOURCE_DOWNLOAD_ATTEMPTS; attempt++)); do
@@ -370,14 +387,7 @@ download_source_consistently() {
       200) resolved_url=${source_url} ;;
       301|302|303|307|308)
         redirect_url=$(awk 'tolower($1) == "location:" {gsub("\r", "", $2); print $2}' "${headers_file}" | tail -n 1)
-        source_name=${source_url##*/}
-        source_stem=${source_name%-latest.osm.pbf}
-        case "${redirect_url}" in
-          "http://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf|"https://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf) ;;
-          *) fail "Unexpected ${country} Geofabrik redirect target." ;;
-        esac
-        [[ "${redirect_url##*/}" =~ ^${source_stem}-[0-9]{6}\.osm\.pbf$ ]] || fail "Unexpected ${country} Geofabrik generation name."
-        resolved_url="https://download.geofabrik.de/europe/${redirect_url##*/}"
+        resolved_url=$(resolve_geofabrik_redirect "${source_url}" "${redirect_url}") || fail "Unexpected ${country} Geofabrik redirect target."
         ;;
       *) fail "Unexpected ${country} Geofabrik response: ${response_code}" ;;
     esac

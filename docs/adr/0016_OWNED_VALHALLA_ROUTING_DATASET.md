@@ -4,6 +4,15 @@
 
 Accepted
 
+### 2026-10-04: bounded Geofabrik mirror redirects
+
+The official Germany latest endpoint can select the exact HTTPS GWDG mirror.
+Allow only that expected country/latest path or the expected Geofabrik dated
+generation (including the exact relative path, upgraded to HTTPS). No generic
+cross-host/HTTP redirect bypass. PBF and both checksum reads use the same chosen
+node and the downloaded body is verified before build. The resolver has offline
+allow/reject tests; source, candidate, activation and rollback gates are unchanged.
+
 ## Context
 
 SIM uses Valhalla for server-side routes, isochrones, nearest-access lookup and
