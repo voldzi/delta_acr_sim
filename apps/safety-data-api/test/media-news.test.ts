@@ -39,6 +39,9 @@ afterEach(() => {
 });
 
 describe("ČT24 media query validation", () => {
+  it("uses the directly reachable main feed without requiring upstream redirects", () => {
+    expect(MEDIA_NEWS_FEEDS.find((feed) => feed.id === "ct24-main")?.url).toBe("https://ct24.ceskatelevize.cz/rss");
+  });
   it("supports only allowlisted feeds and a bounded limit, deduplicating feed IDs", () => {
     expect(parseMediaNewsQuery({})).toEqual({});
     expect(parseMediaNewsQuery({ feeds: "ct24-brno, ct24-main,ct24-brno", limit: "100" })).toEqual({ feeds: ["ct24-brno", "ct24-main"], limit: 100 });

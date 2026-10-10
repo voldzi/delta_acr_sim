@@ -106,8 +106,10 @@ async function acceptance() {
         !proof.bounded ||
         !proof.informational ||
         proof.contract !== "sim-crisis-media-context-v1"
-      )
+      ) {
+        console.log(JSON.stringify({ acceptanceRejected: proof }));
         throw new Error("Live news/health acceptance failed.");
+      }
       return proof;
     }
     await new Promise((done) => setTimeout(done, 2000));
@@ -170,6 +172,7 @@ async function main() {
     ),
     { mode: 0o600 }
   );
+  let activationStage = "configuration_validation";
   try {
     writeFileSync(envPath, newEnv, { mode: 0o600 });
     writeFileSync(composePath, newCompose);
@@ -178,7 +181,9 @@ async function main() {
       if (key !== "safety-data-api" && hash(value) !== hash(after.services[key]))
         throw new Error("An unrelated service configuration would change; refusing activation.");
     }
+    activationStage = "service_start";
     compose("up", "-d", "--no-deps", "--no-build", "safety-data-api");
+    activationStage = "live_acceptance";
     const proof = await acceptance();
     const state = JSON.parse(docker("inspect", "csm-sim-safety-data-api"))[0];
     if (Object.keys(state.HostConfig.PortBindings ?? {}).length) throw new Error("Unexpected published safety port.");
@@ -189,7 +194,7 @@ async function main() {
     writeFileSync(composePath, oldCompose);
     docker("tag", oldImage, before.services["safety-data-api"].image ?? "sim-safety-data-api");
     compose("up", "-d", "--no-deps", "--no-build", "safety-data-api");
-    throw new Error("Activation failed; previous configuration and safety image restored. Check health separately.");
+    throw new Error(`Activation failed at ${activationStage}; previous configuration and safety image restored. Check health separately.`);
   }
 }
 

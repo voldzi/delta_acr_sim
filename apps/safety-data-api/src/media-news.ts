@@ -21,7 +21,7 @@ interface MediaNewsFeed {
 }
 
 export const MEDIA_NEWS_FEEDS: readonly Readonly<MediaNewsFeed>[] = Object.freeze([
-  Object.freeze({ id: "ct24-main", label: "ČT24 – hlavní zprávy", url: "https://ct24.ceskatelevize.cz/rss/hlavni-zpravy", regionCode: "CZ" }),
+  Object.freeze({ id: "ct24-main", label: "ČT24 – zpravodajství", url: "https://ct24.ceskatelevize.cz/rss", regionCode: "CZ" }),
   Object.freeze({
     id: "ct24-ostrava",
     label: "ČT24 – Moravskoslezský kraj",

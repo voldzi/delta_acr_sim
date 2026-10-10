@@ -36,13 +36,18 @@ Pevný allowlist:
 
 | ID | Oficiální RSS URL | `regionCode` – pouze rozsah feedu |
 | --- | --- | --- |
-| `ct24-main` | `https://ct24.ceskatelevize.cz/rss/hlavni-zpravy` | `CZ` |
+| `ct24-main` | `https://ct24.ceskatelevize.cz/rss` | `CZ` |
 | `ct24-ostrava` | `https://ct24.ceskatelevize.cz/rss/rubrika/regiony/moravskoslezsky-kraj-14` | `CZ080` |
 | `ct24-brno` | `https://ct24.ceskatelevize.cz/rss/rubrika/regiony/jihomoravsky-kraj-26` | `CZ064` |
 
 Regionální feed může psát o jiné lokalitě. `regionCode` proto není událostní
 geokód a nesmí vstoupit do AOI/geofence. SIM nikdy nepřevezme ani RSS geometrii,
 neodhaduje souřadnice z titulku a nedotazuje geokódovací službu.
+
+Interní smoke 10.10.2026 ověřil hlavní `/rss` přímo s HTTP 200. Starý alias
+`/rss/hlavni-zpravy` má řetězec 308/307, který striktní konektor nepřijímá.
+Do allowlistu se proto zapisuje přímo ověřený feed; libovolná přesměrování
+zůstávají zakázána.
 
 Zkrácená ilustrační odpověď (ID a titulek nejsou záznam produkční události):
 
