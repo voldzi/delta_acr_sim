@@ -112,6 +112,27 @@ must never use X5.
 
 ## Operational Checks
 
+### Search partial-feed recovery
+
+Complete feeds retain configured TTL (production 300s); source-incomplete feeds
+use at most 30s without stale-on-error extension. Safety bridge includes body
+in `min(SITUATION_DATA_REQUEST_TIMEOUT_MS, 4500)`, below COP's 6s deadline.
+Safety can finish its existing coalesced snapshot load after disconnection;
+provider cadence and notification readiness remain unchanged. This is not a
+total deadline guarantee for the other search providers.
+
+Verify ordinary internal COP `/entities?limit=1000`: retain only status, latency,
+`generatedAt`, summary, warning markers, cursor presence and `X-SIM-Gateway-Cache`.
+Do not output entities/GPS/raw errors; observe normal expiry, not cachebusting.
+Older observations can legitimately keep quality degraded after recovery.
+
+Deploy only SDA from the exact deployed routing revision plus this patch.
+Keep the rollback image, environment/mount/network hashes and other container IDs.
+Do not rebuild SDA from an older crisis-only branch lacking routing/closure guards.
+Verify health, a synthetic car route and graph-bound closures. Rollback selects
+the previous image in the existing Compose override and recreates only SDA with
+`--no-deps --no-build`; no migration, network or secret change is involved.
+
 After deploy:
 
 ```bash

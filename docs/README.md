@@ -21,6 +21,8 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [ADR 0034: bounded search partial-feed recovery](adr/0034_BOUNDED_SEARCH_PARTIAL_FEED_RECOVERY.md)
+
 - [`00_INDEX.md`](00_INDEX.md)
 - [`product/00_INDEX.md`](product/00_INDEX.md)
 - [`architecture/00_INDEX.md`](architecture/00_INDEX.md)

@@ -5950,7 +5950,7 @@
       "get": {
         "operationId": "searchData_listSearchDataEntities",
         "summary": "Return a normalized entity feed for COP indexing",
-        "description": "Returns source-normalized, stable entities with GeoJSON geometry, quality metadata and handling rules. COP should page by nextCursor when present.",
+        "description": "Returns source-normalized, stable entities with GeoJSON geometry, quality metadata and handling rules. COP should page by nextCursor when present; the page limit is not a source-health failure. A source failure returns an incomplete feed with sanitized SEARCH_SOURCE_TIMEOUT, SEARCH_SOURCE_UNAVAILABLE or SEARCH_SOURCE_INCOMPLETE warnings and a static source key. Source-incomplete feeds are cached for at most 30 seconds without stale-on-error reuse; complete feeds retain the configured TTL. The Safety bridge deadline is at most 4500 ms including the body, not an overall deadline guarantee for every provider. Stale observations and original timestamps are preserved.",
         "parameters": [
           {
             "$ref": "#/components/parameters/SearchDataUpdatedSince"

@@ -6,6 +6,10 @@ import { ChmiWeatherRadarSource } from "./sources.js";
 import { WEATHER_FORECAST_SOURCE_ID, WeatherForecastSource } from "./weather-forecast.js";
 import type { BoundingBox, SituationFeature, SituationGeometry, SituationLayerId } from "./types.js";
 
+// Leave transport/serialization headroom below COP's six-second search budget.
+const SAFETY_SEARCH_REQUEST_BUDGET_MS = 4500;
+const PARTIAL_SEARCH_CACHE_TTL_MS = 30_000;
+
 export type SearchEntityType =
   | "police_station"
   | "fire_station"
@@ -262,6 +266,8 @@ export class SearchDataService {
     this.cache = new ManagedResponseCache<SearchEntityFeed>({
       ttlMs: Math.max(10, config.searchDataCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.staleIfErrorSeconds, config.searchDataCacheTtlSeconds) * 1000,
+      ttlMsForValue: (value) => (value.warnings.some(isSourceWarning) ? PARTIAL_SEARCH_CACHE_TTL_MS : undefined),
+      staleIfErrorMsForValue: (value) => (value.warnings.some(isSourceWarning) ? 0 : undefined),
       maxEntries: Math.max(16, config.searchDataCacheMaxEntries)
     });
   }
@@ -498,16 +504,19 @@ export class SearchDataService {
       this.shouldFetchOsmAdmin(entityTypes, options.sourceSystems)
         ? this.fetchOsmAdminRows(options).then((rows) => rows.map(mapOsmAdminEntity).filter(isEntity))
         : Promise.resolve([]),
-      this.shouldFetchSafety(entityTypes, options.sourceSystems) ? this.fetchSafetyEntities(options) : Promise.resolve([]),
+      this.shouldFetchSafety(entityTypes, options.sourceSystems) ? this.fetchSafetyEntities(options, warnings) : Promise.resolve([]),
       this.shouldFetchWeatherForecast(entityTypes, options.sourceSystems) ? this.fetchWeatherForecastEntities(options) : Promise.resolve([]),
       this.shouldFetchWeatherRadar(entityTypes, options.sourceSystems) ? this.fetchWeatherRadarEntities(options) : Promise.resolve([])
     ]);
     const entities: SearchEntity[] = [];
-    for (const result of [poiResult, adminResult, safetyResult, forecastResult, radarResult]) {
+    const sourceKeys = ["osm_reference_poi", "osm_reference_admin", "safety_data", "weather_forecast", "chmi_weather_radar"];
+    for (const [index, result] of [poiResult, adminResult, safetyResult, forecastResult, radarResult].entries()) {
       if (result.status === "fulfilled") {
         entities.push(...result.value);
       } else {
-        warnings.push(result.reason instanceof Error ? result.reason.message : "Unknown search-data source failure.");
+        const error = result.reason;
+        const timedOut = error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError" || /timed out/i.test(error.message));
+        warnings.push(`SEARCH_SOURCE_${timedOut ? "TIMEOUT" : "UNAVAILABLE"}:${sourceKeys[index]}`);
       }
     }
     const unique = deduplicateEntities(entities)
@@ -678,20 +687,26 @@ export class SearchDataService {
     return result.rows;
   }
 
-  private async fetchSafetyEntities(options: CollectOptions): Promise<SearchEntity[]> {
+  private async fetchSafetyEntities(options: CollectOptions, warnings: string[] = []): Promise<SearchEntity[]> {
     const url = new URL(`${trimTrailingSlash(this.config.safetyDataBaseUrl)}/api/v1/features`);
     url.searchParams.set("bbox", `${options.bbox.west},${options.bbox.south},${options.bbox.east},${options.bbox.north}`);
     url.searchParams.set("layers", "weather_alerts,warnings,fire,flood");
     url.searchParams.set("limit", String(Math.max(1, Math.min(this.config.searchDataMaxLimit, options.limit))));
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.requestTimeoutMs);
+    const budgetMs = Math.min(this.config.requestTimeoutMs, SAFETY_SEARCH_REQUEST_BUDGET_MS);
+    const timeout = setTimeout(() => controller.abort(), budgetMs);
     try {
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         throw new Error(`safety-data search source returned HTTP ${response.status}.`);
       }
       const body = (await response.json()) as SafetyFeatureCollection;
+      // Do not leak provider text or silently promote an upstream partial response.
+      if (Array.isArray(body.warnings) && body.warnings.length > 0) warnings.push("SEARCH_SOURCE_INCOMPLETE:safety_data");
       return (body.features ?? []).map(mapSafetyEntity).filter(isEntity);
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error("Safety search source timed out.");
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -871,6 +886,10 @@ export class SearchDataService {
     this.pool ??= new Pool({ connectionString: this.config.osmPostgisConnectionString, max: 4 });
     return this.pool;
   }
+}
+
+function isSourceWarning(warning: string): boolean {
+  return /^SEARCH_SOURCE_(TIMEOUT|UNAVAILABLE|INCOMPLETE):/.test(warning);
 }
 
 function mapOsmPoiEntity(row: OsmPoiSearchRow): SearchEntity | undefined {

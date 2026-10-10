@@ -13,6 +13,9 @@ export interface ManagedResponseCacheOptions<T = unknown> {
   sharedStore?: SharedResponseCacheStore;
   sharedKeyPrefix?: string;
   usableUntilMs?: (value: T) => number | undefined;
+  /** Per-value policies may only shorten the configured cache windows. */
+  ttlMsForValue?: (value: T) => number | undefined;
+  staleIfErrorMsForValue?: (value: T) => number | undefined;
 }
 
 export interface ManagedResponseCacheStats {
@@ -60,6 +63,7 @@ interface SharedCachePayload<T> {
   value: T;
   expiresAtMs: number;
   staleUntilMs: number;
+  storedAtMs?: number;
 }
 
 export class ManagedResponseCache<T> {
@@ -168,16 +172,30 @@ export class ManagedResponseCache<T> {
   private async store(key: string, value: T, loadOptions: ManagedResponseCacheLoadOptions): Promise<void> {
     const now = Date.now();
     const deadline = this.usableUntil(value, loadOptions.usableUntilMs);
-    const expiresAtMs = Math.min(now + Math.max(0, loadOptions.ttlMs ?? this.options.ttlMs), deadline);
-    const staleUntilMs = Math.min(expiresAtMs + Math.max(0, this.options.staleIfErrorMs), deadline);
+    const ttlMs = this.restrictedDuration(loadOptions.ttlMs ?? this.options.ttlMs, value, this.options.ttlMsForValue);
+    const staleIfErrorMs = this.restrictedDuration(this.options.staleIfErrorMs, value, this.options.staleIfErrorMsForValue);
+    const expiresAtMs = Math.min(now + ttlMs, deadline);
+    const staleUntilMs = Math.min(expiresAtMs + staleIfErrorMs, deadline);
     this.storeEntry(key, value, expiresAtMs, staleUntilMs);
-    await this.writeSharedEntry(key, { value, expiresAtMs, staleUntilMs });
+    await this.writeSharedEntry(key, { value, expiresAtMs, staleUntilMs, storedAtMs: now });
+  }
+
+  private restrictedDuration(configuredMs: number, value: T, policy?: (value: T) => number | undefined): number {
+    if (!policy) return Math.max(0, configuredMs);
+    try {
+      const restrictedMs = policy(value);
+      const upperBound = Number.isFinite(configuredMs) ? Math.max(0, configuredMs) : 0;
+      if (restrictedMs === undefined) return upperBound;
+      return Number.isFinite(restrictedMs) ? Math.min(upperBound, Math.max(0, restrictedMs)) : 0;
+    } catch {
+      // An invalid policy must not accidentally extend a cache window.
+      return 0;
+    }
   }
 
   private usableUntil(value: T, requestDeadline?: number): number {
     const valueDeadline = this.options.usableUntilMs?.(value);
-    if ((requestDeadline !== undefined && !Number.isFinite(requestDeadline)) ||
-        (valueDeadline !== undefined && !Number.isFinite(valueDeadline))) return 0;
+    if ((requestDeadline !== undefined && !Number.isFinite(requestDeadline)) || (valueDeadline !== undefined && !Number.isFinite(valueDeadline))) return 0;
     return Math.min(requestDeadline ?? Infinity, valueDeadline ?? Infinity);
   }
 
@@ -212,10 +230,27 @@ export class ManagedResponseCache<T> {
         this.counters.sharedErrors += 1;
         return undefined;
       }
+      const value = parsed.value as T;
+      let expiresAtMs = parsed.expiresAtMs;
+      if (this.options.ttlMsForValue) {
+        // Legacy shared entries have no trustworthy origin for a shorter TTL.
+        // Reload them instead of restarting their age at this reader's time.
+        if (typeof parsed.storedAtMs !== "number" || !Number.isFinite(parsed.storedAtMs) || parsed.storedAtMs < 0 || parsed.storedAtMs > Date.now()) {
+          this.counters.sharedMisses += 1;
+          return undefined;
+        }
+        const ttlMs = this.restrictedDuration(this.options.ttlMs, value, this.options.ttlMsForValue);
+        expiresAtMs = Math.min(expiresAtMs, parsed.storedAtMs + ttlMs);
+      }
+      const staleUntilMs =
+        this.options.ttlMsForValue || this.options.staleIfErrorMsForValue
+          ? Math.min(parsed.staleUntilMs, expiresAtMs + this.restrictedDuration(this.options.staleIfErrorMs, value, this.options.staleIfErrorMsForValue))
+          : parsed.staleUntilMs;
       return {
-        value: parsed.value as T,
-        expiresAtMs: parsed.expiresAtMs,
-        staleUntilMs: parsed.staleUntilMs
+        value,
+        expiresAtMs,
+        staleUntilMs,
+        storedAtMs: parsed.storedAtMs
       };
     } catch {
       this.counters.sharedErrors += 1;

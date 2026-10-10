@@ -146,6 +146,25 @@ COP má pro indexování používat primárně `GET /entities` se stránkování
 rankované entity s důvody shody. SIM schválně nevrací raw upstream payloady jako
 AI kontext; `rawRef` slouží jen jako omezená auditní reference.
 
+### Neúplný feed a zotavení
+
+`returnedCount=1000` s `nextCursor` znamená stránku, ne poruchu.
+`staleEntityCount` počítá celý sebraný soubor před stránkováním; `generatedAt`
+není datum měření. COP respektuje původní pozorování, platnost a `stale`.
+Chyby nesou markery `SEARCH_SOURCE_TIMEOUT:<sourceKey>`,
+`SEARCH_SOURCE_UNAVAILABLE:<sourceKey>` a při Safety 200 s varováním
+`SEARCH_SOURCE_INCOMPLETE:safety_data`. Statické source keys jsou
+`osm_reference_poi`, `osm_reference_admin`, `safety_data`, `weather_forecast`,
+`chmi_weather_radar`; raw provider texty a URL se nikdy nepřepisují.
+
+Source-incomplete `/entities` má cache nejvýše 30s bez stale-on-error reuse.
+Úplný feed zachovává konfigurované TTL (produkčně 300s). Souběžné dotazy se
+slučují, provider intervaly a cache se nemění. Safety bridge má mez
+`min(SITUATION_DATA_REQUEST_TIMEOUT_MS, 4500)` včetně JSON těla, nikoli celkovou
+mez všech podzdrojů. Nginx 10s cache může během obnovy krátce vrátit starý snapshot.
+Síťové oprávnění, tokeny, AI cesta a notification readiness zůstávají stejné.
+Viz ADR 0034.
+
 ## Map Catalog v1 metadata
 
 `GET /catalog` je preferovaný metadata endpoint pro COM layer tree. Vrací provider metadata pro autoritativní source-neutral kontrakt Map Catalog v1:
