@@ -109,7 +109,8 @@ aktuální notice, role warningy a výsledky operátorských akcí vykreslí zno
 - geo-routing-v1 Valhalla dependency state and routing dataset version/build
   timestamp in situation-data readiness; no route body or token logging
 - host-local Valhalla last-attempt/last-success release age, timer result and
-  source provenance; these files stay on `valhalla.home.cz` and are not public
+  source provenance; raw state files stay on `valhalla.home.cz` and are not public;
+  the prepared read-only monitor exports only a bounded sanitized status
 
 ## OpenTelemetry stav
 
@@ -157,11 +158,69 @@ python3 scripts/production-operational-check.py --env-file .env
 
 Kontrola kombinuje provider smoke testy, data-plane smoke testy, DEM health,
 terrain-aware mobile read-model ověření a kontrolu, že veřejné `/metrics`
-zůstává skryté přes nginx. Výsledek zapisuje do
+zůstává skryté přes nginx. Základní verze zapisuje výsledek do
 `data/operational-checks/latest.json`, stav pro deduplikaci alertů do
 `data/operational-checks/state.json` a při změně stavu posílá syslog zprávu.
 Volitelný `SIM_OPERATIONAL_ALERT_WEBHOOK_URL` odešle stejný bounded report jako
-JSON webhook.
+JSON webhook. Syslog není doručené upozornění člověku ani push.
+
+### Read-only dohled Valhally (10. 10. 2026)
+
+Podle [ADR 0032](../adr/0032_VALHALLA_READ_ONLY_OPERATIONAL_MONITOR.md) se rozšiřuje
+hostový monitor, bez změn routingu či Jízdy. Pětiminutová SSH sonda s
+vyhrazenou produkční identitou smí přes existing maintenance wrapper číst jen
+pevný `status`. Nesmí spouštět build, routu, traffic lease ani mutující akci.
+Privátní klíč je mimo Git/X5/obrazy; výstup je omezený a sanitizovaný.
+
+Klíč na Docker hostu připravuje Mac skript
+`setup-valhalla-monitor-access.sh --install`; privátní část nepřenáší.
+Hostový instalátor a runner jsou izolované v
+`/home/voldzi/sim-owned-deploy/valhalla-monitor-20261010/scripts/`, nikoli
+náhradou runtime checkoutu. `run-production-operational-check.sh` používá
+X5 guard před redirekcí, `flock` a timeout 240 s. Oddělený
+`/srv/sim/data/operational-checks/monitor.env` má práva 600; parser přijímá jen
+pět monitorovacích klíčů, nepřebírá tokeny nebo webhook z tohoto souboru.
+
+Signály monitoru:
+
+- warning při stáří aktivních map alespoň 8 dnů, critical od 9 dnů;
+- critical po failed týdenním pokusu nebo při neaktivním weekly timeru;
+- critical při probíhajícím buildu delším než 6 hodin;
+- výslovná chyba dohledu při nedostupném či neplatném statusu;
+- změnové deduplikované upozornění a samostatný recovery signál.
+
+Tyto prahy předcházejí současnému 10dennímu routovacímu limitu, nenahrazují jej.
+`routing.status=ok` v health se nesmí prezentovat jako důkaz čerstvosti grafu
+nebo úspěšně ověřené trasy.
+
+Živá kontrola zjistila, že hostový report nebyl uvnitř `/data` kontejneru
+simulator-api dostupný. Nainstalovaná oprava jej atomicky publikuje do skutečného
+bind adresáře `/srv/x5-production/data/csm-sim/sim-data/operational-checks/`;
+API dál čte `/data/operational-checks/latest.json`. Před každým zápisem na X5
+je nutný guard samostatného mountu a očekávaného UUID. Deduplikační stav zůstává
+v `/srv/sim/data/operational-checks/state.json` na zálohovaném hostovém úložišti.
+
+Existující SIM Overview již obsahuje Alert inbox. Při neúspěšném reportu
+simulator-api poskytuje obecný `operational_check_failed` se závažností
+`critical` a příčinou ve shrnutí; toto nasazení nepřidává nový REST/UI kontrakt.
+Monitor-level warning/critical se dokládají odděleně. Hostový monitor a cron jsou
+nainstalované; načtení reportu autentizovaným API a vizuální akceptace v SIM se
+dokončují. Uživatel zvolil upozornění **pouze v SIM UI**. Nevzniká nový Codex
+heartbeat, e-mail ani externí push; operátor musí aplikaci otevřít. Volitelný
+webhook je neaktivovaný a vyžadoval by samostatné nové schválení.
+`alertDelivery.userNotificationDelivered` je samostatný signál od `sent`;
+samotný úspěšný syslog jej nenastavuje. Primární `.env` a jeho API token
+zůstávají beze změny. Připomenutí chyby po 86400 s nezaručuje lidské doručení.
+
+Připravovaná minimální úprava existujícího API readeru navíc vyvolá stejný
+`operational_check_failed` pro konfigurovaný missing/invalid report, stáří více
+než 15 minut nebo čas více než 30 sekund v budoucnosti. Čtení je omezené na
+128 KiB a chyby jsou pevně sanitizované. Bez této ochrany se zastavený cron
+nemusí projevit v UI. Nevzniká nový endpoint ani vlastnost kontraktu. Ochrana
+má oddělené testy a ještě není tímto dokumentem označena za nasazenou.
+Nasazení smí změnit pouze source/compiled modul v odvozeném obrazu přesné
+immutable identity běžícího main API a restartovat jen `sim-api`; ostatní kód,
+knihovny, flags, Situation Data API a síť zůstávají beze změny.
 
 Součástí kontroly je SLO check nad veřejnou bránou:
 

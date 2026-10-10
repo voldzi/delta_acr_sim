@@ -11,6 +11,7 @@ else
   LOG_DIR="${ROOT_DIR}/data/operational-checks"
 fi
 PYTHON_BIN="${SIM_OPERATIONAL_PYTHON_BIN:-python3}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MARKER_BEGIN="# CSM SIM operational checks BEGIN"
 MARKER_END="# CSM SIM operational checks END"
 
@@ -34,7 +35,7 @@ fi
 
 if [[ "$LOG_DIR" == /srv/x5-production/* ]]; then
   expected_uuid="2f93f595-b61b-4eea-9054-7afa9b275b5b"
-  actual_uuid="$(findmnt -n -o UUID --target /srv/x5-production 2>/dev/null || true)"
+  actual_uuid="$(findmnt -n -o UUID --mountpoint /srv/x5-production 2>/dev/null || true)"
   if [ "$actual_uuid" != "$expected_uuid" ]; then
     echo "Refusing to install operational checks: /srv/x5-production is not mounted with expected UUID $expected_uuid." >&2
     exit 1
@@ -43,7 +44,11 @@ fi
 
 mkdir -p "$LOG_DIR"
 
-entry="$SCHEDULE cd $ROOT_DIR && $PYTHON_BIN scripts/production-operational-check.py --env-file .env --quiet >> $LOG_DIR/cron.log 2>&1"
+printf -v runner '%q' "$SCRIPT_DIR/run-production-operational-check.sh"
+printf -v root '%q' "$ROOT_DIR"
+printf -v log '%q' "$LOG_DIR"
+printf -v python '%q' "$PYTHON_BIN"
+entry="$SCHEDULE SIM_OPERATIONAL_ROOT=$root SIM_OPERATIONAL_LOG_DIR=$log SIM_OPERATIONAL_PYTHON_BIN=$python bash $runner"
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
@@ -63,6 +68,6 @@ crontab "$tmp"
 echo "Installed CSM SIM operational checks:"
 echo "  schedule: $SCHEDULE"
 echo "  root: $ROOT_DIR"
-echo "  report: $ROOT_DIR/data/operational-checks/latest.json"
+echo "  report: configured by host monitor settings (production: X5 SIM data bind)"
 echo "  state: $ROOT_DIR/data/operational-checks/state.json"
 echo "  log: $LOG_DIR/cron.log"

@@ -835,8 +835,82 @@ SIM_OPERATIONAL_ALERT_EVERY_FAILURE=false
 
 `SIM_OPERATIONAL_ALERT_WEBHOOK_URL` je volitelný generic JSON webhook. Bez něj
 kontrola stále zapisuje stav do `data/operational-checks/` a posílá failure /
-recovery zprávy do syslogu. Podrobný postup je v
+recovery zprávy do syslogu. Syslog není push ani potvrzené doručení člověku.
+Uživatel zvolil jen SIM UI; webhook je neaktivovaný, nový e-mail nebo Codex
+heartbeat se nevytváří.
+Podrobný postup je v
 `docs/runbooks/14_OPERATIONAL_ALERTING.md`.
+
+### Valhalla dohled a připravovaná ochrana čtení reportu
+
+Stav 10. 10. 2026: návrh je přijatý v
+[ADR 0032](../adr/0032_VALHALLA_READ_ONLY_OPERATIONAL_MONITOR.md). Hostový monitor
+a jeho cron jsou nainstalované, report je ve skutečném API bindu; úplná API/UI
+akceptace a reader guard se dokončují. Hostový monitor každých 300 s čte
+pevný read-only maintenance `status` vyhrazenou SSH identitou z produkčních
+secrets. Privátní klíč nevkládejte do `.env.example`, Gitu, obrazu ani na X5;
+na Valhalle omezte veřejnou část forced commandem na status bez shellu,
+forwardingu, PTY a mutujících akcí. SSH host key musí být ověřený.
+
+Požadované prahy monitoru jsou warning od 8 dnů aktivních map, critical od
+9 dnů, okamžitý critical při failed weekly pokusu/neaktivním timeru a critical
+při probíhajícím buildu delším než 6 hodin. Nemění se routovací limit stáří
+grafu, routingová konfigurace ani `DRIVER_MEASUREMENTS_ENABLED`.
+
+Instalátor používá oddělený hostový soubor
+`/srv/sim/data/operational-checks/monitor.env` s právy 600 a přesným allowlistem
+pěti klíčů:
+
+```bash
+SIM_OPERATIONAL_VALHALLA_MONITOR_ENABLED=true
+SIM_OPERATIONAL_VALHALLA_MONITOR_KEY=~/.config/csm-sim/valhalla-monitor/id_ed25519
+SIM_OPERATIONAL_REPORT_FILE=/srv/x5-production/data/csm-sim/sim-data/operational-checks/latest.json
+SIM_OPERATIONAL_STATE_FILE=/srv/sim/data/operational-checks/state.json
+SIM_OPERATIONAL_ALERT_REMINDER_SECONDS=86400
+```
+
+Monitor načítá tento soubor parametrem `--monitor-env-file`; nesmí přes něj
+přijmout tokeny, webhook URL či jiné env klíče. Primární `/srv/sim/.env` a jeho
+API token zůstávají beze změny. Cesta privátního klíče se vztahuje k domovu
+uživatele na **docker.home.cz**, kde klíč vznikl; žádný privátní klíč se na Mac
+neexportuje.
+
+Odlišný API klíč `SIM_OPERATIONS_REPORT_FILE=/data/operational-checks/latest.json`
+je již konfigurovanou cestou **uvnitř kontejneru**. Není položkou `monitor.env`.
+Připomenutí 86400 s není důkazem existence vnějšího doručovacího kanálu;
+`userNotificationDelivered` musí být doloženo odděleně od zápisu syslogu.
+
+Přesné nasazené hodnoty a evidence patří do akceptačního záznamu. Před každým
+zápisem reportu či logu na X5 ověřte
+samostatný mount a UUID `2f93f595-b61b-4eea-9054-7afa9b275b5b`; při chybě
+nevytvářejte podkladový adresář na interním disku. Report se zveřejní atomicky,
+bez raw dat/tajností. Skutečný mount a potřebná práva cílové podsložky ověřte
+na hostu. Pouhý default `data/operational-checks/latest.json` po X5 migraci
+nemusí být uvnitř API viditelný.
+
+Samotný hostový monitor vyžaduje jen monitorovací soubory/konfiguraci a oprávnění
+veřejného SSH klíče. Připravovaný minimální API reader guard nepřidává nový env
+klíč ani kontrakt: chybějící/neplatný report, velikost nad 128 KiB, stáří více než
+15 minut nebo čas více než 30 sekund v budoucnosti vyvolají existující critical
+`operational_check_failed`. Původní API chybějící report tiše vynechává; ochranu
+nelze tvrdit za nasazenou jen na základě instalace cronu.
+
+Guard smí být nasazen pouze cíleným odvozeným obrazem z immutable identity
+aktuálně běžícího main API s jedinou source/compiled modulovou změnou. Předem
+ověřte přesnou shodu původního souboru, uchovejte oba image ID a rollback
+manifest; restartujte pouze `sim-api`. Nepoužívejte full Compose deploy,
+starší API/SDA obraz ani přestavbu jiných služeb. Knihovny, stávající flags,
+Situation Data API, routing, Jízda a síť zůstávají beze změny.
+
+`setup-valhalla-monitor-access.sh --install` se spouští z Macu. Hostový
+`install-valhalla-operational-monitor.sh` je v izolovaném
+`/home/voldzi/sim-owned-deploy/valhalla-monitor-20261010/scripts/` a zachovává
+runtime checkout `/srv/sim`. Instalátor provede testy a nastaví vyhrazený cron
+na `run-production-operational-check.sh` každých pět minut. Runner používá
+guard X5 před redirekcí, `flock` a timeout 240 s. Root vzniklého Python procesu
+určuje `SIM_OPERATIONAL_ROOT=/srv/sim`. Instalace vyžaduje pouze oprávnění
+zapisovat do konkrétní reportovací podsložky skutečného API bindu, nikoli
+převlastnění celého data adresáře. Přesné kroky jsou v runbooku 14.
 
 ## Safety Data API
 

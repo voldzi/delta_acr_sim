@@ -1,5 +1,5 @@
 import type { PublisherMode, Scenario } from "@csm-sim/contracts";
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import type { ApiConfig } from "./config.js";
 import { fetchProviderJson } from "./provider-http.js";
 import type { JsonStore } from "./store.js";
@@ -713,19 +713,73 @@ function operationalCheckAlerts(check: OperationsSummary["operationalCheck"] | u
   ];
 }
 
-async function readOperationalCheckSummary(config: ApiConfig): Promise<OperationsSummary["operationalCheck"] | undefined> {
+function validOperationalReportTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) {
+    return false;
+  }
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const monthDays = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= (monthDays[month - 1] ?? 0) &&
+    Number(value.slice(11, 13)) <= 23 && Number(value.slice(14, 16)) <= 59 && Number(value.slice(17, 19)) <= 59 &&
+    Number.isFinite(Date.parse(value));
+}
+
+export async function readOperationalCheckSummary(config: ApiConfig): Promise<OperationsSummary["operationalCheck"] | undefined> {
   if (!config.operationsReportFile) {
     return undefined;
   }
+  const unavailable = {
+    status: "failed",
+    summary: "OPERATIONAL_MONITOR_UNAVAILABLE: Provozní dohled neposkytl platný report."
+  };
+  const maxBytes = 128 * 1024;
   try {
-    const parsed = JSON.parse(await readFile(config.operationsReportFile, "utf8")) as Record<string, unknown>;
+    const handle = await open(config.operationsReportFile, "r");
+    let raw: string;
+    try {
+      const metadata = await handle.stat();
+      if (!metadata.isFile() || metadata.size > maxBytes) return unavailable;
+      // Bound the actual read as well as stat: an atomic replacement or growing
+      // file cannot make this reader allocate or publish an unbounded payload.
+      const buffer = Buffer.alloc(maxBytes + 1);
+      let total = 0;
+      while (total < buffer.length) {
+        const { bytesRead } = await handle.read(buffer, total, buffer.length - total, null);
+        if (bytesRead === 0) break;
+        total += bytesRead;
+      }
+      if (total > maxBytes) return unavailable;
+      raw = new TextDecoder("utf-8", { fatal: true }).decode(buffer.subarray(0, total));
+    } finally {
+      await handle.close();
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return unavailable;
+    const report = parsed as Record<string, unknown>;
+    if (report.schemaVersion !== "sim-operational-check/v1" || (report.status !== "ok" && report.status !== "failed") ||
+        typeof report.summary !== "string" || report.summary.trim().length === 0 || !validOperationalReportTimestamp(report.finishedAt)) {
+      return unavailable;
+    }
+    const ageMs = Date.now() - Date.parse(report.finishedAt);
+    if (ageMs < -30_000) return unavailable;
+    if (ageMs > 900_000) {
+      return {
+        finishedAt: report.finishedAt,
+        status: "failed",
+        summary: "OPERATIONAL_MONITOR_STALE: Poslední report provozního dohledu je starší než 15 minut."
+      };
+    }
     return {
-      finishedAt: stringValue(parsed.finishedAt),
-      status: stringValue(parsed.status),
-      summary: stringValue(parsed.summary)
+      finishedAt: report.finishedAt,
+      status: report.status,
+      summary: report.summary.trim().slice(0, 8192)
     };
   } catch {
-    return undefined;
+    // Report contents, parse errors and filesystem paths never become alerts.
+    return unavailable;
   }
 }
 

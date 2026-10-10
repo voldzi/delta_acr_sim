@@ -10,6 +10,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -19,8 +20,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from valhalla_operational_monitor import evaluate_valhalla_snapshot
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+
+ROOT_DIR = Path(os.environ.get('SIM_OPERATIONAL_ROOT', str(Path(__file__).resolve().parents[1])))
+X5_ROOT = Path('/srv/x5-production')
+X5_UUID = '2f93f595-b61b-4eea-9054-7afa9b275b5b'
 
 
 class OperationalCheckError(RuntimeError):
@@ -436,8 +441,82 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
+    guard_report_mount(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Readers must never observe a partial report. Temporary files contain no secrets.
+    fd, name = tempfile.mkstemp(prefix='.operational-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as output:
+            json.dump(payload, output, ensure_ascii=False, indent=2, sort_keys=True)
+            output.write('\n')
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(name, 0o644)
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def guard_report_mount(path: Path) -> None:
+    resolved = path.resolve()
+    original = path.absolute()
+    if X5_ROOT in original.parents:
+        require(X5_ROOT in resolved.parents, 'X5_PATH_INVALID: report path must not escape the X5 disk')
+    if X5_ROOT not in resolved.parents and resolved != X5_ROOT:
+        return
+    try:
+        result = subprocess.run(
+            ['findmnt', '-n', '-o', 'UUID', '--mountpoint', str(X5_ROOT)],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        valid = result.returncode == 0 and result.stdout.strip() == X5_UUID
+    except (OSError, subprocess.TimeoutExpired):
+        valid = False
+    require(valid, 'X5_MOUNT_UNAVAILABLE: refusing to publish an operational report on an unverified disk')
+
+
+def check_valhalla_monitor(client: Client, args: argparse.Namespace) -> dict[str, Any]:
+    """Read only a forced status snapshot; never trigger a route/lease or update."""
+    start = time.monotonic()
+    failure = {'status': 'failed', 'severity': 'critical', 'error': 'VALHALLA_MONITOR_UNAVAILABLE: nelze ověřit aktualizace a stáří map'}
+    try:
+        key = args.valhalla_monitor_key.expanduser()
+        if not key.is_file() or key.stat().st_mode & 0o077:
+            return {**failure, 'elapsedMs': int((time.monotonic() - start) * 1000)}
+        command = [
+            'ssh', '-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
+            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=5',
+            '-o', 'ServerAliveInterval=3', '-o', 'ServerAliveCountMax=2',
+            '-i', str(key), 'voldzi@valhalla.home.cz', 'status',
+        ]
+        # A file bounds captured partner/runtime output; neither stdout nor stderr is logged.
+        with tempfile.TemporaryFile() as capture:
+            process = subprocess.Popen(command, stdout=capture, stderr=subprocess.DEVNULL)
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                return {**failure, 'elapsedMs': int((time.monotonic() - start) * 1000)}
+            capture.seek(0)
+            raw = capture.read(65537)
+        if process.returncode != 0 or len(raw) > 65536:
+            return {**failure, 'elapsedMs': int((time.monotonic() - start) * 1000)}
+        health, _ = client.json('/situation-data/health/ready')
+        routing = health.get('routing', {})
+        dataset = routing.get('routingDataset', {}) if isinstance(routing, dict) else {}
+        graph_built_at = dataset.get('builtAt') if isinstance(dataset, dict) else None
+        if not isinstance(graph_built_at, str):
+            return {**failure, 'elapsedMs': int((time.monotonic() - start) * 1000)}
+        result = evaluate_valhalla_snapshot(raw.decode('utf-8'), graph_built_at=graph_built_at)
+        if result['status'] != 'ok':
+            result['error'] = '; '.join(f"{item['code']}: {item['error']}" for item in result['failures'])
+        result['elapsedMs'] = int((time.monotonic() - start) * 1000)
+        return result
+    except Exception:
+        # Provider payloads, local secret paths, SSH error output and DETAIL stay private.
+        return {**failure, 'elapsedMs': int((time.monotonic() - start) * 1000)}
 
 
 def failure_fingerprint(failures: list[dict[str, str]]) -> str:
@@ -460,11 +539,12 @@ def send_webhook(url: str, payload: dict[str, Any], timeout_seconds: float) -> d
         raise OperationalCheckError(f"webhook network error: {exc}") from exc
     elapsed_ms = int((time.monotonic() - start) * 1000)
     require(200 <= status < 400, f"webhook expected 2xx/3xx, got {status}")
-    return {"status": status, "elapsedMs": elapsed_ms}
+    return {"httpStatus": status, "elapsedMs": elapsed_ms}
 
 
 def log_syslog(message: str) -> None:
-    subprocess.run(["logger", "-t", "csm-sim-operational-check", message], check=False)
+    result = subprocess.run(["logger", "-t", "csm-sim-operational-check", message], check=False, timeout=5)
+    require(result.returncode == 0, 'SYSLOG_DELIVERY_FAILED')
 
 
 def maybe_alert(report: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
@@ -477,11 +557,17 @@ def maybe_alert(report: dict[str, Any], args: argparse.Namespace) -> dict[str, A
     event_type = ""
     if report["status"] == "failed":
         changed_failure = previous_status != "failed" or previous_fingerprint != fingerprint
-        should_send = args.alert_every_failure or changed_failure
+        last_delivery = previous_state.get('lastExternalAlertAt', 0)
+        due_reminder = bool(last_delivery and time.time() - last_delivery >= args.alert_reminder_seconds)
+        retry_external = bool(args.webhook_url and previous_state.get('externalDeliveryFailed'))
+        should_send = args.alert_every_failure or changed_failure or due_reminder or retry_external
         event_type = "failure"
     elif previous_status == "failed" and args.alert_on_recovery:
         should_send = True
         event_type = "recovery"
+    elif args.webhook_url and previous_state.get('externalDeliveryFailed') and previous_state.get('pendingEventType') == 'recovery' and args.alert_on_recovery:
+        should_send = True
+        event_type = 'recovery'
 
     delivery: dict[str, Any] = {"eventType": event_type or "none", "sent": False, "channels": []}
     alert_payload = {
@@ -500,21 +586,30 @@ def maybe_alert(report: dict[str, Any], args: argparse.Namespace) -> dict[str, A
     if should_send:
         message = f"{args.environment} SIM operational check {report['status']}: {report['summary']}"
         if not args.no_syslog:
-            log_syslog(message)
-            delivery["channels"].append({"type": "syslog", "status": "ok"})
+            try:
+                log_syslog(message)
+                delivery["channels"].append({"type": "syslog", "status": "ok"})
+            except Exception:
+                delivery['channels'].append({'type': 'syslog', 'status': 'failed', 'error': 'SYSLOG_DELIVERY_FAILED'})
         if args.webhook_url:
             try:
                 webhook_result = send_webhook(args.webhook_url, alert_payload, args.webhook_timeout_seconds)
                 delivery["channels"].append({"type": "webhook", "status": "ok", **webhook_result})
-            except Exception as exc:
-                delivery["channels"].append({"type": "webhook", "status": "failed", "error": str(exc)})
-        delivery["sent"] = bool(delivery["channels"])
+            except Exception:
+                delivery["channels"].append({"type": "webhook", "status": "failed", "error": 'WEBHOOK_DELIVERY_FAILED: notification was not delivered'})
+        delivery["sent"] = any(item.get('status') == 'ok' for item in delivery['channels'])
+    external = [item for item in delivery['channels'] if item['type'] == 'webhook']
+    external_ok = any(item.get('status') == 'ok' for item in external)
+    delivery['userNotificationDelivered'] = external_ok
 
     state = {
         "status": report["status"],
         "fingerprint": fingerprint,
         "updatedAt": report["finishedAt"],
         "summary": report["summary"],
+        "lastExternalAlertAt": time.time() if external_ok else previous_state.get('lastExternalAlertAt', 0),
+        "externalDeliveryFailed": bool(external and not external_ok) or (not should_send and bool(previous_state.get('externalDeliveryFailed'))),
+        "pendingEventType": event_type if external and not external_ok else '',
     }
     write_json(args.state_file, state)
     return delivery
@@ -525,6 +620,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     started = time.monotonic()
     client = Client(args.base_url, args.timeout_seconds)
     checks: dict[str, dict[str, Any]] = {}
+
+    if args.valhalla_monitor_enabled:
+        checks['valhallaUpdates'] = check_valhalla_monitor(client, args)
 
     checks["metricsInternal"] = run_named_check("metricsInternal", lambda: check_metrics_are_internal(client))
     checks["operationsSlo"] = run_named_check("operationsSlo", lambda: check_operations_slo(client, args))
@@ -601,9 +699,10 @@ def resolve_args(args: argparse.Namespace, env_file_values: dict[str, str]) -> a
     else:
         args.api_token = unquote_env_value(args.api_token)
     if args.state_file is None:
-        args.state_file = Path(env_value(env_file_values, "SIM_OPERATIONAL_STATE_FILE", "data/operational-checks/state.json"))
+        args.state_file = Path(env_value(env_file_values, "SIM_OPERATIONAL_STATE_FILE", "data/operational-checks/state.json") or 'data/operational-checks/state.json')
     if args.report_file is None:
-        args.report_file = Path(env_value(env_file_values, "SIM_OPERATIONAL_REPORT_FILE", "data/operational-checks/latest.json"))
+        default_report = '/srv/x5-production/data/csm-sim/sim-data/operational-checks/latest.json' if ROOT_DIR == Path('/srv/sim') else 'data/operational-checks/latest.json'
+        args.report_file = Path(env_value(env_file_values, "SIM_OPERATIONAL_REPORT_FILE", default_report) or default_report)
     if not args.state_file.is_absolute():
         args.state_file = ROOT_DIR / args.state_file
     if not args.report_file.is_absolute():
@@ -626,12 +725,16 @@ def resolve_args(args: argparse.Namespace, env_file_values: dict[str, str]) -> a
         if args.slo_require_operations_ok is None
         else args.slo_require_operations_ok
     )
+    args.valhalla_monitor_enabled = env_bool(env_value(env_file_values, 'SIM_OPERATIONAL_VALHALLA_MONITOR_ENABLED', 'false'), False)
+    args.valhalla_monitor_key = Path(unquote_env_value(env_value(env_file_values, 'SIM_OPERATIONAL_VALHALLA_MONITOR_KEY', '~/.config/csm-sim/valhalla-monitor/id_ed25519')))
+    args.alert_reminder_seconds = env_int(env_value(env_file_values, 'SIM_OPERATIONAL_ALERT_REMINDER_SECONDS', '86400'), 86400)
     return args
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=Path(".env"), help="Optional key=value file. Default: %(default)s")
+    parser.add_argument('--monitor-env-file', type=Path, default=None, help='Durable host-only monitor settings (no API tokens).')
     parser.add_argument("--base-url", default=None, help="SIM gateway base URL. Default comes from env or http://127.0.0.1:5020.")
     parser.add_argument("--environment", default=None, help="Alert environment label. Default comes from env or docker-home.")
     parser.add_argument("--bbox", default=None, help="Operational bbox for data-plane smoke checks.")
@@ -672,11 +775,27 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--quiet", action="store_true", help="Print only failures unless --json is used.")
     args = parser.parse_args(argv)
     env_file = args.env_file if args.env_file.is_absolute() else ROOT_DIR / args.env_file
-    return resolve_args(args, parse_env_file(env_file))
+    values = parse_env_file(env_file)
+    if args.monitor_env_file is not None:
+        allowed = {'SIM_OPERATIONAL_VALHALLA_MONITOR_ENABLED', 'SIM_OPERATIONAL_VALHALLA_MONITOR_KEY', 'SIM_OPERATIONAL_REPORT_FILE', 'SIM_OPERATIONAL_STATE_FILE', 'SIM_OPERATIONAL_ALERT_REMINDER_SECONDS'}
+        monitor_values = parse_env_file(args.monitor_env_file)
+        require(not (set(monitor_values) - allowed), 'Monitor config contains unsupported keys')
+        values.update(monitor_values)
+    return resolve_args(args, values)
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    try:
+        guard_report_mount(args.report_file)
+    except OperationalCheckError as exc:
+        if not args.no_syslog:
+            try:
+                log_syslog(str(exc))
+            except Exception:
+                pass
+        print(str(exc), file=sys.stderr)
+        return 3
     report = build_report(args)
     alert_delivery = maybe_alert(report, args)
     report["alertDelivery"] = alert_delivery
