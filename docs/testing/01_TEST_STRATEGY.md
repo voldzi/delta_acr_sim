@@ -21,7 +21,7 @@ První implementační krok má testovat kontrakty, publisher safety gates a AI 
 Na podporovaném Node.js 24 a pnpm 10 spusťte hermetické testy Safety Data API:
 
 ```bash
-pnpm --filter @csm-sim/safety-data-api test test/media-news.test.ts test/notification-safety-guard.test.ts test/notification-input-health.test.ts test/notification-cache-evidence.test.ts test/municipal-notification-provenance.test.ts test/contract.test.ts
+pnpm --filter @csm-sim/safety-data-api test
 pnpm --filter @csm-sim/safety-data-api typecheck
 pnpm openapi:validate
 bash scripts/validate-skeleton.sh
@@ -58,6 +58,25 @@ fallback warning: úspěch jiného klíče ani nové cache čtení agregace nesm
 zahladit degradaci původních source dat. Cílené deployment testy pokrývají
 safety-only Compose patch, zachování ostatních služeb/secrets a validaci
 očekávaných kotev; neprokazují live rollback nebo mount.
+
+`notification-load-budget.test.ts` ověřuje pevný 8s limit, sanitizované 503,
+studenou i hot cache, coalesced obnovu, pozdější odmítnutí a úklid timeru.
+`test.http.test.ts` používá pouze lokální HTTP fixture: stejný provider timeout
+musí zahrnout hlavičky i celé JSON/text tělo. `notification-source-freshness.test.ts`
+ověřuje původní čas vnořené current cache, zachování stale fallback evidence
+při hot/coalesced čtení i po evikci a nepřepisování stáří úspěchem jiného klíče.
+Reference metadata/historie nejsou current snapshot; neplatný či budoucí
+source čas je fail-closed. Hydro expirace se váže k poslednímu měření +2 h,
+nikoli k novému načtení payloadu. Žádný test nevolá živého poskytovatele.
+Image-only deployment test zachovává všechny ostatní `.env` bytes a odmítá
+chybějící/duplicitní image selection; runtime proof je samostatný krok.
+
+Bounded-snapshot oprava 10.10.2026: všech 193/193 Safety testů (11 souborů)
+prošlo na Node 24.21.0 / pnpm 10.33.0, včetně 13 budget, 10 HTTP-body a
+10 nested-freshness/hydro regresí. Dále 5 image-only deploy, 4 security kontrakt
+a 12 gateway patch testů; service typecheck/build, skeleton, OpenAPI sanity
+a generátor consistency prošly. Celá workspace suite není důkazem této
+scoped opravy a nebyla znovu spouštěna. Živé ověření je samostatné v kontraktu 21.
 
 Read-time regresní HTTP testy musí na totožném snapshotu prokázat stáří
 296 → 301 → 520 sekund, stale-if-error odmítnutí, skutečnou recovery,

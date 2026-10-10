@@ -113,7 +113,7 @@ určeno pro diagnostiku, ne automatický push.
 
 ### Fail-closed input readiness
 
-HTTP odpověď vždy přidává `inputReadiness` s poli `status`,
+Úspěšná HTTP 200 odpověď vždy přidává `inputReadiness` s poli `status`,
 `snapshotGeneratedAt`, `snapshotAgeSeconds` (nebo `null`) a `reasons`.
 COP musí pro nové automatické zpracování výslovně vyžadovat `status=ready`;
 chybějící metadata ze staré verze nejsou implicitním souhlasem.
@@ -134,6 +134,35 @@ nepatří do civilních zpráv. `unresolvedStaleEntries` a request-scoped eviden
 source fallbacku uchovají degradaci i při úspěchu jiné cache položky nebo
 dalším čtení agregovaného snapshotu. Podrobnosti v
 [krizovém kontraktu 21](21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
+
+### Omezené čekání a sdílená obnova
+
+Čekání kandidátního handleru na kompletní snapshot má pevný rozpočet
+8 000 ms, pod 15sekundovým rozpočtem COP. Studená/pomalá cache nebo chyba
+načtení vrátí HTTP 503 `SAFETY_NOTIFICATION_INPUT_UNAVAILABLE` s
+`error.correlationId`, `Cache-Control: no-store, max-age=0` a `Pragma: no-cache`.
+To není prázdná bezpečná oblast ani povolení použít minulou ready odpověď.
+COP při 503 nesmí objednat doručení; další běžný cyklus může zkusit nové čtení.
+Nevytváří retry smyčku ani cache-bust.
+
+Sdílená již běžící obnova pokračuje po ukončení čekání, aby příští čtení
+mohlo využít dokončenou cache; stejné klíče a hydro snapshot se coalescují.
+Rozpočet nevyšuje provider limity ani nenavyšuje paralelismus. Celostátní
+hydrologický refresh může trvat déle než 8 sekund i pro malý výřez; dokud
+nedoběhne, včasná 503 je správný stav. Timeout jednotlivého provider GET
+nově zahrnuje hlavičky i celé tělo JSON/text, ne pouze přijetí hlaviček.
+
+`snapshotGeneratedAt` nesmí být novější než nejstarší skutečně použité
+načtení current-provider podkladu. Evidence času i stale fallbacku se ukládá
+s každou cache položkou a přenáší přes nested/hot/coalesced čtení. Úspěch
+jiného klíče ani nově sestavený wrapper ji neobnoví. Referenční metadata,
+geokódování a historické detaily mají oddělenou cache a tento current čas
+neurčují. COP nadále vynucuje nejvýše 300 sekund a kontroluje absolutní
+deadline také po vlastním cache reuse a těsně před doručením.
+
+Hydrologické měření má platnost nejvýše do `observedAt + 2 h`; nové stažení
+nebo opakované čtení jeho payloadu tuto platnost neprodlužuje. Původní čas
+stažení snapshotu a platnost konkrétního měření jsou dvě oddělené kontroly.
 
 Zkraceny tvar odpovedi:
 
@@ -246,13 +275,7 @@ Safety katalog u uzivatelskych vrstev obsahuje `notificationPolicy`:
   "eligible": true,
   "audienceDecisionOwner": "cop",
   "deliveryOwner": "csm-messaging",
-  "deduplicationKeyFields": [
-    "providerId",
-    "providerLayerId",
-    "featureId",
-    "validFrom",
-    "validUntil"
-  ],
+  "deduplicationKeyFields": ["providerId", "providerLayerId", "featureId", "validFrom", "validUntil"],
   "recommendedNotificationTypes": ["safety.alert"],
   "minimumSeverityForUserPush": "advisory",
   "technicalWarningsPolicy": "never_push_to_public_users"

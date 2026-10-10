@@ -50,11 +50,11 @@ SIM gateway. Kontrakt je `sim-crisis-media-context-v1`. Povolené parametry:
 
 Pevný allowlist:
 
-| ID | Oficiální RSS URL | `regionCode` – pouze rozsah feedu |
-| --- | --- | --- |
-| `ct24-main` | `https://ct24.ceskatelevize.cz/rss` | `CZ` |
-| `ct24-ostrava` | `https://ct24.ceskatelevize.cz/rss/rubrika/regiony/moravskoslezsky-kraj-14` | `CZ080` |
-| `ct24-brno` | `https://ct24.ceskatelevize.cz/rss/rubrika/regiony/jihomoravsky-kraj-26` | `CZ064` |
+| ID             | Oficiální RSS URL                                                           | `regionCode` – pouze rozsah feedu |
+| -------------- | --------------------------------------------------------------------------- | --------------------------------- |
+| `ct24-main`    | `https://ct24.ceskatelevize.cz/rss`                                         | `CZ`                              |
+| `ct24-ostrava` | `https://ct24.ceskatelevize.cz/rss/rubrika/regiony/moravskoslezsky-kraj-14` | `CZ080`                           |
+| `ct24-brno`    | `https://ct24.ceskatelevize.cz/rss/rubrika/regiony/jihomoravsky-kraj-26`    | `CZ064`                           |
 
 Regionální feed může psát o jiné lokalitě. `regionCode` proto není událostní
 geokód a nesmí vstoupit do AOI/geofence. SIM nikdy nepřevezme ani RSS geometrii,
@@ -170,16 +170,16 @@ selhání endpointu může vrátit `503 MEDIA_NEWS_UNAVAILABLE`.
 `MUNICIPAL_ALERT_FEEDS` vybere tento vestavěný katalog; explicitní seznam jej
 nahradí, nepřidává se k němu. Nejde o celostátní pokrytí IZS.
 
-| Feed ID | Oficiální URL | Formát |
-| --- | --- | --- |
-| `pkr-ustecky-jpo` | `https://pkr.kr-ustecky.cz/pkr/zasahy-jednotek-pozarni-ochrany/?fmt=json` | PKR JSON |
-| `pkr-liberecky-udalosti` | `https://pkr.kraj-lbc.cz/pkr/probihajici-udalosti/?fmt=json` | PKR JSON |
-| `pkr-stredocesky-aktuality` | `https://pkr.kr-stredocesky.cz/pkr/aktuality/feed.xml` | RSS |
-| `pkr-stredocesky-jpo` | `https://pkr.kr-stredocesky.cz/pkr/zasahy-jpo/feed.xml` | RSS |
-| `olkraj-krizove-rizeni` | `https://www.olkraj.cz/rss/6` | RSS |
-| `bruntal-uredni-rss` | `https://www.mubruntal.cz/rss` | RSS |
-| `krnov-aktuality-rss` | `https://www.krnov.cz/rss` | RSS |
-| `vrbno-aktuality-rss` | `https://www.vrbnopp.cz/rss.xml` | RSS |
+| Feed ID                     | Oficiální URL                                                             | Formát   |
+| --------------------------- | ------------------------------------------------------------------------- | -------- |
+| `pkr-ustecky-jpo`           | `https://pkr.kr-ustecky.cz/pkr/zasahy-jednotek-pozarni-ochrany/?fmt=json` | PKR JSON |
+| `pkr-liberecky-udalosti`    | `https://pkr.kraj-lbc.cz/pkr/probihajici-udalosti/?fmt=json`              | PKR JSON |
+| `pkr-stredocesky-aktuality` | `https://pkr.kr-stredocesky.cz/pkr/aktuality/feed.xml`                    | RSS      |
+| `pkr-stredocesky-jpo`       | `https://pkr.kr-stredocesky.cz/pkr/zasahy-jpo/feed.xml`                   | RSS      |
+| `olkraj-krizove-rizeni`     | `https://www.olkraj.cz/rss/6`                                             | RSS      |
+| `bruntal-uredni-rss`        | `https://www.mubruntal.cz/rss`                                            | RSS      |
+| `krnov-aktuality-rss`       | `https://www.krnov.cz/rss`                                                | RSS      |
+| `vrbno-aktuality-rss`       | `https://www.vrbnopp.cz/rss.xml`                                          | RSS      |
 
 Mapová prezentace těchto vstupů zůstává kompatibilní v
 `public.safety.warnings`. Obecný RSS/Atom/GeoRSS/GeoJSON záznam není v aktuální
@@ -212,11 +212,11 @@ Kandidátní HTTP odpověď obsahuje:
 }
 ```
 
-| Stav | Význam a povinné chování COP |
-| --- | --- |
-| `ready` | Známé snapshot/cache kontroly prošly a známý query limit nebyl dosažen. Teprve pak lze vyhodnotit opt-in, AOI a kandidáty. |
+| Stav          | Význam a povinné chování COP                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ready`       | Známé snapshot/cache kontroly prošly a známý query limit nebyl dosažen. Teprve pak lze vyhodnotit opt-in, AOI a kandidáty.                                   |
 | `unavailable` | Chybný/expirovaný nebo nepřiměřeně budoucí čas, source warning, neobnovená cache chyba či stale úspěch; nové automatické doručení z této odpovědi nepovolit. |
-| `incomplete` | Jinak připravený snapshot dosáhl známého query limitu; možná truncation, nové automatické doručení nepovolit. |
+| `incomplete`  | Jinak připravený snapshot dosáhl známého query limitu; možná truncation, nové automatické doručení nepovolit.                                                |
 
 Kontrolují se původní `collection.generatedAt`, společná response cache a
 cache požadovaných zdrojů; maximální stáří je `SAFETY_DATA_CACHE_TTL_SECONDS`.
@@ -233,6 +233,22 @@ source stale fallback do sanitizovaného warningu agregovaného snapshotu;
 warning přetrvá i při dalším cache čtení. Nový čas agregace nebo úspěch jiné
 položky nesmí přeznačit stará zdrojová data jako připravená. Evidence neobsahuje
 cache klíče nebo raw upstream payload.
+
+Každá cache položka nyní uchovává i vnořenou read evidence: stale fallback
+a nejstarší čas načtení current-provider payloadu. Přenese se ke každému
+hot/coalesced čtenáři i po obnově nebo vyřazení vnitřní položky. Čas
+agregovaného podkladu je minimum počátku agregace, použitých source
+`fetchedAt` a této evidence. Neplatné/budoucí source časy blokují readiness.
+Current-payload tracking se zapíná jen pro živé feedy/payloady; metadata,
+referenční geokódování a historii tím nezaměňujeme s aktuálními pozorováními.
+Pomalá obnova ani obnovování obálky nesmí prodloužit 300sekundovou mez COP.
+
+Kandidátní handler čeká na snapshot nejvýše 8 000 ms. Při timeoutu nebo
+load failure vrací HTTP 503 `SAFETY_NOTIFICATION_INPUT_UNAVAILABLE` a
+`correlationId`, bez kandidátů a bez staré ready odpovědi. Již běžící sdílená
+obnova smí dokončit cache na pozadí; coalescing i provider cadence zůstávají.
+Tato změna omezuje čekání klienta, **nezaručuje** dostupnost všech zdrojů.
+Provider HTTP deadline pokrývá hlavičky i tělo. Viz [ADR 0033](../adr/0033_BOUNDED_SAFETY_NOTIFICATION_SNAPSHOTS.md).
 
 ### Odpověď není další snapshot cache
 
@@ -290,6 +306,17 @@ runtime `/srv/sim`:
 
 ```bash
 node scripts/deploy-crisis-context.mjs --deploy --revision <full-tested-commit>
+```
+
+Pro následnou opravu timeoutu/čerstvosti, když jsou zdroje a gateway již
+zprovozněné, použít `--image-only`. Tento režim vyžaduje právě jeden existující
+`SIM_SAFETY_DATA_IMAGE`, mění pouze jeho hodnotu a nechává Compose i všechny
+ostatní `.env` bytes beze změny. Před aktivací porovná také Safety konfiguraci
+bez image; odlišné zdroje, cadence, secrets, mounts, ports nebo sítě odmítne.
+Žádný gateway reload není pro tuto opravu potřeba.
+
+```bash
+node scripts/deploy-crisis-context.mjs --deploy --revision <full-tested-commit> --image-only
 ```
 
 Skript odmítne jinou revizi nebo sledované změny build vstupů. Sestaví pouze

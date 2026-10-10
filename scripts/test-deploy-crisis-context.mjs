@@ -33,6 +33,16 @@ test("ambiguous configuration refuses activation", () => {
   assert.throws(() => patchCompose(base.replace("image: ${SIM_SAFETY_DATA_IMAGE:-sim-safety-data-api}", "image: unexpected")));
 });
 
+test("image-only patch preserves all source, cadence, auth and secret bytes", () => {
+  const original =
+    "SAFETY_DATA_ENABLED_SOURCES=hzs_incidents,chmi_hydro\nMEDIA_NEWS_ENABLED=false\nMEDIA_NEWS_REQUEST_TIMEOUT_MS=1234\nSIM_SAFETY_DATA_IMAGE=old-reviewed\nOTHER_SECRET=synthetic-placeholder\n";
+  const next = patchEnvironment(original, "new-reviewed", true);
+  assert.equal(next, original.replace("SIM_SAFETY_DATA_IMAGE=old-reviewed", "SIM_SAFETY_DATA_IMAGE=new-reviewed"));
+  assert.equal(patchEnvironment(next, "new-reviewed", true), next);
+  assert.throws(() => patchEnvironment("MEDIA_NEWS_ENABLED=false\n", "new", true));
+  assert.throws(() => patchEnvironment("SIM_SAFETY_DATA_IMAGE=a\nSIM_SAFETY_DATA_IMAGE=b\n", "new", true));
+});
+
 test("full-deploy build never retags an already reviewed pinned safety image", () => {
   const script = readFileSync(new URL("./deploy-docker-home.sh", import.meta.url), "utf8");
   const block = script.match(/if \[\[ "\$SIM_SAFETY_DATA_IMAGE_VALUE" != "sim-safety-data-api" \]\]; then[\s\S]*?\nfi\n/)?.[0];

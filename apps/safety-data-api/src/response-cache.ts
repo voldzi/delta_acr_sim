@@ -4,6 +4,8 @@ export interface ManagedResponseCacheOptions {
   ttlMs: number;
   staleIfErrorMs: number;
   maxEntries: number;
+  /** Only live provider payloads; reference metadata/history must not set this. */
+  trackCurrentFreshness?: boolean;
 }
 
 export interface ManagedResponseCacheStats {
@@ -28,32 +30,41 @@ interface CacheEntry<T> {
   staleUntilMs: number;
   lastAccessedAtMs: number;
   lastRefreshFailed: boolean;
+  readEvidence: CacheReadEvidence;
 }
 
 interface CacheLoadResult<T> {
   value: T;
   staleFallbackUsed: boolean;
+  oldestCurrentDataAtMs?: number;
 }
 
 interface CacheReadEvidence {
   staleFallbackUsed: boolean;
+  oldestCurrentDataAtMs?: number;
 }
 
 const cacheReadEvidence = new AsyncLocalStorage<CacheReadEvidence>();
 
 /** Request-scoped, sanitized evidence. No cache key or provider payload is collected. */
-export async function collectManagedResponseCacheEvidence<T>(operation: () => Promise<T>): Promise<{ value: T; staleFallbackUsed: boolean }> {
+export async function collectManagedResponseCacheEvidence<T>(operation: () => Promise<T>): Promise<CacheLoadResult<T>> {
   const evidence: CacheReadEvidence = { staleFallbackUsed: false };
   const value = await cacheReadEvidence.run(evidence, operation);
-  return { value, staleFallbackUsed: evidence.staleFallbackUsed };
+  return { value, ...evidence };
+}
+
+function recordReadEvidence(value: CacheReadEvidence): void {
+  const evidence = cacheReadEvidence.getStore();
+  if (!evidence) return;
+  evidence.staleFallbackUsed ||= value.staleFallbackUsed;
+  if (value.oldestCurrentDataAtMs !== undefined) {
+    evidence.oldestCurrentDataAtMs = Math.min(evidence.oldestCurrentDataAtMs ?? Infinity, value.oldestCurrentDataAtMs);
+  }
 }
 
 async function unwrapCacheLoad<T>(load: Promise<CacheLoadResult<T>>): Promise<T> {
   const result = await load;
-  if (result.staleFallbackUsed) {
-    const evidence = cacheReadEvidence.getStore();
-    if (evidence) evidence.staleFallbackUsed = true;
-  }
+  recordReadEvidence(result);
   return result.value;
 }
 
@@ -80,6 +91,7 @@ export class ManagedResponseCache<T> {
     if (entry && entry.expiresAtMs > now) {
       this.counters.hits += 1;
       this.touchEntry(key, entry, now);
+      recordReadEvidence(entry.readEvidence);
       return entry.value;
     }
 
@@ -90,12 +102,19 @@ export class ManagedResponseCache<T> {
     }
 
     this.counters.misses += 1;
-    const refresh = loader()
-      .then((value) => {
+    // Capture nested evidence independently of the first request. Persisting it
+    // makes coalesced and later hot readers see the same provenance, even after
+    // an inner source key has recovered or been evicted.
+    const refresh = collectManagedResponseCacheEvidence(loader)
+      .then(({ value, ...nestedEvidence }) => {
         this.counters.refreshes += 1;
         this.lastSuccessAtMs = Date.now();
-        this.store(key, value);
-        return { value, staleFallbackUsed: false };
+        const readEvidence: CacheReadEvidence = { ...nestedEvidence };
+        if (this.options.trackCurrentFreshness) {
+          readEvidence.oldestCurrentDataAtMs = Math.min(now, readEvidence.oldestCurrentDataAtMs ?? Infinity);
+        }
+        this.store(key, value, readEvidence);
+        return { value, ...readEvidence };
       })
       .catch((error) => {
         this.counters.errors += 1;
@@ -109,7 +128,7 @@ export class ManagedResponseCache<T> {
         if (staleEntry && staleEntry.staleUntilMs > Date.now()) {
           this.counters.staleHits += 1;
           this.touchEntry(key, staleEntry, Date.now());
-          return { value: staleEntry.value, staleFallbackUsed: true };
+          return { value: staleEntry.value, ...staleEntry.readEvidence, staleFallbackUsed: true };
         }
         throw error;
       })
@@ -138,7 +157,7 @@ export class ManagedResponseCache<T> {
     return stats;
   }
 
-  private store(key: string, value: T): void {
+  private store(key: string, value: T, readEvidence: CacheReadEvidence): void {
     const now = Date.now();
     this.entries.delete(key);
     this.entries.set(key, {
@@ -146,7 +165,8 @@ export class ManagedResponseCache<T> {
       expiresAtMs: now + Math.max(0, this.options.ttlMs),
       staleUntilMs: now + Math.max(0, this.options.ttlMs) + Math.max(0, this.options.staleIfErrorMs),
       lastAccessedAtMs: now,
-      lastRefreshFailed: false
+      lastRefreshFailed: false,
+      readEvidence
     });
     this.evictIfNeeded();
   }

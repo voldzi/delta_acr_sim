@@ -22,16 +22,14 @@ export function problem(req: Request, res: ExpressResponse, status: number, code
 }
 
 export async function requestJson<T>(url: string, timeoutMs: number): Promise<T> {
-  const response = await request(url, timeoutMs);
-  return (await response.json()) as T;
+  return request(url, timeoutMs, async (response) => (await response.json()) as T);
 }
 
 export async function requestText(url: string, timeoutMs: number): Promise<string> {
-  const response = await request(url, timeoutMs);
-  return response.text();
+  return request(url, timeoutMs, (response) => response.text());
 }
 
-async function request(url: string, timeoutMs: number): Promise<globalThis.Response> {
+async function request<T>(url: string, timeoutMs: number, consume: (response: globalThis.Response) => Promise<T>): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -44,7 +42,8 @@ async function request(url: string, timeoutMs: number): Promise<globalThis.Respo
     if (!response.ok) {
       throw new HttpRequestError(`GET ${url} failed with ${response.status}`, url, response.status);
     }
-    return response;
+    // Keep the same deadline active until the response body has been consumed.
+    return await consume(response);
   } finally {
     clearTimeout(timeout);
   }

@@ -361,6 +361,11 @@ def build_document
   candidate_operation["x-access-policy"] = "internal_network_readonly"
   candidate_operation["x-server-to-server"] = true
   candidate_operation["description"] += " Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist."
+  candidate_operation["description"] += " Snapshot loading has an 8000 ms server wait budget, below COP's 15000 ms request budget. A cold, slow or failed load returns 503 SAFETY_NOTIFICATION_INPUT_UNAVAILABLE with correlationId and no-store; it never substitutes a previous ready response. Shared provider refresh can complete in the background and is coalesced. On every successful read, readiness uses the original oldest current-provider retrieval time; hot/nested cache reuse does not reset its age."
+  candidate_operation["responses"]["503"] = {
+    "description" => "SAFETY_NOTIFICATION_INPUT_UNAVAILABLE: snapshot loading failed or exceeded its 8000 ms wait budget. No usable candidates; no-store, max-age=0. Do not deliver alerts or fall back to an old ready snapshot.",
+    "content" => Marshal.load(Marshal.dump(doc["components"]["responses"]["SafetyDataProblem"]["content"]))
+  }
 
   doc["components"]["schemas"]["SituationDataRoutingStep"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/navigation-step.schema.json")))
   # Current fail-closed notification additions; do not rewrite archived snapshots.
@@ -373,7 +378,7 @@ def build_document
     "type" => "object", "required" => %w[status snapshotGeneratedAt snapshotAgeSeconds reasons],
     "properties" => {
       "status" => { "type" => "string", "enum" => %w[ready unavailable incomplete] },
-      "snapshotGeneratedAt" => { "type" => "string" },
+      "snapshotGeneratedAt" => { "type" => "string", "description" => "Conservative original snapshot time: no newer than the oldest current provider payload retrieval used. Reference metadata/history are excluded; hot or nested cache reuse must not reset this timestamp." },
       "snapshotAgeSeconds" => { "type" => ["number", "null"] },
       "reasons" => { "type" => "array", "items" => { "type" => "string" } }
     },

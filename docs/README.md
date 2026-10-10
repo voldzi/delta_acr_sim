@@ -51,6 +51,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [`integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md`](integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md)
 - [`adr/0031_CRISIS_CONTEXT_AND_NOTIFICATION_BOUNDARIES.md`](adr/0031_CRISIS_CONTEXT_AND_NOTIFICATION_BOUNDARIES.md)
 - [`adr/0032_VALHALLA_READ_ONLY_OPERATIONAL_MONITOR.md`](adr/0032_VALHALLA_READ_ONLY_OPERATIONAL_MONITOR.md) — read-only monitor, SIM UI-only alerts and narrow main API report-freshness guard
+- [`adr/0033_BOUNDED_SAFETY_NOTIFICATION_SNAPSHOTS.md`](adr/0033_BOUNDED_SAFETY_NOTIFICATION_SNAPSHOTS.md) — bounded candidate loading and immutable nested current-provider freshness evidence
 - [`integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md`](integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md)
 - [`runbooks/16_AI_ROUTER_PRODUCTION.md`](runbooks/16_AI_ROUTER_PRODUCTION.md)
 

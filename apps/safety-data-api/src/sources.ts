@@ -297,11 +297,13 @@ class ChmiAlertsSource implements SafetyDataSource {
 
   constructor(private readonly config: SafetyDataConfig) {
     this.listingCache = new ManagedResponseCache<string>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(10 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 1
     });
     this.capCache = new ManagedResponseCache<unknown>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(10 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 4
@@ -512,11 +514,13 @@ class ChmiHydroSource implements SafetyDataSource {
       maxEntries: 1
     });
     this.stationDataCache = new ManagedResponseCache<HydroNowResponse>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(5 * 60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: Math.max(64, config.chmiHydroStationCacheMaxEntries)
     });
     this.currentSnapshotCache = new ManagedResponseCache<HydroCurrentSnapshot>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(5 * 60_000, config.chmiHydroCurrentSnapshotCacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: 1
@@ -735,6 +739,7 @@ class NasaFirmsSource implements SafetyDataSource {
 
   constructor(private readonly config: SafetyDataConfig) {
     this.responseCache = new ManagedResponseCache<string>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(10 * 60_000, config.cacheTtlSeconds * 1000),
       staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: Math.max(16, Math.min(256, config.cacheMaxEntries))
@@ -796,6 +801,7 @@ class GdacsAlertsSource implements SafetyDataSource {
 
   constructor(private readonly config: SafetyDataConfig) {
     this.responseCache = new ManagedResponseCache<unknown>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(300, config.gdacsCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(60 * 60_000, config.staleIfErrorSeconds * 1000),
       maxEntries: Math.max(8, Math.min(128, config.cacheMaxEntries))
@@ -853,11 +859,13 @@ class HzsIncidentsSource implements SafetyDataSource {
 
   constructor(private readonly config: SafetyDataConfig) {
     this.feedCache = new ManagedResponseCache<HzsIncidentRecord[]>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(60, config.hzsIncidentsCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(600, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(8, Math.min(128, config.cacheMaxEntries))
     });
     this.detailCache = new ManagedResponseCache<HzsIncidentDetail>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(300, config.hzsIncidentsDetailCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(1800, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(64, Math.min(1024, config.cacheMaxEntries * 2))
@@ -1052,6 +1060,7 @@ class MunicipalAlertsSource implements SafetyDataSource {
 
   constructor(private readonly config: SafetyDataConfig) {
     this.responseCache = new ManagedResponseCache<unknown>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(60, config.municipalAlertsCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(900, config.staleIfErrorSeconds) * 1000,
       maxEntries: Math.max(16, Math.min(256, config.cacheMaxEntries))
@@ -1125,6 +1134,7 @@ class RoadSrtiLodWarningsSource implements SafetyDataSource {
 
   constructor(private readonly config: SafetyDataConfig) {
     this.responseCache = new ManagedResponseCache<RoadSrtiLodEvent[]>({
+      trackCurrentFreshness: true,
       ttlMs: Math.max(60, config.roadSrtiLodCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(600, config.staleIfErrorSeconds) * 1000,
       maxEntries: 1
@@ -2427,7 +2437,8 @@ function mapHydroStation(station: HydroStation, payload: HydroNowResponse, inclu
     sourceName: "CHMI hydrological stations",
     license: CHMI_OPEN_DATA_LICENSE,
     observedAt: observed.observedAt,
-    expiresAt: addSeconds(fetchedAt, 2 * 60 * 60),
+    // Re-reading a cached payload must not extend a measurement's validity.
+    expiresAt: addSeconds(observed.observedAt, 2 * 60 * 60),
     confidence: hydroConfidence(observed.observedAt),
     severity,
     status,

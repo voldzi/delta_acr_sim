@@ -91,6 +91,7 @@ export class SafetyAggregationService {
   }
 
   private async fetchFeatures(query: SafetyQuery): Promise<SafetyFeatureCollection> {
+    const fetchStartedAtMs = Date.now();
     const enabledSources = this.sources.filter((source) => query.sourceIds.includes(source.descriptor.sourceId));
     const cacheEvidence = await collectManagedResponseCacheEvidence(() => Promise.allSettled(enabledSources.map((source) => source.fetchFeatures(query))));
     const settled = cacheEvidence.value;
@@ -122,7 +123,17 @@ export class SafetyAggregationService {
       .map(normalizeProviderFeature);
     const features = limitBalancedByLayer(deduplicatedFeatures, query.layers, query.limit);
 
-    const generatedAt = new Date().toISOString();
+    // A freshly assembled wrapper must not relabel old provider cache reads as
+    // fresh. Reference metadata is excluded by its cache configuration.
+    const retrievalTimes = results.map((result) => Date.parse(result.fetchedAt));
+    const timestampsValid = retrievalTimes.every(Number.isFinite);
+    if (!timestampsValid) warnings.push("Source retrieval timestamp is invalid; automatic delivery is unavailable.");
+    if (retrievalTimes.some((timestamp) => timestamp > Date.now() + 5_000)) {
+      warnings.push("Source retrieval timestamp is in the future; automatic delivery is unavailable.");
+    }
+    const generatedAt = new Date(
+      Math.min(fetchStartedAtMs, cacheEvidence.oldestCurrentDataAtMs ?? fetchStartedAtMs, ...retrievalTimes.filter(Number.isFinite))
+    ).toISOString();
     return {
       contractVersion: "cop-safety-source-v1",
       type: "FeatureCollection",

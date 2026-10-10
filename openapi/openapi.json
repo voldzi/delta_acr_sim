@@ -6357,7 +6357,7 @@
     "/safety-data/api/v1/notifications/candidates": {
       "get": {
         "summary": "Return COP and CSM Messaging safety notification candidates",
-        "description": "Returns candidate safety alerts with localized message text, geometry for COP audience decisions and suggested idempotency headers for CSM Messaging. SIM does not decide recipients or deliver push notifications. Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist.",
+        "description": "Returns candidate safety alerts with localized message text, geometry for COP audience decisions and suggested idempotency headers for CSM Messaging. SIM does not decide recipients or deliver push notifications. Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist. Snapshot loading has an 8000 ms server wait budget, below COP's 15000 ms request budget. A cold, slow or failed load returns 503 SAFETY_NOTIFICATION_INPUT_UNAVAILABLE with correlationId and no-store; it never substitutes a previous ready response. Shared provider refresh can complete in the background and is coalesced. On every successful read, readiness uses the original oldest current-provider retrieval time; hot/nested cache reuse does not reset its age.",
         "parameters": [
           {
             "$ref": "#/components/parameters/SafetyDataBbox"
@@ -6391,6 +6391,32 @@
           },
           "400": {
             "$ref": "#/components/responses/SafetyDataProblem"
+          },
+          "503": {
+            "description": "SAFETY_NOTIFICATION_INPUT_UNAVAILABLE: snapshot loading failed or exceeded its 8000 ms wait budget. No usable candidates; no-store, max-age=0. Do not deliver alerts or fall back to an old ready snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "correlationId": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "operationId": "safetyData_get_safety_data_api_v1_notifications_candidates",
@@ -19860,7 +19886,8 @@
                 ]
               },
               "snapshotGeneratedAt": {
-                "type": "string"
+                "type": "string",
+                "description": "Conservative original snapshot time: no newer than the oldest current provider payload retrieval used. Reference metadata/history are excluded; hot or nested cache reuse must not reset this timestamp."
               },
               "snapshotAgeSeconds": {
                 "type": [

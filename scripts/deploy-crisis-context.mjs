@@ -39,7 +39,12 @@ export function patchCompose(text) {
   return text.slice(0, start) + block + text.slice(boundary);
 }
 
-export function patchEnvironment(text, image) {
+export function patchEnvironment(text, image, imageOnly = false) {
+  if (imageOnly) {
+    if (text.split("\n").filter((line) => line.startsWith("SIM_SAFETY_DATA_IMAGE=")).length !== 1)
+      throw new Error("Image-only deployment requires one existing image selection.");
+    return text.replace(/^SIM_SAFETY_DATA_IMAGE=.*$/m, `SIM_SAFETY_DATA_IMAGE=${image}`);
+  }
   const sources = text
     .split("\n")
     .filter((line) => line.startsWith("SAFETY_DATA_ENABLED_SOURCES="))
@@ -119,6 +124,7 @@ async function acceptance() {
 
 async function main() {
   const args = process.argv.slice(2);
+  const imageOnly = args.includes("--image-only");
   const revision = args[args.indexOf("--revision") + 1];
   if (args[0] !== "--deploy" || !/^[a-f0-9]{40}$/.test(revision ?? ""))
     throw new Error("Usage: node scripts/deploy-crisis-context.mjs --deploy --revision <full-tested-commit>");
@@ -134,8 +140,8 @@ async function main() {
   const oldEnv = readFileSync(envPath, "utf8");
   const oldCompose = readFileSync(composePath, "utf8");
   const oldX5Compose = readFileSync(resolve(runtimeDir, "docker-compose.x5.yml"), "utf8");
-  const newEnv = patchEnvironment(oldEnv, image);
-  const newCompose = patchCompose(oldCompose);
+  const newEnv = patchEnvironment(oldEnv, image, imageOnly);
+  const newCompose = imageOnly ? oldCompose : patchCompose(oldCompose);
   console.log("Preflight OK; building only the safety-data-api image.");
   execFileSync("docker", ["build", "--label", `org.opencontainers.image.revision=${revision}`, "-t", image, "-f", "apps/safety-data-api/Dockerfile", "."], {
     cwd: sourceDir,
@@ -177,6 +183,14 @@ async function main() {
     writeFileSync(envPath, newEnv, { mode: 0o600 });
     writeFileSync(composePath, newCompose);
     const after = JSON.parse(compose("config", "--format", "json"));
+    if (imageOnly) {
+      const previousSafety = { ...before.services["safety-data-api"] };
+      const nextSafety = { ...after.services["safety-data-api"] };
+      delete previousSafety.image;
+      delete nextSafety.image;
+      if (hash(previousSafety) !== hash(nextSafety)) throw new Error("Image-only deployment would change Safety configuration.");
+      if (after.services["safety-data-api"].image !== image) throw new Error("Image selection is not authoritative in runtime Compose.");
+    }
     for (const [key, value] of Object.entries(before.services)) {
       if (key !== "safety-data-api" && hash(value) !== hash(after.services[key]))
         throw new Error("An unrelated service configuration would change; refusing activation.");

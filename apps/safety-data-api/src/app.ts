@@ -16,6 +16,7 @@ import { LAYERS } from "./layers.js";
 import { MediaNewsQueryError, MediaNewsService, parseMediaNewsQuery } from "./media-news.js";
 import { buildSafetyNotificationCandidateCollection, type SafetyNotificationCandidateOptions } from "./notification-candidates.js";
 import { evaluateNotificationInput } from "./notification-input-health.js";
+import { loadSafetyNotificationInputWithinBudget } from "./notification-load-budget.js";
 import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
 import type {
   BoundingBox,
@@ -24,6 +25,7 @@ import type {
   HydroStationDetailQuery,
   SafetyDataPublicConfig,
   SafetyDataSourceId,
+  SafetyFeatureCollection,
   SafetyLayerId,
   SafetyQuery,
   SafetySeverity
@@ -233,10 +235,17 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
     if (!options.ok) {
       return problem(req, res, 400, "VALIDATION_ERROR", options.error);
     }
-    const collection = await context.aggregation.getFeatures({
-      ...query.value,
-      includeRaw: false
-    });
+    let collection: SafetyFeatureCollection;
+    try {
+      collection = await loadSafetyNotificationInputWithinBudget(() =>
+        context.aggregation.getFeatures({
+          ...query.value,
+          includeRaw: false
+        })
+      );
+    } catch {
+      return problem(req, res, 503, "SAFETY_NOTIFICATION_INPUT_UNAVAILABLE", "Safety notification input is temporarily unavailable.");
+    }
     const result = buildSafetyNotificationCandidateCollection(collection, options.value);
     const inputReadiness = evaluateNotificationInput(
       collection,

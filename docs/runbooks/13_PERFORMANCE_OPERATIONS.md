@@ -149,6 +149,20 @@ shows nginx cache status such as `MISS`, `HIT`, `STALE` or `UPDATING`.
 Gateway responses on these routes use `Cache-Control: private, max-age=10`
 regardless of longer upstream provider cache headers.
 
+The exact `GET /safety-data/api/v1/notifications/candidates` and
+`GET /safety-data/api/v1/context/news` routes are exceptions: gateway cache is
+off and responses report `X-SIM-Gateway-Cache: BYPASS`, `Cache-Control:
+no-store, max-age=0` and `Pragma: no-cache`. Test them with the same URL and
+without cache-bust or Authorization headers. Provider/feed caches inside Safety
+remain shared. Candidate loading has an 8s application budget; an unfinished
+load returns 503 `SAFETY_NOTIFICATION_INPUT_UNAVAILABLE`, not stale ready data.
+The coalesced refresh may complete in the background, so this deadline does not
+prove hydrology refresh completion or increase provider polling frequency.
+Snapshot freshness follows the oldest current payload actually used, including
+nested caches; it is not reset by assembling a new response. Provider TTL above
+the 300s notification deadline can truthfully yield `unavailable` between
+refreshes. Do not widen freshness or add retry/cache-bust loops to suppress it.
+
 The same gateway compresses JSON, GeoJSON, JavaScript, CSS, text and SVG
 responses larger than 1 KiB with gzip level 5. This is especially relevant for
 flight snapshots and map feature collections; COP remains the public fan-out
@@ -218,12 +232,12 @@ an explicit error instead of caching a misleading zero-aircraft snapshot.
 Last verified on `docker.home.cz` on 2026-09-21 with 100 requests per provider
 case, concurrency 20 and the nginx response cache bypassed:
 
-| Path | p95 | Errors |
-| --- | ---: | ---: |
-| flight positions | 228 ms | 0 |
-| OSM communication towers | 26 ms | 0 |
-| mobile coverage | 37 ms | 0 |
-| safety administrative boundary summary | 37 ms | 0 |
+| Path                                   |    p95 | Errors |
+| -------------------------------------- | -----: | -----: |
+| flight positions                       | 228 ms |      0 |
+| OSM communication towers               |  26 ms |      0 |
+| mobile coverage                        |  37 ms |      0 |
+| safety administrative boundary summary |  37 ms |      0 |
 
 The flight path measured 3,097 ms p95 before stale-while-revalidate. A sample
 flight JSON response compressed from 624,781 bytes to 49,592 bytes. All SIM
