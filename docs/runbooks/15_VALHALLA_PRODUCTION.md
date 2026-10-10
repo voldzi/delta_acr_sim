@@ -1243,3 +1243,17 @@ remains disabled and `shadow_only`; no ETA-accuracy claim is implied.
 The [10 October acceptance record](../archive/audits/2026-10-10_VALHALLA_MAPS_AND_FRESH_SPEEDS_ACCEPTANCE.md)
 contains exact deployed identities, validity times, negative-expiry evidence,
 test results, rollback boundary and remaining joint iPhone acceptance gates.
+
+## SDA restart and approved-closure warming
+
+Restarting SDA clears its in-memory TEC snapshot and mechanical graph binding;
+the persisted provider quota gate must remain unchanged. A normal car request
+can fail closed while the gate prevents the first fresh fetch, followed by the
+existing 60-second failed-probe pause. Do not bypass the quota gate, increase
+provider request limits, edit `reviews.json`, or disable closure protections
+to force a positive health result. Retry a bounded ordinary synthetic route
+after the naturally allowed time and check the active dataset and applied
+approved-closure count. `health/ready=ok` alone is not this route acceptance.
+
+The [2026-10-11 scoped SDA acceptance](../archive/audits/2026-10-11_SEARCH_CACHE_AND_COP_DEPENDENCY_ACCEPTANCE.md)
+records this cold-start behavior and a successful route after natural warming.

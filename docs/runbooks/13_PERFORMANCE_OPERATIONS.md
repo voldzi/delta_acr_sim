@@ -250,6 +250,14 @@ an explicit error instead of caching a misleading zero-aircraft snapshot.
 
 ## Verified Production Baseline
 
+The scoped 2026-10-11 search release and independent COP acceptance are recorded
+in [the acceptance report](../archive/audits/2026-10-11_SEARCH_CACHE_AND_COP_DEPENDENCY_ACCEPTANCE.md).
+Production SDA is pinned to `20a0d961ba4cdb1f100998d7f8e07787dad03327`, built
+from the reviewed deployed routing base. The operator checkout contains the
+mirrored search patch, but is not a substitute for that routing base. Preserve
+the base, X5 and driver-measurements Compose files and replace only the SDA
+image pin. Do not deploy older routing code as part of a provider-cache fix.
+
 Last verified on `docker.home.cz` on 2026-09-21 with 100 requests per provider
 case, concurrency 20 and the nginx response cache bypassed:
 
