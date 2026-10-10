@@ -383,8 +383,15 @@ Zvlášť pak potvrdit health, interní 200, veřejnou zdrojovou 403 a admin 401
   gateway při úspěšném běhu rollback nespouštěla; automatický návrat byl
   pro Safety ověřen během první aktivace níže.
 
-COP má revizi a výsledky předané; jeho samostatná společná akceptace aktuální
-age politiky a zařízení/background doručení není tímto SIM readbackem nahrazena.
+COP nezávisle potvrdil společnou serverovou akceptaci po reloadu: dvě čtení
+stejného URL bez cache-bust/časových hlaviček měla snapshot `16:58:43.577Z`,
+age `0 → 2.033 s` (COP výpočet `2.030 s`), čtyři kandidáty a nový generatedAt.
+Normalizátor COP odmítl kopii odpovědi uměle zestárlou v RAM na 301 sekund
+a expirovaného kandidáta; nejde o měření skutečně 301 s starého živého
+snapshotu. News/no-store/null location/no-push a vlastní COP consent/evaluate
+bez autentizace 401 prošly. Tři ČT24 feedy byly `ok`, worker zapnutý,
+zero opt-in a zero delivery ledger rows; žádný test push nebo AI request.
+Skutečné opt-in/zařízení/background doručení zůstává samostatnou akceptací.
 
 ### První aktivace zdrojů 10.10.2026 (před freshness opravou)
 

@@ -92,6 +92,16 @@ COP opt-in/AOI, rozhodování, deduplikace a skutečné background doručení na
 zařízení vyžadují samostatnou společnou akceptaci; SIM testy je nepotvrzují.
 Viz [kontrakt 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
 
+Následná nezávislá COP serverová akceptace potvrzuje dvě živá čtení bez
+cache-bust s age `0 → 2.033 s`, odmítnutí v RAM zestárlé ready odpovědi na
+301 sekund a expirovaného kandidáta; nelze ji označit jako pozorování skutečně
+301 s staré produkční snapshoty. Bez test push/AI request, nula opt-in i
+delivery rows; zařízení/background doručení zůstává neověřené.
+Po změně byla vyžádána reindexace přes recall MCP; vrátila
+`Error executing tool reindex_repo`. Retrieval před změnou fungoval, žádný
+Chroma rebuild se neprováděl. Toto omezuje aktuálnost vývojového indexu,
+nikoli výsledky přímých testů nebo runtime nasazení.
+
 ## Graph-native traffic promotion
 
 Run `python3 deploy/valhalla/test-native-canary-ab.py` and
