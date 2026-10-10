@@ -1223,3 +1223,23 @@ vehicle route passed current-generation/dataset/validity checks with HTTP 200;
 Valhalla remained healthy and was not restarted. This is a limited first-wave
 technical acceptance, not approval of all 427 candidates or measured ETA accuracy.
 See the [live acceptance record](../archive/audits/2026-10-01_VALHALLA_NATIVE_V2_AND_ADAPTIVE_TIMING.md).
+
+### Current map release: 10 October 2026
+
+Release `20261010T174115Z` was successfully activated at 21:35:45 UTC with
+dataset `sim-routing-2026-10-10-1791668067`. The approved HTTPS mirror repair
+is installed; weekly builds, healthchecks and the SIM operational monitor
+remain enabled. Direct CZ/CZ–AT controls and the deployed SIM route passed,
+including guarded automatic revalidation of one approved closure.
+
+The new graph uses a freshly built `openlr-trace-v2` baseline (35,642 / 55,150
+references). The October 1 native-reviewed selection does **not** apply to this
+graph and is rejected automatically; it must not be copied or reapproved merely
+to preserve the previous candidate count. A normal SIM route demonstrated
+`current` speeds (2,195 flows / 17,634 edges), followed by observed natural
+expiry, physical zeroing and a normal non-current SIM route. Jízda intake
+remains disabled and `shadow_only`; no ETA-accuracy claim is implied.
+
+The [10 October acceptance record](../archive/audits/2026-10-10_VALHALLA_MAPS_AND_FRESH_SPEEDS_ACCEPTANCE.md)
+contains exact deployed identities, validity times, negative-expiry evidence,
+test results, rollback boundary and remaining joint iPhone acceptance gates.
