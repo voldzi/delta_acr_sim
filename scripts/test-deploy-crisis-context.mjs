@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import { patchCompose, patchEnvironment } from "./deploy-crisis-context.mjs";
 
 test("targeted Compose patch changes only safety fields and is idempotent", () => {
@@ -30,4 +31,18 @@ test("ambiguous configuration refuses activation", () => {
   assert.throws(() => patchCompose("services:\n  other:\n    image: test\n"));
   const base = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
   assert.throws(() => patchCompose(base.replace("image: ${SIM_SAFETY_DATA_IMAGE:-sim-safety-data-api}", "image: unexpected")));
+});
+
+test("full-deploy build never retags an already reviewed pinned safety image", () => {
+  const script = readFileSync(new URL("./deploy-docker-home.sh", import.meta.url), "utf8");
+  const block = script.match(/if \[\[ "\$SIM_SAFETY_DATA_IMAGE_VALUE" != "sim-safety-data-api" \]\]; then[\s\S]*?\nfi\n/)?.[0];
+  assert.ok(block);
+  const mock =
+    'docker() { if [[ "$*" == "compose config --services" ]]; then printf "%s\\n" sim-api safety-data-api flight-data-api; else printf "%s\\n" "$*"; fi; };\n';
+  const pinned = spawnSync("bash", ["-c", "SIM_SAFETY_DATA_IMAGE_VALUE=reviewed-image\n" + mock + block], { encoding: "utf8" });
+  assert.equal(pinned.status, 0);
+  assert.equal(pinned.stdout, "compose build sim-api flight-data-api\ncompose up -d --no-build\n");
+  const ordinary = spawnSync("bash", ["-c", "SIM_SAFETY_DATA_IMAGE_VALUE=sim-safety-data-api\n" + mock + block], { encoding: "utf8" });
+  assert.equal(ordinary.status, 0);
+  assert.equal(ordinary.stdout, "compose up -d --build\n");
 });

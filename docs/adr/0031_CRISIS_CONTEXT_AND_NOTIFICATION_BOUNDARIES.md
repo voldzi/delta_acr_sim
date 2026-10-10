@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted for implementation, 2026-10-10. Kandidátní implementace a izolované
-automatické testy jsou připravené; doklady produkčního nasazení a společné
-akceptace COP nejsou tímto ADR potvrzené.
+Accepted and deployed in SIM, 2026-10-10. Testy a živá interní cesta COP–SIM
+jsou ověřeny; podrobná identita obrazu a evidence jsou v kontraktu 21.
+Uživatelský opt-in/AOI a skutečné background doručení COP jsou dosud samostatné
+nepotvrzené gates.
 
 ## Context
 
@@ -64,8 +65,8 @@ to je přijatelnější než odvozovat platnost a místo z článku či stale sn
 
 ## Follow-up Actions
 
-Produkčně ověřit přesnou konfiguraci a image, interní provider hranici,
-zapnuté regionální zdroje, news kontrakt/stavy a rollback. Následně samostatně
-ověřit COP opt-in/AOI, deduplikaci a skutečné doručení. Viz
+SIM konfigurace/image, interní provider cesta, regionální zdroje, news stavy a
+automatický rollback byly ověřeny. Následně samostatně ověřit COP opt-in/AOI,
+deduplikaci a skutečné doručení. Viz
 [integrační kontrakt 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md)
 a [notifikační kontrakt 14](../integration/14_CSM_NOTIFICATION_INPUT_CONTRACT.md).

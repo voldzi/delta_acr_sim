@@ -352,7 +352,8 @@ describe("ČT24 bounded shared cache and isolated upstream failures", () => {
 
   it("isolates a failed feed while returning other sources and applies cold-failure backoff", async () => {
     const fetcher = vi.fn<typeof fetch>(async (url) => {
-      if (String(url) === MEDIA_NEWS_FEEDS.find((feed) => feed.id === "ct24-main")?.url) throw new Error("private upstream error details should never be exposed");
+      if (String(url) === MEDIA_NEWS_FEEDS.find((feed) => feed.id === "ct24-main")?.url)
+        throw new Error("private upstream error details should never be exposed");
       return response(
         rss([{ link: String(url).includes("jihomoravsky") ? "https://ct24.ceskatelevize.cz/clanek/brno" : "https://ct24.ceskatelevize.cz/clanek/ostrava" }])
       );

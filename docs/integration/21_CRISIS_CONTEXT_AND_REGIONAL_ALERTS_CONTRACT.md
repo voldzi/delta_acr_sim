@@ -1,8 +1,8 @@
 # Krizový mediální kontext a regionální bezpečnostní vstupy
 
-**Status:** Kandidátní implementace SIM a izolované automatické testy; produkční
-nasazení této změny a společná uživatelská akceptace COP zůstávají samostatnými
-gates. Architektonické rozhodnutí: [ADR 0031](../adr/0031_CRISIS_CONTEXT_AND_NOTIFICATION_BOUNDARIES.md).
+**Status:** SIM nasazen a interně ověřen na `docker.home.cz` 10.10.2026.
+Společná uživatelská akceptace COP a skutečné background doručení zůstávají
+samostatnými gates. Architektonické rozhodnutí: [ADR 0031](../adr/0031_CRISIS_CONTEXT_AND_NOTIFICATION_BOUNDARIES.md).
 
 ## Dvě oddělené datové cesty
 
@@ -286,4 +286,62 @@ Při selhání aktivace skript obnoví původní config/image; health rollbacku 
 nutné samostatně ověřit. Úspěšný script smoke ověřuje health, zdroj
 `municipal_alerts`, zapnutý media flag a news kontrakt/stavy/limity/informativní
 položky. Není důkazem kompletního regionálního pokrytí ani COP doručení.
-Produkční SHA, image a live evidence doplnit až po skutečné aktivaci.
+Produkční identita a ověřené výsledky jsou uvedeny níže.
+
+### Evidence nasazení 10.10.2026
+
+- Nasazený kód služby: `d894f0d8804414600a23f8dfa9a4bbf86fda559d`, větev
+  `codex/crisis-sources-notifications`.
+- Obraz: `sim-safety-data-api:crisis-d894f0d88044`, ID
+  `sha256:a0ccd6979d2625ded9fb2aaf4823350a5cfcbe6d15f4ec59e16ae2f2ae9ab6bd`.
+  Revizní štítek odpovídá uvedenému commitu; stav `healthy`, žádný publikovaný
+  host port. Ostatních osm SIM kontejnerů zachovalo stejné ID; Valhalla,
+  databáze, síť a secrets nebyly měněny.
+- Runtime `MEDIA_NEWS_ENABLED=true`, timeout `8000 ms`, zdroje zachovány a
+  rozšířeny o `municipal_alerts`; vestavěných osm regionálních feedů bylo
+  jednotlivě ověřeno s HTTP 200 a platným RSS/JSON. X5 mount UUID byl ověřen
+  před buildem i aktivací; news cache nemá diskové zápisy.
+- Privátní záloha pro tuto aktivaci:
+  `/srv/sim/.deploy-crisis-backups/2026-10-10T15-27-00-744Z-d894f0d88044/`.
+  První pokus s předchozím RSS aliasem byl odmítnut akceptační kontrolou;
+  automatický návrat obnovil původní obraz
+  `sha256:3ceef2e719ae26ceba6019981cdae9623f48b91c8e7aa52b5de9d99f7f36e355`
+  a jeho zdraví bylo samostatně potvrzeno před druhou aktivací.
+- Živý smoke proběhl ze SIM i produkčního kontejneru `cop-cop-api-1` přes
+  stávající `COP_SAFETY_DATA_BASE_URL`, bez nového tokenu nebo síťové změny.
+  News: tři zdroje `ok`, jeden aktuálně filtrovaný titulek, žádná poloha/čas
+  incidentu ani notifikační způsobilost, 400 pro neznámý feed. Z COP trvala
+  dvě opakovaná čtení 125 a 3 ms, source `fetchedAt` zůstal stejný. První
+  čtení již bylo po instalačním zahřátí, nejde o benchmark cold upstreamu.
+- Municipal bbox ČR/limit 500: 192 mapových prvků, nula warnings. HZS zvolený
+  regionální bbox/limit 100: čtyři prvky, dva kandidáti, dva odhadované body
+  odmítnuty, `inputReadiness=ready`. Při limitu 1 se živě z COP vrátilo
+  `inputReadiness=incomplete`, důvod `input_limit_reached`, nula kandidátů.
+  Počty jsou snapshot, nikoli počet krizí, úplnost ČR nebo garance doručení.
+- Automatické testy: 154/154 Safety Data API a 4/4 deployment patch/build-policy,
+  Node 24.19.0/pnpm 10.33.0; service build/typecheck, skeleton, OpenAPI build
+  consistency a validation prošly. Redocly lint prošel s pěti dřívějšími
+  warningy mimo tuto změnu (traffic feed a AI Router). Celá workspace test
+  suite nebyla pro cílenou API aktivaci spouštěna.
+- Autoritativní runtime `scripts/deploy-docker-home.sh` byl aktualizován jen
+  o zachování čtyř klíčů a ochranu připnutého Safety obrazu před přestavěním
+  starým checkoutem; jeho původní další chování/source změny zachovány.
+  SHA-256 `eb5c3cef64e4456a417c1e0690efd4625df5af1ee37541a3026dff6c7aeecbb1`
+  odpovídá testované lokální verzi; shell syntax prošla. Celý deployment
+  skript se při této aktivaci nespouštěl.
+- Native retrieval reindex byl po zveřejnění změny vyžádán, ale nástroj
+  skončil `Error executing tool reindex_repo`. Obnova vyhledávacího indexu
+  není potvrzena; pro tuto změnu používat přímý Git/file context. Nemá vliv
+  na ověřenou provozní datovou cestu ani nezpůsobila obnovu/rebuild Chroma.
+- Neodeslán žádný testovací push. Opt-in/AOI, vyhodnocovací worker, mediální
+  panel a fyzické doručení při zavřené aplikaci dokončuje COP v samostatném
+  autorizovaném úkolu. SIM data se nesmějí zaměnit za hotovou push funkci.
+
+Opakovatelný agregovaný smoke:
+[`scripts/verify-crisis-context-runtime.mjs`](../../scripts/verify-crisis-context-runtime.mjs).
+Uvnitř SIM používá localhost; uvnitř COP jeho existující base URL. Nevypisuje
+obsah incidentů, souřadnice, secrets ani články. Při ručním pozdějším návratu
+obnovit jen čtyři dotčené klíče a safety sekci Compose/původní image;
+nepřepsat celé současné `.env`/Compose starou zálohou, pokud mezitím proběhly
+jiné změny. Recreate pouze Safety Data API a samostatně potvrdit health,
+disabled news odpověď, zachované další safety zdroje a dostupnost z COP.

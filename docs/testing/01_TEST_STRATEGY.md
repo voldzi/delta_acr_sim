@@ -56,9 +56,12 @@ zahladit degradaci původních source dat. Cílené deployment testy pokrývají
 safety-only Compose patch, zachování ostatních služeb/secrets a validaci
 očekávaných kotev; neprokazují live rollback nebo mount.
 
-Izolované konektorové testy a TypeScript kontrola kandidátní implementace
-prošly; přesnou release evidence doplňuje dokončující validační běh. Živý
-provider smoke, runtime konfigurace a rollback jsou jiné gates než unit testy.
+Release 10.10.2026: 154/154 testů celé Safety Data API a 4/4 deploy patch/build-policy
+testy prošly na Node 24.19.0/pnpm 10.33.0; service typecheck/build, skeleton a
+OpenAPI validation/build consistency prošly. Redocly lint má pět existujících
+warningů mimo změněný kontrakt. Celá workspace suite nebyla spouštěna.
+Živý provider smoke ze SIM i COP, runtime identita a návrat při nepřijetí
+prvního RSS byly samostatně ověřeny; přesná evidence je v kontraktu 21.
 COP opt-in/AOI, rozhodování, deduplikace a skutečné background doručení na
 zařízení vyžadují samostatnou společnou akceptaci; SIM testy je nepotvrzují.
 Viz [kontrakt 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).

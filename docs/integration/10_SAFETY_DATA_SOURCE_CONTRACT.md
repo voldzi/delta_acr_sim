@@ -201,9 +201,10 @@ výslovně vyžadovat `inputReadiness.status=ready`. Source warnings, stale či
 neobnovená cache chyba a dosažený známý query limit fail-closed brání dalšímu
 automatickému doručení. Výsledek pod limitem není důkazem úplnosti upstreamu.
 
-Tato kandidátní implementace netvrdí celostátní pokrytí IZS, nový background
-push scheduler ani otestované doručení na konkrétní zařízení. Produkční změna
-a COP opt-in/AOI/doručení vyžadují samostatné evidence.
+Implementace SIM je nasazená a interně ověřená 10.10.2026 (evidence v kontraktu
+21). Netvrdí celostátní pokrytí IZS, nový background push scheduler ani
+otestované doručení na konkrétní zařízení. COP opt-in/AOI/doručení nadále
+vyžadují samostatné evidence.
 
 Detailní hranice odpovědností je v
 [`14_CSM_NOTIFICATION_INPUT_CONTRACT.md`](14_CSM_NOTIFICATION_INPUT_CONTRACT.md).

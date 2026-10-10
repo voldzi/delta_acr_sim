@@ -235,6 +235,7 @@ Aktivace, retence, revokace a rollback jsou v
 - `MUNICIPAL_ALERTS_CACHE_TTL_SECONDS`
 - `MEDIA_NEWS_ENABLED`
 - `MEDIA_NEWS_REQUEST_TIMEOUT_MS`
+- `SIM_SAFETY_DATA_IMAGE` (ověřený cílený obraz; výchozí `sim-safety-data-api`)
 - `CHMI_ALERTS_CAP_BASE_URL`
 - `CHMI_ORP_CODELIST_URL`
 - `CHMI_HYDRO_METADATA_URL`
@@ -969,6 +970,12 @@ selhání obnoví původní config/image z privátní
 a nezávislé ověření rollback health jsou v
 [kontraktu 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md#cílená-aktivace-na-pilotu).
 Lokální Valhalla/routing změny se při této safety aktivaci neslučují.
+
+Full deployment zachovává media/municipal klíče a vybraný image ze stávajícího
+`.env`. Je-li Safety image revizně připnutý, `deploy-docker-home.sh` jej
+nepřestaví ze staršího runtime checkoutu ani nepřetaguje; build provede jen
+pro ostatní služby a použije existující ověřený obraz. Novou Safety revizi
+publikovat cíleným postupem, nikoli spoléhat na starý checkout.
 
 ### Další veřejné bezpečnostní zdroje
 

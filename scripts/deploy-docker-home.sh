@@ -548,7 +548,19 @@ verify_x5_cache_path "$SIM_DATA_HOST_DIR_VALUE" "sim-api persistent data"
 verify_x5_cache_path "$SITUATION_DATA_HOST_DIR_VALUE" "situation-data-api persistent data"
 verify_x5_cache_path "$SAFETY_DATA_HOST_DIR_VALUE" "safety-data-api persistent data"
 
-docker compose up -d --build
+if [[ "$SIM_SAFETY_DATA_IMAGE_VALUE" != "sim-safety-data-api" ]]; then
+  # Preserve a reviewed targeted image instead of retagging old runtime code.
+  build_services=()
+  while IFS= read -r service; do
+    [[ "$service" == "safety-data-api" ]] || build_services+=("$service")
+  done < <(docker compose config --services)
+  if (( ${#build_services[@]} > 0 )); then
+    docker compose build "${build_services[@]}"
+  fi
+  docker compose up -d --no-build
+else
+  docker compose up -d --build
+fi
 docker compose ps
 wait_for_container_healthy csm-sim-web "sim-web container health"
 wait_for_http http://localhost:5020/health/live "sim-web gateway"
