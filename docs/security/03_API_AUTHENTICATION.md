@@ -2,6 +2,11 @@
 
 **Status:** Baseline dokumentace
 
+Search partial-feed recovery (ADR 0034) does not change this access boundary.
+Sanitized source warning markers never include provider error text, URLs or
+credentials. Safety incompleteness stays explicit; a new search wrapper does
+not grant notification eligibility or permission to use private AI context.
+
 ## SIM API
 
 SIM API musí v implementaci vyžadovat autentizaci pro všechny neveřejné endpointy. Health liveness může být veřejný v lokálním režimu, readiness/dependencies mohou být omezené podle prostředí.
