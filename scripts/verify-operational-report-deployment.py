@@ -24,7 +24,8 @@ def container():
 def other_containers(project):
     ids = command('docker', 'ps', '-aq', '--filter', f'label=com.docker.compose.project={project}').decode().split()
     data = json.loads(command('docker', 'inspect', *ids)) if ids else []
-    return {item['Name']: item['Id'] for item in data if item['Name'] != '/csm-sim-api'}
+    return {item['Name']: {'id': item['Id'], 'startedAt': item['State']['StartedAt']}
+            for item in data if item['Name'] != '/csm-sim-api'}
 
 
 def verify_environment(current):
@@ -57,8 +58,20 @@ def main():
         print(json.dumps({'composeEnvironmentMatches': True, 'snapshotCreated': True}))
         return
     original = json.loads(args.manifest.read_text())
-    if other_containers(project) != original['otherContainers']:
+    other = other_containers(project)
+    previous = original['otherContainers']
+    if set(other) != set(previous):
         raise RuntimeError('An unrelated SIM container changed during the narrow deployment')
+    for name, value in other.items():
+        expected = previous[name]
+        if isinstance(expected, str):
+            # Compatibility with the first installed ID-only manifest. Prove
+            # the current start predates the snapshot instead of assuming it.
+            started = datetime.fromisoformat(value['startedAt'].replace('Z', '+00:00'))
+            if value['id'] != expected or started > datetime.fromisoformat(original['createdAt']):
+                raise RuntimeError('An unrelated SIM container was recreated or restarted')
+        elif value != expected:
+            raise RuntimeError('An unrelated SIM container was recreated or restarted')
     # Existing service credentials stay in memory only; never print/read .env values.
     env = dict(value.split('=', 1) for value in current['Config']['Env'] if '=' in value)
     token = env.get('SIM_API_INTERNAL_TOKEN') or env.get('SIM_API_ADMIN_TOKEN')

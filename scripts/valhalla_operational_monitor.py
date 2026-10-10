@@ -36,6 +36,7 @@ _MESSAGES = {
     "VALHALLA_WEEKLY_TIMER_INACTIVE": "Časovač automatické aktualizace map Valhally neběží.",
     "VALHALLA_WEEKLY_TIMER_DISABLED": "Valhalla weekly update timer is disabled or masked.",
     "VALHALLA_WEEKLY_TIMER_UNSCHEDULED": "Valhalla weekly update timer has no valid next run.",
+    "VALHALLA_WEEKLY_TIMER_OVERDUE": "Plánovaný termín aktualizace map Valhally uplynul a sestavení neběží.",
     "VALHALLA_WEEKLY_UPDATE_FAILED": "Služba automatické aktualizace map Valhally selhala.",
     "VALHALLA_WEEKLY_ATTEMPT_FAILED": "Poslední automatická aktualizace map Valhally selhala.",
     "VALHALLA_ATTEMPT_INVALID": "Valhalla update attempt metadata is missing or invalid.",
@@ -52,6 +53,7 @@ _MESSAGES = {
     "VALHALLA_DISK_METADATA_INVALID": "Valhalla runtime disk metadata is missing or invalid.",
     "VALHALLA_RUNTIME_DISK_LOW": "Valhalla runtime free disk is below its safety minimum.",
     "VALHALLA_HEALTHCHECK_FAILED": "Valhalla host healthcheck has failed.",
+    "VALHALLA_HEALTHCHECK_INVALID": "Valhalla host healthcheck metadata is missing or invalid.",
 }
 
 
@@ -226,11 +228,18 @@ def evaluate_valhalla_snapshot(
         fail("VALHALLA_WEEKLY_TIMER_UNSCHEDULED")
     else:
         timer["nextRunAt"] = _iso(next_run)
-    if len(units) > 2:
-        health = _unit(units[2])
-        details["healthcheck"] = health
-        if health.get("activeState") == "failed" or (health.get("result") not in {None, "success"} and health.get("activeState") != "activating"):
-            fail("VALHALLA_HEALTHCHECK_FAILED")
+        # A running calendar-triggered oneshot can retain its elapsed trigger.
+        # Only the live unit state grants this exception, never an old running
+        # attempt file left behind by an interrupted or stopped build.
+        if next_run < instant and service.get("activeState") not in {"activating", "active"}:
+            fail("VALHALLA_WEEKLY_TIMER_OVERDUE")
+    health = _unit(units[2]) if len(units) > 2 else {}
+    details["healthcheck"] = health
+    if "activeState" not in health or "result" not in health or "execMainStatus" not in health:
+        fail("VALHALLA_HEALTHCHECK_INVALID")
+    elif health["activeState"] == "failed" or ((health["result"] != "success" or health["execMainStatus"] != 0)
+                                               and health["activeState"] != "activating"):
+        fail("VALHALLA_HEALTHCHECK_FAILED")
 
     attempt = _fields(sections.get("last-attempt.env", []), {"RELEASE_ID", "STATUS", "PHASE", "STARTED_AT", "UPDATED_AT"})
     attempt_id = _release(attempt.get("RELEASE_ID"))

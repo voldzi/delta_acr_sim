@@ -1,7 +1,7 @@
 # ADR 0032: read-only Valhalla operational monitor in SIM
 
-Status: accepted; host monitor installed, full API/UI acceptance pending;
-minimal API report-reader guard prepared, not yet claimed deployed.
+Status: accepted and installed; host monitor and main API report-reader guard
+verified through the authenticated API and the signed-in SIM Overview.
 Date: 2026-10-10.
 
 ## Context
@@ -58,6 +58,8 @@ a stale successful report silently green in that UI.
   seconds in the future. Bound reading to 128 KiB; expose only fixed sanitized
   errors, never failed content, paths or exception details. Add no public
   endpoint, response property or schema change.
+- Do not publish monitor exception text, provider body or smoke-test stdout/
+  stderr. Preserve evidence only as bounded sanitized status/error metadata.
 - Deploy that reader change, after exact source-file comparison, only in a
   derived image from the immutable current main API image. Copy only reviewed
   `operations-summary.ts` and its compiled module; preserve all other code,
@@ -87,10 +89,27 @@ green state. Publication alone is not UI acceptance; no external delivery is
 part of this chosen mode. Other existing read-model/SLO failures
 must remain visible.
 
+On 2026-10-10, the derived main API image was installed and healthy:
+`sha256:851a7cbcb5bfba8763392ac345611705d6c0cc3a1934ec63d31368a854a6b243`.
+The patch-source label is `705c026dcb5eac445f3b73962106f35d8b7cb50a`, not a new
+revision for every preserved application module. Six offline checks inside the
+image and all 60 main API tests passed, as did typecheck/build/skeleton/OpenAPI
+validation. Final Linux host monitor/operational checks passed 25/21 tests,
+including health-block/overdue-timer regressions. The authenticated summary returned the
+real failed report at `2026-10-10T19:55:16.811335Z` and its operational alert,
+including the Valhalla cause. Other SIM containers retained identity and start
+times. The signed-in Overview subsequently showed “Vyžadován zásah”,
+“Provozní kontrola selhala” and `VALHALLA_MAP_AGE_CRITICAL`. This establishes API
+and UI alert acceptance, not successful map-build acceptance; the map build was
+still `merging` at that readback.
+
 Rollback restores only monitor files/configuration and revokes only its newly
 dedicated SSH identity if necessary. Preserve unrelated cron jobs, data,
 application images and routing/measurement state. The separate reader rollback
 returns only `sim-api` to its recorded immutable original image; explicitly
 acknowledge that the old image again lacks missing/stale report protection.
-Details live in
+The original immutable image remains the base/rollback identity:
+`sha256:e2b61d0d0aace9168ab0b0410dc129e8e78963fe48cf6f17b03b469de1607a7f`.
+Details, exact source/module hashes, deployment helpers and the manual identity
+guard live in
 [Operational Alerting](../runbooks/14_OPERATIONAL_ALERTING.md).

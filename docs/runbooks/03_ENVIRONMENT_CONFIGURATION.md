@@ -841,12 +841,14 @@ heartbeat se nevytváří.
 Podrobný postup je v
 `docs/runbooks/14_OPERATIONAL_ALERTING.md`.
 
-### Valhalla dohled a připravovaná ochrana čtení reportu
+### Valhalla dohled a nasazená ochrana čtení reportu
 
 Stav 10. 10. 2026: návrh je přijatý v
 [ADR 0032](../adr/0032_VALHALLA_READ_ONLY_OPERATIONAL_MONITOR.md). Hostový monitor
 a jeho cron jsou nainstalované, report je ve skutečném API bindu; úplná API/UI
-akceptace a reader guard se dokončují. Hostový monitor každých 300 s čte
+akceptace přes autentizované API je doložená a reader guard je nasazený.
+Zobrazení alertu v přihlášeném SIM Overview je rovněž doložené. Hostový monitor
+každých 300 s čte
 pevný read-only maintenance `status` vyhrazenou SSH identitou z produkčních
 secrets. Privátní klíč nevkládejte do `.env.example`, Gitu, obrazu ani na X5;
 na Valhalle omezte veřejnou část forced commandem na status bez shellu,
@@ -889,18 +891,29 @@ na hostu. Pouhý default `data/operational-checks/latest.json` po X5 migraci
 nemusí být uvnitř API viditelný.
 
 Samotný hostový monitor vyžaduje jen monitorovací soubory/konfiguraci a oprávnění
-veřejného SSH klíče. Připravovaný minimální API reader guard nepřidává nový env
+veřejného SSH klíče. Nasazený minimální API reader guard nepřidává nový env
 klíč ani kontrakt: chybějící/neplatný report, velikost nad 128 KiB, stáří více než
 15 minut nebo čas více než 30 sekund v budoucnosti vyvolají existující critical
-`operational_check_failed`. Původní API chybějící report tiše vynechává; ochranu
-nelze tvrdit za nasazenou jen na základě instalace cronu.
+`operational_check_failed`. Původní API chybějící report tiše vynechává; instalace
+cronu sama tuto ochranu nezajišťuje.
 
-Guard smí být nasazen pouze cíleným odvozeným obrazem z immutable identity
-aktuálně běžícího main API s jedinou source/compiled modulovou změnou. Předem
+Guard byl nasazen pouze cíleným odvozeným obrazem z immutable identity původního
+main API s jedinou source/compiled modulovou změnou. Při dalším nasazení předem
 ověřte přesnou shodu původního souboru, uchovejte oba image ID a rollback
 manifest; restartujte pouze `sim-api`. Nepoužívejte full Compose deploy,
 starší API/SDA obraz ani přestavbu jiných služeb. Knihovny, stávající flags,
 Situation Data API, routing, Jízda a síť zůstávají beze změny.
+
+Nasazený obraz je
+`sha256:851a7cbcb5bfba8763392ac345611705d6c0cc3a1934ec63d31368a854a6b243`;
+label `cz.csm.sim.monitor-source-revision` je
+`705c026dcb5eac445f3b73962106f35d8b7cb50a` (revize cílené opravy, nikoli všech
+zachovaných modulů). Helpery `deploy-operational-report-guard.sh`,
+`operational-report-guard.Dockerfile`, `test-operational-report-runtime.mjs` a
+`verify-operational-report-deployment.py` žijí v izolovaném deploy adresáři.
+Zachovávají runtime env beze změny; žádné tokeny se nepřesouvají ani nevypisují.
+Původní immutable obraz a manifest jsou určeny jen pro identitou chráněný
+rollback popsaný v runbooku 14.
 
 `setup-valhalla-monitor-access.sh --install` se spouští z Macu. Hostový
 `install-valhalla-operational-monitor.sh` je v izolovaném

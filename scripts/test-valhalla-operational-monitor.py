@@ -157,6 +157,27 @@ class ValhallaOperationalMonitorTest(unittest.TestCase):
         no_slot = fixture().replace("NextElapseUSecRealtime=Sun 2026-10-11 00:15:54 UTC", "NextElapseUSecRealtime=")
         self.assertIn("VALHALLA_WEEKLY_TIMER_UNSCHEDULED", codes(self.evaluate(no_slot)))
 
+    def test_elapsed_timer_fails_unless_weekly_build_is_actually_running(self):
+        elapsed = "NextElapseUSecRealtime=Sat 2026-10-10 01:00:00 UTC"
+        scheduled = "NextElapseUSecRealtime=Sun 2026-10-11 00:15:54 UTC"
+        raw = fixture().replace(scheduled, elapsed)
+        report = self.evaluate(raw)
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("VALHALLA_WEEKLY_TIMER_OVERDUE", codes(report))
+        for state in ("active", "activating"):
+            with self.subTest(state=state):
+                raw = fixture(status="running", phase="tiles", service_state=state,
+                              start=NOW - timedelta(hours=1), updated=NOW - timedelta(minutes=1)).replace(scheduled, elapsed)
+                self.assertEqual(self.evaluate(raw)["status"], "ok")
+                inactive_timer = raw.replace("ActiveState=active\nNextElapseUSecRealtime=Sat 2026-10-10 01:00:00 UTC",
+                                             "ActiveState=inactive\nNextElapseUSecRealtime=Sat 2026-10-10 01:00:00 UTC", 1)
+                self.assertIn("VALHALLA_WEEKLY_TIMER_INACTIVE", codes(self.evaluate(inactive_timer)))
+        stale_attempt = fixture(status="running", phase="tiles", service_state="inactive",
+                                start=NOW - timedelta(hours=1), updated=NOW - timedelta(minutes=1)).replace(scheduled, elapsed)
+        self.assertIn("VALHALLA_WEEKLY_TIMER_OVERDUE", codes(self.evaluate(stale_attempt)))
+        boundary = fixture().replace(scheduled, f"NextElapseUSecRealtime={iso(NOW)}")
+        self.assertEqual(self.evaluate(boundary)["status"], "ok")
+
     def test_missing_or_invalid_exit_status_cannot_look_healthy(self):
         for replacement in ("", SECRET, "999"):
             raw = fixture().replace("ExecMainStatus=0", f"ExecMainStatus={replacement}", 1)
@@ -239,6 +260,38 @@ class ValhallaOperationalMonitorTest(unittest.TestCase):
         report = self.evaluate(raw)
         self.assertIn("VALHALLA_HEALTHCHECK_FAILED", codes(report))
         self.assertEqual(report["severity"], "critical")
+
+    def test_missing_malformed_or_shifted_healthcheck_fails_closed(self):
+        block = "ActiveState=inactive\nResult=success\nExecMainStatus=0\n"
+        replacements = (
+            "",  # The third unit becomes the traffic timer, not a healthcheck.
+            "ActiveState=inactive\n",
+            "ActiveState=inactive\nResult=success\n",
+            "ActiveState=inactive\nResult=unknown\nExecMainStatus=0\n",
+            "ActiveState=unknown\nResult=success\nExecMainStatus=0\n",
+            "ActiveState=inactive\nResult=success\nExecMainStatus=999\n",
+            f"ActiveState=inactive\nResult={SECRET}\nExecMainStatus=0\n",
+        )
+        for replacement in replacements:
+            with self.subTest(replacement=replacement):
+                report = self.evaluate(fixture().replace(block, replacement, 1))
+                self.assertEqual(report["status"], "failed")
+                self.assertIn("VALHALLA_HEALTHCHECK_INVALID", codes(report))
+                self.assertNotIn(SECRET, json.dumps(report))
+        # A snapshot with no third or subsequent unit cannot omit this gate.
+        raw = fixture()
+        head, sections = raw.split("\nlast-attempt.env\n", 1)
+        head = head.split(block, 1)[0]
+        report = self.evaluate(head + "\nlast-attempt.env\n" + sections)
+        self.assertIn("VALHALLA_HEALTHCHECK_INVALID", codes(report))
+
+    def test_healthcheck_nonzero_exit_fails_even_with_success_result(self):
+        raw = fixture().replace("ActiveState=inactive\nResult=success\nExecMainStatus=0",
+                                "ActiveState=inactive\nResult=success\nExecMainStatus=1", 1)
+        self.assertIn("VALHALLA_HEALTHCHECK_FAILED", codes(self.evaluate(raw)))
+        running = raw.replace("ActiveState=inactive\nResult=success\nExecMainStatus=1",
+                              "ActiveState=activating\nResult=exit-code\nExecMainStatus=1", 1)
+        self.assertEqual(self.evaluate(running)["status"], "ok")
 
     def test_epoch_and_offset_aware_now_supported_naive_clock_rejected(self):
         self.assertEqual(evaluate_valhalla_snapshot(fixture(), now=NOW.timestamp())["status"], "ok")

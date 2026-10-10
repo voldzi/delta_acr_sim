@@ -92,6 +92,46 @@ def failure_report(status: str = "failed") -> dict:
             "startedAt": "2026-10-10T08:00:00Z", "finishedAt": "2026-10-10T08:00:01Z", "failures": failures}
 
 
+class GeneralReportRedactionTests(unittest.TestCase):
+    def test_invalid_provider_json_does_not_copy_the_response_body(self):
+        for body in [f'not-json {PRIVATE}'.encode(), bytes([0xff, 0xfe])]:
+            client = checker.Client('http://synthetic.invalid', 1)
+            response = checker.Response('http://synthetic.invalid/health', 200, body, 1)
+            with mock.patch.object(client, 'request', return_value=response):
+                with self.assertRaises(checker.OperationalCheckError) as result:
+                    client.json('/health')
+                self.assertNotIn(PRIVATE, str(result.exception))
+                self.assertEqual(str(result.exception), 'Provider returned invalid JSON')
+
+    def test_all_known_and_unknown_check_errors_are_fixed_not_exception_text(self):
+        for name in [*checker.CHECK_FAILURE_MESSAGES, 'syntheticUnknown']:
+            def fail():
+                raise RuntimeError(f'{PRIVATE} {PROVIDER_URL}')
+            result = checker.run_named_check(name, fail)
+            self.assertEqual(result['status'], 'failed')
+            self.assertNotIn(PRIVATE, json.dumps(result))
+            self.assertNotIn(PROVIDER_URL, json.dumps(result))
+            self.assertTrue(result['error'].startswith('OPERATIONAL_'))
+
+    def test_smoke_failure_does_not_publish_stdout_or_stderr(self):
+        completed = subprocess.CompletedProcess(['python3'], 1, PRIVATE, PROVIDER_URL)
+        with mock.patch.object(checker.subprocess, 'run', return_value=completed):
+            with self.assertRaises(checker.OperationalCheckError) as result:
+                checker.run_command('synthetic smoke', ['python3'], 1)
+        self.assertNotIn(PRIVATE, str(result.exception))
+        self.assertNotIn(PROVIDER_URL, str(result.exception))
+        self.assertIn('exit code 1', str(result.exception))
+
+    def test_smoke_success_publishes_metadata_not_raw_output(self):
+        completed = subprocess.CompletedProcess(['python3'], 0, PRIVATE, PROVIDER_URL)
+        with mock.patch.object(checker.subprocess, 'run', return_value=completed):
+            result = checker.run_command('synthetic smoke', ['python3'], 1)
+        self.assertEqual(result['exitCode'], 0)
+        self.assertNotIn('stdoutPreview', result)
+        self.assertNotIn(PRIVATE, json.dumps(result))
+        self.assertNotIn(PROVIDER_URL, json.dumps(result))
+
+
 class AtomicPublicationTests(unittest.TestCase):
     def test_write_is_atomic_and_leaves_no_temporary_files(self):
         with tempfile.TemporaryDirectory() as temporary:

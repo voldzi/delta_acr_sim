@@ -76,9 +76,10 @@ class Client:
         require(response.status == 200, f"{response.url}: expected HTTP 200, got {response.status}")
         try:
             payload = json.loads(response.body.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            preview = response.body[:200].decode("utf-8", errors="replace")
-            raise OperationalCheckError(f"{response.url}: invalid JSON: {preview}") from exc
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            # Provider bodies can contain private values even on a health path.
+            # Do not copy previews into reports, UI, syslog or webhooks.
+            raise OperationalCheckError("Provider returned invalid JSON") from exc
         require(isinstance(payload, dict), f"{response.url}: expected JSON object")
         return payload, response
 
@@ -167,14 +168,11 @@ def run_command(label: str, command: list[str], timeout_seconds: float) -> dict[
         raise OperationalCheckError(f"{label}: timed out after {timeout_seconds:.0f}s") from exc
     elapsed_ms = int((time.monotonic() - start) * 1000)
     if completed.returncode != 0:
-        stderr = completed.stderr.strip()
-        stdout = completed.stdout.strip()
-        detail = stderr or stdout or f"exit code {completed.returncode}"
-        raise OperationalCheckError(f"{label}: {detail[-4000:]}")
+        raise OperationalCheckError(f"{label}: smoke failed with exit code {completed.returncode}")
     return {
         "elapsedMs": elapsed_ms,
         "command": command[0],
-        "stdoutPreview": completed.stdout.strip()[-1000:] if completed.stdout.strip() else "",
+        "exitCode": completed.returncode,
     }
 
 
@@ -412,15 +410,28 @@ def check_mobile_network_read_model(client: Client, args: argparse.Namespace) ->
     }
 
 
+CHECK_FAILURE_MESSAGES = {
+    "metricsInternal": "OPERATIONAL_METRICS_ACCESS_FAILED: Ochrana interních metrik neprošla kontrolou.",
+    "operationsSlo": "OPERATIONAL_SLO_FAILED: Připravenost nebo odezva služeb nesplňuje provozní limit.",
+    "providerGatewaySmoke": "OPERATIONAL_GATEWAY_FAILED: Kontrola přístupu k datovým službám selhala.",
+    "dataPlaneSmoke": "OPERATIONAL_MAP_DATA_FAILED: Kontrola mapových dat nebo jejich datových modelů selhala.",
+    "demHealth": "OPERATIONAL_DEM_FAILED: Výšková data nejsou připravená.",
+    "terrainAwareMobileCoverage": "OPERATIONAL_MOBILE_COVERAGE_FAILED: Model mobilního pokrytí není připravený.",
+    "mobileNetworkReadModel": "OPERATIONAL_MOBILE_NETWORK_FAILED: Datový model mobilní sítě není připravený.",
+}
+
+
 def run_named_check(name: str, check: Callable[[], dict[str, Any]]) -> dict[str, Any]:
     started = time.monotonic()
     try:
         details = check()
-    except Exception as exc:
+    except Exception:
         return {
             "status": "failed",
             "elapsedMs": int((time.monotonic() - started) * 1000),
-            "error": str(exc),
+            # Failures carry stable operator messages, not exception/provider
+            # text. The report is later exposed to authenticated operators.
+            "error": CHECK_FAILURE_MESSAGES.get(name, "OPERATIONAL_CHECK_FAILED: Provozní kontrola selhala."),
         }
     elapsed_ms = int((time.monotonic() - started) * 1000)
     if "status" in details:

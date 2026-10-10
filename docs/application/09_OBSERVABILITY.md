@@ -110,7 +110,7 @@ aktuální notice, role warningy a výsledky operátorských akcí vykreslí zno
   timestamp in situation-data readiness; no route body or token logging
 - host-local Valhalla last-attempt/last-success release age, timer result and
   source provenance; raw state files stay on `valhalla.home.cz` and are not public;
-  the prepared read-only monitor exports only a bounded sanitized status
+  the installed read-only monitor exports only a bounded sanitized status
 
 ## OpenTelemetry stav
 
@@ -204,23 +204,32 @@ Existující SIM Overview již obsahuje Alert inbox. Při neúspěšném reportu
 simulator-api poskytuje obecný `operational_check_failed` se závažností
 `critical` a příčinou ve shrnutí; toto nasazení nepřidává nový REST/UI kontrakt.
 Monitor-level warning/critical se dokládají odděleně. Hostový monitor a cron jsou
-nainstalované; načtení reportu autentizovaným API a vizuální akceptace v SIM se
-dokončují. Uživatel zvolil upozornění **pouze v SIM UI**. Nevzniká nový Codex
+nainstalované; report a provozní alert jsou doložené v autentizovaném API.
+Přihlášené SIM Overview zobrazilo „Provozní kontrola selhala“ včetně
+`VALHALLA_MAP_AGE_CRITICAL`, tedy také UI cesta je doložená. Uživatel zvolil upozornění
+**pouze v SIM UI**. Nevzniká nový Codex
 heartbeat, e-mail ani externí push; operátor musí aplikaci otevřít. Volitelný
 webhook je neaktivovaný a vyžadoval by samostatné nové schválení.
 `alertDelivery.userNotificationDelivered` je samostatný signál od `sent`;
 samotný úspěšný syslog jej nenastavuje. Primární `.env` a jeho API token
 zůstávají beze změny. Připomenutí chyby po 86400 s nezaručuje lidské doručení.
 
-Připravovaná minimální úprava existujícího API readeru navíc vyvolá stejný
+Nasazená minimální úprava existujícího API readeru navíc vyvolá stejný
 `operational_check_failed` pro konfigurovaný missing/invalid report, stáří více
 než 15 minut nebo čas více než 30 sekund v budoucnosti. Čtení je omezené na
 128 KiB a chyby jsou pevně sanitizované. Bez této ochrany se zastavený cron
 nemusí projevit v UI. Nevzniká nový endpoint ani vlastnost kontraktu. Ochrana
-má oddělené testy a ještě není tímto dokumentem označena za nasazenou.
-Nasazení smí změnit pouze source/compiled modul v odvozeném obrazu přesné
-immutable identity běžícího main API a restartovat jen `sim-api`; ostatní kód,
-knihovny, flags, Situation Data API a síť zůstávají beze změny.
+má oddělené testy: šest offline kontrol ve skutečném obrazu a 60 main API testů
+prošlo. Odvozený obraz `sha256:851a7cbcb5bfba8763392ac345611705d6c0cc3a1934ec63d31368a854a6b243`
+mění pouze source/compiled modul původního immutable main API; pouze `sim-api`
+bylo cíleně nahrazeno. Ostatní kód, knihovny, flags, Situation Data API a síť
+zůstávají beze změny, ostatní SIM kontejnery zachovaly identitu i čas startu.
+Monitor nevkládá do reportu exception/provider body ani stdout/stderr smoke
+testů. Finální hostové Linux testy prošly v počtech 25/21. Úplné hashe,
+testovací evidence a ruční guarded rollback jsou v
+[runbooku 14](../runbooks/14_OPERATIONAL_ALERTING.md). Doložený failed report
+`2026-10-10T19:55:16.811335Z` není důkazem dokončení mapového buildu; ten byl
+v té době stále ve fázi `merging`.
 
 Součástí kontroly je SLO check nad veřejnou bránou:
 

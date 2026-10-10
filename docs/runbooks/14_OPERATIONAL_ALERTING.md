@@ -1,13 +1,14 @@
 # Operational Alerting
 
 **Stav 10. 10. 2026:** rozšířený hostový monitor je nainstalovaný, jeho cron je
-aktivní a report se publikuje do skutečného bindu SIM API. Úplná akceptace přes
-autentizované API/UI a minimální ochrana proti zastaralému reportu se dokončují
+aktivní a report se publikuje do skutečného bindu SIM API. Minimální ochrana proti
+zastaralému reportu je nasazená; autentizované API prokazatelně načítá report a
+vrací alert. V přihlášeném SIM Overview byla ověřena i viditelná upozornění
 podle [ADR 0032](../adr/0032_VALHALLA_READ_ONLY_OPERATIONAL_MONITOR.md).
 Zvoleným notifikačním kanálem je **pouze přihlášené SIM UI**; nezřizuje se nový
 Codex heartbeat, e-mail ani push. Instalace monitoru není důkazem načtení alertu
-v aplikaci. Nasazenou revizi, hash monitoru a akceptační důkazy je nutné doplnit
-po skutečném ověření; ochranu čtení reportu zatím neoznačujte za nasazenou.
+v aplikaci. Níže jsou oddělené důkazy instalace, API i přihlášeného UI;
+nejde o potvrzení dokončení mapového buildu nebo automatickou aktivaci Jízdy.
 
 ## Purpose
 
@@ -52,7 +53,7 @@ Základní monitor lze spustit z `/srv/sim` na `docker.home.cz`:
 python3 scripts/production-operational-check.py --env-file .env --json
 ```
 
-Základní verze bez přepsané konfigurace zapisuje:
+Mimo produkční `/srv/sim` základní verze bez přepsané konfigurace zapisuje:
 
 ```text
 data/operational-checks/latest.json
@@ -60,6 +61,10 @@ data/operational-checks/state.json
 ```
 
 It exits with code `0` only when all required checks pass.
+
+Nová verze při `SIM_OPERATIONAL_ROOT=/srv/sim` používá pro report výchozí X5
+bind uvedený níže. Produkční instalace jej přesto určuje výslovně v
+`monitor.env`; starší runtime checkout se pro tuto kontrolu nepoužívá.
 
 Pro nainstalované rozšíření použijte jeho izolovanou verzi a oddělenou
 hostovou konfiguraci, nikoli starší kopii v runtime checkoutu:
@@ -108,7 +113,7 @@ Nezaměňujte hostový `SIM_OPERATIONAL_REPORT_FILE` s API nastavením
 ověřte při nasazení, neodvozujte jej jen z verzovaného Compose. Samotné propojení
 reportu nevyžaduje restart API, Situation Data API nebo webu.
 
-### Ochrana proti zastavení monitoru — připravená API změna
+### Ochrana proti zastavení monitoru — nasazený API guard
 
 Pouze správný bind nestačí: zastavený cron nesmí zanechat starý zelený report.
 Minimální změna existujícího readeru v `operations-summary.ts` proto pro
@@ -125,6 +130,67 @@ ostatní aplikační soubory, knihovny, flags, síť a Situation Data API se zac
 Před cíleným restartem pouze `sim-api` ověřte shodu zdrojového souboru s běžícím
 obrazem a zaznamenejte identity původního/odvozeného obrazu i rollback manifest.
 Tento postup není full-stack build ani deploy staršího runtime checkoutu.
+Monitor rovněž publikuje pevně sanitizované chyby: do reportu nepřidává exception
+text, provider body ani stdout/stderr smoke testů.
+
+### Úzké nasazení a důkazy 10. 10. 2026
+
+V izolovaném deploy adresáři monitoru jsou nové helpery:
+
+- `scripts/deploy-operational-report-guard.sh`: kontrola přesné původní image,
+  source/compiled hashů, X5 a konfigurace; offline build/test a cílená výměna
+  pouze `sim-api` pomocí `--no-deps --no-build`;
+- `scripts/operational-report-guard.Dockerfile`: odvozený obraz kopíruje pouze
+  zdrojový a zkompilovaný operations-summary modul;
+- `scripts/test-operational-report-runtime.mjs`: offline fixture testy uvnitř
+  skutečného kandidátního obrazu, bez síťového přístupu a bez změn živého reportu;
+- `scripts/verify-operational-report-deployment.py`: bezpečný snapshot/accept
+  konfigurace, skutečného reportu a nezměněných ostatních kontejnerů.
+
+Nasazovací skript běží pouze na `docker.home.cz`, bez sudo. Artefakty má v
+`/home/voldzi/sim-owned-deploy/valhalla-monitor-20261010/report-guard/`; manifest
+`report-guard-rollback.json` ve stejném deploy kořeni má práva 600. Pokud se
+běžící image nebo původní hashe liší, postup skončí bez nahrazení souběžné
+změny. Automatický návrat při neúspěšné akceptaci stejným způsobem chrání
+identity aktuálního a původního obrazu.
+
+Ověřené identity:
+
+```text
+Původní immutable image / rollback:
+sha256:e2b61d0d0aace9168ab0b0410dc129e8e78963fe48cf6f17b03b469de1607a7f
+Nasazený odvozený main API image:
+sha256:851a7cbcb5bfba8763392ac345611705d6c0cc3a1934ec63d31368a854a6b243
+Label cz.csm.sim.monitor-source-revision:
+705c026dcb5eac445f3b73962106f35d8b7cb50a
+SHA-256 operations-summary.ts:
+a3c50a03a0c6bc772de23546c2ab6442faed877dfdd890c578a1bf1d6a58f2f2
+SHA-256 operations-summary.js:
+a4bb21f4ecf9af1528185b11cbbc6a89fc4989dba85f2ec119c1c96d08280f52
+SHA-256 scripts/production-operational-check.py na hostu:
+b92a6c399af1a689d5c45624b31a4917399a9e9db40369572864e82812c943e8
+SHA-256 scripts/valhalla_operational_monitor.py na hostu:
+0ca4bbf3a5db690f6908c030bae4cd4f014d3a43f840faad27cfc4f9f89448ee
+```
+
+Label identifikuje zdroj cílené opravy, nikoli novou revizi všech původních
+aplikačních modulů nebo knihoven. Nasazený main API je `healthy`; šest offline
+image runtime kontrol a všech 60 main API testů prošlo. Typecheck, build,
+skeleton a OpenAPI validace rovněž prošly (144 cest, 239 schemat). Finální hostové
+testy na Linuxu prošly v počtech 25 pro Valhalla monitor a 21 pro operational
+check, včetně regresí health-block/overdue-timer.
+
+Autentizovaný `operations/summary` načetl skutečný report s
+`finishedAt=2026-10-10T19:56:54.986849Z`, stavem `failed` a viditelným provozním
+alertem včetně příčiny Valhalla. Identita i čas startu ostatních SIM kontejnerů
+zůstaly beze změny; u původního ID-only snapshotu byla navíc doložena jejich
+existence před vznikem manifestu. Následně byl v přihlášeném SIM Overview
+ověřen stav „Vyžadován zásah“, „Přehled upozornění“ a „Provozní kontrola selhala“,
+včetně `VALHALLA_MAP_AGE_CRITICAL`. To potvrzuje také zobrazení skutečné chyby
+v UI, nikoli jen zápis reportu. Uložený vizuální důkaz je lokální screenshot
+`/private/tmp/sim-valhalla-monitor-20261010.png`; interní diagnostické screenshoty
+nepatří do veřejného Gitu. Týdenní mapový build v tomto readbacku stále byl
+ve fázi `merging`; alerting release není důkazem jeho úspěchu ani novějšího grafu.
 
 ## Read-only dohled Valhally
 
@@ -257,7 +323,7 @@ pomocí `flock` zabrání překryvu běhů. Celkový běh má `timeout 240` seku
 
 Na produkčním `/srv/sim` se obnovitelný `cron.log` ukládá na X5 do
 `/srv/x5-production/cache/csm-sim/operational-checks`. Základní instalátor před
-změnou crontabu ověří UUID X5. Připravované rozšíření musí guard provést i při
+změnou crontabu ověří UUID X5. Nasazený runner provádí guard i při
 každém běhu před otevřením souboru na X5; shellová redirekce před guardem není
 bezpečná. Stav deduplikace zůstává na zálohovaném hostovém úložišti, report pro
 UI se publikuje do skutečného API bind adresáře uvedeného výše.
@@ -420,3 +486,31 @@ ochranu stáří/missing reportu, což musí být výslovně uvedeno. Rollback n
 `DRIVER_MEASUREMENTS_ENABLED`, routingové limity,
 traffic overlay nebo produkční síť. Další aktivace Jízdy a živá routovací
 akceptace mají samostatné podmínky.
+
+### Ruční rollback pouze main API guardu
+
+Na Docker hostu nejprve ověřte uložený manifest a přesnou immutable identitu.
+Pokud od té doby proběhl další deploy nebo se změnila konfigurace, skončete a
+nepřepište jej. Následující postup nemění monitor, report, SDA ani jiný stack:
+
+```bash
+GUARD=sha256:851a7cbcb5bfba8763392ac345611705d6c0cc3a1934ec63d31368a854a6b243
+ORIGINAL=sha256:e2b61d0d0aace9168ab0b0410dc129e8e78963fe48cf6f17b03b469de1607a7f
+DEPLOY=/home/voldzi/sim-owned-deploy/valhalla-monitor-20261010
+test "$(findmnt -n -o UUID --mountpoint /srv/x5-production)" = '2f93f595-b61b-4eea-9054-7afa9b275b5b' || exit 1
+test "$(docker inspect -f '{{.Image}}' csm-sim-api)" = "$GUARD" || exit 1
+test "$(docker image inspect -f '{{.Id}}' "$ORIGINAL")" = "$ORIGINAL" || exit 1
+python3 "$DEPLOY/scripts/verify-operational-report-deployment.py" snapshot \
+  "$DEPLOY/report-guard-pre-rollback.json"
+test "$(docker inspect -f '{{.Image}}' csm-sim-api)" = "$GUARD" || exit 1
+docker tag "$ORIGINAL" sim-sim-api
+cd /srv/sim
+docker compose up -d --no-deps --no-build sim-api
+test "$(docker inspect -f '{{.Image}}' csm-sim-api)" = "$ORIGINAL" || exit 1
+```
+
+Poté samostatně ověřte `healthy`, původní modulové hashe, nezměněné ostatní
+kontejnery a autentizované API. Původní obraz umí načíst aktuální report, ale
+**nemá missing/stale/future guard**; absence takového alertu po rollbacku není
+důkazem zdravého monitoru. Nepouštějte kvůli rollbacku celý deploy/helper znovu
+proti nečekané identitě a nezastavujte běžící Valhalla build.
