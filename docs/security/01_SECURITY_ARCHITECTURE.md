@@ -35,6 +35,24 @@ bbox query, detailní source endpointy, readiness, observability a partner/TAK
 endpointy zůstávají interní/VPN-only. COP frontend a mobilní klienti mají volat
 COP API, nikoli provider endpointy SIM přímo.
 
+### Přístupová hranice kandidátů a mediálního kontextu
+
+Aktuální read-only operace
+`GET /safety-data/api/v1/notifications/candidates` a
+`GET /safety-data/api/v1/context/news` jsou dostupné COP backendu v důvěryhodné
+interní/VPN síti bez bearer tokenu. Safety Data API u těchto operací samo
+nepřidává aplikační autentizaci; v gateway je chrání
+`internal-provider-access.conf` (interní/VPN allowlist a `deny all`). Hranice
+je síťová, nikoli identita každého interního volajícího. Žádný token zaslaný
+z veřejné sítě tuto síťovou podmínku neobchází.
+
+OpenAPI proto pouze u těchto dvou GET operací výslovně deklaruje `security=[]`
+a `x-access-policy=internal_network_readonly`. To **není veřejné anonymní API**
+ani změna runtime oprávnění. Globální bearer default a kontrakty jiných operací
+zůstávají beze změny; jejich autentizace se touto úzkou opravou nepřehodnocuje.
+Neotvírat provider porty, neupravovat VPN/firewall ani gateway allowlist.
+Uživatelská autentizace, role, opt-in a AOI zůstávají před COP API.
+
 ### Krizový mediální kontext a notifikační vstupy
 
 `/safety-data/api/v1/context/news` zůstává ve stejné server-to-server provider

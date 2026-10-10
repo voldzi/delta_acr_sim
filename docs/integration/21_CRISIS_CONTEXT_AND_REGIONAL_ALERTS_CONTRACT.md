@@ -17,6 +17,22 @@ nebo upstream RSS. Existující interní/VPN provider hranice se nemění.
 ČT24 konektor není `SafetyDataSource`, neposkytuje `SafetyFeature`, mapovou
 geometrii nebo kandidáta na safety notifikaci. Nepřidává push scheduler.
 
+## Přístupová hranice
+
+COP backend čte `GET /safety-data/api/v1/notifications/candidates` a
+`GET /safety-data/api/v1/context/news` z důvěryhodné interní/VPN sítě bez
+bearer tokenu. U těchto dvou GET operací Safety Data API nepřidává aplikační
+autentizaci; gateway používá `internal-provider-access.conf` s interním/VPN
+allowlistem a `deny all`. Veřejný bearer token tuto síťovou hranici neobchází.
+Uživatelé, browser a mobilní klienti nadále přistupují přes autentizované COP
+API a vlastní uživatelské opt-in/AOI rozhodnutí COP.
+
+Operation-level `security=[]` a
+`x-access-policy=internal_network_readonly` v OpenAPI popisují tento konkrétní
+síťově omezený read-only režim, **nikoli veřejný anonymní endpoint**. Globální
+bearer default a jiné operace zůstávají beze změny. Tato oprava dokumentace a
+kontraktu nemění runtime, Nginx, porty, VPN/firewall nebo deployment konfiguraci.
+
 ## ČT24 endpoint
 
 ```http
@@ -218,6 +234,24 @@ warning přetrvá i při dalším cache čtení. Nový čas agregace nebo úspě
 položky nesmí přeznačit stará zdrojová data jako připravená. Evidence neobsahuje
 cache klíče nebo raw upstream payload.
 
+### Odpověď není další snapshot cache
+
+Oba přesné GET endpointy (`notifications/candidates`, `context/news`) vracejí
+`Cache-Control: no-store, max-age=0` a `Pragma: no-cache`, včetně chyb validace.
+Gateway používá samostatné exact locations se stejným interním allowlistem,
+`proxy_cache off`, bez stale/background update a s
+`X-SIM-Gateway-Cache: BYPASS`. Obecný provider cache include, který ignoruje
+upstream cache headers a dovoluje stale odpovědi, se na ně nesmí použít.
+To neodstraňuje sdílenou source/feed cache uvnitř Safety Data API.
+
+`generatedAt` je čas aktuálního čtení; `snapshotGeneratedAt` zůstává původním
+časem podkladu a `snapshotAgeSeconds` se přepočítává při každém čtení podle
+serverových hodin. Hlavička `X-COP-Request-At` ani klientský timestamp se při
+rozhodování nepoužívají. COP zachová vlastní přísnější maximum 300 sekund a
+odmítne překročení i v případě jinak `ready` vstupu. Změna query pro cache-bust
+není řešením čerstvosti. Výpadek upstreamu nesmí na gateway obnovit předchozí
+HTTP 200/readiness jako aktuální odpověď.
+
 Při `unavailable` nebo `incomplete` HTTP vrací `candidates=[]`,
 `summary.candidateCount=0`, `summary.skippedCount=featureCount` a
 `summary.inputRejectedCount` jako počet jinak způsobilých kandidátů, které
@@ -287,6 +321,24 @@ nutné samostatně ověřit. Úspěšný script smoke ověřuje health, zdroj
 `municipal_alerts`, zapnutý media flag a news kontrakt/stavy/limity/informativní
 položky. Není důkazem kompletního regionálního pokrytí ani COP doručení.
 Produkční identita a ověřené výsledky jsou uvedeny níže.
+
+Gateway freshness se nasazuje samostatně z téhož čistého otestovaného checkoutu:
+
+```bash
+node scripts/deploy-crisis-gateway-freshness.mjs --deploy --revision <full-tested-commit>
+```
+
+Skript vyžaduje již existující read-only bind z autoritativního
+`/srv/sim/apps/simulator-web/nginx/default.conf`. Vloží jen dvě exact locations;
+zachová ostatní konfiguraci včetně zákazu proxování driver measurements.
+Před zápisem znovu ověří X5 mount/UUID/místo, aktuální healthy gateway a
+nezměněný config. Zápis zachová inode mountu, následuje `nginx -t` a reload,
+nikoli recreate kontejneru nebo změna obrazu, portů či sítí. Privátní záloha
+je v `.deploy-crisis-backups/<timestamp>-gateway-<sha12>/`.
+Při neúspěšné akceptaci obnoví původní obsah a reloadne jej. Ruční návrat
+musí také zachovat inode: původní config přepsat do existujícího souboru,
+ověřit syntax a reloadnout; nepoužívat atomic rename přes bind mount.
+Zvlášť pak potvrdit health, interní 200, veřejnou zdrojovou 403 a admin 401.
 
 ### Evidence nasazení 10.10.2026
 

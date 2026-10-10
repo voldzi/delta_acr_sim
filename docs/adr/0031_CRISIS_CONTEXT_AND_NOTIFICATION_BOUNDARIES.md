@@ -41,6 +41,15 @@ nepozorovaně vstoupit do bezpečnostních mapových prvků nebo automatických 
   stale/chybné cache, varování nebo dosažení známého limitu neposkytne
   automaticky použitelné kandidáty. Výsledek pod limitem není důkazem úplnosti
   upstreamu. COP musí pro automatické zpracování vyžadovat `status=ready`.
+- Read-time kandidátní a mediální odpovědi nejsou gateway snapshot cache:
+  oba přesné GET endpointy mají no-store a bypass bez stale/background update.
+  Sdílená cache podkladů zůstává; jejich původní timestamp se nepřeznačuje.
+  Stáří/readiness se vyhodnocuje na serveru při každém čtení, nikoli podle
+  klientské časové hlavičky. COP zachová vlastní přísnější age limit.
+- Tyto dva read-only GET endpointy mají explicitní OpenAPI `security: []`
+  s `x-access-policy=internal_network_readonly`, odpovídající existujícímu
+  internímu/VPN allowlistu. Nejde o veřejné anonymní API ani o odstranění
+  autentizace jiných operací.
 - COP vlastní uživatelský opt-in, AOI/geofence, oprávnění, konečné rozhodnutí a
   objednání doručení. CSM Messaging vlastní doručovací kanály a audit. SIM
   nedostává uživatelskou GPS, device tokeny ani preference a neslibuje nový

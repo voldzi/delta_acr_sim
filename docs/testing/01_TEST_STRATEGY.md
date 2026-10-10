@@ -26,6 +26,9 @@ pnpm --filter @csm-sim/safety-data-api typecheck
 pnpm openapi:validate
 bash scripts/validate-skeleton.sh
 node scripts/test-deploy-crisis-context.mjs
+node scripts/test-crisis-context-openapi.mjs
+node scripts/test-crisis-gateway-deploy.mjs
+bash scripts/smoke-nginx-crisis-freshness.sh
 ```
 
 Konektorové testy musí prokázat default-disabled/no-fetch, pevný allowlist,
@@ -55,6 +58,25 @@ fallback warning: úspěch jiného klíče ani nové cache čtení agregace nesm
 zahladit degradaci původních source dat. Cílené deployment testy pokrývají
 safety-only Compose patch, zachování ostatních služeb/secrets a validaci
 očekávaných kotev; neprokazují live rollback nebo mount.
+
+Read-time regresní HTTP testy musí na totožném snapshotu prokázat stáří
+296 → 301 → 520 sekund, stale-if-error odmítnutí, skutečnou recovery,
+expiraci události při dalším čtení a ignorování falešných klientských časů.
+Oba GET endpointy mají no-store/Pragma i u 400 a news feed cache se sdílí dál.
+Skutečný Nginx test používá syntetický backend: exact GET vždy BYPASS,
+aktuální generatedAt/sequence, zachování query, veřejný zdroj 403 a upstream
+503 bez stale 200. Běžná flight cache dál musí projít MISS → HIT → STALE.
+Lokální test nepotřebuje publikovaný port ani produkční síť. Kontraktní test
+navíc ověřuje přesně dva interní security overrides a zachovaný bearer default
+i soukromé/service auth operace. Gateway patch test zachová všechny ostatní
+bytes včetně driver-measurements deny route, prověří idempotenci a odmítnutí
+neočekávaných kotev; není sám o sobě důkazem živého reloadu.
+
+Při následném nasazení zopakovat `verify-crisis-context-runtime.mjs` ze SIM
+i COP bez cache-bust query nebo časových hlaviček. Dvě čtení musí mít nový
+`generatedAt` a při stejném snapshotu rostoucí, skutečnému času odpovídající
+age. Samostatně doložit gateway config hash, nezměněnou identitu webu,
+veřejný zdroj 403 a privátní/admin endpointy 401.
 
 Release 10.10.2026: 154/154 testů celé Safety Data API a 4/4 deploy patch/build-policy
 testy prošly na Node 24.19.0/pnpm 10.33.0; service typecheck/build, skeleton a

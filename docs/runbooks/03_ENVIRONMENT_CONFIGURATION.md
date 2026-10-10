@@ -930,6 +930,14 @@ a explicitním aktivním event intervalem. Viz
 
 ### Volitelný ČT24 mediální kontext
 
+Kandidátní a media read-time odpovědi nejsmějí použít obecnou gateway provider
+cache. Dvě exact locations vracejí `no-store, max-age=0` a `BYPASS`, zatímco
+source/feed cache v Safety Data API zůstává sdílená. Cílený gateway updater
+`scripts/deploy-crisis-gateway-freshness.mjs` vloží pouze tyto bloky do již
+mountovaného autoritativního runtime configu a provede syntax check/reload
+s privátní zálohou; nemění sítě, porty, obraz ani jiné služby. Podrobná
+aktivace a návrat jsou v [kontraktu 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
+
 `MEDIA_NEWS_ENABLED=false` je default a vrací `status=disabled` bez upstream
 dotazu. Pouze přesná hodnota `true` zapne server-to-server
 `GET /safety-data/api/v1/context/news`; tento přepínač je nezávislý na

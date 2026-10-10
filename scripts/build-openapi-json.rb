@@ -354,6 +354,14 @@ def build_document
   add_health_path(doc, "/tak-gateway/health/live", "TAK Gateway", "takGateway_health_live")
   add_health_path(doc, "/tak-gateway/health/ready", "TAK Gateway", "takGateway_health_ready")
 
+  # Match the audited internal/VPN gateway boundary for this read-only operation.
+  # Do not weaken the composite bearer default or unrelated provider operations.
+  candidate_operation = doc["paths"]["/safety-data/api/v1/notifications/candidates"]["get"]
+  candidate_operation["security"] = []
+  candidate_operation["x-access-policy"] = "internal_network_readonly"
+  candidate_operation["x-server-to-server"] = true
+  candidate_operation["description"] += " Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist."
+
   doc["components"]["schemas"]["SituationDataRoutingStep"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/navigation-step.schema.json")))
   # Current fail-closed notification additions; do not rewrite archived snapshots.
   candidates = doc["components"]["schemas"]["SafetyDataSafetyNotificationCandidateCollection"]["properties"]

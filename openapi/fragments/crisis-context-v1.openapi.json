@@ -5,7 +5,9 @@
     "/context/news": {
       "get": {
         "summary": "Return bounded informational ČT24 RSS headlines; never safety alerts",
-        "description": "Server-to-server additive context. Feed region is editorial scope, not event position. No GPS or event timestamp is inferred. No raw XML, article bodies, images or video are returned. This endpoint is not input to automatic crisis push.",
+        "description": "Server-to-server additive context. Feed region is editorial scope, not event position. No GPS or event timestamp is inferred. No raw XML, article bodies, images or video are returned. This endpoint is not input to automatic crisis push. Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist.",
+        "security": [],
+        "x-access-policy": "internal_network_readonly",
         "parameters": [
           { "name": "feeds", "in": "query", "description": "Comma-separated allowlisted feed IDs; defaults to all three. No arbitrary URL accepted.", "schema": { "type": "string", "example": "ct24-main,ct24-ostrava" } },
           { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } }

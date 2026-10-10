@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { loadConfig, type SafetyDataConfig } from "../src/config.js";
 import { MEDIA_NEWS_FEEDS } from "../src/media-news.js";
-import type { ManagedResponseCacheStats } from "../src/response-cache.js";
+import { ManagedResponseCache, type ManagedResponseCacheStats } from "../src/response-cache.js";
 import type { SafetyFeature, SafetyFeatureCollection } from "../src/types.js";
 
 const NOW = "2026-10-10T12:00:00.000Z";
@@ -48,6 +48,7 @@ describe("Crisis-context HTTP boundary and notification input readiness", () => 
     const news = await request(configured.app).get("/api/v1/context/news").expect(200);
     const health = await request(configured.app).get("/health/ready").expect(200);
 
+    expectNoHttpCache(news);
     expect(news.body).toMatchObject({
       contractVersion: "sim-crisis-media-context-v1",
       status: "disabled",
@@ -71,6 +72,7 @@ describe("Crisis-context HTTP boundary and notification input readiness", () => 
     const response = await request(configured.app).get(url).set("X-Correlation-Id", "crisis-contract-validation").expect(400);
 
     expect(response.body.error).toMatchObject({ code: "INVALID_MEDIA_NEWS_QUERY", correlationId: "crisis-contract-validation" });
+    expectNoHttpCache(response);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -85,6 +87,8 @@ describe("Crisis-context HTTP boundary and notification input readiness", () => 
     const notifications = await request(configured.app).get("/api/v1/notifications/candidates?layers=weather_alerts&source=mock&limit=10").expect(200);
     const sources = await request(configured.app).get("/api/v1/sources").expect(200);
 
+    expectNoHttpCache(news);
+    expectNoHttpCache(notifications);
     expect(news.body).toMatchObject({ status: "ok", informationalOnly: true, notificationEligible: false });
     expect(news.body.items).toHaveLength(1);
     expect(news.body.items[0]).toMatchObject({
@@ -107,12 +111,97 @@ describe("Crisis-context HTTP boundary and notification input readiness", () => 
     expect(fetcher).toHaveBeenCalledExactlyOnceWith(MEDIA_NEWS_FEEDS[1]?.url, expect.objectContaining({ redirect: "error" }));
   });
 
+  it("disables HTTP news caching while preserving the bounded shared backend feed cache", async () => {
+    vi.stubEnv("MEDIA_NEWS_ENABLED", "true");
+    fetcher.mockResolvedValue(new Response(newsRss(), { headers: { "content-type": "application/rss+xml" } }));
+    configured = await createApp(await loadConfig());
+    const first = await request(configured.app).get("/api/v1/context/news?feeds=ct24-ostrava&limit=5").expect(200);
+
+    vi.setSystemTime(new Date("2026-10-10T12:01:00.000Z"));
+    const reread = await request(configured.app).get("/api/v1/context/news?limit=1&feeds=ct24-ostrava").expect(200);
+
+    expectNoHttpCache(first);
+    expectNoHttpCache(reread);
+    expect(first.body.generatedAt).toBe(NOW);
+    expect(reread.body.generatedAt).toBe("2026-10-10T12:01:00.000Z");
+    expect(reread.body.items[0].fetchedAt).toBe(NOW);
+    expect(reread.body.sources[0].fetchedAt).toBe(NOW);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "/api/v1/notifications/candidates?layers=invalid",
+    "/api/v1/notifications/candidates?source=invalid",
+    "/api/v1/notifications/candidates?minSeverity=urgent"
+  ])("disables HTTP caching for candidate validation errors on %s", async (url) => {
+    const response = await request(configured.app).get(url).expect(400);
+
+    expectNoHttpCache(response);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("preserves ready synthetic candidates and accounts for input rejection separately", async () => {
     const response = await request(configured.app).get("/api/v1/notifications/candidates?layers=weather_alerts&source=mock&limit=10").expect(200);
 
+    expectNoHttpCache(response);
     expect(response.body.inputReadiness).toEqual({ status: "ready", snapshotGeneratedAt: NOW, snapshotAgeSeconds: 0, reasons: [] });
     expect(response.body.summary).toMatchObject({ featureCount: 1, candidateCount: 1, skippedCount: 0, inputRejectedCount: 0 });
     expect(response.body.candidates[0].candidateId).toContain("weather_alerts:mock:wind-prague-west");
+  });
+
+  it("recomputes snapshot age on every read, rejects stale-if-error fallback, and accepts only actual recovery", async () => {
+    configured = await createApp({ ...config, cacheTtlSeconds: 300, staleIfErrorSeconds: 600 });
+    let unavailable = false;
+    const responseCache = new ManagedResponseCache<SafetyFeatureCollection>({ ttlMs: 300_000, staleIfErrorMs: 600_000, maxEntries: 10 });
+    const loadSnapshot = vi.fn(async () => {
+      if (unavailable) throw new Error("Isolated upstream refresh failure.");
+      const generatedAt = new Date().toISOString();
+      return snapshot({ generatedAt, source: { sourceId: "safety-data-api", sourceType: "PUBLIC_SAFETY_AGGREGATE", generatedAt } });
+    });
+    vi.spyOn(configured.context.aggregation, "getFeatures").mockImplementation(() => responseCache.getOrLoad("isolated-candidate-query", loadSnapshot));
+    vi.spyOn(configured.context.aggregation, "cacheStats").mockImplementation(() => responseCache.stats());
+    vi.spyOn(configured.context.aggregation, "sourceCacheStats").mockReturnValue([]);
+
+    const first = await candidateRequest();
+    expectActualReadySnapshot(first.body, 300);
+    expect(first.body.inputReadiness.snapshotAgeSeconds).toBe(0);
+
+    vi.setSystemTime(new Date("2026-10-10T12:04:56.000Z"));
+    const cached = await candidateRequest();
+    expectActualReadySnapshot(cached.body, 300);
+    expect(cached.body.generatedAt).toBe("2026-10-10T12:04:56.000Z");
+    expect(cached.body.inputReadiness).toMatchObject({ snapshotGeneratedAt: NOW, snapshotAgeSeconds: 296 });
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+
+    unavailable = true;
+    vi.setSystemTime(new Date("2026-10-10T12:05:01.000Z"));
+    const failed = await candidateRequest();
+    expect(failed.body.inputReadiness).toMatchObject({ status: "unavailable", snapshotGeneratedAt: NOW, snapshotAgeSeconds: 301 });
+    expect(failed.body.inputReadiness.reasons).toContain("snapshot_expired");
+    expect(failed.body.inputReadiness.reasons).toContain("response_cache_error_unrecovered");
+    expect(failed.body.candidates).toEqual([]);
+
+    vi.setSystemTime(new Date("2026-10-10T12:08:40.000Z"));
+    const stale = await request(configured.app)
+      .get("/api/v1/notifications/candidates?layers=weather_alerts&source=mock&limit=10")
+      .set("X-COP-Snapshot-Generated-At", "2026-10-10T12:08:40.000Z")
+      .set("X-COP-Snapshot-Age-Seconds", "0")
+      .set("X-COP-Input-Readiness", "ready")
+      .expect(200);
+    expect(stale.body.generatedAt).toBe("2026-10-10T12:08:40.000Z");
+    expect(stale.body.inputReadiness).toMatchObject({ status: "unavailable", snapshotGeneratedAt: NOW, snapshotAgeSeconds: 520 });
+    expect(stale.body.candidates).toEqual([]);
+    expect(stale.body.summary.inputRejectedCount).toBe(1);
+
+    unavailable = false;
+    vi.setSystemTime(new Date("2026-10-10T12:08:41.000Z"));
+    const recovered = await candidateRequest();
+    expectActualReadySnapshot(recovered.body, 300);
+    expect(recovered.body.inputReadiness).toMatchObject({ snapshotGeneratedAt: "2026-10-10T12:08:41.000Z", snapshotAgeSeconds: 0 });
+    expect(recovered.body.candidates).toHaveLength(1);
+    expect(recovered.body.summary.inputRejectedCount).toBe(0);
+    for (const response of [first, cached, failed, stale, recovered]) expectNoHttpCache(response);
   });
 
   it("fails closed on warnings while leaving the feature and summary surfaces available", async () => {
@@ -195,6 +284,24 @@ describe("Crisis-context HTTP boundary and notification input readiness", () => 
     expect(response.body.summary).toMatchObject({ staleSkippedCount: 1, inputRejectedCount: 0, skippedCount: 1 });
   });
 
+  it("rechecks event expiry on later reads of the same still-fresh snapshot", async () => {
+    const input = snapshot();
+    input.features[0]!.properties.validUntil = "2026-10-10T12:00:20.000Z";
+    installSnapshot(input);
+    const first = await candidateRequest();
+    expect(first.body.candidates).toHaveLength(1);
+    expectActualReadySnapshot(first.body, 300);
+
+    vi.setSystemTime(new Date("2026-10-10T12:00:21.000Z"));
+    const expired = await candidateRequest();
+    expectActualReadySnapshot(expired.body, 300);
+    expect(expired.body.inputReadiness.snapshotAgeSeconds).toBe(21);
+    expect(expired.body.candidates).toEqual([]);
+    expect(expired.body.summary).toMatchObject({ staleSkippedCount: 1, inputRejectedCount: 0 });
+    expectNoHttpCache(first);
+    expectNoHttpCache(expired);
+  });
+
   function installSnapshot(input: SafetyFeatureCollection): void {
     vi.spyOn(configured.context.aggregation, "getFeatures").mockResolvedValue(input);
     vi.spyOn(configured.context.aggregation, "cacheStats").mockReturnValue(cache());
@@ -205,6 +312,21 @@ describe("Crisis-context HTTP boundary and notification input readiness", () => 
     return request(configured.app).get("/api/v1/notifications/candidates?layers=weather_alerts&source=mock&limit=10").expect(200);
   }
 });
+
+function expectNoHttpCache(response: { headers: Record<string, string> }): void {
+  expect(response.headers["cache-control"]).toBe("no-store, max-age=0");
+  expect(response.headers.pragma).toBe("no-cache");
+}
+
+function expectActualReadySnapshot(
+  body: { inputReadiness: { status: string; snapshotGeneratedAt: string; snapshotAgeSeconds: number | null } },
+  maxAgeSeconds: number
+): void {
+  expect(body.inputReadiness.status).toBe("ready");
+  const actualAge = Math.max(0, (Date.now() - Date.parse(body.inputReadiness.snapshotGeneratedAt)) / 1_000);
+  expect(body.inputReadiness.snapshotAgeSeconds).toBe(actualAge);
+  expect(actualAge).toBeLessThanOrEqual(maxAgeSeconds);
+}
 
 function cache(overrides: Partial<ManagedResponseCacheStats> = {}): ManagedResponseCacheStats {
   return {

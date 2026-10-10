@@ -6357,7 +6357,7 @@
     "/safety-data/api/v1/notifications/candidates": {
       "get": {
         "summary": "Return COP and CSM Messaging safety notification candidates",
-        "description": "Returns candidate safety alerts with localized message text, geometry for COP audience decisions and suggested idempotency headers for CSM Messaging. SIM does not decide recipients or deliver push notifications.",
+        "description": "Returns candidate safety alerts with localized message text, geometry for COP audience decisions and suggested idempotency headers for CSM Messaging. SIM does not decide recipients or deliver push notifications. Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist.",
         "parameters": [
           {
             "$ref": "#/components/parameters/SafetyDataBbox"
@@ -6396,7 +6396,12 @@
         "operationId": "safetyData_get_safety_data_api_v1_notifications_candidates",
         "tags": [
           "Safety Data: Safety Data"
-        ]
+        ],
+        "security": [
+
+        ],
+        "x-access-policy": "internal_network_readonly",
+        "x-server-to-server": true
       }
     },
     "/safety-data/api/v1/features/{featureId}/geometry": {
@@ -6577,7 +6582,11 @@
     "/safety-data/api/v1/context/news": {
       "get": {
         "summary": "Return bounded informational ČT24 RSS headlines; never safety alerts",
-        "description": "Server-to-server additive context. Feed region is editorial scope, not event position. No GPS or event timestamp is inferred. No raw XML, article bodies, images or video are returned. This endpoint is not input to automatic crisis push.",
+        "description": "Server-to-server additive context. Feed region is editorial scope, not event position. No GPS or event timestamp is inferred. No raw XML, article bodies, images or video are returned. This endpoint is not input to automatic crisis push. Trusted internal/VPN network read-only access; no bearer token is required within this boundary. This is not a public anonymous endpoint: external networks are denied by the gateway allowlist.",
+        "security": [
+
+        ],
+        "x-access-policy": "internal_network_readonly",
         "parameters": [
           {
             "name": "feeds",

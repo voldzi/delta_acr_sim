@@ -6,6 +6,23 @@ SIM je server-to-server datovy provider. SIM nikdy neposila push notifikace
 uzivatelum, neuklada APNs tokeny, nezna zarizeni, skupiny ani uzivatelske
 preference. Tyto informace patri do COP a CSM Messaging.
 
+## Přístupová hranice a autentizace
+
+`GET /safety-data/api/v1/notifications/candidates` a samostatný
+`GET /safety-data/api/v1/context/news` volá COP backend z důvěryhodné interní
+nebo VPN sítě. Současný runtime na této hranici nevyžaduje bearer token;
+Safety Data API jej u těchto GET operací neověřuje. SIM gateway je chrání
+`internal-provider-access.conf` s interním/VPN allowlistem a `deny all`.
+Veřejný klient se k provideru nedostane zasláním bearer tokenu.
+
+Závazný OpenAPI kontrakt proto u právě těchto dvou operací uvádí `security=[]`
+a `x-access-policy=internal_network_readonly`. Prázdný security seznam zde
+znamená síťově omezené server-to-server čtení, nikoli veřejný anonymní přístup.
+Globální bearer default a ostatní operace se nemění. COP nadále autentizuje
+uživatele, vyhodnocuje role, odvolatelný opt-in a AOI; browser/mobile nesmí
+provider endpointy volat přímo. Runtime/gateway/auth konfigurace se touto
+kontraktní opravou nemění.
+
 ## Odpovednosti
 
 ```text

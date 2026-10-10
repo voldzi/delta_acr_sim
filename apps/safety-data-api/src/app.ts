@@ -55,6 +55,7 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   registerMetadataRoutes(app, context);
   registerFeatureRoutes(app, context);
   app.get("/api/v1/context/news", async (req, res) => {
+    res.set({ "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" });
     try {
       const query = parseMediaNewsQuery(req.query);
       res.json(await mediaNews.query(query));
@@ -220,6 +221,7 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
   });
 
   app.get("/api/v1/notifications/candidates", async (req, res) => {
+    res.set({ "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" });
     const query = parseSafetyQuery(req.query, context.config, {
       defaultLayers: ["warnings", "weather_alerts", "fire", "flood"],
       defaultLimit: 100
