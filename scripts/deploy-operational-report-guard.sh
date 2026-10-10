@@ -35,8 +35,20 @@ rollback() {
     live="$(docker inspect -f '{{.Image}}' csm-sim-api 2>/dev/null || true)"
     if [ "$live" = "$candidate_id" ] || [ "$live" = "$EXPECTED_IMAGE" ]; then
       docker tag "$EXPECTED_IMAGE" sim-sim-api
-      (cd /srv/sim && docker compose up -d --no-deps --no-build sim-api) || true
-      echo 'Main API restored to recorded original image after failed acceptance.' >&2
+      if (cd /srv/sim && docker compose up -d --no-deps --no-build sim-api); then
+        for attempt in {1..30}; do
+          if [ "$(docker inspect -f '{{.State.Health.Status}}' csm-sim-api 2>/dev/null || true)" = healthy ]; then break; fi
+          sleep 2
+        done
+        if [ "$(docker inspect -f '{{.Image}}' csm-sim-api)" = "$EXPECTED_IMAGE" ] &&
+           [ "$(docker inspect -f '{{.State.Health.Status}}' csm-sim-api)" = healthy ]; then
+          echo 'Main API restored to recorded original image and healthy after failed acceptance.' >&2
+        else
+          echo 'Rollback attempted, but original image/health acceptance failed; operator action required.' >&2
+        fi
+      else
+        echo 'Rollback failed to recreate the main API; operator action required.' >&2
+      fi
     else
       echo 'Unexpected concurrent main API change; refusing to overwrite it during rollback.' >&2
     fi

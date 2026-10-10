@@ -5,7 +5,12 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError('Unexpected API redirect; protected acceptance refuses redirects')
 
 
 def command(*args):
@@ -61,7 +66,7 @@ def main():
         raise RuntimeError('No existing internal credential for acceptance')
     request = Request('http://127.0.0.1:5020/api/v1/operations/summary',
                       headers={'Accept': 'application/json', 'Authorization': f'Bearer {token}'})
-    with urlopen(request, timeout=30) as response:
+    with build_opener(NoRedirect).open(request, timeout=30) as response:
         payload = json.load(response)
     report = json.loads(Path('/srv/x5-production/data/csm-sim/sim-data/operational-checks/latest.json').read_text())
     operational = payload.get('operationalCheck') or {}
