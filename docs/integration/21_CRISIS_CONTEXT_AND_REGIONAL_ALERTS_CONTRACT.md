@@ -340,7 +340,53 @@ musí také zachovat inode: původní config přepsat do existujícího souboru,
 ověřit syntax a reloadnout; nepoužívat atomic rename přes bind mount.
 Zvlášť pak potvrdit health, interní 200, veřejnou zdrojovou 403 a admin 401.
 
-### Evidence nasazení 10.10.2026
+### Aktuální freshness oprava a readback 10.10.2026 16:57 UTC
+
+- Nasazený kód Safety Data API a gateway patch: commit
+  `1c9c3135ee66ab0ca82441792de24155992a7dcc` na stejné publikované větvi.
+  Obraz `sim-safety-data-api:crisis-1c9c3135ee66`, ID
+  `sha256:6bbe0c651a4e4729761c050a12ab434a2bbbbd3cfdd397c0dc82f252f15afec4`;
+  runtime label souhlasí, `healthy`, žádný host port.
+- Gateway konfigurace SHA-256
+  `7b97987f30288ed78176fa003b74da219a2fd29623d6b7c170f8740ed4b0688b`.
+  Proveden pouze syntax check/reload; web ID `0b8ae33d370e` a image
+  `sha256:c6e756cda935a51540e1ab453e0f3810dac1c2cc05464f680a460bffb3e6a999`
+  zůstaly stejné. Autoritativní bind config zachoval driver-measurements deny
+  i všechny ostatní bytes. Ostatních osm SIM kontejnerů má původní ID.
+- Živá cesta COP API → SIM gateway bez tokenu, cache-bust nebo klientských
+  timestampů vrací obě GET operace `200`, `BYPASS`, `no-store, max-age=0`
+  a `Pragma: no-cache`. Kandidátní snapshot `16:57:37.745Z` při dvou čteních
+  zůstal stejný, skutečné age vzrostlo `16.117 → 16.472 s` a `generatedAt`
+  se změnil. Přímé backend čtení také potvrdilo růst `38.767 → 39.122 s`.
+  Šest HZS prvků poskytlo čtyři způsobilé kandidáty; dva přibližné body byly
+  odmítnuty, readiness `ready`, žádné warnings. To není důkaz úplného pokrytí.
+- Tři ČT24 feedy měly `status=ok`, sdílený `fetchedAt` se použil znovu;
+  v této chvíli byl filtrovaný mediální seznam prázdný. První COP čtení
+  `92 ms`, opakované `6 ms` nejsou cold-source benchmarkem. Regionální
+  dotaz poskytl 190 prvků, 36 s explicitní způsobilostí a nula warnings;
+  následná kandidátní/readiness/AOI pravidla je stále nutné použít.
+- Oba endpointy přes skutečný veřejný HTTPS ingress i se simulovanou veřejnou
+  IP za důvěryhodným proxy vracejí `403`. Privátní `/api/v1/scenarios` a
+  administrátorský `/api/v1/ai/router-admin` bez autentizace vracejí `401`.
+  OpenAPI mění pouze dva read-only GET security overrides; ostatní operace
+  a bearer default zůstaly stejné. Porty, sítě, DB a tokeny se neměnily.
+- Testy: 160/160 Safety Data API, 20/20 kontrakt/deploy patch, reálný místní
+  Nginx fixture test (BYPASS, aktuální čas, query, public403, upstream503 bez
+  starého200; ostatní provider MISS/HIT/STALE), typecheck/build, skeleton,
+  OpenAPI validation/generator consistency a lint prošly. Pět lint warningů
+  mimo změněný kontrakt je původních; celá workspace suite nebyla spuštěna.
+- Privátní rollback Safety:
+  `/srv/sim/.deploy-crisis-backups/2026-10-10T16-56-26-685Z-1c9c3135ee66/`;
+  gateway:
+  `/srv/sim/.deploy-crisis-backups/2026-10-10T16-57-35-921Z-gateway-1c9c3135ee66/`.
+  Předchozí Safety image/config a gateway file se zachovaly. Aktualizace
+  gateway při úspěšném běhu rollback nespouštěla; automatický návrat byl
+  pro Safety ověřen během první aktivace níže.
+
+COP má revizi a výsledky předané; jeho samostatná společná akceptace aktuální
+age politiky a zařízení/background doručení není tímto SIM readbackem nahrazena.
+
+### První aktivace zdrojů 10.10.2026 (před freshness opravou)
 
 - Nasazený kód služby: `d894f0d8804414600a23f8dfa9a4bbf86fda559d`, větev
   `codex/crisis-sources-notifications`.

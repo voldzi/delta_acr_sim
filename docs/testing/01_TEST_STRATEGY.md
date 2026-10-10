@@ -78,8 +78,12 @@ i COP bez cache-bust query nebo časových hlaviček. Dvě čtení musí mít no
 age. Samostatně doložit gateway config hash, nezměněnou identitu webu,
 veřejný zdroj 403 a privátní/admin endpointy 401.
 
-Release 10.10.2026: 154/154 testů celé Safety Data API a 4/4 deploy patch/build-policy
-testy prošly na Node 24.19.0/pnpm 10.33.0; service typecheck/build, skeleton a
+Následná freshness oprava 10.10.2026: 160/160 testů celé Safety Data API a
+20/20 kontrakt/deploy patch testů prošlo na Node 24.19.0/pnpm 10.33.0;
+skutečný lokální Nginx fixture smoke dvakrát prošel bez publikovaného portu.
+Živý gateway reload i přímá COP→SIM cesta potvrdily no-store/BYPASS,
+rostoucí skutečné stáří a nový generatedAt; veřejný HTTPS ingress 403 a
+privátní/admin odmítnutí 401. Service typecheck/build, skeleton a
 OpenAPI validation/build consistency prošly. Redocly lint má pět existujících
 warningů mimo změněný kontrakt. Celá workspace suite nebyla spouštěna.
 Živý provider smoke ze SIM i COP, runtime identita a návrat při nepřijetí
