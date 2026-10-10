@@ -299,6 +299,24 @@ Provider HTTP deadline pokrývá hlavičky i tělo. Viz [ADR 0033](../adr/0033_B
 - COP byl požádán o nezávislý same-URL test z jeho nasazeného validátoru,
   RAM-only 301s/cached-source-deadline odmítnutí a potvrzení žádného doručení.
   Společná device/background akceptace zůstává samostatná.
+- Následná nezávislá COP akceptace z API image `sha256:14b4d19d34a107ab933cd1068b41e07007ba3f90a37acd2ab09118a148c48556`
+  potvrdila celostátní čtyřvrstvý GET za 97 ms, HTTP 200 / `incomplete`,
+  `input_limit_reached`, nula kandidátů. COP normalizer zachoval
+  `possibly_truncated` a snapshot nebyl způsobilý k dispatch. HZS **fire-only**
+  query dvakrát bez auth/cache-bust: 141 / 5 ms, snapshot
+  `2026-10-10T20:35:13.020Z`, age `213.451 → 215.458 s`, `ready/complete`,
+  nula kandidátů. Jde o jiný výběr vrstev než předchozí SIM smoke;
+  nula kandidátů není potvrzení bezpečné oblasti. RAM-only simulace stáří
+  301 s i reuse deadline `299 → 301 s` byly odmítnuty aktuálním COP modulem;
+  nejde o pozorování skutečně 301 s staré produkční snapshoty.
+  Consent/evaluate bez přihlášení 401, nezávislý Safety image readback healthy.
+  Fyzické opt-in/push/E2EE ověření zůstává oddělené; žádný test push ani AI request.
+- Přesné veřejné adresy ověřené samostatným GET z COP, bez autentizace:
+  `https://sim.zeleznalady.cz/safety-data/api/v1/notifications/candidates` 403,
+  `https://sim.zeleznalady.cz/safety-data/api/v1/context/news` 403,
+  `https://sim.zeleznalady.cz/api/v1/scenarios` 401. Předchozí privátní 401
+  smoke používal interní `http://docker.home.cz:5020/api/v1/scenarios`;
+  veřejný HTTPS 401 je navazující samostatný test, nikoli přeznačení původního.
 - Retrieval/reindex CLI v této změně nemohl kontaktovat Chroma server;
   native režim navíc odmítl replacement repo identity. Použita cílená přímá
   inspekce; žádný rebuild indexu/serveru se neprováděl.
