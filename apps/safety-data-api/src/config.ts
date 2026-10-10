@@ -62,6 +62,8 @@ export interface SafetyDataConfig {
   hzsIncidentsMaxActiveDetails: number;
   municipalAlertFeeds: MunicipalAlertFeedConfig[];
   municipalAlertsCacheTtlSeconds: number;
+  mediaNewsEnabled?: boolean;
+  mediaNewsRequestTimeoutMs?: number;
   roadSrtiLodSparqlUrl: string;
   roadSrtiLodCacheTtlSeconds: number;
   roadSrtiLodMaxRecords: number;
@@ -118,6 +120,8 @@ export async function loadConfig(): Promise<SafetyDataConfig> {
     hzsIncidentsMaxActiveDetails: parseInteger(process.env.HZS_INCIDENTS_MAX_ACTIVE_DETAILS, 50),
     municipalAlertFeeds: parseMunicipalAlertFeeds(process.env.MUNICIPAL_ALERT_FEEDS),
     municipalAlertsCacheTtlSeconds: parseInteger(process.env.MUNICIPAL_ALERTS_CACHE_TTL_SECONDS, 300),
+    mediaNewsEnabled: process.env.MEDIA_NEWS_ENABLED === "true",
+    mediaNewsRequestTimeoutMs: parseInteger(process.env.MEDIA_NEWS_REQUEST_TIMEOUT_MS, 8000),
     roadSrtiLodSparqlUrl: process.env.ROAD_SRTI_LOD_SPARQL_URL ?? "https://lod.tamtamresearch.com/sparql/",
     roadSrtiLodCacheTtlSeconds: Math.max(60, parseInteger(process.env.SAFETY_DATA_ROAD_SRTI_CACHE_TTL_SECONDS, 60)),
     roadSrtiLodMaxRecords: parseInteger(process.env.ROAD_SRTI_LOD_MAX_RECORDS, 1500),

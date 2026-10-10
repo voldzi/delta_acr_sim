@@ -1,5 +1,5 @@
 import type { SafetyDataConfig } from "./config.js";
-import { ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
+import { collectManagedResponseCacheEvidence, ManagedResponseCache, type ManagedResponseCacheStats } from "./response-cache.js";
 import type { SafetyDataSource, SourceCacheStats } from "./sources.js";
 import type {
   BoundingBox,
@@ -92,9 +92,15 @@ export class SafetyAggregationService {
 
   private async fetchFeatures(query: SafetyQuery): Promise<SafetyFeatureCollection> {
     const enabledSources = this.sources.filter((source) => query.sourceIds.includes(source.descriptor.sourceId));
-    const settled = await Promise.allSettled(enabledSources.map((source) => source.fetchFeatures(query)));
+    const cacheEvidence = await collectManagedResponseCacheEvidence(() => Promise.allSettled(enabledSources.map((source) => source.fetchFeatures(query))));
+    const settled = cacheEvidence.value;
     const results: SourceFetchResult[] = [];
     const warnings: string[] = [];
+    if (cacheEvidence.staleFallbackUsed) {
+      // Persist exact stale-read evidence in this snapshot, including response
+      // cache hits after the failed source entry has been recovered or evicted.
+      warnings.push("Source data reused stale cache after an upstream failure; automatic delivery is unavailable.");
+    }
 
     for (const item of settled) {
       if (item.status === "fulfilled") {

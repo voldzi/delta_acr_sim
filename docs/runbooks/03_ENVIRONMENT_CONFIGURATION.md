@@ -231,6 +231,10 @@ Aktivace, retence, revokace a rollback jsou v
 - `SAFETY_DATA_CACHE_MAX_ENTRIES`
 - `SAFETY_DATA_STALE_AFTER_SECONDS`
 - `SAFETY_DATA_REQUEST_TIMEOUT_MS`
+- `MUNICIPAL_ALERT_FEEDS`
+- `MUNICIPAL_ALERTS_CACHE_TTL_SECONDS`
+- `MEDIA_NEWS_ENABLED`
+- `MEDIA_NEWS_REQUEST_TIMEOUT_MS`
 - `CHMI_ALERTS_CAP_BASE_URL`
 - `CHMI_ORP_CODELIST_URL`
 - `CHMI_HYDRO_METADATA_URL`
@@ -875,6 +879,8 @@ HZS_INCIDENTS_DETAIL_CACHE_TTL_SECONDS=1800
 HZS_INCIDENTS_MAX_ACTIVE_DETAILS=50
 MUNICIPAL_ALERT_FEEDS=
 MUNICIPAL_ALERTS_CACHE_TTL_SECONDS=300
+MEDIA_NEWS_ENABLED=false
+MEDIA_NEWS_REQUEST_TIMEOUT_MS=8000
 SAFETY_DATA_ADMIN_BOUNDARY_DATABASE_URL=
 SAFETY_DATA_ADMIN_BOUNDARY_TABLE=public.osm_admin_boundary
 SAFETY_DATA_ADMIN_BOUNDARY_CACHE_TTL_SECONDS=86400
@@ -890,14 +896,15 @@ použije vestavěný ověřený katalog veřejných regionálních zdrojů:
 - `pkr-liberecky-udalosti`: Liberecký kraj, veřejný PKR JSON probíhajících
   událostí s přesnou geometrií převáděnou ze S-JTSK/Křováka do WGS84.
 - `pkr-stredocesky-aktuality`: Středočeský kraj, veřejný PKR RSS aktualit;
-  položky bez souřadnic jsou publikované jako autoritativní krajský fallback bod
-  s nižší důvěrou a implicitní sedmidenní platností.
+  položky bez souřadnic mají krajský fallback bod autority s nižší důvěrou.
+  Implicitní sedmidenní konec mapového záznamu není platností události a
+  nepovoluje notifikaci.
 - `pkr-stredocesky-jpo`: Středočeský kraj, veřejný PKR RSS zásahů JPO;
-  feed nedodává souřadnice, proto se publikuje jako autoritativní krajský
-  fallback bod s nižší důvěrou.
+  feed nedodává souřadnice, proto se publikuje jako krajský bod autority,
+  nikoli ověřená poloha incidentu.
 - `olkraj-krizove-rizeni`: Olomoucký kraj, veřejný RSS kanál kategorie krizové
-  řízení; položky bez souřadnic jsou publikované jako autoritativní krajský
-  fallback bod s nižší důvěrou.
+  řízení; položky bez souřadnic mají krajský fallback bod autority s nižší
+  důvěrou, který není vhodný pro radius-push.
 - `bruntal-uredni-rss`, `krnov-aktuality-rss`, `vrbno-aktuality-rss`: obecní
   oficiální RSS feedy pro Bruntál, Krnov a Vrbno pod Pradědem. Protože nejde o
   dedikované krizové feedy, SIM z nich publikuje pouze přísně filtrované
@@ -912,6 +919,58 @@ MUNICIPAL_ALERTS_CACHE_TTL_SECONDS=300
 Více feedů se odděluje středníkem. Formát položky je
 `url|label|authority|fallbackLon|fallbackLat|bbox|id|format`, kde `format` je
 `auto`, `rss`, `atom`, `georss`, `geojson` nebo `pkr-json`.
+
+Vestavěný katalog má osm feedů. Prázdné `MUNICIPAL_ALERT_FEEDS` je aktivuje
+pouze tehdy, když je `municipal_alerts` zapnutý; není to příslib plošného
+pokrytí IZS. Obecná RSS/Atom/GeoRSS/GeoJSON aktualita nemá notifikační
+způsobilost. PKR JSON může získat pozitivní způsobilost jen se zdrojovým bodem
+a explicitním aktivním event intervalem. Viz
+[krizový kontrakt 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
+
+### Volitelný ČT24 mediální kontext
+
+`MEDIA_NEWS_ENABLED=false` je default a vrací `status=disabled` bez upstream
+dotazu. Pouze přesná hodnota `true` zapne server-to-server
+`GET /safety-data/api/v1/context/news`; tento přepínač je nezávislý na
+`SAFETY_DATA_ENABLED_SOURCES` a nevytváří safety mapovou vrstvu nebo push.
+`MEDIA_NEWS_REQUEST_TIMEOUT_MS=8000` omezuje fetch i body, ve službě je hodnota
+omezena na `25..30000 ms`.
+
+Feed URL nejsou konfigurovatelné: pouze `ct24-main`, `ct24-ostrava`,
+`ct24-brno`. Pevná fresh memory cache má 300 s, výchozí negativní backoff
+60 s a dalších 600 s stale-if-error; velikost body je nejvýše 1 MiB,
+100 krátkých titulků na feed a nejvýše 100 ve výsledku. Tyto výchozí hodnoty
+se nyní nemění přes environment a nejsou odvozené z obecných
+`SAFETY_DATA_CACHE_*` parametrů. Články/obrázky se nestahují, raw RSS se
+neukládá, AI se nevolá. Vždy `notificationEligible=false`, `location=null`,
+`eventAt=null`; region znamená pouze rozsah feedu.
+
+Kandidátní notifikační endpoint posuzuje stale/chyby cache a warningy zvlášť
+přes `inputReadiness`; maximální povolené stáří snapshot/cache úspěchu je
+`SAFETY_DATA_CACHE_TTL_SECONDS`. Dosažení query limitu vrací `incomplete`.
+COP nesmí ne-ready nebo chybějící readiness automaticky použít pro push.
+
+Při aktivaci doložit runtime konfiguraci/image a interní smoke; samotná
+úprava `.env.example` není důkazem produkční aktivace. Rollback mediální části
+je `MEDIA_NEWS_ENABLED=false` a restart/recreate jen Safety Data API;
+po restartu ověřit disabled odpověď a nulové RSS dotazy. Pro rollback
+regionálních feedů vrátit původní explicitní `MUNICIPAL_ALERT_FEEDS` nebo
+odebrat `municipal_alerts` ze zdrojů a ověřit ostatní safety vrstvy. Neměnit
+firewall/VPN, COP ani společné databáze.
+
+Pro produkční aktivaci použít cílený
+`node scripts/deploy-crisis-context.mjs --deploy --revision <full-tested-commit>`
+ze samostatného otestovaného checkoutu na `docker.home.cz`, ne úplný
+`deploy-docker-home.sh`. Skript chrání divergentní runtime config/secrets,
+mění jen safety service/čtyři `.env` klíče, kontroluje mount UUID a ≥5 GiB
+volného místa před buildem i aktivací, porovnává ostatní Compose služby a při
+selhání obnoví původní config/image z privátní
+`/srv/sim/.deploy-crisis-backups/<timestamp-sha12>/`. Omezení, akceptační smoke
+a nezávislé ověření rollback health jsou v
+[kontraktu 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md#cílená-aktivace-na-pilotu).
+Lokální Valhalla/routing změny se při této safety aktivaci neslučují.
+
+### Další veřejné bezpečnostní zdroje
 
 `gdacs_alerts` je bezklicovy verejny GeoRSS/RSS zdroj GDACS pro globalni
 katastroficke alerty s potencialnim humanitarnim dopadem. SIM ho normalizuje

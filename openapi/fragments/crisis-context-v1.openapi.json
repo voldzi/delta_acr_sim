@@ -1,0 +1,88 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "SIM informational crisis media context", "version": "1.0.0" },
+  "paths": {
+    "/context/news": {
+      "get": {
+        "summary": "Return bounded informational ČT24 RSS headlines; never safety alerts",
+        "description": "Server-to-server additive context. Feed region is editorial scope, not event position. No GPS or event timestamp is inferred. No raw XML, article bodies, images or video are returned. This endpoint is not input to automatic crisis push.",
+        "parameters": [
+          { "name": "feeds", "in": "query", "description": "Comma-separated allowlisted feed IDs; defaults to all three. No arbitrary URL accepted.", "schema": { "type": "string", "example": "ct24-main,ct24-ostrava" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Informational result, including explicit disabled/degraded source states", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MediaNewsResult" } } } },
+          "400": { "description": "Unknown query, feed or invalid limit", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MediaNewsError" } } } },
+          "503": { "description": "Unexpected informational context service failure", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MediaNewsError" } } } }
+        },
+        "x-server-to-server": true
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "MediaNewsResult": {
+        "type": "object",
+        "required": ["contractVersion", "status", "generatedAt", "informationalOnly", "notificationEligible", "items", "sources"],
+        "properties": {
+          "contractVersion": { "type": "string", "const": "sim-crisis-media-context-v1" },
+          "status": { "type": "string", "enum": ["ok", "degraded", "disabled"] },
+          "generatedAt": { "type": "string", "format": "date-time" },
+          "informationalOnly": { "type": "boolean", "const": true },
+          "notificationEligible": { "type": "boolean", "const": false },
+          "items": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/MediaNewsItem" } },
+          "sources": { "type": "array", "maxItems": 3, "items": { "$ref": "#/components/schemas/MediaNewsSource" } }
+        }
+      },
+      "MediaNewsItem": {
+        "type": "object",
+        "required": ["id", "title", "link", "publishedAt", "fetchedAt", "eventAt", "regionCode", "regionScope", "location", "locationStatus", "informationalOnly", "notificationEligible", "stale", "source"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string", "maxLength": 300 },
+          "link": { "type": "string", "format": "uri", "pattern": "^https://ct24\\.ceskatelevize\\.cz/" },
+          "publishedAt": { "type": "string", "format": "date-time" },
+          "fetchedAt": { "type": "string", "format": "date-time" },
+          "eventAt": { "type": "null" },
+          "regionCode": { "type": "string", "enum": ["CZ", "CZ080", "CZ064"] },
+          "regionScope": { "type": "string", "const": "feed" },
+          "location": { "type": "null" },
+          "locationStatus": { "type": "string", "const": "unresolved" },
+          "informationalOnly": { "type": "boolean", "const": true },
+          "notificationEligible": { "type": "boolean", "const": false },
+          "stale": { "type": "boolean" },
+          "source": {
+            "type": "object", "required": ["id", "name", "feedId", "attribution"],
+            "properties": {
+              "id": { "type": "string", "const": "ct24" },
+              "name": { "type": "string", "const": "ČT24" },
+              "feedId": { "type": "string", "enum": ["ct24-main", "ct24-ostrava", "ct24-brno"] },
+              "attribution": { "type": "string", "const": "Česká televize / ČT24" }
+            }
+          }
+        }
+      },
+      "MediaNewsSource": {
+        "type": "object",
+        "required": ["id", "label", "feedUrl", "regionCode", "regionScope", "attribution", "status", "fetchedAt", "stale", "errorCode", "retryAfterSeconds"],
+        "properties": {
+          "id": { "type": "string", "enum": ["ct24-main", "ct24-ostrava", "ct24-brno"] },
+          "label": { "type": "string" },
+          "feedUrl": { "type": "string", "format": "uri" },
+          "regionCode": { "type": "string", "enum": ["CZ", "CZ080", "CZ064"] },
+          "regionScope": { "type": "string", "const": "feed" },
+          "attribution": { "type": "string", "const": "Česká televize / ČT24" },
+          "status": { "type": "string", "enum": ["ok", "stale", "unavailable", "disabled"] },
+          "fetchedAt": { "type": ["string", "null"], "format": "date-time" },
+          "stale": { "type": "boolean" },
+          "errorCode": { "type": ["string", "null"], "enum": [null, "UPSTREAM_HTTP_ERROR", "UPSTREAM_TIMEOUT", "UPSTREAM_TOO_LARGE", "UPSTREAM_INVALID_XML", "UPSTREAM_UNAVAILABLE"] },
+          "retryAfterSeconds": { "type": ["integer", "null"], "minimum": 0 }
+        }
+      },
+      "MediaNewsError": {
+        "type": "object", "required": ["error"],
+        "properties": { "error": { "type": "object", "required": ["code", "message", "correlationId"], "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "correlationId": { "type": "string" } } } }
+      }
+    }
+  }
+}

@@ -16,6 +16,53 @@
 
 První implementační krok má testovat kontrakty, publisher safety gates a AI guardrails dříve než bohaté UI chování.
 
+## Krizový mediální kontext a bezpečné kandidáty
+
+Na podporovaném Node.js 24 a pnpm 10 spusťte hermetické testy Safety Data API:
+
+```bash
+pnpm --filter @csm-sim/safety-data-api test test/media-news.test.ts test/notification-safety-guard.test.ts test/notification-input-health.test.ts test/notification-cache-evidence.test.ts test/municipal-notification-provenance.test.ts test/contract.test.ts
+pnpm --filter @csm-sim/safety-data-api typecheck
+pnpm openapi:validate
+bash scripts/validate-skeleton.sh
+node scripts/test-deploy-crisis-context.mjs
+```
+
+Konektorové testy musí prokázat default-disabled/no-fetch, pevný allowlist,
+validaci query, atribuci, sanitizaci titulků, odmítnutí škodlivých odkazů,
+nepřevzetí GPS/GeoRSS/enclosure a `eventAt=null`. Dále čas publikace ≤24 h,
+odmítnutí budoucích/chybných/ambivalentních dat, relevantní vs. běžné,
+retrospektivní a cvičné titulky, deduplikaci, limity metadata/body/nesting,
+timeout fetch i body, coalescing query, cache TTL, backoff, explicitní stale,
+expiraci/recovery a izolaci chyb jednotlivých feedů. Testy nesmějí volat
+živé ČT24, články, AI nebo geokódování.
+
+Notifikační testy musí odmítnout informativní/provider-denied prvky,
+fallback/centroid body, obecné obecní RSS i geolokovanou neověřenou aktualitu.
+Publikační datum nebo syntetická expirace nenahrazují explicitní aktivní event
+interval. Zachovat autoritativní polygon a syntetické fixture, stabilní ID a
+deduplikaci. Znovu prověřit `validUntil` při čtení cache a diagnostické
+`includeStale=true`, které nesmí obejít eligibility/readiness.
+
+Readiness testy rozlišují `ready`, `unavailable` a známým query limitem
+`incomplete`: neplatný/starý/budoucí snapshot či cache čas, source warnings,
+chyba bez pozdějšího úspěchu a stale úspěch. HTTP kontrakt ověří prázdné
+kandidáty a `inputRejectedCount` při ne-ready vstupu. Výsledek pod limitem
+není testem úplnosti upstreamu ani celostátního pokrytí.
+
+Cache evidence testy ověří `unresolvedStaleEntries` a request-scoped source
+fallback warning: úspěch jiného klíče ani nové cache čtení agregace nesmí
+zahladit degradaci původních source dat. Cílené deployment testy pokrývají
+safety-only Compose patch, zachování ostatních služeb/secrets a validaci
+očekávaných kotev; neprokazují live rollback nebo mount.
+
+Izolované konektorové testy a TypeScript kontrola kandidátní implementace
+prošly; přesnou release evidence doplňuje dokončující validační běh. Živý
+provider smoke, runtime konfigurace a rollback jsou jiné gates než unit testy.
+COP opt-in/AOI, rozhodování, deduplikace a skutečné background doručení na
+zařízení vyžadují samostatnou společnou akceptaci; SIM testy je nepotvrzují.
+Viz [kontrakt 21](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
+
 ## Graph-native traffic promotion
 
 Run `python3 deploy/valhalla/test-native-canary-ab.py` and

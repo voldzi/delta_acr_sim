@@ -6574,6 +6574,70 @@
         ]
       }
     },
+    "/safety-data/api/v1/context/news": {
+      "get": {
+        "summary": "Return bounded informational ČT24 RSS headlines; never safety alerts",
+        "description": "Server-to-server additive context. Feed region is editorial scope, not event position. No GPS or event timestamp is inferred. No raw XML, article bodies, images or video are returned. This endpoint is not input to automatic crisis push.",
+        "parameters": [
+          {
+            "name": "feeds",
+            "in": "query",
+            "description": "Comma-separated allowlisted feed IDs; defaults to all three. No arbitrary URL accepted.",
+            "schema": {
+              "type": "string",
+              "example": "ct24-main,ct24-ostrava"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Informational result, including explicit disabled/degraded source states",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisisContextMediaNewsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown query, feed or invalid limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisisContextMediaNewsError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unexpected informational context service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrisisContextMediaNewsError"
+                }
+              }
+            }
+          }
+        },
+        "x-server-to-server": true,
+        "operationId": "crisisContext_get_safety_data_api_v1_context_news",
+        "tags": [
+          "Safety Data: Safety Data"
+        ]
+      }
+    },
     "/tak-gateway/api/v1/catalog": {
       "get": {
         "summary": "Return TAK Gateway provider metadata for COM Map Catalog v1",
@@ -19683,6 +19747,10 @@
               "technicalWarningsPolicy": {
                 "type": "string",
                 "const": "never_push_to_public_users"
+              },
+              "eligibilityPolicy": {
+                "type": "string",
+                "const": "verified_alert_and_non_fallback_location_required"
               }
             }
           },
@@ -19732,6 +19800,21 @@
               },
               "includeStale": {
                 "type": "boolean"
+              },
+              "eligibilitySkippedCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "eligibilitySkippedReasons": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "inputRejectedCount": {
+                "type": "integer",
+                "minimum": 0
               }
             }
           },
@@ -19749,6 +19832,41 @@
             "items": {
               "type": "string"
             }
+          },
+          "inputReadiness": {
+            "type": "object",
+            "required": [
+              "status",
+              "snapshotGeneratedAt",
+              "snapshotAgeSeconds",
+              "reasons"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "unavailable",
+                  "incomplete"
+                ]
+              },
+              "snapshotGeneratedAt": {
+                "type": "string"
+              },
+              "snapshotAgeSeconds": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Automatic delivery must require ready. Unavailable or known limit-reached input returns no candidates, not proof that an area is safe. This detects known limits, not completeness of upstream geographic coverage."
           }
         }
       },
@@ -21077,6 +21195,279 @@
           "H_F",
           "Q_F"
         ]
+      },
+      "CrisisContextMediaNewsResult": {
+        "type": "object",
+        "required": [
+          "contractVersion",
+          "status",
+          "generatedAt",
+          "informationalOnly",
+          "notificationEligible",
+          "items",
+          "sources"
+        ],
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "const": "sim-crisis-media-context-v1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "disabled"
+            ]
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "informationalOnly": {
+            "type": "boolean",
+            "const": true
+          },
+          "notificationEligible": {
+            "type": "boolean",
+            "const": false
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/CrisisContextMediaNewsItem"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/CrisisContextMediaNewsSource"
+            }
+          }
+        }
+      },
+      "CrisisContextMediaNewsItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "link",
+          "publishedAt",
+          "fetchedAt",
+          "eventAt",
+          "regionCode",
+          "regionScope",
+          "location",
+          "locationStatus",
+          "informationalOnly",
+          "notificationEligible",
+          "stale",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "link": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://ct24\\.ceskatelevize\\.cz/"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "eventAt": {
+            "type": "null"
+          },
+          "regionCode": {
+            "type": "string",
+            "enum": [
+              "CZ",
+              "CZ080",
+              "CZ064"
+            ]
+          },
+          "regionScope": {
+            "type": "string",
+            "const": "feed"
+          },
+          "location": {
+            "type": "null"
+          },
+          "locationStatus": {
+            "type": "string",
+            "const": "unresolved"
+          },
+          "informationalOnly": {
+            "type": "boolean",
+            "const": true
+          },
+          "notificationEligible": {
+            "type": "boolean",
+            "const": false
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "feedId",
+              "attribution"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "const": "ct24"
+              },
+              "name": {
+                "type": "string",
+                "const": "ČT24"
+              },
+              "feedId": {
+                "type": "string",
+                "enum": [
+                  "ct24-main",
+                  "ct24-ostrava",
+                  "ct24-brno"
+                ]
+              },
+              "attribution": {
+                "type": "string",
+                "const": "Česká televize / ČT24"
+              }
+            }
+          }
+        }
+      },
+      "CrisisContextMediaNewsSource": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "feedUrl",
+          "regionCode",
+          "regionScope",
+          "attribution",
+          "status",
+          "fetchedAt",
+          "stale",
+          "errorCode",
+          "retryAfterSeconds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "ct24-main",
+              "ct24-ostrava",
+              "ct24-brno"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "feedUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "regionCode": {
+            "type": "string",
+            "enum": [
+              "CZ",
+              "CZ080",
+              "CZ064"
+            ]
+          },
+          "regionScope": {
+            "type": "string",
+            "const": "feed"
+          },
+          "attribution": {
+            "type": "string",
+            "const": "Česká televize / ČT24"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "stale",
+              "unavailable",
+              "disabled"
+            ]
+          },
+          "fetchedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "UPSTREAM_HTTP_ERROR",
+              "UPSTREAM_TIMEOUT",
+              "UPSTREAM_TOO_LARGE",
+              "UPSTREAM_INVALID_XML",
+              "UPSTREAM_UNAVAILABLE"
+            ]
+          },
+          "retryAfterSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
+      },
+      "CrisisContextMediaNewsError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "correlationId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "correlationId": {
+                "type": "string"
+              }
+            }
+          }
+        }
       },
       "TakGatewayBoundingBox": {
         "type": "object",

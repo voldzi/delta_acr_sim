@@ -40,7 +40,10 @@ notifikace pro obcana:
 
 - `public.boundary.admin`
 - vsechny diagnosticke/source-health warningy,
-- stale/cache/upstream degradace bez civilni udalosti.
+- stale/cache/upstream degradace bez civilni udalosti,
+- obecne RSS aktuality, publikacni cas clanku a neoverene body autority,
+- cely medialni endpoint `GET /safety-data/api/v1/context/news` s
+  `notificationEligible=false`.
 
 ## Autoritativni kandidatni endpoint
 
@@ -54,14 +57,66 @@ Podporovane parametry:
 
 - `bbox=west,south,east,north` omezuje prostor, pro ktery COP hleda udalosti.
 - `layers=warnings,weather_alerts,fire,flood`; vychozi hodnota je tato sada.
-- `source=chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,road_srti_lod` nebo `source=mock` pro test.
+- `source=chmi_alerts,chmi_hydro,nasa_firms,gdacs_alerts,hzs_incidents,municipal_alerts,road_srti_lod` nebo `source=mock` pro test.
 - `minSeverity=info|advisory|warning|critical`; vychozi je `advisory`.
 - `includeStale=true|false`; vychozi je `false`.
 - `limit=1..1000`; vychozi je `100`.
 
 Odpoved ma `contractVersion=sim-safety-notification-candidates-v1`. SIM v ni
-vraci pouze kandidatni udalosti a hotove lokalizovane texty. SIM tim stale
-nerozhoduje o adresatech ani kanalech.
+vraci filtrované kandidatni vstupy a hotove lokalizovane texty. SIM tim stale
+nerozhoduje o adresatech ani kanalech. Katalogová způsobilost vrstvy neznamená
+způsobilost každého jejího prvku; závazné jsou níže uvedené per-feature a
+input-readiness gates.
+
+### Přesnost, původ a aktivní interval
+
+`policy.eligibilityPolicy=verified_alert_and_non_fallback_location_required`.
+Informativní metadata a explicitní `providerProperties.notification.eligible=false`
+se odmítají i při vysoké severity. Point s
+`locationPrecision=authority_fallback_point|region_centroid|municipality_centroid|admin_boundary_centroid`,
+`geometryMode=representative_point` nebo basis
+`chmi_cap_representative_point` nesmí být radius-push kandidátem. Autoritativní
+polygon se neposuzuje jako takový centroid.
+
+U `municipal_alerts` je navíc povinné `notification.eligible=true`,
+`validityBasis=explicit_event_interval`, validní uspořádané časy
+`validFrom<=now<validUntil` a `status=active`. Aktuální normalizátor nastavuje
+pozitivní způsobilost jen pro PKR JSON s vlastním zdrojovým bodem a explicitním
+intervalem. Obecný RSS/Atom/GeoRSS/GeoJSON, datum publikace ani syntetická
+expirace snapshotu tuto způsobilost nevytvářejí. Pole
+`providerProperties.publication` rozlišuje publikaci od
+`eventAt/eventValidUntil`. Výchozí `includeStale=false` znovu odmítá stale nebo
+expirované `validUntil` i u cachovaných feature.
+
+`summary.eligibilitySkippedCount` a `eligibilitySkippedReasons` rozlišují
+`informational_only`, `provider_not_eligible`, `approximate_location`,
+`unverified_municipal_alert`, `unknown_municipal_event_validity` a
+`inactive_municipal_alert`. `includeStale=true` tyto gates neobchází a je
+určeno pro diagnostiku, ne automatický push.
+
+### Fail-closed input readiness
+
+HTTP odpověď vždy přidává `inputReadiness` s poli `status`,
+`snapshotGeneratedAt`, `snapshotAgeSeconds` (nebo `null`) a `reasons`.
+COP musí pro nové automatické zpracování výslovně vyžadovat `status=ready`;
+chybějící metadata ze staré verze nejsou implicitním souhlasem.
+
+- `ready`: známá kontrola snapshotu/cache prošla a známý query limit není
+  dosažen. Nejde o důkaz kompletního upstreamu nebo celostátního pokrytí.
+- `unavailable`: neplatný, starý nebo více než 5 s budoucí timestamp,
+  `response.warnings`, neobnovená cache chyba nebo starý úspěch response /
+  požadované source cache. Max stáří je `SAFETY_DATA_CACHE_TTL_SECONDS`.
+- `incomplete`: jinak připravený vstup má `features.length>=query.limit`, tedy
+  známé riziko truncation. Výsledek pod limitem úplnost negarantuje.
+
+Při ne-ready vstupu je `candidates=[]`, `candidateCount=0` a
+`skippedCount=featureCount`. `summary.inputRejectedCount` počítá jinak
+způsobilé kandidáty odmítnuté vstupní gate; per-feature skip počty po této gate
+nejsou prostým součtem finálního `skippedCount`. Technické reasons/warnings
+nepatří do civilních zpráv. `unresolvedStaleEntries` a request-scoped evidence
+source fallbacku uchovají degradaci i při úspěchu jiné cache položky nebo
+dalším čtení agregovaného snapshotu. Podrobnosti v
+[krizovém kontraktu 21](21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
 
 Zkraceny tvar odpovedi:
 
@@ -69,15 +124,25 @@ Zkraceny tvar odpovedi:
 {
   "contractVersion": "sim-safety-notification-candidates-v1",
   "providerId": "sim.safety-data",
+  "inputReadiness": {
+    "status": "ready",
+    "snapshotGeneratedAt": "2026-06-29T08:00:00Z",
+    "snapshotAgeSeconds": 0,
+    "reasons": []
+  },
   "policy": {
     "audienceDecisionOwner": "cop",
     "deliveryOwner": "csm-messaging",
     "notificationType": "safety.alert",
-    "technicalWarningsPolicy": "never_push_to_public_users"
+    "technicalWarningsPolicy": "never_push_to_public_users",
+    "eligibilityPolicy": "verified_alert_and_non_fallback_location_required"
   },
   "summary": {
     "candidateCount": 1,
     "duplicateSkippedCount": 0,
+    "eligibilitySkippedCount": 0,
+    "eligibilitySkippedReasons": {},
+    "inputRejectedCount": 0,
     "minSeverity": "advisory",
     "includeStale": false
   },
@@ -200,8 +265,9 @@ nezavislych kampani nebo audience segmentu.
 ## Pokyn pro COP
 
 1. COP vola `GET /safety-data/api/v1/notifications/candidates` server-to-server.
-2. COP filtruje kandidaty podle role, opravneni, sledovane oblasti, aktualni
-   polohy, ticheho rezimu a uzivatelskych preferenci.
+2. COP vyžaduje `inputReadiness.status=ready`, vlastní očekávané zdroje a
+   odvolatelný uživatelský opt-in. Filtruje kandidaty podle role, opravneni,
+   sledovane oblasti / AOI, aktualni polohy, ticheho rezimu a preferenci.
 3. COP nevytvari push z `response.warnings`, health/readiness, cache/stale
    degradace ani z diagnostickych vrstev.
 4. COP vytvori finalni pozadavek do CSM Messaging az po audience rozhodnuti.
@@ -231,9 +297,14 @@ CSM Messenger klient ma zobrazit text pripraveny COP/Messagingem, otevrit
 deeplink do detailu a neziskavat si sam kandidatni endpoint SIM. SIM zustava
 server-to-server provider.
 
+SIM neimplementuje nový background push scheduler a tato kandidátní změna
+nedokládá skutečné doručení na zařízení. Způsob průběžného vyhodnocování,
+uživatelský opt-in, AOI a objednání doručení zůstávají v COP; registry/kanály
+a audit v CSM Messaging. Osm regionálních feedů není blanket pokrytí IZS.
+
 ## Technicke warningy
 
 SIM muze vracet `warnings`, `sourceHealth`, `stale`, `cache` nebo `upstream`
 degradaci. Tyto informace jsou urcene pro provozni dohled a COP admin UI.
-Nesmí byt posilane obcanum jako bezpecnostni push notifikace, pokud nejsou
-soucasti realne safety feature.
+Technická metadata nikdy nejsou samostatnou občanskou push notifikací;
+samostatný způsobilý safety kandidát musí projít výše uvedenými gates.

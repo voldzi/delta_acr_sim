@@ -10,6 +10,7 @@ Safety Data API je samostatný COM zdroj pro veřejná bezpečnostní data. Kont
 GET /safety-data/api/v1/catalog
 GET /safety-data/api/v1/features
 GET /safety-data/api/v1/notifications/candidates
+GET /safety-data/api/v1/context/news
 GET /safety-data/api/v1/hydro/stations/{stationId}/observations
 ```
 
@@ -20,6 +21,11 @@ https://sim.zeleznalady.cz/safety-data/api/v1/features
 ```
 
 `/safety-data/api/v1/cop/features` zůstává jen jako kompatibilní alias pro existující backend adaptéry.
+
+`/context/news` je samostatný informační ČT24 seznam, nikoli GeoJSON/safety
+vrstva nebo notifikační zdroj. Používá jiný kontrakt a query pouze `feeds,limit`;
+podrobnosti a pevný allowlist jsou v
+[`21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md`](21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
 
 Podporované query parametry:
 
@@ -168,7 +174,7 @@ GET /safety-data/api/v1/notifications/candidates?bbox=...&layers=warnings,weathe
 ```
 
 Odpověď má `contractVersion=sim-safety-notification-candidates-v1`. Obsahuje
-pouze realné bezpečnostní kandidáty z vrstev `warnings`, `weather_alerts`,
+filtrované bezpečnostní kandidátní vstupy z vrstev `warnings`, `weather_alerts`,
 `fire` a `flood`, ne technické warningy služby. SIM kandidáty deduplikuje podle
 `candidateId`; počet zahozených duplicit vrací v
 `summary.duplicateSkippedCount`. Každý kandidát nese:
@@ -184,6 +190,20 @@ SIM zde stále nerozhoduje o adresátech. COP musí kandidáty filtrovat podle
 uživatele, role, oprávnění, sledované oblasti, aktuální polohy a aplikační
 politiky. CSM Messaging přijímá až finální požadavek od COP a deduplikuje jej
 podle `X-Idempotency-Key`.
+
+Katalogová způsobilost vrstvy nestačí: `informationalOnly`, explicitní provider
+deny a odhadované/fallback point geometrie se odmítají. Obecné regionální RSS
+příspěvky nejsou notifikačně způsobilé; PKR JSON potřebuje zdrojový bod a
+aktivní explicitní interval události, nikoli datum publikace/snapshotu.
+HTTP endpoint navíc vrací `inputReadiness=ready|unavailable|incomplete`.
+Při ne-ready vstupu je `candidates=[]`; COP musí pro automatické vyhodnocení
+výslovně vyžadovat `inputReadiness.status=ready`. Source warnings, stale či
+neobnovená cache chyba a dosažený známý query limit fail-closed brání dalšímu
+automatickému doručení. Výsledek pod limitem není důkazem úplnosti upstreamu.
+
+Tato kandidátní implementace netvrdí celostátní pokrytí IZS, nový background
+push scheduler ani otestované doručení na konkrétní zařízení. Produkční změna
+a COP opt-in/AOI/doručení vyžadují samostatné evidence.
 
 Detailní hranice odpovědností je v
 [`14_CSM_NOTIFICATION_INPUT_CONTRACT.md`](14_CSM_NOTIFICATION_INPUT_CONTRACT.md).
@@ -266,8 +286,8 @@ odfiltruje nenotifikovatelne vrstvy, prida lokalizovane texty a pripravi
 doporuceny `X-Idempotency-Key`.
 
 Technicke `response.warnings`, stale stav zdroju a degradace upstreamu patri do
-provozniho dohledu. Nesmí se posilat obcanum jako safety push, pokud nejsou
-soucasti realne safety feature.
+provozniho dohledu, nikdy nejsou samostatnou občanskou safety push notifikací.
+Samostatný safety kandidát musí projít eligibility a input-readiness gates.
 
 Detailni kontrakt je v
 [`14_CSM_NOTIFICATION_INPUT_CONTRACT.md`](14_CSM_NOTIFICATION_INPUT_CONTRACT.md).

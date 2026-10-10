@@ -35,6 +35,32 @@ bbox query, detailní source endpointy, readiness, observability a partner/TAK
 endpointy zůstávají interní/VPN-only. COP frontend a mobilní klienti mají volat
 COP API, nikoli provider endpointy SIM přímo.
 
+### Krizový mediální kontext a notifikační vstupy
+
+`/safety-data/api/v1/context/news` zůstává ve stejné server-to-server provider
+hranici; přidání konektoru neotevírá veřejné provider API ani obcházení COP
+autentizace/rolí. Uživatel nesmí určit upstream URL. Pevný allowlist obsahuje
+jen tři oficiální RSS URL ČT24, redirect se odmítá; článkové odkazy mají přesný
+host `ct24.ceskatelevize.cz`, pouze HTTPS bez credentials/nestandardního portu.
+Body je omezené na 1 MiB, DTD/custom entities se odmítají a titulek je
+sanitizovaný plain text. Sdílená bounded cache a negativní backoff brání
+opakovaným upstream dotazům podle variací uživatelského query.
+
+RSS se zpracuje pouze transientně. Žádné raw payloady, plné články, obrázky,
+GPS inference, AI export nebo AI volání; uchovává se jen krátká metadata cache
+v paměti. Publikace není vznik události a region feedu není incidentní lokace.
+Všechny ČT24 položky jsou informativní a nenotifikovatelné.
+
+Notifikační kandidáti odmítají informativní/provider-denied prvky a odhadované
+fallback/centroid point geometrie. Obecné obecní RSS nejsou způsobilé; PKR JSON
+musí dodat zdrojový bod a explicitní aktivní interval. HTTP gate
+`inputReadiness` při varování, stale/neobnovené cache chybě, neplatném čase nebo
+známé truncation vrací prázdné kandidáty. COP musí vyžadovat `ready`, vlastní
+opt-in, AOI a oprávnění, než objedná doručení u CSM Messaging. Ne-ready stav
+není bezpečnostní zpráva pro veřejnost. Viz
+[ADR 0031](../adr/0031_CRISIS_CONTEXT_AND_NOTIFICATION_BOUNDARIES.md) a
+[integrační kontrakt](../integration/21_CRISIS_CONTEXT_AND_REGIONAL_ALERTS_CONTRACT.md).
+
 `valhalla.home.cz:8002` patří do stejné interní/VPN-only hranice. Veřejný
 browser ani COP klient jej nesmí volat přímo. Updater má pouze odchozí přístup
 nutný pro pinované images a veřejné mapové/elevation zdroje; release manifest

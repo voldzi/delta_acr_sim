@@ -29,6 +29,21 @@
 - 401/403/409/422/429/503 handling
 - revokace zdroje bez změny kódu
 
+## Krizové veřejné zdroje a mediální kontext
+
+- News endpoint se volá pouze COP backendem, zobrazuje atribuci ČT24 a
+  nepřidává safety geometrii, event čas, články, AI nebo notifikace.
+- Osm regionálních/obecních feedů je omezený katalog, nikoli plošné pokrytí IZS;
+  runtime konfigurace a source stavy musí být doložené zvlášť.
+- Odhadované body autority/centroidy a obecné RSS nesmějí vytvářet radius-push
+  kandidáty; explicitní event interval a původ polohy nejsou publikace článku.
+- COP pro automatické vyhodnocení vyžaduje `inputReadiness.status=ready`,
+  odvolatelný opt-in, AOI a vlastní oprávnění. Chybějící metadata, degradace a
+  známá truncation fail-closed zabrání novému automatickému doručení.
+- Kandidátní unit/contract testy, instalovaná image, aktivovaná konfigurace,
+  živý interní smoke a skutečné doručení na zařízení se vykazují jako oddělené
+  gates; tato změna sama neprokazuje background push.
+
 ## Výkonnost
 
 - 1 000 aktivních tracků MVP

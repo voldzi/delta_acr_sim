@@ -13,7 +13,9 @@ import {
 } from "./feature-views.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
+import { MediaNewsQueryError, MediaNewsService, parseMediaNewsQuery } from "./media-news.js";
 import { buildSafetyNotificationCandidateCollection, type SafetyNotificationCandidateOptions } from "./notification-candidates.js";
+import { evaluateNotificationInput } from "./notification-input-health.js";
 import { allSourceDescriptors, createSafetyDataSources } from "./sources.js";
 import type {
   BoundingBox,
@@ -30,6 +32,7 @@ import type {
 export interface SafetyDataAppContext {
   config: SafetyDataConfig;
   aggregation: SafetyAggregationService;
+  mediaNews?: MediaNewsService;
   hydroDetails?: {
     getHydroStationDetail(stationId: string, query: HydroStationDetailQuery): Promise<HydroStationDetail | undefined>;
   };
@@ -40,7 +43,8 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   const aggregation = new SafetyAggregationService(config, sources);
   const hydroSource = sources.find((source) => source.descriptor.sourceId === "chmi_hydro" && source.getHydroStationDetail);
   const hydroDetails = hydroSource?.getHydroStationDetail ? { getHydroStationDetail: hydroSource.getHydroStationDetail.bind(hydroSource) } : undefined;
-  const context: SafetyDataAppContext = { config, aggregation, hydroDetails };
+  const mediaNews = new MediaNewsService({ enabled: config.mediaNewsEnabled === true, requestTimeoutMs: config.mediaNewsRequestTimeoutMs });
+  const context: SafetyDataAppContext = { config, aggregation, hydroDetails, mediaNews };
   const app = express();
 
   app.use(createHttpRequestTracingMiddleware("csm-sim-safety-data-api"));
@@ -50,6 +54,17 @@ export async function createApp(config: SafetyDataConfig): Promise<{ app: Expres
   registerHealthRoutes(app, context);
   registerMetadataRoutes(app, context);
   registerFeatureRoutes(app, context);
+  app.get("/api/v1/context/news", async (req, res) => {
+    try {
+      const query = parseMediaNewsQuery(req.query);
+      res.json(await mediaNews.query(query));
+    } catch (error) {
+      if (error instanceof MediaNewsQueryError) {
+        return problem(req, res, 400, error.code, error.message);
+      }
+      return problem(req, res, 503, "MEDIA_NEWS_UNAVAILABLE", "Informational news context is temporarily unavailable.");
+    }
+  });
   registerHydroDetailRoutes(app, context);
 
   app.use((req, res) => {
@@ -79,7 +94,8 @@ function registerHealthRoutes(app: Express, context: SafetyDataAppContext): void
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      enabledSources: context.config.enabledSources
+      enabledSources: context.config.enabledSources,
+      mediaNews: { enabled: context.config.mediaNewsEnabled === true, informationalOnly: true, notificationEligible: false }
     });
   });
 
@@ -219,7 +235,20 @@ function registerFeatureRoutes(app: Express, context: SafetyDataAppContext): voi
       ...query.value,
       includeRaw: false
     });
-    res.json(buildSafetyNotificationCandidateCollection(collection, options.value));
+    const result = buildSafetyNotificationCandidateCollection(collection, options.value);
+    const inputReadiness = evaluateNotificationInput(
+      collection,
+      context.aggregation.cacheStats(),
+      context.aggregation.sourceCacheStats(),
+      context.config.cacheTtlSeconds
+    );
+    const inputRejectedCount = inputReadiness.status === "ready" ? 0 : result.candidates.length;
+    if (inputReadiness.status !== "ready") {
+      result.candidates = [];
+      result.summary.candidateCount = 0;
+      result.summary.skippedCount = result.summary.featureCount;
+    }
+    res.json({ ...result, inputReadiness, summary: { ...result.summary, inputRejectedCount } });
   });
 
   app.get("/api/v1/features/:featureId/geometry", async (req, res) => {

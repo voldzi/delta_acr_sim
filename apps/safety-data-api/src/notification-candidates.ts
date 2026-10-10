@@ -18,6 +18,7 @@ export interface SafetyNotificationCandidateCollection {
     notificationType: "safety.alert";
     deduplicationKeyFields: string[];
     technicalWarningsPolicy: "never_push_to_public_users";
+    eligibilityPolicy: "verified_alert_and_non_fallback_location_required";
   };
   summary: {
     featureCount: number;
@@ -27,6 +28,8 @@ export interface SafetyNotificationCandidateCollection {
     staleSkippedCount: number;
     belowSeveritySkippedCount: number;
     duplicateSkippedCount: number;
+    eligibilitySkippedCount: number;
+    eligibilitySkippedReasons: Partial<Record<SafetyNotificationEligibilitySkipReason, number>>;
     minSeverity: SafetySeverity;
     includeStale: boolean;
   };
@@ -34,6 +37,14 @@ export interface SafetyNotificationCandidateCollection {
   sources: SafetyFeatureCollection["sources"];
   warnings: string[];
 }
+
+export type SafetyNotificationEligibilitySkipReason =
+  | "informational_only"
+  | "provider_not_eligible"
+  | "approximate_location"
+  | "unverified_municipal_alert"
+  | "unknown_municipal_event_validity"
+  | "inactive_municipal_alert";
 
 export interface SafetyNotificationCandidate {
   candidateId: string;
@@ -103,6 +114,7 @@ export interface SafetyNotificationCandidate {
 }
 
 const NOTIFICATION_LAYERS = new Set<SafetyLayerId>(["warnings", "weather_alerts", "fire", "flood"]);
+const APPROXIMATE_POINT_PRECISIONS = new Set(["authority_fallback_point", "region_centroid", "municipality_centroid", "admin_boundary_centroid"]);
 const SEVERITY_RANK: Record<SafetySeverity, number> = {
   info: 0,
   advisory: 1,
@@ -119,6 +131,8 @@ export function buildSafetyNotificationCandidateCollection(
   let staleSkippedCount = 0;
   let belowSeveritySkippedCount = 0;
   let duplicateSkippedCount = 0;
+  let eligibilitySkippedCount = 0;
+  const eligibilitySkippedReasons: Partial<Record<SafetyNotificationEligibilitySkipReason, number>> = {};
   const seenCandidateIds = new Set<string>();
   const candidates: SafetyNotificationCandidate[] = [];
 
@@ -133,6 +147,17 @@ export function buildSafetyNotificationCandidateCollection(
     }
     if (SEVERITY_RANK[feature.properties.severity] < SEVERITY_RANK[options.minSeverity]) {
       belowSeveritySkippedCount += 1;
+      continue;
+    }
+    const eligibilitySkipReason = notificationEligibilitySkipReason(feature, Date.parse(generatedAt));
+    if (eligibilitySkipReason) {
+      eligibilitySkippedCount += 1;
+      eligibilitySkippedReasons[eligibilitySkipReason] = (eligibilitySkippedReasons[eligibilitySkipReason] ?? 0) + 1;
+      continue;
+    }
+    const validUntil = Date.parse(feature.properties.validUntil ?? "");
+    if (Number.isFinite(validUntil) && validUntil <= Date.parse(generatedAt) && !options.includeStale) {
+      staleSkippedCount += 1;
       continue;
     }
     const candidate = buildSafetyNotificationCandidate(feature, collection.query);
@@ -160,7 +185,8 @@ export function buildSafetyNotificationCandidateCollection(
       deliveryOwner: "csm-messaging",
       notificationType: "safety.alert",
       deduplicationKeyFields: ["providerId", "providerLayerId", "featureId", "validFrom", "validUntil"],
-      technicalWarningsPolicy: "never_push_to_public_users"
+      technicalWarningsPolicy: "never_push_to_public_users",
+      eligibilityPolicy: "verified_alert_and_non_fallback_location_required"
     },
     summary: {
       featureCount: collection.features.length,
@@ -170,6 +196,8 @@ export function buildSafetyNotificationCandidateCollection(
       staleSkippedCount,
       belowSeveritySkippedCount,
       duplicateSkippedCount,
+      eligibilitySkippedCount,
+      eligibilitySkippedReasons,
       minSeverity: options.minSeverity,
       includeStale: options.includeStale
     },
@@ -177,6 +205,49 @@ export function buildSafetyNotificationCandidateCollection(
     sources: collection.sources,
     warnings: collection.warnings
   };
+}
+
+function notificationEligibilitySkipReason(feature: SafetyFeature, now: number): SafetyNotificationEligibilitySkipReason | undefined {
+  const properties = feature.properties;
+  const providerProperties = properties.providerProperties ?? {};
+  const notification = asRecord(providerProperties.notification);
+
+  if (providerProperties.informationalOnly === true || notification?.informationalOnly === true || properties.tags?.informationalOnly === "true") {
+    return "informational_only";
+  }
+  if (notification?.eligible === false) {
+    return "provider_not_eligible";
+  }
+  if (
+    feature.geometry.type === "Point" &&
+    (APPROXIMATE_POINT_PRECISIONS.has(properties.tags?.locationPrecision ?? "") ||
+      properties.tags?.geometryMode === "representative_point" ||
+      properties.basis.includes("chmi_cap_representative_point"))
+  ) {
+    return "approximate_location";
+  }
+  if (properties.sourceId !== "municipal_alerts") {
+    return undefined;
+  }
+  if (notification?.eligible !== true) {
+    return "unverified_municipal_alert";
+  }
+  if (notification.validityBasis !== "explicit_event_interval") {
+    return "unknown_municipal_event_validity";
+  }
+  const validFrom = Date.parse(properties.validFrom);
+  const validUntil = Date.parse(properties.validUntil ?? "");
+  if (!Number.isFinite(validFrom) || !Number.isFinite(validUntil) || validUntil <= validFrom) {
+    return "unknown_municipal_event_validity";
+  }
+  if (properties.status !== "active" || validFrom > now || validUntil <= now) {
+    return "inactive_municipal_alert";
+  }
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function buildSafetyNotificationCandidate(feature: SafetyFeature, query: SafetyFeatureCollection["query"]): SafetyNotificationCandidate {

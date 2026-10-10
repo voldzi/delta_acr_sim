@@ -74,6 +74,13 @@ SPECS = [
     path_prefix: "/safety-data/api/v1"
   },
   {
+    key: "crisisContext",
+    prefix: "CrisisContext",
+    tag_prefix: "Safety Data",
+    file: "openapi/fragments/crisis-context-v1.openapi.json",
+    path_prefix: "/safety-data/api/v1"
+  },
+  {
     key: "takGateway",
     prefix: "TakGateway",
     tag_prefix: "TAK Gateway",
@@ -348,6 +355,22 @@ def build_document
   add_health_path(doc, "/tak-gateway/health/ready", "TAK Gateway", "takGateway_health_ready")
 
   doc["components"]["schemas"]["SituationDataRoutingStep"] = JSON.parse(File.read(File.join(ROOT, "openapi/fragments/navigation-step.schema.json")))
+  # Current fail-closed notification additions; do not rewrite archived snapshots.
+  candidates = doc["components"]["schemas"]["SafetyDataSafetyNotificationCandidateCollection"]["properties"]
+  candidates["policy"]["properties"]["eligibilityPolicy"] = { "type" => "string", "const" => "verified_alert_and_non_fallback_location_required" }
+  candidates["summary"]["properties"]["eligibilitySkippedCount"] = { "type" => "integer", "minimum" => 0 }
+  candidates["summary"]["properties"]["eligibilitySkippedReasons"] = { "type" => "object", "additionalProperties" => { "type" => "integer", "minimum" => 0 } }
+  candidates["summary"]["properties"]["inputRejectedCount"] = { "type" => "integer", "minimum" => 0 }
+  candidates["inputReadiness"] = {
+    "type" => "object", "required" => %w[status snapshotGeneratedAt snapshotAgeSeconds reasons],
+    "properties" => {
+      "status" => { "type" => "string", "enum" => %w[ready unavailable incomplete] },
+      "snapshotGeneratedAt" => { "type" => "string" },
+      "snapshotAgeSeconds" => { "type" => ["number", "null"] },
+      "reasons" => { "type" => "array", "items" => { "type" => "string" } }
+    },
+    "description" => "Automatic delivery must require ready. Unavailable or known limit-reached input returns no candidates, not proof that an area is safe. This detects known limits, not completeness of upstream geographic coverage."
+  }
   # Preserve the active traffic timing contract instead of its archived wording.
   doc["components"]["schemas"]["SituationDataTpeg2SourceTiming"]["description"] = "Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh. nextRefreshAt respects the configured upstream and monotonic minimum interval; opted-in adaptive Last-Modified scheduling may only delay the next request and never changes source observation or expiry."
   doc["components"]["schemas"]["SituationDataRoutingRoute"]["properties"]["steps"]["items"] = { "$ref" => "#/components/schemas/SituationDataRoutingStep" }

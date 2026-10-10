@@ -213,6 +213,7 @@ function cacheStatsFor(sourceId: SafetyDataSourceId, caches: Array<{ stats(): Ma
       summary.refreshes += stats.refreshes;
       summary.errors += stats.errors;
       summary.evictions += stats.evictions;
+      summary.unresolvedStaleEntries = (summary.unresolvedStaleEntries ?? 0) + (stats.unresolvedStaleEntries ?? 0);
       const lastSuccessAt = newestIsoTimestamp(summary.lastSuccessAt, stats.lastSuccessAt);
       const lastErrorAt = newestIsoTimestamp(summary.lastErrorAt, stats.lastErrorAt);
       if (lastSuccessAt) {
@@ -234,7 +235,8 @@ function cacheStatsFor(sourceId: SafetyDataSourceId, caches: Array<{ stats(): Ma
       staleHits: 0,
       refreshes: 0,
       errors: 0,
-      evictions: 0
+      evictions: 0,
+      unresolvedStaleEntries: 0
     }
   );
 }
@@ -1358,6 +1360,8 @@ interface HzsKhkIncidentDto {
 }
 
 interface MunicipalAlertItem {
+  eventAt?: string;
+  eventValidUntil?: string;
   id: string;
   title: string;
   description?: string;
@@ -3094,6 +3098,8 @@ function municipalAlertItemFromPkrJsonRecord(value: unknown, feed: MunicipalAler
     description,
     link: detailUrl,
     publishedAt: validity.publishedAt ?? fetchedAt,
+    eventAt: validity.publishedAt,
+    eventValidUntil: validity.expiresAt,
     updatedAt: fetchedAt,
     expiresAt: validity.expiresAt ?? addSeconds(fetchedAt, 30 * 60),
     categories,
@@ -3216,6 +3222,9 @@ function municipalAlertItemIntersectsQuery(item: MunicipalAlertItem, feed: Munic
 function mapMunicipalAlertItem(item: MunicipalAlertItem, feed: MunicipalAlertFeedConfig, fetchedAt: string): SafetyFeature {
   const classification = classifyMunicipalAlert(item);
   const observedAt = item.publishedAt ?? item.updatedAt ?? fetchedAt;
+  // Article publication and synthetic cache expiry are not event-validity evidence.
+  const explicitEventInterval = Boolean(item.eventAt && item.eventValidUntil && Date.parse(item.eventAt) < Date.parse(item.eventValidUntil));
+  const notificationEligible = item.geometryBasis === "source_pkr_json" && explicitEventInterval;
   const common = {
     id: `warnings:municipal_alerts:${stableToken(`${feed.id}:${item.id}`)}`,
     layer: "warnings" as const,
@@ -3271,7 +3280,14 @@ function mapMunicipalAlertItem(item: MunicipalAlertItem, feed: MunicipalAlertFee
       schemaVersion: "sim.municipal-alerts.v1",
       sourceAuthority: feed.authorityName,
       geometryBasis: item.geometryBasis,
-      categories: item.categories
+      categories: item.categories,
+      publication: { publishedAt: item.publishedAt, eventAt: item.eventAt ?? null, eventValidUntil: item.eventValidUntil ?? null },
+      notification: {
+        eligible: notificationEligible,
+        informationalOnly: !notificationEligible,
+        validityBasis: explicitEventInterval ? "explicit_event_interval" : "publication_or_snapshot_only",
+        reason: notificationEligible ? "verified_point_and_explicit_event_interval" : "requires_verified_event_location_and_validity"
+      }
     },
     raw: item.raw
   };

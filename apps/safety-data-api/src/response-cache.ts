@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 export interface ManagedResponseCacheOptions {
   ttlMs: number;
   staleIfErrorMs: number;
@@ -17,6 +19,7 @@ export interface ManagedResponseCacheStats {
   evictions: number;
   lastSuccessAt?: string;
   lastErrorAt?: string;
+  unresolvedStaleEntries?: number;
 }
 
 interface CacheEntry<T> {
@@ -24,11 +27,39 @@ interface CacheEntry<T> {
   expiresAtMs: number;
   staleUntilMs: number;
   lastAccessedAtMs: number;
+  lastRefreshFailed: boolean;
+}
+
+interface CacheLoadResult<T> {
+  value: T;
+  staleFallbackUsed: boolean;
+}
+
+interface CacheReadEvidence {
+  staleFallbackUsed: boolean;
+}
+
+const cacheReadEvidence = new AsyncLocalStorage<CacheReadEvidence>();
+
+/** Request-scoped, sanitized evidence. No cache key or provider payload is collected. */
+export async function collectManagedResponseCacheEvidence<T>(operation: () => Promise<T>): Promise<{ value: T; staleFallbackUsed: boolean }> {
+  const evidence: CacheReadEvidence = { staleFallbackUsed: false };
+  const value = await cacheReadEvidence.run(evidence, operation);
+  return { value, staleFallbackUsed: evidence.staleFallbackUsed };
+}
+
+async function unwrapCacheLoad<T>(load: Promise<CacheLoadResult<T>>): Promise<T> {
+  const result = await load;
+  if (result.staleFallbackUsed) {
+    const evidence = cacheReadEvidence.getStore();
+    if (evidence) evidence.staleFallbackUsed = true;
+  }
+  return result.value;
 }
 
 export class ManagedResponseCache<T> {
   private readonly entries = new Map<string, CacheEntry<T>>();
-  private readonly inflight = new Map<string, Promise<T>>();
+  private readonly inflight = new Map<string, Promise<CacheLoadResult<T>>>();
   private readonly counters = {
     hits: 0,
     misses: 0,
@@ -55,7 +86,7 @@ export class ManagedResponseCache<T> {
     const existingInflight = this.inflight.get(key);
     if (existingInflight) {
       this.counters.coalescedHits += 1;
-      return existingInflight;
+      return unwrapCacheLoad(existingInflight);
     }
 
     this.counters.misses += 1;
@@ -64,16 +95,21 @@ export class ManagedResponseCache<T> {
         this.counters.refreshes += 1;
         this.lastSuccessAtMs = Date.now();
         this.store(key, value);
-        return value;
+        return { value, staleFallbackUsed: false };
       })
       .catch((error) => {
         this.counters.errors += 1;
         this.lastErrorAtMs = Date.now();
         const staleEntry = this.entries.get(key);
+        if (staleEntry) {
+          // Only successful replacement of this exact key resolves its failure.
+          // A newer success for a different key is not recovery evidence.
+          staleEntry.lastRefreshFailed = true;
+        }
         if (staleEntry && staleEntry.staleUntilMs > Date.now()) {
           this.counters.staleHits += 1;
           this.touchEntry(key, staleEntry, Date.now());
-          return staleEntry.value;
+          return { value: staleEntry.value, staleFallbackUsed: true };
         }
         throw error;
       })
@@ -82,7 +118,7 @@ export class ManagedResponseCache<T> {
       });
 
     this.inflight.set(key, refresh);
-    return refresh;
+    return unwrapCacheLoad(refresh);
   }
 
   stats(): ManagedResponseCacheStats {
@@ -90,6 +126,7 @@ export class ManagedResponseCache<T> {
       entries: this.entries.size,
       inflight: this.inflight.size,
       maxEntries: Math.max(1, this.options.maxEntries),
+      unresolvedStaleEntries: [...this.entries.values()].filter((entry) => entry.lastRefreshFailed).length,
       ...this.counters
     };
     if (this.lastSuccessAtMs) {
@@ -108,7 +145,8 @@ export class ManagedResponseCache<T> {
       value,
       expiresAtMs: now + Math.max(0, this.options.ttlMs),
       staleUntilMs: now + Math.max(0, this.options.ttlMs) + Math.max(0, this.options.staleIfErrorMs),
-      lastAccessedAtMs: now
+      lastAccessedAtMs: now,
+      lastRefreshFailed: false
     });
     this.evictIfNeeded();
   }
