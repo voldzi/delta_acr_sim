@@ -250,6 +250,59 @@ obnova smí dokončit cache na pozadí; coalescing i provider cadence zůstávaj
 Tato změna omezuje čekání klienta, **nezaručuje** dostupnost všech zdrojů.
 Provider HTTP deadline pokrývá hlavičky i tělo. Viz [ADR 0033](../adr/0033_BOUNDED_SAFETY_NOTIFICATION_SNAPSHOTS.md).
 
+### Omezený timeout a zachované source stáří — nasazení 10.10.2026
+
+- Nasazená revize `219d8b01a7bf882f7c2157055ae8797cae84e4a3` na větvi
+  `codex/crisis-sources-notifications`; image
+  `sim-safety-data-api:crisis-219d8b01a7bf`, ID
+  `sha256:10615c34f3452e18a8b0da43e1becde7b5e368d292bcbf3f038b6e994064c46d`,
+  runtime readback `healthy`. Čistý isolated checkout a `--image-only` režim.
+- Před i po aktivaci ověřen správný X5 UUID a dostatek místa. Jen Safety
+  container/image se změnil; všech deset sledovaných ostatních SIM/COP
+  container ID/image a config hashů zůstalo shodných. Compose/X5/gateway hash,
+  ports, network membership a mounty beze změny; Safety nemá veřejný port.
+  `.env` má práva 600, všechny bytes kromě image selection beze změny.
+  Hash pořadí Safety env array se lišil, ale porovnání hodnot proti nezměněnému
+  Compose a původnímu image prokázalo shodu; pouze pořadí proměnných není invariant.
+- Skutečný COP API → SIM gateway GET bez tokenu/cache-bust/časových hlaviček:
+  celostátní query `bbox=12,48,19,51`, čtyři krizové vrstvy, limit 100,
+  `minSeverity=warning`, `includeStale=false` vrátil studený HTTP 503
+  `SAFETY_NOTIFICATION_INPUT_UNAVAILABLE` za 8 255 ms. Nový 8s load budget
+  ukončil čekání před 15s COP timeoutem; nedokončený refresh není ready snapshot.
+  Jedno pozdější čtení stejného URL po přirozeném dokončení obnovy vrátilo
+  HTTP 200 za 89 ms, `incomplete`, age 181.023 s a nula kandidátů. Známý query
+  limit 100 se nezaměňuje za celostátně úplný/ready vstup; nebyl cache-bust ani
+  vynucený provider refresh.
+- Dvě čtení totožného HZS URL: HTTP 200 / `ready`, latence 123 / 14 ms,
+  původní snapshot `2026-10-10T20:35:12.133Z`, skutečná age
+  `54.657 → 55.026 s`, nový response `generatedAt`, 1 kandidát ze 2 prvků.
+  Obě odpovědi `no-store, max-age=0`, `Pragma: no-cache`, gateway `BYPASS`.
+  Toto není důkaz celostátního pokrytí ani skutečného doručení na zařízení.
+- News HTTP 200 za 10 ms, původní informativní kontrakt zachován;
+  veřejné HTTPS candidates/news 403, privátní scenarios bez autentizace 401.
+  Žádný push ani AI request; stávající auth, cadence, limity a tokeny se neměnily.
+- Hermetické testy 193/193 Safety + 5 deploy + 4 security kontrakt +
+  12 gateway patch; typecheck/build/skeleton/OpenAPI check/validation/lint prošly
+  na Node 24.21.0 / pnpm 10.33.0. Lint má pět známých warningů mimo tuto změnu.
+  Timeout chybového/hung provideru a 300/301s readiness jsou fixture důkazy,
+  nikoli cílené narušení živého poskytovatele. Workspace suite znovu neběžela.
+- Runtime zdroje/build vstupy byly před změnou shodné s nasazenou Safety
+  revizí `1c9c3135ee66`; novější Situation/AI/COP se nepřebuildovaly.
+  Starý immutable image
+  `sha256:6bbe0c651a4e4729761c050a12ab434a2bbbbd3cfdd397c0dc82f252f15afec4`
+  a soukromá záloha
+  `/srv/sim/.deploy-crisis-backups/2026-10-10T20-35-02-457Z-219d8b01a7bf/`
+  jsou zachované. Při nutnosti návratu vrátit pouze Safety image selection,
+  znovu vytvořit jen `safety-data-api` s `--no-deps --no-build` a zvlášť
+  ověřit skutečný starý image, healthy a GET; nepřepsat pozdější config změny
+  celým starým `.env` nebo Compose. Návrat vrací i původní timeout/freshness chybu.
+- COP byl požádán o nezávislý same-URL test z jeho nasazeného validátoru,
+  RAM-only 301s/cached-source-deadline odmítnutí a potvrzení žádného doručení.
+  Společná device/background akceptace zůstává samostatná.
+- Retrieval/reindex CLI v této změně nemohl kontaktovat Chroma server;
+  native režim navíc odmítl replacement repo identity. Použita cílená přímá
+  inspekce; žádný rebuild indexu/serveru se neprováděl.
+
 ### Odpověď není další snapshot cache
 
 Oba přesné GET endpointy (`notifications/candidates`, `context/news`) vracejí
