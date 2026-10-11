@@ -13,6 +13,21 @@ identity, X5 UUID/místo/RAM, shoda resolved Compose a runtime. Aktivovat pouze
 Soukromá 600 záloha a invarianty chrání současné pilotní flags, tokeny/HMAC,
 DB, mounty, porty, sítě a provider cadence. Při cizí změně skončit bez přepsání.
 
+Guard `scripts/deploy-routing-unroutable.mjs` se spouští na hostu Node24 nejprve
+s `--check`, pak s `--apply`. Oba režimy vyžadují `--image`, `--revision`,
+`--expected-old-image-id`, `--expected-routing-source-sha256` a
+`--expected-routing-dist-sha256`; poslední dvě hodnoty patří ověřenému kandidátu.
+Přesný základ tohoto hotfixu je `20a0d961ba4cdb1f100998d7f8e07787dad03327`.
+Guard neprovádí routovací akceptaci a při recreate používá `--pull never`.
+Porovnává také skutečné runtime command/entrypoint/user/healthcheck overrides.
+Nevalidní geometrie, varování a porušení uzávěry mají přednost před typovanou
+chybou snapu; kontrolují se všechny varianty včetně nadbytečných.
+
+Lokální ověření 11.10.2026: 388 testů API prošlo, šest PostgreSQL testů bez
+testovací DB se standardně přeskočilo; typecheck/build/skeleton/OpenAPI
+build/check/validate prošly. OpenAPI lint prošel s 18 existujícími warnings
+podmíněných/otevřených schémat. Nejde o důkaz živé routovací akceptace.
+
 Po restartu se TEC a graph binding obnovují běžnou cestou při respektování
 přetrvávajícího timing/negativní cache: žádný forced fetch nebo mazání cache.
 Po image/health akceptaci ověřit skutečné LOCATION422 na vlastní veřejné fixture

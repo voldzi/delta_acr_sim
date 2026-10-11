@@ -1197,6 +1197,16 @@ export class RoutingService {
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
       if (!native.trip || trips.some((t) => !t) || (native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
         throw new Error("Incomplete or weakened engine request");
+      // Invalid geometry or a breached closure is not a client location error.
+      // Verify every variant before classifying any waypoint snap.
+      for (const t of trips) {
+        if (!t?.legs?.length) throw new Error("Missing engine legs");
+        for (const leg of t.legs) {
+          const shape = decodeValhallaPolyline6(leg.shape ?? "");
+          if (shape.some(([lon, lat]) => lon < -180 || lon > 180 || lat < -90 || lat > 90)) throw new Error("Invalid engine geometry");
+          verifyKnownClosureGeometry(shape, snapshot);
+        }
+      }
       for (const t of trips) {
         assertValhallaRouteWaypointSnaps(
           { trip: t },
@@ -1204,8 +1214,6 @@ export class RoutingService {
           Math.min(25, this.config.routingMaxSnapDistanceM),
           true
         );
-        if (!t?.legs?.length) throw new Error("Missing engine legs");
-        for (const leg of t.legs) verifyKnownClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot);
       }
       let routes = valhallaRoutes(profile, request, native, request.alternatives);
       if (
@@ -1326,14 +1334,25 @@ export class RoutingService {
       if ((native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
         throw new Error("Engine could not apply the exact request without warnings.");
       for (const t of trips) {
+        if (!t?.legs?.length) throw new Error("Missing engine legs");
+        // Check even surplus variants before any input-correctable snap error.
+        for (const leg of t.legs) {
+          const shape = decodeValhallaPolyline6(leg.shape ?? "");
+          if (
+            shape.length < 2 ||
+            shape.some(([lon, lat]) => !Number.isFinite(lon) || !Number.isFinite(lat) || lon < -180 || lon > 180 || lat < -90 || lat > 90)
+          )
+            throw new Error("Invalid engine geometry");
+          verifyClosureGeometry(shape, snapshot, now);
+        }
+      }
+      for (const t of trips) {
         assertValhallaRouteWaypointSnaps(
           { trip: t },
           [request.from, ...(request.via ?? []), request.to],
           Math.min(25, this.config.routingMaxSnapDistanceM),
           true
         );
-        // Check even surplus engine alternatives before limiting the output count.
-        for (const leg of t!.legs ?? []) verifyClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot, now);
       }
       const routes = valhallaRoutes(profile, request, native, request.alternatives);
       if (
@@ -3481,7 +3500,9 @@ async function requestValhallaRoute(
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
-  assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM, !!request.vehicleProfile || rejectUnroutableLocations);
+  // Reviewed road paths validate warnings/geometry/closure exclusions for ALL
+  // variants first, then classify their snaps. Keep legacy/geo behavior intact.
+  if (!rejectUnroutableLocations) assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM, !!request.vehicleProfile);
   return body;
 }
 

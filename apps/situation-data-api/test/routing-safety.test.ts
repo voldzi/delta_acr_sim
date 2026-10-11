@@ -351,6 +351,75 @@ describe("actual strict route pipeline (synthetic engine)", () => {
       expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
     }
   );
+  it("does not reinterpret a distant single-vertex strict shape as an endpoint error", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      const data = reply();
+      data.legs[0]!.shape = encodeValhallaPolyline6([[1, 1]]);
+      return Response.json({ trip: data });
+    });
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+  });
+  it.each(["root", "trip", "alternate"])("keeps a strict %s warning protective ahead of an invalid primary snap", async (location) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      const data: any = { trip: reply(), alternates: [{ trip: reply(true) }] },
+        warnings = [{ code: 500, text: "synthetic omitted restriction" }];
+      data.trip.legs[1].shape = encodeValhallaPolyline6([
+        [14.43, 50.085],
+        [14.44, 50.09],
+        [14.451, 50.1]
+      ]);
+      if (location === "root") data.warnings = warnings;
+      else if (location === "trip") data.trip.warnings = warnings;
+      else data.alternates[0].trip.warnings = warnings;
+      return Response.json(data);
+    });
+    await expect(f.service.route({ ...request(), alternatives: 1 })).rejects.toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+  });
+  it("checks a strict surplus closure breach before classifying an invalid primary snap", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      const primary = reply(),
+        alternate = reply(true);
+      primary.legs[1]!.shape = encodeValhallaPolyline6([
+        [14.43, 50.085],
+        [14.44, 50.09],
+        [14.451, 50.1]
+      ]);
+      alternate.legs[1]!.shape = encodeValhallaPolyline6([
+        [14.43, 50.085],
+        [14.5, 50.1],
+        [14.45, 50.1]
+      ]);
+      return Response.json({ trip: primary, alternates: [{ trip: alternate }] });
+    });
+    await expect(f.service.route({ ...request(), alternatives: 1 })).rejects.toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+  });
+  it("keeps a failed strict route fetch protective without exposing its message or retrying", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      throw new Error("private strict network request detail");
+    });
+    const failure = await f.service.route(request()).catch((error) => error);
+    expect(failure).toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+    expect(failure.message).not.toContain("private strict network request detail");
+    expect(f.fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(["/status", "/route"]);
+  });
+  it.each([200, 400])("keeps invalid strict route JSON on HTTP%s protective rather than inferring 171", async (status) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : new Response('{"error_code":171', { status, headers: { "content-type": "application/json" } })
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+    expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
+  });
   it("exposes the additive profiles capability and exact correlated errors through the actual HTTP app", async () => {
     const f = await fixture(),
       { app, context } = await createApp({ ...(await loadConfig()), enabledSources: [], sharedCacheRedisUrl: undefined });

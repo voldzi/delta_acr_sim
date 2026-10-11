@@ -349,6 +349,90 @@ describe("ordinary route engine fences", () => {
       await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
     }
   });
+  it("does not misclassify a distant single-vertex shape as a client endpoint error", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status") ? Response.json({ version: "3.8.3", tileset_last_modified: tileset }) : Response.json({ trip: trip([[1, 1]]) })
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+  });
+  it("does not classify finite out-of-WGS84 engine geometry as an endpoint error", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({
+            trip: trip([
+              [181, 50],
+              [181.001, 50]
+            ])
+          })
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+  });
+  it.each(["root", "trip", "alternate"])("preserves a protective %s warning even when the primary endpoint snap is invalid", async (location) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      const data: any = reply(),
+        warnings = [{ code: 500, text: "synthetic omitted restriction" }];
+      data.trip = trip([
+        [14.42, 50.08],
+        [14.44, 50.09],
+        [14.451, 50.1]
+      ]);
+      if (location === "root") data.warnings = warnings;
+      else if (location === "trip") data.trip.warnings = warnings;
+      else data.alternates[0].trip.warnings = warnings;
+      return Response.json(data);
+    });
+    await expect(f.service.route({ ...request(), alternatives: 1 })).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+  });
+  it("checks a surplus closure-crossing variant before classifying an invalid primary snap", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({
+            trip: trip([
+              [14.42, 50.08],
+              [14.44, 50.09],
+              [14.451, 50.1]
+            ]),
+            alternates: [
+              {
+                trip: trip([
+                  [14.42, 50.08],
+                  [14.5, 50.1],
+                  [14.45, 50.1]
+                ])
+              }
+            ]
+          })
+    );
+    await expect(f.service.route({ ...request(), alternatives: 1 })).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+  });
+  it("keeps a failed route fetch protective without exposing its message or retrying", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      throw new Error("private network request detail");
+    });
+    const failure = await f.service.route(request()).catch((error) => error);
+    expect(failure).toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+    expect(failure.message).not.toContain("private network request detail");
+    expect(f.fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(["/status", "/route"]);
+  });
+  it.each([200, 400])("keeps invalid route JSON on HTTP%s protective rather than inferring 171", async (status) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : new Response('{"error_code":171', { status, headers: { "content-type": "application/json" } })
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+    expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
+  });
   it("rejects a proven via-point snap outside 25m as a waypoint, not the target", async () => {
     const f = await fixture();
     f.fetchMock.mockImplementation(async (url) =>
