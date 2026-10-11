@@ -22,6 +22,8 @@ documents instead of duplicating flat files. The decision is recorded in
 ## Active Documentation Indexes
 
 - [ADR 0034: bounded search partial-feed recovery](adr/0034_BOUNDED_SEARCH_PARTIAL_FEED_RECOVERY.md)
+- [ADR 0035: řízený pilot Jízdy a rotace službového tokenu](adr/0035_CONTROLLED_DRIVER_MEASUREMENT_PILOT.md)
+- [Runbook 17: produkční pilot Jízdy, retence a mazání](runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md)
 
 - [`00_INDEX.md`](00_INDEX.md)
 - [`product/00_INDEX.md`](product/00_INDEX.md)

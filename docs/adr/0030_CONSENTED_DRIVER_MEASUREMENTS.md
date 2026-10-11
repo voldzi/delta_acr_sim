@@ -51,3 +51,9 @@ only authenticated DELETE and retention cleanup with dedicated credentials;
 it does not enable collection, reads, map matching or traffic promotion.
 Both flags default false. Storage errors retain pending COP deletion and never
 report successful erasure. Keep HMAC/token/database configuration during rollback.
+
+Amendment 11 Oct 2026: the user explicitly authorized a restricted, consented
+shadow-only pilot to perform physical acceptance. COP must enforce a verified
+OIDC subject allowlist; consent is still separate. The paired bearer rotation
+preserves both HMAC identities and historical deletion. Broad rollout and live
+ETA promotion remain unapproved. See [ADR 0035](0035_CONTROLLED_DRIVER_MEASUREMENT_PILOT.md).

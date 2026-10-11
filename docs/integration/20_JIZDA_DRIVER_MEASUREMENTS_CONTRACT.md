@@ -6,6 +6,14 @@ Závazné schéma: `openapi/openapi.json`; zdroj fragmentu
 `openapi/fragments/driver-measurements-v1.openapi.json`.
 Rozhodnutí: [ADR 0030](../adr/0030_CONSENTED_DRIVER_MEASUREMENTS.md).
 
+Provozní doplnění 11. 10. 2026: službový bearer COP–SIM byl párově vyměněn,
+HMAC identity a mazání starších příspěvků zachované. Uživatel schválil omezený
+dobrovolný pilot pro fyzické ověření, nikoli plošný příjem nebo využití v ETA.
+COP musí vynucovat allowlist ověřeného OIDC subject a stále samostatný souhlas.
+Samotné serverové ON neprokazuje fyzické ověření. Stav a návrat jsou v
+[runbooku 17](../runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md) a
+[ADR 0035](../adr/0035_CONTROLLED_DRIVER_MEASUREMENT_PILOT.md).
+
 ## Účel a skutečné využití
 
 SIM přiřadí krátký úsek **naměřených** GPS bodů k aktuálním směrovým hranám
@@ -245,10 +253,14 @@ oddělenou správcovskou retenční/deletion politiku, nejsou pokryty pouhým TT
 1. Založit vyhrazenou DB a runtime účet přes HAProxy, aplikovat migraci.
 2. Doplnit bezpečně `DRIVER_MEASUREMENTS_*` proměnné podle `.env.example`.
 3. Nasadit pouze situation-data-api, příjem ještě ponechat `false`.
-4. Společně COP/Jízda/SIM ověřit souhlas, minimalizaci, outbox/retry, skutečný
-   payload a odvolání. Teprve potom `DRIVER_MEASUREMENTS_ENABLED=true` pro pilot.
-5. Ověřit syntetické dávky a GPS pilot, chráněné agregáty, health a běžné
-   mapy/routing; neslibovat živou optimalizaci ETA.
+4. Pro výslovně schválený omezený pilot podle ADR 0035 nejdříve nasadit
+   fail-closed COP filtr s jediným serverem ověřeným účtem a vypnutým příjmem.
+   Pak zapnout `DRIVER_MEASUREMENTS_ENABLED=true`, ověřit syntetické dávky
+   a mazání a teprve následně povolit COP příjem pro tento účet.
+5. Společně COP/Jízda/SIM fyzicky ověřit samostatný souhlas, minimalizaci,
+   outbox/retry, skutečný payload a odvolání; zachovat chráněné agregáty,
+   health a běžné mapy/routing. Tento test je gate pro rozšíření pilotu,
+   nikoli důsledek serverového ON; neslibovat živou optimalizaci ETA.
 6. Návrat: `DRIVER_MEASUREMENTS_ENABLED=false`,
    `DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true`, restart pouze situation-data-api;
    zastavit COP odesílání, zachovat DB/token/HMAC pro mazání a retenční úklid.
@@ -303,8 +315,11 @@ Integrační PostgreSQL testy: opakovatelná migrace, omezený runtime účet,
 transakční souběh, deduplikace intervalů/ETA, prahy souhrnů, oddělení datasetů,
 expirace, kaskádové smazání a absence GPS polí v uloženém receipt.
 
-Před aktivací chybí reálná akceptace COP/Jízdy, produkční DB/klíče a zátěžový
-test. Před využitím do navigace navíc nezávislé vzorky souběžných vozovek,
+K 11. 10. 2026 produkční DB a omezený runtime existují; službový bearer
+byl párově vyměněn se zachováním HMAC a historického mazání. Reálná akceptace
+COP/Jízdy na iPhonu a zátěžový test zůstávají nesplněné; schválený jednoúčtový
+pilot k jejich provedení se řídí ADR 0035 a runbookem 17. Před využitím do
+navigace navíc nezávislé vzorky souběžných vozovek,
 opakovaného průjezdu, kolon, měst a dálnic a kontrolovaný experiment ETA.
 Zdroj algoritmického rozhraní:
 [oficiální Valhalla Map Matching](https://valhalla.github.io/valhalla/api/map-matching/).

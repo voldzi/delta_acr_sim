@@ -8,6 +8,11 @@
 - Secrets se načítají přes environment nebo secret store.
 - Logy a audity ukládají pouze reference nebo hash, nikdy hodnotu secretu.
 - Rotace tokenu nesmí vyžadovat změnu kódu.
+- Službový bearer COP–SIM pro dobrovolná měření je oddělený od obou HMAC
+  identit. Jeho párová rotace nesmí změnit dohledání nebo smazání starších
+  příspěvků. Nový token je jen v chráněných produkčních secrets; klient jej
+  nikdy nedostává. Při rollbacku se neobnovuje kompromitovaný starý bearer.
+  [Postup a ověření](../runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md).
 - `TPEG2_API_TOKEN` je upstream serverový credential: smí být pouze v chráněném
   produkčním prostředí situation-data-api. Nesmí se objevit v katalogu,
   normalizovaných features, URL logu, chybové odpovědi ani v raw projekci.
