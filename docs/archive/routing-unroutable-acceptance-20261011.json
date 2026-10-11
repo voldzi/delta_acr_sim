@@ -1,0 +1,95 @@
+{
+  "scope": "SIM routing location error classification; no client or navigation policy activation",
+  "deployedRevision": "03b842e005f103bb02d622bb4fc95f27fbea9572",
+  "baseRevision": "20a0d961ba4cdb1f100998d7f8e07787dad03327",
+  "image": "sim-situation-data-api:routing-location-03b842e005f1",
+  "imageId": "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965",
+  "previousImageId": "sha256:60d66a8083e4df55ea5eb8d8713c1846556a96162cd4fce1b70600ffecf89fc4",
+  "routingSourceSha256": "21710e48b7cc338946796ac49e33c043ecc2506b471598fdbec8be5d35da9928",
+  "routingDistSha256": "00787bf4b9db388e6fa7f046a270c7bbb2ab13880b818559c89a4b8515f9b249",
+  "deployment": {
+    "host": "docker.home.cz",
+    "service": "situation-data-api",
+    "health": "healthy",
+    "restartCount": 0,
+    "onlySdaChanged": true,
+    "runtimeFilesExceptRoutingUnchanged": true,
+    "runtimeEnvironmentMountsNetworksAndCommandPreserved": true,
+    "pilotIntakePreservedEnabled": true,
+    "revocationPreservedEnabled": true,
+    "measurementApplicationMode": "shadow_only",
+    "secretsAndDatabaseConfigurationPreserved": true,
+    "privateRollbackBackup": "/srv/sim/.deploy-routing-unroutable-backups/2026-10-11T11-06-08.518Z-03b842e005f1-447783",
+    "rollbackOwnershipGuard": true
+  },
+  "localValidation": {
+    "apiTestsPassed": 388,
+    "postgresTestsSkippedWithoutTestDatabase": 6,
+    "typecheck": "passed",
+    "build": "passed",
+    "skeleton": "passed",
+    "openapiBuildCheckValidate": "passed",
+    "openapiLint": "passed with 18 existing schema warnings",
+    "independentReview": "passed after geometry-before-snap and runtime-config guard repairs",
+    "chromaReindex": "unavailable: native CLI refuses non-selected exact-base checkout"
+  },
+  "liveSim": {
+    "fixtures": "own public synthetic anchors only; no user GPS or partner records retained",
+    "unroutable": {
+      "at": "2026-10-11T11:07:08.372Z",
+      "http": 422,
+      "code": "ROUTING_LOCATION_NOT_ROUTABLE",
+      "latencyMs": 2268,
+      "routeCount": 0,
+      "routeProofPresent": false,
+      "locationIndexInferred": false
+    },
+    "routable": {
+      "at": "2026-10-11T11:07:08.938Z",
+      "http": 200,
+      "latencyMs": 518,
+      "routeCount": 1,
+      "positiveDistanceAndDuration": true,
+      "routingDataset": "sim-routing-2026-10-11-1791687606",
+      "knownClosureState": "applied",
+      "approvedClosureCount": 1,
+      "trafficState": "warming",
+      "currentSpeedsNotAcceptedWhileWarming": true
+    },
+    "correlationContract": "error.correlationId; verified in HTTP contract tests; initial smoke extractor incorrectly inspected top-level field"
+  },
+  "cop": {
+    "testAndDocumentationRevision": "bd6c3c5983bc3aed93cdcfd010b38ceb2c274382",
+    "targetedTestsPassed": 26,
+    "newBoundaryTests": 16,
+    "anonymous401ProviderCalls": 0,
+    "runtimeRecreated": false,
+    "liveAdapter": {
+      "at": "2026-10-11T11:09:44.417Z",
+      "status": "passed",
+      "http": 422,
+      "code": "ROUTING_LOCATION_NOT_ROUTABLE",
+      "latencyMs": 213,
+      "upstreamCalls": 1,
+      "sameCapturedErrorCompiledEnvelopeCheck": "passed: own COP correlation, only error fields, no routes/proof/index/target claim",
+      "publicNativeAuthenticationFlowTested": false,
+      "realIphoneJourneyTested": false,
+      "rawRequestOrResponseEmitted": false
+    }
+  },
+  "jizda": {
+    "handoffSent": true,
+    "automaticSnapOrAppleFallbackAuthorized": false,
+    "physicalJourneyAcceptance": "separate client-owned gate"
+  },
+  "preservedSafety": [
+    "maximum 25 metre reviewed endpoint tolerance",
+    "vehicle profile and reviewed closure requirements",
+    "warnings, malformed geometry and closure breaches remain protective errors",
+    "all variants checked before location error classification",
+    "graph/source/expiry/proof fences",
+    "no route, proof, fallback or provider text in location rejection",
+    "only HTTP400 numeric171 on reviewed route paths classified as neutral LOCATION; no failing-point index inferred",
+    "no measurement-derived live speeds or ETA activation"
+  ]
+}
