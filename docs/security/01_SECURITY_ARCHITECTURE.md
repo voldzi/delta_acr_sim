@@ -1,5 +1,16 @@
 # Security architecture
 
+## Fail-closed routing location errors
+
+Reviewed road routing maps direct Valhalla `/route` HTTP 400 + numeric 171
+to 422 `ROUTING_LOCATION_NOT_ROUTABLE`, not an availability exception. It
+reveals no provider text or presumed point index. Verified over-tolerance
+geometry yields target/waypoint-specific 422. No route/proof, dropped vehicle
+or closure requirement, widened tolerance or automatic fallback is allowed.
+Geometry/closure violations and outages retain protective errors. No extra
+provider call, public port, secret, GPS logging or traffic/measurement writer
+is introduced. See [ADR 0036](../adr/0036_FAIL_CLOSED_ROUTING_LOCATION_ERRORS.md).
+
 **Status:** Baseline dokumentace
 
 ## Cíle

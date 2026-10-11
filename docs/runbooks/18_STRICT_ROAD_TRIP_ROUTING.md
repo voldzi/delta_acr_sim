@@ -1,5 +1,29 @@
 # 18. Přísný routing Jízda–COP–SIM
 
+## Omezený hotfix klasifikace bodů (ADR 0036)
+
+LOCATION422 není outage ani důkaz chybného cíle. TARGET/WAYPOINT vyžadují
+ověřený geometrický index. Zachovat 25m toleranci, profil, uzávěry a proof;
+reviews.json ručně neopravovat. Diagnostika jen status/code/correlation,
+dataset/counts/latence, nikoli GPS nebo provider text.
+
+Release: přesný přijatý SDA základ + allowlist diffu, testy/OpenAPI, source/dist
+identity, X5 UUID/místo/RAM, shoda resolved Compose a runtime. Aktivovat pouze
+`situation-data-api` se stejnými overlays a explicitním image override.
+Soukromá 600 záloha a invarianty chrání současné pilotní flags, tokeny/HMAC,
+DB, mounty, porty, sítě a provider cadence. Při cizí změně skončit bez přepsání.
+
+Po restartu se TEC a graph binding obnovují běžnou cestou při respektování
+přetrvávajícího timing/negativní cache: žádný forced fetch nebo mazání cache.
+Po image/health akceptaci ověřit skutečné LOCATION422 na vlastní veřejné fixture
+a 200 s uzávěrou/datasetem na car-road-correlated fixture; potom COP forward.
+Healthy není routovací akceptace. Nezapojuje se měření do živých rychlostí/ETA.
+
+Rollback vrací původní image při zachování všech aktuálních flags a mazání.
+Automatický návrat smí měnit jen vlastní dosud nezměněný candidate env/image
+při shodě Compose hashů; jinak `requires_attention`. Starý obraz do akceptace
+nemazat. Pro crash recovery zachovat soukromou original env a image identity.
+
 ## Mapované vehicleProfile (ADR 0033)
 
 Samostatná aditivní větev podporuje čtyři běžné profily bez aktivace strict

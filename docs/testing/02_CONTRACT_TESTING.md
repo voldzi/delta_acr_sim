@@ -31,3 +31,14 @@ closure mimo straight OD koridor, expiry/revocation/direction/revision/graph
 změny za běhu, chyby bez fallbacku a skutečné 26/27 roundabout metadata.
 Mock engine není geographic/live restriction acceptance. Testovací fixtures
 nejsou skutečné uzavírky a nesmějí se nahrát do běžného provideru.
+
+## Neroutovatelné body
+
+Known-closure a strict testy ověřují plain/mapped/strict route i alternatives:
+jen přímé HTTP 400 `/route` + číselné 171 => neutrální LOCATION422; domnělý
+upstream index se ignoruje. Bez dalšího route/locate/fallbacku. Ověřené snaps
+za 25m mají TARGET/WAYPOINT422, také surplus varianty. Transport, 5xx s 171,
+string kód, vadný JSON, warnings, chybějící geometrie a closure crossing zůstávají
+ochranné. Status/trace nedostávají tuto klasifikaci; legacy se nemění. HTTP
+test zachová correlation ID a nevrací raw provider text, trasu ani proof.
+Živý syntetický COP test nenahrazuje fyzickou iPhone akceptaci.

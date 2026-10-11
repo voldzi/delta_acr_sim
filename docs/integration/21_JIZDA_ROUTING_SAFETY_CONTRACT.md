@@ -215,6 +215,30 @@ chyba: 503 `ROUTING_KNOWN_CLOSURES_UNAVAILABLE` nebo
 `ROUTING_KNOWN_CLOSURES_ENGINE_FAILED`; budoucí odjezd: 422
 `ROUTING_KNOWN_CLOSURES_UNSUPPORTED`. Žádné přímé náhradní volání.
 
+### Neroutovatelné body (ADR 0036)
+
+Pro revidované známé uzávěry a strict `trip`, v `route` i `alternatives`,
+se přímé Valhalla `/route` HTTP 400 s číselným `error_code=171` překládá na
+422 `ROUTING_LOCATION_NOT_ROUTABLE`. Některý bod nelze korelovat na aktuální
+graf pro tento profil/toleranci. Neprokazuje chybu cíle ani nedostupnost enginu.
+Valhalla 3.8.3 nevrací index; SIM neparsuje provider text a ignoruje domnělý
+`location_index`. Veřejná zpráva je pevná, bez upstream textu či souřadnic.
+
+Při ověřené vrácené geometrii a snapu za tolerancí je kód 422
+`ROUTING_TARGET_NOT_ROUTABLE` pro cíl nebo `ROUTING_WAYPOINT_NOT_ROUTABLE`
+pro start/mezibod. Platí i pro surplus varianty. Nečitelná geometrie, warnings,
+průnik uzávěry, timeout, HTTP 5xx, vadný JSON/kód a 171 z `/status` zůstávají
+ochrannými chybami. Trace failure zachovává explicitní unavailable attributes.
+Legacy a walking/bicycle se nemění.
+
+COP předá HTTP status a přesný `error.code`; klientovi vrací vlastní
+`error.correlationId` z COP požadavku (nepředpokládat shodu s ID SIM). Žádná 422
+není transient outage ani povolení Apple fallbacku. Jízda může požádat o
+výslovnou opravu bodu/příjezdového místa; poslední míle mimo ověřenou geometrii
+není sjízdná trasa. Bez automatického locate, retry, zvětšení 25m limitu,
+odebrání profilu/uzávěr nebo vymyšlené final leg. Chyba neobsahuje trasu/proof;
+předchozí trasa si zachová jen původní platnost a zřetelný failure/stale stav.
+
 Directed road attributes: ověřené přesné opakování prvního vertexu v
 Valhalla edge_walk může sdílet index0. Nejde o obecné slučování blízkých
 bodů/loopů; interior repeats stále potřebují vlastní forward index. Není-li

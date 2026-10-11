@@ -371,9 +371,18 @@ def build_document
   %w[trip vehicle].each { |name| mapped_properties.delete(name) }
   mapped_properties.merge!({ "profileId" => { "const" => "car" }, "vehicleProfile" => { "$ref" => "#/components/schemas/MappedRoadProfileProfile" }, "alternatives" => { "type" => "integer", "minimum" => 1, "maximum" => 3 } })
   trip_request["allOf"] << { "if" => { "required" => ["vehicleProfile"] }, "then" => { "required" => %w[from to vehicleProfile], "properties" => mapped_properties, "additionalProperties" => false } }
+  routing_unprocessable = JSON.parse(JSON.generate(doc["components"]["responses"]["SituationDataProblem"]))
+  routing_unprocessable["description"] = "Fail-closed routing rejection, not an availability/fallback signal. In reviewed known-closure and strict road-trip paths, direct Valhalla /route HTTP 400 with numeric error_code 171 returns ROUTING_LOCATION_NOT_ROUTABLE: one or more locations cannot be correlated for the requested profile/tolerance; the engine does not identify which point. A verified returned-shape snap beyond tolerance returns ROUTING_TARGET_NOT_ROUTABLE for the destination or ROUTING_WAYPOINT_NOT_ROUTABLE for origin/via. Other unsupported safety/profile requests also use 422. No route, assessment, automatic snapping, widened tolerance, fabricated final leg, profile downgrade or provider fallback. Legacy and walking/bicycle contracts are unchanged."
+  routing_unprocessable["content"]["application/json"]["examples"] = {
+    "locationNotRoutable" => { "value" => { "error" => { "code" => "ROUTING_LOCATION_NOT_ROUTABLE", "message" => "One or more requested locations could not be connected to the road network for this profile within the accepted tolerance; no fallback was used.", "correlationId" => "synthetic-routing-location-error" } } },
+    "targetNotRoutable" => { "value" => { "error" => { "code" => "ROUTING_TARGET_NOT_ROUTABLE", "message" => "Requested coordinate exceeds the accepted endpoint tolerance for this route; no fabricated final leg or profile downgrade.", "correlationId" => "synthetic-routing-target-error" } } },
+    "waypointNotRoutable" => { "value" => { "error" => { "code" => "ROUTING_WAYPOINT_NOT_ROUTABLE", "message" => "Requested coordinate exceeds the accepted endpoint tolerance for this route; no fabricated final leg or profile downgrade.", "correlationId" => "synthetic-routing-waypoint-error" } } }
+  }
+  doc["components"]["responses"]["SituationDataRoutingUnprocessable"] = routing_unprocessable
   %w[route alternatives].each do |operation|
     responses = doc["paths"]["/situation-data/api/v1/routing/#{operation}"]["post"]["responses"]
     %w[400 422 502 503].each { |status| responses[status] = { "$ref" => "#/components/responses/SituationDataProblem" } unless responses.key?(status) }
+    responses["422"] = { "$ref" => "#/components/responses/SituationDataRoutingUnprocessable" }
   end
   # Preserve the active traffic timing contract instead of its archived wording.
   doc["components"]["schemas"]["SituationDataTpeg2SourceTiming"]["description"] = "Aggregate dynamic-provider timing. Conditional HTTP 304 does not make unchanged observations fresh. nextRefreshAt respects the configured upstream and monotonic minimum interval; opted-in adaptive Last-Modified scheduling may only delay the next request and never changes source observation or expiry."

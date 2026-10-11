@@ -3918,7 +3918,7 @@
             "$ref": "#/components/responses/SituationDataProblem"
           },
           "422": {
-            "$ref": "#/components/responses/SituationDataProblem"
+            "$ref": "#/components/responses/SituationDataRoutingUnprocessable"
           },
           "503": {
             "$ref": "#/components/responses/SituationDataProblem"
@@ -3961,7 +3961,7 @@
             "$ref": "#/components/responses/SituationDataProblem"
           },
           "422": {
-            "$ref": "#/components/responses/SituationDataProblem"
+            "$ref": "#/components/responses/SituationDataRoutingUnprocessable"
           },
           "503": {
             "$ref": "#/components/responses/SituationDataProblem"
@@ -23001,6 +23001,61 @@
                     "correlationId": {
                       "type": "string"
                     }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "SituationDataRoutingUnprocessable": {
+        "description": "Fail-closed routing rejection, not an availability/fallback signal. In reviewed known-closure and strict road-trip paths, direct Valhalla /route HTTP 400 with numeric error_code 171 returns ROUTING_LOCATION_NOT_ROUTABLE: one or more locations cannot be correlated for the requested profile/tolerance; the engine does not identify which point. A verified returned-shape snap beyond tolerance returns ROUTING_TARGET_NOT_ROUTABLE for the destination or ROUTING_WAYPOINT_NOT_ROUTABLE for origin/via. Other unsupported safety/profile requests also use 422. No route, assessment, automatic snapping, widened tolerance, fabricated final leg, profile downgrade or provider fallback. Legacy and walking/bicycle contracts are unchanged.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "examples": {
+              "locationNotRoutable": {
+                "value": {
+                  "error": {
+                    "code": "ROUTING_LOCATION_NOT_ROUTABLE",
+                    "message": "One or more requested locations could not be connected to the road network for this profile within the accepted tolerance; no fallback was used.",
+                    "correlationId": "synthetic-routing-location-error"
+                  }
+                }
+              },
+              "targetNotRoutable": {
+                "value": {
+                  "error": {
+                    "code": "ROUTING_TARGET_NOT_ROUTABLE",
+                    "message": "Requested coordinate exceeds the accepted endpoint tolerance for this route; no fabricated final leg or profile downgrade.",
+                    "correlationId": "synthetic-routing-target-error"
+                  }
+                }
+              },
+              "waypointNotRoutable": {
+                "value": {
+                  "error": {
+                    "code": "ROUTING_WAYPOINT_NOT_ROUTABLE",
+                    "message": "Requested coordinate exceeds the accepted endpoint tolerance for this route; no fabricated final leg or profile downgrade.",
+                    "correlationId": "synthetic-routing-waypoint-error"
                   }
                 }
               }

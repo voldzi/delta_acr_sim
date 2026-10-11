@@ -743,6 +743,7 @@ interface ValhallaManeuver {
 
 interface ValhallaRouteRequestOptions {
   maxSnapDistanceM?: number;
+  rejectUnroutableLocations?: boolean;
   excludePolygons?: Array<Array<[number, number]>>;
   alternates?: number;
   linearCostFactors?: ValhallaLinearCostFactor[];
@@ -1190,6 +1191,7 @@ export class RoutingService {
       const native = await requestValhallaRoute(this.config, profile, request, undefined, {
         liveSpeeds,
         maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
+        rejectUnroutableLocations: true,
         excludePolygons: snapshot.closures.map((c) => c.polygon)
       });
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
@@ -1200,7 +1202,7 @@ export class RoutingService {
           { trip: t },
           [request.from, ...(request.via ?? []), request.to],
           Math.min(25, this.config.routingMaxSnapDistanceM),
-          !!request.vehicleProfile
+          true
         );
         if (!t?.legs?.length) throw new Error("Missing engine legs");
         for (const leg of t.legs) verifyKnownClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot);
@@ -1314,6 +1316,7 @@ export class RoutingService {
       const native = await requestValhallaRoute(this.config, profile, request, undefined, {
         liveSpeeds,
         maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
+        rejectUnroutableLocations: true,
         excludePolygons: activeClosures(snapshot, now).map((c) => c.polygon)
       });
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
@@ -1323,7 +1326,12 @@ export class RoutingService {
       if ((native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
         throw new Error("Engine could not apply the exact request without warnings.");
       for (const t of trips) {
-        assertValhallaRouteWaypointSnaps({ trip: t }, [request.from, ...(request.via ?? []), request.to], Math.min(25, this.config.routingMaxSnapDistanceM));
+        assertValhallaRouteWaypointSnaps(
+          { trip: t },
+          [request.from, ...(request.via ?? []), request.to],
+          Math.min(25, this.config.routingMaxSnapDistanceM),
+          true
+        );
         // Check even surplus engine alternatives before limiting the output count.
         for (const leg of t!.legs ?? []) verifyClosureGeometry(decodeValhallaPolyline6(leg.shape ?? ""), snapshot, now);
       }
@@ -3465,11 +3473,15 @@ async function requestValhallaRoute(
       turn_lanes: true
     }
   };
-  const body = await requestValhallaJson<ValhallaRouteResponse>(config, "/route", payload);
+  // Only direct fail-closed road requests use the client-correctable location
+  // error. Auxiliary cost-factor points and legacy/geo routing keep their
+  // existing error contracts. No extra locate, retry or fallback is performed.
+  const rejectUnroutableLocations = options.rejectUnroutableLocations === true && !options.linearCostFactors?.length;
+  const body = await requestValhallaJson<ValhallaRouteResponse>(config, "/route", payload, "POST", rejectUnroutableLocations);
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
-  assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM, !!request.vehicleProfile);
+  assertValhallaRouteWaypointSnaps(body, orderedLocations, snapLimitM, !!request.vehicleProfile || rejectUnroutableLocations);
   return body;
 }
 
@@ -3809,7 +3821,13 @@ function datasetAgeSeconds(dataset: ExactRoutingDataset, observedAt: string): nu
   return Math.max(0, Math.floor((Date.parse(observedAt) - Date.parse(dataset.builtAt)) / 1000));
 }
 
-async function requestValhallaJson<T>(config: SituationDataConfig, endpoint: string, payload?: unknown, method: "GET" | "POST" = "POST"): Promise<T> {
+async function requestValhallaJson<T>(
+  config: SituationDataConfig,
+  endpoint: string,
+  payload?: unknown,
+  method: "GET" | "POST" = "POST",
+  rejectUnroutableLocations = false
+): Promise<T> {
   const baseUrl = config.valhallaBaseUrl;
   if (!baseUrl) {
     throw new Error("VALHALLA_BASE_URL is not configured.");
@@ -3824,7 +3842,16 @@ async function requestValhallaJson<T>(config: SituationDataConfig, endpoint: str
     body: payload === undefined ? undefined : JSON.stringify(payload),
     signal: AbortSignal.timeout(config.requestTimeoutMs)
   });
-  const body = (await response.json().catch(() => ({}))) as T & { error?: string; status_message?: string };
+  const body = (await response.json().catch(() => ({}))) as T & { error?: string; error_code?: number; status_message?: string };
+  if (rejectUnroutableLocations && endpoint === "/route" && response.status === 400 && body?.error_code === 171) {
+    // Valhalla 3.8.3 reports correlation failure without a location index. Do
+    // not guess TARGET/WAYPOINT from provider text or expose that raw text.
+    throw new RoutingError(
+      422,
+      "ROUTING_LOCATION_NOT_ROUTABLE",
+      "One or more requested locations could not be connected to the road network for this profile within the accepted tolerance; no fallback was used."
+    );
+  }
   if (!response.ok) {
     throw new Error(body.error ?? body.status_message ?? `HTTP ${response.status} from Valhalla.`);
   }
@@ -4040,7 +4067,7 @@ function assertValhallaRouteWaypointSnaps(
   response: ValhallaRouteResponse,
   locations: RoutingCoordinate[],
   maxSnapDistanceM: number,
-  mappedProfile = false
+  rejectUnroutableLocations = false
 ): void {
   const legs = response.trip?.legs ?? [];
   if (legs.length !== locations.length - 1) {
@@ -4057,11 +4084,11 @@ function assertValhallaRouteWaypointSnaps(
     const requested = locations[index]!;
     const distanceM = haversineMeters([requested.lon, requested.lat], snapped[index]!);
     if (distanceM > maxSnapDistanceM) {
-      if (mappedProfile)
+      if (rejectUnroutableLocations)
         throw new RoadTripError(
           422,
           index === locations.length - 1 ? "ROUTING_TARGET_NOT_ROUTABLE" : "ROUTING_WAYPOINT_NOT_ROUTABLE",
-          "Requested coordinate exceeds accepted mapped endpoint tolerance; no fabricated final leg or profile downgrade."
+          "Requested coordinate exceeds the accepted endpoint tolerance for this route; no fabricated final leg or profile downgrade."
         );
       throw new Error(`Valhalla waypoint ${index} snap ${Math.round(distanceM)} m exceeds configured threshold ${Math.round(maxSnapDistanceM)} m.`);
     }

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import supertest from "supertest";
+import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { RoutingService, encodeValhallaPolyline6 } from "../src/routing-service.js";
 import { canonicalRoutingHash } from "../src/routing-safety.js";
@@ -200,6 +202,201 @@ describe("known closure publisher", () => {
   });
 });
 describe("ordinary route engine fences", () => {
+  it.each(["route", "alternatives"] as const)(
+    "returns a neutral 422 for a typed HTTP400 location rejection on %s without locating or retrying",
+    async (method) => {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async (url, init) => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        f.payloads.push(JSON.parse(String(init?.body)));
+        return Response.json({ error_code: 171, error: "private upstream location detail", location_index: 1 }, { status: 400 });
+      });
+      await expect(f.service[method](request())).rejects.toMatchObject({ status: 422, code: "ROUTING_LOCATION_NOT_ROUTABLE" });
+      expect(f.payloads).toHaveLength(1);
+      expect(f.payloads[0].locations.map((p: any) => [p.radius, p.search_cutoff])).toEqual([
+        [25, 25],
+        [25, 25]
+      ]);
+      expect(f.payloads[0].exclude_polygons).toEqual([polygon]);
+      expect(f.fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(["/status", "/route"]);
+    }
+  );
+  it.each([undefined, 0, 1, 2, -1, "1", 1.5, { value: 1 }])("never trusts an upstream location_index %j to identify the requested endpoint", async (index) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json(
+            { error_code: 171, error: "No suitable edges near location", ...(index === undefined ? {} : { location_index: index }) },
+            { status: 400 }
+          )
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 422, code: "ROUTING_LOCATION_NOT_ROUTABLE" });
+  });
+  it.each([200, 401, 403, 404, 429, 500, 502, 503])("does not classify HTTP%s with a spoofed 171 as a route location error", async (status) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({ error_code: 171, error: "private upstream location detail" }, { status })
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+    expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
+  });
+  it.each([undefined, "171", 170, 171.5, null, [171], { code: 171 }])(
+    "does not infer an endpoint rejection from malformed or other error_code %j",
+    async (code) => {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async (url) =>
+        String(url).endsWith("/status")
+          ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+          : Response.json({ error: "No suitable edges near location", ...(code === undefined ? {} : { error_code: code }) }, { status: 400 })
+      );
+      await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+    }
+  );
+  it("does not reinterpret a status error as a route endpoint rejection", async () => {
+    const f = await fixture();
+    f.fetchMock.mockResolvedValue(Response.json({ error_code: 171, error: "private status detail" }, { status: 400 }));
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+    expect(f.fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it("keeps an attribute endpoint error advisory rather than classifying the request location", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      if (String(url).endsWith("/trace_attributes")) return Response.json({ error_code: 171, error: "private trace detail" }, { status: 400 });
+      return Response.json(reply());
+    });
+    const result = await f.service.route({ ...request(), includeRoadAttributes: true });
+    expect(result.routes).toHaveLength(1);
+    expect(result.routes.every((route) => route.roadAttributes?.state === "unavailable")).toBe(true);
+    expect(result.routes.every((route) => route.knownClosures?.state === "applied")).toBe(true);
+  });
+  it.each(["route", "alternatives"] as const)("keeps mapped-profile constraints on a typed location rejection from %s", async (method) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      f.payloads.push(JSON.parse(String(init?.body)));
+      return Response.json({ error_code: 171 }, { status: 400 });
+    });
+    await expect(
+      f.service[method]({
+        ...request(),
+        vehicleProfile: { version: "sim-mapped-road-profile-v1", intent: "car", coverageAcknowledged: "mapped_restrictions_incomplete" }
+      })
+    ).rejects.toMatchObject({ status: 422, code: "ROUTING_LOCATION_NOT_ROUTABLE" });
+    expect(f.payloads).toHaveLength(1);
+    expect(f.payloads[0].costing_options.auto.ignore_access).toBe(false);
+    expect(f.payloads[0].exclude_polygons).toEqual([polygon]);
+  });
+  it.each(["route", "alternatives"] as const)("exposes only the correlated typed error without raw engine text or proof through HTTP %s", async (endpoint) => {
+    const f = await fixture(),
+      { app, context } = await createApp({ ...(await loadConfig()), enabledSources: [], sharedCacheRedisUrl: undefined });
+    context.routing = f.service;
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({ error_code: 171, error: "private upstream location detail" }, { status: 400 })
+    );
+    try {
+      const response = await supertest(app).post(`/api/v1/routing/${endpoint}`).set("x-correlation-id", "synthetic-unroutable-contract").send(request());
+      expect(response.status).toBe(422);
+      expect(response.body.code ?? response.body.error?.code).toBe("ROUTING_LOCATION_NOT_ROUTABLE");
+      expect(JSON.stringify(response.body)).toContain("synthetic-unroutable-contract");
+      expect(JSON.stringify(response.body)).not.toContain("private upstream location detail");
+      expect(response.body.routes).toBeUndefined();
+      expect(response.body.knownClosures).toBeUndefined();
+      expect(response.body.assessment).toBeUndefined();
+    } finally {
+      await context.driverMeasurements.close();
+    }
+  });
+  it.each(["start", "target", "surplus-start", "surplus-target"])(
+    "classifies a proven %s shape snap outside 25m without accepting any variant",
+    async (position) => {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async (url) => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        const data = reply(),
+          shape: Array<[number, number]> = [
+            [14.42, 50.08],
+            [14.44, 50.09],
+            [14.45, 50.1]
+          ];
+        if (position.endsWith("start")) shape[0] = [14.419, 50.08];
+        else shape[2] = [14.451, 50.1];
+        if (position.startsWith("surplus")) data.alternates[0]!.trip = trip(shape);
+        else data.trip = trip(shape);
+        return Response.json(data);
+      });
+      await expect(f.service.route({ ...request(), alternatives: 1 })).rejects.toMatchObject({
+        status: 422,
+        code: position.endsWith("target") ? "ROUTING_TARGET_NOT_ROUTABLE" : "ROUTING_WAYPOINT_NOT_ROUTABLE"
+      });
+      expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
+    }
+  );
+  it("keeps missing or invalid shape geometry a protective engine failure", async () => {
+    for (const shape of [undefined, "", null, 123]) {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async (url) => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        return Response.json({
+          trip: { status: 0, summary: { length: 2, time: 100 }, legs: [{ ...(shape === undefined ? {} : { shape }), summary: { length: 2, time: 100 } }] }
+        });
+      });
+      await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+    }
+  });
+  it("rejects a proven via-point snap outside 25m as a waypoint, not the target", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({
+            trip: {
+              status: 0,
+              summary: { length: 2, time: 100 },
+              legs: [
+                {
+                  shape: encodeValhallaPolyline6([
+                    [14.42, 50.08],
+                    [14.431, 50.085]
+                  ]),
+                  summary: { length: 1, time: 50 },
+                  maneuvers: []
+                },
+                {
+                  shape: encodeValhallaPolyline6([
+                    [14.431, 50.085],
+                    [14.45, 50.1]
+                  ]),
+                  summary: { length: 1, time: 50 },
+                  maneuvers: []
+                }
+              ]
+            }
+          })
+    );
+    await expect(f.service.route({ ...request(), alternatives: 1, via: [{ lon: 14.43, lat: 50.085 }] })).rejects.toMatchObject({
+      status: 422,
+      code: "ROUTING_WAYPOINT_NOT_ROUTABLE"
+    });
+  });
+  it("does not change the legacy route behavior when reviewed-closure routing is disabled", async () => {
+    const f = await fixture();
+    f.options.enabled = false;
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({ error_code: 171, error: "No suitable edges near location" }, { status: 400 })
+    );
+    const response = await f.service.route({ ...request(), alternatives: 1 });
+    expect(response.routes[0]!.quality.mode).toBe("direct_fallback");
+    expect(response.routes[0]!.knownClosures).toBeUndefined();
+    expect(response.routes[0]!.assessment).toBeUndefined();
+  });
   it("preserves explicit mapped alternatives on route as well as alternatives endpoint", async () => {
     const f = await fixture();
     const p = { version: "sim-mapped-road-profile-v1" as const, intent: "car" as const, coverageAcknowledged: "mapped_restrictions_incomplete" as const };

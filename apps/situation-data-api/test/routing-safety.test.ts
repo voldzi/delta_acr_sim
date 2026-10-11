@@ -259,6 +259,98 @@ describe("reviewed closure boundary", () => {
 });
 
 describe("actual strict route pipeline (synthetic engine)", () => {
+  it.each(["route", "alternatives"] as const)(
+    "returns a neutral typed location error on HTTP400/171 from strict %s without weakening the request",
+    async (method) => {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async (url, init) => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        f.payloads.push(JSON.parse(String(init?.body)));
+        return Response.json({ error_code: 171, error: "private engine request detail", location_index: 2 }, { status: 400 });
+      });
+      await expect(f.service[method](request())).rejects.toMatchObject({ status: 422, code: "ROUTING_LOCATION_NOT_ROUTABLE" });
+      expect(f.payloads).toHaveLength(1);
+      expect(f.payloads[0].locations.map((p: any) => [p.radius, p.search_cutoff, p.type])).toEqual([
+        [25, 25, "break"],
+        [25, 25, "break_through"],
+        [25, 25, "break"]
+      ]);
+      expect(f.payloads[0].costing_options.auto).toMatchObject({
+        height: 1.8,
+        width: 1.9,
+        length: 4.5,
+        weight: 1.9,
+        ignore_access: false,
+        ignore_restrictions: false,
+        ignore_closures: false
+      });
+      expect(f.payloads[0].exclude_polygons).toEqual(snapshot().closures.map((closure) => closure.polygon));
+      expect(f.fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(["/status", "/route"]);
+    }
+  );
+  it.each([
+    { status: 200, errorCode: 171 },
+    { status: 500, errorCode: 171 },
+    { status: 503, errorCode: 171 },
+    { status: 400, errorCode: "171" },
+    { status: 400, errorCode: 170 },
+    { status: 400, errorCode: undefined }
+  ])("keeps strict non-location engine errors protective (%j)", async ({ status, errorCode }) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) =>
+      String(url).endsWith("/status")
+        ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+        : Response.json({ error: "No suitable edges near location", ...(errorCode === undefined ? {} : { error_code: errorCode }) }, { status })
+    );
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+    expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
+  });
+  it("does not classify a strict status failure as an endpoint rejection", async () => {
+    const f = await fixture();
+    f.fetchMock.mockResolvedValue(Response.json({ error_code: 171, error: "private status detail" }, { status: 400 }));
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_SAFETY_ENGINE_FAILED" });
+    expect(f.fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it.each(["start", "via", "target", "surplus-start", "surplus-via", "surplus-target"])(
+    "rejects a proven strict %s snap beyond 25m with no proof or downgrade",
+    async (position) => {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async (url) => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        const primary = reply(),
+          alternate = reply(true),
+          rejected = position.startsWith("surplus") ? alternate : primary;
+        if (position.endsWith("start")) {
+          rejected.legs[0]!.shape = encodeValhallaPolyline6([
+            [14.419, 50.08],
+            [14.43, 50.085]
+          ]);
+        } else if (position.endsWith("via")) {
+          rejected.legs[0]!.shape = encodeValhallaPolyline6([
+            [14.42, 50.08],
+            [14.431, 50.085]
+          ]);
+          rejected.legs[1]!.shape = encodeValhallaPolyline6([
+            [14.431, 50.085],
+            [14.44, 50.09],
+            [14.45, 50.1]
+          ]);
+        } else {
+          rejected.legs[1]!.shape = encodeValhallaPolyline6([
+            [14.43, 50.085],
+            [14.44, 50.09],
+            [14.451, 50.1]
+          ]);
+        }
+        return Response.json({ trip: primary, alternates: [{ trip: alternate }] });
+      });
+      await expect(f.service.route({ ...request(), alternatives: 1 })).rejects.toMatchObject({
+        status: 422,
+        code: position.endsWith("target") ? "ROUTING_TARGET_NOT_ROUTABLE" : "ROUTING_WAYPOINT_NOT_ROUTABLE"
+      });
+      expect(f.fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/route"))).toHaveLength(1);
+    }
+  );
   it("exposes the additive profiles capability and exact correlated errors through the actual HTTP app", async () => {
     const f = await fixture(),
       { app, context } = await createApp({ ...(await loadConfig()), enabledSources: [], sharedCacheRedisUrl: undefined });
@@ -476,7 +568,9 @@ describe("actual strict route pipeline (synthetic engine)", () => {
           ]);
         return Response.json({ trip });
       });
-      await expect(f.service.route(request())).rejects.toMatchObject({ status: mode === "stale" ? 503 : mode === "unreviewed" ? 422 : 502 });
+      await expect(f.service.route(request())).rejects.toMatchObject({
+        status: mode === "stale" ? 503 : mode === "unreviewed" || mode === "bad-snap" ? 422 : 502
+      });
     }
   });
 });
