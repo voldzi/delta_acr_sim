@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
-import { assertEffectiveEnvironment, assertImageRuntimeConfiguration, assertRuntimeBaseLayers, imagePinPatchPlan, parseArguments, replaceImagePinInPlace, rootFilesystemProofScript, runtimeEnvironmentMap } from "./deploy-search-freshness.mjs";
+import { assertEffectiveEnvironment, assertImageRuntimeConfiguration, assertRuntimeBaseLayers, assertTailMetadataProof, DELTA_HELPER_SHA, imagePinPatchPlan, parseArguments, replaceImagePinInPlace, rootFilesystemProofScript, runtimeEnvironmentMap } from "./deploy-search-freshness.mjs";
 
 const revision = "90e1d8d0cc50236429b32476e3fd2f31899cf03c";
 const oldImageId = "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965";
@@ -27,6 +27,29 @@ const validArgs = (mode = "--check") => [
   "--expected-dist-sha256", distHash,
   ...(mode === "--rollback" ? ["--record-dir", recordDir] : [])
 ];
+
+test("reviewed helper bytes match the pinned digest without executing the helper", () => {
+  const bytes = readFileSync(new URL("./verify-search-image-delta.py", import.meta.url));
+  assert.match(DELTA_HELPER_SHA, /^[0-9a-f]{64}$/);
+  assert.ok(bytes.length > 0 && bytes.length < 256 * 1024);
+  assert.equal(hash(bytes), DELTA_HELPER_SHA);
+});
+
+test("actual tail metadata proof requires the complete exact candidate and source aggregate", () => {
+  const candidateId = `sha256:${"c".repeat(64)}`;
+  const proof = { schemaVersion: "sim-search-image-delta-v1", candidateImageId: candidateId, baseImageId: oldImageId,
+    basePrefixVerified: true, tailLayerCount: 2, tailEntriesVerified: true, extendedAttributesRejected: true,
+    sourceSha256: sourceHash, distSha256: distHash, directoryMtimePolicy: "old-or-reviewed-build-window", dockerSavePasses: 2 };
+  assert.equal(assertTailMetadataProof(proof, candidateId), true);
+  for (const [key, value] of [["candidateImageId", `sha256:${"d".repeat(64)}`], ["baseImageId", candidateId],
+    ["basePrefixVerified", false], ["tailLayerCount", 3], ["tailEntriesVerified", false], ["extendedAttributesRejected", false],
+    ["sourceSha256", distHash], ["distSha256", sourceHash], ["directoryMtimePolicy", "unbounded"], ["dockerSavePasses", 1]]) {
+    assert.throws(() => assertTailMetadataProof({ ...proof, [key]: value }, candidateId));
+  }
+  const missing = { ...proof }; delete missing.extendedAttributesRejected;
+  assert.throws(() => assertTailMetadataProof(missing, candidateId));
+  assert.throws(() => assertTailMetadataProof({ ...proof, unknownField: "synthetic" }, candidateId));
+});
 
 function replaceArg(argv, name, value) {
   const changed = [...argv];

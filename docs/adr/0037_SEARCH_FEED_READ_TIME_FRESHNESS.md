@@ -103,3 +103,11 @@ Docker/virtual runtime mount paths are excluded. Development dependencies may
 exist in the build stage but are never copied into the final runtime. These
 provenance checks do not replace host resource, Linux file-write or joint live
 acceptance gates.
+
+Before executing candidate binaries, the separately pinned standard-library
+Python verifier authenticates the complete base layer streams and two exact
+tail deltas in at most two bounded, read-only Docker exports. It rejects
+unreviewed archive metadata and checks the narrowly allowed build timestamps.
+No binary archive or production configuration copy is retained. Its Linux
+resource and actual image-export gates must pass separately; synthetic test
+success is not runtime acceptance or authorization to activate the release.

@@ -7,9 +7,9 @@ import {
   closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync,
   openSync, readFileSync, readSync, statfsSync, statSync, unlinkSync, writeFileSync, writeSync
 } from "node:fs";
-import { posix, resolve } from "node:path";
+import { dirname, posix, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = "/srv/sim", ENV_FILE = `${ROOT}/.env`, SERVICE = "situation-data-api", CONTAINER = "csm-sim-situation-data-api";
 const IMAGE_KEY = "DRIVER_MEASUREMENTS_IMAGE";
@@ -21,6 +21,8 @@ const CANDIDATE = "sim-situation-data-api:search-freshness-90e1d8d0cc50";
 const PROTECTED_OLD = "sim-situation-data-api:rollback-search90-03b842e005f1";
 const SOURCE_SHA = "698e3dd4d978db08cd8ddbc484082327b3743392913ad37b53244cab3a327aaa";
 const DIST_SHA = "3060a86a481496e701f9f3c1523bb2c95f68825348a285fe7979a090fe4aad1b";
+// Independent source review and synthetic tests bind these exact helper bytes.
+export const DELTA_HELPER_SHA = "0c8d570dbab5d9b719d667239330e8f13009846bf855ae6cda3927ecce9e577f";
 const X5 = "/srv/x5-production", X5_UUID = "2f93f595-b61b-4eea-9054-7afa9b275b5b";
 const LOCK = `${ROOT}/.deploy-search-freshness.lock`, BACKUPS = `${ROOT}/.deploy-search-freshness-backups`;
 const FILES = [`${ROOT}/docker-compose.yml`, `${ROOT}/docker-compose.x5.yml`, `${ROOT}/docker-compose.driver-measurements.yml`];
@@ -313,6 +315,36 @@ assert.equal(JSON.stringify(feed),retained);assert.equal(out.generatedAt,feed.ge
 assert.ok(out.entities.every((e,i)=>e.observedAt===feed.entities[i].observedAt));
 assert.equal(out.freshness.scope,'returned_entities');assert.equal(out.freshness.returnedStaleCount,3);assert.equal(out.freshness.returnedExpiredCount,1);assert.equal(out.freshness.invalidExpiryCount,1);assert.equal(out.freshness.missingExpiryCount,2);assert.equal(out.freshness.feedAgeSeconds,10);
 console.log(JSON.stringify({fixturePassed:true,returnedEntitiesScope:true,sourceMetadataPreserved:true,retainedSnapshotUnchanged:true}));`;
+export function assertTailMetadataProof(proof, candidateId) {
+  assert.deepEqual(proof, {
+    schemaVersion: "sim-search-image-delta-v1", candidateImageId: candidateId, baseImageId: OLD_ID,
+    basePrefixVerified: true, tailLayerCount: 2, tailEntriesVerified: true, extendedAttributesRejected: true,
+    sourceSha256: SOURCE_SHA, distSha256: DIST_SHA, directoryMtimePolicy: "old-or-reviewed-build-window", dockerSavePasses: 2
+  }, "Actual image layer metadata proof is incomplete or mismatched");
+  return true;
+}
+function verifiedDeltaMetadata(candidateId) {
+  let fd;
+  try {
+    const path = resolve(dirname(fileURLToPath(import.meta.url)), "verify-search-image-delta.py"), stat = lstatSync(path);
+    assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && stat.uid === process.getuid() &&
+      [0o644, 0o755].includes(stat.mode & 0o7777) && stat.size > 0 && stat.size < 256 * 1024);
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    assert.deepEqual(selectedMetadata(fstatSync(fd)), selectedMetadata(stat));
+    const bytes = readFd(fd, stat.size);
+    assert.equal(sha(bytes), DELTA_HELPER_SHA); assert.deepEqual(selectedMetadata(lstatSync(path)), selectedMetadata(stat));
+    closeSync(fd); fd = undefined;
+    // Execute exactly the verified bytes via stdin, not a replaceable pathname.
+    const output = execFileSync("python3", ["-B", "-", "--candidate-id", candidateId], {
+      // Leave room for the verifier's 180-second budget and owned-child cleanup.
+      cwd: ROOT, env: process.env, input: bytes, timeout: 190_000, encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"], maxBuffer: 1024 * 1024
+    });
+    const proof = JSON.parse(output); assertTailMetadataProof(proof, candidateId);
+    return proof;
+  } catch { throw guardError("DELTA_METADATA_PROOF_FAILED"); }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
 function candidateIdentity(before) {
   const old = inspectImage(OLD_ID), candidate = inspectImage(CANDIDATE);
   assert.equal(inspectImage(OLD_PIN).Id, OLD_ID);
@@ -326,6 +358,8 @@ function candidateIdentity(before) {
   assert.equal(old.RootFS?.Type, "layers"); assert.equal(candidate.RootFS?.Type, "layers");
   assertRuntimeBaseLayers(old.RootFS.Layers, candidate.RootFS.Layers);
   assertImageRuntimeConfiguration(old.Config, candidate.Config);
+  // Validate the actual delta before executing any candidate binary.
+  const metadataProof = verifiedDeltaMetadata(candidate.Id);
   const original = JSON.parse(command("docker", [...offlineArgs(OLD_ID), "-e", manifestScript]));
   const next = JSON.parse(command("docker", [...offlineArgs(candidate.Id), "-e", manifestScript]));
   assert.equal(next.treeHash, original.treeHash); assert.equal(next.fileCount, original.fileCount); assert.equal(next.nodeVersion, original.nodeVersion);
@@ -339,7 +373,8 @@ function candidateIdentity(before) {
   assert.equal(before.Image, OLD_ID);
   assert.equal(inspectImage(PROTECTED_OLD).Id, OLD_ID); assert.equal(inspectImage(CANDIDATE).Id, candidate.Id);
   return { candidateId: candidate.Id, unchangedTreeSha256: next.treeHash, unchangedRootFilesystemSha256: nextRoot.rootFilesystemSha256,
-    immutableBaseLayersSha256: sha(old.RootFS.Layers), exactRuntimeBaseVerified: true, fixturePassed: true };
+    immutableBaseLayersSha256: sha(old.RootFS.Layers), layerMetadataProofSha256: sha(metadataProof),
+    exactRuntimeBaseVerified: true, tailMetadataAndAttributesVerified: true, fixturePassed: true };
 }
 function privateDirectory(path, create = false) {
   if (create && !existsSync(path)) mkdirSync(path, { mode: 0o700 });
@@ -370,14 +405,14 @@ function readRecord(directory) {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   let record;
   try { assert.deepEqual(selectedMetadata(fstatSync(fd)), selectedMetadata(stat)); record = JSON.parse(readFileSync(fd, "utf8")); } finally { closeSync(fd); }
-  const keys = ["schemaVersion", "sourceRevision", "baseRevision", "oldPin", "candidatePin", "oldImageId", "candidateImageId", "originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "environmentMetadata", "configHashes", "runtimeInvariant", "unchangedTreeSha256", "unchangedRootFilesystemSha256", "immutableBaseLayersSha256"];
+  const keys = ["schemaVersion", "sourceRevision", "baseRevision", "oldPin", "candidatePin", "oldImageId", "candidateImageId", "originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "environmentMetadata", "configHashes", "runtimeInvariant", "unchangedTreeSha256", "unchangedRootFilesystemSha256", "immutableBaseLayersSha256", "layerMetadataProofSha256"];
   assert.deepEqual(Object.keys(record).sort(), keys.sort());
-  assert.equal(record.schemaVersion, "sim-search-freshness-image-only/v2");
+  assert.equal(record.schemaVersion, "sim-search-freshness-image-only/v3");
   assert.equal(record.sourceRevision, SOURCE_REVISION); assert.equal(record.baseRevision, BASE_REVISION);
   assert.equal(record.oldPin, OLD_PIN); assert.equal(record.candidatePin, CANDIDATE); assert.equal(record.oldImageId, OLD_ID);
   assert.match(record.candidateImageId, /^sha256:[0-9a-f]{64}$/);
   assert.notEqual(record.candidateImageId, OLD_ID);
-  for (const key of ["originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "unchangedTreeSha256", "unchangedRootFilesystemSha256", "immutableBaseLayersSha256"]) assert.match(record[key], /^[0-9a-f]{64}$/);
+  for (const key of ["originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "unchangedTreeSha256", "unchangedRootFilesystemSha256", "immutableBaseLayersSha256", "layerMetadataProofSha256"]) assert.match(record[key], /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(record.configHashes).sort(), [...FILES].sort());
   for (const value of Object.values(record.configHashes)) assert.match(value, /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(record.environmentMetadata).sort(), ["uid", "gid", "mode", "dev", "ino", "nlink", "size"].sort());
@@ -463,7 +498,7 @@ async function main() {
       console.log(JSON.stringify({ status: "checked", productionUnchanged: true, sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION,
         candidateImageId: candidateId, unchangedRuntimeTreeSha256: identity.unchangedTreeSha256,
         immutableBaseLayersVerified: identity.exactRuntimeBaseVerified, offlineFilesystemContentAndPosixMetadataVerified: true,
-        extendedAttributeAndLayerMetadataAcceptancePending: true, pureFixturePassed: true }));
+        tailMetadataAndAttributesVerified: identity.tailMetadataAndAttributesVerified, pureFixturePassed: true }));
       return;
     }
     phase = "metadata_record";
@@ -471,12 +506,13 @@ async function main() {
     const directory = `${BACKUPS}/${new Date().toISOString().replaceAll(":", "-")}-${process.pid}`;
     privateDirectory(directory, true); recordDir = directory;
     privateRecord(`${recordDir}/before.json`, {
-      schemaVersion: "sim-search-freshness-image-only/v2", sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION,
+      schemaVersion: "sim-search-freshness-image-only/v3", sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION,
       oldPin: OLD_PIN, candidatePin: CANDIDATE, oldImageId: OLD_ID, candidateImageId: candidateId,
       originalEnvironmentSha256: planned.originalSha256, candidateEnvironmentSha256: planned.nextSha256,
       nonImageSha256: planned.nonImageSha256, environmentMetadata: metadata, configHashes: files,
       runtimeInvariant: baseline, unchangedTreeSha256: identity.unchangedTreeSha256,
-      unchangedRootFilesystemSha256: identity.unchangedRootFilesystemSha256, immutableBaseLayersSha256: identity.immutableBaseLayersSha256
+      unchangedRootFilesystemSha256: identity.unchangedRootFilesystemSha256, immutableBaseLayersSha256: identity.immutableBaseLayersSha256,
+      layerMetadataProofSha256: identity.layerMetadataProofSha256
     });
     privateRecord(`${recordDir}/rollback-instructions.json`, {
       noEnvironmentCopies: true, noEnvironmentRewrite: true, noImageTagMutation: true,
@@ -497,6 +533,7 @@ async function main() {
     const proof = { status: "success", sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION, candidateImageId: candidateId,
       onlySdaChanged: true, runtimeInvariantsPreserved: true, environmentInodePreserved: true, environmentNonImageBytesPreserved: true,
       immutableBaseLayersVerified: true, offlineFilesystemContentAndPosixMetadataVerified: true,
+      tailMetadataAndAttributesVerified: true,
       pureFixturePassed: true, authenticatedApiAcceptancePending: true, recordDir };
     privateRecord(`${recordDir}/after.json`, proof); console.log(JSON.stringify(proof));
   } catch (error) {

@@ -222,6 +222,7 @@ Run local guard tests before requesting the host window:
 ```bash
 node --check scripts/deploy-search-freshness.mjs
 node --test scripts/test-deploy-search-freshness.mjs
+python3 -B scripts/test-verify-search-image-delta.py
 ```
 
 The tests use only synthetic temporary `fake-config` files, never production
@@ -246,8 +247,8 @@ provider workloads to create headroom.
 
 After the window opens, stage a Git archive of exactly the source revision in
 a new private context, such as
-`/home/voldzi/sim-search-freshness-90e1d8d0cc50`. Stage the reviewed guard, its
-synthetic test file and
+`/home/voldzi/sim-search-freshness-90e1d8d0cc50`. Stage the reviewed guard,
+`verify-search-image-delta.py`, both synthetic test files and
 `apps/situation-data-api/Dockerfile.search-freshness` from the operations
 commit separately and verify their SHA-256 values. The context must not
 contain `.env`, credentials, user/provider data or the working tree's ignored
@@ -343,19 +344,45 @@ is a failed gate, not permission to relax the comparison. Local synthetic
 tests are not evidence that Linux flock/pwrite or these actual Docker/image
 checks have passed; those remain separate gates in the authorized host window.
 
-The whole-filesystem proof covers content, type, mode, UID/GID and symlink
-targets, not extended attributes, ACLs, capabilities or timestamps. Before
-cutover approval, the coordinator must also accept the two appended layer
-metadata: their actual uncompressed tar SHA-256 must equal the reported
-DiffIDs; only each exact reviewed regular file and unchanged ancestor
-directories may be present. Reject whiteouts, links, devices, FIFO, sparse or
-duplicate effective paths, traversal and unvalidated PAX/GNU metadata.
-Validate relevant xattrs/ACLs/capabilities and parent directory timestamps
-against the immutable old image, or fail closed. Use a reviewed existing
-parser in a bounded streaming check; do not save a large Docker archive or
-introduce an unreviewed handwritten tar parser. This metadata acceptance is
-still pending and is not supplied by the synthetic VM tests or a `--check`
-result. Do not invoke `--apply` until that independent gate is accepted.
+The whole-filesystem proof alone does not inspect extended attributes, ACLs,
+capabilities or timestamps. The separate pinned Python verifier closes that
+boundary **before executing any candidate binary**. The guard checks its code
+SHA-256 and executes those exact bytes through stdin, preventing a pathname
+replacement between verification and execution. It uses the standard-library
+`tarfile` parser without extracting files. In at most two streaming
+`docker image save` passes it authenticates the candidate config, manifest and
+complete original layer byte streams, then verifies both actual uncompressed
+tail tar SHA-256 values against the reported DiffIDs. No Docker archive,
+partner data or binary output is stored on disk or transferred to the Mac.
+
+Each tail tar is bounded to 4 MiB and may contain only its exact reviewed
+regular file and permitted existing parent directories. The verifier checks
+header checksums and physical offsets, zero data padding, at least two zero
+EOF blocks and zero-only trailing bytes. It rejects whiteouts, hard/symbolic
+links, devices, FIFO, sparse entries, duplicate effective paths, traversal,
+PAX/GNU extensions and xattrs/ACL/capability metadata. Parent and target types,
+mode/UID/GID come from authenticated baseline layers in manifest order;
+relevant baseline whiteouts, links or unsafe extended metadata fail closed.
+Unsupported export formats, incomplete reads or a timeout reject the whole
+proof and terminate only the owned save process. Both passes share an 8 GiB
+streaming byte bound and a 180-second deadline. On Linux the Python reader
+also applies a 256 MiB address-space cap while parsing, after starting the
+owned Docker process; the Docker CLI does not inherit that cap. This bounds
+allocation of oversized extension metadata before `tarfile` can return a
+member to the validation code. Unsupported or unavailable resource controls
+fail closed. The Node supervisor allows 190 seconds for the verifier's own
+deadline and bounded child cleanup; CLI SIGTERM/SIGINT use the same failed
+proof and owned-child cleanup path. Timeout is never a successful proof.
+
+Timestamp drift is limited to the reviewed build delta. The source file mtime
+must equal Git revision `90e1d8d`'s archive timestamp, Unix `1791829376`.
+Compiled file timestamps must lie between that epoch and the candidate image
+creation time plus five seconds. A permitted parent directory may retain its
+baseline timestamp or use that same bounded interval. No other directory may
+change; this permits archive/build/COPY timestamps, not a new source-data
+observation or live-data claim. Local RAM-only tar fixtures do not establish
+that the real Docker export uses an accepted format. Actual Linux and image
+proofs must still pass in the authorized window before cutover approval.
 
 Keep both immutable images and their aliases through joint acceptance.
 
@@ -386,10 +413,11 @@ stay `shadow_only`. No database migration is involved.
 The private mode-0700 directory printed as `recordDir` under
 `/srv/sim/.deploy-search-freshness-backups/` stores mode-0600 metadata records:
 image IDs/pins, file identity, private hashes and runtime invariants only. It
-also records the unchanged offline-filesystem and base-layer digests under
-record schema `sim-search-freshness-image-only/v2`; it does not contain `.env`
-bytes or secret values. The earlier v1 operations plan was not activated and
-its narrower selected-code proof is not accepted by this guard. If activation
+also records the unchanged offline-filesystem, base-layer and verified layer
+metadata proof digests under record schema
+`sim-search-freshness-image-only/v3`; it does not contain `.env` bytes or
+secret values. Earlier v1/v2 plans were not activated and their narrower
+proofs are not accepted by this guard. If activation
 fails after a
 verified pin write, automatic rollback is permitted only while this release
 still owns the exact image/configuration/runtime state. An incomplete or
