@@ -72,7 +72,15 @@ describe("Search Data Safety boundary", () => {
     const service = new SearchDataService(config);
     const partial = await service.entities({ limit: 1000 });
     await vi.advanceTimersByTimeAsync(29_999);
-    expect(await service.entities({ limit: 1000 })).toBe(partial);
+    const partialProjection = await service.entities({ limit: 1000 });
+    expect(partialProjection).not.toBe(partial);
+    expect(partialProjection).toMatchObject({
+      generatedAt: partial.generatedAt,
+      entities: partial.entities,
+      summary: partial.summary,
+      warnings: partial.warnings
+    });
+    expect(partialProjection.freshness?.evaluatedAt).toBe(new Date().toISOString());
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     const recovered = await service.entities({ limit: 1000 });
@@ -80,7 +88,15 @@ describe("Search Data Safety boundary", () => {
     expect(recovered.generatedAt).not.toBe(partial.generatedAt);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(299_999);
-    expect(await service.entities({ limit: 1000 })).toBe(recovered);
+    const recoveredProjection = await service.entities({ limit: 1000 });
+    expect(recoveredProjection).not.toBe(recovered);
+    expect(recoveredProjection).toMatchObject({
+      generatedAt: recovered.generatedAt,
+      entities: recovered.entities,
+      summary: recovered.summary,
+      warnings: recovered.warnings
+    });
+    expect(recoveredProjection.freshness?.evaluatedAt).toBe(new Date().toISOString());
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
     await service.entities({ limit: 1000 });

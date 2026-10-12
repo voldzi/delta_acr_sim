@@ -5962,7 +5962,7 @@
       "get": {
         "operationId": "searchData_listSearchDataEntities",
         "summary": "Return a normalized entity feed for COP indexing",
-        "description": "Returns source-normalized, stable entities with GeoJSON geometry, quality metadata and handling rules. COP should page by nextCursor when present; the page limit is not a source-health failure. A source failure returns an incomplete feed with sanitized SEARCH_SOURCE_TIMEOUT, SEARCH_SOURCE_UNAVAILABLE or SEARCH_SOURCE_INCOMPLETE warnings and a static source key. Source-incomplete feeds are cached for at most 30 seconds without stale-on-error reuse; complete feeds retain the configured TTL. The Safety bridge deadline is at most 4500 ms including the body, not an overall deadline guarantee for every provider. Stale observations and original timestamps are preserved.",
+        "description": "Returns source-normalized, stable entities with GeoJSON geometry, quality metadata and handling rules. COP should page by nextCursor when present; the page limit is not a source-health failure. A source failure returns an incomplete feed with sanitized SEARCH_SOURCE_TIMEOUT, SEARCH_SOURCE_UNAVAILABLE or SEARCH_SOURCE_INCOMPLETE warnings and a static source key. Source-incomplete feeds are cached for at most 30 seconds without stale-on-error reuse; complete feeds retain the configured TTL. The Safety bridge deadline is at most 4500 ms including the body, not an overall deadline guarantee for every provider. Stale observations and original timestamps are preserved. Each read, including an application-cache hit, projects expiry onto the returned entities and adds optional freshness diagnostics scoped to returned_entities. No extra provider fetch, reordering, timestamp/revision rewrite or pagination change is introduced; existing feed generatedAt and collection summary retain their snapshot meaning. Expired data remains stale. Invalid or missing dynamic expiry, or invalid/future feed generation, cannot certify freshness. OSM records with sourceSystem osm_reference and sourceAuthority reference retain timeless reference semantics when no deadline is supplied; they are not live observations.",
         "parameters": [
           {
             "$ref": "#/components/parameters/SearchDataUpdatedSince"
@@ -6048,7 +6048,7 @@
       "post": {
         "operationId": "searchData_querySearchDataEntities",
         "summary": "Run a bounded server-side search over normalized entities",
-        "description": "Supports COP AI context retrieval without exposing raw upstream systems to COP clients. The response uses the same SearchEntityFeed contract as /entities.",
+        "description": "Supports COP AI context retrieval without exposing raw upstream systems to COP clients. The response uses the same SearchEntityFeed contract as /entities. Expiry projection precedes the existing includeStale filter. The returned page has the same optional freshness diagnostics as /entities, evaluated at the same request time; /query has no shared whole-feed cache. These counts describe only returned entities and do not replace source or collection health.",
         "requestBody": {
           "required": true,
           "content": {
@@ -18961,7 +18961,8 @@
           },
           "generatedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Original feed generation time, preserved on a cache hit. It is not a source measurement timestamp and must not be replaced by consumer request time."
           },
           "query": {
             "type": "object",
@@ -19016,7 +19017,8 @@
                 "type": "integer"
               },
               "staleEntityCount": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Legacy snapshot count: /entities counts the collected set before pagination; /query retains its existing returned-result count. It is not recomputed by read-time projection. Use freshness.returnedStaleCount for the current returned page, without treating it as a whole-collection count."
               },
               "deletedCount": {
                 "type": "integer"
@@ -19040,6 +19042,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/SearchDataSearchFeedFreshness"
           }
         }
       },
@@ -19407,7 +19412,8 @@
           },
           "generatedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Time of this observability response, not a source-data refresh or proof of fresh entities."
           },
           "status": {
             "type": "string",
@@ -19418,7 +19424,7 @@
           },
           "dataQualityStatus": {
             "type": "string",
-            "description": "Aggregate source-data quality state. Unlike status, this can be degraded while the search-data service itself remains reachable.",
+            "description": "Aggregate source-data quality state. Unlike status, this can be degraded while the search-data service itself remains reachable. Optional for compatibility; absence is unknown, not ok.",
             "enum": [
               "ok",
               "degraded"
@@ -19426,7 +19432,8 @@
           },
           "degradedSourceCount": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Number of source observations reporting degraded quality. Optional for compatibility; absence is unknown, not zero."
           },
           "sources": {
             "type": "array",
@@ -19436,7 +19443,8 @@
           },
           "cache": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "description": "Open cache telemetry object. Consumers whitelist known numeric counters; missing or unknown fields are not coerced to zero or fresh. Cache hits do not establish provider-data quality."
           },
           "capabilities": {
             "type": "object",
@@ -19507,7 +19515,8 @@
           },
           "lastSuccessAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Source-specific snapshot/import time, not the observability request time. For safety_data this is the actual lastResult.generatedAt when available; missing timestamp means unknown source age."
           },
           "warnings": {
             "type": "array",
@@ -22880,6 +22889,69 @@
             }
           }
         }
+      },
+      "SearchDataSearchFeedFreshness": {
+        "type": "object",
+        "description": "Application read-time diagnostics for only the entities returned in this response, not the collected source snapshot or a country-wide total. Counts are not mutually exclusive. Evaluation does not refresh providers or alter the original feed timestamp, source timestamps, revisions, order or pagination. A gateway HIT/STALE may reuse serialized diagnostics with their original evaluatedAt; consumers must still respect actual entity validity. Missing diagnostics never mean zero stale entities or verified freshness.",
+        "required": [
+          "scope",
+          "evaluatedAt",
+          "feedTimestampState",
+          "feedAgeSeconds",
+          "returnedStaleCount",
+          "returnedExpiredCount",
+          "missingExpiryCount",
+          "invalidExpiryCount"
+        ],
+        "properties": {
+          "scope": {
+            "type": "string",
+            "const": "returned_entities"
+          },
+          "evaluatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time at which this returned page was evaluated; not a new source observation or feed generation."
+          },
+          "feedTimestampState": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "future",
+              "invalid"
+            ],
+            "description": "Validity of the original feed generatedAt relative to evaluatedAt. A future or invalid value cannot certify freshness."
+          },
+          "feedAgeSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Age of the original feed generatedAt when its state is valid; null for a future or invalid timestamp. Not the age of individual source observations."
+          },
+          "returnedStaleCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Returned entities whose projected stale flag is true at evaluatedAt, including preserved provider staleness."
+          },
+          "returnedExpiredCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Returned entities whose projected status is expired at evaluatedAt. This can overlap returnedStaleCount."
+          },
+          "missingExpiryCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Normalized returned entities without either expiry deadline. This may include a source value normalized to null. OSM reference records may intentionally have no deadline; absence is not proof of current dynamic data or a service outage."
+          },
+          "invalidExpiryCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Returned entities with an invalid normalized validUntil or expiresAt. This is not a count of invalid raw provider values; values already normalized to null are counted as missing. Invalid deadlines never make an entity fresh; a separate valid expired deadline still takes precedence."
+          }
+        },
+        "additionalProperties": false
       }
     },
     "securitySchemes": {

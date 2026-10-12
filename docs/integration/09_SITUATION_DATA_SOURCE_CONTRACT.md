@@ -165,6 +165,90 @@ mez všech podzdrojů. Nginx 10s cache může během obnovy krátce vrátit star
 Síťové oprávnění, tokeny, AI cesta a notification readiness zůstávají stejné.
 Viz ADR 0034.
 
+### Čerstvost při čtení feedu
+
+Připravená aditivní změna podle [ADR 0037](../adr/0037_SEARCH_FEED_READ_TIME_FRESHNESS.md)
+přidává do `SearchEntityFeed` volitelné pole `freshness`. Produkční aktivace
+vyžaduje společnou akceptaci SIM a COP; starší odpověď bez tohoto pole znamená
+neznámou diagnostiku, nikoli nulové počty nebo potvrzenou čerstvost.
+
+SIM při každém aplikačním čtení `/entities`, včetně zásahu aplikační cache, vyhodnotí
+platnost právě vrácených entit. Již zastaralý stav zachová. Platný
+`expiresAt` nebo `validUntil` nejpozději v okamžiku vyhodnocení označí entitu
+`stale=true` a `status=expired`; neplatná platnost nikdy nedokazuje čerstvost.
+Chybějící nebo neplatná dynamická platnost a neplatný či budoucí čas feedu
+znamenají zastaralý/neznámý stav, nikoli čerstvost. Stav `expired` má přednost,
+již neaktivní záznam zůstává neaktivní. OSM entity se
+`sourceSystem=osm_reference` a `sourceAuthority=reference` bez časové platnosti
+zachovávají původní referenční stav a `stale`; nejde o živé pozorování a nevzniká
+z nich výpadek zdroje jen kvůli chybějící platnosti.
+
+Vyhodnocení nezpůsobí nové načtení poskytovatele, změnu pořadí, stránkování,
+`nextCursor`, `sourceRevision`, původních časů ani změnu uloženého snapshotu.
+`generatedAt` zůstává časem sestavení původního feedu. `summary` zachovává
+dosavadní rozsah: `/entities` má `staleEntityCount` za sebraný soubor před
+stránkováním, `/query` za dosavadní vrácený výsledek. Nové počty nelze použít
+jako náhradu těchto hodnot ani jako počet za celé území.
+
+Nginx gateway může vrátit již serializovanou odpověď `HIT` nebo `STALE`, aniž
+se aplikační projekce znovu spustí. Její `freshness.evaluatedAt` proto zůstane
+původní. COP musí respektovat tento čas i skutečné platnosti entit a nesmí
+z existence diagnostiky odvodit aktuálnost v okamžiku svého požadavku. Politika
+gateway cache se touto změnou nemění.
+
+| Pole `freshness` | Význam |
+| --- | --- |
+| `scope` | Vždy `returned_entities`; všechny počty se týkají jen `entities` v této odpovědi. |
+| `evaluatedAt` | Čas vyhodnocení této stránky, ne nové měření nebo načtení zdroje. |
+| `feedTimestampState` | `valid`, `future` nebo `invalid` pro původní `generatedAt`. |
+| `feedAgeSeconds` | Nezáporné stáří původního feedu; pro `future` a `invalid` je `null`. Nejde o stáří pozorování. |
+| `returnedStaleCount` | Počet vrácených entit s `stale=true` po vyhodnocení. |
+| `returnedExpiredCount` | Počet vrácených entit se stavem `expired`; může se překrývat se zastaralými. |
+| `missingExpiryCount` | Počet normalizovaných vrácených entit bez obou konců platnosti. Může zahrnout neplatný zdrojový čas dříve normalizovaný na `null`; referenční entity platnost mít nemusí. |
+| `invalidExpiryCount` | Počet vrácených entit s neplatným normalizovaným `validUntil` nebo `expiresAt`, nikoli počet vadných raw hodnot poskytovatele. |
+
+Počty se mohou překrývat. Pokud jedna normalizovaná platnost je neplatná a
+druhá platná, ale již vypršená, entita je `expired` a zároveň se počítá do
+`invalidExpiryCount`. Nulový `invalidExpiryCount` nedokazuje, že upstream
+nikdy neposlal neplatnou hodnotu; normalizace ji mohla převést na `null`.
+
+`POST /query` vyhodnotí platnost před stávajícím filtrem `includeStale` a vrací
+stejnou diagnostiku za vrácený výsledek v jednom okamžiku vyhodnocení. Nemá
+sdílenou cache celého feedu. Projekce Safety zachovává zastaralost poskytovatele i při
+dosud nevypršené platnosti; pozdější platnost nesmí vymazat `stale=true`.
+Stávající neúplná cache nejvýše 30s bez prodloužení při chybě a úplná cache
+s konfigurovaným TTL 300s se touto změnou nemění.
+
+### Dostupnost a diagnostika zdrojů
+
+COP odděluje dostupnost služby od `dataQualityStatus` a stáří záznamů.
+Z `GET /observability` přebírá `dataQualityStatus`, `degradedSourceCount`,
+`sources[]` a jen známé číselné agregáty otevřeného objektu `cache`.
+Současné známé agregáty jsou `entries`, `inflight`, `maxEntries`, `hits`,
+`misses`, `hitRate`, `staleHits`, `refreshes`, `errors` a `evictions`.
+Chybějící volitelná kvalita, čas nebo počet je neznámý, nikoli `ok` či nula.
+Počet zastaralých entit v `sources[]` má rozsah daného zdrojového snapshotu,
+nikoli právě vrácené stránky. Samotný úspěšný HTTP požadavek, zásah cache nebo
+nový čas odpovědi neprokazuje aktuálnost dat.
+
+Observability nevyžaduje top-level `warnings`; jeho nepřítomnost není porušení
+kontraktu ani výpadek. Varování zdrojů jsou v `sources[].warnings`.
+`SearchEntityFeed` má vlastní povinné `warnings` a `summary.warningCount`;
+prázdné pole skutečně přijaté podle tohoto kontraktu lze spočítat jako nulu,
+ale chybějící pole nelze nahradit výchozím `[]` a vydávat za důkaz bezchybnosti.
+
+U `sources[].sourceSystem=safety_data` používá připravená změna pro
+`lastSuccessAt` skutečný `lastResult.generatedAt`, pokud jej zdroj poskytne,
+nikoli `generatedAt` požadavku na observability. Ostatní zdroje zachovávají
+vlastní význam časů importu a publikace; jednotný limit stáří se nezavádí.
+Dotaz na observability není novým čistě cache-only endpointem a nesmí sloužit
+k plošnému přednačítání poskytovatelů.
+
+Pro provozní závadu se při běžném zpracování uchovává pouze povolený agregovaný
+snapshot podle [provozního postupu](../runbooks/13_PERFORMANCE_OPERATIONS.md):
+stav, statický chybový kód, časy, počty a cache metadata. Chybějící historickou
+odpověď nelze zpětně odvodit z pozdějšího zeleného stavu.
+
 ## Map Catalog v1 metadata
 
 `GET /catalog` je preferovaný metadata endpoint pro COM layer tree. Vrací provider metadata pro autoritativní source-neutral kontrakt Map Catalog v1:

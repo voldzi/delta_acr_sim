@@ -117,6 +117,81 @@ export interface SearchEntityFeed {
   entities: SearchEntity[];
   nextCursor?: string;
   warnings: string[];
+  freshness?: SearchFeedFreshness;
+}
+
+export interface SearchFeedFreshness {
+  scope: "returned_entities";
+  evaluatedAt: string;
+  feedTimestampState: "valid" | "future" | "invalid";
+  feedAgeSeconds: number | null;
+  returnedStaleCount: number;
+  returnedExpiredCount: number;
+  missingExpiryCount: number;
+  invalidExpiryCount: number;
+}
+
+// A cache deadline proves only cache reuse, not current validity of its records.
+// Never mutate the retained source snapshot or invent a new observation time.
+export function projectSearchFeedFreshness(feed: SearchEntityFeed, nowMs = Date.now()): SearchEntityFeed {
+  if (!Number.isFinite(nowMs)) throw new RangeError("Invalid freshness evaluation time.");
+  const generatedMs = readTimeTimestamp(feed.generatedAt);
+  const feedTimestampState = generatedMs === undefined ? "invalid" : generatedMs > nowMs ? "future" : "valid";
+  let returnedStaleCount = 0,
+    returnedExpiredCount = 0,
+    missingExpiryCount = 0,
+    invalidExpiryCount = 0;
+  const entities = feed.entities.map((entity) => {
+    const evaluated = evaluateSearchEntityValidity(entity, nowMs, feedTimestampState);
+    if (evaluated.missing) missingExpiryCount += 1;
+    if (evaluated.invalid) invalidExpiryCount += 1;
+    if (evaluated.entity.stale) returnedStaleCount += 1;
+    if (evaluated.expired) returnedExpiredCount += 1;
+    return evaluated.entity;
+  });
+  return {
+    ...feed,
+    entities,
+    freshness: {
+      scope: "returned_entities",
+      evaluatedAt: new Date(nowMs).toISOString(),
+      feedTimestampState,
+      feedAgeSeconds: feedTimestampState === "valid" ? Math.floor((nowMs - generatedMs!) / 1000) : null,
+      returnedStaleCount,
+      returnedExpiredCount,
+      missingExpiryCount,
+      invalidExpiryCount
+    }
+  };
+}
+
+function evaluateSearchEntityValidity(entity: SearchEntity, nowMs: number, feedTimestampState: SearchFeedFreshness["feedTimestampState"]) {
+  const deadlines = [entity.validUntil, entity.expiresAt].filter((value) => value !== null && value !== undefined);
+  const parsed = deadlines.map(readTimeTimestamp);
+  const missing = deadlines.length === 0;
+  const invalid = parsed.some((value) => value === undefined);
+  const expired = entity.status === "expired" || parsed.some((value) => value !== undefined && value <= nowMs);
+  // Timeless reference records are not live observations. Missing validity is
+  // reported, not converted into a fabricated deadline or a reference outage.
+  const reference = entity.sourceSystem === "osm_reference" && entity.sourceAuthority === "reference";
+  const unknown = invalid || (!reference && (missing || feedTimestampState !== "valid"));
+  const stale = entity.stale || expired || unknown;
+  const status: SearchEntity["status"] = expired ? "expired" : unknown && entity.status !== "inactive" ? "unknown" : entity.status;
+  return { entity: { ...entity, stale, status }, missing, invalid, expired };
+}
+
+function readTimeTimestamp(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!parts) return undefined;
+  const year = Number(parts[1]),
+    month = Number(parts[2]),
+    day = Number(parts[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]! || Number(parts[4]) > 23 || Number(parts[5]) > 59 || Number(parts[6]) > 59) return undefined;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 export interface SearchQueryRequest {
@@ -335,7 +410,7 @@ export class SearchDataService {
       sourceSystems,
       includeDeleted
     });
-    return this.cache.getOrLoad(cacheKey, async () => {
+    const feed = await this.cache.getOrLoad(cacheKey, async () => {
       const collected = await this.collectEntities({
         bbox: CZECHIA_BBOX,
         entityTypes,
@@ -375,6 +450,7 @@ export class SearchDataService {
         warnings
       };
     });
+    return projectSearchFeedFreshness(feed);
   }
 
   async getEntity(providerEntityId: string): Promise<SearchEntity | undefined> {
@@ -423,7 +499,9 @@ export class SearchDataService {
       includeStale: request.includeStale === true,
       validAt
     });
+    const evaluatedAtMs = Date.now();
     const scored = collected.entities
+      .map((entity) => evaluateSearchEntityValidity(entity, evaluatedAtMs, "valid").entity)
       .filter((entity) => (request.includeStale === true ? true : !entity.stale))
       .filter((entity) => (validAt ? entityValidAt(entity, validAt) : true))
       .filter((entity) => (request.center && request.radiusM ? distanceToEntityMeters(request.center, entity) <= request.radiusM : true))
@@ -433,28 +511,31 @@ export class SearchDataService {
       .slice(0, limit)
       .map((item) => item.entity);
 
-    return {
-      contractVersion: CONTRACT_VERSION,
-      providerId: PROVIDER_ID,
-      generatedAt: new Date().toISOString(),
-      query: {
-        updatedSince: undefined,
-        cursor: undefined,
-        limit,
-        entityTypes,
-        sourceSystems,
-        includeDeleted: false
+    return projectSearchFeedFreshness(
+      {
+        contractVersion: CONTRACT_VERSION,
+        providerId: PROVIDER_ID,
+        generatedAt: new Date(evaluatedAtMs).toISOString(),
+        query: {
+          updatedSince: undefined,
+          cursor: undefined,
+          limit,
+          entityTypes,
+          sourceSystems,
+          includeDeleted: false
+        },
+        summary: {
+          entityCount: collected.entities.length,
+          returnedCount: scored.length,
+          staleEntityCount: scored.filter((entity) => entity.stale).length,
+          deletedCount: 0,
+          warningCount: collected.warnings.length
+        },
+        entities: scored,
+        warnings: collected.warnings
       },
-      summary: {
-        entityCount: collected.entities.length,
-        returnedCount: scored.length,
-        staleEntityCount: scored.filter((entity) => entity.stale).length,
-        deletedCount: 0,
-        warningCount: collected.warnings.length
-      },
-      entities: scored,
-      warnings: collected.warnings
-    };
+      evaluatedAtMs
+    );
   }
 
   async observability() {
@@ -800,13 +881,14 @@ export class SearchDataService {
       }
       const body = (await response.json()) as Record<string, unknown>;
       const lastResult = asRecord(body.lastResult);
+      const lastResultAt = readTimeTimestamp(lastResult?.generatedAt);
       return {
         sourceSystem: "safety_data",
         status: body.status === "ok" ? "ok" : "degraded",
         dataQualityStatus: body.status === "ok" ? "ok" : "degraded",
         entityCount: numberValue(lastResult?.featureCount) ?? 0,
         staleCount: numberValue(lastResult?.staleFeatureCount) ?? 0,
-        lastSuccessAt: stringValue(body.generatedAt),
+        lastSuccessAt: lastResultAt !== undefined && lastResultAt <= Date.now() ? new Date(lastResultAt).toISOString() : undefined,
         warnings: body.status === "ok" ? [] : ["safety-data observability is degraded."]
       };
     } catch (error) {
@@ -1082,8 +1164,14 @@ function mapSafetyEntity(feature: SafetyFeature): SearchEntity | undefined {
   const observedAt = normalizeTimestamp(properties.observedAt);
   const validFrom = normalizeTimestamp(properties.validFrom ?? properties.effectiveAt);
   const validUntil = normalizeTimestamp(properties.validUntil ?? properties.expiresAt);
+  const expiresAt = normalizeTimestamp(properties.expiresAt) ?? validUntil;
   const updatedAt = normalizeTimestamp(properties.updatedAt ?? properties.observedAt ?? properties.validFrom) ?? new Date().toISOString();
-  const stale = booleanValue(properties.stale) ?? isExpired(validUntil);
+  const expired = isExpired(validUntil) || isExpired(expiresAt);
+  const invalidValidity = [properties.validUntil, properties.expiresAt].some(
+    (value) => value !== null && value !== undefined && readTimeTimestamp(value) === undefined
+  );
+  const unknownValidity = invalidValidity || (!validUntil && !expiresAt);
+  const stale = booleanValue(properties.stale) === true || expired || unknownValidity;
   const severity = normalizeSeverity(stringValue(properties.severity));
   const sourceName = stringValue(properties.sourceName) ?? stringValue(properties.source) ?? sourceId;
   const localized = asRecord(properties.localized);
@@ -1124,7 +1212,7 @@ function mapSafetyEntity(feature: SafetyFeature): SearchEntity | undefined {
       municipality: undefined,
       street: undefined
     },
-    status: isExpired(validUntil) ? "expired" : "active",
+    status: expired ? "expired" : unknownValidity ? "unknown" : "active",
     severity,
     confidence: clampNumber(numberValue(properties.confidence), 0.5, 0, 1),
     dataQuality: dataQualityForSafetySource(sourceId, entityType),
@@ -1137,7 +1225,7 @@ function mapSafetyEntity(feature: SafetyFeature): SearchEntity | undefined {
     validFrom: validFrom ?? observedAt ?? updatedAt,
     validUntil: validUntil ?? null,
     updatedAt,
-    expiresAt: normalizeTimestamp(properties.expiresAt) ?? validUntil ?? null,
+    expiresAt: expiresAt ?? null,
     stale,
     sourceRevision: `${sourceId}:${updatedAt}`,
     layerIds: layerIdsForEntityType(entityType),

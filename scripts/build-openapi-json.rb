@@ -394,6 +394,37 @@ def build_document
   request_properties["includeRoadMatch"] = { "type" => "boolean", "default" => false, "description" => "Include versioned directional road-match evidence; never implies a routing closure." }
   request_properties["headingDeg"] = { "type" => "number", "minimum" => 0, "exclusiveMaximum" => 360 }
 
+  # Add current search freshness semantics without editing historical YAML.
+  doc["components"]["schemas"]["SearchDataSearchFeedFreshness"] = {
+    "type" => "object",
+    "description" => "Application read-time diagnostics for only the entities returned in this response, not the collected source snapshot or a country-wide total. Counts are not mutually exclusive. Evaluation does not refresh providers or alter the original feed timestamp, source timestamps, revisions, order or pagination. A gateway HIT/STALE may reuse serialized diagnostics with their original evaluatedAt; consumers must still respect actual entity validity. Missing diagnostics never mean zero stale entities or verified freshness.",
+    "required" => %w[scope evaluatedAt feedTimestampState feedAgeSeconds returnedStaleCount returnedExpiredCount missingExpiryCount invalidExpiryCount],
+    "properties" => {
+      "scope" => { "type" => "string", "const" => "returned_entities" },
+      "evaluatedAt" => { "type" => "string", "format" => "date-time", "description" => "Time at which this returned page was evaluated; not a new source observation or feed generation." },
+      "feedTimestampState" => { "type" => "string", "enum" => %w[valid future invalid], "description" => "Validity of the original feed generatedAt relative to evaluatedAt. A future or invalid value cannot certify freshness." },
+      "feedAgeSeconds" => { "type" => ["number", "null"], "minimum" => 0, "description" => "Age of the original feed generatedAt when its state is valid; null for a future or invalid timestamp. Not the age of individual source observations." },
+      "returnedStaleCount" => { "type" => "integer", "minimum" => 0, "description" => "Returned entities whose projected stale flag is true at evaluatedAt, including preserved provider staleness." },
+      "returnedExpiredCount" => { "type" => "integer", "minimum" => 0, "description" => "Returned entities whose projected status is expired at evaluatedAt. This can overlap returnedStaleCount." },
+      "missingExpiryCount" => { "type" => "integer", "minimum" => 0, "description" => "Normalized returned entities without either expiry deadline. This may include a source value normalized to null. OSM reference records may intentionally have no deadline; absence is not proof of current dynamic data or a service outage." },
+      "invalidExpiryCount" => { "type" => "integer", "minimum" => 0, "description" => "Returned entities with an invalid normalized validUntil or expiresAt. This is not a count of invalid raw provider values; values already normalized to null are counted as missing. Invalid deadlines never make an entity fresh; a separate valid expired deadline still takes precedence." }
+    },
+    "additionalProperties" => false
+  }
+  search_feed = doc["components"]["schemas"]["SearchDataSearchEntityFeed"]
+  search_feed["properties"]["freshness"] = { "$ref" => "#/components/schemas/SearchDataSearchFeedFreshness" }
+  search_feed["properties"]["generatedAt"]["description"] = "Original feed generation time, preserved on a cache hit. It is not a source measurement timestamp and must not be replaced by consumer request time."
+  search_feed["properties"]["summary"]["properties"]["staleEntityCount"]["description"] = "Legacy snapshot count: /entities counts the collected set before pagination; /query retains its existing returned-result count. It is not recomputed by read-time projection. Use freshness.returnedStaleCount for the current returned page, without treating it as a whole-collection count."
+  search_entities = doc["paths"]["/search-data/api/v1/entities"]["get"]
+  search_entities["description"] += " Each read, including an application-cache hit, projects expiry onto the returned entities and adds optional freshness diagnostics scoped to returned_entities. No extra provider fetch, reordering, timestamp/revision rewrite or pagination change is introduced; existing feed generatedAt and collection summary retain their snapshot meaning. Expired data remains stale. Invalid or missing dynamic expiry, or invalid/future feed generation, cannot certify freshness. OSM records with sourceSystem osm_reference and sourceAuthority reference retain timeless reference semantics when no deadline is supplied; they are not live observations."
+  doc["paths"]["/search-data/api/v1/query"]["post"]["description"] += " Expiry projection precedes the existing includeStale filter. The returned page has the same optional freshness diagnostics as /entities, evaluated at the same request time; /query has no shared whole-feed cache. These counts describe only returned entities and do not replace source or collection health."
+  search_observability = doc["components"]["schemas"]["SearchDataSearchObservabilityResponse"]
+  search_observability["properties"]["generatedAt"]["description"] = "Time of this observability response, not a source-data refresh or proof of fresh entities."
+  search_observability["properties"]["cache"]["description"] = "Open cache telemetry object. Consumers whitelist known numeric counters; missing or unknown fields are not coerced to zero or fresh. Cache hits do not establish provider-data quality."
+  search_observability["properties"]["dataQualityStatus"]["description"] += " Optional for compatibility; absence is unknown, not ok."
+  search_observability["properties"]["degradedSourceCount"]["description"] = "Number of source observations reporting degraded quality. Optional for compatibility; absence is unknown, not zero."
+  doc["components"]["schemas"]["SearchDataSearchSourceObservability"]["properties"]["lastSuccessAt"]["description"] = "Source-specific snapshot/import time, not the observability request time. For safety_data this is the actual lastResult.generatedAt when available; missing timestamp means unknown source age."
+
   doc["tags"].uniq! { |tag| tag["name"] }
   prune_unused_schemas(doc)
   doc

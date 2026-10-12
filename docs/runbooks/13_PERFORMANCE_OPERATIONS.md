@@ -133,6 +133,66 @@ Verify health, a synthetic car route and graph-bound closures. Rollback selects
 the previous image in the existing Compose override and recreates only SDA with
 `--no-deps --no-build`; no migration, network or secret change is involved.
 
+### Search read time freshness acceptance
+
+[ADR 0037](../adr/0037_SEARCH_FEED_READ_TIME_FRESHNESS.md) is prepared source;
+its production rollout remains blocked until the coordinated build/deploy
+window and joint SIM/COP acceptance. Prepare the selected search diff against
+the recorded deployed routing source `03b842e`, not an older crisis-source
+branch. Preflight must reverify the actual running image and source revision;
+an older observation is not authority to replace a newer release.
+
+Observe the ordinary COP processing path without new diagnostic domain queries,
+cachebusting, provider refreshes, wider limits or relaxed health gates. Capture
+only a bounded allowlist in existing structured logs under their existing
+retention: HTTP status and latency, static reason/source codes, feed
+`generatedAt`, returned/collection summary counts with explicit scope,
+`freshness` enum/ISO/count fields when present, cursor presence (never value),
+gateway cache state and recognized numeric cache counters. The existing
+observability contract may also supply service `status`, optional
+`dataQualityStatus`/`degradedSourceCount`, source quality/stale counts and source
+`lastSuccessAt`. Do not introduce a diagnostic database, durable snapshot store
+or a purely cache-only endpoint for this repair.
+
+Keep absent metadata unknown. In particular, a missing `freshness` object,
+optional quality or source success time must not become `ok`, zero or the
+current request time. Feed age is not observation age; for a future or invalid
+feed time its value is `null`. `freshness.scope=returned_entities` counts only
+the current page, while `/entities` legacy `summary.staleEntityCount` retains
+the collected snapshot scope. Source observability counters have their own
+source snapshot scope. A complete cached collection and an entirely fresh
+returned page are different claims.
+
+An nginx `HIT` or `STALE` can return previously serialized freshness without
+executing the application projection again. Preserve and inspect its original
+`evaluatedAt`; do not claim it was recomputed at the consumer request time.
+The gateway policy is unchanged. This is why the consumer must still enforce
+entity validity rather than trust a cached freshness count alone.
+
+Missing-expiry counts include normalized values without both deadlines and can
+include provider values normalized to null. Invalid-expiry counts cover only
+invalid fields still present in returned normalized entities; zero cannot
+certify that all raw source timestamps were valid. OSM reference entities
+without expiry do not become a source outage or a live observation. Safety
+`lastSuccessAt` must be its actual `lastResult.generatedAt`, not observability
+response time. Preserve original entity observation, validity and revisions.
+
+Post-build checks must cover the expiry transition on an application-cache hit,
+query stale filtering, unchanged partial/full TTL, Safety staleness/snapshot
+time and additive OpenAPI compatibility. Deploy only Situation Data API and
+preserve routing/closure guards, pilot flags, HMAC/service tokens, database
+configuration, mounts, internal network membership and all other containers.
+Record the exact candidate and rollback image identities before activation.
+Rollback reselects the prior image through the same existing Compose overlays
+and recreates only Situation Data API; no data migration is required.
+
+If a gate fails, retain only the allowed metadata from that failed processing
+step before rollback. Do not log entities, IDs, GPS/geometry, query text, raw
+warnings, provider URLs, cursors, request bodies or secret values. A subsequent
+green healthcheck cannot reconstruct a missing earlier snapshot. The prior
+historical failure has no established provider, PostgreSQL or API cause; this
+repair addresses proven freshness/diagnostic gaps without asserting one.
+
 After deploy:
 
 ```bash

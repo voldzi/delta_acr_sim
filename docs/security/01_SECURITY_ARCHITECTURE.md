@@ -51,6 +51,26 @@ browser ani COP klient jej nesmí volat přímo. Updater má pouze odchozí př�
 nutný pro pinované images a veřejné mapové/elevation zdroje; release manifest
 nesmí obsahovat credentials.
 
+## Search feed freshness boundary
+
+The prepared read-time projection in [ADR 0037](../adr/0037_SEARCH_FEED_READ_TIME_FRESHNESS.md)
+only changes the returned stale/status view and adds aggregate freshness
+metadata. It does not authorize provider calls, alter source timestamps or
+revisions, replace handling rules, expand public access or make stale dynamic
+data eligible for notifications or AI use. Missing or invalid expiry cannot
+certify current data. Reference data without expiry is not a live observation.
+Availability, source-data quality, collection staleness and returned-page
+staleness remain distinct; an HTTP success or cache hit certifies none of the
+other scopes.
+
+Operational diagnosis uses the existing structured logging and retention
+boundary only: allowlisted enum states, static reason codes, ISO times and
+numeric counts/cache counters. Do not log entities, entity IDs, geometry/GPS,
+queries, cursors, source URLs, provider warning text, credentials or request
+bodies. No diagnostic database, durable store, new endpoint, public port,
+authentication flag, secret or role is introduced. Production activation and
+rollback remain coordinated; prepared source is not evidence of deployment.
+
 ## AI Router a hranice COP kontextu
 
 AI Router je interní server-to-server služba. Samotná autentizace služby COP
