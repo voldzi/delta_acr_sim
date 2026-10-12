@@ -172,6 +172,17 @@ export function runtimeEnvironmentMap(entries) {
   assert.equal(new Set(pairs.map(([key]) => key)).size, pairs.length, "Duplicate runtime environment key");
   return sorted(Object.fromEntries(pairs));
 }
+export function assertRuntimeBaseLayers(oldLayers, candidateLayers) {
+  const digest = /^sha256:[0-9a-f]{64}$/;
+  assert.ok(Array.isArray(oldLayers) && oldLayers.length > 0 && oldLayers.every(value => typeof value === "string" && digest.test(value)), "Old image layers must be immutable digests");
+  assert.ok(Array.isArray(candidateLayers) && candidateLayers.every(value => typeof value === "string" && digest.test(value)), "Candidate layers must be immutable digests");
+  assert.equal(candidateLayers.length, oldLayers.length + 2, "Candidate must contain only the two reviewed file-copy layers");
+  assert.deepEqual(candidateLayers.slice(0, oldLayers.length), oldLayers, "Candidate must inherit the complete immutable old image");
+  const added = candidateLayers.slice(oldLayers.length);
+  assert.equal(new Set(added).size, 2, "Reviewed copy layers must be distinct");
+  assert.ok(added.every(value => !oldLayers.includes(value)), "Reviewed copy layers must be new");
+  return true;
+}
 export function assertEffectiveEnvironment(imageEnvEntries, composeEnvObject, runtimeEnvEntries) {
   const defaults = runtimeEnvironmentMap(imageEnvEntries);
   const runtime = runtimeEnvironmentMap(runtimeEnvEntries);
@@ -263,6 +274,17 @@ function walk(relative){const absolute=path.join('/app',relative),stat=fs.lstatS
 for(const relative of ['apps/situation-data-api/src','apps/situation-data-api/dist','packages/observability/src','packages/observability/dist','openapi'])walk(relative);
 for(const relative of ['package.json','pnpm-lock.yaml','pnpm-workspace.yaml','.npmrc','apps/situation-data-api/package.json','apps/situation-data-api/tsconfig.json','packages/observability/package.json'])walk(relative);
 records.sort((a,b)=>a[0].localeCompare(b[0]));console.log(JSON.stringify({treeHash:sha(JSON.stringify(records)),fileCount:records.length,nodeVersion:process.version,sourceHash:sha(fs.readFileSync('/app/apps/situation-data-api/src/search-data.ts')),distHash:sha(fs.readFileSync('/app/apps/situation-data-api/dist/search-data.js'))}));`;
+// Compare offline image roots, never the live SDA filesystem or provider mounts.
+// Only reviewed file content and Docker-created runtime mounts are excluded.
+export const rootFilesystemProofScript = String.raw`
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
+const reviewedFiles=new Set(['/app/apps/situation-data-api/src/search-data.ts','/app/apps/situation-data-api/dist/search-data.js']),excludedFiles=new Set(['/etc/hostname','/etc/hosts','/etc/resolv.conf']);
+const excludedTrees=new Set(['/proc','/sys','/dev']),digest=crypto.createHash('sha256'),chunk=Buffer.alloc(1024*1024);
+let entryCount=0,fileCount=0,hashedBytes=0;
+const identity=s=>[s.dev,s.ino,s.mode,s.uid,s.gid,s.size,s.nlink];
+function fileDigest(file,stat){assert.ok(stat.size<=512*1024*1024,'Image file exceeds proof bound');const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW),hash=crypto.createHash('sha256');try{assert.deepEqual(identity(fs.fstatSync(fd)),identity(stat));let position=0;while(position<stat.size){const count=fs.readSync(fd,chunk,0,Math.min(chunk.length,stat.size-position),position);assert.ok(count>0,'Incomplete image file read');hash.update(chunk.subarray(0,count));position+=count;}assert.equal(fs.readSync(fd,chunk,0,1,position),0);assert.deepEqual(identity(fs.fstatSync(fd)),identity(stat));assert.deepEqual(identity(fs.lstatSync(file)),identity(stat));hashedBytes+=position;return hash.digest('hex');}finally{fs.closeSync(fd);}}
+function walk(file,depth=0){assert.ok(depth<=64&&file.length<=4096,'Image path exceeds proof bound');if(excludedTrees.has(file)||excludedFiles.has(file))return;const stat=fs.lstatSync(file);assert.ok(++entryCount<=128000,'Image entries exceed proof bound');const metadata=[stat.mode&0o7777,stat.uid,stat.gid];if(reviewedFiles.has(file)){assert.ok(stat.isFile(),'Reviewed content must be a regular file');fileCount++;digest.update(JSON.stringify([file,'reviewed-content',...metadata])+'\n');}else if(stat.isDirectory()){digest.update(JSON.stringify([file,'directory',...metadata])+'\n');for(const name of fs.readdirSync(file).sort())walk(path.join(file,name),depth+1);assert.deepEqual(identity(fs.lstatSync(file)),identity(stat));}else if(stat.isFile()){fileCount++;digest.update(JSON.stringify([file,'file',...metadata,stat.size,fileDigest(file,stat)])+'\n');}else if(stat.isSymbolicLink()){const target=fs.readlinkSync(file);assert.ok(target.length<=4096);assert.deepEqual(identity(fs.lstatSync(file)),identity(stat));digest.update(JSON.stringify([file,'symlink',...metadata,target])+'\n');}else throw Error('Unexpected image filesystem entry type');}
+walk('/');console.log(JSON.stringify({rootFilesystemSha256:digest.digest('hex'),entryCount,fileCount,hashedBytes}));`;
 const fixtureScript = String.raw`
 import assert from 'node:assert/strict';
 globalThis.fetch=()=>{throw Error('Network forbidden in pure fixture');};
@@ -285,18 +307,27 @@ function candidateIdentity(before) {
   assert.equal(inspectImage(PROTECTED_OLD).Id, OLD_ID);
   assert.equal(old.Config.Labels?.["org.opencontainers.image.revision"], BASE_REVISION);
   assert.equal(candidate.Config.Labels?.["org.opencontainers.image.revision"], SOURCE_REVISION);
+  assert.equal(candidate.Config.Labels?.["org.opencontainers.image.base-revision"], BASE_REVISION);
+  assert.equal(candidate.Config.Labels?.["org.opencontainers.image.base-image-id"], OLD_ID);
   assert.notEqual(candidate.Id, OLD_ID);
   assert.equal(candidate.Os, old.Os); assert.equal(candidate.Architecture, old.Architecture);
+  assert.equal(old.RootFS?.Type, "layers"); assert.equal(candidate.RootFS?.Type, "layers");
+  assertRuntimeBaseLayers(old.RootFS.Layers, candidate.RootFS.Layers);
   for (const key of ["Cmd", "Entrypoint", "WorkingDir", "User", "Env", "Healthcheck", "ExposedPorts", "Volumes"]) assert.deepEqual(candidate.Config[key] ?? null, old.Config[key] ?? null);
-  const original = JSON.parse(command("docker", ["exec", CONTAINER, "node", "-e", manifestScript]));
+  const original = JSON.parse(command("docker", [...offlineArgs(OLD_ID), "-e", manifestScript]));
   const next = JSON.parse(command("docker", [...offlineArgs(candidate.Id), "-e", manifestScript]));
   assert.equal(next.treeHash, original.treeHash); assert.equal(next.fileCount, original.fileCount); assert.equal(next.nodeVersion, original.nodeVersion);
   assert.equal(next.sourceHash, SOURCE_SHA); assert.equal(next.distHash, DIST_SHA);
   assert.notEqual(next.sourceHash, original.sourceHash); assert.notEqual(next.distHash, original.distHash);
+  const originalRoot = JSON.parse(command("docker", [...offlineArgs(OLD_ID), "-e", rootFilesystemProofScript]));
+  const nextRoot = JSON.parse(command("docker", [...offlineArgs(candidate.Id), "-e", rootFilesystemProofScript]));
+  assert.deepEqual(nextRoot, originalRoot, "OS, native libraries, dependencies or unreviewed runtime files changed");
   const fixture = JSON.parse(command("docker", [...offlineArgs(candidate.Id), "--input-type=module", "-e", fixtureScript]));
   assert.deepEqual(fixture, { fixturePassed: true, returnedEntitiesScope: true, sourceMetadataPreserved: true, retainedSnapshotUnchanged: true });
   assert.equal(before.Image, OLD_ID);
-  return { candidateId: candidate.Id, unchangedTreeSha256: next.treeHash, fixturePassed: true };
+  assert.equal(inspectImage(PROTECTED_OLD).Id, OLD_ID); assert.equal(inspectImage(CANDIDATE).Id, candidate.Id);
+  return { candidateId: candidate.Id, unchangedTreeSha256: next.treeHash, unchangedRootFilesystemSha256: nextRoot.rootFilesystemSha256,
+    immutableBaseLayersSha256: sha(old.RootFS.Layers), exactRuntimeBaseVerified: true, fixturePassed: true };
 }
 function privateDirectory(path, create = false) {
   if (create && !existsSync(path)) mkdirSync(path, { mode: 0o700 });
@@ -327,14 +358,14 @@ function readRecord(directory) {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   let record;
   try { assert.deepEqual(selectedMetadata(fstatSync(fd)), selectedMetadata(stat)); record = JSON.parse(readFileSync(fd, "utf8")); } finally { closeSync(fd); }
-  const keys = ["schemaVersion", "sourceRevision", "baseRevision", "oldPin", "candidatePin", "oldImageId", "candidateImageId", "originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "environmentMetadata", "configHashes", "runtimeInvariant", "unchangedTreeSha256"];
+  const keys = ["schemaVersion", "sourceRevision", "baseRevision", "oldPin", "candidatePin", "oldImageId", "candidateImageId", "originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "environmentMetadata", "configHashes", "runtimeInvariant", "unchangedTreeSha256", "unchangedRootFilesystemSha256", "immutableBaseLayersSha256"];
   assert.deepEqual(Object.keys(record).sort(), keys.sort());
-  assert.equal(record.schemaVersion, "sim-search-freshness-image-only/v1");
+  assert.equal(record.schemaVersion, "sim-search-freshness-image-only/v2");
   assert.equal(record.sourceRevision, SOURCE_REVISION); assert.equal(record.baseRevision, BASE_REVISION);
   assert.equal(record.oldPin, OLD_PIN); assert.equal(record.candidatePin, CANDIDATE); assert.equal(record.oldImageId, OLD_ID);
   assert.match(record.candidateImageId, /^sha256:[0-9a-f]{64}$/);
   assert.notEqual(record.candidateImageId, OLD_ID);
-  for (const key of ["originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "unchangedTreeSha256"]) assert.match(record[key], /^[0-9a-f]{64}$/);
+  for (const key of ["originalEnvironmentSha256", "candidateEnvironmentSha256", "nonImageSha256", "unchangedTreeSha256", "unchangedRootFilesystemSha256", "immutableBaseLayersSha256"]) assert.match(record[key], /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(record.configHashes).sort(), [...FILES].sort());
   for (const value of Object.values(record.configHashes)) assert.match(value, /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(record.environmentMetadata).sort(), ["uid", "gid", "mode", "dev", "ino", "nlink", "size"].sort());
@@ -418,7 +449,9 @@ async function main() {
     assert.deepEqual(configHashes(), files); assert.equal(inspect().Id, before.Id); assert.deepEqual(others(), otherBefore);
     if (options.mode === "check") {
       console.log(JSON.stringify({ status: "checked", productionUnchanged: true, sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION,
-        candidateImageId: candidateId, unchangedRuntimeTreeSha256: identity.unchangedTreeSha256, pureFixturePassed: true }));
+        candidateImageId: candidateId, unchangedRuntimeTreeSha256: identity.unchangedTreeSha256,
+        immutableBaseLayersVerified: identity.exactRuntimeBaseVerified, offlineFilesystemContentAndPosixMetadataVerified: true,
+        extendedAttributeAndLayerMetadataAcceptancePending: true, pureFixturePassed: true }));
       return;
     }
     phase = "metadata_record";
@@ -426,11 +459,12 @@ async function main() {
     const directory = `${BACKUPS}/${new Date().toISOString().replaceAll(":", "-")}-${process.pid}`;
     privateDirectory(directory, true); recordDir = directory;
     privateRecord(`${recordDir}/before.json`, {
-      schemaVersion: "sim-search-freshness-image-only/v1", sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION,
+      schemaVersion: "sim-search-freshness-image-only/v2", sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION,
       oldPin: OLD_PIN, candidatePin: CANDIDATE, oldImageId: OLD_ID, candidateImageId: candidateId,
       originalEnvironmentSha256: planned.originalSha256, candidateEnvironmentSha256: planned.nextSha256,
       nonImageSha256: planned.nonImageSha256, environmentMetadata: metadata, configHashes: files,
-      runtimeInvariant: baseline, unchangedTreeSha256: identity.unchangedTreeSha256
+      runtimeInvariant: baseline, unchangedTreeSha256: identity.unchangedTreeSha256,
+      unchangedRootFilesystemSha256: identity.unchangedRootFilesystemSha256, immutableBaseLayersSha256: identity.immutableBaseLayersSha256
     });
     privateRecord(`${recordDir}/rollback-instructions.json`, {
       noEnvironmentCopies: true, noEnvironmentRewrite: true, noImageTagMutation: true,
@@ -450,6 +484,7 @@ async function main() {
     assert.equal(sha(readEnvironmentBytes(metadata)), planned.nextSha256); assert.deepEqual(envMetadata(), metadata);
     const proof = { status: "success", sourceRevision: SOURCE_REVISION, baseRevision: BASE_REVISION, candidateImageId: candidateId,
       onlySdaChanged: true, runtimeInvariantsPreserved: true, environmentInodePreserved: true, environmentNonImageBytesPreserved: true,
+      immutableBaseLayersVerified: true, offlineFilesystemContentAndPosixMetadataVerified: true,
       pureFixturePassed: true, authenticatedApiAcceptancePending: true, recordDir };
     privateRecord(`${recordDir}/after.json`, proof); console.log(JSON.stringify(proof));
   } catch (error) {

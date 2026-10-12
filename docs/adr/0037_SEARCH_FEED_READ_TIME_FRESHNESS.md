@@ -92,3 +92,14 @@ reserialized: only the same-width image value may change under byte-level
 compare-and-swap and FD flock. Rollback records contain private metadata and
 hashes, not configuration contents. A partial write or foreign configuration
 change requires coordinated attention without blind recreation or restore.
+
+Runtime provenance is anchored to the complete immutable old image, not a
+moving Node.js base tag. The narrow operations Dockerfile copies only the two
+reviewed source/compiled search files into that exact runtime. Candidate checks
+require its complete original RootFS prefix plus two new layers, unchanged
+runtime configuration and a whole offline-filesystem comparison covering OS,
+native libraries and dependencies. Only the reviewed files and explicit
+Docker/virtual runtime mount paths are excluded. Development dependencies may
+exist in the build stage but are never copied into the final runtime. These
+provenance checks do not replace host resource, Linux file-write or joint live
+acceptance gates.

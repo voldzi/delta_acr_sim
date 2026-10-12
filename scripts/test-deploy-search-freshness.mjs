@@ -5,8 +5,10 @@ import { createHash } from "node:crypto";
 import { chmodSync, linkSync, lstatSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
-import { assertEffectiveEnvironment, imagePinPatchPlan, parseArguments, replaceImagePinInPlace, runtimeEnvironmentMap } from "./deploy-search-freshness.mjs";
+import { assertEffectiveEnvironment, assertRuntimeBaseLayers, imagePinPatchPlan, parseArguments, replaceImagePinInPlace, rootFilesystemProofScript, runtimeEnvironmentMap } from "./deploy-search-freshness.mjs";
 
 const revision = "90e1d8d0cc50236429b32476e3fd2f31899cf03c";
 const oldImageId = "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965";
@@ -182,6 +184,217 @@ test("effective environment rejects duplicate image keys, malformed runtime entr
   assert.throws(() => assertEffectiveEnvironment([], { SYNTHETIC_KEY: undefined }, []));
 });
 
+test("runtime layer provenance accepts only the exact old prefix followed by two new runtime layers", () => {
+  const layer = (character) => `sha256:${character.repeat(64)}`,
+    old = [layer("a"), layer("b")],
+    candidate = [...old, layer("c"), layer("d")],
+    oldBefore = [...old],
+    candidateBefore = [...candidate];
+  assert.equal(assertRuntimeBaseLayers(old, candidate), true);
+  assert.equal(assertRuntimeBaseLayers([layer("a")], [layer("a"), layer("c"), layer("d")]), true);
+  assert.equal(assertRuntimeBaseLayers([layer("a"), layer("a")], [layer("a"), layer("a"), layer("c"), layer("d")]), true);
+  assert.deepEqual(old, oldBefore);
+  assert.deepEqual(candidate, candidateBefore);
+});
+
+test("runtime layer provenance rejects incomplete, extra, reordered, changed and malformed layer lists", () => {
+  const layer = (character) => `sha256:${character.repeat(64)}`,
+    old = [layer("a"), layer("b")],
+    valid = [...old, layer("c"), layer("d")];
+  for (const candidate of [
+    [],
+    [...old],
+    [...old, layer("c")],
+    [...valid, layer("e")],
+    [...old, layer("a"), layer("d")],
+    [...old, layer("c"), layer("b")],
+    [...old, layer("c"), layer("c")],
+    [old[1], old[0], layer("c"), layer("d")],
+    [layer("e"), old[1], layer("c"), layer("d")],
+    [old[0], layer("e"), layer("c"), layer("d")],
+    [old[0], layer("c"), layer("d")],
+    [old[0], old[1], "sha256:short", layer("d")],
+    [old[0], old[1], "sha256:" + "G".repeat(64), layer("d")],
+    [old[0], old[1], "c".repeat(64), layer("d")],
+    [old[0], old[1], 42, layer("d")],
+    null,
+    { layers: valid }
+  ]) assert.throws(() => assertRuntimeBaseLayers(old, candidate));
+  for (const wrongOld of [[], null, { layers: old }, ["invalid-old-digest"], [42]]) {
+    assert.throws(() => assertRuntimeBaseLayers(wrongOld, valid));
+  }
+});
+
+// This facade supplies every filesystem operation used by the production proof
+// script. The VM never receives real node:fs and cannot open a host path.
+function syntheticFilesystem() {
+  const require = createRequire(import.meta.url),
+    path = require("node:path"),
+    entries = new Map(),
+    descriptors = new Map(),
+    reads = [],
+    lstatCounts = new Map();
+  let nextInode = 1, nextFd = 100;
+  const put = (name, kind, data = "", overrides = {}) => {
+    if (name !== "/" && !entries.has(path.dirname(name))) put(path.dirname(name), "directory");
+    const entry = { kind, bytes: Buffer.from(data), target: String(data), dev: 1, ino: nextInode++, uid: 1, gid: 1,
+      mode: kind === "directory" ? 0o40755 : kind === "symlink" ? 0o120777 : 0o100644, nlink: 1, ...overrides };
+    entries.set(name, entry);
+    return entry;
+  };
+  const stats = (entry) => ({
+    dev: entry.dev, ino: entry.ino, mode: entry.mode, uid: entry.uid, gid: entry.gid, nlink: entry.nlink,
+    size: entry.sizeOverride ?? (entry.kind === "file" ? entry.bytes.length : entry.kind === "symlink" ? entry.target.length : 0),
+    isDirectory: () => entry.kind === "directory", isFile: () => entry.kind === "file", isSymbolicLink: () => entry.kind === "symlink"
+  });
+  put("/", "directory");
+  for (const [name, value] of [
+    ["/app/apps/situation-data-api/src/search-data.ts", "synthetic old reviewed source"],
+    ["/app/apps/situation-data-api/dist/search-data.js", "synthetic old reviewed dist"],
+    ["/app/apps/situation-data-api/dist/routing-service.js", "synthetic routing implementation"],
+    ["/app/node_modules/synthetic-package/index.js", "synthetic dependency"],
+    ["/usr/bin/node", "synthetic node executable"],
+    ["/usr/lib/synthetic-native.so", "synthetic native library"],
+    ["/lib/synthetic-os.so", "synthetic OS library"],
+    ["/etc/hostname", "synthetic container name"],
+    ["/etc/hosts", "synthetic generated hosts"],
+    ["/etc/resolv.conf", "synthetic generated resolver"],
+    ["/proc/synthetic-entry", "synthetic virtual process data"],
+    ["/sys/synthetic-entry", "synthetic virtual system data"],
+    ["/dev/synthetic-entry", "synthetic virtual device data"]
+  ]) put(name, "file", value);
+  put("/app/node_modules/synthetic-link", "symlink", "/synthetic-never-follow-target");
+  const hooks = {};
+  const fs = {
+    constants: { O_RDONLY: 0, O_NOFOLLOW: 0x20000 },
+    lstatSync(name) {
+      reads.push(["lstat", name]);
+      const count = (lstatCounts.get(name) ?? 0) + 1;
+      lstatCounts.set(name, count);
+      hooks.lstat?.(name, count, entries);
+      const entry = entries.get(name);
+      assert.ok(entry, "Synthetic path unavailable");
+      return stats(entry);
+    },
+    readdirSync(name) {
+      reads.push(["readdir", name]);
+      return [...entries.keys()].filter((key) => key !== name && path.dirname(key) === name).map((key) => path.basename(key));
+    },
+    readlinkSync(name) { reads.push(["readlink", name]); return entries.get(name).target; },
+    openSync(name, flags) {
+      reads.push(["open", name]);
+      const entry = entries.get(name);
+      assert.ok(entry?.kind === "file" && !entry.unreadable, "Synthetic open rejected");
+      assert.ok((flags & fs.constants.O_NOFOLLOW) !== 0);
+      const fd = nextFd++;
+      descriptors.set(fd, { name, entry });
+      return fd;
+    },
+    fstatSync(fd) { const record = descriptors.get(fd); assert.ok(record); hooks.fstat?.(record.entry); return stats(record.entry); },
+    readSync(fd, buffer, offset, length, position) {
+      const record = descriptors.get(fd); assert.ok(record);
+      const count = Math.min(length, Math.max(0, record.entry.bytes.length - position));
+      record.entry.bytes.copy(buffer, offset, position, position + count);
+      return count;
+    },
+    closeSync(fd) { assert.ok(descriptors.delete(fd)); }
+  };
+  return { fs, entries, put, hooks, reads, descriptors };
+}
+
+function syntheticRootProof(fixture) {
+  const require = createRequire(import.meta.url), output = [];
+  runInNewContext(rootFilesystemProofScript, {
+    Buffer,
+    require(name) {
+      if (name === "node:fs") return fixture.fs;
+      assert.ok(["node:path", "node:crypto", "node:assert/strict"].includes(name));
+      return require(name);
+    },
+    console: { log(value) { output.push(JSON.parse(value)); } }
+  }, { timeout: 5000 });
+  assert.equal(output.length, 1);
+  assert.deepEqual(Object.keys(output[0]).sort(), ["entryCount", "fileCount", "hashedBytes", "rootFilesystemSha256"].sort());
+  assert.match(output[0].rootFilesystemSha256, /^[0-9a-f]{64}$/);
+  assert.equal(fixture.descriptors.size, 0);
+  return output[0];
+}
+
+test("production whole-filesystem proof is deterministic over a wholly synthetic filesystem and emits only aggregates", () => {
+  const first = syntheticRootProof(syntheticFilesystem()), second = syntheticRootProof(syntheticFilesystem());
+  assert.deepEqual(first, second);
+  assert.ok(first.entryCount > first.fileCount && first.fileCount > 0 && first.hashedBytes > 0);
+});
+
+test("whole-filesystem proof ignores only the two reviewed files, three generated etc files and exact virtual trees", () => {
+  const baseline = syntheticRootProof(syntheticFilesystem()), fixture = syntheticFilesystem();
+  for (const name of [
+    "/app/apps/situation-data-api/src/search-data.ts", "/app/apps/situation-data-api/dist/search-data.js",
+    "/etc/hostname", "/etc/hosts", "/etc/resolv.conf", "/proc/synthetic-entry", "/sys/synthetic-entry", "/dev/synthetic-entry"
+  ]) fixture.entries.get(name).bytes = Buffer.from("synthetic changed ignored content");
+  fixture.put("/proc/synthetic-extra", "unexpected");
+  fixture.put("/sys/synthetic-extra", "unexpected");
+  fixture.put("/dev/synthetic-extra", "unexpected");
+  assert.deepEqual(syntheticRootProof(fixture), baseline);
+  assert.ok(fixture.reads.every(([, name]) => !name.startsWith("/proc/") && !name.startsWith("/sys/") && !name.startsWith("/dev/")));
+});
+
+test("whole-filesystem proof detects any unreviewed OS, native, dependency, metadata, symlink or membership change", () => {
+  const baseline = syntheticRootProof(syntheticFilesystem()).rootFilesystemSha256;
+  const mutations = [
+    (fixture) => { fixture.entries.get("/lib/synthetic-os.so").bytes = Buffer.from("changed OS"); },
+    (fixture) => { fixture.entries.get("/usr/lib/synthetic-native.so").bytes = Buffer.from("changed native"); },
+    (fixture) => { fixture.entries.get("/app/node_modules/synthetic-package/index.js").bytes = Buffer.from("changed dependency"); },
+    (fixture) => { fixture.entries.get("/app/apps/situation-data-api/dist/routing-service.js").bytes = Buffer.from("changed unreviewed app"); },
+    (fixture) => { fixture.entries.get("/usr/bin/node").mode ^= 0o100; },
+    (fixture) => { fixture.entries.get("/usr/lib/synthetic-native.so").uid += 1; },
+    (fixture) => { fixture.entries.get("/app/node_modules/synthetic-package/index.js").gid += 1; },
+    (fixture) => { fixture.entries.get("/app/apps/situation-data-api/src/search-data.ts").mode ^= 0o100; },
+    (fixture) => { fixture.entries.get("/app/apps/situation-data-api/src/search-data.ts").uid += 1; },
+    (fixture) => { fixture.entries.get("/app/apps/situation-data-api/dist/search-data.js").gid += 1; },
+    (fixture) => { fixture.entries.get("/app/node_modules").mode ^= 0o100; },
+    (fixture) => { fixture.entries.get("/app/node_modules/synthetic-link").target = "/changed-synthetic-link-target"; },
+    (fixture) => { fixture.put("/usr/lib/synthetic-added.so", "file", "new library"); },
+    (fixture) => { fixture.entries.delete("/usr/lib/synthetic-native.so"); }
+  ];
+  for (const mutate of mutations) {
+    const fixture = syntheticFilesystem();
+    mutate(fixture);
+    assert.notEqual(syntheticRootProof(fixture).rootFilesystemSha256, baseline);
+  }
+});
+
+test("whole-filesystem proof records symlinks without following their targets", () => {
+  const fixture = syntheticFilesystem();
+  syntheticRootProof(fixture);
+  assert.ok(fixture.reads.some(([operation, name]) => operation === "readlink" && name === "/app/node_modules/synthetic-link"));
+  assert.ok(fixture.reads.every(([, name]) => name !== "/synthetic-never-follow-target"));
+  assert.ok(fixture.reads.every(([operation, name]) => operation !== "open" || name !== "/app/node_modules/synthetic-link"));
+});
+
+test("whole-filesystem proof rejects unreadable files, unexpected types, incomplete reads and identity races", () => {
+  const rejectedFixtures = [
+    () => { const fixture = syntheticFilesystem(); fixture.entries.get("/usr/bin/node").unreadable = true; return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.put("/usr/lib/synthetic-socket", "unexpected"); return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.put("/app/apps/situation-data-api/src/search-data.ts", "symlink", "/synthetic-never-follow-target"); return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.put("/app/apps/situation-data-api/dist/search-data.js", "unexpected"); return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.entries.get("/usr/bin/node").sizeOverride = 1000; return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.hooks.fstat = (entry) => { if (entry === fixture.entries.get("/usr/bin/node")) entry.ino += 1; }; return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.hooks.lstat = (name, count, entries) => { if (name === "/usr/bin/node" && count === 2) entries.get(name).ino += 1; }; return fixture; }
+  ];
+  for (const createFixture of rejectedFixtures) assert.throws(() => syntheticRootProof(createFixture()));
+});
+
+test("whole-filesystem proof rejects over-bound file size, depth, path and symlink length instead of skipping", () => {
+  const rejectedFixtures = [
+    () => { const fixture = syntheticFilesystem(); fixture.entries.get("/usr/bin/node").sizeOverride = 512 * 1024 * 1024 + 1; return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.put("/" + Array.from({ length: 66 }, () => "synthetic").join("/"), "file", "bounded fixture"); return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.put("/" + "s".repeat(4097), "file", "bounded fixture"); return fixture; },
+    () => { const fixture = syntheticFilesystem(); fixture.entries.get("/app/node_modules/synthetic-link").target = "s".repeat(4097); return fixture; }
+  ];
+  for (const createFixture of rejectedFixtures) assert.throws(() => syntheticRootProof(createFixture()));
+});
+
 test("image patch plan changes only the single ASCII value and preserves UTF-8 comments and CRLF bytes", () => {
   const original = bytesFor();
   const before = Buffer.from(original);
@@ -237,6 +450,24 @@ test("forward and reverse in-place writes preserve inode, ownership, mode, size 
     assert.deepEqual(readFileSync(path), original);
     assert.deepEqual(metadataFor(path), metadata);
     assert.equal(locks, 2);
+    assert.deepEqual(readdirSync(dir), ["fake-config"]);
+  });
+});
+
+test("Linux default inherited-FD flock protects synthetic in-place forward and reverse writes", { skip: process.platform !== "linux" }, async () => {
+  await fixture(async ({ dir, path, original, metadata, next }) => {
+    const forward = await replaceImagePinInPlace(path, original, next, metadata);
+    assert.equal(forward.verified, true);
+    assert.equal(forward.previousSha256, hash(original));
+    assert.equal(forward.nextSha256, hash(next));
+    assert.deepEqual(readFileSync(path), next);
+    assert.deepEqual(metadataFor(path), metadata);
+    assert.deepEqual(readdirSync(dir), ["fake-config"]);
+    const backward = await replaceImagePinInPlace(path, next, original, metadata);
+    assert.equal(backward.verified, true);
+    assert.equal(backward.nonImageSha256, forward.nonImageSha256);
+    assert.deepEqual(readFileSync(path), original);
+    assert.deepEqual(metadataFor(path), metadata);
     assert.deepEqual(readdirSync(dir), ["fake-config"]);
   });
 });

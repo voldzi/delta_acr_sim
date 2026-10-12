@@ -228,6 +228,11 @@ The tests use only synthetic temporary `fake-config` files, never production
 configuration. They verify exact arguments, equal-width byte changes, original
 inode/ownership/mode, UTF-8 and CRLF preservation, full-file compare-and-swap,
 symlink/hardlink rejection, lock failure and concurrent foreign file changes.
+Layer and whole-filesystem proof tests use synthetic digests and a fake
+filesystem in a VM; they cannot open host image or provider paths. The
+Linux-only default flock/in-place-write test is skipped on macOS. Stage the
+reviewed test file with the guard and run it in the later authorized Linux
+window before activation; a local macOS pass is not that Linux evidence.
 The deployed application source tests remain the separate acceptance evidence
 for cache expiry, Safety normalization, routing and driver measurements.
 
@@ -241,16 +246,19 @@ provider workloads to create headroom.
 
 After the window opens, stage a Git archive of exactly the source revision in
 a new private context, such as
-`/home/voldzi/sim-search-freshness-90e1d8d0cc50`. Stage the reviewed guard from
-the operations commit separately and verify its SHA-256. The context must not
+`/home/voldzi/sim-search-freshness-90e1d8d0cc50`. Stage the reviewed guard, its
+synthetic test file and
+`apps/situation-data-api/Dockerfile.search-freshness` from the operations
+commit separately and verify their SHA-256 values. The context must not
 contain `.env`, credentials, user/provider data or the working tree's ignored
-files. Select only the Docker build inputs from the source archive: root
-package/lock/workspace/TypeScript/npm configuration, `.dockerignore`,
-`packages/observability`, `apps/situation-data-api`, the three road-routing
-OpenAPI fragments named by the Dockerfile, and the tracked offline
-package-manager bundle `.corepack-pnpm-10.33.0.tgz`. Verify the bundle SHA-256:
-`a11ec4fa850e70156ce15257e56ac5a72ea7e5f686de3dc5ae6426322743d7d5`.
-Do not archive or reset the dirty server checkout.
+files. Select only `tsconfig.base.json`, `.dockerignore` and
+`apps/situation-data-api/src/search-data.ts` from the exact source archive.
+All other build code, lock/workspace/package configuration, Node.js and
+package-manager tooling are inherited from the protected old image.
+`tsconfig.base.json` is needed only in the build stage and is unchanged
+between base `03b842e` and source `90e1d8d`. Never archive or reset the dirty
+server checkout, copy a fresh package-manager bundle, or rebuild the runtime
+from a moving `node:24-alpine` tag for this release.
 
 All four guard modes require the same exact arguments. With Node.js 24 and
 the reviewed script staged, the initial read-only invocation is:
@@ -274,28 +282,74 @@ Insufficient resources, a newer SDA or a different set of Compose overlays
 stops the release instead of weakening the checks.
 
 After preflight passes, protect the existing immutable image and build only
-the candidate using the existing default builder:
+the candidate using the existing default builder. Verify the protected alias
+resolves to the recorded image ID immediately before and after this build;
+the alias is not itself the trust anchor:
 
 ```bash
 docker image tag sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965 \
   sim-situation-data-api:rollback-search90-03b842e005f1
-docker buildx build --builder default --load \
+docker buildx build --builder default --load --pull=false \
   --label org.opencontainers.image.revision=90e1d8d0cc50236429b32476e3fd2f31899cf03c \
   --label org.opencontainers.image.base-revision=03b842e005f103bb02d622bb4fc95f27fbea9572 \
+  --label org.opencontainers.image.base-image-id=sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965 \
   -t sim-situation-data-api:search-freshness-90e1d8d0cc50 \
-  -f /home/voldzi/sim-search-freshness-90e1d8d0cc50/apps/situation-data-api/Dockerfile \
+  -f /home/voldzi/sim-search-freshness-90e1d8d0cc50/apps/situation-data-api/Dockerfile.search-freshness \
   /home/voldzi/sim-search-freshness-90e1d8d0cc50
 ```
+
+The build stage may install development dependencies with the inherited frozen
+lockfile to compile the selected source. None of those dependencies or other
+build outputs enter the final runtime. The runtime inherits the entire exact
+old image and appends only two separate COPY layers: the selected search source
+and compiled search module. There is no runtime RUN, package installation,
+configuration replacement or OS/library upgrade. The historical application
+Dockerfile remains unchanged.
 
 Run the exact invocation above with `--check` instead of `--preflight`.
 It must verify the candidate image ID, source/compiled hashes, Node version,
 image runtime configuration and the unchanged application/observability/schema
 manifest. Only `src/search-data.ts` and `dist/search-data.js` are excluded from
-that unchanged-code manifest. The compiled projector fixture runs in a
-temporary container with no network, read-only filesystem, dropped
-capabilities and explicit CPU/memory/process limits. It cannot request a
-provider or PostgreSQL. A changing `node:24-alpine` base or other build drift
-is a failed gate, not permission to relax the manifest or upgrade dependencies.
+that unchanged-code manifest. This selected manifest and Node version alone
+do not prove an unchanged OS or complete dependency tree. The additional
+provenance gate must match the candidate's whole original RootFS layer prefix
+to immutable image ID `2f3aa165…`, with exactly two new distinct file-copy
+layers and the required base-image label.
+
+The guard also hashes the complete filesystems of both **offline images**, not
+the live SDA filesystem or its data mounts. It compares regular-file content,
+mode/UID/GID, directory metadata and symlink targets without following links.
+The only content exclusions are the two reviewed changed files, Docker-created
+`/etc/hostname`, `/etc/hosts`, `/etc/resolv.conf`, and the virtual `/proc`,
+`/sys`, `/dev` subtrees. The two reviewed files must still be regular files
+with unchanged mode/UID/GID; their exact content hashes are checked separately.
+OS files, native libraries, `node_modules` and every
+other image file remain in the comparison. An unreadable/unexpected entry,
+race, proof bound, timeout or mismatch rejects the complete proof; no entry is
+silently omitted. Reads stream through a bounded buffer, with limits of
+128000 entries, 512 MiB per file and 64 path levels.
+
+Each filesystem/code proof and the compiled projector fixture runs in a
+temporary no-network, read-only container with dropped capabilities, 256 MiB
+memory, 0.5 CPU and 32-process limits. It cannot request a provider or
+PostgreSQL. A new base, dependency change or any unreviewed runtime difference
+is a failed gate, not permission to relax the comparison. Local synthetic
+tests are not evidence that Linux flock/pwrite or these actual Docker/image
+checks have passed; those remain separate gates in the authorized host window.
+
+The whole-filesystem proof covers content, type, mode, UID/GID and symlink
+targets, not extended attributes, ACLs, capabilities or timestamps. Before
+cutover approval, the coordinator must also accept the two appended layer
+metadata: their actual uncompressed tar SHA-256 must equal the reported
+DiffIDs; only each exact reviewed regular file and unchanged ancestor
+directories may be present. Reject whiteouts, links, devices, FIFO, sparse or
+duplicate effective paths, traversal and unvalidated PAX/GNU metadata.
+Validate relevant xattrs/ACLs/capabilities and parent directory timestamps
+against the immutable old image, or fail closed. Use a reviewed existing
+parser in a bounded streaming check; do not save a large Docker archive or
+introduce an unreviewed handwritten tar parser. This metadata acceptance is
+still pending and is not supplied by the synthetic VM tests or a `--check`
+result. Do not invoke `--apply` until that independent gate is accepted.
 Keep both immutable images and their aliases through joint acceptance.
 
 #### Activation and return
@@ -325,7 +379,11 @@ stay `shadow_only`. No database migration is involved.
 The private mode-0700 directory printed as `recordDir` under
 `/srv/sim/.deploy-search-freshness-backups/` stores mode-0600 metadata records:
 image IDs/pins, file identity, private hashes and runtime invariants only. It
-does not contain `.env` bytes or secret values. If activation fails after a
+also records the unchanged offline-filesystem and base-layer digests under
+record schema `sim-search-freshness-image-only/v2`; it does not contain `.env`
+bytes or secret values. The earlier v1 operations plan was not activated and
+its narrower selected-code proof is not accepted by this guard. If activation
+fails after a
 verified pin write, automatic rollback is permitted only while this release
 still owns the exact image/configuration/runtime state. An incomplete or
 unverified write stops without recreation or another write and requires

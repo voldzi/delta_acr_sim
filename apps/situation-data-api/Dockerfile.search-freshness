@@ -1,0 +1,16 @@
+# The caller must verify this protected local tag resolves to the approved 2f3aa165 image.
+# Build-only development dependencies and tsconfig never enter the runtime image.
+FROM sim-situation-data-api:rollback-search90-03b842e005f1 AS build
+
+COPY tsconfig.base.json /app/tsconfig.base.json
+COPY apps/situation-data-api/src/search-data.ts /app/apps/situation-data-api/src/search-data.ts
+RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    NODE_ENV=development pnpm install --frozen-lockfile --prod=false \
+    && pnpm --filter @csm-sim/situation-data-api... build
+
+# Inherit the exact old OS, Node, native libraries, dependencies and runtime configuration.
+# Only these two reviewed files may form new filesystem layers; OCI labels come from the caller.
+FROM sim-situation-data-api:rollback-search90-03b842e005f1 AS runtime
+
+COPY --from=build /app/apps/situation-data-api/src/search-data.ts /app/apps/situation-data-api/src/search-data.ts
+COPY --from=build /app/apps/situation-data-api/dist/search-data.js /app/apps/situation-data-api/dist/search-data.js
