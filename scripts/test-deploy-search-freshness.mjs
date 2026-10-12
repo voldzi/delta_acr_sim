@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
-import { assertEffectiveEnvironment, assertRuntimeBaseLayers, imagePinPatchPlan, parseArguments, replaceImagePinInPlace, rootFilesystemProofScript, runtimeEnvironmentMap } from "./deploy-search-freshness.mjs";
+import { assertEffectiveEnvironment, assertImageRuntimeConfiguration, assertRuntimeBaseLayers, imagePinPatchPlan, parseArguments, replaceImagePinInPlace, rootFilesystemProofScript, runtimeEnvironmentMap } from "./deploy-search-freshness.mjs";
 
 const revision = "90e1d8d0cc50236429b32476e3fd2f31899cf03c";
 const oldImageId = "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965";
@@ -222,6 +222,64 @@ test("runtime layer provenance rejects incomplete, extra, reordered, changed and
   ]) assert.throws(() => assertRuntimeBaseLayers(old, candidate));
   for (const wrongOld of [[], null, { layers: old }, ["invalid-old-digest"], [42]]) {
     assert.throws(() => assertRuntimeBaseLayers(wrongOld, valid));
+  }
+});
+
+const syntheticImageConfiguration = () => ({
+  Env: ["SYNTHETIC_IMAGE_FLAG=true"],
+  Cmd: ["node", "synthetic-entry.js"],
+  Entrypoint: null,
+  WorkingDir: "/synthetic",
+  User: "1000:1000",
+  StopSignal: "SIGTERM",
+  Shell: ["/bin/sh", "-c"],
+  OnBuild: ["SYNTHETIC immutable instruction"],
+  ArgsEscaped: false,
+  SyntheticUnknownField: { preserved: "synthetic-value" },
+  Labels: {
+    "synthetic.preserved-label": "unchanged",
+    "org.opencontainers.image.revision": "synthetic-old-revision",
+    "org.opencontainers.image.base-revision": "synthetic-old-base",
+    "org.opencontainers.image.base-image-id": "synthetic-old-image"
+  }
+});
+
+test("whole image configuration permits only three provenance label changes without mutating either parameter", () => {
+  const old = syntheticImageConfiguration(), candidate = structuredClone(old);
+  candidate.Labels["org.opencontainers.image.revision"] = "synthetic-candidate-revision";
+  candidate.Labels["org.opencontainers.image.base-revision"] = "synthetic-candidate-base";
+  candidate.Labels["org.opencontainers.image.base-image-id"] = "synthetic-candidate-base-image";
+  const beforeOld = structuredClone(old), beforeCandidate = structuredClone(candidate);
+  assert.equal(assertImageRuntimeConfiguration(old, candidate), true);
+  assert.deepEqual(old, beforeOld);
+  assert.deepEqual(candidate, beforeCandidate);
+  const labelsAbsent = syntheticImageConfiguration(), labelsNull = structuredClone(labelsAbsent);
+  delete labelsAbsent.Labels;
+  labelsNull.Labels = null;
+  assert.equal(assertImageRuntimeConfiguration(labelsAbsent, labelsNull), true);
+});
+
+test("whole image configuration rejects drift in all fields, unknown fields and labels beyond the three exact exceptions", () => {
+  const old = syntheticImageConfiguration();
+  const mutations = [
+    (candidate) => { candidate.Env = ["SYNTHETIC_IMAGE_FLAG=false"]; },
+    (candidate) => { candidate.Cmd = ["node", "synthetic-other-entry.js"]; },
+    (candidate) => { candidate.User = "0:0"; },
+    (candidate) => { candidate.StopSignal = "SIGKILL"; },
+    (candidate) => { candidate.Shell = ["/bin/synthetic-other-shell", "-c"]; },
+    (candidate) => { candidate.OnBuild = []; },
+    (candidate) => { candidate.ArgsEscaped = true; },
+    (candidate) => { candidate.SyntheticExtraUnknownField = "unexpected"; },
+    (candidate) => { delete candidate.SyntheticUnknownField; },
+    (candidate) => { candidate.SyntheticUnknownField.preserved = "changed"; },
+    (candidate) => { candidate.Labels["synthetic.preserved-label"] = "changed"; },
+    (candidate) => { candidate.Labels["synthetic.extra-label"] = "unexpected"; },
+    (candidate) => { candidate.Labels["org.opencontainers.image.base-image-id-extra"] = "not-an-allowed-exception"; }
+  ];
+  for (const mutate of mutations) {
+    const candidate = structuredClone(old);
+    mutate(candidate);
+    assert.throws(() => assertImageRuntimeConfiguration(old, candidate));
   }
 });
 

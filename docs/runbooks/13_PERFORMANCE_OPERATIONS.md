@@ -316,6 +316,12 @@ provenance gate must match the candidate's whole original RootFS layer prefix
 to immutable image ID `2f3aa165…`, with exactly two new distinct file-copy
 layers and the required base-image label.
 
+All image Config fields remain equal; the only label exceptions are
+`org.opencontainers.image.revision`, `org.opencontainers.image.base-revision`
+and `org.opencontainers.image.base-image-id`, each separately bound to the
+exact release profile. A different metadata field also stops the candidate
+check rather than being implicitly ignored.
+
 The guard also hashes the complete filesystems of both **offline images**, not
 the live SDA filesystem or its data mounts. It compares regular-file content,
 mode/UID/GID, directory metadata and symlink targets without following links.
@@ -350,6 +356,7 @@ parser in a bounded streaming check; do not save a large Docker archive or
 introduce an unreviewed handwritten tar parser. This metadata acceptance is
 still pending and is not supplied by the synthetic VM tests or a `--check`
 result. Do not invoke `--apply` until that independent gate is accepted.
+
 Keep both immutable images and their aliases through joint acceptance.
 
 #### Activation and return

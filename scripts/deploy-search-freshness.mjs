@@ -183,6 +183,18 @@ export function assertRuntimeBaseLayers(oldLayers, candidateLayers) {
   assert.ok(added.every(value => !oldLayers.includes(value)), "Reviewed copy layers must be new");
   return true;
 }
+export function assertImageRuntimeConfiguration(oldConfig, candidateConfig) {
+  const normalized = value => {
+    assert.ok(value && typeof value === "object" && !Array.isArray(value), "Image runtime configuration must be an object");
+    const result = structuredClone(value);
+    const labels = { ...(result.Labels ?? {}) };
+    for (const key of ["org.opencontainers.image.revision", "org.opencontainers.image.base-revision", "org.opencontainers.image.base-image-id"]) delete labels[key];
+    result.Labels = labels;
+    return result;
+  };
+  assert.deepEqual(normalized(candidateConfig), normalized(oldConfig), "Unreviewed image runtime configuration changed");
+  return true;
+}
 export function assertEffectiveEnvironment(imageEnvEntries, composeEnvObject, runtimeEnvEntries) {
   const defaults = runtimeEnvironmentMap(imageEnvEntries);
   const runtime = runtimeEnvironmentMap(runtimeEnvEntries);
@@ -202,7 +214,7 @@ function invariant(container) {
   if (Array.isArray(host.Mounts)) host.Mounts.sort((a, b) => a.Target.localeCompare(b.Target));
   if (Array.isArray(host.Binds)) host.Binds.sort();
   return {
-    runtimeConfigHash: sha(Object.fromEntries(["Cmd", "Entrypoint", "WorkingDir", "User", "Healthcheck", "ExposedPorts", "Volumes"].map(key => [key, container.Config[key] ?? null]))),
+    runtimeConfigHash: sha(Object.fromEntries(["Cmd", "Entrypoint", "WorkingDir", "User", "Healthcheck", "ExposedPorts", "Volumes", "StopSignal", "Shell", "OnBuild", "ArgsEscaped"].map(key => [key, container.Config[key] ?? null]))),
     environmentHash: sha(environmentMap(container)), hostConfigHash: sha(host),
     mountsHash: sha([...container.Mounts].sort((a, b) => a.Destination.localeCompare(b.Destination))),
     networks: sorted(Object.fromEntries(Object.entries(container.NetworkSettings.Networks).map(([name, network]) => [name, {
@@ -313,7 +325,7 @@ function candidateIdentity(before) {
   assert.equal(candidate.Os, old.Os); assert.equal(candidate.Architecture, old.Architecture);
   assert.equal(old.RootFS?.Type, "layers"); assert.equal(candidate.RootFS?.Type, "layers");
   assertRuntimeBaseLayers(old.RootFS.Layers, candidate.RootFS.Layers);
-  for (const key of ["Cmd", "Entrypoint", "WorkingDir", "User", "Env", "Healthcheck", "ExposedPorts", "Volumes"]) assert.deepEqual(candidate.Config[key] ?? null, old.Config[key] ?? null);
+  assertImageRuntimeConfiguration(old.Config, candidate.Config);
   const original = JSON.parse(command("docker", [...offlineArgs(OLD_ID), "-e", manifestScript]));
   const next = JSON.parse(command("docker", [...offlineArgs(candidate.Id), "-e", manifestScript]));
   assert.equal(next.treeHash, original.treeHash); assert.equal(next.fileCount, original.fileCount); assert.equal(next.nodeVersion, original.nodeVersion);
