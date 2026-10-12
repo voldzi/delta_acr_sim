@@ -193,7 +193,166 @@ green healthcheck cannot reconstruct a missing earlier snapshot. The prior
 historical failure has no established provider, PostgreSQL or API cause; this
 repair addresses proven freshness/diagnostic gaps without asserting one.
 
-After deploy:
+### Pinned search freshness deployment
+
+This release uses `scripts/deploy-search-freshness.mjs`, not the historical
+`deploy-routing-unroutable.mjs` or the full-stack `deploy-docker-home.sh`.
+The historical routing guard remains unchanged. The new guard is restricted
+to the following source and image identities:
+
+| Identity | Exact value |
+| --- | --- |
+| Source revision | `90e1d8d0cc50236429b32476e3fd2f31899cf03c` |
+| Runtime base revision | `03b842e005f103bb02d622bb4fc95f27fbea9572` |
+| Existing image pin | `sim-situation-data-api:routing-location-03b842e005f1` |
+| Existing image ID | `sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965` |
+| Candidate image pin | `sim-situation-data-api:search-freshness-90e1d8d0cc50` |
+| Protected rollback alias | `sim-situation-data-api:rollback-search90-03b842e005f1` |
+| Search source SHA-256 | `698e3dd4d978db08cd8ddbc484082327b3743392913ad37b53244cab3a327aaa` |
+| Search compiled SHA-256 | `3060a86a481496e701f9f3c1523bb2c95f68825348a285fe7979a090fe4aad1b` |
+
+Both image pin values are exactly 52 ASCII bytes. The source revision is not
+the later operations commit containing this guard and runbook. Review and
+record that operations commit and the guard file SHA-256 separately; never
+substitute a moving branch, `HEAD`, an old workspace or `/srv/sim`'s unrelated
+checkout for the source revision above.
+
+Run local guard tests before requesting the host window:
+
+```bash
+node --check scripts/deploy-search-freshness.mjs
+node --test scripts/test-deploy-search-freshness.mjs
+```
+
+The tests use only synthetic temporary `fake-config` files, never production
+configuration. They verify exact arguments, equal-width byte changes, original
+inode/ownership/mode, UTF-8 and CRLF preservation, full-file compare-and-swap,
+symlink/hardlink rejection, lock failure and concurrent foreign file changes.
+The deployed application source tests remain the separate acceptance evidence
+for cache expiry, Safety normalization, routing and driver measurements.
+
+#### Build and candidate checks
+
+The infrastructure coordinator must release one SIM build window after the
+operations commit review. While COP owns that window, keep SIM preparation
+offline: no image build, image tag change, container recreation or `.env` edit.
+Never restart Docker, prune images, alter shared PostgreSQL or probe broad
+provider workloads to create headroom.
+
+After the window opens, stage a Git archive of exactly the source revision in
+a new private context, such as
+`/home/voldzi/sim-search-freshness-90e1d8d0cc50`. Stage the reviewed guard from
+the operations commit separately and verify its SHA-256. The context must not
+contain `.env`, credentials, user/provider data or the working tree's ignored
+files. Select only the Docker build inputs from the source archive: root
+package/lock/workspace/TypeScript/npm configuration, `.dockerignore`,
+`packages/observability`, `apps/situation-data-api`, the three road-routing
+OpenAPI fragments named by the Dockerfile, and the tracked offline
+package-manager bundle `.corepack-pnpm-10.33.0.tgz`. Verify the bundle SHA-256:
+`a11ec4fa850e70156ce15257e56ac5a72ea7e5f686de3dc5ae6426322743d7d5`.
+Do not archive or reset the dirty server checkout.
+
+All four guard modes require the same exact arguments. With Node.js 24 and
+the reviewed script staged, the initial read-only invocation is:
+
+```bash
+node /home/voldzi/sim-search-freshness-90e1d8d0cc50/scripts/deploy-search-freshness.mjs \
+  --preflight \
+  --image sim-situation-data-api:search-freshness-90e1d8d0cc50 \
+  --revision 90e1d8d0cc50236429b32476e3fd2f31899cf03c \
+  --expected-old-image-id sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965 \
+  --expected-source-sha256 698e3dd4d978db08cd8ddbc484082327b3743392913ad37b53244cab3a327aaa \
+  --expected-dist-sha256 3060a86a481496e701f9f3c1523bb2c95f68825348a285fe7979a090fe4aad1b
+```
+
+`--preflight` reads capacity, current SDA identity/health, configuration file
+hashes and `.env` file metadata, but not its contents. It creates no lock,
+record, image alias or container. It requires at least 12 GiB available on
+`/`, X5 and Docker's root directory, and 4 GiB `MemAvailable`. X5 must be a
+separate device with UUID `2f93f595-b61b-4eea-9054-7afa9b275b5b`.
+Insufficient resources, a newer SDA or a different set of Compose overlays
+stops the release instead of weakening the checks.
+
+After preflight passes, protect the existing immutable image and build only
+the candidate using the existing default builder:
+
+```bash
+docker image tag sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965 \
+  sim-situation-data-api:rollback-search90-03b842e005f1
+docker buildx build --builder default --load \
+  --label org.opencontainers.image.revision=90e1d8d0cc50236429b32476e3fd2f31899cf03c \
+  --label org.opencontainers.image.base-revision=03b842e005f103bb02d622bb4fc95f27fbea9572 \
+  -t sim-situation-data-api:search-freshness-90e1d8d0cc50 \
+  -f /home/voldzi/sim-search-freshness-90e1d8d0cc50/apps/situation-data-api/Dockerfile \
+  /home/voldzi/sim-search-freshness-90e1d8d0cc50
+```
+
+Run the exact invocation above with `--check` instead of `--preflight`.
+It must verify the candidate image ID, source/compiled hashes, Node version,
+image runtime configuration and the unchanged application/observability/schema
+manifest. Only `src/search-data.ts` and `dist/search-data.js` are excluded from
+that unchanged-code manifest. The compiled projector fixture runs in a
+temporary container with no network, read-only filesystem, dropped
+capabilities and explicit CPU/memory/process limits. It cannot request a
+provider or PostgreSQL. A changing `node:24-alpine` base or other build drift
+is a failed gate, not permission to relax the manifest or upgrade dependencies.
+Keep both immutable images and their aliases through joint acceptance.
+
+#### Activation and return
+
+Candidate checks and a healthy image do not authorize activation. Obtain the
+coordinator's explicit cutover confirmation, then invoke the same reviewed
+script and five arguments with `--apply`. The only authoritative image value
+it may edit is `DRIVER_MEASUREMENTS_IMAGE` in `/srv/sim/.env`. Its exclusive
+deployment marker, Linux FD flock, byte-level compare-and-swap, inode/mode/
+owner checks and one positional write preserve every non-image byte. There
+is no configuration copy, temporary replacement, truncation or serialization.
+Inherited image overrides are rejected. Do not enable shell tracing or export
+environment/configuration hashes outside the private process and record.
+
+Activation uses project `sim` and exactly these existing overlays:
+
+- `/srv/sim/docker-compose.yml`;
+- `/srv/sim/docker-compose.x5.yml`;
+- `/srv/sim/docker-compose.driver-measurements.yml`.
+
+Only `situation-data-api` may be recreated, with `--no-deps --no-build
+--pull never`. Preserve all environment values, effective Compose settings,
+mounts, internal networks, image startup settings and other container IDs.
+Current driver pilot/revocation flags remain unchanged; measurement outputs
+stay `shadow_only`. No database migration is involved.
+
+The private mode-0700 directory printed as `recordDir` under
+`/srv/sim/.deploy-search-freshness-backups/` stores mode-0600 metadata records:
+image IDs/pins, file identity, private hashes and runtime invariants only. It
+does not contain `.env` bytes or secret values. If activation fails after a
+verified pin write, automatic rollback is permitted only while this release
+still owns the exact image/configuration/runtime state. An incomplete or
+unverified write stops without recreation or another write and requires
+coordinated inspection; never use a blind restore, shell writer or `.env` copy.
+
+For a later owner-approved rollback, use the same script and five arguments
+with `--rollback --record-dir` followed by that exact private record path.
+The guard reverifies ownership, full file bytes, inode, overlays and protected
+old image before restoring the same-width pin and recreating only SDA.
+Other applications are compared with their current rollback-start identities,
+not the earlier deployment snapshot, so a separately authorized COP release
+does not invalidate a later SDA-only return. Configuration drift or a newer
+SDA stops rollback for manual coordination.
+
+After activation, use normal COP processing and the unchanged health gate,
+with cache warm-up at the existing cadence. Keep only the permitted scoped
+freshness/quality aggregates from that actual processing step. Confirm a
+bounded synthetic routing control and the driver flags remain intact. Do not
+run the general provider benchmark, gateway-cache bypass, radar workload or
+extra domain queries below during this coordinated repair. Accept ADR 0037
+only after both services pass their separate source, image and live gates.
+
+### General post deployment checks
+
+These broader checks are for a separately approved routine monitoring/load
+window. They are not part of the pinned search freshness repair above, and
+must not run while shared PostgreSQL or the host has insufficient headroom.
 
 ```bash
 curl -fsS http://127.0.0.1:5020/health/live

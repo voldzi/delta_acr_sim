@@ -83,3 +83,12 @@ Rollback selects the previous image and recreates only Situation Data API via
 the existing Compose overlays. No data migration or network/secret change is
 required. Accepting this ADR requires the source tests and joint SIM/COP
 freshness acceptance; a historical cause is not implied by that acceptance.
+
+The pinned image-only release uses `scripts/deploy-search-freshness.mjs` and
+the exact procedure in the mapped performance runbook. Its operations commit
+is reviewed separately from source revision `90e1d8d`; the historical routing
+deploy guard is not repurposed. Production configuration is not copied or
+reserialized: only the same-width image value may change under byte-level
+compare-and-swap and FD flock. Rollback records contain private metadata and
+hashes, not configuration contents. A partial write or foreign configuration
+change requires coordinated attention without blind recreation or restore.
