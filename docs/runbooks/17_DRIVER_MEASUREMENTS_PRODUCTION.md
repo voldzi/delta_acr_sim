@@ -11,8 +11,8 @@ a Valhalla POST map_snap, ne v DB, cache nebo logu SIM. Souhrny vždy `shadow_on
 
 Rozšíření podle [ADR 0038](../adr/0038_DRIVER_MEASUREMENT_EVALUATION_AND_COMPARISON.md)
 je připravené pouze ve zdrojovém kódu: chráněná evaluace, operátorský přehled
-a oddělený porovnávací selector. Produkční build a aktivace této změny jsou
-pozastaveny infrastrukturním HOLD. Tento runbook není potvrzení aktuálního
+a oddělený porovnávací selector. Sdílené DB servisní okno je uzavřené, ale
+produkční změna čeká na X5 preflight a společný release slot. Tento runbook není potvrzení aktuálního
 nasazeného obrazu nebo přepnutí účtů COP. Význam v1 se nemění na živou dopravu.
 
 ## DB a secrets
@@ -151,7 +151,7 @@ do staršího stavu. Obnovená data se nikdy nezpřístupní agregaci.
 
 ## Nasazení a rollback
 
-Dokud platí HOLD, následující postup se nespouští. Před otevřením nového
+Dokud platí případný další HOLD, následující postup se nespouští. Před otevřením nového
 okna je nutné sjednotit přesné revize SIM/COP/Jízdy, zkontrolovat a znovu
 ověřit testy, závazné OpenAPI a publikované obrazy. Zdrojová příprava není
 důkaz produkční, geografické nebo fyzické iPhone akceptace.

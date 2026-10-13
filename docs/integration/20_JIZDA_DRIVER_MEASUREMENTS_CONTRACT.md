@@ -10,8 +10,9 @@ Rozšíření 13. 10. 2026: připravená evaluace a dostupnost dobrovolné funkc
 pro všechny autentizované účty přes COP podle
 [ADR 0038](../adr/0038_DRIVER_MEASUREMENT_EVALUATION_AND_COMPARISON.md).
 Jde o zdrojovou přípravu, ne potvrzenou změnu produkčního sběru.
-Produkční změny jsou pozastaveny infrastrukturním HOLD; v1 zůstává
-`shadow_only` a nový živý rychlostní zdroj není aktivován.
+Sdílený databázový HOLD skončil; nasazení vyžaduje úspěšný X5 preflight
+a koordinované release okno. V1 zůstává `shadow_only` a nový živý rychlostní
+zdroj není aktivován.
 
 ## Účel a skutečné využití
 

@@ -1,6 +1,6 @@
 # ADR 0038 Evaluace dobrovolných měření Jízdy
 
-Stav: přijato pro přípravu zdrojového kódu. Produkční aktivace je pozastavena.
+Stav: přijato ve zdrojovém kódu. Produkční nasazení čeká na společnou akceptaci.
 Datum: 13. 10. 2026.
 Navazuje na [ADR 0030](0030_CONSENTED_DRIVER_MEASUREMENTS.md).
 
@@ -92,8 +92,9 @@ COP 202 nadále znamená čekající smazání, ne dokončené smazání.
 Tato ochrana jednoho operátorského reportu není ochrana budoucího live writeru
 ani důkaz odstranění z fyzických záloh.
 
-Zdrojová příprava nezakládá produkční okno. Dokud platí infrastrukturní HOLD,
-neprobíhá build, změna obrazů, flags, secrets, sítě, databáze ani restart.
+Zdrojová příprava nezakládá produkční akceptaci. Sdílené databázové servisní
+okno skončilo 13. 10. 2026; produkční změna této funkce zatím neproběhla.
+Před další změnou je nutný úspěšný X5 preflight a společný release slot COP/SIM.
 Nasazení vyžaduje koordinované okno, kontrolu přesné revize a obrazů,
 ověření chráněných API a reportu a společnou akceptaci COP a Jízdy.
 Návrat vypíná sběr a publikaci, nikoli mazání a retenční úklid; databáze

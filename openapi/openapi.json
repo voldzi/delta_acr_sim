@@ -5131,7 +5131,7 @@
           "Driver Measurements: Driver Measurements"
         ],
         "summary": "Delete one daily pseudonym and reject queued uploads for 7 days",
-        "description": "Available with enabled intake or the independent default-off DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true mode. Dedicated authentication, database and HMAC configuration remain required. Revocation-only mode enables neither batch intake nor aggregate reads and does not require map matching. Storage failure returns 503, not a successful deletion receipt.",
+        "description": "Available with enabled intake or the independent default-off DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true mode. Dedicated authentication, database and HMAC configuration remain required. Revocation-only mode enables neither batch intake nor aggregate/evaluation reads and does not require map matching. If an operator evaluation report is configured, 200 also requires acknowledging its refresh without the deleted contribution or its removal. A report acknowledgement failure returns 503 even if database deletion already committed; COP must retain pending deletion and retry. COP 202 means pending, not complete. This protects the derived operator report, not a durable live traffic overlay or physical backups.",
         "security": [
           {
             "driverMeasurementCopBearer": [
