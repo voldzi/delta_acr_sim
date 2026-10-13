@@ -6,6 +6,8 @@ Nová veřejná dokumentace pro mapové providery je v [../provider/00_INDEX.md]
 
 ## Runtime publisher a společné zásady
 
+- [Návrh 22_COP_ACCOUNT_ERASURE_CONTRACT.md](22_COP_ACCOUNT_ERASURE_CONTRACT.md)
+
 - [01_SHARED_INTEGRATION_CONTRACT.md](01_SHARED_INTEGRATION_CONTRACT.md)
 - [02_SIMULATOR_TO_COP_CONTRACT.md](02_SIMULATOR_TO_COP_CONTRACT.md)
 - [03_PUBLISHER_CONTRACT.md](03_PUBLISHER_CONTRACT.md)

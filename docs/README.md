@@ -21,6 +21,9 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [Návrh ADR 0039: hranice mazání účtu COP](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md)
+- [Návrh integrace 22: mazání účtu COP v SIM](integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)
+
 - [ADR 0036: fail-closed routing location errors](adr/0036_FAIL_CLOSED_ROUTING_LOCATION_ERRORS.md)
 
 - [ADR 0034: bounded search partial-feed recovery](adr/0034_BOUNDED_SEARCH_PARTIAL_FEED_RECOVERY.md)

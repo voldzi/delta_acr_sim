@@ -1,0 +1,138 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SIM COP account erasure review proposal",
+    "version": "0.1.0",
+    "description": "Review proposal only. NOT merged into binding openapi/openapi.json, NOT a deployed or available capability. No production permission, secret, retention decision or deletion is authorized by this document. COP derives actor and all contributor identities server-side."
+  },
+  "servers": [{ "url": "/", "description": "Relative review context only; no available production endpoint is advertised." }],
+  "x-implementation-status": "proposal_not_activated",
+  "paths": {
+    "/situation-data/api/v1/internal/driver-measurements/v1/account-erasure-operations": {
+      "post": {
+        "operationId": "proposeDriverAccountErasure",
+        "tags": ["Account erasure review"],
+        "summary": "Request or resume one COP-derived driver erasure operation",
+        "description": "Existing dedicated COP measurement bearer plus purpose-bound signed actor. COP must preserve its durable account fence and deletion queue, derive every retained/outbox contributor day and key version, and never truncate a manifest. Seven-day received-at retention plus 24-hour observation age requires UTC date(deleteAt minus eight days) through today, and any next-day date permitted by the 30-second future tolerance. Scope is online driver storage and acknowledged derived report only. SIM cannot independently prove manifest identity membership or completeness. No live speed or ETA activation.",
+        "security": [{ "copMeasurementBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ActorHeader" }, { "$ref": "#/components/parameters/ActorSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverErasureRequest" } } } },
+        "responses": {
+          "200": { "description": "Verified named online driver scope only; never whole-account, physical-backup or provider completion", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverErasureReceipt" } } } },
+          "202": { "description": "Pending replay review, publisher review, report acknowledgement or zero verification; not erased", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverErasureReceipt" } } } },
+          "400": { "description": "Invalid or incomplete manifest; no truncation" },
+          "401": { "description": "Invalid bearer or purpose-bound actor" },
+          "403": { "description": "Browser or unapproved service" },
+          "409": { "description": "Operation identity or immutable body digest conflict" },
+          "429": { "description": "Bounded service rate limit; preserve operation ID" },
+          "503": { "description": "Disabled capability, unavailable storage or unsafe replay state; no bypass" }
+        }
+      }
+    },
+    "/situation-data/api/v1/internal/driver-measurements/v1/account-erasure-operations/{operationId}": {
+      "get": {
+        "operationId": "proposeReadDriverAccountErasure",
+        "tags": ["Account erasure review"],
+        "summary": "Read the durable driver erasure status without advancing it",
+        "security": [{ "copMeasurementBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OperationId" }, { "$ref": "#/components/parameters/ActorHeader" }, { "$ref": "#/components/parameters/ActorSignature" }],
+        "responses": {
+          "200": { "description": "Verified completed named online scope, never whole-account proof", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverErasureReceipt" } } } },
+          "202": { "description": "Durable pending status, not a deletion acknowledgement", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverErasureReceipt" } } } },
+          "400": { "description": "Invalid ID or unexpected query" },
+          "401": { "description": "Invalid bearer or actor" },
+          "404": { "description": "No operation visible to this actor" },
+          "409": { "description": "Operation belongs to a different actor" },
+          "503": { "description": "Capability disabled or durable store unavailable" }
+        }
+      }
+    },
+    "/api/v1/ai-router/cop/users/me/erasure-operations": {
+      "post": {
+        "operationId": "proposeRouterAccountErasure",
+        "tags": ["Account erasure review"],
+        "summary": "Request or resume one COP namespace Router erasure operation",
+        "description": "Requires COP bearer and a purpose-bound actor, independently of BYOK or external-model flags. The browser never selects target account or payer. Fence all key mutations, reservations, BYOK chat and legacy COP generate; no shared-key fallback. Already-sent provider work cannot be unsent. Pending provider reservations, retention review or restore review prevent completion. Cost carry-forward is minimalized internal evidence without direct user linkage, not automatically anonymous.",
+        "security": [{ "copRouterBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/ActorHeader" }, { "$ref": "#/components/parameters/ActorSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RouterErasureRequest" } } } },
+        "responses": {
+          "200": { "description": "Verified primary-database COP namespace only; named exceptions remain", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RouterErasureReceipt" } } } },
+          "202": { "description": "Erasure remains pending; does not authorize a fallback or apparent success", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RouterErasureReceipt" } } } },
+          "400": { "description": "Invalid exact request body" },
+          "401": { "description": "Invalid bearer or purpose-bound actor" },
+          "403": { "description": "Only the approved COP service may invoke this operation" },
+          "409": { "description": "Operation identity conflict" },
+          "503": { "description": "Disabled capability or unavailable durable store" }
+        }
+      }
+    },
+    "/api/v1/ai-router/cop/users/me/erasure-operations/{operationId}": {
+      "get": {
+        "operationId": "proposeReadRouterAccountErasure",
+        "tags": ["Account erasure review"],
+        "summary": "Read the actor-bound Router erasure status without provider calls",
+        "security": [{ "copRouterBearer": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OperationId" }, { "$ref": "#/components/parameters/ActorHeader" }, { "$ref": "#/components/parameters/ActorSignature" }],
+        "responses": {
+          "200": { "description": "Verified completed named online scope, not whole-account completion", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RouterErasureReceipt" } } } },
+          "202": { "description": "Durable pending status, not a deletion acknowledgement", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RouterErasureReceipt" } } } },
+          "400": { "description": "Invalid ID or unexpected query" },
+          "401": { "description": "Invalid bearer or purpose-bound actor" },
+          "404": { "description": "No operation visible to this actor" },
+          "409": { "description": "Operation identity conflict" },
+          "503": { "description": "Capability disabled or durable store unavailable" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "copMeasurementBearer": { "type": "http", "scheme": "bearer", "description": "Existing dedicated COP measurement service credential; new erasure purpose requires separate explicit approval. Never a browser credential." },
+      "copRouterBearer": { "type": "http", "scheme": "bearer", "description": "Existing dedicated COP Router service credential; new erasure purpose requires separate explicit approval. No shared-key bypass." }
+    },
+    "parameters": {
+      "OperationId": { "name": "operationId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+      "ActorHeader": { "name": "x-cop-actor", "in": "header", "required": true, "description": "Unpadded canonical base64url encoding of exact JSON claims sub/aud/iat/exp/operationId; audience sim-account-erasure, opaque sub 8-128 characters, lifetime at most 60 seconds, operationId bound to the request/path. COP derives it from the trusted server session. Signature timing is excluded from idempotency digest.", "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{20,1024}$" } },
+      "ActorSignature": { "name": "x-cop-actor-signature", "in": "header", "required": true, "description": "HMAC-SHA256 of the exact encoded x-cop-actor under an approved server-only signer secret. No token, signature or actor content is logged.", "schema": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }
+    },
+    "schemas": {
+      "RouterErasureRequest": {
+        "type": "object", "additionalProperties": false, "required": ["contractVersion", "operationId"],
+        "properties": { "contractVersion": { "const": "sim-account-erasure-v1" }, "operationId": { "type": "string", "format": "uuid" } }
+      },
+      "DriverErasureRequest": {
+        "type": "object", "additionalProperties": false, "required": ["contractVersion", "operationId", "contributors", "attestation"],
+        "properties": {
+          "contractVersion": { "const": "sim-account-erasure-v1" }, "operationId": { "type": "string", "format": "uuid" },
+          "attestation": { "const": "cop-account-erasure-contributors-reviewed-v1" },
+          "contributors": { "type": "array", "minItems": 9, "maxItems": 40, "uniqueItems": true,
+            "items": { "type": "object", "additionalProperties": false, "required": ["contributorDay", "contributorIdDay"], "properties": { "contributorDay": { "type": "string", "format": "date" }, "contributorIdDay": { "type": "string", "pattern": "^[A-Za-z0-9_-]{32,128}$" } } }
+          }
+        }
+      },
+      "DriverErasureReceipt": {
+        "type": "object", "additionalProperties": false,
+        "required": ["contractVersion", "operationId", "status", "scope", "wholeAccountComplete", "backupReplayRequired", "acceptedAt", "updatedAt", "contributorCount", "deletedBatchCount", "remainingBatchCount", "databaseZeroVerified", "derivedReportAcknowledged", "reportScope", "replayReady", "singleWriterReviewed", "pendingReason"],
+        "properties": {
+          "contractVersion": { "const": "sim-account-erasure-v1" }, "operationId": { "type": "string", "format": "uuid" }, "status": { "enum": ["pending", "completed"] }, "scope": { "const": "online_driver_scope" },
+          "wholeAccountComplete": { "const": false }, "backupReplayRequired": { "const": true }, "acceptedAt": { "type": "string", "format": "date-time" }, "updatedAt": { "type": "string", "format": "date-time" },
+          "contributorCount": { "type": "integer", "minimum": 9, "maximum": 40 }, "deletedBatchCount": { "type": "integer", "minimum": 0 }, "remainingBatchCount": { "type": "integer", "minimum": 0 },
+          "databaseZeroVerified": { "type": "boolean" }, "derivedReportAcknowledged": { "type": "boolean" }, "reportScope": { "const": "current_process" }, "replayReady": { "type": "boolean" }, "singleWriterReviewed": { "type": "boolean" },
+          "pendingReason": { "enum": [null, "replay_review_required", "publisher_review_required", "derived_report_pending", "stored_rows_remaining"] }
+        },
+        "allOf": [{ "if": { "properties": { "status": { "const": "completed" } } }, "then": { "properties": { "remainingBatchCount": { "const": 0 }, "databaseZeroVerified": { "const": true }, "derivedReportAcknowledged": { "const": true }, "replayReady": { "const": true }, "singleWriterReviewed": { "const": true }, "pendingReason": { "const": null } } } }]
+      },
+      "RouterErasureReceipt": {
+        "type": "object", "additionalProperties": false,
+        "required": ["contractVersion", "operationId", "status", "scope", "pendingReasons", "pendingRequestCount", "onlineScopeComplete", "wholeAccountComplete", "backupsComplete", "providerRetentionComplete", "retainedMinimumReplayFence", "aliasScope"],
+        "properties": {
+          "contractVersion": { "const": "sim-account-erasure-v1" }, "operationId": { "type": "string", "format": "uuid" }, "status": { "enum": ["pending", "online_complete"] }, "scope": { "const": "cop_router_primary_database" },
+          "pendingReasons": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "enum": ["provider_requests_pending", "cost_retention_review_required", "backup_replay_not_ready"] } }, "pendingRequestCount": { "type": "integer", "minimum": 0 }, "onlineScopeComplete": { "type": "boolean" },
+          "wholeAccountComplete": { "const": false }, "backupsComplete": { "const": false }, "providerRetentionComplete": { "const": false }, "retainedMinimumReplayFence": { "const": true }, "aliasScope": { "const": "sim_izs_not_resolved" }
+        },
+        "allOf": [{ "if": { "properties": { "status": { "const": "online_complete" } } }, "then": { "properties": { "pendingRequestCount": { "const": 0 }, "pendingReasons": { "maxItems": 0 }, "onlineScopeComplete": { "const": true } } } }]
+      }
+    }
+  }
+}
