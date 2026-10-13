@@ -9,6 +9,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { ApiConfig } from "./config.js";
 import { problem } from "./http.js";
+import { readDriverMeasurementEvaluation } from "./driver-measurement-evaluation.js";
 import { buildOperationsSummary } from "./operations-summary.js";
 import { buildProviderDashboardDetails } from "./provider-dashboard.js";
 import { RuntimeRunner } from "./runtime-runner.js";
@@ -512,6 +513,12 @@ function registerAiRoutes(app: Express, context: AppContext): void {
 }
 
 function registerOperationsRoutes(app: Express, context: AppContext): void {
+  app.get("/api/v1/operations/driver-measurements", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (Object.keys(req.query).length > 0) return problem(req, res, 400, "VALIDATION_ERROR", "Driver evaluation does not accept query parameters.");
+    res.json(await readDriverMeasurementEvaluation(context.config));
+  });
+
   app.get("/api/v1/operations/summary", async (_req, res) => {
     res.json(await buildOperationsSummary(context));
   });

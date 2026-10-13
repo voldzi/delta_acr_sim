@@ -4,6 +4,7 @@ import { describe,it,expect,vi } from "vitest";
 import { DRIVER_CONTRACT,DriverMeasurementError,deriveDriverIntervals,driverSettings,parseDriverBatch,registerDriverMeasurementRoutes,ValhallaDriverMatcher,
   type DriverBatch,type DriverMatch,type DriverStore,type DriverReceipt } from "../src/driver-measurements.js";
 import type { SituationDataConfig } from "../src/config.js";
+import { projectDriverEvaluationSnapshot } from "../src/driver-measurement-evaluation.js";
 
 const now=Date.parse("2026-10-01T12:05:00.000Z"), dataset="sim-routing-2026-09-29-1790679143", token="t".repeat(40);
 function batch():DriverBatch {
@@ -77,7 +78,13 @@ function fixture(options:{enabled?:boolean;revocationEnabled?:boolean;rate?:numb
   const saved=new Map<string,{hash:string;receipt:DriverReceipt}>(), revoked=new Set<string>();
   const store:DriverStore={lookup:vi.fn(async(_owner,id,hash)=>{const p=saved.get(id);if(p&&p.hash!==hash)throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");return p?.receipt;}),
     commit:vi.fn(async(_owner,contributor,hash,b,intervals,r)=>{if(revoked.has(contributor))throw new DriverMeasurementError(403,"DRIVER_CONSENT_REVOKED");saved.set(b.batchId,{hash,receipt:r});return r;}),
-    aggregates:vi.fn(async()=>[]),quality:vi.fn(async()=>({acceptedIntervalCount:2})),revoke:vi.fn(async(_owner,hash)=>{revoked.add(hash);saved.clear();return 1;}),close:vi.fn(async()=>{})};
+    aggregates:vi.fn(async()=>[]),quality:vi.fn(async()=>({acceptedIntervalCount:2})),
+    evaluation:vi.fn(async()=>projectDriverEvaluationSnapshot(dataset,new Date(now).toISOString(),
+      {retainedBatchCount:saved.size,lastAcceptedAt:null,acceptedIntervalCount:saved.size*2,deduplicatedIntervalCount:0,
+        activeRevocationTombstoneCount:revoked.size,rejectionCounts:{}},
+      {evaluatedGroupCount:0,currentGroupCount:0,historicalGroupCount:0,futureGroupCount:0,otherDatasetGroupCount:0,
+        subthresholdGroupCount:0,qualityGroupCount:0,closedWindowGroupCount:0,currentQualityGroupCount:0,currentQualityIntervalCount:0},[])),
+    revoke:vi.fn(async(_owner,hash)=>{revoked.add(hash);saved.clear();return 1;}),close:vi.fn(async()=>{})};
   const matcher={match:vi.fn(async()=>match()),dataset:vi.fn(async()=>dataset)},app=express();app.use(express.json({limit:"1mb"}));
   registerDriverMeasurementRoutes(app,{} as SituationDataConfig,{enabled:options.enabled??true,revocationEnabled:options.revocationEnabled,token,hashSecret:"s".repeat(40),ratePerMinute:options.rate??120},{store,matcher,now:()=>now});
   return {app,store,matcher};
@@ -103,7 +110,7 @@ describe("driver measurements HTTP boundary",()=>{
     expect(result.status).toBe(200);expect(result.body.deletedBatchCount).toBe(1);
     expect(store.revoke).toHaveBeenCalledTimes(1);
     expect((await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(batch())).status).toBe(503);
-    for(const endpoint of ["quality","aggregates"])expect((await request(app).get(`${path}/${endpoint}`).set("Authorization",`Bearer ${token}`)).status).toBe(503);
+    for(const endpoint of ["quality","aggregates","evaluation"])expect((await request(app).get(`${path}/${endpoint}`).set("Authorization",`Bearer ${token}`)).status).toBe(503);
     expect(matcher.match).not.toHaveBeenCalled();expect(matcher.dataset).not.toHaveBeenCalled();
   });
   it("deletion remains default disabled and storage failure cannot report success",async()=>{
@@ -148,6 +155,36 @@ describe("driver measurements HTTP boundary",()=>{
   it("revocation prevents queued retransmission",async()=>{const {app}=fixture();
     const r=await request(app).delete(`${path}/contributions`).set("Authorization",`Bearer ${token}`).send({contractVersion:DRIVER_CONTRACT,contributorIdDay:batch().contributorIdDay});expect(r.status).toBe(200);
     expect((await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(batch())).status).toBe(403);
+  });
+  it("an upload delayed beyond completed deletion cannot commit afterwards",async()=>{
+    const {app,matcher,store}=fixture();let release!:()=>void;
+    matcher.match.mockImplementationOnce(()=>new Promise(resolve=>{release=()=>resolve(match());}));
+    const upload=request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(batch()).then(r=>r);
+    await vi.waitFor(()=>expect(matcher.match).toHaveBeenCalledOnce());
+    const deleted=await request(app).delete(`${path}/contributions`).set("Authorization",`Bearer ${token}`)
+      .send({contractVersion:DRIVER_CONTRACT,contributorIdDay:batch().contributorIdDay});
+    expect(deleted.status).toBe(200);release();expect((await upload).status).toBe(403);
+    expect(store.commit).toHaveBeenCalledOnce();expect((await store.evaluation!(dataset,new Date(now).toISOString())).summary.retainedBatchCount).toBe(0);
+  });
+  it("serves a protected bounded evaluation, not user or raw GPS history",async()=>{
+    const {app,store}=fixture();expect((await request(app).get(`${path}/evaluation`)).status).toBe(401);
+    expect((await request(app).get(`${path}/evaluation`).set("Authorization",`Bearer ${token}`).set("Origin","https://cop.example")).status).toBe(403);
+    expect((await request(app).get(`${path}/evaluation?userId=private`).set("Authorization",`Bearer ${token}`)).status).toBe(400);
+    const r=await request(app).get(`${path}/evaluation`).set("Authorization",`Bearer ${token}`);
+    expect(r.status).toBe(200);expect(r.headers["cache-control"]).toBe("no-store");
+    expect(r.body).toMatchObject({contractVersion:"sim-driver-evaluation-v1",livePromotionSupported:false,comparisonMode:"disabled",liveAppliedGroupCount:0});
+    expect(r.body.intake.accountScope).toBe("cop_managed_with_consent");
+    for(const raw of ['"lat"','"lon"','"points"','"batchId"','"contributorIdDay"']) expect(JSON.stringify(r.body)).not.toContain(raw);
+    (store.evaluation as any).mockRejectedValue(new Error("private postgres connection detail"));
+    const failure=await request(app).get(`${path}/evaluation`).set("Authorization",`Bearer ${token}`);
+    expect(failure.status).toBe(503);expect(JSON.stringify(failure.body)).not.toContain("private postgres");
+    const limited=fixture({rate:1});await request(limited.app).get(`${path}/evaluation`).set("Authorization",`Bearer ${token}`);
+    expect((await request(limited.app).get(`${path}/evaluation`).set("Authorization",`Bearer ${token}`)).status).toBe(429);
+  });
+  it("rejects graph rotation during an evaluation rather than freshening the old graph",async()=>{
+    const {app,matcher}=fixture();matcher.dataset.mockResolvedValueOnce(dataset).mockResolvedValueOnce("sim-routing-2026-10-12-1");
+    const r=await request(app).get(`${path}/evaluation`).set("Authorization",`Bearer ${token}`);
+    expect(r.status).toBe(503);expect(r.body.error.code).toBe("DRIVER_MATCH_UNAVAILABLE");
   });
   it("never map-matches estimated trace points",async()=>{const {app,matcher}=fixture(),b=batch();b.points[1].positionSource="estimated";
     const r=await request(app).post(`${path}/batches`).set("Authorization",`Bearer ${token}`).send(b);expect(r.status).toBe(200);expect(r.body.acceptedIntervalCount).toBe(0);expect(matcher.match).not.toHaveBeenCalled();});

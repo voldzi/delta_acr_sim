@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { createHmac } from "node:crypto";
 import { DriverMeasurementError, type DriverBatch, type DriverInterval, type DriverReceipt, type DriverStore } from "./driver-measurements.js";
+import { driverEvaluationInputs, projectDriverEvaluationSnapshot, type DriverEvaluationSnapshot } from "./driver-measurement-evaluation.js";
 
 /** Dedicated database only; no DDL or raw position persistence in the runtime. */
 export class PostgresDriverMeasurementStore implements DriverStore {
@@ -75,7 +76,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       SELECT i.dataset,i.edge_id,i.window_start,r.contributor_hash,count(*) AS intervals,
         percentile_cont(0.5) WITHIN GROUP(ORDER BY i.speed_kph) AS median_speed
       FROM driver_measurement_intervals i JOIN driver_measurement_receipts r USING(owner,batch_id)
-      WHERE i.dataset=$1 AND i.window_start>=$2 AND r.expires_at>$3
+      WHERE i.dataset=$1 AND i.window_start>=$2 AND i.window_start<=$3 AND r.expires_at>$3
       GROUP BY i.dataset,i.edge_id,i.window_start,r.contributor_hash
     ) SELECT dataset,edge_id AS "directedEdgeId",window_start AS "windowStart",
       count(*)::integer AS "attestedContributorCount",sum(intervals)::integer AS "intervalCount",
@@ -107,6 +108,65 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       FROM driver_measurement_receipts r CROSS JOIN LATERAL jsonb_each_text(r.receipt->'rejectionCounts') AS v(reason,value)
       WHERE r.expires_at>$1 GROUP BY reason`,[now]);
     return {...r.rows[0],rejectionCounts:Object.fromEntries(rejected.rows.map(x=>[x.reason,x.count])),eta:eta.rows};
+  }
+  async evaluation(dataset:string, now:string):Promise<DriverEvaluationSnapshot> {
+    const input=driverEvaluationInputs(dataset,now), client=await this.pool.connect();
+    try {
+      // All counts and ETA rows describe one snapshot, including concurrent deletion.
+      // It is not a durable revocation fence for a later live-speed publication.
+      await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const totals=await client.query(`WITH retained AS (
+        SELECT receipt,received_at FROM driver_measurement_receipts
+        WHERE owner='cop' AND expires_at>$1 AND received_at<=$1
+      ), rejected AS (
+        SELECT reason,sum(value::bigint)::double precision AS n FROM retained r
+        CROSS JOIN LATERAL jsonb_each_text(r.receipt->'rejectionCounts') AS v(reason,value)
+        GROUP BY reason
+      ) SELECT count(*)::integer AS "retainedBatchCount",max(received_at) AS "lastAcceptedAt",
+        coalesce(sum((receipt->>'acceptedIntervalCount')::bigint),0)::double precision AS "acceptedIntervalCount",
+        coalesce(sum((receipt->>'deduplicatedIntervalCount')::bigint),0)::double precision AS "deduplicatedIntervalCount",
+        (SELECT count(*)::integer FROM driver_measurement_revocations WHERE owner='cop' AND expires_at>$1) AS "activeRevocationTombstoneCount",
+        coalesce((SELECT jsonb_object_agg(reason,n) FROM rejected),'{}'::jsonb) AS "rejectionCounts"
+        FROM retained`,[input.now]);
+      const speed=await client.query(`WITH per_contributor AS (
+        SELECT i.dataset,i.edge_id,i.window_start,r.contributor_hash,count(*)::integer AS intervals
+        FROM driver_measurement_intervals i JOIN driver_measurement_receipts r USING(owner,batch_id)
+        WHERE i.owner='cop' AND i.window_start>=$2 AND r.expires_at>$3 AND r.received_at<=$3
+        GROUP BY i.dataset,i.edge_id,i.window_start,r.contributor_hash
+      ), grouped AS (
+        SELECT dataset,edge_id,window_start,count(*)::integer AS contributors,
+          sum(intervals)::double precision AS intervals
+        FROM per_contributor GROUP BY dataset,edge_id,window_start
+      ) SELECT count(*)::integer AS "evaluatedGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start<=$3 AND window_start+interval '5 minutes'>$3)::integer AS "currentGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start+interval '5 minutes'<=$3)::integer AS "historicalGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start>$3)::integer AS "futureGroupCount",
+        count(*) FILTER(WHERE dataset<>$1)::integer AS "otherDatasetGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start<=$3 AND (contributors<5 OR intervals<10))::integer AS "subthresholdGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start<=$3 AND contributors>=5 AND intervals>=10)::integer AS "qualityGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start+interval '5 minutes'<=$3)::integer AS "closedWindowGroupCount",
+        count(*) FILTER(WHERE dataset=$1 AND window_start<=$3 AND window_start+interval '5 minutes'>$3 AND contributors>=5 AND intervals>=10)::integer AS "currentQualityGroupCount",
+        coalesce(sum(intervals) FILTER(WHERE dataset=$1 AND window_start<=$3 AND window_start+interval '5 minutes'>$3 AND contributors>=5 AND intervals>=10),0)::double precision AS "currentQualityIntervalCount"
+        FROM grouped`,[input.dataset,input.since,input.now]);
+      const eta=await client.query(`WITH per_contributor AS (
+        SELECT e.dataset,e.window_start,r.contributor_hash,count(*)::integer AS n,
+          percentile_cont(0.5) WITHIN GROUP(ORDER BY abs(e.actual_seconds-e.predicted_seconds)) AS error_seconds,
+          percentile_cont(0.5) WITHIN GROUP(ORDER BY 100*abs(e.actual_seconds-e.predicted_seconds)/e.predicted_seconds) AS error_percent
+        FROM driver_measurement_eta e JOIN driver_measurement_receipts r USING(owner,batch_id)
+        WHERE e.owner='cop' AND e.dataset=$1 AND e.window_start>=$2 AND e.window_start<=$3
+          AND r.expires_at>$3 AND r.received_at<=$3
+        GROUP BY e.dataset,e.window_start,r.contributor_hash
+      ) SELECT dataset AS "routingDataset",window_start AS "windowStart",
+        count(*)::integer AS "attestedContributorCount",sum(n)::double precision AS "observationCount",
+        percentile_cont(0.5) WITHIN GROUP(ORDER BY error_seconds) AS "medianAbsoluteErrorSeconds",
+        percentile_cont(0.5) WITHIN GROUP(ORDER BY error_percent) AS "medianAbsoluteErrorPercent"
+        FROM per_contributor GROUP BY dataset,window_start HAVING count(*)>=5 AND sum(n)>=10
+        ORDER BY window_start DESC LIMIT 100`,[input.dataset,input.since,input.now]);
+      const snapshot=projectDriverEvaluationSnapshot(input.dataset,input.now,totals.rows[0],speed.rows[0],eta.rows);
+      await client.query("COMMIT");
+      return snapshot;
+    } catch(error) { await client.query("ROLLBACK").catch(()=>undefined); throw error; }
+    finally {client.release();}
   }
   async revoke(owner:string,contributor:string):Promise<number> {
     const c=await this.pool.connect();

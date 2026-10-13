@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PostgresDriverMeasurementStore } from "../src/driver-measurement-store.js";
 import { DRIVER_CONTRACT, type DriverBatch, type DriverInterval, type DriverReceipt } from "../src/driver-measurements.js";
 
@@ -101,5 +101,104 @@ describe.skipIf(!url)("driver measurement PostgreSQL persistence",()=>{
     expect((await store.quality(new Date().toISOString()) as any).retainedBatchCount).toBe(0);
     await (store as unknown as {cleanup:()=>Promise<void>}).cleanup();
     expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_intervals")).rows[0].n).toBe(0);
+  });
+  it("evaluates contributor thresholds, graph and time groups without exposing identities",async()=>{
+    const at=new Date(Date.now()+60000).toISOString(), start=new Date(Math.floor(Date.parse(at)/300000)*300000).toISOString();
+    const submit=async(n:number,driver:number,window:string,edge="8",graph=dataset,extra=0)=>{
+      const p=payload(n);p.eta=undefined;
+      const rows=[...intervals(n),...Array.from({length:extra},(_,i)=>({...intervals(n)[0]!,key:contributor(20000+n*200+i)}))]
+        .map(i=>({...i,dataset:graph,edgeId:edge,windowStart:window}));
+      await store.commit("cop",contributor(driver),"a".repeat(64),p,rows,{...receipt(n),acceptedIntervalCount:rows.length,etaAccepted:false});
+    };
+    for(let n=1;n<=5;n++)await submit(n,n,start);
+    // Many samples from an existing contributor do not create another contributor.
+    await submit(6,1,start,"8",dataset,100);
+    await submit(7,6,start,"16",dataset,30);await submit(8,7,start,"16",dataset,30);
+    const historical=new Date(Date.parse(start)-300000).toISOString();
+    for(let n=9;n<=13;n++)await submit(n,n,historical);
+    await submit(14,14,new Date(Date.parse(start)+300000).toISOString());
+    await submit(15,15,start,"8","sim-routing-2026-10-12-1791774006");
+    const result=await store.evaluation(dataset,at);
+    expect(result.summary.speed).toEqual({evaluatedGroupCount:5,currentGroupCount:2,historicalGroupCount:1,futureGroupCount:1,
+      otherDatasetGroupCount:1,subthresholdGroupCount:1,qualityGroupCount:2,closedWindowGroupCount:1,
+      currentQualityGroupCount:1,currentQualityIntervalCount:112});
+    expect(result.summary.eta).toEqual([]);expect(result.livePromotionSupported).toBe(false);
+    const serialized=JSON.stringify(result);
+    for(const forbidden of ['"lat"','"lon"','"points"','"edgeId"','"directedEdgeId"','"contributor_hash"','"batch_id"',`"${contributor(1)}"`,`"${id(1)}"`])expect(serialized).not.toContain(forbidden);
+    const end=await store.evaluation(dataset,new Date(Date.parse(start)+300000).toISOString());
+    expect(end.summary.speed.historicalGroupCount).toBe(3);
+    expect(end.summary.speed.currentGroupCount).toBe(1);expect(end.summary.speed.currentQualityGroupCount).toBe(0);
+    const legacy=await store.aggregates(dataset,start,at) as Array<{windowStart:Date}>;
+    expect(legacy.every(row=>row.windowStart.toISOString()<=at)).toBe(true);
+  });
+  it("balances ETA by contributor, bounds current-graph evidence and does not call it ground truth",async()=>{
+    const at=new Date(Date.now()+60000).toISOString(), start=new Date(Math.floor(Date.parse(at)/300000)*300000).toISOString();
+    const submit=async(n:number,driver:number,error:number,graph=dataset)=>{
+      const p=payload(n);p.eta={...p.eta!,routingDataset:graph,completedAt:at,predictedDurationSeconds:100,actualDurationSeconds:100+error};
+      await store.commit("cop",contributor(driver),"a".repeat(64),p,
+        intervals(n).map(i=>({...i,dataset:graph,windowStart:start})),receipt(n));
+    };
+    for(let n=1;n<=10;n++)await submit(n,(n-1)%5+1,20);
+    for(let n=11;n<=25;n++)await submit(n,1,1000);
+    await submit(26,26,50,"sim-routing-2026-10-12-1791774006");
+    const result=await store.evaluation(dataset,at);
+    expect(result.summary.eta).toHaveLength(1);
+    expect(result.summary.eta[0]).toMatchObject({routingDataset:dataset,attestedContributorCount:5,observationCount:25,
+      medianAbsoluteErrorSeconds:20,medianAbsoluteErrorPercent:20});
+    expect(result.etaEvidence).toBe("client_reported_not_ground_truth");
+  });
+  it("fresh evaluation after raced revocation contains no removed contribution or usable group",async()=>{
+    const at=new Date(Date.now()+60000).toISOString(), start=new Date(Math.floor(Date.parse(at)/300000)*300000).toISOString();
+    const rows=(n:number)=>intervals(n).map(i=>({...i,windowStart:start}));
+    for(let n=1;n<=5;n++)await store.commit("cop",contributor(n),"a".repeat(64),payload(n),rows(n),receipt(n));
+    expect((await store.evaluation(dataset,at)).summary.speed.currentQualityGroupCount).toBe(1);
+    const raced=await Promise.allSettled([store.commit("cop",contributor(5),"b".repeat(64),payload(6),rows(6),receipt(6)),store.revoke("cop",contributor(5))]);
+    expect(raced[1]?.status).toBe("fulfilled");
+    const after=await store.evaluation(dataset,at);
+    expect(after.summary).toMatchObject({retainedBatchCount:4,acceptedIntervalCount:8,activeRevocationTombstoneCount:1,
+      speed:{currentQualityGroupCount:0,currentQualityIntervalCount:0,subthresholdGroupCount:1}});
+    expect(after.revocationCoverage).toBe("database_only");
+    await expect(store.commit("cop",contributor(5),"c".repeat(64),payload(7),rows(7),receipt(7))).rejects.toThrow("DRIVER_CONSENT_REVOKED");
+  });
+  it("a repeatable-read view is not a live revocation fence; a new evaluation observes deletion",async()=>{
+    const at=new Date(Date.now()+60000).toISOString(), start=new Date(Math.floor(Date.parse(at)/300000)*300000).toISOString();
+    for(let n=1;n<=5;n++)await store.commit("cop",contributor(n),"a".repeat(64),payload(n),
+      intervals(n).map(i=>({...i,windowStart:start})),receipt(n));
+    const read=await admin.connect();
+    try {
+      await read.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      expect((await read.query("SELECT count(*)::int AS n FROM driver_measurement_receipts")).rows[0].n).toBe(5);
+      await store.revoke("cop",contributor(5));
+      // PostgreSQL deliberately keeps the older read snapshot; do not persist or apply it.
+      expect((await read.query("SELECT count(*)::int AS n FROM driver_measurement_receipts")).rows[0].n).toBe(5);
+      await read.query("COMMIT");
+    } catch(error) {await read.query("ROLLBACK").catch(()=>undefined);throw error;}finally{read.release();}
+    const current=await store.evaluation(dataset,at);
+    expect(current.summary.retainedBatchCount).toBe(4);expect(current.summary.speed.currentQualityGroupCount).toBe(0);
+    expect(current.livePromotionSupported).toBe(false);expect(current.revocationCoverage).toBe("database_only");
+  });
+  it("a commit queued behind revocation cannot reinsert data after the delete transaction completes",async()=>{
+    const driver=contributor(5), blocker=await admin.connect();
+    await store.commit("cop",driver,"a".repeat(64),payload(1),intervals(1),receipt(1));
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`cop:${driver}`]);
+    const revoked=store.revoke("cop",driver);
+    let late:Promise<{error?:Error; committed?:boolean}>|undefined;
+    try {
+      // This isolated test DB has no other clients waiting on advisory locks.
+      const waiting=async()=>Number((await admin.query("SELECT count(*)::int AS n FROM pg_locks WHERE locktype='advisory' AND NOT granted")).rows[0].n);
+      await vi.waitFor(async()=>expect(await waiting()).toBe(1),{timeout:500,interval:10});
+      late=store.commit("cop",driver,"b".repeat(64),payload(2),intervals(2),receipt(2))
+        .then(()=>({committed:true}),error=>({error}));
+      await vi.waitFor(async()=>expect(await waiting()).toBe(2),{timeout:500,interval:10});
+      await blocker.query("COMMIT");
+      expect(await revoked).toBe(1);
+      expect((await late).error?.message).toBe("DRIVER_CONSENT_REVOKED");
+      expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_receipts")).rows[0].n).toBe(0);
+      expect((await admin.query("SELECT count(*)::int AS n FROM driver_measurement_intervals")).rows[0].n).toBe(0);
+    } finally {
+      await blocker.query("ROLLBACK").catch(()=>undefined);blocker.release();
+      await revoked.catch(()=>undefined);await late;
+    }
   });
 });

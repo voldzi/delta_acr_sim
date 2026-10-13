@@ -1,0 +1,23 @@
+# Additive opt-in operator evaluation. No public port or new service network.
+# Pre-create this dedicated child on the verified X5 disk; Compose must not
+# create a directory on the root disk when X5 is absent.
+services:
+  sim-api:
+    environment:
+      SIM_OPERATIONS_DRIVER_MEASUREMENT_REPORT_FILE: /driver-measurement-reports/latest.json
+    volumes:
+      - type: bind
+        source: ${SIM_DRIVER_EVALUATION_HOST_DIR:?Pin the verified X5 driver-measurement report cache directory}
+        target: /driver-measurement-reports
+        read_only: true
+        bind:
+          create_host_path: false
+  situation-data-api:
+    environment:
+      DRIVER_MEASUREMENTS_EVALUATION_REPORT_FILE: /driver-measurement-reports/latest.json
+    volumes:
+      - type: bind
+        source: ${SIM_DRIVER_EVALUATION_HOST_DIR:?Pin the verified X5 driver-measurement report cache directory}
+        target: /driver-measurement-reports
+        bind:
+          create_host_path: false

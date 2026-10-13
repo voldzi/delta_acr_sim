@@ -25,7 +25,28 @@ je povoleno jen pro interní/lab režim a smí zpřístupnit pouze read-only das
 endpointy. Mutace scénářů, start/stop runtime, publisher queue, metriky a změny
 konfigurace musí zůstat chráněné bearer tokenem vždy.
 
-## COP API
+## Dobrovolná měření a jejich vyhodnocení
+
+Vnitřní `/api/v1/internal/driver-measurements/v1/evaluation` zachovává
+vyhrazenou službovou identitu COP, zákaz browser `Origin`, limity a `no-store`.
+Neexistuje klientské přepnutí identity či účtu. Přístup všech ověřených účtů
+se řídí na COP a stále vyžaduje jejich jednotlivý souhlas; nejde o anonymní
+příjem ani přímý přístup telefonu do SIM.
+
+Operátorský `GET /api/v1/operations/driver-measurements` vyžaduje
+`SIM_VIEWER` i při `SIM_API_PUBLIC_READ=true`. Čte pouze přesný odvozený scalar
+DTO: žádné GPS, pseudonymy, UUID dávek, hrany nebo provider payload. SIM API
+nemá kopii měřicího tokenu, HMAC ani databázového přístupu. RW/RO transport
+je vyhrazená podložka na X5, report mode 600; veřejný souhrn jej neobsahuje.
+
+Po úspěšném odvolání publisher zneplatní starý snapshot a obnoví přehled před
+potvrzením mazání. Při selhání starý report odstraní a vrátí 503; COP musí
+ponechat stav pending. Tato ochrana je pro aktuální jedinou SDA instanci,
+ne potvrzení odstranění záloh nebo budoucího traffic overlay. Více publisherů
+a zapojení do ETA vyžadují trvalou generační ochranu a potvrzení všech writerů.
+Podrobnosti: [kontrakt Jízdy](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md).
+
+## COP publisher
 
 Publisher používá bearer token jako baseline a návrhově podporuje mTLS/OIDC client credentials. `X-Source-System-Id`, `X-Contract-Version`, `X-Idempotency-Key` a `X-Correlation-Id` jsou povinné integrační hlavičky.
 

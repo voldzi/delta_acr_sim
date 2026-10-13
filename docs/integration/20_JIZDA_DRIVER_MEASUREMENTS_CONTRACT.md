@@ -6,6 +6,13 @@ Závazné schéma: `openapi/openapi.json`; zdroj fragmentu
 `openapi/fragments/driver-measurements-v1.openapi.json`.
 Rozhodnutí: [ADR 0030](../adr/0030_CONSENTED_DRIVER_MEASUREMENTS.md).
 
+Rozšíření 13. 10. 2026: připravená evaluace a dostupnost dobrovolné funkce
+pro všechny autentizované účty přes COP podle
+[ADR 0038](../adr/0038_DRIVER_MEASUREMENT_EVALUATION_AND_COMPARISON.md).
+Jde o zdrojovou přípravu, ne potvrzenou změnu produkčního sběru.
+Produkční změny jsou pozastaveny infrastrukturním HOLD; v1 zůstává
+`shadow_only` a nový živý rychlostní zdroj není aktivován.
+
 ## Účel a skutečné využití
 
 SIM přiřadí krátký úsek **naměřených** GPS bodů k aktuálním směrovým hranám
@@ -34,6 +41,10 @@ Jízda (dobrovolný souhlas, skutečné GPS)
 Jízda a veřejný browser nesmějí znát SIM token ani volat SIM/Valhallu přímo.
 COP ověří přihlášeného uživatele, aktuální dobrovolný souhlas a režim osobního
 automobilu. Souhlas není odvozen od používání navigace a musí jít odvolat.
+Funkce může být dostupná kterémukoli autentizovanému účtu; oprávnění ji vidět
+není souhlas s měřením. COP řídí dostupnost, nezávislost identity, minimální
+účel a bezpečnou frontu. SIM nemá seznam povolených lidských účtů a nepřijímá
+klientem zvolenou cizí identitu. Rozšíření dostupnosti neruší kapacitní limity.
 COP vytvoří pro každého uživatele **stabilní pseudonym jen v rámci UTC dne**:
 HMAC nad ověřeným interním uživatelem a UTC dnem, odděleným tajemstvím COP.
 Klient nesmí zvolit cizí identitu. Pseudonym má 32–128 znaků `[A-Za-z0-9_-]`.
@@ -60,7 +71,15 @@ Všechny endpointy vyžadují `Authorization: Bearer <vyhrazený COP token>`;
 | `POST /batches` | Přijmout dávku; idempotentní `batchId`, oddělená deduplikace dvojic GPS a ETA událostí. |
 | `GET /aggregates?since=<UTC ISO>` | Souhrny jen pro právě aktivní routing dataset; implicitně posledních 24 h, maximálně 7 dnů a 1000 řádků. |
 | `GET /quality` | Počty přijatých/odmítnutých intervalů, poslední příjem, příspěvkově vyvážené ETA souhrny. |
+| `GET /evaluation` | Nový typovaný skalární report `sim-driver-evaluation-v1`, bez GPS a identifikátorů hran či přispěvatelů; pouze hodnocení, ne živé použití. |
 | `DELETE /contributions` | Odvolání souhlasu pro jeden denní pseudonym; smazání příspěvků a zákaz pozdního doručení na 7 dnů. |
+
+Přímá interní cesta evaluace je
+`/api/v1/internal/driver-measurements/v1/evaluation`; gateway cesta zachovává
+výše uvedený prefix. Stejné službové přihlášení jako `/quality`, žádné query
+filtry a žádný browser `Origin`. Při vypnutém sběru vrací 503 také v režimu
+revokace; DELETE tím není vypnutý. Žádný nový veřejný endpoint SIM pro mobil
+nebo veřejná metrika řidičů nevzniká.
 
 ## Přesný vstup
 
@@ -187,6 +206,60 @@ přispěvatelů, nejméně **5 přispěvatelů a 10 intervalů**. Souhrn ETA má
 nezávislý stejný práh. `usableUntil` je konec 5min okna; později je záznam
 výslovně `historical`, nikoli živá rychlost.
 
+### Chráněná evaluace v SIM
+
+`GET /evaluation` vrací `DriverEvaluationReport`: scalar snapshot doplněný
+serverovými metadaty `intake.enabled`, `intake.revocationEnabled`,
+`intake.accountScope:"cop_managed_with_consent"`, `comparisonMode` a
+`liveAppliedGroupCount`. Runtime této etapy uvádí `comparisonMode:"disabled"`,
+`liveAppliedGroupCount:0`, `livePromotionSupported:false` a
+`revocationCoverage:"database_only"`.
+
+Jedna transakce `READ ONLY REPEATABLE READ` zajistí vzájemně konzistentní
+počty. Totals, duplicity a osm povolených `rejectionCounts` zahrnují retained
+receipts za sedmidenní retenci; neobsahují chyby HTTP požadavků, které receipt
+nevytvořily. Skupiny rychlostí a hodinové ETA jsou omezené uloženým začátkem
+bucketu na posledních 24 hodin. `generatedAt = asOf = evaluationWindow.until`,
+`evaluationWindow.since = until − 24 h`. `lastAcceptedAt` je čas příjmu do SIM,
+nikoli čas GPS. Bez retained dat je `null`, bez srovnatelné ETA je `eta:[]`.
+
+`evaluatedGroupCount` je součet čtyř disjunktních počtů: current, historical,
+future a otherDataset. První tři patří pouze aktivnímu grafu. `qualityGroupCount`
+a `subthresholdGroupCount` dělí jeho current a historical skupiny podle prahu
+5/10; slovo quality zde neprokazuje nezávislé osoby ani geografickou správnost.
+`closedWindowGroupCount` je historical, nikoli úplné projetí silniční hrany.
+Aktuální okno končí v následující hranici 5 min od `asOf` a tento konec
+neprodlužujeme. `futureGroupCount` detekuje budoucí bucket; přesný budoucí bod
+ve stejném bucketu nelze z uloženého v1 zrekonstruovat.
+
+Report neobsahuje souřadnice, UUID, contributor hashes, denní pseudonymy,
+edge IDs ani jednotlivé jízdy. Neznámé uložené rejection keys se nezveřejní
+a způsobí bezpečné odmítnutí evaluace. Fresh report neznamená fresh měření:
+časová platnost rychlostí zůstává původní `usableUntil`. ETA je stále
+klientský souhrn `client_reported_not_ground_truth`, nikoli nezávislý benchmark.
+
+Operátorský přehled SIM čte jen tento scalar report přes chráněné
+`GET /api/v1/operations/driver-measurements`. Chybějící nebo neplatný report
+označí unavailable/invalid, po 90 s stale. Zastaralý report nesmí působit jako
+aktuální stav. Nezobrazuje se ve veřejné mapě ani nezachraňuje chybující routing.
+
+### Porovnávací selector a podmínky živého použití
+
+Čistý selector `driver-speed-pilot.ts` je výchozí vypnutý; režim
+`comparison_only` pouze počítá, které souhrny splňují porovnávací podmínky.
+Vyžaduje stejný aktivní graf, revidovanou směrovou hranu, stále platné původní
+okno, práh 5/10, rychlostní strop a omezený rozptyl. Čerstvý oficiální zdroj
+má vždy přednost. Neznámé nebo neúplné pokrytí není důkaz, že oficiální rychlost
+chybí. Selector nevolá poskytovatele ani writer a nevrací raw data nebo edge IDs
+do operátorského reportu. Způsobilý porovnávací souhrn není povolení k ETA.
+
+Před skutečným doplňováním živých rychlostí je potřeba nový účelový souhlas,
+časová a prostorová evidence nad rámec v1, kontrola nezávislých řidičů,
+ověřená přednost oficiálního zdroje a generační ochrana mazání všech odvozených
+live kopií. Dosavadní `traffic-quality-v1` neopravňuje zpětně přepsat účel
+starších měření. Nakonec následuje nezávislé vyhodnocení ETA a omezený canary
+s automatickým návratem. Úplný seznam podmínek je v ADR 0038.
+
 ## Odpovědi, limity a revokace
 
 200 vrací `batchId`, čas přijetí, počty využitých/duplicitních intervalů,
@@ -218,6 +291,14 @@ Odvolání: DELETE JSON `{contractVersion:"sim-driver-measurements-v1",
 contributorIdDay:"<denní pseudonym>"}`. COP odvodí pseudonymy všech dosud
 uchovaných dnů (a případného pozdního outboxu), požádá o jejich smazání,
 zastaví budoucí odesílání. SIM zachová 7denní HMAC tombstone bez GPS.
+
+Je-li nastavený odvozený operátorský report, SIM potvrdí DELETE stavem 200
+teprve po jeho novém načtení nebo odstranění. Selhání tohoto potvrzení vrací
+503 i po dokončeném databázovém DELETE; COP ponechá mazání ve frontě a opakuje
+je idempotentně. COP 202 znamená pending, nikoli hotovo. Starý repeatable-read
+snapshot může doběhnout po revokaci, takže jeho čerstvé `generatedAt` samo
+nechrání budoucí live writer. Pro něj je nutná samostatná durable generační
+ochrana; evaluace ji netvrdí.
 
 ## Úložiště, nasazení a návrat
 

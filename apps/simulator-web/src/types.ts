@@ -937,6 +937,54 @@ export interface OperationsSummary {
   status: OperationsSummaryStatus;
 }
 
+export interface DriverMeasurementEvaluationReport {
+  contractVersion: "sim-driver-evaluation-v1";
+  generatedAt: string;
+  asOf: string;
+  routingDataset: string;
+  evaluationWindow: { since: string; until: string };
+  applicationMode: "shadow_only";
+  etaEvidence: "client_reported_not_ground_truth";
+  consistency: "read_only_repeatable_read";
+  retentionDays: 7;
+  livePromotionSupported: false;
+  revocationCoverage: "database_only";
+  intake: { enabled: boolean; revocationEnabled: boolean; accountScope: "cop_managed_with_consent" };
+  comparisonMode: "disabled" | "comparison_only";
+  liveAppliedGroupCount: 0;
+  summary: {
+    retainedBatchCount: number;
+    lastAcceptedAt: string | null;
+    acceptedIntervalCount: number;
+    deduplicatedIntervalCount: number;
+    activeRevocationTombstoneCount: number;
+    rejectionCounts: Record<"non_measured_position" | "low_sensor_quality" | "personal_stop_or_unknown_motion" | "sampling_gap" | "ambiguous_or_noncontinuous_edge" | "heading_inconsistent" | "speed_or_distance_inconsistent" | "eta_not_comparable", number>;
+    speed: {
+      evaluatedGroupCount: number;
+      currentGroupCount: number;
+      historicalGroupCount: number;
+      futureGroupCount: number;
+      otherDatasetGroupCount: number;
+      subthresholdGroupCount: number;
+      qualityGroupCount: number;
+      closedWindowGroupCount: number;
+      currentQualityGroupCount: number;
+      currentQualityIntervalCount: number;
+    };
+    eta: Array<{ routingDataset: string; windowStart: string; attestedContributorCount: number; observationCount: number; medianAbsoluteErrorSeconds: number; medianAbsoluteErrorPercent: number }>;
+  };
+  limits: { minimumAttestedContributors: 5; minimumIntervals: 10; maximumEtaRows: 100 };
+}
+
+export interface DriverMeasurementEvaluationResponse {
+  contractVersion: "sim-driver-evaluation-v1";
+  status: "current" | "stale" | "unavailable" | "invalid";
+  checkedAt: string;
+  reportAgeSeconds: number | null;
+  report?: DriverMeasurementEvaluationReport;
+  reason?: "report_missing" | "report_unreadable" | "report_invalid" | "report_stale";
+}
+
 export interface TakGatewayFeature {
   type: "Feature";
   id: string;

@@ -14,7 +14,33 @@
   dataset metadata, invalid input, no optimization, service auth/browser
   rejection, Valhalla degradation and publication idempotency
 
-## Mock COP
+## Dobrovolná měření Jízdy
+
+`driver-measurements.test.ts` ověřuje službovou identitu, individuální atestaci,
+striktní strukturu, idempotenci, směr, verzi grafu, kvalitu, 429/503 a pozdní
+upload po dokončeném odvolání. `driver-measurement-store.test.ts` lze spustit
+bez produkční DB přes `bash scripts/test-driver-measurements-postgres.sh`:
+vytvoří loopback-only dočasný PostgreSQL a po testu jej odstraní. Prokazuje
+omezená runtime práva, retenční úklid, vyvážení přispěvatelů, skutečný
+commit/revoke race a vyloučení příspěvku z nového read snapshotu.
+
+Evaluation/projector/publication testy odmítají raw pole, neznámé důvody,
+vadné počty, chybějící data, symlinky a prošlá okna. Revokace během čtení
+zahodí starý report; chyba obnovy nesmí ponechat čerstvý starý report a vydat
+potvrzení dokončení. Repeatable-read izolace sama není trvalá revokační ochrana.
+
+`driver-speed-pilot.test.ts` je pouze porovnávací selector: testuje prahy 5/10,
+graph-bound směrovou review, rozptyl a strop, původní konec okna, přednost
+čerstvých oficiálních dat a fail-closed neznámé pokrytí. `liveAppliedEdgeCount`
+je vždy nula. Syntetické testy neprokazují přesnost ETA, souhlas skutečného
+uživatele nebo správný směr konkrétní silnice.
+
+SIM API/UI testy ověřují chráněný endpoint, přesný DTO, 90s zastarání,
+pětiminutový deadline, oddělené 7d/24h rozsahy, omezené obnovování a zrušení
+po odhlášení. Závěrečná akceptace musí přidat dva skutečné běžné účty,
+fyzický iPhone, odvolání se zpožděnou dávkou a kontrolu viditelného přehledu.
+
+## Mock COP behavior
 
 Mock COP endpoint musí vracet úspěch, validaci, auth chyby, rate limit, server error a idempotency konflikt pro deterministické testy.
 

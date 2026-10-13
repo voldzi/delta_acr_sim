@@ -17,6 +17,7 @@ import type {
   ScenarioBlock,
   DashboardObservability,
   OperationsSummary,
+  DriverMeasurementEvaluationResponse,
   ServiceObservability,
   TakGatewayConfig,
   TakGatewayFeatureResponse,
@@ -78,6 +79,9 @@ let manualTokenUsageEnabled = true;
 async function api<T>(path: string, init?: RequestInit, timeoutMs = API_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const cancel = () => controller.abort();
+  if (init?.signal?.aborted) controller.abort();
+  else init?.signal?.addEventListener("abort", cancel, { once: true });
   const token = getSimAuthorizationToken();
   const headers: Record<string, string> = {
     "content-type": "application/json",
@@ -109,7 +113,12 @@ async function api<T>(path: string, init?: RequestInit, timeoutMs = API_TIMEOUT_
     return (await response.json()) as T;
   } finally {
     window.clearTimeout(timeout);
+    init?.signal?.removeEventListener("abort", cancel);
   }
+}
+
+export function getDriverMeasurementEvaluation(signal?: AbortSignal): Promise<DriverMeasurementEvaluationResponse> {
+  return api<DriverMeasurementEvaluationResponse>("/api/v1/operations/driver-measurements", { signal });
 }
 
 async function timedApi<T>(path: string, init?: RequestInit): Promise<{ latencyMs: number; payload: T }> {

@@ -1,0 +1,145 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SIM protected driver measurement operations",
+    "version": "1.0.0",
+    "description": "Authenticated SIM operator read-only projection of the strict scalar driver evaluation report. Shared DriverEvaluation schemas are defined by driver-measurements-v1.openapi.json and merged with the same DriverMeasurements prefix. No provider call, measurement intake, credential forwarding or live routing activation is performed."
+  },
+  "paths": {
+    "/api/v1/operations/driver-measurements": {
+      "get": {
+        "operationId": "getDriverMeasurementOperations",
+        "tags": ["Operations"],
+        "summary": "Read the protected scalar driving-measurement evaluation",
+        "description": "Requires an authenticated SIM principal with SIM_VIEWER. Public-read monitoring does not grant access. No query parameters are accepted; any query key is rejected with 400. A missing/unreadable file is unavailable, malformed or unsafe data is invalid, and a report older than 90 seconds is stale. No missing metric is synthesized as zero, no private measurement data is returned, and neither stale nor current reports authorize live speed or ETA application. The report is bounded to 64 KiB, read from the explicitly configured dedicated read-only mount, and never substituted by a provider request.",
+        "security": [{ "simOperatorBearer": [] }],
+        "x-required-roles": ["SIM_VIEWER"],
+        "x-public-read": false,
+        "x-unknown-query-policy": "reject",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sanitized current, stale, unavailable or invalid evaluation state. The report remains shadow_only; ETA evidence is client-reported, not independently verified ground truth.",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["private, no-store"] } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverEvaluationOperationsResponse" } } }
+          },
+          "400": {
+            "description": "Query parameters are not accepted",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverEvaluationOperationsProblem" } } }
+          },
+          "401": {
+            "description": "Missing, expired or invalid SIM bearer credential; public read is not an alternative",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverEvaluationOperationsProblem" } } }
+          },
+          "403": {
+            "description": "Authenticated principal does not have SIM_VIEWER",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverEvaluationOperationsProblem" } } }
+          },
+          "429": {
+            "description": "Standard SIM principal rate limit; no alternate provider request",
+            "headers": { "Retry-After": { "schema": { "type": "string" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DriverEvaluationOperationsProblem" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DriverEvaluationOperationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["contractVersion", "status", "checkedAt", "reportAgeSeconds"],
+        "description": "Current/stale contain the exact shared scalar DriverEvaluationReport. Unavailable/invalid contain no report and use null age, not invented empty counts. Fractional report age is preserved so the browser cannot extend freshness by rounding. Current evidence additionally expires at the end of the five-minute bucket containing asOf, regardless of report freshness; generatedAt and lastAcceptedAt are not raw GPS observation ages.",
+        "properties": {
+          "contractVersion": { "type": "string", "enum": ["sim-driver-evaluation-v1"] },
+          "status": { "type": "string", "enum": ["current", "stale", "unavailable", "invalid"] },
+          "checkedAt": { "$ref": "#/components/schemas/DriverEvaluationUtcTimestamp" },
+          "reportAgeSeconds": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Nonnegative elapsed report age, including fractional seconds. Null when no trusted report is available."
+          },
+          "report": { "$ref": "#/components/schemas/DriverEvaluationReport" },
+          "reason": { "type": "string", "enum": ["report_missing", "report_unreadable", "report_invalid", "report_stale"] }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "enum": ["current"] } } },
+            "then": {
+              "required": ["report"],
+              "properties": {
+                "report": { "$ref": "#/components/schemas/DriverEvaluationReport" },
+                "reportAgeSeconds": { "type": "number", "minimum": 0, "maximum": 90 }
+              },
+              "not": {
+                "required": ["reason"],
+                "properties": { "reason": { "type": "string", "enum": ["report_missing", "report_unreadable", "report_invalid", "report_stale"] } }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "status": { "enum": ["stale"] } } },
+            "then": {
+              "required": ["report", "reason"],
+              "properties": {
+                "report": { "$ref": "#/components/schemas/DriverEvaluationReport" },
+                "reportAgeSeconds": { "type": "number", "exclusiveMinimum": 90 },
+                "reason": { "enum": ["report_stale"] }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "status": { "enum": ["unavailable"] } } },
+            "then": {
+              "required": ["reason"],
+              "properties": { "reportAgeSeconds": { "type": "null" }, "reason": { "enum": ["report_missing", "report_unreadable"] } },
+              "not": { "required": ["report"], "properties": { "report": { "$ref": "#/components/schemas/DriverEvaluationReport" } } }
+            }
+          },
+          {
+            "if": { "properties": { "status": { "enum": ["invalid"] } } },
+            "then": {
+              "required": ["reason"],
+              "properties": { "reportAgeSeconds": { "type": "null" }, "reason": { "enum": ["report_invalid"] } },
+              "not": { "required": ["report"], "properties": { "report": { "$ref": "#/components/schemas/DriverEvaluationReport" } } }
+            }
+          }
+        ]
+      },
+      "DriverEvaluationOperationsProblem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error"],
+        "description": "SIM simulator-api problem() shape for this protected operations endpoint. Unlike the COP measurement service Error, SIM includes the details array. This endpoint never populates it with report contents, credentials or private measurements.",
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "message", "details", "correlationId"],
+            "properties": {
+              "code": { "type": "string", "enum": ["VALIDATION_ERROR", "UNAUTHORIZED", "FORBIDDEN", "RATE_LIMITED"] },
+              "message": { "type": "string" },
+              "details": {
+                "type": "array",
+                "maxItems": 0,
+                "description": "Empty for the documented 400/401/403/429 responses; no report or caller data is echoed."
+              },
+              "correlationId": {
+                "type": "string",
+                "description": "Existing SIM correlation ID semantics: supplied request correlation value or a generated UUID. No new UUID-only restriction."
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "simOperatorBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Standard SIM authentication: a validated OIDC access token or configured SIM bearer principal with SIM_VIEWER. Not the dedicated COP measurement token; no browser receives that service credential."
+      }
+    }
+  }
+}

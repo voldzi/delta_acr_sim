@@ -51,6 +51,8 @@ import {
   denseDemoScenario,
   getAiRouterAdmin,
   getAiRouterScenarioPreview,
+  getDriverMeasurementEvaluation,
+  getSimAuthorizationToken,
   hasSimAuthorizationToken,
   hasSimApiToken,
   loadDashboard,
@@ -66,11 +68,13 @@ import {
   type AiRouterScenarioPreview
 } from "./api";
 import { beginLogin, createInitialAuthSession, endSession, initializeAuth, isOidcEnabled, readAuthConfig, type AuthSession, type SimRole } from "./auth";
+import { driverEvaluationView, startDriverEvaluationPolling } from "./driver-measurement-ui";
 import type {
   AiDraft,
   DashboardObservability,
   OperationsSummary,
   OperationsSummaryService,
+  DriverMeasurementEvaluationResponse,
   ServiceObservability,
   CacheObservability,
   FlightDataConfig,
@@ -413,6 +417,7 @@ export function App() {
   const oidcEnabled = isOidcEnabled(authConfig);
   const manualTokenLoginAllowed = !oidcEnabled || authConfig.allowManualTokenLogin;
   const [authSession, setAuthSession] = useState<AuthSession>(() => createInitialAuthSession(authConfig));
+  const [driverAuthRevision, setDriverAuthRevision] = useState(0);
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>(() => readInitialUiLanguage());
   const tr = useCallback((source: string) => translateUi(uiLanguage, source), [uiLanguage]);
   const numberLocale = uiLanguage === "cs" ? "cs-CZ" : "en-US";
@@ -598,6 +603,7 @@ export function App() {
   const hasAiAdminRole = roleAllows(authenticatedRoles, "SIM_AI_ADMIN");
   const protectedSectionsUnlocked = oidcEnabled ? hasViewerRole || tokenAccessReady : apiTokenConfigured;
   const canReadDashboard = authConfig.publicReadEnabled || protectedSectionsUnlocked;
+  const driverAuthorizationReady = authSession.status !== "authenticated" || getSimAuthorizationToken() === authSession.accessToken;
   const canManageScenarios = tokenAccessReady || hasOperatorRole || hasAdminRole;
   const canAdministerPublisher = tokenAccessReady || hasAdminRole;
   const canUseAiAssistant = tokenAccessReady || hasAiRole || hasAiAdminRole || hasAdminRole;
@@ -1086,6 +1092,7 @@ export function App() {
     setSimAuthorizationTokenProvider(() => authSession.accessToken);
     setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
     setManualTokenConfigured(manualTokenLoginAllowed && hasSimApiToken());
+    setDriverAuthRevision((revision) => revision + 1);
     return () => setSimAuthorizationTokenProvider(undefined);
   }, [authSession.accessToken, manualTokenLoginAllowed]);
 
@@ -1124,6 +1131,7 @@ export function App() {
   useEffect(
     () =>
       onSimApiAuthChange(() => {
+        setDriverAuthRevision((revision) => revision + 1);
         setApiTokenConfigured(Boolean(authSession.accessToken) || (manualTokenLoginAllowed && hasSimAuthorizationToken()));
         setManualTokenConfigured(manualTokenLoginAllowed && hasSimApiToken());
       }),
@@ -1478,6 +1486,8 @@ export function App() {
                     </div>
                   </section>
                 </section>
+
+                {protectedSectionsUnlocked && driverAuthRevision > 0 && driverAuthorizationReady ? <DriverMeasurementsPanel key={driverAuthRevision} authorizationRevision={driverAuthRevision} /> : null}
 
                 <section className="operations-layout secondary" aria-label={tr("Runtime and feed readiness")}>
                   <section className="ops-panel readiness-panel">
@@ -2558,6 +2568,88 @@ function LoginGate({
           )}
         </div>
       </div>
+    </section>
+  );
+}
+
+function DriverMeasurementsPanel({ authorizationRevision }: { authorizationRevision: number }) {
+  const tr = useUiText();
+  const locale = useNumberLocale();
+  const [snapshot, setSnapshot] = useState<{ response: DriverMeasurementEvaluationResponse; receivedAt: number }>();
+  const [, setFreshnessRevision] = useState(0);
+  useEffect(() => {
+    setSnapshot(undefined);
+    const polling = startDriverEvaluationPolling({
+      load: getDriverMeasurementEvaluation,
+      visible: () => document.visibilityState === "visible",
+      deliver: (response) => setSnapshot({ response, receivedAt: performance.now() }),
+      fail: () => setSnapshot(undefined)
+    });
+    const visibilityChanged = () => polling.visibilityChanged();
+    document.addEventListener("visibilitychange", visibilityChanged);
+    return () => { polling.stop(); document.removeEventListener("visibilitychange", visibilityChanged); };
+  }, [authorizationRevision]);
+  useEffect(() => {
+    if (!snapshot || snapshot.response.status !== "current" || snapshot.response.reportAgeSeconds === null) return;
+    const elapsedMs = performance.now() - snapshot.receivedAt;
+    const ageMs = snapshot.response.reportAgeSeconds * 1000 + elapsedMs;
+    const asOfMs = snapshot.response.report ? Date.parse(snapshot.response.report.asOf) : null;
+    const delays = [90_001 - ageMs, ...(asOfMs === null ? [] : [Math.floor(asOfMs / 300_000) * 300_000 + 300_000 - asOfMs - ageMs + 1])];
+    const timers = delays.map((delayMs) => window.setTimeout(() => setFreshnessRevision((revision) => revision + 1), Math.max(0, delayMs)));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [snapshot]);
+  const view = driverEvaluationView(snapshot?.response, snapshot ? performance.now() - snapshot.receivedAt : 0);
+  const report = view.report;
+  const tone: Tone = view.status === "current" ? "safe" : view.status === "stale" ? "warn" : "neutral";
+  const statusTitle = view.status === "current" ? "Current evaluation" : view.status === "stale" ? "Stale evaluation" : view.status === "invalid" ? "Invalid evaluation" : "Evaluation unavailable";
+  const reasons: Record<string, string> = {
+    non_measured_position: "Non-measured position", low_sensor_quality: "Low sensor quality", personal_stop_or_unknown_motion: "Personal stop or unknown motion",
+    sampling_gap: "Sampling gap", ambiguous_or_noncontinuous_edge: "Ambiguous road or direction", heading_inconsistent: "Inconsistent heading",
+    speed_or_distance_inconsistent: "Inconsistent speed or distance", eta_not_comparable: "ETA observation not comparable"
+  };
+  return (
+    <section className="ops-panel" aria-label={tr("Voluntary driving measurements")}>
+      <PanelTitle icon={<Gauge />} title="Voluntary driving measurements" subtitle="Read-only evaluation; no measurement is applied to live speeds or ETA." />
+      <StatusPill label={tr(statusTitle)} tone={tone} />
+      {!report ? <div className="empty-state">{tr("No trustworthy evaluation is available. Missing results are not zero measurements.")}</div> : (
+        <>
+          <div className="readiness-list compact">
+            <ReadinessItem icon={<Signal />} label="Measurement intake" value={tr(report.intake.enabled ? "Enabled with individual consent" : "Disabled")} detail={tr("Account access and consent are managed by COP.")} tone={report.intake.enabled ? "active" : "neutral"} />
+            <ReadinessItem icon={<FlaskConical />} label="Use of measurements" value={tr(report.comparisonMode === "comparison_only" ? "Comparison only" : "Comparison disabled")} detail={tr("Shadow-only intake; zero live applications.")} tone="neutral" />
+            <ReadinessItem icon={<MapPinned />} label="Routing dataset" value={report.routingDataset} detail={tr("Results from other graphs are separated; they are not reused as current speeds.")} tone="neutral" />
+            <ReadinessItem icon={<TimerReset />} label="Evaluation age" value={view.ageMs === null ? tr("not reported") : formatDuration(Math.floor(view.ageMs / 1000))} detail={`${tr("evaluation window")}: ${formatTime(report.evaluationWindow.since)} – ${formatTime(report.evaluationWindow.until)}`} tone={tone} />
+            <ReadinessItem icon={<Download />} label="Last accepted batch" value={report.summary.lastAcceptedAt ? formatTime(report.summary.lastAcceptedAt) : tr("No accepted batch")} detail={tr("Receipt time is not the age of the road measurements.")} tone="neutral" />
+            <ReadinessItem icon={<ShieldCheck />} label="Evidence at evaluation" value={tr(view.currentEvidenceAvailable ? "Threshold-qualified groups available" : "Insufficient evidence")} detail={`${tr("Minimum contributors / intervals")}: ${report.limits.minimumAttestedContributors} / ${report.limits.minimumIntervals} · ${tr("five-minute window ends")}: ${formatTime(view.currentWindowEndsAt ?? undefined)}`} tone={view.currentEvidenceAvailable ? "safe" : "neutral"} />
+          </div>
+          {view.status === "stale" ? <div className="empty-state">{tr("This is an old evaluation snapshot, not proof of current speeds.")}</div> : null}
+          <div className="publisher-stats situation-stats">
+            <PublisherStat label="Retained batches" value={report.summary.retainedBatchCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Accepted intervals" value={report.summary.acceptedIntervalCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Deduplicated intervals" value={report.summary.deduplicatedIntervalCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Threshold-qualified current groups at evaluation" value={report.summary.speed.currentQualityGroupCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Historical groups" value={report.summary.speed.historicalGroupCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Future five-minute windows" value={report.summary.speed.futureGroupCount.toLocaleString(locale)} tone={report.summary.speed.futureGroupCount > 0 ? "warn" : "neutral"} />
+            <PublisherStat label="Groups below threshold" value={report.summary.speed.subthresholdGroupCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Groups from other datasets" value={report.summary.speed.otherDatasetGroupCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Active revocation tombstones" value={report.summary.activeRevocationTombstoneCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Evaluated groups" value={report.summary.speed.evaluatedGroupCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Closed historical windows" value={report.summary.speed.closedWindowGroupCount.toLocaleString(locale)} tone="neutral" />
+            <PublisherStat label="Current qualified intervals at evaluation" value={report.summary.speed.currentQualityIntervalCount.toLocaleString(locale)} tone="neutral" />
+          </div>
+          <div className="readiness-list compact">
+            <ReadinessItem icon={<TrendingUp />} label="Reported ETA error" value={view.etaErrorSeconds === null ? tr("Insufficient evidence") : `${view.etaErrorSeconds.toLocaleString(locale, { maximumFractionDigits: 1 })} s · ${view.etaErrorPercent!.toLocaleString(locale, { maximumFractionDigits: 1 })} %`} detail={view.eta ? `${tr("Latest qualified hourly group")}: ${formatTime(view.eta.windowStart)} · ${view.eta.observationCount} ${tr("observations")}` : tr("No threshold-qualified ETA group.")} tone="neutral" />
+            <ReadinessItem icon={<Info />} label="Evidence quality" value={tr("Client-reported; not ground truth")} detail={tr("Each attested contributor is weighted equally. Independent drivers are not verified.")} tone="warn" />
+            <ReadinessItem icon={<Trash2 />} label="Revocation and deletion" value={tr(report.intake.revocationEnabled ? "Revocation enabled" : "Revocation disabled")} detail={tr("Tombstones describe database revocations only; they do not prove completion of pending COP deletion or backup erasure.")} tone={report.intake.revocationEnabled ? "neutral" : "warn"} />
+          </div>
+          <details>
+            <summary>{tr("Rejected measurement reasons (retained seven-day records)")}</summary>
+            <div className="publisher-stats situation-stats">
+              {Object.entries(report.summary.rejectionCounts).map(([reason, count]) => <PublisherStat key={reason} label={reasons[reason]!} value={count.toLocaleString(locale)} tone="neutral" />)}
+            </div>
+          </details>
+          <small>{tr("Batch, interval and rejection totals cover retained seven-day records. Speed and ETA groups cover the last 24 hours. This panel contains no GPS coordinates or driver identifiers.")}</small>
+        </>
+      )}
     </section>
   );
 }

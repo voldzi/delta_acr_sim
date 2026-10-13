@@ -3,6 +3,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { SituationDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { PostgresDriverMeasurementStore } from "./driver-measurement-store.js";
+import type { DriverEvaluationSnapshot } from "./driver-measurement-evaluation.js";
+import { DriverEvaluationPublisher, projectDriverEvaluationReport, removeDriverEvaluationReport, validateDriverEvaluationReportPath,
+  type DriverEvaluationReport } from "./driver-measurement-publication.js";
 
 export const DRIVER_CONTRACT = "sim-driver-measurements-v1";
 const PREFIX = "/api/v1/internal/driver-measurements/v1";
@@ -63,6 +66,7 @@ export interface DriverStore {
   commit(owner: string, contributor: string, hash: string, batch: DriverBatch, intervals: DriverInterval[], receipt: DriverReceipt): Promise<DriverReceipt>;
   aggregates(dataset: string, since: string, now: string): Promise<unknown[]>;
   quality(now: string): Promise<unknown>;
+  evaluation?(dataset: string, now: string): Promise<DriverEvaluationSnapshot>;
   revoke(owner: string, contributor: string): Promise<number>;
   close(): Promise<void>;
 }
@@ -187,14 +191,17 @@ export class ValhallaDriverMatcher implements DriverMatcher {
   }
 }
 
-export interface DriverSettings { enabled: boolean; revocationEnabled?: boolean; databaseUrl?: string; token?: string; hashSecret?: string; ratePerMinute: number }
+export interface DriverSettings { enabled: boolean; revocationEnabled?: boolean; databaseUrl?: string; token?: string; hashSecret?: string;
+  ratePerMinute: number; evaluationReportFile?: string }
 export function driverSettings(): DriverSettings {
   const enabled=process.env.DRIVER_MEASUREMENTS_ENABLED==="true";
   const revocationEnabled=process.env.DRIVER_MEASUREMENTS_REVOCATION_ENABLED==="true";
   const databaseUrl=process.env.DRIVER_MEASUREMENTS_DATABASE_URL, token=process.env.DRIVER_MEASUREMENTS_COP_TOKEN, hashSecret=process.env.DRIVER_MEASUREMENTS_HASH_SECRET;
   const ratePerMinute=Number(process.env.DRIVER_MEASUREMENTS_RATE_PER_MINUTE ?? 120);
+  const evaluationReportFile=process.env.DRIVER_MEASUREMENTS_EVALUATION_REPORT_FILE || undefined;
+  if (evaluationReportFile) validateDriverEvaluationReportPath(evaluationReportFile);
   if ((enabled || revocationEnabled) && (!databaseUrl || !token || token.length<32 || !hashSecret || hashSecret.length<32 || !Number.isInteger(ratePerMinute) || ratePerMinute<1 || ratePerMinute>600)) throw new Error("Invalid driver-measurement configuration");
-  return { enabled,revocationEnabled,databaseUrl,token,hashSecret,ratePerMinute };
+  return { enabled,revocationEnabled,databaseUrl,token,hashSecret,ratePerMinute,evaluationReportFile };
 }
 
 export function registerDriverMeasurementRoutes(app: Express, config: SituationDataConfig, settings=driverSettings(),
@@ -208,6 +215,16 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
   const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
+  const loadEvaluation=async():Promise<DriverEvaluationReport>=>{
+    if (!settings.enabled || !store?.evaluation || !matcher) throw new DriverMeasurementError(503,"DRIVER_EVALUATION_UNAVAILABLE");
+    const dataset=await matcher.dataset(), asOf=new Date(now()).toISOString();
+    const snapshot=await store.evaluation(dataset,asOf);
+    if (dataset!==await matcher.dataset()) throw new DriverMeasurementError(503,"DRIVER_MATCH_UNAVAILABLE");
+    return projectDriverEvaluationReport({...snapshot,intake:{enabled:settings.enabled,revocationEnabled:!!settings.revocationEnabled,accountScope:"cop_managed_with_consent"},
+      comparisonMode:"disabled",liveAppliedGroupCount:0});
+  };
+  const publisher=new DriverEvaluationPublisher(settings.enabled ? settings.evaluationReportFile : undefined,loadEvaluation);
+  publisher.start();
   let minute=0, requests=0, inflight=0;
   const contributors=new Map<string,{at:number; count:number}>();
   const hashContributor=(id:string)=>createHmac("sha256",settings.hashSecret!).update(`cop:${id}`).digest("hex");
@@ -268,14 +285,27 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     try { res.json({contractVersion:DRIVER_CONTRACT,applicationMode:"shadow_only",etaEvidence:"client_reported_not_ground_truth",summary:await store!.quality(new Date(now()).toISOString())}); }
     catch(error) { failure(req,res,error); }
   });
+  app.get(`${PREFIX}/evaluation`,async(req,res)=>{
+    if (!auth(req,res)) return;
+    try {
+      if (Object.keys(req.query).length) invalid();
+      res.json(await loadEvaluation());
+    } catch(error) { failure(req,res,error); }
+  });
   app.delete(`${PREFIX}/contributions`,async(req,res)=>{
     if (!auth(req,res,true)) return;
     try {
       const raw=object(req.body,["contractVersion","contributorIdDay"]);
       if (raw.contractVersion!==DRIVER_CONTRACT) invalid();
       const count=await store!.revoke("cop",hashContributor(opaque(raw.contributorIdDay)));
+      // A completed deletion must also acknowledge removal from the derived operator report.
+      // No matcher/database read is added to revocation-only rollback mode.
+      if (settings.evaluationReportFile) {
+        if (settings.enabled) await publisher.afterRevocation();
+        else await removeDriverEvaluationReport(settings.evaluationReportFile);
+      }
       res.json({contractVersion:DRIVER_CONTRACT,deletedBatchCount:count});
     } catch(error) { failure(req,res,error); }
   });
-  return {close:()=>store?.close()??Promise.resolve()};
+  return {close:async()=>{await publisher.close();await store?.close();}};
 }

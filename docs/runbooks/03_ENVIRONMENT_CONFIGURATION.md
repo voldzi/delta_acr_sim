@@ -15,6 +15,25 @@
 - `DRIVER_MEASUREMENTS_COP_TOKEN`: oddělený vysokonáhodný službový token, ≥32 znaků.
 - `DRIVER_MEASUREMENTS_HASH_SECRET`: oddělený vysokonáhodný HMAC secret, ≥32 znaků.
 - `DRIVER_MEASUREMENTS_RATE_PER_MINUTE=120`: 1–600 požadavků/min/instanci.
+- `DRIVER_MEASUREMENTS_EVALUATION_REPORT_FILE`: nepovinný privátní soubor
+  `latest.json`. V ověřeném X5 overlay je `/driver-measurement-reports/latest.json`;
+  nepřítomná cesta nezapíná publikaci ani jiný datový zdroj. Publisher běží
+  jednou za minutu, pouze při zapnutém příjmu; mazání invaliduje odvozený report.
+  Nejde o cache živých rychlostí.
+- `SIM_OPERATIONS_DRIVER_MEASUREMENT_REPORT_FILE`: explicitní cesta pouze pro
+  čtení stejného reportu v SIM API. Bez nastavení vrací chráněný přehled
+  `unavailable`, nikoliv nulové počty. Přehled po 90 s zastará; stáří reportu
+  nesmí prodloužit platnost zdrojového pětiminutového okna.
+
+Volitelný `docker-compose.driver-measurement-evaluation.yml` připojuje jen
+dedikovanou cache složku `SIM_DRIVER_EVALUATION_HOST_DIR`, přesně
+`/srv/x5-production/cache/csm-sim/driver-measurement-reports`
+(SDA zápis, SIM API pouze čtení), bez nového portu, sítě či kopie secrets.
+Složku musí správce předem vytvořit na ověřeném X5, Compose ji nevytváří.
+Read-only `scripts/preflight-driver-evaluation-x5.sh` ověří zařízení, UUID,
+volné místo a přesnou soukromou cestu před každou budoucí změnou.
+Přepínače COP a souhlas v Jízdě jsou samostatné; zapnutí SIM neprokazuje jejich
+aktivaci. Podrobnosti a schválené nasazovací okno řeší runbook 17.
 
 Compose předává hodnoty pouze situation-data-api; deployment je zachovává
 z existujícího `.env`, negeneruje ani nepředává nové tokeny automaticky.

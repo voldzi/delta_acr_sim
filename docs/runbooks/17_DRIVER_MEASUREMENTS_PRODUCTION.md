@@ -9,6 +9,12 @@ Jde o pseudonymizaci, nikoli anonymizaci. HTTP tracing této konkrétní cesty j
 vypnutý, aby neexportoval klientská ID, IP ani query string. Raw GPS je jen v RAM
 a Valhalla POST map_snap, ne v DB, cache nebo logu SIM. Souhrny vždy `shadow_only`.
 
+Rozšíření podle [ADR 0038](../adr/0038_DRIVER_MEASUREMENT_EVALUATION_AND_COMPARISON.md)
+je připravené pouze ve zdrojovém kódu: chráněná evaluace, operátorský přehled
+a oddělený porovnávací selector. Produkční build a aktivace této změny jsou
+pozastaveny infrastrukturním HOLD. Tento runbook není potvrzení aktuálního
+nasazeného obrazu nebo přepnutí účtů COP. Význam v1 se nemění na živou dopravu.
+
 ## DB a secrets
 
 Operátor použije `provision-driver-measurements-postgres.sh --apply`, skryté
@@ -46,6 +52,85 @@ produkčního sběru. Testovat idempotenci, privacy, stáří/quality, směr/gra
 rovné váhy přispěvatelů, retenci, FK cascade a souběh commit/revoke.
 Geografická jistota paralelních vozovek a reálný iPhone jsou další společnou bránou.
 
+## Dostupnost účtům a chráněná evaluace
+
+COP má nabídnout dobrovolný sběr kterémukoli autentizovanému účtu, nikoli
+jen seznamu pilotů. Před každou dávkou ověřuje skutečný souhlas a správnou
+identitu; klient neurčuje cizí pseudonym. Tato dostupnost nesmí automaticky
+udělit souhlas, zvýšit limity nebo obejít frontu a její backoff. SIM nadále
+přijímá pouze vyhrazenou službu COP, nikoli lidský účet nebo mobil přímo.
+
+Nová interní cesta:
+`http://sim-driver-measurements:4020/api/v1/internal/driver-measurements/v1/evaluation`.
+Používá stejný službový token jako `/quality`, `Cache-Control:no-store`,
+odmítnutí browser `Origin` a neznámých query parametrů. Vypnutý příjem
+vrací 503 také pro evaluaci; zachované mazání není povolení k novému čtení.
+Databázové čtení běží v jedné transakci `READ ONLY REPEATABLE READ`, bez
+DDL, nových tabulek nebo změny retence.
+
+Počty dávek, duplicit a osm povolených rejection codes jsou za retained
+sedmidenní data. Rychlostní skupiny a klientské ETA jsou za posledních
+24 hodin uložených bucket starts a s explicitním aktivním grafem.
+`generatedAt = asOf = evaluationWindow.until`; fresh report nenahrazuje
+skutečný čas pozorování. Future count znamená budoucí pětiminutový bucket,
+nikoli všechny budoucí GPS body ve stejném bucketu. Konec aktuálního okna
+je `floor(asOf / 5 min) × 5 min + 5 min`, nikdy nový uploadový TTL.
+Quality count pouze splnil 5 přispěvatelů / 10 intervalů; neprůkazná nezávislost
+účtů, nepokrytá celá hrana a klientská ETA zůstávají výslovné omezení.
+
+Výstup `sim-driver-evaluation-v1` neobsahuje GPS, UUID, contributor hashes,
+pseudonymy, edge IDs ani jednotlivé jízdy. Prázdná ETA je `[]`, poslední příjem
+bez dat `null`. Operátorská cesta SIM `/api/v1/operations/driver-measurements`
+zůstává pod existujícím přihlášením a čte pouze typovaný scalar report,
+nikoli partnerská nebo klientská raw data. Chybějící report je unavailable,
+neplatný invalid a starší než 90 s stale; stale není current. Metriky se
+nevkládají do veřejných vrstev ani AI promptů.
+
+## Provoz odvozeného reportu
+
+Volitelné `DRIVER_MEASUREMENTS_EVALUATION_REPORT_FILE` určuje writer cestu
+končící přesně `latest.json`; `SIM_OPERATIONS_DRIVER_MEASUREMENT_REPORT_FILE`
+určuje reader cestu k témuž reportu. Obě hodnoty patří pouze do schválené
+serverové konfigurace. Report nemá službový token, DB URL ani HMAC tajemství.
+Zdrojový publisher vytváří pouze jednu poslední kopii, obnovuje ji nejvýše
+jednou souběžnou operací a běžně po 60 s. Reader nepřijímá symlinky, soubor
+nad 64 KiB, neznámé klíče nebo neplatné časové a početní vztahy.
+
+Případný hostitelský bind mount pro další schválené okno je
+`/srv/x5-production/cache/csm-sim/driver-measurement-reports/`, uvnitř obou
+služeb `/driver-measurement-reports/`. Jde jen o obnovitelný scalar report,
+nikoli primární databázi nebo archiv jízd. Před jeho vytvořením ověřit samostatný
+mount a UUID `2f93f595-b61b-4eea-9054-7afa9b275b5b`, dostatek místa,
+vlastníka a práva. Writer má zapisovat pouze do této složky; reader má
+read-only mount. Privátní `latest.json` má práva 600 a číst jej smějí pouze
+dotčené služby se správnou provozní identitou. Zdroj nepřesouvá PostgreSQL,
+secrets nebo existující data a nevyžaduje nový veřejný port či službový token.
+
+Po potvrzeném databázovém DELETE publisher zahodí starý rozpracovaný pohled
+a musí potvrdit nový report bez odvolaného příspěvku, případně report odstranit.
+V režimu revokace při vypnutém příjmu jej pouze odstraní, bez volání matcheru.
+Odpověď 200 vyžaduje dokončení této odvozené operace; při chybě je 503 a COP
+ponechá pending deletion, i když SQL DELETE již proběhlo. Samotná 202 COP
+potvrzuje pouze zařazení do fronty. Tato ochrana souboru není durable fence
+pro live traffic writer ani potvrzení smazání fyzických záloh.
+
+## Porovnávací příprava a další brány
+
+`driver-speed-pilot.ts` je čistý selector bez IO, provider požadavků, cache
+a writeru. Výchozí `disabled`, volitelné `comparison_only` pouze vyhodnocuje
+revidované směrové hrany daného grafu, původní okno, práh 5/10, rychlostní
+strop a rozptyl. Čerstvá oficiální rychlost má vždy přednost. Při neznámém
+oficiálním pokrytí nelze předpokládat absenci oficiálního zdroje.
+Runtime report této verze zůstává `comparisonMode:"disabled"`,
+`livePromotionSupported:false`, `liveAppliedGroupCount:0`.
+
+Pro živé doplňování je nutná nová etapa: účelově odpovídající souhlas,
+spolehlivé skutečné stáří a průjezd hranou včetně dopravních zastavení,
+kontrola nezávislosti přispěvatelů, autoritativní oficiální pokrytí, generační
+ochrana revokace napříč procesy a potvrzení odstranění všech live kopií,
+nezávislé vyhodnocení ETA a omezený canary s návratem. Starý souhlas
+`traffic-quality-v1` ani čerstvé `generatedAt` tyto podmínky nenahrazují.
+
 ## Sedm dní, úklid a zálohy
 
 Receipt a revocation tombstone expirují za 7 dní. Expirace je filtrována při
@@ -66,14 +151,41 @@ do staršího stavu. Obnovená data se nikdy nezpřístupní agregaci.
 
 ## Nasazení a rollback
 
+Dokud platí HOLD, následující postup se nespouští. Před otevřením nového
+okna je nutné sjednotit přesné revize SIM/COP/Jízdy, zkontrolovat a znovu
+ověřit testy, závazné OpenAPI a publikované obrazy. Zdrojová příprava není
+důkaz produkční, geografické nebo fyzické iPhone akceptace.
+Neprovádět nové env zálohy, kopie, dočasné env soubory, přenos tokenů,
+rotaci HMAC, změnu sítě nebo databáze jako vedlejší krok této evaluace.
+Konfiguraci a případný bind mount lze měnit až v přesně schváleném okně.
+
 Zachovat dirty otel/X5/secrets; fast-forward konkrétního SHA. Původní SDA obraz
 označit rollback tagem. Stavět pouze SDA, OCI revision label a tag s plným SHA.
 `docker compose up -d --no-deps situation-data-api` bez restartu Valhally,
 Docker daemonu či jiných projektů. COP API recreate pouze pro secrets/cleanup.
 Web bránu reloadovat po `nginx -t` pro blokování nové interní cesty.
 
+Pro rozšíření evaluace je plánované nasazení omezené na přesně tři služby:
+`situation-data-api`, `sim-api` a `sim-web`. Vyžaduje vlastní
+schválené revize a identitu každého obrazu nad zkontrolovaným provozním základem,
+nikoli rebuild celé vývojové větve. Zachovat routing hotfix, observability,
+X5 a driver overlays i aktuální hodnoty secrets a flags; žádný reset dirty
+checkoutu, restart dalších služeb, změna Valhally nebo globální Docker operace.
+COP přepnutí účtů a akceptace na iPhonu jsou oddělené koordinované kroky.
+Opt-in overlay `docker-compose.driver-measurement-evaluation.yml` vyžaduje
+`SIM_DRIVER_EVALUATION_HOST_DIR` s přesnou výše uvedenou cache cestou; nepřipojuje
+celý X5 ani širší operational-checks adresář. Před každou schválenou změnou
+spustit `scripts/preflight-driver-evaluation-x5.sh`. Je read-only a skončí při
+jiném UUID, zařízení, cestě, právech nebo nedostatku místa bez změny.
+
 Návrat vypíná sběr, nikoli revocation/cleanup. Zachovat DB, síť a stejná HMAC.
 Preferovat poslední obraz podporující revocation-only. Nouzový návrat na starý
 provider obraz před touto funkcí ponechá COP deletion pending a nezávislý
 retenční cron; nesmí se hlásit úspěšné smazání, dokud jej SIM nepotvrdí.
 Nikdy neobnovovat starou DB jako rollback.
+
+Při návratu evaluace nejprve zastavit publikaci, odstranit jen scalar
+`latest.json` a ověřit, že UI ukazuje unavailable/stale místo starého current
+stavu. Sběr lze vypnout nezávisle, ale režim revokace, její fronta a retenční
+úklid musí zůstat funkční. Nevracet staré kopie reportu či databáze.
+Oficiální traffic updater, uzávěry a běžné trasy tato změna nepřepíná.

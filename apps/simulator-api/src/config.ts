@@ -49,6 +49,7 @@ export interface ApiConfig {
   operationsSafetyDataBaseUrl?: string;
   operationsTakGatewayBaseUrl?: string;
   operationsReportFile?: string;
+  operationsDriverMeasurementReportFile?: string;
 }
 
 export async function loadConfig(): Promise<ApiConfig> {
@@ -102,7 +103,8 @@ export async function loadConfig(): Promise<ApiConfig> {
     operationsSituationDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_SITUATION_DATA_BASE_URL ?? "http://127.0.0.1:4020"),
     operationsSafetyDataBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_SAFETY_DATA_BASE_URL ?? "http://127.0.0.1:4030"),
     operationsTakGatewayBaseUrl: normalizeBaseUrl(process.env.SIM_OPERATIONS_TAK_GATEWAY_BASE_URL ?? "http://127.0.0.1:4040"),
-    operationsReportFile: process.env.SIM_OPERATIONS_REPORT_FILE
+    operationsReportFile: process.env.SIM_OPERATIONS_REPORT_FILE,
+    operationsDriverMeasurementReportFile: process.env.SIM_OPERATIONS_DRIVER_MEASUREMENT_REPORT_FILE
   };
 }
 

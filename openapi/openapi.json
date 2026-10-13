@@ -5028,6 +5028,102 @@
         }
       }
     },
+    "/situation-data/api/v1/internal/driver-measurements/v1/evaluation": {
+      "get": {
+        "operationId": "driverMeasurements_getDriverMeasurementEvaluation",
+        "tags": [
+          "Driver Measurements: Driver Measurements"
+        ],
+        "summary": "Read a scalar-only shadow evaluation through the COP service boundary",
+        "description": "Dedicated COP backend bearer only; browser Origin is forbidden and no query parameters are accepted. Uses one read-only repeatable-read PostgreSQL snapshot. Receipt counts cover retained seven-day data; speed and ETA buckets cover the preceding 24 hours. No GPS, request UUID, pseudonym, contributor hash, edge ID or individual trip is returned. Quality group means the five-contributor/ten-interval threshold, not independent people, geographic certainty or ETA accuracy. applicationMode stays shadow_only, livePromotionSupported is false, and liveAppliedGroupCount is zero. Comparison-only eligibility cannot modify traffic.tar or ETA. Collection disabled returns 503, including revocation-only mode. A previous snapshot is not a durable revocation fence.",
+        "security": [
+          {
+            "driverMeasurementCopBearer": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Protected aggregate evaluation; no live-speed activation",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown query parameter or invalid strict request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Dedicated COP service authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Browser Origin forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bounded shared service request limit",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Collection disabled, database or graph unavailable, inconsistent snapshot, or invalid evaluation metadata; no alternate provider fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/situation-data/api/v1/internal/driver-measurements/v1/contributions": {
       "delete": {
         "operationId": "driverMeasurements_revokeDriverContributions",
@@ -5138,6 +5234,100 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DriverMeasurementsRevoke"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/driver-measurements": {
+      "get": {
+        "operationId": "driverMeasurementOperations_getDriverMeasurementOperations",
+        "tags": [
+          "Driver Measurements: Operations"
+        ],
+        "summary": "Read the protected scalar driving-measurement evaluation",
+        "description": "Requires an authenticated SIM principal with SIM_VIEWER. Public-read monitoring does not grant access. No query parameters are accepted; any query key is rejected with 400. A missing/unreadable file is unavailable, malformed or unsafe data is invalid, and a report older than 90 seconds is stale. No missing metric is synthesized as zero, no private measurement data is returned, and neither stale nor current reports authorize live speed or ETA application. The report is bounded to 64 KiB, read from the explicitly configured dedicated read-only mount, and never substituted by a provider request.",
+        "security": [
+          {
+            "simOperatorBearer": [
+
+            ]
+          }
+        ],
+        "x-required-roles": [
+          "SIM_VIEWER"
+        ],
+        "x-public-read": false,
+        "x-unknown-query-policy": "reject",
+        "parameters": [
+
+        ],
+        "responses": {
+          "200": {
+            "description": "Sanitized current, stale, unavailable or invalid evaluation state. The report remains shadow_only; ETA evidence is client-reported, not independently verified ground truth.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "private, no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationOperationsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Query parameters are not accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationOperationsProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or invalid SIM bearer credential; public read is not an alternative",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationOperationsProblem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated principal does not have SIM_VIEWER",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationOperationsProblem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Standard SIM principal rate limit; no alternate provider request",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationOperationsProblem"
+                }
               }
             }
           }
@@ -17481,6 +17671,367 @@
           }
         }
       },
+      "DriverMeasurementsDriverEvaluationCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "DriverMeasurementsDriverEvaluationUtcTimestamp": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+      },
+      "DriverMeasurementsDriverEvaluationDataset": {
+        "type": "string",
+        "pattern": "^sim-routing-\\d{4}-\\d{2}-\\d{2}-\\d+$"
+      },
+      "DriverMeasurementsDriverEvaluationWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "since",
+          "until"
+        ],
+        "description": "Exactly 24 hours: until equals generatedAt and asOf. Buckets are included by their stored window start; no exact point observation timestamps are reconstructed.",
+        "properties": {
+          "since": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationUtcTimestamp"
+          },
+          "until": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationUtcTimestamp"
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationRejectionCounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "non_measured_position",
+          "low_sensor_quality",
+          "personal_stop_or_unknown_motion",
+          "sampling_gap",
+          "ambiguous_or_noncontinuous_edge",
+          "heading_inconsistent",
+          "speed_or_distance_inconsistent",
+          "eta_not_comparable"
+        ],
+        "description": "Only these eight retained derivation rejection codes. Unknown stored keys fail closed; arbitrary JSON or text is not forwarded.",
+        "properties": {
+          "non_measured_position": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "low_sensor_quality": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "personal_stop_or_unknown_motion": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "sampling_gap": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "ambiguous_or_noncontinuous_edge": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "heading_inconsistent": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "speed_or_distance_inconsistent": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "eta_not_comparable": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationSpeedCounts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evaluatedGroupCount",
+          "currentGroupCount",
+          "historicalGroupCount",
+          "futureGroupCount",
+          "otherDatasetGroupCount",
+          "subthresholdGroupCount",
+          "qualityGroupCount",
+          "closedWindowGroupCount",
+          "currentQualityGroupCount",
+          "currentQualityIntervalCount"
+        ],
+        "description": "A group is one directed edge and five-minute bucket, but no edge ID is returned. evaluatedGroupCount equals current + historical + future + otherDataset, which are disjoint. The first three use the active dataset. quality + subthreshold equals current + historical; thresholds are five attested contributors and ten intervals. closedWindow equals historical, not full-edge spatial coverage. Future means a future bucket, not every future GPS sample within the same bucket. currentQualityIntervalCount counts accepted intervals in current threshold-passing groups.",
+        "properties": {
+          "evaluatedGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "currentGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "historicalGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "futureGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "otherDatasetGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "subthresholdGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "qualityGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "closedWindowGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "currentQualityGroupCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "currentQualityIntervalCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationEta": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "routingDataset",
+          "windowStart",
+          "attestedContributorCount",
+          "observationCount",
+          "medianAbsoluteErrorSeconds",
+          "medianAbsoluteErrorPercent"
+        ],
+        "description": "Active-dataset hourly bucket inside the evaluation window. Medians first balance each attested contributor, then balance contributors. Percent denominator is the original predicted duration, not actual duration. Client-reported values are not independently verified ground truth.",
+        "properties": {
+          "routingDataset": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationDataset"
+          },
+          "windowStart": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationUtcTimestamp"
+          },
+          "attestedContributorCount": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 9007199254740991
+          },
+          "observationCount": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 9007199254740991
+          },
+          "medianAbsoluteErrorSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "medianAbsoluteErrorPercent": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "retainedBatchCount",
+          "lastAcceptedAt",
+          "acceptedIntervalCount",
+          "deduplicatedIntervalCount",
+          "activeRevocationTombstoneCount",
+          "rejectionCounts",
+          "speed",
+          "eta"
+        ],
+        "properties": {
+          "retainedBatchCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "lastAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$",
+            "description": "Actual latest retained receipt at or before asOf; null when no retained receipt exists. It is not a GPS observation timestamp."
+          },
+          "acceptedIntervalCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "deduplicatedIntervalCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "activeRevocationTombstoneCount": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationCount"
+          },
+          "rejectionCounts": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationRejectionCounts"
+          },
+          "speed": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationSpeedCounts"
+          },
+          "eta": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationEta"
+            },
+            "description": "Empty array, never invented accuracy, when comparable threshold-passing evidence is absent."
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationLimits": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "minimumAttestedContributors",
+          "minimumIntervals",
+          "maximumEtaRows"
+        ],
+        "properties": {
+          "minimumAttestedContributors": {
+            "type": "integer",
+            "enum": [
+              5
+            ]
+          },
+          "minimumIntervals": {
+            "type": "integer",
+            "enum": [
+              10
+            ]
+          },
+          "maximumEtaRows": {
+            "type": "integer",
+            "enum": [
+              100
+            ]
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "generatedAt",
+          "asOf",
+          "routingDataset",
+          "evaluationWindow",
+          "applicationMode",
+          "etaEvidence",
+          "consistency",
+          "retentionDays",
+          "livePromotionSupported",
+          "revocationCoverage",
+          "summary",
+          "limits",
+          "intake",
+          "comparisonMode",
+          "liveAppliedGroupCount"
+        ],
+        "description": "The scalar snapshot plus server-owned intake and comparison metadata. No client chooses account scope, changes the thresholds or activates routing. The browser-facing operator view is separately authenticated; this endpoint remains COP backend only.",
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-evaluation-v1"
+            ]
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationUtcTimestamp"
+          },
+          "asOf": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationUtcTimestamp"
+          },
+          "routingDataset": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationDataset"
+          },
+          "evaluationWindow": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationWindow"
+          },
+          "applicationMode": {
+            "type": "string",
+            "enum": [
+              "shadow_only"
+            ]
+          },
+          "etaEvidence": {
+            "type": "string",
+            "enum": [
+              "client_reported_not_ground_truth"
+            ]
+          },
+          "consistency": {
+            "type": "string",
+            "enum": [
+              "read_only_repeatable_read"
+            ]
+          },
+          "retentionDays": {
+            "type": "integer",
+            "enum": [
+              7
+            ]
+          },
+          "livePromotionSupported": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "revocationCoverage": {
+            "type": "string",
+            "enum": [
+              "database_only"
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationSummary"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationLimits"
+          },
+          "intake": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enabled",
+              "revocationEnabled",
+              "accountScope"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "revocationEnabled": {
+                "type": "boolean"
+              },
+              "accountScope": {
+                "type": "string",
+                "enum": [
+                  "cop_managed_with_consent"
+                ]
+              }
+            }
+          },
+          "comparisonMode": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "comparison_only"
+            ]
+          },
+          "liveAppliedGroupCount": {
+            "type": "integer",
+            "enum": [
+              0
+            ]
+          }
+        }
+      },
       "DriverMeasurementsRevoke": {
         "type": "object",
         "additionalProperties": false,
@@ -17545,6 +18096,248 @@
               },
               "correlationId": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "DriverMeasurementsDriverEvaluationOperationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "status",
+          "checkedAt",
+          "reportAgeSeconds"
+        ],
+        "description": "Current/stale contain the exact shared scalar DriverEvaluationReport. Unavailable/invalid contain no report and use null age, not invented empty counts. Fractional report age is preserved so the browser cannot extend freshness by rounding. Current evidence additionally expires at the end of the five-minute bucket containing asOf, regardless of report freshness; generatedAt and lastAcceptedAt are not raw GPS observation ages.",
+        "properties": {
+          "contractVersion": {
+            "type": "string",
+            "enum": [
+              "sim-driver-evaluation-v1"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "stale",
+              "unavailable",
+              "invalid"
+            ]
+          },
+          "checkedAt": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationUtcTimestamp"
+          },
+          "reportAgeSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Nonnegative elapsed report age, including fractional seconds. Null when no trusted report is available."
+          },
+          "report": {
+            "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationReport"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "report_missing",
+              "report_unreadable",
+              "report_invalid",
+              "report_stale"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "current"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "report"
+              ],
+              "properties": {
+                "report": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationReport"
+                },
+                "reportAgeSeconds": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 90
+                }
+              },
+              "not": {
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "report_missing",
+                      "report_unreadable",
+                      "report_invalid",
+                      "report_stale"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "stale"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "report",
+                "reason"
+              ],
+              "properties": {
+                "report": {
+                  "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationReport"
+                },
+                "reportAgeSeconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 90
+                },
+                "reason": {
+                  "enum": [
+                    "report_stale"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "unavailable"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reportAgeSeconds": {
+                  "type": "null"
+                },
+                "reason": {
+                  "enum": [
+                    "report_missing",
+                    "report_unreadable"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "report"
+                ],
+                "properties": {
+                  "report": {
+                    "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationReport"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "invalid"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "reason"
+              ],
+              "properties": {
+                "reportAgeSeconds": {
+                  "type": "null"
+                },
+                "reason": {
+                  "enum": [
+                    "report_invalid"
+                  ]
+                }
+              },
+              "not": {
+                "required": [
+                  "report"
+                ],
+                "properties": {
+                  "report": {
+                    "$ref": "#/components/schemas/DriverMeasurementsDriverEvaluationReport"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "DriverMeasurementsDriverEvaluationOperationsProblem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "description": "SIM simulator-api problem() shape for this protected operations endpoint. Unlike the COP measurement service Error, SIM includes the details array. This endpoint never populates it with report contents, credentials or private measurements.",
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "message",
+              "details",
+              "correlationId"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "VALIDATION_ERROR",
+                  "UNAUTHORIZED",
+                  "FORBIDDEN",
+                  "RATE_LIMITED"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "array",
+                "maxItems": 0,
+                "description": "Empty for the documented 400/401/403/429 responses; no report or caller data is echoed."
+              },
+              "correlationId": {
+                "type": "string",
+                "description": "Existing SIM correlation ID semantics: supplied request correlation value or a generated UUID. No new UUID-only restriction."
               }
             }
           }
@@ -22903,6 +23696,11 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Dedicated COP backend credential. Never in Jizda/mobile/browser. Browser Origin prohibited. Client cannot select service owner."
+      },
+      "simOperatorBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Standard SIM authentication: a validated OIDC access token or configured SIM bearer principal with SIM_VIEWER. Not the dedicated COP measurement token; no browser receives that service credential."
       },
       "aiRouterBearer": {
         "type": "http",
