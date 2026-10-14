@@ -45,6 +45,24 @@ Aktuální místní PostgreSQL HBA používá podle infrastrukturního auditu
 root brokeru. Před aktivací autority řešit zvlášť schválené autentizační
 zpevnění, nikoli v SIM měnit HBA nebo vydat pozitivní verifier.
 
+Nově dodaný `cop-actor-peer-isolated-v1` je pouze zmrazený source/fixture
+ABI. Jeho offline klient není runtime transport, enrollment ani verifier;
+`productionReady=false` zůstává povinné i po úspěšné testovací odpovědi.
+V1 nesmí být automaticky použit pro jinou verzi wrapperu. Pro skutečný
+provoz stále chybí peer/kernel/lifecycle akceptace, aktuální Root authority,
+owner-wide replay/generation, skutečné identity a side-effect settlement.
+
+Správce následně doložil devět skutečných vlastních neprivilegovaných
+Linux fixture testů, včetně socket credentials, přijatých deskriptorů,
+smrti procesu a čekající lease. Jeho `ROOT-LINUX-RESULTS.json` má SHA-256
+`496f4931122e59c1305e3214fe6228ac036d7672309a8bf21cc93c7f8440f6f2`;
+SIM ověřil obsah a hash, nikoli druhý Linuxový běh. Tento v2 harness
+není owner-wire ABI v1 ani produkční služba. Atomické pořadí runtime
+generation/commit/fence, skutečný bootstrap, owner-wide replay a restore
+zůstávají otevřené. Návrh zpevnění PostgreSQL `trust` na `peer` je pouze
+source plán; jeho provedení, HBA reload a nové provozní přístupy nejsou
+aplikační migrací a vyžadují samostatný konkrétní krok.
+
 ## Ověření zdrojů
 
 V odděleném pracovním stromu:
@@ -108,6 +126,34 @@ při vypnutém příjmu. Cizí/neexistující SIM receipt nesmí udělit oprávn
 k resume a výpadek či timeout readiness nesmí být zaměněn za povolení.
 Dosavadní archivní dvojice a počet 10 HTTP scénářů se nepřepíšou výsledky
 nové orchestrace nebo nepublikované COP revize.
+
+Pro novou čistou COP revizi `898cd5132f513259b226d5beff5c3876156b56e7`
+existuje samostatný runner skutečného řadiče, consent composition a obou
+COP adaptérů proti skutečným SIM handlerům. Spouštět jen s Node 24:
+
+```sh
+node --import ./apps/ai-router-api/node_modules/tsx/dist/loader.mjs scripts/test-cop-sim-erasure-controller-http.mts --run --cop-source /absolute/reviewed/COP/checkout
+```
+
+Stores, identity, native authority, publication a ostatní vlastníci jsou
+syntetické; veřejný login, COP HTTP routes, iPhone a produkční DB nejsou
+ověřené. Test zahrnuje čekající 202, staré outbox dny, vlastní flag-off
+resume a skutečný restart řadiče po local purge, ale před global checkpoint
+commitem. Následující Driver kontrola musí být GET-only, bez rekonstrukce
+odstraněných dnů a bez nového POST. Historické 10/71 důkazy původního
+adaptér testu zůstávají samostatné.
+
+Offline v1 klient je opt-in test bez sítě, procesu, native transportu nebo
+databáze. Externí wrapper checkout musí odpovídat připnutým hashům:
+
+```sh
+node --import ./apps/ai-router-api/node_modules/tsx/dist/loader.mjs scripts/test-isolated-native-peer-client.mts --run --wrapper-source /absolute/reviewed/isolated-linux-wrapper
+```
+
+Ani úspěšných 61 memory/codec případů a 8 controller HTTP scénářů nezapíná
+produkční verifier, chat, mazání nebo obnovu. Přesné piny a rozdělení
+ověřených a neověřených vlastností zaznamenat v samostatném archive;
+počty se nesčítají s historickými native/SQL testy.
 
 ## Před aktivací
 

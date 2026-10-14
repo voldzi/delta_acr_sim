@@ -393,6 +393,59 @@ ověřit maintenance/replay, zachování SIM/IZS, shadow režimu a finančních
 stropů. Tyto budoucí native scénáře nejsou součástí již doložených 10 HTTP
 a 41 PostgreSQL kontrol; žádný pozitivní fixture nenahrazuje aktuální broker.
 
+### Izolovaný testovací protokol v1
+
+Infrastruktura dodala oddělený fixture protokol
+`cop-actor-peer-isolated-v1`, nikoli produkční variantu předchozího
+`cop-private-admission-proposal-v1`. Jeho mode je výhradně
+`isolated-fixture-only`. Request má šest přesných klíčů `protocol`,
+`mode`, `owner`, `requestId`, `method`, `args`. Obsahuje pouze metody
+`current`, `admit`, `begin_commit`, `complete`, `mark_indeterminate`,
+`drain`; nenabízí enrollment, registraci identity/evidence, fence,
+cleanup, skutečný local commit, provider dispatch ani settlement.
+
+Wrapper je zmrazený na SHA-256
+`64e26614bf4512157f09281e0fed7452bdd0c327a6e3f807059a062f027bd69b`,
+request schema na
+`ed06fbb3b460bd6ba7bc3a48369d90c0944677dce7b7577dc5a3aac0d35aee3e`
+a coordinator na
+`5da047bd04aaf3766a3b8ce2572b2ee8eaa38e8439d8462ed277e342a748e01e`.
+Nový wrapper/protocol vyžaduje samostatnou revizi. V1 nelze označit za
+kompatibilní s připravovaným v2 nebo za Linux kernel akceptaci.
+
+Testovací klient smí používat jen explicitně injektovanou výměnu packetů
+v paměti, bez nativního transportu a bez produkčního entrypointu. Rámec
+je nejvýše 16 384 UTF-8 bajtů; parser odmítá duplicate keys ve všech
+hloubkách, druhý JSON dokument, neplatné UTF-8, všechny float lexémy
+včetně `1.0` a `1e0`, nefinite a unsafe integers. Nested CAS, lease a
+čtyři evidence refs mají přesný tvar a jsou pouze fixture reference.
+
+Response nemá top-level owner ani method. Result se váže na původní
+request/method, předem určený owner a fixture binding, shodný requestId,
+izolovaný response mode a scope 3. Všech deset authority flags musí být
+přítomných a `false`; ani validní CAS, `drained` nebo terminal ACK
+neznamená produkční připravenost. `requestId` je korelace, ne idempotentní
+oprávnění. Historical ACK nemůže vydat nové admission/commit oprávnění.
+
+Wire error envelope v1 není definovaný. Chybné bytes, zavřená výměna,
+Denied, timeout či pozdní výsledek nemohou být known abort nebo settlement.
+Deadline klienta ukončuje jen jeho čekání; neprokazuje ukončení serveru,
+není backend watchdog a nevytváří automatický retry či příkaz k cleanupu.
+Fixture klient se nesmí připojit jako `OwnerCheckpointVerifier` nebo
+`DriverErasureProtectedProof`; production compatibility zůstane `false`.
+Skutečný owner-wide replay/generation, principal bootstrap, runtime trust
+a distribuované vypořádání zůstávají mimo tento izolovaný protokol.
+
+Zdrojový klient je pouze `scripts/lib/isolated-native-peer-client.mts`;
+žádný `apps/*/src` jej neimportuje. `scripts/test-isolated-native-peer-client.mts`
+ověřuje přesné externí source piny před importem, nezávislé Ajv2020 schema
+a deterministické výměny v paměti. Samostatný negativní bridge vždy vrací
+`compatible:false`, `productionReady:false` a
+`ISOLATED_PROTOCOL_NOT_RUNTIME_AUTHORITY`. Čtyři neukončené výměny obsazují
+kapacitu i po timeoutu; pozdní odpověď nezaloží current CAS ani oprávnění.
+Test nesmí být zapojen do runtime, použit jako pozitivní proof nebo
+přejmenován na Linux akceptaci.
+
 ## Pokyn pro COP
 
 Udržte account lock, send generation a durable erasure frontu nezávisle

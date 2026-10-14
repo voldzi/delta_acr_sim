@@ -136,3 +136,11 @@ ochrany proti návratu smazaných dat. Správce připraví konkrétní omezený
 privilegovaný balíček a skutečnou runtime hranici. Návrhový podpis,
 syntetický verifier nebo samotná testovací DB nemění stav produkční gate;
 shared SIM identita a přístup se nesmějí globálně odvolat.
+
+Testovací šestimetodový `cop-actor-peer-isolated-v1` má oddělený offline
+codec a klient pod `scripts/lib`, bez produkčního importu či transportu.
+Jeho všechny authority flags a kompatibilita s runtime zůstávají false.
+Deterministický timeout není terminal outcome nebo drain. Nová verze
+nativního wrapperu, owner-wide generace, bootstrap identity a skutečné
+commit/fence pořadí vyžadují samostatný přijatý kontrakt. Izolovaná Linux
+fixture, samotná metadata DB a aplikovaný JSON tvar tuto hranici nemění.
