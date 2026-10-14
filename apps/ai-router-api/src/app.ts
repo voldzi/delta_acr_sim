@@ -153,7 +153,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
   app.disable("x-powered-by");
   app.use("/api/v1/ai-router/cop/users/me/erasure-operations", (_req, res, next) => {
     res.locals.erasureCorrelationId=randomUUID();res.setHeader("X-Correlation-ID",res.locals.erasureCorrelationId);
-    res.setHeader("Cache-Control", "private, no-store");next();
+    res.setHeader("Cache-Control", "no-store");next();
   });
   app.use(express.json({ limit: "32kb" }));
   app.get("/health/live", (_req, res) => res.json({ status: "ok" }));

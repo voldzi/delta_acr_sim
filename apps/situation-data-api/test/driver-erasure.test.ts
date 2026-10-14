@@ -41,6 +41,15 @@ describe("driver erasure exact request and identity",()=>{
     const text=JSON.stringify(input);expect(text).not.toContain(claims().sub);expect(text).not.toContain(claims().routerUserId);expect(text).not.toContain(parsed.contributors[0].contributorIdDay);
     const reordered={...parsed,contributors:[...parsed.contributors].reverse()};expect(prepareDriverErasureInput(parseDriverErasureRequest(reordered),claims("synthetic-subject",now+1000),secret).requestHash).toBe(input.requestHash);
   });
+  it("accepts bounded older retained/outbox days while still requiring the full recent interval",()=>{
+    const m=manifest();m.contributors.push({contributorDay:"2026-09-29",contributorIdDay:"old-a".padEnd(40,"x")},{contributorDay:"2026-09-29",contributorIdDay:"old-b".padEnd(40,"x")});
+    const parsed=parseDriverErasureRequest(m),input=prepareDriverErasureInput(parsed,claims(),secret);expect(()=>validateDriverErasureCoverage(input,now)).not.toThrow();expect(input.contributors).toHaveLength(11);
+    const missing={...input,contributors:input.contributors.filter(c=>c.contributorDay!=="2026-10-08")};expect(()=>validateDriverErasureCoverage(missing,now)).toThrow("INCOMPLETE_MANIFEST");
+    const future={...input,contributors:[...input.contributors,{contributorDay:"2026-10-15",contributorHash:"f".repeat(64)}]};expect(()=>validateDriverErasureCoverage(future,now)).toThrow("INCOMPLETE_MANIFEST");
+    const late=Date.parse("2026-10-14T23:59:40Z"),allowed=prepareDriverErasureInput(parseDriverErasureRequest(manifest(late)),claims(),secret);expect(()=>validateDriverErasureCoverage(allowed,late)).not.toThrow();
+    expect(()=>validateDriverErasureCoverage({...allowed,contributors:[...allowed.contributors,{contributorDay:"2026-10-16",contributorHash:"f".repeat(64)}]},late)).toThrow("INCOMPLETE_MANIFEST");
+    const retry=prepareDriverErasureInput(parsed,claims("synthetic-subject",Date.parse("2026-10-15T00:01:00Z")),secret);expect(retry.requestHash).toBe(input.requestHash);expect(()=>validateDriverErasureCoverage(retry,now)).not.toThrow();
+  });
   it.each([
     (m:any)=>{m.email="private@example.invalid";},(m:any)=>{m.contributors[0].lat=50;},(m:any)=>{m.contributors[0].contributorDay="2026-02-30";},
     (m:any)=>{m.contributors[0].contributorDay="9999-99-99";},(m:any)=>{m.contributors[0].contributorIdDay="short";},(m:any)=>{m.attestation="automatic";},
@@ -83,6 +92,14 @@ describe("driver erasure HTTP boundary and passive probes",()=>{
     const status=await request(f.app).get(`${collection}/${op}`).set(headers());expect(status.status).toBe(200);expect((f.store.accountErasure as any).mock.calls).toHaveLength(count);
     expect((await request(f.app).get(`${collection}/${op}`).set(headers(claims("other-subject")))).status).toBe(404);
     const again=await request(f.app).post(`${collection}/preflight`).set(headers()).send(manifest());expect(again.body.coverageAnchor.kind).toBe("first_accepted_at");
+  });
+  it("preserves all older inventory through preflight and erase without widening another actor's scope",async()=>{
+    const f=fixture(),m=manifest();m.contributors.push({contributorDay:"2026-09-29",contributorIdDay:"historical-a".padEnd(40,"x")},{contributorDay:"2026-09-29",contributorIdDay:"historical-b".padEnd(40,"x")});
+    const p=await request(f.app).post(`${collection}/preflight`).set(headers()).send(m);expect(p.status).toBe(200);expect(p.body.contributorCount).toBe(11);expect(f.ledger.size).toBe(0);
+    expect((await request(f.app).post(collection).set(headers()).send(m)).status).toBe(200);expect((f.store.accountErasure as any).mock.calls[0][0].contributors).toHaveLength(11);
+    expect((await request(f.app).post(`${collection}/preflight`).set(headers(claims("other-subject"))).send(m)).status).toBe(404);
+    expect((await request(f.app).post(collection).set(headers(claims("other-subject"))).send(m)).status).toBe(404);
+    const changed=manifest();expect((await request(f.app).post(collection).set(headers()).send(changed)).status).toBe(409);expect(f.ledger.size).toBe(1);
   });
   it("rejects changed immutable requests and never joins other actors",async()=>{
     const f=fixture();await request(f.app).post(collection).set(headers()).send(manifest());

@@ -7,25 +7,25 @@ function input():DriverErasureInput{return {operationId:op,actorHash:"a".repeat(
 const proof:DriverErasureProtectedProof={checkpoint,restoreCheckpointCurrent:true,identityReviewed:true,retentionReviewed:true,publicationFenceVerified:true,reportProtection:"no_report"};
 function fixture(options:{schema?:boolean;active?:boolean;external?:boolean;proof?:Partial<DriverErasureProtectedProof>;permissions?:boolean}={}){
   const rows=new Map<string,Record<string,any>>(),fences=new Set<string>(),calls:Array<{sql:string;params:unknown[]}>=[];
-  let receipts=2;
+  let receipts=2,clock=now;
   const query=vi.fn(async(sql:string,params:unknown[]=[])=>{
     calls.push({sql,params});const result=(values:unknown[])=>({rows:values,rowCount:values.length});
-    if(sql.includes("pg_trigger"))return result([{at:new Date(now),installed:options.schema!==false}]);
+    if(sql.includes("pg_trigger"))return result([{at:new Date(clock),installed:options.schema!==false}]);
     if(sql.includes("pg_roles WHERE"))return result([{ready:options.permissions!==false}]);
     if(sql.includes("proof_valid_until>now()"))return result([{valid:true,replay_ready:true,replay_checkpoint_hash:driverErasureHash(secret,"cop:account-erasure-checkpoint",checkpoint),retention_reviewed:true,report_protection:"no_report",publication_fence_verified:true}]);
     if(sql.includes("AS operations,"))return result([{operations:options.active===true,fences:options.active===true}]);
     if(sql.includes(" AS active"))return result([{active:options.active===true||rows.size>0||fences.size>0}]);
-    if(sql.includes("clock_timestamp()"))return result([{at:new Date(now)}]);
+    if(sql.includes("clock_timestamp()"))return result([{at:new Date(clock)}]);
     if(sql.startsWith("SELECT * FROM driver_account_erasure_operations")||sql.startsWith("SELECT actor_hash,request_hash,created_at")){
       const row=rows.get(params[0] as string);return result(row&&(!sql.includes("AND actor_hash")||row.actor_hash===params[1])?[{...row}]:[]);}
     if(sql.startsWith("INSERT INTO driver_account_erasure_operations")){
-      rows.set(params[0] as string,{actor_hash:params[1],request_hash:params[2],contributor_count:params[3],created_at:new Date(now),updated_at:new Date(now),deleted_batch_count:0,remaining_batch_count:0,database_zero_verified:false,derived_report_acknowledged:false,replay_checkpoint_hash:null,status:"pending"});return result([]);}
+      rows.set(params[0] as string,{actor_hash:params[1],request_hash:params[2],contributor_count:params[3],created_at:new Date(clock),updated_at:new Date(clock),deleted_batch_count:0,remaining_batch_count:0,database_zero_verified:false,derived_report_acknowledged:false,replay_checkpoint_hash:null,status:"pending"});return result([]);}
     if(sql.startsWith("INSERT INTO driver_account_erasure_revocations")){for(const h of params[0] as string[])fences.add(h);return result([]);}
     if(sql.startsWith("SELECT 1 FROM driver_account_erasure_revocations"))return result(fences.has(params[1] as string)?[{}]:[]);
     if(sql.startsWith("DELETE FROM driver_measurement_receipts")){const n=receipts;receipts=0;return {rows:[],rowCount:n};}
     if(sql.includes("count(*)::integer AS n"))return result([{n:receipts}]);
     if(sql.startsWith("UPDATE driver_account_erasure_operations")){
-      const row=rows.get(params[0] as string)!;row.updated_at=new Date(now);
+      const row=rows.get(params[0] as string)!;row.updated_at=new Date(clock);
       if(sql.includes("deleted_batch_count=deleted_batch_count")){row.deleted_batch_count+=params[1] as number;row.remaining_batch_count=params[2];row.database_zero_verified=params[3];row.derived_report_acknowledged=false;row.status="pending";row.replay_checkpoint_hash=params[4];}
       else{row.remaining_batch_count=params[1];row.database_zero_verified=params[2];row.derived_report_acknowledged=params[3];row.status=params[4];row.replay_checkpoint_hash=params[5];}
       return result([{...row}]);}
@@ -34,7 +34,7 @@ function fixture(options:{schema?:boolean;active?:boolean;external?:boolean;proo
   const pool={query,connect:async()=>({query,release:vi.fn()})} as unknown as Pool;
   const protectedProof=options.external===false?undefined:vi.fn(async()=>({...proof,...options.proof}));
   const store=new PostgresDriverAccountErasureStore(pool,secret,{enabled:true,identityConfigured:true,expectedCheckpoint:checkpoint,protectedProof});
-  return {store,rows,fences,calls,protectedProof};
+  return {store,rows,fences,calls,protectedProof,setClock:(at:number)=>{clock=at;}};
 }
 describe("driver erasure durable evidence and passive gates",()=>{
   it("old ready DB state without the current protected guard is never ready",async()=>{
@@ -50,6 +50,20 @@ describe("driver erasure durable evidence and passive gates",()=>{
   it("passive preflight checks coverage but creates no ledger, fence or mutation",async()=>{
     const f=fixture(),p=await f.store.preflight(input());expect(p.ready).toBe(true);expect(p.coverageAnchor).toEqual({kind:"checked_at",at:p.checkedAt});expect(f.rows.size).toBe(0);expect(f.fences.size).toBe(0);
     expect(f.calls.some(call=>/^(INSERT|UPDATE|DELETE|TRUNCATE)/.test(call.sql))).toBe(false);
+  });
+  it("retains all bounded older days and key versions in the ephemeral operation without a durable join",async()=>{
+    const f=fixture(),i=input();i.contributors.push({contributorDay:"2026-09-29",contributorHash:"a".repeat(64)},{contributorDay:"2026-09-29",contributorHash:"b".repeat(64)});
+    const p=await f.store.preflight(i);expect(p.contributorCount).toBe(11);expect(f.rows.size).toBe(0);expect(f.fences.size).toBe(0);
+    const r=await f.store.erase(i);expect(r.contributorCount).toBe(11);expect(f.fences.size).toBe(11);expect(r.deletedBatchCount).toBe(2);
+    const raw=JSON.stringify([...f.rows]);expect(raw).not.toContain("2026-09-29");expect(raw).not.toContain("contributorHash");expect(raw).not.toContain(op);
+    expect(await f.store.status(op,"z".repeat(64))).toBeUndefined();await expect(f.store.erase({...i,actorHash:"z".repeat(64)})).rejects.toMatchObject({status:404});
+  });
+  it("a midnight retry retains its original accepted anchor and immutable full inventory",async()=>{
+    const f=fixture(),i=input();i.contributors.push({contributorDay:"2026-09-29",contributorHash:"a".repeat(64)},{contributorDay:"2026-09-29",contributorHash:"b".repeat(64)});
+    const original=await f.store.erase(i);f.setClock(Date.parse("2026-10-15T00:01:00Z"));
+    const p=await f.store.preflight(i);expect(p.coverageAnchor).toEqual({kind:"first_accepted_at",at:original.acceptedAt});expect(p.checkedAt).toBe("2026-10-15T00:01:00.000Z");
+    const replay=await f.store.erase(i);expect(replay.acceptedAt).toBe(original.acceptedAt);expect(replay.deletedBatchCount).toBe(2);expect(replay.contributorCount).toBe(11);expect(f.rows.size).toBe(1);
+    await expect(f.store.erase({...i,requestHash:"c".repeat(64)})).rejects.toMatchObject({status:409});
   });
   it("an acknowledged online receipt remains separate from whole-account and backup completion",async()=>{
     const f=fixture(),i=input(),start=await f.store.erase(i);expect(start.status).toBe("pending");expect(start.deletedBatchCount).toBe(2);expect(f.fences.size).toBe(9);

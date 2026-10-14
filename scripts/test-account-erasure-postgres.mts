@@ -286,6 +286,24 @@ await check('database stores no raw manifest, subject, batch identity or account
 await check('UTC expiry window requires next-day tolerance and does not reuse stale preflight authorization',async()=>{
  const at=Date.parse('2026-10-14T23:59:45Z');assert.equal(driverErasureRequiredDays(at).length,10);assert.equal(driverErasureRequiredDays(at-60000).length,9);const synthetic={...a.input,contributors:driverErasureRequiredDays(at-60000).map(day=>({contributorDay:day,contributorHash:hash(day)}))};await reject(async()=>validateDriverErasureCoverage(synthetic,at),'DRIVER_ACCOUNT_ERASURE_INCOMPLETE_MANIFEST');
 });
+await check('full older inventory erases every attested version without truncation or future-day permission',async()=>{
+ const historical=manifest('historical');
+ const oldDay=new Date(Date.now()-15*86400000).toISOString().slice(0,10);
+ const older=[1,2].map(version=>({contributorDay:oldDay,contributorIdDay:`synthetic_historical_old_v${version}_${oldDay.replaceAll('-','')}`.padEnd(48,'x')}));
+ const body=parseDriverErasureRequest({...historical.body,contributors:[...historical.body.contributors,...older]});
+ const input=prepareDriverErasureInput(body,historical.actor,secret);
+ for(const row of older)await commit(hash(row.contributorIdDay));
+ const before=(await runtime.query('SELECT count(*)::integer AS n FROM driver_account_erasure_operations')).rows[0].n;
+ const pre=await store.accountErasurePreflight(input);assert.equal(pre.ready,true);assert.equal(pre.contributorCount,body.contributors.length);
+ assert.equal((await runtime.query('SELECT count(*)::integer AS n FROM driver_account_erasure_operations')).rows[0].n,before);
+ const pending=await store.accountErasure(input);assert.equal(pending.deletedBatchCount,2);
+ const done=await store.acknowledgeAccountErasure(input);assert.equal(done.status,'completed');assert.equal(done.remainingBatchCount,0);
+ assert.equal((await runtime.query("SELECT count(*)::integer AS n FROM driver_account_erasure_revocations WHERE owner='cop' AND contributor_hash=ANY($1::text[])",[input.contributors.map(row=>row.contributorHash)])).rows[0].n,input.contributors.length);
+ for(const row of older)await reject(()=>commit(hash(row.contributorIdDay)),'DRIVER_CONSENT_REVOKED');
+ assert.equal(await store.accountErasureStatus(input.operationId,b.input.actorHash),undefined);
+ const forbiddenFuture=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
+ await reject(async()=>validateDriverErasureCoverage({...input,contributors:[...input.contributors,{contributorDay:forbiddenFuture,contributorHash:hash('synthetic_forbidden_future')}]},Date.now()),'DRIVER_ACCOUNT_ERASURE_INCOMPLETE_MANIFEST');
+});
 
   return passed;
 }

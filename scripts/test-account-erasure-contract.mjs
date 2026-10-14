@@ -64,6 +64,15 @@ check("RouterErasureReceipt", { ...receipt, backupsComplete: true }, false);
 check("RouterErasureReceipt", { ...receipt, status: "pending", onlineScopeComplete: false }, false);
 const driverReceipt = { contractVersion: version, operationId, status: "completed", scope: "online_driver_scope", wholeAccountComplete: false, backupReplayRequired: true, acceptedAt: at, updatedAt: at, contributorCount: 9, deletedBatchCount: 1, remainingBatchCount: 0, databaseZeroVerified: true, derivedReportAcknowledged: true, reportProtection: "no_report", publicationFenceVerified: true, replayReady: true, retentionReviewed: true, pendingReason: null };
 check("DriverErasureCompletedReceipt", driverReceipt);
+for (const operationId of ["00000000-0000-7000-8000-000000000001", "00000000-0000-8000-8000-000000000001"]) {
+  check("DriverErasureRequest", { ...request, operationId }, false);
+  check("DriverErasurePreflight", { ...driverPreflight, operationId }, false);
+  check("DriverErasureCompletedReceipt", { ...driverReceipt, operationId }, false);
+}
+const driverOperationId = ajv.compile(fragment.components.parameters.DriverOperationId.schema);
+assert.equal(driverOperationId(operationId), true);
+assert.equal(driverOperationId("00000000-0000-7000-8000-000000000001"), false);
+checks += 2;
 for (const field of ["databaseZeroVerified", "derivedReportAcknowledged", "publicationFenceVerified", "replayReady", "retentionReviewed"]) check("DriverErasureCompletedReceipt", { ...driverReceipt, [field]: false }, false);
 check("DriverErasurePendingReceipt", { ...driverReceipt, status: "pending", replayReady: false, pendingReason: "replay_review_required" });
 check("DriverErasureError", { error: { code: "DRIVER_ACCOUNT_ERASURE_NOT_READY", message: "Operation unavailable.", correlationId: "synthetic-correlation" } });

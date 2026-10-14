@@ -104,6 +104,11 @@ překročení nesmí znamenat tiché zkrácení. Tělo neobsahuje `keyVersion`,
 proto SIM nemůže rozpoznat chybějící historickou verzi klíče. COP musí
 úplnost verzí doložit před odesláním; neznámá verze blokuje preflight.
 
+Pro společnou operaci používat serverově generované UUID v4. Driver
+endpoint přijímá UUID verzí 1–5, což výslovně vynucuje také závazné
+schéma požadavku, preflightu, receipt a parametru cesty. COP nesmí
+pro Driver generovat širší UUID variantu jen podle Router validátoru.
+
 COP sestaví celý možný retenční interval od `UTC-date(acceptedAt − 8 dní)`
 po UTC den prvního přijetí v SIM a datum přípustné tolerancí budoucího
 pozorování 30 sekund. `acceptedAt` uloží SIM při první operaci; COP navíc
@@ -157,6 +162,15 @@ operace používá právě `checkedAt`; `kind=first_accepted_at` u existující
 vlastní operace používá původní uložené `acceptedAt`. `manifestValid`
 dokládá tvar a UTC rozsah, nikoli příslušnost pseudonymů nebo úplnost
 historických klíčových verzí a outboxu; ty atestuje COP.
+
+Interval devíti nebo deseti UTC dnů je povinné **minimum**, nikoli zákaz
+starší historie. Manifest může v limitu 40 dvojic obsahovat další starší
+retained/outbox dny a skutečně používané klíčové verze. Každý den musí být
+platným UTC kalendářním datem a nesmí být pozdější než den původního
+`acceptedAt + 30 sekund`. Chybějící povinný den, nepovolená budoucnost
+nebo překročení limitu se odmítne; starší inventář se nikdy potichu neořízne.
+Toto pravidlo nemění 24hodinové stáří příjmu ani sedmidenní retenci měření.
+Po prvním přijetí zůstává celý manifest a jeho digest neměnný.
 
 HTTP 200 zde znamená pouze spolehlivě provedenou kontrolu. `ready=false`
 je blokovaná příprava, nikoli zahájené mazání; preflight nepoužívá 202.

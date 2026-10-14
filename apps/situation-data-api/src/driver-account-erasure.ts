@@ -73,7 +73,15 @@ export function driverErasureRequiredDays(now:number):string[] {
 }
 export function validateDriverErasureCoverage(input:DriverErasureInput,acceptedAt:number):void {
   const required=driverErasureRequiredDays(acceptedAt),actual=new Set(input.contributors.map(row=>row.contributorDay));
-  if (required.some(day=>!actual.has(day)) || [...actual].some(day=>!required.includes(day))) throw new DriverAccountErasureError(400,"DRIVER_ACCOUNT_ERASURE_INCOMPLETE_MANIFEST");
+  // The recent range is a minimum, not an allowlist: COP must include older
+  // retained/outbox identities and historical key versions without truncation.
+  // Past inventory is bounded by the existing 40-pair contract; future extras
+  // beyond this operation's original acceptance/tolerance day remain forbidden.
+  const latest=required[required.length-1]!;
+  if (input.contributors.length<9 || input.contributors.length>40 || required.some(day=>!actual.has(day)) || [...actual].some(day=>
+      !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(`${day}T00:00:00Z`)) || new Date(`${day}T00:00:00Z`).toISOString().slice(0,10)!==day || day>latest)) {
+    throw new DriverAccountErasureError(400,"DRIVER_ACCOUNT_ERASURE_INCOMPLETE_MANIFEST");
+  }
 }
 export function driverErasureHash(secret:string,purpose:string,value:string):string {
   return createHmac("sha256",secret).update(`${purpose}:${value}`).digest("hex");

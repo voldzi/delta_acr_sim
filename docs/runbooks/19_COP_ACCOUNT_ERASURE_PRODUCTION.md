@@ -14,6 +14,13 @@ Env flag, časově platný soubor, owner DB boolean, hash či syntetický podpis
 nejsou náhradou. Nasazení kódu není aktivace mazání; nová operace bez
 aktuálního skutečného důkazu nesmí vytvořit ani fence.
 
+Vlastník 14. 10. 2026 schválil přípravu a ověření této samostatné
+infrastrukturní ochrany se správcem. To neruší produkční gate: skutečné
+umístění autority, omezené technické role, secrets, privátní transport,
+enrollment a consumer wiring musejí být konkrétně připravené a schválené.
+Zdrojový návrh a izolovaný kryptografický/SQL test nejsou existující
+produkční autoritou. Nezřizovat tyto objekty pod aplikační migrací 002/003.
+
 **Aktuální release není způsobilý k přepnutí produkčního Routeru:** nové
 chráněné COP cesty vyžadují skutečný owner verifier i při prázdném ledgeru.
 Jeho absence by správně vrátila 503 i pro dosavadní COP chat. Nepřepnout
@@ -56,8 +63,25 @@ Runner ověří soukromý data directory, socket, skutečnou serverovou identitu
 chybějící TCP listener a SHA-256 všech pěti migrací. Zablokuje `fetch`,
 nepřebírá PG/AI secrets z prostředí a po úspěchu zastaví a odstraní pouze
 svůj vygenerovaný syntetický cluster. Neúspěšný test ponechá soukromý
-fixture pro diagnostiku. 40 těchto kontrol dne 14. 10. 2026 prošlo;
+fixture pro diagnostiku. 41 těchto kontrol dne 14. 10. 2026 prošlo;
 není to důkaz skutečné produkční obnovy ani vydání Root autorizace.
+
+Společný zdrojový HTTP test importuje pouze čistý a přesně připnutý COP
+checkout a spojuje skutečné COP adaptéry se skutečnými Express handlery
+SIM přes dočasný loopback. Stores, ověření identity/autority a publikační
+barrier jsou výslovně syntetické. Externí volání, intake, model a matcher
+jsou zakázané. Tento test nenahrazuje nativní PostgreSQL ani produkční
+Root/restore akceptaci:
+
+```sh
+node --import ./apps/ai-router-api/node_modules/tsx/dist/loader.mjs scripts/test-cop-sim-erasure-http.mts --run --cop-source /absolute/reviewed/COP/checkout
+```
+
+Použít Node 24 také v podprocesech. Nová COP revize vyžaduje zvláštní
+zdrojovou revizi a aktualizaci pinů; dirty nebo jiná revize skončí před
+importem COP a otevřením portu. Výsledek rozlišuje syntetickou HTTP
+akceptaci od produkční autorizace. Před produkčním rozhodnutím zaznamenat
+v archive přesnou dvojici zdrojových revizí, hashe a skutečný rozsah testu.
 
 ## Před aktivací
 

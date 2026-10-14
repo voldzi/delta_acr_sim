@@ -259,7 +259,7 @@ export function registerErasureRoutes(app:Express,config:Config,hashUser:(client
   let windowStart=Date.now(),serviceRequests=0,activeStarts=0;
   const fail=(res:Response,status:number,error:string)=>res.status(status).json({error,correlationId:res.locals.erasureCorrelationId??randomUUID()});
   const service=(req:Request,res:Response)=> {
-    res.setHeader("Cache-Control","private, no-store");
+    res.setHeader("Cache-Control","no-store");
     if(res.locals.caller!=="cop" || req.header("origin")){fail(res,403,"task_not_allowed");return false;}
     const now=Date.now();if(now-windowStart>=60_000){windowStart=now;serviceRequests=0;}
     if(serviceRequests>=60){res.setHeader("Retry-After",String(Math.max(1,Math.ceil((60_000-(now-windowStart))/1000))));fail(res,429,"erasure_rate_limited");return false;}

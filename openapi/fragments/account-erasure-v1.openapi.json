@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SIM COP and Jizda scoped account erasure",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Server-only scoped COP/Jizda erasure. COP derives actor and contributor identities server-side. Preserve the shared identity and SIM/IZS access and data. Availability requires the actual current protected restore authority; no flag, historical checkpoint or signed token alone enables erasure. HTTP 200 confirms only the named online scope, never provider retention or physical backup deletion."
   },
   "servers": [
@@ -104,7 +104,7 @@
           "Scoped COP/Jizda erasure"
         ],
         "summary": "Read-only actor-specific Driver erasure preflight",
-        "description": "Same dedicated bearer, seven-claim purpose actor and exact DriverErasureRequest as start. Reject query and Origin. Validate identity/operation binding and the original own operation digest if present; other-actor existing operations return the same non-disclosing 404 as hidden state. No operation creation, fence, deletion, publication, key decryption, reservation, provider call or measurement fetch. HTTP 200 means only a performed probe; ready=false is blocked, not pending deletion. Start rechecks transient readiness under actual lifecycle/financial/contributor locks. For a new operation coverageAnchor.kind=checked_at and at=checkedAt; an existing own operation uses first_accepted_at and its original acceptedAt. Validate manifest shape and UTC coverage against that anchor; COP attests membership, all historical key versions and retained/outbox completeness. A preflight across UTC midnight is not durable authorization; start uses its actual first acceptedAt and may reject a now-incomplete manifest.",
+        "description": "Same dedicated bearer, seven-claim purpose actor and exact DriverErasureRequest as start. Reject query and Origin. Validate identity/operation binding and the original own operation digest if present; other-actor existing operations return the same non-disclosing 404 as hidden state. No operation creation, fence, deletion, publication, key decryption, reservation, provider call or measurement fetch. HTTP 200 means only a performed probe; ready=false is blocked, not pending deletion. Start rechecks transient readiness under actual lifecycle/financial/contributor locks. For a new operation coverageAnchor.kind=checked_at and at=checkedAt; an existing own operation uses first_accepted_at and its original acceptedAt. The nine or ten required UTC days are minimum coverage, not a maximum historical inventory: include all additional attested retained/outbox past days and key versions within the unchanged forty-pair bound. Never truncate the inventory or accept a future day beyond anchor plus thirty seconds. COP attests membership, all historical key versions and retained/outbox completeness. A preflight across UTC midnight is not durable authorization; start uses its actual first acceptedAt and may reject a now-incomplete manifest.",
         "security": [
           {
             "copMeasurementBearer": [
@@ -568,7 +568,7 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/OperationId"
+            "$ref": "#/components/parameters/DriverOperationId"
           },
           {
             "$ref": "#/components/parameters/ActorHeader"
@@ -881,6 +881,17 @@
       }
     },
     "parameters": {
+      "DriverOperationId": {
+        "name": "operationId",
+        "in": "path",
+        "required": true,
+        "description": "Driver runtime accepts UUID versions one through five. Use a server-generated UUID v4 for a joint Router/Driver operation.",
+        "schema": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        }
+      },
       "OperationId": {
         "name": "operationId",
         "in": "path",
@@ -1451,7 +1462,8 @@
               },
               "operationId": {
                 "type": "string",
-                "format": "uuid"
+                "format": "uuid",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
               },
               "identityBinding": {
                 "const": "cop_attested_daily_manifest"
@@ -1718,6 +1730,7 @@
       },
       "DriverErasureRequest": {
         "type": "object",
+        "description": "Complete COP-attested daily contributor inventory. Include every required UTC day from the anchor date minus eight days through anchor plus thirty seconds, plus all retained/outbox historical days and used key versions. Required coverage is a minimum; additional past days are permitted. No future day beyond that original anchor is permitted. Keep all pairs within the forty-pair limit without truncation; unresolved or larger inventory requires a separate reviewed contract, never a partial completion. Existing operations keep their first acceptedAt and immutable full body digest across retries and UTC midnight. Prefer server-generated UUID v4 for shared Router/Driver operations; the Driver accepts UUID versions one through five.",
         "additionalProperties": false,
         "required": [
           "contractVersion",
@@ -1731,7 +1744,8 @@
           },
           "operationId": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
           },
           "attestation": {
             "const": "cop-account-erasure-contributors-reviewed-v1"
@@ -1791,7 +1805,8 @@
           },
           "operationId": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
           },
           "status": {
             "enum": [

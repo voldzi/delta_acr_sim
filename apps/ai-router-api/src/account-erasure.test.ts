@@ -101,11 +101,29 @@ describe("purpose-bound account erasure actor",()=>{
 });
 
 describe("COP erasure HTTP owner boundary",()=>{
+  it("uses the binding exact no-store header for owner probes, receipts and errors",async()=>{
+    const f=fixture(),app=createApp(config,f.store,f.separate,f.erase);
+    const responses=[
+      await request(app).get(`${path}/capability`).set("authorization",`Bearer ${config.copToken}`).expect(200),
+      await request(app).post(`${path}/preflight`).set(headers()).send(body()).expect(200),
+      await request(app).post(path).set(headers()).send(body()).expect(200),
+      await request(app).get(`${path}/${op1}`).set(headers()).expect(200),
+      await request(app).get(`${path}/capability`).expect(401),
+      await request(app).get(`${path}/capability`).set("authorization",`Bearer ${config.simToken}`).expect(403),
+      await request(app).get(`${path}/capability`).set(headers()).expect(400),
+      await request(app).get(`${path}/${op2}`).set(headers(claims(op2,"subject-two",alias2))).expect(404)
+    ];
+    const pendingFixture=fixture();pendingFixture.flags.setRetention(false);
+    responses.push(await request(createApp(config,pendingFixture.store,pendingFixture.separate,pendingFixture.erase)).post(path).set(headers()).send(body()).expect(202));
+    f.flags.setOutage(true);
+    responses.push(await request(app).get(`${path}/capability`).set("authorization",`Bearer ${config.copToken}`).expect(503));
+    for(const response of responses)expect(response.headers["cache-control"]).toBe("no-store");
+  });
   it("probes capability and disabled preflight without any writes/provider calls",async()=>{
     const f=fixture();const fetchMock=vi.fn();vi.stubGlobal("fetch",fetchMock);
     const app=createApp({...config,accountErasureEnabled:false},f.store,f.separate,f.erase);
     const cap=await request(app).get(`${path}/capability`).set("authorization",`Bearer ${config.copToken}`).expect(200);
-    expect(cap.body.ready).toBe(false);expect(cap.body.blockers).toEqual(["erasure_disabled"]);expect(cap.headers["cache-control"]).toContain("no-store");
+    expect(cap.body.ready).toBe(false);expect(cap.body.blockers).toEqual(["erasure_disabled"]);expect(cap.headers["cache-control"]).toBe("no-store");
     const probe=await request(app).post(`${path}/preflight`).set(headers()).send(body()).expect(200);
     expect(probe.body.ready).toBe(false);expect(probe.body.checks.providerRequestsSettled).toBe(true);expect(probe.body.mutates).toBe(false);
     expect(f.operations.size).toBe(0);expect(f.keys.size).toBe(2);expect(fetchMock).not.toHaveBeenCalled();
@@ -121,7 +139,7 @@ describe("COP erasure HTTP owner boundary",()=>{
     await request(app).post(path).set(headers()).send({...body(),userId:alias2}).expect(400);
     await request(app).post(path).set(chatHeaders()).send(body()).expect(401);
     const invalidGet=await request(app).get(`${path}/${op1}`).set(headers()).send({unexpected:true}).expect(400);
-    expect(invalidGet.body.correlationId).toMatch(/^[a-f0-9-]{36}$/);expect(invalidGet.headers["cache-control"]).toContain("no-store");
+    expect(invalidGet.body.correlationId).toMatch(/^[a-f0-9-]{36}$/);expect(invalidGet.headers["cache-control"]).toBe("no-store");
     expect(f.operations.size).toBe(0);
   });
   it("isolates actors, immutable IDs, retry/restart and online-only receipts",async()=>{
@@ -157,7 +175,8 @@ describe("COP erasure HTTP owner boundary",()=>{
     for(let i=0;i<70;i++){
       const response=await request(app).get(`${path}/capability`).set("authorization",`Bearer ${config.copToken}`);
       expect(response.status).toBe(i<60?200:429);
-      if(i>=60){expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);expect(response.body.error).toBe("erasure_rate_limited");expect(response.headers["cache-control"]).toContain("no-store");}
+      expect(response.headers["cache-control"]).toBe("no-store");
+      if(i>=60){expect(Number(response.headers["retry-after"])).toBeGreaterThan(0);expect(response.body.error).toBe("erasure_rate_limited");}
     }
     expect(f.operations.size).toBe(0);expect(f.keys.size).toBe(2);expect(fetchMock).not.toHaveBeenCalled();
   });

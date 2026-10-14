@@ -130,3 +130,9 @@ ověřovatel vrací neaktuální checkpoint; nevzniká nová mazací operace.
 Správce infrastruktury musí před aktivací doložit současný autoritativní
 stav mazání nezávislý na obnovované aplikační databázi. Nová guard služba,
 její databáze, síť a klíče nejsou součástí omezených aplikačních migrací.
+
+Vlastník 14. 10. 2026 samostatně schválil přípravu a ověření infrastrukturní
+ochrany proti návratu smazaných dat. Správce připraví konkrétní omezený
+privilegovaný balíček a skutečnou runtime hranici. Návrhový podpis,
+syntetický verifier nebo samotná testovací DB nemění stav produkční gate;
+shared SIM identita a přístup se nesmějí globálně odvolat.
