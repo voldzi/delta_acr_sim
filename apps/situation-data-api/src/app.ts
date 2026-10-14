@@ -9,6 +9,7 @@ import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { registerGeoRoutingRoutes } from "./geo-routing.js";
 import { registerDriverMeasurementRoutes } from "./driver-measurements.js";
+import {createProductionDriverRetentionLifecycle,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
@@ -57,7 +58,7 @@ export interface SituationDataAppContext {
   routing: RoutingService;
   valhallaTraffic: ValhallaTrafficCoordinator;
   searchData: SearchDataService;
-  driverMeasurements: { close: () => Promise<void> };
+  driverMeasurements: DriverRetentionControl;
 }
 
 export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
@@ -92,7 +93,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
     routing,
     valhallaTraffic,
     searchData,
-    driverMeasurements: { close: async () => undefined }
+    driverMeasurements: createProductionDriverRetentionLifecycle()
   };
   const app = express();
 
@@ -110,6 +111,9 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerValhallaTrafficRoutes(app, context);
   registerGeoRoutingRoutes(app, config, routing);
   context.driverMeasurements = registerDriverMeasurementRoutes(app, config);
+  // Actual maintenance/replay admission is not bound yet. This blocks only
+  // maintenance, BEFORE its init/SQL, while preserving the established APIs.
+  await context.driverMeasurements.start().catch(()=>undefined);
   registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);
 

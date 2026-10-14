@@ -6,6 +6,7 @@ import { PostgresDriverMeasurementStore } from "./driver-measurement-store.js";
 import {DRIVER_ACCOUNT_ERASURE_CONTRACT,DriverAccountErasureError,driverErasureHash,driverErasureOperationId,parseDriverErasureRequest,prepareDriverErasureInput,verifyDriverErasureActor,
   type DriverErasureMethods,type DriverErasureCapability,type DriverErasureBlocker} from "./driver-account-erasure.js";
 import type {DriverErasureProtectedProof} from "./driver-account-erasure-store.js";
+import {DriverRetentionLifecycleError,type DriverRetentionConsumer,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
 
 export const DRIVER_CONTRACT = "sim-driver-measurements-v1";
 const PREFIX = "/api/v1/internal/driver-measurements/v1";
@@ -67,6 +68,10 @@ export interface DriverStore extends Partial<DriverErasureMethods> {
   aggregates(dataset: string, since: string, now: string): Promise<unknown[]>;
   quality(now: string): Promise<unknown>;
   revoke(owner: string, contributor: string): Promise<number>;
+  /** Optional for injected legacy fixtures; absence never counts as completed initialization. */
+  init?():Promise<void>;
+  startRetention?():Promise<void>;
+  runRetentionOnce?():Promise<void>;
   close(): Promise<void>;
 }
 export interface DriverMatch {
@@ -206,7 +211,7 @@ export function driverSettings(): DriverSettings {
 }
 
 export function registerDriverMeasurementRoutes(app: Express, config: SituationDataConfig, settings=driverSettings(),
-  dependencies?: { store: DriverStore; matcher: DriverMatcher; now?:()=>number;accountErasureDerivedBarrier?:()=>Promise<void>;accountErasureProtectedProof?:()=>Promise<DriverErasureProtectedProof> }): { close: ()=>Promise<void> } {
+  dependencies?: { store?: DriverStore; matcher?: DriverMatcher; now?:()=>number;accountErasureDerivedBarrier?:()=>Promise<void>;accountErasureProtectedProof?:()=>Promise<DriverErasureProtectedProof>;retentionConsumer?:DriverRetentionConsumer }): DriverRetentionControl {
   // Body parser errors otherwise escape to Express's default HTML/error logging.
   app.use(PREFIX,(error:unknown,req:Request,res:Response,_next:NextFunction)=>{
     res.set("Cache-Control","no-store");
@@ -216,7 +221,8 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
   const identityConfigured=!!settings.driverAccountErasureIssuer&&!!settings.driverAccountErasureActorSecret&&settings.driverAccountErasureActorSecret.length>=32;
   const erasureReadConfigured=identityConfigured&&!!settings.databaseUrl&&!!settings.hashSecret&&settings.hashSecret.length>=32;
   const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled || settings.driverAccountErasureEnabled || erasureReadConfigured) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!,{
-    enabled:settings.driverAccountErasureEnabled,expectedCheckpoint:settings.driverAccountErasureReplayCheckpoint,identityConfigured,protectedProof:dependencies?.accountErasureProtectedProof}) : undefined);
+    enabled:settings.driverAccountErasureEnabled,expectedCheckpoint:settings.driverAccountErasureReplayCheckpoint,identityConfigured,protectedProof:dependencies?.accountErasureProtectedProof,
+    retentionConsumer:dependencies?.retentionConsumer}) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
   let minute=0, requests=0, inflight=0;
@@ -347,5 +353,53 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
       if(!result)throw new DriverAccountErasureError(404,"DRIVER_ACCOUNT_ERASURE_NOT_FOUND");res.status(result.status==="completed"?200:202).json(result);
     }catch(error){erasureFailure(req,res,error);}
   });
-  return {close:()=>store?.close()??Promise.resolve()};
+  // Maintenance is composed separately from all API routes. A missing accepted
+  // consumer does not disable existing intake/read/revocation/erasure handlers.
+  let closed=false,initialization:Promise<void>|undefined,starting:Promise<void>|undefined,
+    once:Promise<void>|undefined,closing:Promise<void>|undefined;
+  const lifecycleError=(code:"DRIVER_RETENTION_CLOSED"|"DRIVER_RETENTION_UNBOUND"|"DRIVER_RETENTION_UNAVAILABLE")=>Promise.reject(new DriverRetentionLifecycleError(code));
+  const init=():Promise<void>=>{
+    if(closed)return lifecycleError("DRIVER_RETENTION_CLOSED");
+    if(!store?.init)return lifecycleError("DRIVER_RETENTION_UNAVAILABLE");
+    if(!initialization)initialization=Promise.resolve().then(()=>{
+      if(closed)throw new DriverRetentionLifecycleError("DRIVER_RETENTION_CLOSED");
+      return store.init!();
+    });
+    return initialization;
+  };
+  const start=():Promise<void>=>{
+    if(closed)return lifecycleError("DRIVER_RETENTION_CLOSED");
+    if(!dependencies?.retentionConsumer)return lifecycleError("DRIVER_RETENTION_UNBOUND");
+    if(!store?.startRetention)return lifecycleError("DRIVER_RETENTION_UNAVAILABLE");
+    if(!starting)starting=(async()=>{
+      await init();
+      if(closed)throw new DriverRetentionLifecycleError("DRIVER_RETENTION_CLOSED");
+      await store.startRetention!();
+    })();
+    return starting;
+  };
+  const runOnce=():Promise<void>=>{
+    if(closed)return lifecycleError("DRIVER_RETENTION_CLOSED");
+    if(!dependencies?.retentionConsumer)return lifecycleError("DRIVER_RETENTION_UNBOUND");
+    if(!store?.runRetentionOnce)return lifecycleError("DRIVER_RETENTION_UNAVAILABLE");
+    if(!once){
+      const work=(async()=>{await init();if(closed)throw new DriverRetentionLifecycleError("DRIVER_RETENTION_CLOSED");await store.runRetentionOnce!();})();
+      once=work;void work.then(()=>{if(once===work)once=undefined;},()=>{if(once===work)once=undefined;});
+    }
+    return once;
+  };
+  const close=():Promise<void>=>{
+    if(!closing){
+      closed=true;
+      // Stop the store's timer/callback admission immediately, not after waiting
+      // for route-level work. The real store independently awaits its actual SQL.
+      let storageClosing:Promise<void>;
+      try{storageClosing=store?.close()??Promise.resolve();}catch{storageClosing=lifecycleError("DRIVER_RETENTION_UNAVAILABLE");}
+      closing=Promise.allSettled([initialization,starting,once,storageClosing].filter((p):p is Promise<void>=>!!p)).then(results=>{
+        if(results.at(-1)?.status==="rejected")throw new DriverRetentionLifecycleError("DRIVER_RETENTION_UNAVAILABLE");
+      });
+    }
+    return closing;
+  };
+  return {init,start,runOnce,close};
 }
