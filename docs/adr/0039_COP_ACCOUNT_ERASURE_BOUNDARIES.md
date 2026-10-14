@@ -82,17 +82,22 @@ jeho pozdní výstup se uživateli nevrací a náklad se konzervativně dokonč�
 Neuzavřená rezervace po pádu služby znamená čekající stav, nikoli úspěch
 odvozený jen z uplynulého času.
 
-Výchozí nákladová politika zůstává `pending_requires_review`. Kandidátem
-je `aggregate-costs-current-month-v1`: odstranění uživatelských vazeb,
+Provozní retence `aggregate-costs-current-month-v1` byla vlastníkem
+výslovně schválena dne 14. 10. 2026. Zahrnuje odstranění uživatelských vazeb,
 request IDs a otisků klíče po atomickém převodu potřebných součtů do
 minimalizované interní evidence bez přímé vazby na uživatele. Pole této
-evidence a navržená expirace jsou v integračním návrhu. Nejde automaticky
+evidence a schválená expirace jsou v integračním návrhu. Nejde automaticky
 o anonymní data, zejména při malém počtu účtů.
 
 Převod součtů, odstranění navázaných řádků a potvrzení operace musí být
 jednou transakcí pod stejnými finančními zámky jako rezervace. Spotřeba
 a limity čtou součty i dosud navázané řádky bez dvojího započtení.
 Smazání účtu nesmí snížit globální denní či měsíční finanční strop.
+
+Schválení provozní retence samo nezapíná mazání ani nenahrazuje skutečný
+owner checkpoint. Bez jeho potvrzení zůstává nákladová část čekající.
+Odmítnutí zachování součtů vyžaduje jinou výslovně schválenou variantu
+zachovávající finanční stropy; nikoli skrytou retenci nebo reset limitů.
 
 ## Zálohy, logy a návrat
 
@@ -101,8 +106,8 @@ Správce infrastruktury musí potvrdit horizont kopií, karanténu obnovy
 a opakované uplatnění aktuální fronty mazání před návratem do provozu.
 Historická hodnota `ready=true` obnovená ze zálohy sama tento důkaz nenahrazuje.
 
-Dokud není schválená konkrétní retence účtovací evidence, minimálních
-replay tombstones, logů a historických aliasů, zůstávají odpovídající
+Vedle schválených nákladových součtů musí být určena retence minimálních
+replay tombstones, logů a historických aliasů. Do té doby zůstávají odpovídající
 části akceptace otevřené. Návrat k obrazu, který nezná erasure fence,
 vyžaduje zablokování příslušných vstupů; pouhé vypnutí nového endpointu
 nesmí obnovit zaniklý účet nebo jeho klíč.

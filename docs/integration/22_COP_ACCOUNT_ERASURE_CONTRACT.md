@@ -1,8 +1,8 @@
 # Mazání účtu COP v SIM
 
-Stav: pouze kontrakt a návrh; upřesnění identity ze 14. 10. 2026.
-Nové operace nejsou dostupnou capability; implementace, migrace, granty,
-aktivace ani mazání účtů nejsou v aktuálním rozsahu. Inventura běžných
+Stav: návrh kontraktu 0.3.0; upřesnění ze 14. 10. 2026.
+Nové operace nejsou dostupnou capability. Tento podklad není implementací,
+migrací, grantem, aktivací ani důkazem smazání účtu. Inventura běžných
 úložišť vychází z revize SIM `03b842e` a identity COP z `3be10da`.
 
 Machine-readable návrh je v
@@ -113,10 +113,56 @@ POST nebo explicitní interní worker obnoví trvalý čekající stav; nemají
 neomezenou retry smyčku. 401/403, 400, 409, 429 a 503 jsou jednoznačné
 hranice, nikoli důvod obejít SIM, obnovit starý klíč nebo volat OpenAI přímo.
 
-Samostatná capability a actor-bound preflight rozhraní se musí před
-implementací sjednotit s COP v konkrétní revizi kontraktu. Capability
-nesmí vydávat stav uživatelského účtu; preflight nesmí mazat ani vytvářet
-fence. Žádná z těchto kontrol není nyní dostupným produkčním endpointem.
+## Návrh readiness a preflight
+
+Verze 0.3.0 přidává následující čtyři návrhové operace. Cesty v tabulce
+jsou relativní k interní službě; v kompozitním návrhu má SDA prefix
+`/situation-data`. Router prefix navíc nemá. Žádná cesta zatím není
+nasazeným rozhraním ani součástí závazného `openapi/openapi.json`.
+
+| Vlastník | Metoda a cesta | Ověření a tělo |
+| --- | --- | --- |
+| `sim_measurements` | `GET /api/v1/internal/driver-measurements/v1/account-erasure-operations/capability` | Vyhrazený measurement bearer; bez actor hlaviček, těla a query. |
+| `sim_measurements` | `POST /api/v1/internal/driver-measurements/v1/account-erasure-operations/preflight` | Stejný bearer, sedmipolový purpose actor a přesný `DriverErasureRequest` jako start. |
+| `ai_router` | `GET /api/v1/ai-router/cop/users/me/erasure-operations/capability` | Vyhrazený Router bearer; bez actor hlaviček, těla a query. |
+| `ai_router` | `POST /api/v1/ai-router/cop/users/me/erasure-operations/preflight` | Stejný bearer, sedmipolový purpose actor a přesný `RouterErasureRequest` jako start. |
+
+Všechny probe odpovědi mají `Cache-Control: no-store`, UTC `checkedAt`,
+`owner`, pojmenovaný `scope`, `enabled`, `ready`, přesně typované `checks`
+a `blockers`. Vždy vracejí `mutates=false`, `providerCalls=false` a
+`wholeAccountComplete=false`. `ready` je právě konjunkce zapnutí, všech
+příslušných kontrol a schváleného retenčního/publikačního režimu; při
+`ready=true` je seznam blockers prázdný, při `ready=false` je neprázdný.
+
+Capability ověřuje skutečné schéma, omezená oprávnění, schválené identity,
+aktuální chráněný restore checkpoint a retenci. U měření navíc vyžaduje
+publikační ochranu a ověřený režim reportu. Zdravá služba, historické DB
+`ready=true`, procesová epocha ani konfigurační přepínač tyto důkazy
+nenahrazují. Obecná Router capability neobsahuje `providerRequestsSettled`,
+protože bez actor identity nemá konkrétní účet.
+
+Preflight kontroluje vlastní actor/operation vazbu a původní digest,
+pokud už operace existuje. Přidává `identityBindingReviewed`; Router
+ověří `providerRequestsSettled` pouze pro daný cílový účet. SDA dostane
+celý manifest a přidá `manifestShapeAndCoverageValid`, `manifestValid=true`,
+počet položek a `coverageAnchor={kind,at}`. `kind=checked_at` u nové
+operace používá právě `checkedAt`; `kind=first_accepted_at` u existující
+vlastní operace používá původní uložené `acceptedAt`. `manifestValid`
+dokládá tvar a UTC rozsah, nikoli příslušnost pseudonymů nebo úplnost
+historických klíčových verzí a outboxu; ty atestuje COP.
+
+HTTP 200 zde znamená pouze spolehlivě provedenou kontrolu. `ready=false`
+je blokovaná příprava, nikoli zahájené mazání; preflight nepoužívá 202.
+Při nemožnosti kontrolu spolehlivě provést vrací 503. Nezapisuje operaci,
+fence, rezervaci ani receipt, nedešifruje AI klíč a nevolá poskytovatele.
+Cizí existující operace nemá odhalitelný stav; vrací stejné 404 jako
+neviditelný záznam. 409 patří pouze konfliktu vlastní neměnné operace.
+
+Výsledek preflight není trvalé oprávnění. Start znovu ověří všechny
+podmínky pod skutečnými zámky, včetně nové in-flight práce nebo UTC
+půlnoci mezi probe a prvním přijetím. COP zatím nesmí návrhové cesty
+volat jako produkční endpointy; společná akceptace zahrne konkrétní
+implementaci, závazný kontrakt a oba interní adaptéry.
 
 ## Důkaz dokončení a závody
 
@@ -148,21 +194,29 @@ nasazených i externích kopií, nikoli jen absenci modulu ve zdroji.
 Dokončení vyžaduje skutečné potvrzení ochrany, replay a retenčního review;
 procesová epocha ani samotný příznak review nejsou důkazem vynucení.
 
-## Retenční rozhodnutí k samostatnému schválení
+## Nákladová retence a otevřené retenční hranice
 
-Výchozí stav je `pending_requires_review`. Návrh
-`aggregate-costs-current-month-v1` zachová pouze účetní větev, UTC den,
+Vlastník dne 14. 10. 2026 výslovně schválil provozní nákladovou retenci
+`aggregate-costs-current-month-v1`. Ta zachová pouze účetní větev, UTC den,
 součet konzervativních nákladů, počet požadavků a vstupních/výstupních
 tokenů. Nezachová account, payer či actor hash, request/operation ID,
 fingerprint, obsah, uživatelskou skupinu ani join na operaci mazání.
 Účelem je zabránit resetu běžných denních a měsíčních finančních stropů.
 
-Navržená expirace této minimalizované evidence je začátek dalšího UTC
+Expirace této minimalizované evidence je začátek dalšího UTC
 měsíce po vypořádání všech rezervací relevantního období. Nevyřešené
 `reserved`/`uncertain` nesmějí být vyúčtovány ani prohlášeny za smazané
 jen podle času; správce musí schválit jejich konkrétní vypořádání a
-maximální horizont. Tento návrh není přijatou právní retenční politikou
-a netvrdí anonymitu při malém počtu uživatelů.
+maximální horizont. Schválení těchto součtů netvrdí jejich anonymitu při
+malém počtu uživatelů ani neřeší kopie poskytovatele, zálohy a logy.
+
+Runtime nesmí tuto politiku automaticky odvodit z přítomnosti schématu.
+Bez jejího konkrétního owner-controlled potvrzení zůstává stav
+`pending_requires_review`. Pokud by vlastník zachování součtů odmítl,
+preflight je `ready=false` a nová operace se nesmí zahájit. Již existující
+operace zůstává čekající do schválení jiné varianty zachovávající stropy.
+Součty se nesmějí tajně ponechat ani vazby bez náhrady odstranit a tím
+resetovat finanční limity.
 
 Omezené runtime DML pro navázanou AI historii i nové operation/fence
 tabulky vyžadují výslovné samostatné schválení. Tento návrh neuděluje
