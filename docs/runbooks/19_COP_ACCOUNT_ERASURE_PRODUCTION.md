@@ -195,6 +195,11 @@ Návrh budoucího transportu je v [integraci 22](../integration/22_COP_ACCOUNT_E
 nebo wiring není tímto krokem vytvořen. Jeho skutečná akceptace patří do
 odděleného konkrétního infrastrukturního balíčku a společného testu COP–SIM.
 
+Vlastní finální běh SIM má 88 PASS / 0 FAIL, 60 čistých Python helper
+jobs a 17 memory exchanges; přesné piny a omezení jsou v
+[oddělené V5 evidenci](../archive/2026-10-14_DORMANT_V5_CODEC_CONFORMANCE.md).
+Root 34 a v1 61 se k tomuto počtu nepřičítají.
+
 ## Před aktivací
 
 1. COP doloží přesnou stávající derivaci Router aliasu, issuer, všechny

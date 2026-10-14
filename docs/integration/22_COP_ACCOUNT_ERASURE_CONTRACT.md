@@ -473,6 +473,14 @@ Marker historical, syntetické drained ani ACK neopravňují k novému
 admission, cleanupu nebo externímu efektu. Příslušnost lease, původ refs,
 skutečný grant a fence může ověřit jen registrující autorita, ne tento DTO.
 
+V5 také odděluje nové admission od vypořádání původního efektu. Nově
+registrovaný origin kanál může podle serverového grant scope použít
+`current`, `unknown`, `settle`, `drain`, aby po doloženém původním
+settlementu získal aktuální CAS. To neuděluje `admit` ani `begin_commit`
+pro cizí/starou generaci. Přijatý immutable permit je původní autorizační
+hranice; nelze k ní dodatečně přidat automatický abort podle smrti procesu
+nebo tvrdit nepřerušenou živost stejného executable napříč externím COMMIT.
+
 Rámec je 1–16 384 UTF-8 bajtů, bez BOM, duplicate keys, trailing JSON,
 float/exponent lexémů, nonfinite, unsafe integer a unpaired surrogate.
 Limity jsou hloubka 12 (root 0), 256 uzlů, pole 32, klíč 64 a string 256

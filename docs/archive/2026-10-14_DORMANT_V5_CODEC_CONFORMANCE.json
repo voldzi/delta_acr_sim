@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-14 11:25:52 UTC",
+  "simRevision": "6e73a303e6c6a4fd126b0dc381b6b36f1cc4c2bf",
+  "simTree": "b187e936fd29dbb399fc939b06bcdd3dfde216e6",
+  "executedBy": "SIM main agent independent rerun of frozen source",
+  "runtime": {
+    "node": "24.16.0",
+    "pnpm": "10.33.0",
+    "python": "3.14.6",
+    "ajv": "8.20.0"
+  },
+  "fixtureSourcePins": {
+    "runner": "95c9f1d1452b2d27812881c76c2d8aa928ab653320dfed1edb8d1312ae031b65",
+    "bridge": "cb40d41f76221a3b311a9ecaeea07aa91eee6926a3b199312b8512d30f5f47fc",
+    "helper": "2e56df7c563f62ab0bfd14f90503249f2704cf4693d63d3ec9b7153b5dafa89d",
+    "client": "927fc8dcdbacc52727934405e7c472a22c46715e7235faa2a30a7d7ced3c242d"
+  },
+  "checks": {
+    "strictFixtureTypecheck": "PASS",
+    "workspaceTypecheck": "PASS after pinning child pnpm10 PATH; first attempt stopped on global pnpm11 engine check",
+    "workspaceBuild": "PASS",
+    "unitTests": {
+      "passed": 591,
+      "failed": 0,
+      "skipped": 6,
+      "skipScope": "existing opt-in PostgreSQL suite; historical SQL tests are not added"
+    },
+    "bindingOpenapi": {
+      "paths": 151,
+      "schemas": 273,
+      "changed": false,
+      "sha256": "4509ff5bd9931a011805984895254d6b19e75bfef2e5fa2efdb8b28ad8d90992",
+      "buildCheck": "PASS",
+      "sanityValidation": "PASS"
+    },
+    "erasureSchemaCases": 70,
+    "skeleton": "PASS",
+    "diffCheck": "PASS",
+    "applicationDeploymentConfigImportsChanged": false,
+    "chromaReindex": {
+      "result": "REFUSED",
+      "exitCode": 2,
+      "reason": "native retrieval does not accept a replacement repository identity",
+      "mainIndexRebuiltOrBypassed": false
+    }
+  },
+  "v5": {
+    "scope": "dormant_v5_schema_pure_python_codec_and_in_memory_client_only",
+    "protocol": "cop-dormant-boundary-fixture-v5",
+    "mode": "own-fixture-only",
+    "sourcePins": {
+      "boundary.py": "f0bffe6f0f6d3b26570050c2a0bcb59d27923e3a347f8967b9aba76240a859dd",
+      "request.schema.json": "9cc8241cb5218ce0128d6ebe3fa66ead972b4eaf474145a4458d96879dcd1a50",
+      "result.schema.json": "1f3153bc01ff1c9099a96ee1685655147320c0b7aaf2bf4f7e7fdf944511fcd6",
+      "SOURCE-PINS.json": "90814725db2f78232d401fbdf83f6f5d99a16a146b67e648adfb76d4d018523f",
+      "SCHEMA-FIXTURE-FRAMES.json": "c8163064b00f3f5f25a639dd7646938dff41538622092fd505b0f53a886023eb",
+      "../dormant-core-v3/core.py": "b180c23d68cab41d966bca52d08a28fc71ca7fc162c500017f439c91a9401256",
+      "../isolated-continuity/isolated-linux-wrapper/peer_wrapper.py": "64e26614bf4512157f09281e0fed7452bdd0c327a6e3f807059a062f027bd69b",
+      "../isolated-continuity/isolated-linux-wrapper-v2/linux_fixture.py": "77d47471ba1939b3aa649a8d1973d901849e604db5dd6d27ccc7df29020c25c3"
+    },
+    "bridgeSha256": "cb40d41f76221a3b311a9ecaeea07aa91eee6926a3b199312b8512d30f5f47fc",
+    "clientSourcePins": {
+      "scripts/lib/dormant-v5-fixture-client.mts": "927fc8dcdbacc52727934405e7c472a22c46715e7235faa2a30a7d7ced3c242d",
+      "scripts/lib/dormant-fixture-json.mts": "2e56df7c563f62ab0bfd14f90503249f2704cf4693d63d3ec9b7153b5dafa89d"
+    },
+    "independentSchemas": "Ajv2020-existing-SDA-dependency",
+    "counts": {
+      "total": 88,
+      "passed": 88,
+      "failed": 0
+    },
+    "tests": [
+      {
+        "case": "direct-helper-exact-denial-utf8",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-bom",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-duplicate-escaped-key",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-float",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-exponent",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-unsafe-integer",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-depth",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-nodes",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-array",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-key",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-string",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-surrogate",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-frame-overflow",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-exact-denial-empty-frame",
+        "passed": true
+      },
+      {
+        "case": "direct-helper-inclusive-depth-node-array-key-string-byte-boundaries",
+        "passed": true
+      },
+      {
+        "case": "direct-canonical-ascii-del-control-escaping-and-negative-zero",
+        "passed": true
+      },
+      {
+        "case": "canonical-proxy-accessor-and-tojson-hooks-never-invoked",
+        "passed": true
+      },
+      {
+        "case": "root-emitted-synthetic-pair-1-schema-canonical-and-python-encoder",
+        "passed": true
+      },
+      {
+        "case": "root-emitted-synthetic-pair-2-schema-canonical-and-python-encoder",
+        "passed": true
+      },
+      {
+        "case": "root-emitted-synthetic-pair-3-schema-canonical-and-python-encoder",
+        "passed": true
+      },
+      {
+        "case": "root-emitted-synthetic-pair-4-schema-canonical-and-python-encoder",
+        "passed": true
+      },
+      {
+        "case": "six-method-current-actual-python-canonical-digest-result",
+        "passed": true
+      },
+      {
+        "case": "six-method-admit-actual-python-canonical-digest-result",
+        "passed": true
+      },
+      {
+        "case": "six-method-begin_commit-actual-python-canonical-digest-result",
+        "passed": true
+      },
+      {
+        "case": "six-method-unknown-actual-python-canonical-digest-result",
+        "passed": true
+      },
+      {
+        "case": "six-method-settle-actual-python-canonical-digest-result",
+        "passed": true
+      },
+      {
+        "case": "six-method-drain-actual-python-canonical-digest-result",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-empty",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-invalid-utf8",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-bom",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-second-document",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-root-array",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-frame-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-multibyte-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-escaped-surrogate",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-depth-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-array-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-node-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-key-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-string-overflow",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-duplicate-top",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-duplicate-nested-escaped",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-1_0",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-1e0",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-1e999",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-NaN",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-Infinity",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-9007199254740992",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-_1",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-byte-request-denial-counter-token-true",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-exact-envelope-protocol-v4",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-exact-envelope-protocol-v1",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-exact-envelope-production-mode",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-exact-envelope-foreign-owner",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-exact-envelope-database-selector",
+        "passed": true
+      },
+      {
+        "case": "python-and-typescript-exact-envelope-admin-method",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-permit-foreign-request-lease",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-ack-historical-mismatch",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-drain-count-state-mismatch",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-drain-foreign-operation-scope",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-cas-foreign-operation",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-private-result-fields",
+        "passed": true
+      },
+      {
+        "case": "actual-python-encoder-and-typescript-relational-denial-unknown-not-known-abort",
+        "passed": true
+      },
+      {
+        "case": "schema-alone-allows-cas-crossfield-and-lexical-float-but-decoders-deny",
+        "passed": true
+      },
+      {
+        "case": "canonical-crosslanguage-whitespace-keyorder-and-safe-counter-boundaries",
+        "passed": true
+      },
+      {
+        "case": "actual-python-safe-errors-correlated-or-null-are-only-unresolved",
+        "passed": true
+      },
+      {
+        "case": "response-correlation-binding-method-version-and-private-fields-denied",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-productionAuthorization",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualProducer",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualAdmission",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualIdentity",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualOwnerEvidence",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualIndependentAnchor",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualProvider",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualSimPreservation",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-actualRestore",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-ownerWideReplayComplete",
+        "passed": true
+      },
+      {
+        "case": "all-eleven-actual-flags-remain-false-kernelDatabaseAtomicityClaim",
+        "passed": true
+      },
+      {
+        "case": "lease-and-permit-digests-preserved-as-distinct-opaque-values",
+        "passed": true
+      },
+      {
+        "case": "own-historical-marker-is-informational-not-an-unforgeable-provenance-claim",
+        "passed": true
+      },
+      {
+        "case": "client-fixed-operation-snapshot-no-per-call-identity-or-selector-change",
+        "passed": true
+      },
+      {
+        "case": "client-known-error-and-invalid-response-never-fallback-or-authorize",
+        "passed": true
+      },
+      {
+        "case": "client-null-correlated-null-packet-and-malformed-errors-are-only-unknown",
+        "passed": true
+      },
+      {
+        "case": "client-preaborted-caller-never-dispatches-exchange",
+        "passed": true
+      },
+      {
+        "case": "client-synchronous-deadline-before-queued-dispatch-never-exchanges",
+        "passed": true
+      },
+      {
+        "case": "client-inflight-abort-keeps-slot-until-underlying-exchange-settlement",
+        "passed": true
+      },
+      {
+        "case": "client-four-deadlines-keep-unsettled-slots-late-responses-not-success",
+        "passed": true
+      },
+      {
+        "case": "negative-production-proof-bridge-and-root-flags-never-positive-authority",
+        "passed": true
+      }
+    ],
+    "rootEmittedSyntheticPairs": 4,
+    "purePythonHelperCases": 60,
+    "pythonProcessCount": 1,
+    "pythonVersion": [
+      3,
+      14,
+      6
+    ],
+    "pythonAuditGuards": {
+      "dataWriteCalls": 0,
+      "forbiddenCallbackCalls": 0,
+      "lateFileOpenCalls": 0,
+      "socketCalls": 0,
+      "sqliteCalls": 0,
+      "subprocessCalls": 0
+    },
+    "inMemoryExchangeCalls": 17,
+    "forbiddenNetworkCalls": 0,
+    "actualPurePythonHelpers": true,
+    "actualNativeTransport": false,
+    "actualDatabase": false,
+    "actualCoreLoaded": false,
+    "actualOwnerCallbacks": false,
+    "actualRegistryLeaseProvenance": false,
+    "rootHistoricalTestsAdded": 0,
+    "v1HistoricalTestsAdded": 0,
+    "acceptedWire": false,
+    "productionReady": false,
+    "flags": {
+      "productionAuthorization": false,
+      "actualProducer": false,
+      "actualAdmission": false,
+      "actualIdentity": false,
+      "actualOwnerEvidence": false,
+      "actualIndependentAnchor": false,
+      "actualProvider": false,
+      "actualSimPreservation": false,
+      "actualRestore": false,
+      "ownerWideReplayComplete": false,
+      "kernelDatabaseAtomicityClaim": false
+    }
+  },
+  "preservedHistoricalEvidence": {
+    "v1ClientSha256": "b78e3f69b85a0df7e9e9e417b7b5cb32cfce37941c795d3caf533ef89840125d",
+    "v1TestSha256": "6e7d11699bb6a1109002d66b473bd0a44fda684b1ef45e957e38af5de37f960f",
+    "v1ClientAndTestChanged": false,
+    "v1HistoricalCases": 61,
+    "v1CasesAddedToV5Count": 0,
+    "rootHistoricalV5FixtureCases": 34,
+    "rootCasesRunByThisRunner": 0,
+    "rootHistoricalCoreAndLinuxCasesAddedToV5Count": 0,
+    "root34ReceiptSha256": "ac2686c79b024b7786ec46c4f4051b72ce1020123b0b384de6bc94f44cba71b8",
+    "root34ReceiptScope": "owner reported own offline SQLite fixture; not rerun or upgraded by SIM codec tests"
+  },
+  "reviewScope": {
+    "mainRead": "all new source and final88-case runner; own88-case rerun",
+    "independentSourceReview": "helper/client/bridge and original67-case runner; scoped no P1/P2",
+    "final21CaseDelta": "main full-read and own rerun; production authority not inferred",
+    "countersAreNotGeneralOsSandbox": true
+  },
+  "infrastructureGate": {
+    "emptyMetadataFoundationReceiptSha256": "03012e09198dbcca73bb38fcd263cdb1bce2aab582adcd78c54e242a83230177",
+    "emptyMetadataFoundationIsRuntimeAuthority": false,
+    "lastOwnerReportedPreflight": "STOP live_entrypoint_config_relationship_unresolved; narrow readonly source provenance followup requested",
+    "actualProducerAccepted": false,
+    "actualIndependentAnchorAccepted": false,
+    "actualRestoreAccepted": false,
+    "nativeTransportInstalled": false,
+    "applicationWiringChanged": false
+  },
+  "production": {
+    "deployed": false,
+    "migrationsAppliedBySim": false,
+    "realAccountsDeleted": false,
+    "openAiCalled": false,
+    "networkOrSecretsChanged": false,
+    "erasureActivated": false
+  }
+}
