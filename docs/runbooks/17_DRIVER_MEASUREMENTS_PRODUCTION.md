@@ -69,6 +69,15 @@ Samotné dokončení promise consumeru není potvrzení dokončeného úklidu.
 Ověření retence v revocation-only i plánovaného entrypointu patří do
 [společné akceptace v runbooku 19](19_COP_ACCOUNT_ERASURE_PRODUCTION.md).
 
+Expiration SQL kandidát pod `scripts/fixtures/driver-retention-real-schema/`
+není instalační migrací a neprovádí se na produkci. Testuje původní transakci
+nad skutečným schématem, včetně cascade a zachování trvalých erasure řádků.
+Budoucí omezení grantů se musí nasadit zároveň s chráněnými náhradami revoke
+a erase i s úpravou provisioning/recovery skriptu; samotné odebrání DELETE
+by oba dnešní legitimní endpointy poškodilo. UPDATE se také nesmí ponechat
+na expiry a identitních sloupcích. Podrobná source hranice je v
+[integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md#pevný-databázový-původ-expirace).
+
 Nezavádět dlouhodobé logical exporty těchto krátkodobých odvozených dat.
 Existující fyzické PBS/WAL/PITR zálohy clusteru tato aplikace nemění; mohou
 obsahovat starší stránky. SQL DELETE nezaručuje odstranění z fyzických záloh.

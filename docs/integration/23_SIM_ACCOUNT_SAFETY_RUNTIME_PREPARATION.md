@@ -70,6 +70,68 @@ fence a erasure ledger zůstávají nedotčené. Lifecycle sleduje skutečnou
 promise úklidu odděleně od promise consumeru, nepřekrývá práci a close na
 ni vyčká. Z toho neplyne nativní drain, abort ani potvrzení fyzické obnovy.
 
+### Pevný databázový původ expirace
+
+Zdrojový kandidát
+`scripts/fixtures/driver-retention-real-schema/expiry-source.sql` rozvíjí
+konkrétní origin mechanismus COP nad nezměněným skutečným schématem SIM
+`schema.sql` a migrací `002_account_erasure.sql`. Není v adresáři migrací,
+nevytváří aplikační tabulky, nemění jejich vlastníka ani stávající guard a
+neimportuje se do API. Samostatný test
+`scripts/test-driver-expiry-real-schema.mts` používá pouze novou soukromou
+lokální databázi se syntetickými daty.
+Jeho [samostatný záznam](../archive/2026-10-14_DRIVER_EXPIRY_REAL_SCHEMA.md)
+obsahuje jeden vlastní běh PostgreSQL 18.3 s 11/11 případy a přesné piny;
+nejde o přepočet dřívějších lifecycle nebo autorských COP testů.
+
+Jedinou operací je expirace celého COP namespace pod jedním neměnným cutoff.
+Oddělený kontrolní kanál jednorázově váže origin na původní XID8, PID a
+backend start; pevný executor toto spojení znovu ověří. Dva DELETE, oba FK
+cascades a marker výsledku sdílejí původní transakci. Trvalé revokace,
+erasure operace a checkpoint nejsou součástí destruktivního plánu. Origin
+neuchovává contributor hash, manifest ani vazbu účtu na denní pseudonymy.
+
+Resolver používá stejný zámek originu. Výsledek uvnitř control transakce
+je pouze prozatímní: terminal vyžaduje skutečný control COMMIT a nové čtení
+stejného originu. Ztracené potvrzení dovoluje pouze probe původního originu,
+nikoli nový pokus o mazání. Chybějící origin či zaneprázdněný executor zůstává
+pending. Trvalý seal uzavírá pouze povolené efekty tohoto přesného originu;
+neprokazuje SQL rollback ani owner-wide drain.
+
+Omezené `SECURITY DEFINER` funkce a role jsou zde pouze zdrojovým kandidátem
+pro izolované ověření. Nejsou implicitním rozšířením původních aplikačních
+migrací nebo schválením produkčního přístupu. Jejich budoucí instalace potřebuje
+konkrétní přijatý Root runner, registry, scope a profile. Pět grant/inspect
+metod není privátní executor a `recordOutcome` se za něj nepovažuje.
+
+Univerzální whole-COP plán lze přijmout jen s doloženou retenční a report
+politikou bez individuálních retain výjimek a se stabilní writer/protection
+generací. Samotný origin lock tuto generaci nechrání. Při individuální výjimce
+nebo chybějící bariéře zůstane tento plán vypnutý a musí vzniknout samostatná
+připravená effect closure; nikoli tiché filtrování nebo nový app cutoff.
+
+### Společná změna writerů a práv před nasazením
+
+Odebrání přímého DELETE zůstává v tomto kroku pouze v izolované zkoušce.
+Aktuální `revoke()` a `erase()` jej potřebují; změna samotných grantů by
+znefunkčnila legitimní odstranění dat. Produkční přechod proto musí současně
+zachovat všechny níže uvedené švy a upravit provisioning/recovery, které dnes
+blanket DML granty znovu udělují a vyžadují.
+
+| Cesta | Požadavek budoucího přechodu |
+| --- | --- |
+| Commit a lookup | Zachovat batch → contributor zámky, dočasnou revokaci, permanentní fence i receipt trigger uvnitř transakce. |
+| Revoke | Stejný contributor zámek před upsert a receipt cascade; zachovat schválenou dobu dočasné revokace. |
+| Erase a acknowledge | Operation zámek → setříděné contributor zámky; fence, cascade a ledger atomicky, původní actor/request/acceptedAt a oddělené replay/publikace. |
+| Periodický a samostatný úklid | Stejný přijatý původní executor, žádný alternativní pool/SQL/cutoff z aplikace. |
+| Granty a recovery skript | Zákaz přímého DELETE až s funkčními náhradami; UPDATE zúžit na skutečně používaný `receipt`, ne expiry/owner/contributor/key. |
+| Restore quarantine | Privilegovaný TRUNCATE je zvláštní pre-start/replay operace, nikoli retenční oprávnění. |
+
+Contributor executor z testovacího COP kandidáta se nepřebírá: nemá skutečný
+SIM contributor lock a admission coupling a jeho origin journal vytváří
+novou trvalou vazbu na contributor hash. Hash není anonymizace; taková vazba
+by vyžadovala oddělené privacy, retenci a unlink rozhodnutí.
+
 ### Přesná místa budoucího nativního zapojení
 
 | Soubor a současný port | Konkrétní potřebná změna po přijetí autority |

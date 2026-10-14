@@ -1,0 +1,78 @@
+{
+  "status": "SOURCE_REAL_SCHEMA_SQL_MECHANICS_ONLY",
+  "startedAt": "2026-10-14T15:28:13.815Z",
+  "completedAt": "2026-10-14T15:28:15.366Z",
+  "postgresVersion": "18.3",
+  "cases": [
+    {
+      "case": "restricted roles cannot bypass fixed expiration or mutate expiry selection",
+      "passed": true
+    },
+    {
+      "case": "same original transaction contains actual cascades and marker, preserving erasure evidence",
+      "passed": true
+    },
+    {
+      "case": "immutable registration and single claim reject altered body/store and duplicate claim",
+      "passed": true
+    },
+    {
+      "case": "rollback restores four effects and a new XID cannot reuse original claim",
+      "passed": true
+    },
+    {
+      "case": "durable seal prevents late original entry while original backend is still alive",
+      "passed": true
+    },
+    {
+      "case": "busy executor never becomes timeout-derived no-effect outcome",
+      "passed": true
+    },
+    {
+      "case": "inner seal JSON followed by control rollback is not durable closure",
+      "passed": true
+    },
+    {
+      "case": "control COMMIT and fresh readback precede terminal seal publication",
+      "passed": true
+    },
+    {
+      "case": "missing origin remains unknown and fixed cutoff retains later rows across graph versions",
+      "passed": true
+    },
+    {
+      "case": "real permanent fence still rejects intake and real interval quality constraint is unchanged",
+      "passed": true
+    },
+    {
+      "case": "origin journal has no contributor, manifest, GPS or account/day linkage",
+      "passed": true
+    }
+  ],
+  "passed": 11,
+  "providerCalls": 0,
+  "isolation": {
+    "newOwnedCluster": true,
+    "tcpListener": false,
+    "externalTargetsAccepted": false,
+    "dataRemoved": true
+  },
+  "sourcePins": {
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "scripts/fixtures/driver-retention-real-schema/expiry-source.sql": "1561825849c8990526af26eae3866ee2100072db72bed638997a2eec7a8afb7a",
+    "scripts/test-driver-expiry-real-schema.mts": "61ff2bfe5b3510fa0c8d4a2be61bc8cea83fb798695d35713b0681634f5e2b6f"
+  },
+  "sourceUnchangedDuringRun": true,
+  "actual": {
+    "productionChanged": false,
+    "nativeAuthority": false,
+    "rootConnectionCustody": false,
+    "nativeTransport": false,
+    "wholeScopePolicyAccepted": false,
+    "actualWriterIntegration": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false
+  },
+  "interpretation": "11 real-schema SQL cases, not native delivery/Root/physical restore acceptance; no contributor executor or changed live grants."
+}

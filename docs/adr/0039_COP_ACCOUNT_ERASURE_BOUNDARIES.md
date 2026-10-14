@@ -95,6 +95,16 @@ SQL obchvatu. Příjem, revokace a ostatní SIM/IZS služby se kvůli chybějíc
 maintenance závislosti plošně nevypínají. Tato zdrojová změna nesmí být
 nasazena bez přijaté skutečné autority a společné akceptace retence.
 
+Samostatný expiration SQL zdroj nad nezměněným skutečným driver schématem
+ověřuje konkrétní původní transakci a marker, nikoli nové produkční oprávnění.
+Pevné `SECURITY DEFINER` funkce pod NOLOGIN ownerem jsou pouze odděleným
+source kandidátem; jejich instalace není součástí původního minimálního návrhu.
+Origin neuchovává denní contributor identitu ani manifest. Jednorázový seal
+se smí vydat za terminal až po skutečném control COMMIT a čerstvém readbacku.
+Před omezením runtime DELETE musí být společně upraveny revoke, erase a
+provisioning; jinak se legitimní mazání zastaví. Konkrétní podmínky pevných
+scope, writer generace a práv jsou v integraci 23.
+
 ## AI náklady a rozpracované požadavky
 
 Zákaz po zahájení mazání se musí vztahovat na BYOK správu, rezervaci,
