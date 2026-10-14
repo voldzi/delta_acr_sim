@@ -1,0 +1,442 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-14 09:15:16 UTC",
+  "simRevision": "6daa969bd93542009b3edab964dbd466cbed65c5",
+  "simTree": "a8a84b257c2de74dd620379c1c9eeabd4702bdf6",
+  "node": "24.16.0",
+  "pnpm": "10.33.0",
+  "checks": {
+    "workspaceTypecheck": "PASS",
+    "workspaceBuild": "PASS",
+    "unitTests": {
+      "passed": 591,
+      "failed": 0,
+      "skipped": 6,
+      "skipScope": "existing opt-in PostgreSQL suite; earlier separate41 native tests are not added"
+    },
+    "strictTypeScriptFixtureScripts": "PASS",
+    "bindingOpenapi": {
+      "paths": 151,
+      "schemas": 273,
+      "changed": false,
+      "sha256": "4509ff5bd9931a011805984895254d6b19e75bfef2e5fa2efdb8b28ad8d90992"
+    },
+    "erasureSchemaCases": 70,
+    "skeleton": "PASS",
+    "diffCheck": "PASS",
+    "chromaReindex": {
+      "result": "REFUSED",
+      "exitCode": 2,
+      "reason": "native retrieval does not accept a replacement repository identity",
+      "mainIndexRebuiltOrBypassed": false
+    }
+  },
+  "isolatedPeerClient": {
+    "scope": "isolated_typescript_codec_in_memory_client_only",
+    "independentRequestSchema": "Ajv2020-existing-SDA-dependency",
+    "sourcePins": {
+      "peer_wrapper.py": "64e26614bf4512157f09281e0fed7452bdd0c327a6e3f807059a062f027bd69b",
+      "peer-request.schema.json": "ed06fbb3b460bd6ba7bc3a48369d90c0944677dce7b7577dc5a3aac0d35aee3e",
+      "SOURCE-PINS.json": "eb7a984db9ae661ef8ffac8643fcde29e836b66f4fe0c91dd5b7b8fcb8eab133",
+      "../actor-native-isolated/coordinator.py": "5da047bd04aaf3766a3b8ce2572b2ee8eaa38e8439d8462ed277e342a748e01e"
+    },
+    "clientSourceSha256": "b78e3f69b85a0df7e9e9e417b7b5cb32cfce37941c795d3caf533ef89840125d",
+    "counts": {
+      "total": 61,
+      "passed": 61,
+      "failed": 0
+    },
+    "tests": [
+      {
+        "case": "schema-and-codec-valid-current",
+        "passed": true
+      },
+      {
+        "case": "schema-and-codec-valid-admit",
+        "passed": true
+      },
+      {
+        "case": "schema-and-codec-valid-begin_commit",
+        "passed": true
+      },
+      {
+        "case": "schema-and-codec-valid-complete",
+        "passed": true
+      },
+      {
+        "case": "schema-and-codec-valid-mark_indeterminate",
+        "passed": true
+      },
+      {
+        "case": "schema-and-codec-valid-drain",
+        "passed": true
+      },
+      {
+        "case": "valid-json-order-and-whitespace-not-confused-with-signed-actor-canonicality",
+        "passed": true
+      },
+      {
+        "case": "frame-empty-nonobject-invalid-utf8-second-document-and-depth",
+        "passed": true
+      },
+      {
+        "case": "byte-boundary-including-multibyte-overflow",
+        "passed": true
+      },
+      {
+        "case": "duplicate-top-nested-and-escaped-equivalent-keys",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-1_0",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-1e0",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-1E_0",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-_0_0",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-1e999",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-NaN",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-Infinity",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-_Infinity",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-9007199254740992",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-_1",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-true",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-null",
+        "passed": true
+      },
+      {
+        "case": "reject-counter-token-_1_",
+        "passed": true
+      },
+      {
+        "case": "independent-schema-does-not-replace-lexical-float-check",
+        "passed": true
+      },
+      {
+        "case": "missing-extra-topkeys-and-unsupported-protocol-owner-method-mode",
+        "passed": true
+      },
+      {
+        "case": "canonical-identifiers-digests-exact-args-and-four-independent-refs",
+        "passed": true
+      },
+      {
+        "case": "independent-schema-safe-counter-inclusive-zero-and-maximum",
+        "passed": true
+      },
+      {
+        "case": "encoder-accessor-input-denied-without-invoking-getter",
+        "passed": true
+      },
+      {
+        "case": "response-bad-bytes-duplicate-scope-correlation-and-private-fields",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-productionAuthorization",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-productionGo",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualLinuxAcceptance",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualRuntimeImageAttestation",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualRootEnrollment",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualIdentity",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualProvider",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualRestore",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-ownerWideReplayComplete",
+        "passed": true
+      },
+      {
+        "case": "response-authority-flag-actualSimPreservation",
+        "passed": true
+      },
+      {
+        "case": "response-current-full-cas-binding-and-handle",
+        "passed": true
+      },
+      {
+        "case": "response-method-bound-results-and-registered-permit-digest",
+        "passed": true
+      },
+      {
+        "case": "response-drain-owner-state-count-no-private-principal",
+        "passed": true
+      },
+      {
+        "case": "validated-results-are-frozen-and-never-production-compatible",
+        "passed": true
+      },
+      {
+        "case": "client-requires-isolated-owner-mode-binding-exchange-and-bounded-deadline",
+        "passed": true
+      },
+      {
+        "case": "client-synthetic-method-response-shapes-remain-isolated",
+        "passed": true
+      },
+      {
+        "case": "client-no-current-or-unknown-lease-fails-before-exchange",
+        "passed": true
+      },
+      {
+        "case": "client-all-nine-cas-fields-and-cross-handle-guard",
+        "passed": true
+      },
+      {
+        "case": "client-new-current-invalidates-stale-cas",
+        "passed": true
+      },
+      {
+        "case": "concurrent-current-responses-recheck-capacity-at-observation",
+        "passed": true
+      },
+      {
+        "case": "lease-id-cross-handle-collision-and-historical-ack-downgrade-denied",
+        "passed": true
+      },
+      {
+        "case": "historical-lease-not-fresh-admission-but-known-terminal-and-unknown-allowed",
+        "passed": true
+      },
+      {
+        "case": "exchange-throw-unknown-without-retry-or-abort-claim",
+        "passed": true
+      },
+      {
+        "case": "exchange-empty-unknown-without-retry-or-abort-claim",
+        "passed": true
+      },
+      {
+        "case": "exchange-malformed-unknown-without-retry-or-abort-claim",
+        "passed": true
+      },
+      {
+        "case": "exchange-wrong-id-unknown-without-retry-or-abort-claim",
+        "passed": true
+      },
+      {
+        "case": "exchange-authority-true-unknown-without-retry-or-abort-claim",
+        "passed": true
+      },
+      {
+        "case": "safe-errors-never-echo-payload-capability-or-provider-message",
+        "passed": true
+      },
+      {
+        "case": "deterministic-deadline-late-response-ignored-no-retry",
+        "passed": true
+      },
+      {
+        "case": "four-unsettled-deadlines-retain-capacity-until-late-exchanges-settle",
+        "passed": true
+      },
+      {
+        "case": "caller-abort-before-and-after-dispatch-never-settles",
+        "passed": true
+      },
+      {
+        "case": "client-both-owner-domains-and-binding-isolation",
+        "passed": true
+      }
+    ],
+    "forbiddenNetworkCalls": 0,
+    "syntheticExchangeCalls": 168,
+    "wrapperHistoricalTestsAdded": 0,
+    "actualNativeTransport": false,
+    "actualPostgresTest": false,
+    "actualOwnerCallbacks": false,
+    "productionAuthorization": false,
+    "productionGo": false,
+    "actualLinuxAcceptance": false,
+    "actualRuntimeImageAttestation": false,
+    "actualRootEnrollment": false,
+    "actualIdentity": false,
+    "actualProvider": false,
+    "actualRestore": false,
+    "ownerWideReplayComplete": false,
+    "actualSimPreservation": false
+  },
+  "controllerConsentHttp": {
+    "scope": "synthetic_controller_consent_loopback_HTTP_only",
+    "copRevision": "898cd5132f513259b226d5beff5c3876156b56e7",
+    "copTree": "a41ee5b065216dfb5e8ab37ee020fc766b66a5c6",
+    "copSourceSha256": {
+      "apps/cop-api/src/account-erasure.ts": "597d79d34e23f279bc527b2870a954198fc5b4f59f16dd409be9a3401704bdb7",
+      "apps/cop-api/src/cop-driver-consent-erasure.ts": "b3db56b6a67a401d76544ede3df32707be8d7b20005e84d5955483db4a15d690",
+      "apps/cop-api/src/driver-measurement-consent-store.ts": "e0c368cee3eee5a6d1a5f56a0419ace4cc949a05733aeb2a3bffb6d7777be6be",
+      "apps/cop-api/src/sim-account-erasure.ts": "d9e20c5fbbbf25eb75182a328f26055d15a159279f55daffe787af20c27f676a",
+      "apps/cop-api/src/mobility-store.ts": "d125b4c96c14bcba1ec323e8003ca1f6882d3cd02a686b5821d974cc57c82e8a",
+      "apps/cop-api/src/ai-router-chat.ts": "a2357095540f118c1c77208e2ae4abd767178558969e00b1af7277efdba14e57",
+      "apps/cop-api/src/driver-measurement-contract.ts": "d0d5c9275c8cb04ae97c3199508509a4e2dd6e08738eb226aa1acdf46b4b40c0",
+      "apps/cop-api/src/cop-pg-pool.ts": "13c8d567ff1860a6bfb4d0fba04cafb6c6236f51ad24f0ac09ac3118823b71ed",
+      "apps/cop-api/src/cop-session-database.ts": "f5da56a3e4d85b476c607233dd675da3d60f5e17a3d7896a18df3da1fa6358f8",
+      "apps/cop-api/src/bounded-upstream.ts": "5f691417fc4064dd699f7bc015ae55e9023bb8e2de50a5c4b06c66d2dfb5112a",
+      "apps/cop-api/src/dispatch-lease.ts": "cb48402a1c5701b82ba5148d0ba9d4ed88a85cc9a8012c8321bbbc673875ffa8",
+      "docs/testing/account-erasure-consent-followup-20261014.json": "2319d529ee8640f953cef9fa9c11a0a953e2d74180396fd3e9bda89239cf7aca"
+    },
+    "simSourceSha256": {
+      "apps/ai-router-api/src/app.ts": "e298137791c2240aab3f2d0996fbb1ed6d1b0e9e91b881520f47e676bd5dce37",
+      "apps/ai-router-api/src/account-erasure.ts": "0d59e2009749dc973b76f9fa3b15da1afe28c2eaeb5589b3ce32f2fa93c39d7a",
+      "apps/situation-data-api/src/driver-measurements.ts": "bf128290ecaca8250e763f2347b0733a66296c39ff8dd0411c82c5b1879d7652",
+      "apps/situation-data-api/src/driver-account-erasure.ts": "25e6c9731452150c4424b3bc60a0679d03b99044e824813d19a92674d342ca23"
+    },
+    "runnerSha256": "5aba43cc6bac09b98a3ffb01b830037eb019784ea9037efc7b89ef5851698088",
+    "actualCopController": true,
+    "actualCopConsentComposition": true,
+    "actualCopInMemoryConsentLogic": true,
+    "actualCopSimAdapters": true,
+    "actualSimExpressHandlers": true,
+    "actualPublicCopLoginOrHttpRoutes": false,
+    "syntheticDependencies": [
+      "COP durable store in memory",
+      "SIM Router and Driver stores",
+      "OIDC actor and identity review",
+      "native admission and owner authority",
+      "publication barrier",
+      "all other owners"
+    ],
+    "productionGo": false,
+    "productionChanged": false,
+    "actualUserDeletion": false,
+    "actualPostgres": false,
+    "actualNativeAuthority": false,
+    "providerCalls": 0,
+    "matcherCalls": 0,
+    "forbiddenNetworkCalls": 0,
+    "sharedIdentityAndSimIzsPreservedByFixture": true,
+    "backupCompletionClaimed": false,
+    "cases": [
+      {
+        "name": "actual controller preflight is ordinary-ready without premature own-provider acceptance",
+        "result": "PASS"
+      },
+      {
+        "name": "first SIM handoff follows actual durable confirmed COP job; Driver202 preserves consent inventory",
+        "result": "PASS"
+      },
+      {
+        "name": "actual composition sends every old COP pending date, never raw subject or secret",
+        "result": "PASS"
+      },
+      {
+        "name": "feature-off resumes only this own accepted job; interruption preserves pending controller checkpoint after actual local purge",
+        "result": "PASS"
+      },
+      {
+        "name": "actual restarted controller uses fresh GET-only Driver proof after consent and every inventory date are removed",
+        "result": "PASS"
+      },
+      {
+        "name": "foreign actor and operation cannot resume, mutate or reconstruct completed inventory",
+        "result": "PASS"
+      },
+      {
+        "name": "missing identity and unapproved authority prevent new controller jobs without fallback",
+        "result": "PASS"
+      },
+      {
+        "name": "no shared SIM/IZS or identity deletion and no real backup/provider proof is claimed",
+        "result": "PASS"
+      }
+    ],
+    "requestCounts": {
+      "total": 53,
+      "routerStarts": 1,
+      "driverStarts": 2,
+      "controllerHandoffs": 4
+    },
+    "unverified": [
+      "real COP/SIM native admission, commit, drain and restore",
+      "production database and identity/key-version/outbox provenance",
+      "public login/frontend/iPhone",
+      "provider and backup retention",
+      "production activation"
+    ]
+  },
+  "sourceScripts": {
+    "client": "b78e3f69b85a0df7e9e9e417b7b5cb32cfce37941c795d3caf533ef89840125d",
+    "peerRunner": "6e7d11699bb6a1109002d66b473bd0a44fda684b1ef45e957e38af5de37f960f",
+    "controllerRunner": "5aba43cc6bac09b98a3ffb01b830037eb019784ea9037efc7b89ef5851698088",
+    "historicalAdapterRunnerUnchanged": "666a4a06ae28ded9824884224c8246a7a3658c334fa297f88c7e9b729e45831b"
+  },
+  "independentInfraReceiptReview": {
+    "foundationSha256": "03012e09198dbcca73bb38fcd263cdb1bce2aab582adcd78c54e242a83230177",
+    "linuxV2Sha256": "496f4931122e59c1305e3214fe6228ac036d7672309a8bf21cc93c7f8440f6f2",
+    "sourceOwnerReportedLinuxFixtureCases": 9,
+    "contentAndHashChecked": true,
+    "secondLinuxRunBySim": false,
+    "v1CompatibilityWithV2": false,
+    "productionAuthority": false
+  },
+  "production": {
+    "simImagesChanged": false,
+    "simApplicationMigrationsApplied": false,
+    "realAccountDeleted": false,
+    "secretsChanged": false,
+    "openaiCalled": false,
+    "networkChanged": false,
+    "restorePerformed": false,
+    "nativeConsumerWiring": false,
+    "productionGo": false
+  },
+  "notes": [
+    "This receipt records one root independent rerun on the exact frozen SIM revision and exact clean COP source.",
+    "The isolated codec cases are only injected memory packet exchanges; they do not execute the Python wrapper.",
+    "Controller calls use actual COP controller/composition/adapters and SIM handlers on owned loopback, but stores and native/identity/publication authorities are synthetic.",
+    "Historical Root40, nativePG41 and directAdapter10/71 reports remain separate and are not summed.",
+    "An empty guard metadata database and Linux fixtures do not establish actual runtime admission, owner-wide replay or restore safety."
+  ]
+}

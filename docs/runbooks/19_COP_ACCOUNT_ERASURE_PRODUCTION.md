@@ -155,6 +155,9 @@ produkční verifier, chat, mazání nebo obnovu. Přesné piny a rozdělení
 ověřených a neověřených vlastností zaznamenat v samostatném archive;
 počty se nesčítají s historickými native/SQL testy.
 
+Zmrazený vlastní rerun SIM a přesná dvojice s COP 898 jsou v
+[oddělené evidenci řadiče a peer fixtures](../archive/2026-10-14_COP_SIM_CONTROLLER_AND_PEER_FIXTURES.md).
+
 ## Před aktivací
 
 1. COP doloží přesnou stávající derivaci Router aliasu, issuer, všechny
