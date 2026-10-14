@@ -15,7 +15,16 @@ nejsou náhradou. Nasazení kódu není aktivace mazání; nová operace bez
 aktuálního skutečného důkazu nesmí vytvořit ani fence.
 
 Vlastník 14. 10. 2026 schválil přípravu a ověření této samostatné
-infrastrukturní ochrany se správcem. To neruší produkční gate: skutečné
+infrastrukturní ochrany se správcem. Následně samostatně schválil prázdnou
+`cop_account_safety_guard` a sedm NOLOGIN metadata rolí; správce jejich
+zřízení doložil receipt z `2026-10-14T08:26:39Z`, SHA-256
+`03012e09198dbcca73bb38fcd263cdb1bce2aab582adcd78c54e242a83230177`.
+Migrace `a29369e48a1380bb12ce3b40b9254d924e0d98a3b90f7cdcdc0fb7e9ba27aaba`
+vytvořila devět prázdných tabulek; nevytvořila LOGIN, členství nebo
+enrollment. Původní role a členství zůstaly stejné. SIM zdrojový vlastník
+ověřil obsah a hash receipt, nikoli druhý živý DBA audit.
+Tato metadata DB není aplikační per-principal fence store a nesmí se na ni
+přesměrovat aplikační DB URL. To neruší produkční gate: skutečné
 umístění autority, omezené technické role, secrets, privátní transport,
 enrollment a consumer wiring musejí být konkrétně připravené a schválené.
 Zdrojový návrh a izolovaný kryptografický/SQL test nejsou existující
@@ -27,6 +36,14 @@ Jeho absence by správně vrátila 503 i pro dosavadní COP chat. Nepřepnout
 obraz pouze s erasure flagem `false` a nepovažovat to za bezpečné nasazení.
 Nejprve dokončit zvlášť schválenou autoritu a společnou akceptaci; stávající
 zdravé služby se do té doby zachovají.
+
+Linux peer/socket wrapper a jeho skutečný protocol/owner wiring nejsou
+zřízené. Přesná zdrojová mapa a potřebné per-principal i owner-wide
+hranice jsou v [integraci 22](../integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md#napojení-na-chráněnou-nativní-autoritu).
+Aktuální místní PostgreSQL HBA používá podle infrastrukturního auditu
+`trust`, ne OS `peer`; přístup k socketu sám nepotvrzuje skutečnou roli
+root brokeru. Před aktivací autority řešit zvlášť schválené autentizační
+zpevnění, nikoli v SIM měnit HBA nebo vydat pozitivní verifier.
 
 ## Ověření zdrojů
 
@@ -83,6 +100,14 @@ importem COP a otevřením portu. Výsledek rozlišuje syntetickou HTTP
 akceptaci od produkční autorizace. Před produkčním rozhodnutím zaznamenat
 v archive přesnou dvojici zdrojových revizí, hashe a skutečný rozsah testu.
 Aktuální dvojice a důkazy jsou v [navazujícím zdrojovém ověření](../archive/2026-10-14_COP_SIM_ERASURE_HTTP_CORRECTION.md).
+
+Přímý adaptér/handler test nepokrývá celý COP controller. Nový release
+musí zvlášť ověřit první předání skutečně potvrzeného durable COP jobu
+při zapnuté ordinary readiness i pokračování vlastní přijaté operace
+při vypnutém příjmu. Cizí/neexistující SIM receipt nesmí udělit oprávnění
+k resume a výpadek či timeout readiness nesmí být zaměněn za povolení.
+Dosavadní archivní dvojice a počet 10 HTTP scénářů se nepřepíšou výsledky
+nové orchestrace nebo nepublikované COP revize.
 
 ## Před aktivací
 

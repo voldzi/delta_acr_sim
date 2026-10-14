@@ -295,6 +295,104 @@ Jednotkové, HTTP a izolované PostgreSQL testy používají pouze syntetické
 identity a falešné poskytovatele. Výsledek produkční a společné akceptace
 se musí zaznamenat zvlášť; žádný test nemaže skutečný účet nebo volá OpenAI.
 
+## Napojení na chráněnou nativní autoritu
+
+Zdrojová kontrola SIM `fe0eec5` potvrzuje chybějící runtime propojení,
+nikoli hotového klienta brokeru. Router předává do `PgAccountErasure`
+výchozí verifier `false`; SDA registruje Driver bez protected-proof a
+derived-barrier dependencies. Omezený databázový základ infrastruktury
+je zřízený, ale jeho existence, health, JWS snapshot ani lokální checkpoint
+nepovolují operaci. Přenosový kontrakt Linux wrapperu musí nejprve určit
+request i response schémata, framing, meze, peer/runtime ověření a retry.
+
+Pevné mapování je `sim_ai_router → ai_router / cop_router_primary_database`
+a `sim_driver_measurements → sim_measurements / online_driver_scope`.
+Nejsou to názvy databází ani volitelné cíle klienta. Nová ochrana se
+vztahuje na COP/Jízdu; `client_id=sim`, `sim_project`, IZS a společná
+identita/relace/oprávnění zůstávají mimo toto mazání.
+
+### Potřebná volání a přesná místa
+
+Názvy v prostředním sloupci jsou navržené private metody infrastruktury,
+nikoli existující REST endpointy. Poslední dva řádky vyžadují samostatné
+owner-wide typy, které nynější per-principal návrh nepokrývá.
+
+| Spotřebitel ve zdroji | Požadovaná private hranice | Životnost a výsledek |
+| --- | --- | --- |
+| Router `capability`, Driver `gate`; oba entrypointy | Čtecí current-proof/enrollment probe | Skutečný runtime, owner store, schema/policy a souvislý frontier; bez actor fence nebo mutace. |
+| Router key GET/PUT/DELETE, rezervace a dispatch; Driver lookup/matcher/commit/revoke | `resolveOwnerEvidence` → `admitGuardedOperation` | Samostatný schválený principal reference, přesný účel a ID práce; žádný admission podle pouhého hash nebo SQL booleanu. |
+| Oba SQL store commity a skutečné externí handoffy | `beginGuardedCommit` | Registrovaná gate serializovaná s permanent fence a držená přes skutečný commit i rozpracované vedlejší efekty. |
+| Oba Router `finish`, Driver commit/abort, pozdní výsledky | `completeGuardedOperation` | Typované, nezávisle rozřešené terminal evidence z přijaté práce; timeout není abort. Settlement zůstává možný po fence, nový dispatch/výstup nikoli. |
+| Router `request/advance`, Driver `erase/acknowledge` | Root `commitPermanentFence` → `readOwnerDrain` → `readPrivateOwnerReadback` | Trvalá fence před dokončením cleanupu; skutečný drain a generačně svázané readback/report potvrzení. SIM nemá root fence oprávnění. |
+| Driver `aggregates/quality`, report/cache/publication | Owner/dataset-wide read a publication generation | Každá relevantní fence zneplatní staré výsledky. Per-principal drain neprokazuje odvodnění všech souhrnných čtení. |
+| Driver cleanup, Router rollup expiry, startup/replay | Owner-wide maintenance a souvislý replay | Bez smyšleného uživatelského principalu; zahrnout completed i pending fence, neapplicable události a aktuální CAS. |
+
+Čtecí checkpoint verifier nenahradí `admit` ani commit gate. Současný
+`AccountErasureGate.assertActive(targetHash, transaction?)` nezná účel,
+request ID, lease ani outcome. Driver proof nezná principal/operaci,
+aktuální incarnation/frontier ani lease; `DerivedBarrier(): Promise<void>`
+nezná manifest, generaci ani typované potvrzení. Tyto interfaces musejí
+být rozšířené podle přijatého native protokolu, ne napojené na callback,
+který vrátí `true` podle podpisu, TTL nebo přítomnosti metadata DB.
+
+Router PUT klíče v `separate-routes.ts` volá `validateProjectKey` před
+uložením. Jde o externí `/models` side effect mimo současný reservation
+ledger; jeho lease/drain musí existovat samostatně. Oba `finish()` získají
+principal a lane z již přijatého trvalého requestu, ne od klienta nebo
+z nové identity. Nejistý provider výsledek zůstává pending, bez resetu
+finančních stropů či přímého fallbacku.
+
+Driver `aggregates/quality` a publikace přesahují jednu identitu. Potřebují
+owner-wide generaci platnou přes snapshot a response/publication boundary;
+nesmí se pro ně vymyslet osobní `principalScopeRef`. Minutový cleanup a
+expirace nákladových součtů mají oddělenou maintenance capability. Native
+gate musí platit i po restartu a při obnovené prázdné/staré DB, ještě před
+vznikem workeru a prvním chráněným čtením; `processPending()` není replay.
+
+### Přenosová data a chybějící bootstrap
+
+Nynější návrh `cop-private-admission-proposal-v1` je výslovně
+`isolated-contract-only` / `unaccepted-proposal` / `productionAuthorization=false`.
+Má exact request pole `requestId`, `requestNonce`, `method`, `audience`,
+`operationId`, `principalScopeRef`, `binding`, `ownerTarget`,
+`operationSchemaDigest`; dále typed `ownerEvidence`, `cas`, `lease`,
+`commitPermit`, `terminalEvidence` podle metody. Root musí nezávisle
+rozřešit identity/retention/report/schema refs, aktuální frontier,
+store/incarnation a registry generation. Shape-valid reference není důkaz.
+Skutečný klient nemá implementovat zatím chybějící response či transport.
+
+Běžný BYOK actor obsahuje původní opaque alias, ne raw subject pro
+sedmipolový erasure actor. Driver intake v1 obsahuje denní pseudonym a
+službový bearer, ne ověřený účet. Broker proto potřebuje přesný nezávislý
+bootstrap existujícího aliasu/denního scope do přijatého operation reference.
+COP ani SIM nesmějí tento reference vytvořit automatickou adopcí hashů.
+Případná serverová native envelope nesmí měnit přesné tělo
+`sim-driver-measurements-v1` nebo z něj vytvořit účetní identifikátor.
+
+Do private přenosu nepatří prompt, AI klíč, plaintext komunikace, surové
+GPS, příloha, fingerprint ani volný kontext. Owner manifest a odvozené
+contributor hashes zůstávají pouze ephemeral podle schváleného identity
+resolveru. V Driver SQL nevznikne trvalý join účet → dny. Registry key,
+root role nebo Docker socket nesmějí být mountnuté do SIM.
+
+Před implementací klienta musí infrastruktura dodat přesný response/error
+kontrakt, autentizovaný peer/runtime binding, challenge/nonce a aktuální
+CAS, bounded frame/response velikost, timeout a crash/reconnect protokol.
+Reference expiry omezuje nové použití, ale nikdy sama neodvodní lease,
+nesmaže fence ani nevytvoří known-terminal abort.
+
+### Ověření klienta před propojením
+
+Negativní testy zahrnou chybějící socket/enrollment/identity, nesprávný
+peer/owner/image/policy/incarnation, starý či replayed nonce/proof a N+1
+frontier. Ověří fence během key validation, matcheru, lookupu, rezervace,
+dispatch a bezprostředně před COMMIT; pád mezi commitem a native ack;
+unknown provider outcome a nemožnost návratu pozdního výstupu. Souhrnné
+čtení či druhý writer nesmí po drain zveřejnit starou generaci. Současně
+ověřit maintenance/replay, zachování SIM/IZS, shadow režimu a finančních
+stropů. Tyto budoucí native scénáře nejsou součástí již doložených 10 HTTP
+a 41 PostgreSQL kontrol; žádný pozitivní fixture nenahrazuje aktuální broker.
+
 ## Pokyn pro COP
 
 Udržte account lock, send generation a durable erasure frontu nezávisle
