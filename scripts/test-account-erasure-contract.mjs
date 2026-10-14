@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+// Schema-only synthetic evidence. No database, provider, account or secrets.
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+const require = createRequire(resolve("apps/situation-data-api/package.json"));
+const Ajv = require("ajv/dist/2020.js").default;
+const addFormats = require("ajv-formats").default;
+const fragment = JSON.parse(readFileSync("openapi/fragments/account-erasure-v1.openapi.json", "utf8"));
+const ajv = new Ajv({ strict: false, allErrors: true });
+addFormats(ajv);
+const id = "https://schemas.example.invalid/sim-account-erasure-v1";
+ajv.addSchema({ $id: id, components: fragment.components });
+const validators = new Map(Object.keys(fragment.components.schemas).map(name => [name, ajv.compile({ $ref: `${id}#/components/schemas/${name}` })]));
+let checks = 0;
+function check(name, value, expected = true) {
+  const validate = validators.get(name);
+  assert.ok(validate, `Unknown schema: ${name}`);
+  assert.equal(validate(value), expected, `${name}: ${JSON.stringify(validate.errors)}`);
+  checks++;
+}
+const operationId = "00000000-0000-4000-8000-000000000001";
+const version = "sim-account-erasure-v1";
+const at = "2026-10-14T12:00:00.000Z";
+const checksFor = name => Object.fromEntries(fragment.components.schemas[name].required.map(key => [key, true]));
+const base = { contractVersion: version, enabled: true, ready: true, checkedAt: at, blockers: [], mutates: false, providerCalls: false, wholeAccountComplete: false };
+const driver = { ...base, owner: "sim_measurements", scope: "online_driver_scope", checks: checksFor("DriverErasureServiceChecks"), reportProtection: "no_report" };
+const router = { ...base, owner: "ai_router", scope: "cop_router_primary_database", checks: checksFor("RouterErasureServiceChecks"), costPolicy: "aggregate-costs-current-month-v1" };
+check("DriverErasureCapability", driver);
+check("RouterErasureCapability", router);
+for (const [name, value] of [["DriverErasureCapability", driver], ["RouterErasureCapability", router]]) {
+  check(name, { ...value, enabled: false, ready: false, blockers: ["erasure_disabled"] });
+  check(name, { ...value, enabled: false }, false);
+  check(name, { ...value, ready: false }, false);
+  for (const field of Object.keys(value.checks)) check(name, { ...value, checks: { ...value.checks, [field]: false } }, false);
+  for (const field of ["mutates", "providerCalls", "wholeAccountComplete"]) check(name, { ...value, [field]: true }, false);
+  check(name, { ...value, actorId: "synthetic-do-not-expose" }, false);
+}
+const driverPreflight = { ...driver, operationId, checks: checksFor("DriverErasureActorChecks"), identityBinding: "cop_attested_daily_manifest", manifestValid: true, contributorCount: 9, coverageAnchor: { kind: "checked_at", at } };
+const routerPreflight = { ...router, operationId, checks: checksFor("RouterErasureActorChecks"), identityBinding: "cop_attested_existing_router_alias" };
+check("DriverErasurePreflight", driverPreflight);
+check("RouterErasurePreflight", routerPreflight);
+check("RouterErasureCapability", routerPreflight, false);
+check("RouterErasurePreflight", { ...routerPreflight, ready: false, blockers: ["provider_requests_pending"], checks: { ...routerPreflight.checks, providerRequestsSettled: false } });
+check("DriverErasurePreflight", { ...driverPreflight, coverageAnchor: { kind: "last_seen", at } }, false);
+check("DriverErasurePreflight", { ...driverPreflight, manifestValid: false }, false);
+const actor = { iss: "https://identity.example.invalid/realms/cop", sub: "synthetic-subject", aud: "sim-account-erasure", iat: 1, exp: 61, operationId, routerUserId: `cop_${"A".repeat(43)}` };
+check("ErasureActorClaims", actor);
+for (const sub of ["", "x\u0000", "x\u007f", "x\u0085", "x".repeat(513)]) check("ErasureActorClaims", { ...actor, sub }, false);
+check("ErasureActorClaims", { ...actor, keyVersion: 1 }, false);
+check("RouterErasureRequest", { contractVersion: version, operationId });
+check("RouterErasureRequest", { contractVersion: version, operationId, userId: actor.sub }, false);
+const request = { contractVersion: version, operationId, attestation: "cop-account-erasure-contributors-reviewed-v1", contributors: Array.from({ length: 9 }, (_, index) => ({ contributorDay: `2026-10-${String(index + 6).padStart(2, "0")}`, contributorIdDay: `synthetic_${String(index).padStart(32, "0")}` })) };
+check("DriverErasureRequest", request);
+check("DriverErasureRequest", { ...request, contributors: request.contributors.slice(1) }, false);
+check("DriverErasureRequest", { ...request, contributors: [...request.contributors, request.contributors[0]] }, false);
+check("DriverErasureRequest", { ...request, attestation: "unreviewed" }, false);
+const receipt = { contractVersion: version, operationId, status: "online_complete", scope: "cop_router_primary_database", pendingReasons: [], pendingRequestCount: 0, onlineScopeComplete: true, wholeAccountComplete: false, backupsComplete: false, providerRetentionComplete: false, retainedMinimumReplayFence: true, aliasScope: "sim_izs_preserved_out_of_scope" };
+check("RouterErasureCompletedReceipt", receipt);
+check("RouterErasurePendingReceipt", { ...receipt, status: "pending", pendingReasons: ["erasure_processing_pending"], onlineScopeComplete: false });
+check("RouterErasureReceipt", { ...receipt, aliasScope: "sim_izs_not_resolved" }, false);
+check("RouterErasureReceipt", { ...receipt, backupsComplete: true }, false);
+check("RouterErasureReceipt", { ...receipt, status: "pending", onlineScopeComplete: false }, false);
+const driverReceipt = { contractVersion: version, operationId, status: "completed", scope: "online_driver_scope", wholeAccountComplete: false, backupReplayRequired: true, acceptedAt: at, updatedAt: at, contributorCount: 9, deletedBatchCount: 1, remainingBatchCount: 0, databaseZeroVerified: true, derivedReportAcknowledged: true, reportProtection: "no_report", publicationFenceVerified: true, replayReady: true, retentionReviewed: true, pendingReason: null };
+check("DriverErasureCompletedReceipt", driverReceipt);
+for (const field of ["databaseZeroVerified", "derivedReportAcknowledged", "publicationFenceVerified", "replayReady", "retentionReviewed"]) check("DriverErasureCompletedReceipt", { ...driverReceipt, [field]: false }, false);
+check("DriverErasurePendingReceipt", { ...driverReceipt, status: "pending", replayReady: false, pendingReason: "replay_review_required" });
+check("DriverErasureError", { error: { code: "DRIVER_ACCOUNT_ERASURE_NOT_READY", message: "Operation unavailable.", correlationId: "synthetic-correlation" } });
+check("DriverErasureError", { error: { code: "UNAVAILABLE", message: "Operation unavailable." } }, false);
+check("RouterErasureError", { error: "erasure_review_required", correlationId: operationId });
+check("RouterErasureError", { error: "erasure_review_required", correlationId: operationId, targetHash: "do-not-expose" }, false);
+assert.equal(Object.keys(fragment.paths).length, 8);
+const binding = JSON.parse(readFileSync("openapi/openapi.json", "utf8"));
+for (const path of Object.keys(fragment.paths)) assert.ok(binding.paths[path], `Missing binding path ${path}`);
+console.log(`Account erasure contract: ${checks} synthetic schema cases passed; 8 binding paths present. No runtime or production acceptance implied.`);

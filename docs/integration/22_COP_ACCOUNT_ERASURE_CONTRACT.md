@@ -1,15 +1,22 @@
 # Mazání účtu COP v SIM
 
-Stav: návrh kontraktu 0.3.0; upřesnění ze 14. 10. 2026.
-Nové operace nejsou dostupnou capability. Tento podklad není implementací,
-migrací, grantem, aktivací ani důkazem smazání účtu. Inventura běžných
+Stav: implementační kontrakt v1; upřesnění ze 14. 10. 2026.
+Zdrojová implementace a omezené migrace byly výslovně schváleny. Nasazení
+je oddělené od aktivace a od důkazu smazání účtu. Inventura běžných
 úložišť vychází z revize SIM `03b842e` a identity COP z `3be10da`.
 
-Machine-readable návrh je v
-[`openapi/proposals/account-erasure-v1.openapi.json`](../../openapi/proposals/account-erasure-v1.openapi.json).
-Není připojen do závazného `openapi/openapi.json`; popsané nové cesty nejsou
-nasazeným ani ověřeným rozhraním. Přesun do závazného kontraktu vyžaduje
-dokončenou implementaci, testy a výslovný review rozsahu.
+Machine-readable fragment je v
+[`openapi/fragments/account-erasure-v1.openapi.json`](../../openapi/fragments/account-erasure-v1.openapi.json).
+Závazný kontrakt generuje `openapi/openapi.json`. Dostupnost operace určuje
+aktuální `capability`, nikoli dokument, healthcheck nebo konfigurační flag.
+
+## Zachovaný společný účet a SIM
+
+Tento životní cyklus odstraňuje pouze COP/Jízdu. Společná Keycloak identita,
+přístup do SIM, SIM/IZS namespace, projekty a jejich finanční historie
+zůstávají mimo rozsah. Neprovádí se globální logout ani DELETE sdíleného
+uživatele. Router potvrzuje `aliasScope=sim_izs_preserved_out_of_scope`.
+Zachování těchto dat je zvolený rozsah, ne blocker smazání COP/Jízdy.
 
 COP koordinuje zánik účtu a jednotlivé backendy potvrzují pouze svůj
 rozsah. Stav 202 musí uživatel vidět jako probíhající mazání. Dokončení
@@ -80,7 +87,7 @@ retry. Backend váže ID na HMAC účtu a neměnný digest těla. Jiný účet
 nebo jiný manifest nesmí získat existující výsledek. Rotující `iat`,
 `exp` a podpis nejsou součástí idempotency digestu.
 
-## Navržené interní operace
+## Interní operace
 
 | Backend | Operace | Rozsah |
 | --- | --- | --- |
@@ -113,12 +120,12 @@ POST nebo explicitní interní worker obnoví trvalý čekající stav; nemají
 neomezenou retry smyčku. 401/403, 400, 409, 429 a 503 jsou jednoznačné
 hranice, nikoli důvod obejít SIM, obnovit starý klíč nebo volat OpenAI přímo.
 
-## Návrh readiness a preflight
+## Readiness a preflight
 
-Verze 0.3.0 přidává následující čtyři návrhové operace. Cesty v tabulce
-jsou relativní k interní službě; v kompozitním návrhu má SDA prefix
-`/situation-data`. Router prefix navíc nemá. Žádná cesta zatím není
-nasazeným rozhraním ani součástí závazného `openapi/openapi.json`.
+Následující čtyři operace jsou čistě čtecí. Cesty v tabulce jsou relativní
+k interní službě; v kompozitním kontraktu má SDA prefix `/situation-data`.
+Router prefix navíc nemá. Vypnutý příjem měření není překážkou jejich
+odvolání; vypnutá erasure capability nesmí vytvořit novou operaci.
 
 | Vlastník | Metoda a cesta | Ověření a tělo |
 | --- | --- | --- |
@@ -153,6 +160,11 @@ historických klíčových verzí a outboxu; ty atestuje COP.
 
 HTTP 200 zde znamená pouze spolehlivě provedenou kontrolu. `ready=false`
 je blokovaná příprava, nikoli zahájené mazání; preflight nepoužívá 202.
+Router omezuje tento namespace na 60 požadavků za minutu a nejvýše dvě
+souběžné start/resume operace na proces. Překročení vrací 429 a
+`Retry-After`. SDA používá stávající sdílený limit measurement služby
+`DRIVER_MEASUREMENTS_RATE_PER_MINUTE` (výchozí 120). Jde o místní limity
+procesu, nikoli tvrzení o distribuovaném limiteru všech replik.
 Při nemožnosti kontrolu spolehlivě provést vrací 503. Nezapisuje operaci,
 fence, rezervaci ani receipt, nedešifruje AI klíč a nevolá poskytovatele.
 Cizí existující operace nemá odhalitelný stav; vrací stejné 404 jako
@@ -160,9 +172,15 @@ neviditelný záznam. 409 patří pouze konfliktu vlastní neměnné operace.
 
 Výsledek preflight není trvalé oprávnění. Start znovu ověří všechny
 podmínky pod skutečnými zámky, včetně nové in-flight práce nebo UTC
-půlnoci mezi probe a prvním přijetím. COP zatím nesmí návrhové cesty
-volat jako produkční endpointy; společná akceptace zahrne konkrétní
+půlnoci mezi probe a prvním přijetím. Před přepnutím COP adaptéru zahrne společná akceptace konkrétní
 implementaci, závazný kontrakt a oba interní adaptéry.
+
+Router má výjimku pro právě běžící provider práci: při splnění všech
+službových kontrol může POST přijmout ochrannou fence a vrátit 202
+`provider_requests_pending`, přestože actor preflight má `ready=false`.
+Tak zablokuje nové požadavky a výměnu klíče, dokud se původní práce
+nevypořádá. Není to výjimka z oprávnění, identity, retence nebo autority
+obnovy a není to potvrzení dokončení. Eraser poskytovatele nevolá.
 
 ## Důkaz dokončení a závody
 
@@ -172,10 +190,13 @@ jen pojmenovaný online rozsah po databázovém ověření a potvrzení odvozen�
 kopií. Odpověď nikdy nevrací `wholeAccountComplete=true` ani dokončení
 u poskytovatele nebo ve fyzických zálohách.
 
-Návrh OpenAPI odděluje receipt schémata pro 200 a 202. Pending musí mít
+OpenAPI odděluje receipt schémata pro 200 a 202. Pending musí mít
 důvod a nesmí tvrdit online dokončení Routeru. GET pro cizí i neexistující
 operaci vrací totožné 404; konflikt neměnného těla vlastní operace patří
-do POST 409 a nesmí prozradit cizí stav.
+do POST 409 a nesmí prozradit cizí stav. Router používá
+`erasure_processing_pending`, pokud je uložená operace stále pending,
+ale již nejsou jiné blokující podmínky a transakční dokončení ještě
+neproběhlo. GET ho nesmí dokončovat ani vymýšlet falešný retenční důvod.
 
 Commit dávky a revokace zamykají stejné pseudonymy. Pozdní commit po
 fence nesmí přidat řádek do agregace. Během AI mazání se zablokuje PUT,
@@ -218,17 +239,27 @@ operace zůstává čekající do schválení jiné varianty zachovávající st
 Součty se nesmějí tajně ponechat ani vazby bez náhrady odstranit a tím
 resetovat finanční limity.
 
-Omezené runtime DML pro navázanou AI historii i nové operation/fence
-tabulky vyžadují výslovné samostatné schválení. Tento návrh neuděluje
-DELETE nad `ai_router_request`, `ai_router_billing_request` ani
-`ai_router_user_key_audit`; neobsahuje provozní SQL nebo migraci.
+Legacy sdílený finanční strop čte `ai_router_budget_usage` včetně převedených
+součtů a platí i pro zachovaný SIM namespace. BYOK limit je dosud
+na konkrétního plátce: erasure target zůstává trvale zablokovaný. Jeho
+odvázaná historie je zahrnutá v celkovém přehledu SIM, ale nesmí se
+přičítat limitu jiného uživatele s vlastním OpenAI klíčem. `sim_project`
+větev a její rozpočet zůstávají oddělené a zachované.
+
+Omezené runtime DML vlastník přímo schválil 14. 10. 2026. Migrace
+`deploy/ai-router/003_account_erasure.sql` přidává RLS omezené DELETE
+navázané COP historie a oddělené minimální finanční součty. Migrace
+`deploy/driver-measurements/002_account_erasure.sql` přidává skalární
+ledger a trvalé denní fence bez vazby účet → dny. Runtime nemá DDL,
+superuser, bypass RLS ani UPDATE owner checkpointu. Funkce jsou
+`SECURITY INVOKER`; běžné sedmidenní čištění fence nemaže.
 
 Samostatné rozhodnutí vlastníka musí určit také horizont minimálního
 replay tombstone, erasure receipt, všech záloh/WAL a logů. Historické
-SIM/IZS aliasy nelze automaticky spojovat s účtem COP. Volné operátorské
-review důvody a sdílené scénáře se nesmějí plošně mazat bez ownership
-pravidla. Dokud nejsou tyto části vyřešeny, jsou explicitním blockerem
-dokončení celého účtu, nikoli domněle zahrnutým rozsahem.
+SIM/IZS aliasy, volné operátorské review důvody a sdílené scénáře
+zůstávají záměrně mimo zvolený rozsah COP/Jízdy. Nesmějí se spojovat
+nebo plošně mazat. Kopie COP u poskytovatele a v zálohách zůstávají
+samostatnou retenční hranicí; nepatří do online receipt.
 
 ## Akceptační scénáře
 
@@ -246,8 +277,9 @@ dokončení celého účtu, nikoli domněle zahrnutým rozsahem.
 - Obnovení staré DB/klíče/reportu zůstává v karanténě do replay aktuální
   autoritativní fronty COP; změna flagu ani starý obraz neobejdou fence.
 
-Tyto scénáře jsou plánem ověření, nikoli dosud provedenými testy. Nové
-capability, granty, tajemství a skutečné mazání zůstávají vypnuté.
+Jednotkové, HTTP a izolované PostgreSQL testy používají pouze syntetické
+identity a falešné poskytovatele. Výsledek produkční a společné akceptace
+se musí zaznamenat zvlášť; žádný test nemaže skutečný účet nebo volá OpenAI.
 
 ## Pokyn pro COP
 
@@ -256,4 +288,5 @@ na odstranění profilu. Manifest odvozujte výhradně na serveru, ne v klientu.
 Adaptér zapněte až po společném review konkrétní revize OpenAPI, identity
 a podpisových scopes, omezených grantů, retenčního rozhodnutí a restore
 postupu. Odpověď 200 jednoho backendu nikdy nepovyšujte na dokončení celého
-účtu; nevyřešené aliasy, logy nebo zálohy zobrazte jako přesně vymezený stav.
+účtu; logy, poskytovatelovy kopie a zálohy zobrazte jako přesně vymezený stav.
+Zachovanou identitu a SIM/IZS neoznačujte jako selhání mazání COP/Jízdy.

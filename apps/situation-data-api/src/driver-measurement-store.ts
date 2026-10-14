@@ -1,15 +1,19 @@
 import { Pool } from "pg";
 import { createHmac } from "node:crypto";
 import { DriverMeasurementError, type DriverBatch, type DriverInterval, type DriverReceipt, type DriverStore } from "./driver-measurements.js";
+import {PostgresDriverAccountErasureStore,type DriverErasureStorageOptions} from "./driver-account-erasure-store.js";
+import type {DriverErasureInput} from "./driver-account-erasure.js";
 
 /** Dedicated database only; no DDL or raw position persistence in the runtime. */
 export class PostgresDriverMeasurementStore implements DriverStore {
   private pool: Pool;
   private timer: ReturnType<typeof setInterval>;
-  constructor(url: string, private hashSecret: string) {
+  private erasures:PostgresDriverAccountErasureStore;
+  constructor(url: string, private hashSecret: string, options:DriverErasureStorageOptions={}) {
     if (hashSecret.length < 32) throw new Error("Invalid driver storage secret");
     this.pool=new Pool({connectionString:url,max:4,connectionTimeoutMillis:1500,statement_timeout:5000,idleTimeoutMillis:10000});
     this.pool.on("error",()=>{ /* No connection string/error payload is logged. */ });
+    this.erasures=new PostgresDriverAccountErasureStore(this.pool,hashSecret,options);
     this.timer=setInterval(()=>{void this.cleanup().catch(()=>undefined);},60000); this.timer.unref();
   }
   private key(owner:string,kind:string,value:string):string {
@@ -20,10 +24,18 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`;
   }
   async lookup(owner:string,batchId:string,hash:string):Promise<DriverReceipt|undefined> {
-    const r=await this.pool.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,this.id(owner,"batch",batchId)]);
-    if (!r.rowCount) return undefined;
-    if (r.rows[0].request_hash!==hash) throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");
-    return {...r.rows[0].receipt,batchId};
+    const c=await this.pool.connect(),storedId=this.id(owner,"batch",batchId);
+    try {
+      await c.query("BEGIN");await c.query("SET LOCAL lock_timeout='1500ms'");await this.erasures.assertIntake(c,owner);
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:batch:${storedId}`]);
+      let r=await c.query("SELECT request_hash,receipt,contributor_hash FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,storedId]);
+      if(r.rowCount){const contributor=r.rows[0].contributor_hash;
+        await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:${contributor}`]);
+        await this.erasures.assertIntake(c,owner,contributor);
+        r=await c.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,storedId]);
+        if(r.rowCount&&r.rows[0].request_hash!==hash)throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");}
+      await c.query("COMMIT");return r.rowCount?{...r.rows[0].receipt,batchId}:undefined;
+    }catch(error){await c.query("ROLLBACK").catch(()=>undefined);throw error;}finally{c.release();}
   }
   private async cleanup():Promise<void> {
     await this.pool.query("DELETE FROM driver_measurement_receipts WHERE expires_at<=now()");
@@ -42,6 +54,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       await client.query("SET LOCAL lock_timeout='1500ms'");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:batch:${batch.batchId}`]);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:${contributor}`]);
+      await this.erasures.assertIntake(client,owner,contributor);
       const revoked=await client.query("SELECT 1 FROM driver_measurement_revocations WHERE owner=$1 AND contributor_hash=$2 AND expires_at>now()",[owner,contributor]);
       if (revoked.rowCount) throw new DriverMeasurementError(403,"DRIVER_CONSENT_REVOKED");
       const old=await client.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2",[owner,batch.batchId]);
@@ -119,4 +132,9 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     } catch(error) { await c.query("ROLLBACK").catch(()=>undefined); throw error; } finally {c.release();}
   }
   async close():Promise<void> {clearInterval(this.timer);await this.pool.end();}
+  accountErasure(input:DriverErasureInput){return this.erasures.erase(input);}
+  accountErasureStatus(id:string,actorHash:string){return this.erasures.status(id,actorHash);}
+  acknowledgeAccountErasure(input:DriverErasureInput){return this.erasures.acknowledge(input);}
+  accountErasureCapability(){return this.erasures.capability();}
+  accountErasurePreflight(input:DriverErasureInput){return this.erasures.preflight(input);}
 }

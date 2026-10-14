@@ -268,7 +268,7 @@ describe("AI Router request boundary", () => {
     vi.stubGlobal("fetch", fetchMock);
     await request(createApp(runtimeConfig, providerStore as unknown as BudgetStore)).post("/api/v1/ai-router/generate").set("authorization", `Bearer ${config.copToken}`).send(body).expect(503);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(providerStore.finish).toHaveBeenCalledWith(expect.any(String), "failed");
+    expect(providerStore.finish).toHaveBeenCalledWith(expect.any(String), "uncertain");
     const finishStore = testStore();
     finishStore.finish.mockRejectedValueOnce(new Error("audit db down"));
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "Odpověď" }] }], usage: { input_tokens: 5, output_tokens: 5 } }), { status: 200 })));

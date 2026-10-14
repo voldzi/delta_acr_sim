@@ -67,6 +67,13 @@ SPECS = [
     path_prefix: "/search-data/api/v1"
   },
   {
+    key: "accountErasure",
+    prefix: "AccountErasure",
+    tag_prefix: "Scoped Account Erasure",
+    file: "openapi/fragments/account-erasure-v1.openapi.json",
+    path_prefix: ""
+  },
+  {
     key: "safetyData",
     prefix: "SafetyData",
     tag_prefix: "Safety Data",

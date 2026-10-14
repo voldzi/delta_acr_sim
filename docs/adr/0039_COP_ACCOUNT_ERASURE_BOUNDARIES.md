@@ -1,27 +1,35 @@
 # ADR 0039 Mazání účtu COP v SIM
 
-Stav: návrh k bezpečnostnímu a retenčnímu posouzení. Není povolením produkčního mazání.
+Stav: schválená zdrojová implementace s oddělenou produkční akceptací.
 Datum: 13. 10. 2026. Upřesnění rozsahu: 14. 10. 2026.
 Navazuje na ADR 0026, ADR 0030 a ADR 0038.
 
-Tento podklad zahrnuje pouze kontrakt a návrh. Sám nepovoluje runtime
-implementaci, migraci, nové granty, produkční aktivaci ani mazání syntetických
-nebo skutečných účtů. Retenční návrh zůstává k samostatnému schválení.
+Vlastník 14. 10. 2026 přímo v chatu SIM schválil implementaci, omezené
+migrace a práva, izolované syntetické PostgreSQL testy a nasazení po společném
+ověření s COP. Nejde o souhlas k mazání skutečných účtů pro test, ke změně
+chatu nebo k volání poskytovatele. Schválená nákladová retence je níže.
+Aktivace stále vyžaduje skutečnou autoritu obnovy a doložené společné testy;
+podpis nebo historická hodnota `ready` není takovým důkazem.
 
 ## Rozsah
 
 COP řídí životní cyklus svého účtu a předává SIM jen serverově odvozenou
 identitu. Smazání v SIM se skládá z oddělených důkazů pro dobrovolná měření
 a COP namespace AI Routeru. Nezahrnuje automaticky COP profil, komunikaci,
-historické identity operátorů SIM/IZS, poskytovatelovy kopie ani fyzické zálohy.
+identity, přístup ani historii operátorů SIM/IZS, poskytovatelovy kopie nebo
+fyzické zálohy. Vlastník výslovně zvolil odstranění COP/Jízdy při zachování
+společného účtu a přístupu do SIM. COP nesmí smazat uživatele sdíleného
+Keycloak realmu, vyvolat globální logout ani odvolat oprávnění SIM.
+Router vrací `aliasScope=sim_izs_preserved_out_of_scope`; zachování mimo
+rozsah není nevyřešeným aliasem ani blockerem smazání COP/Jízdy.
 
 Dosavadní denní revokace a odstranění BYOK klíče nejsou smazáním celého účtu.
 SIM neumí z denního pseudonymu zjistit všechny dny přispěvatele. AI Router
 odstraněním klíče nemaže audit klíče ani historii tokenů a nákladů.
 
-## Navržená rozhodnutí
+## Rozhodnutí
 
-Připravit samostatnou, výchozím nastavením vypnutou operaci
+Implementovat samostatnou, výchozím nastavením vypnutou operaci
 `sim-account-erasure-v1`. Existující kontrakt `sim-driver-measurements-v1`
 a jeho režim `shadow_only` se nemění. Mazání nepoužívá OpenAI a nesmí být
 závislé na zapnutém chatu, příjmu měření nebo externím zpracování.
@@ -116,5 +124,9 @@ nesmí obnovit zaniklý účet nebo jeho klíč.
 
 Přesná inventura, návrh kontraktu, testovací scénáře a předávací hranice
 jsou v [integračním návrhu 22](../integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md).
-Produkční aktivace, nová tajemství, granty a skutečné mazání nejsou touto
-zdrojovou přípravou schváleny.
+Závazný kontrakt je v `openapi/openapi.json`. Zdroj, testy, migrace,
+nasazení a aktivace jsou samostatné kroky. Výchozí neexistující chráněný
+ověřovatel vrací neaktuální checkpoint; nevzniká nová mazací operace.
+Správce infrastruktury musí před aktivací doložit současný autoritativní
+stav mazání nezávislý na obnovované aplikační databázi. Nová guard služba,
+její databáze, síť a klíče nejsou součástí omezených aplikačních migrací.

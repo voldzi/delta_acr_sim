@@ -32,6 +32,10 @@ export interface Config {
   simIzsMonthlyMicrousd?: number;
   simIzsDailyRequests?: number;
   publishedSourceIds?: string[];
+  accountErasureEnabled?: boolean;
+  accountErasureReplayReady?: boolean;
+  accountErasureIssuer?: string;
+  accountErasureCostPolicy?: "pending_requires_review" | "aggregate-costs-current-month-v1";
 }
 
 function positiveInt(name: string, fallback: number): number {
@@ -56,6 +60,12 @@ export function loadConfig(): Config {
   const simIzsEnabled = process.env.AI_ROUTER_SIM_IZS_ENABLED === "true";
   const izsToken = process.env.AI_ROUTER_IZS_TOKEN ?? "";
   const copActorSecret = process.env.AI_ROUTER_COP_ACTOR_SECRET ?? "";
+  const accountErasureEnabled = process.env.AI_ROUTER_ACCOUNT_ERASURE_ENABLED === "true";
+  const accountErasureReplayReady = process.env.AI_ROUTER_ACCOUNT_ERASURE_REPLAY_READY === "true";
+  const accountErasureIssuer = process.env.AI_ROUTER_ACCOUNT_ERASURE_ISSUER ?? "";
+  const accountErasureCostPolicy = process.env.AI_ROUTER_ACCOUNT_ERASURE_COST_POLICY ?? "pending_requires_review";
+  if (!["pending_requires_review", "aggregate-costs-current-month-v1"].includes(accountErasureCostPolicy)) throw new Error("Invalid account erasure cost policy");
+  if (accountErasureEnabled && (copActorSecret.length < 32 || !/^https:\/\/[^\s]+$/u.test(accountErasureIssuer))) throw new Error("Account erasure requires its approved issuer and COP signer");
   const credentialEncryptionKey = process.env.AI_ROUTER_CREDENTIAL_ENCRYPTION_KEY ?? "";
   if (copByokEnabled && copActorSecret.length < 32) {
     throw new Error("COP BYOK requires a separate actor secret");
@@ -103,6 +113,8 @@ export function loadConfig(): Config {
     simIzsDailyMicrousd: positiveInt("AI_ROUTER_SIM_IZS_DAILY_MICROUSD", 1_000_000),
     simIzsMonthlyMicrousd: positiveInt("AI_ROUTER_SIM_IZS_MONTHLY_MICROUSD", 10_000_000),
     simIzsDailyRequests: positiveInt("AI_ROUTER_SIM_IZS_DAILY_REQUESTS", 20),
-    publishedSourceIds: (process.env.AI_ROUTER_PUBLISHED_SOURCE_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean)
+    publishedSourceIds: (process.env.AI_ROUTER_PUBLISHED_SOURCE_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+    accountErasureEnabled, accountErasureReplayReady, accountErasureIssuer,
+    accountErasureCostPolicy: accountErasureCostPolicy as Config["accountErasureCostPolicy"]
   };
 }

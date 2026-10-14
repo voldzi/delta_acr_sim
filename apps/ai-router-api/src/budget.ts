@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
+import type { AccountErasureGate } from "./account-erasure.js";
 
 const { Pool } = pg;
 
@@ -23,6 +24,7 @@ export class BudgetError extends Error {
 
 export class BudgetStore {
   readonly pool: pg.Pool;
+  accountErasure?: AccountErasureGate;
   constructor(
     url: string,
     private readonly userHashSecret: string,
@@ -127,6 +129,8 @@ export class BudgetStore {
     const userHash = this.hashUser(clientId, userId);
     try {
       await client.query("BEGIN");
+      if (clientId === "cop") await this.accountErasure?.assertActive(userHash, client);
+      await client.query("SELECT set_config('sim.router_erasure_code_version','1',true)");
       await client.query("SELECT pg_advisory_xact_lock(634019, 1)");
       const policyResult = await client.query<{
         daily_microusd: string;
@@ -145,8 +149,8 @@ export class BudgetStore {
         SELECT
           COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_total,
           COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS month_total,
-          COUNT(*) FILTER (WHERE user_hash = $1 AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS user_count
-        FROM ai_router_request
+          COALESCE(SUM(record_count) FILTER (WHERE user_hash = $1 AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS user_count
+        FROM ai_router_budget_usage
         WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
       `,
         [userHash]
@@ -171,7 +175,7 @@ export class BudgetStore {
     }
   }
 
-  async finish(id: string, status: "success" | "failed", inputTokens?: number, outputTokens?: number, chargedMicrousd?: number): Promise<void> {
+  async finish(id: string, status: "success" | "failed" | "uncertain", inputTokens?: number, outputTokens?: number, chargedMicrousd?: number): Promise<void> {
     const result = await this.pool.query(
       `UPDATE ai_router_request SET status=$2, input_tokens=$3,
       output_tokens=$4, charged_microusd=$5 WHERE id=$1 AND status='reserved'`,
@@ -185,13 +189,13 @@ export class BudgetStore {
       SELECT
         COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_total,
         COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)), 0) AS month_total,
-        COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS day_count,
-        COUNT(*) AS month_count,
+        COALESCE(SUM(record_count) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_count,
+        COALESCE(SUM(record_count),0) AS month_count,
         COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_input,
         COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_output,
         COALESCE(SUM(input_tokens), 0) AS month_input,
         COALESCE(SUM(output_tokens), 0) AS month_output
-      FROM ai_router_request WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      FROM ai_router_budget_usage WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
     `);
     const row = result.rows[0]!;
     return {

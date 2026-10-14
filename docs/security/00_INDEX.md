@@ -9,3 +9,4 @@ Tento index odkazuje dokumenty v daném adresáři.
 - [05_AUDIT.md](05_AUDIT.md)
 - [06_SYNTHETIC_DATA_SAFETY.md](06_SYNTHETIC_DATA_SAFETY.md)
 - [07_THREAT_MODEL.md](07_THREAT_MODEL.md)
+- [Hranice mazání COP/Jízdy a zachování SIM](../integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)

@@ -1,10 +1,11 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import { BudgetError, BudgetStore, type RouterPolicy } from "./budget.js";
 import { copModelPrompt, validCopContext } from "./cop-context.js";
 import type { Config } from "./config.js";
 import { registerSeparateRoutes } from "./separate-routes.js";
 import type { SeparateBilling } from "./separate-billing.js";
+import { AccountErasureError, registerErasureRoutes, type AccountErasureStore } from "./account-erasure.js";
 import { chooseRoute, estimateMicrousd, estimateTokens, taskAllowsDataClass, type DataClass, type ModelPreference, type TaskType } from "./routing.js";
 
 interface GenerateBody {
@@ -67,9 +68,11 @@ interface ModelResult {
 }
 
 class OpenAiRateLimitedError extends Error {}
+class OpenAiOutcomeUnknownError extends Error {}
 
 async function callOpenAI(config: Config, model: string, prompt: string, maxOutputTokens: number): Promise<ModelResult> {
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  let response: Awaited<ReturnType<typeof fetch>>;
+  try { response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { authorization: `Bearer ${config.openaiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
@@ -82,13 +85,17 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
       max_output_tokens: maxOutputTokens
     }),
     signal: AbortSignal.timeout(25_000)
-  });
+  }); } catch { throw new OpenAiOutcomeUnknownError("provider_outcome_unknown"); }
   if (response.status === 429) throw new OpenAiRateLimitedError("provider_rate_limited");
-  if (!response.ok) throw new Error(`openai_http_${response.status}`);
-  const data = (await response.json()) as {
+  if (!response.ok) {
+    if (response.status >= 500) throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
+    throw new Error(`openai_http_${response.status}`);
+  }
+  let data: {
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
     usage?: { input_tokens?: number; output_tokens?: number };
   };
+  try { data = await response.json() as typeof data; } catch { throw new OpenAiOutcomeUnknownError("provider_outcome_unknown"); }
   const text =
     data.output
       ?.flatMap((item) => item.content ?? [])
@@ -96,7 +103,7 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
       .map((item) => item.text ?? "")
       .join("\n")
       .trim() ?? "";
-  if (!text || !Number.isInteger(data.usage?.input_tokens) || !Number.isInteger(data.usage?.output_tokens)) throw new Error("provider_response_incomplete");
+  if (!text || !Number.isInteger(data.usage?.input_tokens) || !Number.isInteger(data.usage?.output_tokens)) throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
   return { text, inputTokens: data.usage!.input_tokens!, outputTokens: data.usage!.output_tokens! };
 }
 
@@ -140,9 +147,14 @@ async function callLocal(config: Config, prompt: string, maxOutputTokens: number
   throw new Error("local_model_unavailable");
 }
 
-export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling) {
+export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling, erasure?: AccountErasureStore) {
+  if (erasure) store.accountErasure = erasure;
   const app = express();
   app.disable("x-powered-by");
+  app.use("/api/v1/ai-router/cop/users/me/erasure-operations", (_req, res, next) => {
+    res.locals.erasureCorrelationId=randomUUID();res.setHeader("X-Correlation-ID",res.locals.erasureCorrelationId);
+    res.setHeader("Cache-Control", "private, no-store");next();
+  });
   app.use(express.json({ limit: "32kb" }));
   app.get("/health/live", (_req, res) => res.json({ status: "ok" }));
   app.get("/health/ready", async (_req, res) => {
@@ -157,7 +169,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
   app.use("/api/v1/ai-router", (req, res, next) => {
     const identity = caller(req, config);
     if (!identity) {
-      res.status(401).json({ error: "unauthorized" });
+      res.status(401).json({ error: "unauthorized", ...(res.locals.erasureCorrelationId ? {correlationId:res.locals.erasureCorrelationId} : {}) });
       return;
     }
     res.locals.caller = identity;
@@ -239,6 +251,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     }
   });
   registerSeparateRoutes(app, config, store, separate);
+  registerErasureRoutes(app, config, (client, user) => store.hashUser(client, user), erasure);
   app.post("/api/v1/ai-router/generate", async (req, res) => {
     if (!validBody(req.body)) {
       res.status(400).json({ error: "invalid_request" });
@@ -249,6 +262,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     if (identity === "admin" || identity === "izs" || (identity === "cop" && body.taskType === "sim_scenario") || (identity === "sim" && body.taskType !== "sim_scenario")) {
       res.status(403).json({ error: "task_not_allowed" });
       return;
+    }
+    if (identity === "cop" && store.accountErasure) {
+      try { await store.accountErasure.assertActive(store.hashUser("cop", body.userId)); }
+      catch (error) { res.status(error instanceof AccountErasureError ? 410 : 503).json({ error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" }); return; }
     }
     if (!taskAllowsDataClass(body.taskType, body.dataClass)) {
       res.status(400).json({ error: "data_class_not_allowed" });
@@ -322,6 +339,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     try {
       id = await store.reserve(identity, body.userId, body.taskType, model, decision.reason, decision.difficulty, decision.tier, reservedMicrousd);
     } catch (error) {
+      if (error instanceof AccountErasureError) { res.status(410).json({ error: error.code }); return; }
       if (error instanceof BudgetError) {
         res.status(429).json({ error: error.code });
         return;
@@ -331,14 +349,16 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     }
     let result: ModelResult;
     try {
+      if (identity === "cop") await store.accountErasure?.assertActive(store.hashUser("cop", body.userId));
       result = decision.tier === "local_fast" ? await callLocal(config, modelPrompt, maxOutputTokens) : await callOpenAI(config, model, modelPrompt, maxOutputTokens);
     } catch (error) {
       try {
-        await store.finish(id, "failed");
+        await store.finish(id, error instanceof OpenAiOutcomeUnknownError ? "uncertain" : "failed");
       } catch {
         res.status(503).json({ requestId: id, error: "budget_store_unavailable" });
         return;
       }
+      if (error instanceof AccountErasureError) { res.status(410).json({ requestId: id, error: error.code }); return; }
       const rateLimited = error instanceof OpenAiRateLimitedError;
       res.status(rateLimited ? 429 : 503).json({ requestId: id, error: rateLimited ? "provider_rate_limited" : "model_unavailable" });
       return;
@@ -349,6 +369,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     } catch {
       res.status(503).json({ requestId: id, error: "budget_store_unavailable" });
       return;
+    }
+    if (identity === "cop" && store.accountErasure) {
+      try { await store.accountErasure.assertActive(store.hashUser("cop", body.userId)); }
+      catch (error) { result.text = ""; res.status(error instanceof AccountErasureError ? 410 : 503).json({ requestId: id, error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" }); return; }
     }
     res.json({
       requestId: id,
@@ -362,7 +386,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     });
   });
   app.use((error: unknown, _req: Request, res: Response, _next: unknown) => {
-    res.status(400).json({ error: error instanceof SyntaxError ? "invalid_json" : "invalid_request" });
+    res.status(400).json({ error: error instanceof SyntaxError ? "invalid_json" : "invalid_request", ...(res.locals.erasureCorrelationId ? {correlationId:res.locals.erasureCorrelationId} : {}) });
   });
   return app;
 }

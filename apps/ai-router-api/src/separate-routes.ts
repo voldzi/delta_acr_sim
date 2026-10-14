@@ -7,6 +7,14 @@ import { estimateMicrousd } from "./routing.js";
 import { type BillingLimits, type SeparateBilling, SeparateBillingError } from "./separate-billing.js";
 import { callSeparateOpenAI, ProviderError, validateProjectKey } from "./separate-provider.js";
 import { copOutboundInput, simIzsOutboundInput, validCopChatBody, validSimIzsBody } from "./typed-context.js";
+import { AccountErasureError } from "./account-erasure.js";
+
+async function accountActive(userHash: string, res: Response, store: BudgetStore): Promise<boolean> {
+  try { await store.accountErasure?.assertActive(userHash); return true; }
+  catch (error) {
+    res.status(error instanceof AccountErasureError ? 410 : 503).json({ error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" }); return false;
+  }
+}
 
 function forbidden(res: Response): boolean {
   if (res.locals.caller === "admin") { res.status(403).json({ error: "task_not_allowed" }); return true; }
@@ -43,13 +51,15 @@ export function registerSeparateRoutes(app: Express, config: Config, store: Budg
   app.get(path, async (req, res) => {
     const userHash = copUser(req, res, config, store);
     if (!userHash) return;
+    if (!await accountActive(userHash, res, store)) return;
     if (!separate) { res.status(503).json({ error: "credential_store_unavailable" }); return; }
-    try { res.json(await separate.keyStatus(userHash)); }
-    catch { res.status(503).json({ error: "credential_store_unavailable" }); }
+    try { const status = await separate.keyStatus(userHash); if (await accountActive(userHash, res, store)) res.json(status); }
+    catch (error) { res.status(error instanceof AccountErasureError ? 410 : 503).json({ error: error instanceof AccountErasureError ? error.code : "credential_store_unavailable" }); }
   });
   app.put(path, async (req, res) => {
     const userHash = copUser(req, res, config, store);
     if (!userHash) return;
+    if (!await accountActive(userHash, res, store)) return;
     if (!separate) { res.status(503).json({ error: "credential_store_unavailable" }); return; }
     const body = req.body as Record<string, unknown> | undefined;
     if (!body || Object.keys(body).length !== 1 || typeof body.apiKey !== "string" ||
@@ -58,8 +68,11 @@ export function registerSeparateRoutes(app: Express, config: Config, store: Budg
     }
     try {
       await validateProjectKey(body.apiKey, config.economyModel);
-      res.json(await separate.putKey(userHash, body.apiKey));
+      if (!await accountActive(userHash, res, store)) return;
+      const status = await separate.putKey(userHash, body.apiKey);
+      if (await accountActive(userHash, res, store)) res.json(status);
     } catch (error) {
+      if (error instanceof AccountErasureError) { res.status(410).json({ error: error.code }); return; }
       if (error instanceof ProviderError) { res.status(providerStatus(error)).json({ error: error.code }); return; }
       res.status(503).json({ error: "credential_store_unavailable" });
     }
@@ -67,9 +80,10 @@ export function registerSeparateRoutes(app: Express, config: Config, store: Budg
   app.delete(path, async (req, res) => {
     const userHash = copUser(req, res, config, store);
     if (!userHash) return;
+    if (!await accountActive(userHash, res, store)) return;
     if (!separate) { res.status(503).json({ error: "credential_store_unavailable" }); return; }
     try { await separate.removeKey(userHash); res.status(204).end(); }
-    catch { res.status(503).json({ error: "credential_store_unavailable" }); }
+    catch (error) { res.status(error instanceof AccountErasureError ? 410 : 503).json({ error: error instanceof AccountErasureError ? error.code : "credential_store_unavailable" }); }
   });
   app.get("/api/v1/ai-router/billing-usage", async (_req, res) => {
     if (res.locals.caller !== "admin") { res.status(403).json({ error: "forbidden" }); return; }
@@ -80,6 +94,7 @@ export function registerSeparateRoutes(app: Express, config: Config, store: Budg
   app.post("/api/v1/ai-router/cop/chat", async (req, res) => {
     const userHash = copUser(req, res, config, store);
     if (!userHash) return;
+    if (!await accountActive(userHash, res, store)) return;
     if (!separate) { res.status(503).json({ error: "billing_store_unavailable" }); return; }
     if (!validCopChatBody(req.body, config.publishedSourceIds ?? [])) { res.status(400).json({ error: "invalid_request" }); return; }
     try { if (!await externalPolicyAllowed(config, store)) { res.status(503).json({ error: "external_processing_disabled" }); return; } }
@@ -87,7 +102,7 @@ export function registerSeparateRoutes(app: Express, config: Config, store: Budg
     if (config.economyModel !== "gpt-6-luna") { res.status(503).json({ error: "model_policy_unavailable" }); return; }
     let key: Awaited<ReturnType<SeparateBilling["getKey"]>>;
     try { key = await separate.getKey(userHash); }
-    catch { res.status(503).json({ error: "credential_store_unavailable" }); return; }
+    catch (error) { res.status(error instanceof AccountErasureError ? 410 : 503).json({ error: error instanceof AccountErasureError ? error.code : "credential_store_unavailable" }); return; }
     if (!key) { res.status(422).json({ error: "user_key_missing" }); return; }
     const input = copOutboundInput(req.body);
     const maxOutputTokens = req.body.maxOutputTokens ?? 512;
@@ -95,23 +110,32 @@ export function registerSeparateRoutes(app: Express, config: Config, store: Budg
     let id: string;
     try { id = await separate.reserve("user_openai_key", userHash, userHash, key.fingerprint, null, "cop_chat", "gpt-6-luna", reserved, limits(config, "user_openai_key")); }
     catch (error) {
+      key.apiKey = "";
+      if (error instanceof AccountErasureError) { key.apiKey = ""; res.status(410).json({ error: error.code }); return; }
       if (error instanceof SeparateBillingError) { res.status(429).json({ error: error.code }); return; }
       res.status(503).json({ error: "billing_store_unavailable" }); return;
     }
     try {
+      await store.accountErasure?.assertActive(userHash);
       const result = await callSeparateOpenAI(key.apiKey, "gpt-6-luna", input, maxOutputTokens);
       const estimatedMicrousd = estimateMicrousd(result.inputTokens, result.outputTokens, 0.2, 1);
       await separate.finish(id, "success", result.inputTokens, result.outputTokens, estimatedMicrousd);
+      if (!await accountActive(userHash, res, store)) { result.text = ""; return; }
       res.json({ requestId: id, billingSource: "user_openai_key", model: "gpt-6-luna", output: result.text,
         usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens, estimatedMicrousd, actualProviderChargesVerified: false }, requiresHumanReview: true });
     } catch (error) {
+      if (error instanceof AccountErasureError) {
+        try { await separate.finish(id, "failed", undefined, undefined, undefined, error.code); }
+        catch { res.status(503).json({ requestId: id, error: "billing_store_unavailable" }); return; }
+        res.status(410).json({ requestId: id, error: error.code }); return;
+      }
       if (error instanceof ProviderError) {
         try { await separate.finish(id, error.uncertain ? "uncertain" : "failed", undefined, undefined, undefined, error.code); }
         catch { res.status(503).json({ requestId: id, error: "billing_store_unavailable" }); return; }
         res.status(providerStatus(error)).json({ requestId: id, error: error.code }); return;
       }
       res.status(503).json({ requestId: id, error: "billing_store_unavailable" });
-    }
+    } finally { key.apiKey = ""; }
   });
   app.post("/api/v1/ai-router/sim/izs-summary", async (req, res) => {
     if (forbidden(res)) return;

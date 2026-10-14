@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID } from "node:crypto";
 import type pg from "pg";
+import type { AccountErasureGate } from "./account-erasure.js";
 
 export type BillingSource = "user_openai_key" | "sim_project";
 export type BillingStatus = "success" | "failed" | "uncertain";
@@ -28,7 +29,7 @@ export interface SeparateBilling {
 
 export class PgSeparateBilling implements SeparateBilling {
   private readonly encryptionKey: Buffer;
-  constructor(private readonly pool: pg.Pool, encodedKey: string) {
+  constructor(private readonly pool: pg.Pool, encodedKey: string, private readonly accountErasure?: AccountErasureGate) {
     this.encryptionKey = Buffer.from(encodedKey, "base64");
     if (this.encryptionKey.length !== 32) throw new Error("credential_encryption_key_invalid");
   }
@@ -43,6 +44,7 @@ export class PgSeparateBilling implements SeparateBilling {
   }
 
   async keyStatus(userHash: string): Promise<{ configured: boolean; fingerprint?: string; updatedAt?: string }> {
+    await this.accountErasure?.assertActive(userHash);
     const result = await this.pool.query<{ fingerprint: string; updated_at: Date }>("SELECT fingerprint, updated_at FROM ai_router_user_key WHERE user_hash=$1", [userHash]);
     const row = result.rows[0];
     return row ? { configured: true, fingerprint: row.fingerprint, updatedAt: row.updated_at.toISOString() } : { configured: false };
@@ -58,12 +60,13 @@ export class PgSeparateBilling implements SeparateBilling {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await this.accountErasure?.assertActive(userHash, client);
       const old = await client.query<{ fingerprint: string }>("SELECT fingerprint FROM ai_router_user_key WHERE user_hash=$1 FOR UPDATE", [userHash]);
       await client.query(
         `INSERT INTO ai_router_user_key (user_hash,ciphertext,nonce,auth_tag,fingerprint)
          VALUES ($1,$2,$3,$4,$5) ON CONFLICT (user_hash) DO UPDATE SET
          ciphertext=EXCLUDED.ciphertext, nonce=EXCLUDED.nonce, auth_tag=EXCLUDED.auth_tag,
-         fingerprint=EXCLUDED.fingerprint, updated_at=now()`,
+         fingerprint=EXCLUDED.fingerprint, key_version=ai_router_user_key.key_version+1, updated_at=now()`,
         [userHash, encrypted, nonce, tag, fingerprint]
       );
       await client.query("INSERT INTO ai_router_user_key_audit (user_hash,action,fingerprint) VALUES ($1,$2,$3)", [userHash, old.rowCount ? "replaced" : "created", fingerprint]);
@@ -81,6 +84,7 @@ export class PgSeparateBilling implements SeparateBilling {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await this.accountErasure?.assertActive(userHash, client);
       const removed = await client.query<{ fingerprint: string }>("DELETE FROM ai_router_user_key WHERE user_hash=$1 RETURNING fingerprint", [userHash]);
       if (removed.rows[0]) await client.query("INSERT INTO ai_router_user_key_audit (user_hash,action,fingerprint) VALUES ($1,'removed',$2)", [userHash, removed.rows[0].fingerprint]);
       await client.query("COMMIT");
@@ -93,6 +97,7 @@ export class PgSeparateBilling implements SeparateBilling {
   }
 
   async getKey(userHash: string): Promise<StoredUserKey | null> {
+    await this.accountErasure?.assertActive(userHash);
     const result = await this.pool.query<{ ciphertext: Buffer; nonce: Buffer; auth_tag: Buffer; fingerprint: string }>("SELECT ciphertext,nonce,auth_tag,fingerprint FROM ai_router_user_key WHERE user_hash=$1", [userHash]);
     const row = result.rows[0];
     if (!row) return null;
@@ -108,6 +113,11 @@ export class PgSeparateBilling implements SeparateBilling {
     const id = randomUUID();
     try {
       await client.query("BEGIN");
+      if (source === "user_openai_key") {
+        if (payerHash !== actorHash || taskType !== "cop_chat") throw new Error("billing_identity_invalid");
+        await this.accountErasure?.assertActive(actorHash, client);
+      }
+      await client.query("SELECT set_config('sim.router_erasure_code_version','1',true)");
       // One transaction lock makes parallel reservations obey the same hard cap.
       await client.query("SELECT pg_advisory_xact_lock(634019, 2)");
       const result = await client.query<{ day_total: string; month_total: string; day_count: string }>(
@@ -153,11 +163,11 @@ export class PgSeparateBilling implements SeparateBilling {
       `SELECT billing_source,
         COALESCE(SUM(COALESCE(estimated_microusd,reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_total,
         COALESCE(SUM(COALESCE(estimated_microusd,reserved_microusd)),0) AS month_total,
-        COUNT(*) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS day_count,
-        COUNT(*) AS month_count,
+        COALESCE(SUM(record_count) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_count,
+        COALESCE(SUM(record_count),0) AS month_count,
         COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_input,
         COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_output
-       FROM ai_router_billing_request WHERE created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+       FROM ai_router_billing_usage WHERE created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
        GROUP BY billing_source`
     );
     const empty = () => ({ dailyMicrousd: 0, monthlyMicrousd: 0, dailyRequests: 0, monthlyRequests: 0, dailyInputTokens: 0, dailyOutputTokens: 0 });

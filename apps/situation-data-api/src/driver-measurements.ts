@@ -3,6 +3,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { SituationDataConfig } from "./config.js";
 import { problem } from "./http.js";
 import { PostgresDriverMeasurementStore } from "./driver-measurement-store.js";
+import {DRIVER_ACCOUNT_ERASURE_CONTRACT,DriverAccountErasureError,driverErasureHash,driverErasureOperationId,parseDriverErasureRequest,prepareDriverErasureInput,verifyDriverErasureActor,
+  type DriverErasureMethods,type DriverErasureCapability,type DriverErasureBlocker} from "./driver-account-erasure.js";
+import type {DriverErasureProtectedProof} from "./driver-account-erasure-store.js";
 
 export const DRIVER_CONTRACT = "sim-driver-measurements-v1";
 const PREFIX = "/api/v1/internal/driver-measurements/v1";
@@ -58,7 +61,7 @@ export interface DriverReceipt {
   rejectionCounts: Record<string, number>; etaAccepted: boolean;
   applicationMode: "shadow_only"; rawPositionsStored: false;
 }
-export interface DriverStore {
+export interface DriverStore extends Partial<DriverErasureMethods> {
   lookup(owner: string, batchId: string, hash: string): Promise<DriverReceipt | undefined>;
   commit(owner: string, contributor: string, hash: string, batch: DriverBatch, intervals: DriverInterval[], receipt: DriverReceipt): Promise<DriverReceipt>;
   aggregates(dataset: string, since: string, now: string): Promise<unknown[]>;
@@ -187,43 +190,51 @@ export class ValhallaDriverMatcher implements DriverMatcher {
   }
 }
 
-export interface DriverSettings { enabled: boolean; revocationEnabled?: boolean; databaseUrl?: string; token?: string; hashSecret?: string; ratePerMinute: number }
+export interface DriverSettings { enabled: boolean; revocationEnabled?: boolean; databaseUrl?: string; token?: string; hashSecret?: string; ratePerMinute: number;
+  driverAccountErasureEnabled?:boolean;driverAccountErasureActorSecret?:string;driverAccountErasureIssuer?:string;driverAccountErasureReplayCheckpoint?:string }
 export function driverSettings(): DriverSettings {
   const enabled=process.env.DRIVER_MEASUREMENTS_ENABLED==="true";
   const revocationEnabled=process.env.DRIVER_MEASUREMENTS_REVOCATION_ENABLED==="true";
   const databaseUrl=process.env.DRIVER_MEASUREMENTS_DATABASE_URL, token=process.env.DRIVER_MEASUREMENTS_COP_TOKEN, hashSecret=process.env.DRIVER_MEASUREMENTS_HASH_SECRET;
   const ratePerMinute=Number(process.env.DRIVER_MEASUREMENTS_RATE_PER_MINUTE ?? 120);
-  if ((enabled || revocationEnabled) && (!databaseUrl || !token || token.length<32 || !hashSecret || hashSecret.length<32 || !Number.isInteger(ratePerMinute) || ratePerMinute<1 || ratePerMinute>600)) throw new Error("Invalid driver-measurement configuration");
-  return { enabled,revocationEnabled,databaseUrl,token,hashSecret,ratePerMinute };
+  const driverAccountErasureEnabled=process.env.DRIVER_ACCOUNT_ERASURE_ENABLED==="true",driverAccountErasureActorSecret=process.env.DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET,
+    driverAccountErasureIssuer=process.env.DRIVER_ACCOUNT_ERASURE_ISSUER,driverAccountErasureReplayCheckpoint=process.env.DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT;
+  if ((enabled || revocationEnabled || driverAccountErasureEnabled) && (!databaseUrl || !token || token.length<32 || !hashSecret || hashSecret.length<32 || !Number.isInteger(ratePerMinute) || ratePerMinute<1 || ratePerMinute>600)) throw new Error("Invalid driver-measurement configuration");
+  if(driverAccountErasureReplayCheckpoint&&!/^[A-Za-z0-9_-]{32,128}$/.test(driverAccountErasureReplayCheckpoint))throw new Error("Invalid driver-account-erasure checkpoint");
+  if(driverAccountErasureIssuer){try{const url=new URL(driverAccountErasureIssuer);if(driverAccountErasureIssuer.length>512||url.protocol!=="https:"||url.username||url.password||url.search||url.hash)throw new Error();}catch{throw new Error("Invalid driver-account-erasure issuer");}}
+  return { enabled,revocationEnabled,databaseUrl,token,hashSecret,ratePerMinute,driverAccountErasureEnabled,driverAccountErasureActorSecret,driverAccountErasureIssuer,driverAccountErasureReplayCheckpoint };
 }
 
 export function registerDriverMeasurementRoutes(app: Express, config: SituationDataConfig, settings=driverSettings(),
-  dependencies?: { store: DriverStore; matcher: DriverMatcher; now?:()=>number }): { close: ()=>Promise<void> } {
+  dependencies?: { store: DriverStore; matcher: DriverMatcher; now?:()=>number;accountErasureDerivedBarrier?:()=>Promise<void>;accountErasureProtectedProof?:()=>Promise<DriverErasureProtectedProof> }): { close: ()=>Promise<void> } {
   // Body parser errors otherwise escape to Express's default HTML/error logging.
   app.use(PREFIX,(error:unknown,req:Request,res:Response,_next:NextFunction)=>{
     res.set("Cache-Control","no-store");
     const tooLarge=!!error && typeof error==="object" && "type" in error && error.type==="entity.too.large";
     problem(req,res,tooLarge?413:400,tooLarge?"DRIVER_PAYLOAD_TOO_LARGE":"DRIVER_MEASUREMENT_INVALID","Invalid driver measurement payload.");
   });
-  const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!) : undefined);
+  const identityConfigured=!!settings.driverAccountErasureIssuer&&!!settings.driverAccountErasureActorSecret&&settings.driverAccountErasureActorSecret.length>=32;
+  const erasureReadConfigured=identityConfigured&&!!settings.databaseUrl&&!!settings.hashSecret&&settings.hashSecret.length>=32;
+  const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled || settings.driverAccountErasureEnabled || erasureReadConfigured) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!,{
+    enabled:settings.driverAccountErasureEnabled,expectedCheckpoint:settings.driverAccountErasureReplayCheckpoint,identityConfigured,protectedProof:dependencies?.accountErasureProtectedProof}) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
   let minute=0, requests=0, inflight=0;
   const contributors=new Map<string,{at:number; count:number}>();
   const hashContributor=(id:string)=>createHmac("sha256",settings.hashSecret!).update(`cop:${id}`).digest("hex");
-  function auth(req:Request,res:Response,revocationOnly=false): boolean {
+  function auth(req:Request,res:Response,revocationOnly=false,erasureMode?:"read_only"|"resume_existing"): boolean {
     res.set("Cache-Control","no-store");
     if (req.get("origin")) { problem(req,res,403,"BROWSER_ACCESS_FORBIDDEN","Backend service access only."); return false; }
     const actual=Buffer.from(req.get("authorization")??""), expected=Buffer.from(`Bearer ${settings.token??""}`);
     if (!settings.token || actual.length!==expected.length || !timingSafeEqual(actual,expected)) { problem(req,res,401,"UNAUTHORIZED","COP measurement service authentication required."); return false; }
-    const allowed=revocationOnly ? settings.enabled || settings.revocationEnabled : settings.enabled;
-    if (!allowed || !store || (!revocationOnly && !matcher)) { problem(req,res,503,"DRIVER_MEASUREMENTS_DISABLED","Driver measurement operation is disabled."); return false; }
+    const allowed=erasureMode?true:revocationOnly ? settings.enabled || settings.revocationEnabled : settings.enabled;
+    if (!allowed || (erasureMode!=="read_only"&&!store) || (!revocationOnly&&!erasureMode&&!matcher)) { problem(req,res,503,erasureMode?"DRIVER_ACCOUNT_ERASURE_DISABLED":"DRIVER_MEASUREMENTS_DISABLED","Driver measurement operation is disabled."); return false; }
     const m=Math.floor(now()/60000); if (m!==minute) {minute=m;requests=0;}
     if (++requests>settings.ratePerMinute) { res.set("Retry-After","60"); problem(req,res,429,"DRIVER_RATE_LIMITED","Retry later without changing the batch identity."); return false; }
     return true;
   }
   const failure=(req:Request,res:Response,error:unknown)=>{
-    const e=error instanceof DriverMeasurementError ? error : new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
+    const e=error instanceof DriverMeasurementError||error instanceof DriverAccountErasureError ? error : new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
     problem(req,res,e.status,e.code,"Driver measurement operation could not be completed.");
   };
   app.post(`${PREFIX}/batches`,async(req,res)=>{
@@ -276,6 +287,65 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
       const count=await store!.revoke("cop",hashContributor(opaque(raw.contributorIdDay)));
       res.json({contractVersion:DRIVER_CONTRACT,deletedBatchCount:count});
     } catch(error) { failure(req,res,error); }
+  });
+  const collection=`${PREFIX}/account-erasure-operations`;
+  const actor=(req:Request,id:string)=>verifyDriverErasureActor(req.get("x-cop-actor"),req.get("x-cop-actor-signature"),settings.driverAccountErasureActorSecret,settings.driverAccountErasureIssuer,id,now());
+  const erasureFailure=(req:Request,res:Response,error:unknown)=>failure(req,res,error instanceof DriverAccountErasureError?error:new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE"));
+  const noQuery=(req:Request)=>{if(Object.keys(req.query).length)throw new DriverAccountErasureError(400,"DRIVER_ACCOUNT_ERASURE_INVALID");};
+  const capabilityProjection=(result:DriverErasureCapability):DriverErasureCapability=>{
+    const checks={...result.checks,identityReviewed:result.checks.identityReviewed&&identityConfigured};
+    const enabled=!!settings.driverAccountErasureEnabled,blockers:DriverErasureBlocker[]=result.blockers.filter(x=>x!=="erasure_disabled"&&x!=="identity_review_required");
+    if(!enabled)blockers.unshift("erasure_disabled");if(!checks.identityReviewed)blockers.push("identity_review_required");
+    return {...result,enabled,checks,blockers,ready:enabled&&Object.values(checks).every(Boolean)&&result.reportProtection!=="unverified"};
+  };
+  // Service-only static probes precede the actor-bound UUID status route.
+  app.get(`${collection}/capability`,async(req,res)=>{
+    if(!auth(req,res,false,"read_only"))return;
+    try{noQuery(req);if(req.get("x-cop-actor")||req.get("x-cop-actor-signature")||req.get("content-length")&&req.get("content-length")!=="0"||Object.keys(req.body??{}).length)throw new DriverAccountErasureError(400,"DRIVER_ACCOUNT_ERASURE_INVALID");
+      const result:DriverErasureCapability=store?.accountErasureCapability?await store.accountErasureCapability():{
+        contractVersion:DRIVER_ACCOUNT_ERASURE_CONTRACT,owner:"sim_measurements",scope:"online_driver_scope",enabled:false,ready:false,checkedAt:new Date(now()).toISOString(),mutates:false,providerCalls:false,wholeAccountComplete:false,
+        reportProtection:"unverified",checks:{schemaReady:false,permissionsReady:false,identityReviewed:false,restoreCheckpointCurrent:false,retentionReviewed:false,publicationFenceVerified:false},
+        blockers:["erasure_disabled","schema_not_ready","permissions_not_ready","identity_review_required","restore_checkpoint_not_current","retention_review_required","publication_proof_required"]};
+      res.json(capabilityProjection(result));}catch(error){erasureFailure(req,res,error);}
+  });
+  app.post(`${collection}/preflight`,async(req,res)=>{
+    if(!auth(req,res,false,"read_only"))return;
+    try{noQuery(req);const request=parseDriverErasureRequest(req.body),signed=actor(req,request.operationId);
+      if(!store?.accountErasurePreflight)throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE");
+      const result=await store.accountErasurePreflight(prepareDriverErasureInput(request,signed,settings.hashSecret!));
+      const projected=capabilityProjection({...result,checks:result.checks});
+      res.json({...result,...projected,checks:{...projected.checks,identityBindingReviewed:result.checks.identityBindingReviewed,manifestShapeAndCoverageValid:result.checks.manifestShapeAndCoverageValid}});
+    }catch(error){erasureFailure(req,res,error);}
+  });
+  app.post(collection,async(req,res)=>{
+    if(!auth(req,res,false,"resume_existing"))return;
+    try{noQuery(req);const request=parseDriverErasureRequest(req.body),signed=actor(req,request.operationId);
+      if(!store?.accountErasure||!store.acknowledgeAccountErasure)throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE");
+      const input=prepareDriverErasureInput(request,signed,settings.hashSecret!);
+      // Disabled capability permits ONLY an actor-owned, already durable operation.
+      // This explicit read-back occurs before any erasure/fence mutation. The store
+      // independently rejects new operations and altered immutable request digests.
+      if(!settings.driverAccountErasureEnabled){
+        const accepted=store.accountErasureStatus?await store.accountErasureStatus(input.operationId,input.actorHash):undefined;
+        if(!accepted)throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_DISABLED");
+      }
+      let result=await store.accountErasure(input);
+      if(result.publicationFenceVerified){
+        if(result.reportProtection==="no_report")result=await store.acknowledgeAccountErasure(input);
+        else if(dependencies?.accountErasureDerivedBarrier){try{await dependencies.accountErasureDerivedBarrier();result=await store.acknowledgeAccountErasure(input);}catch{
+          res.status(202).json({...result,status:"pending",derivedReportAcknowledged:false,pendingReason:"derived_report_pending"});return;}}
+      }
+      res.status(result.status==="completed"?200:202).json(result);
+    }catch(error){erasureFailure(req,res,error);}
+  });
+  app.get(`${collection}/:operationId`,async(req,res)=>{
+    if(!auth(req,res,false,"read_only"))return;
+    try{noQuery(req);if(Object.keys(req.body??{}).length||req.get("content-length")&&req.get("content-length")!=="0")throw new DriverAccountErasureError(400,"DRIVER_ACCOUNT_ERASURE_INVALID");
+      const id=driverErasureOperationId(req.params.operationId),signed=actor(req,id);
+      if(!store?.accountErasureStatus)throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE");
+      const result=await store.accountErasureStatus(id,driverErasureHash(settings.hashSecret!,"cop:account-erasure-actor",JSON.stringify([signed.iss,signed.sub])));
+      if(!result)throw new DriverAccountErasureError(404,"DRIVER_ACCOUNT_ERASURE_NOT_FOUND");res.status(result.status==="completed"?200:202).json(result);
+    }catch(error){erasureFailure(req,res,error);}
   });
   return {close:()=>store?.close()??Promise.resolve()};
 }
