@@ -144,3 +144,13 @@ Deterministický timeout není terminal outcome nebo drain. Nová verze
 nativního wrapperu, owner-wide generace, bootstrap identity a skutečné
 commit/fence pořadí vyžadují samostatný přijatý kontrakt. Izolovaná Linux
 fixture, samotná metadata DB a aplikovaný JSON tvar tuto hranici nemění.
+
+Samostatný `cop-dormant-boundary-fixture-v5` má vlastní čistý Node codec a
+paměťového klienta; v1 ani v4 a jejich historické důkazy se nepřepisují.
+Offline porovnání s připnutými čistými Python funkcemi ověřuje bytes,
+DTO a korelaci, nikoli skutečné registry/evidence nebo externí efekty.
+Návrh budoucího in-process Node-API transportu je dokumentace, bez nové
+závislosti, binárního sestavení nebo produkčního zapojení. Přijatý permit
+je hranice autorizace původního efektu; timeout ani změna procesu z něj
+neodvozují známý abort. Skutečný transport, bootstrap, nezávislý anchor,
+restore a následná společná aplikační akceptace zůstávají oddělené gates.

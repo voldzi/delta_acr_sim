@@ -163,6 +163,38 @@ v docs-only komitu ce052cf runtime 898 nemění. Její sjednocených 2 429
 PASS / 8 SKIP vzniklo z původního neúspěšného úplného běhu a cíleného
 PostGIS recovery; není to jedna bezchybná úplná sada ani produkční gate.
 
+### Samostatné V5 porovnání Node–Python
+
+V5 má oddělené schéma, codec a fixture klienta; neprovádět migraci v1/v4
+ani přepis jejich archivních počtů. Před importem ověřit přesné externí
+source piny, Node 24, Ajv 8.20.0 a reviewed Python bridge. Spuštění je
+výslovně opt-in:
+
+```sh
+node --import ./apps/ai-router-api/node_modules/tsx/dist/loader.mjs scripts/test-dormant-fixture-companion.mts --run --boundary-source /absolute/reviewed/dormant-boundary-v5
+```
+
+Runner nepřijímá executable, URL nebo credentials. Jeden pevně zvolený
+Homebrew Python s `-I -S -B` dostane hash-verified bridge bytes a syntetické
+STDIN zakončené EOF. Maximum vstupu/výstupu je 1 MiB, stderr 16 KiB;
+rodič má limit 5 sekund. Po přečtení osmi přesně připnutých souborů Python
+audit odmítne late open, socket, SQLite, další subprocess a datové změny.
+Volají se pouze decoder, canonical frame, frame/correlation digest,
+result a error encoder; registry, core, native dispatch nebo DB se nepoužijí.
+
+Výsledky ověřují čtyři emitované syntetické páry a vlastnosti přísného
+parseru, response vztahů a omezené paměťové výměny. Schema-only PASS
+neprokazuje duplicate-key/float token kontrolu ani cross-field vztahy.
+Parent timeout není watchdog nativního COMMIT. Node fetch counter není
+obecný OS síťový sandbox; reviewed codec moduly proto nesmějí dostat nové
+transportní či aplikační importy bez nové revize. Všechny actual flags,
+`acceptedWire` a `productionReady` zůstávají false.
+
+Návrh budoucího transportu je v [integraci 22](../integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md#návrh-nejmenšího-nativního-transportu-pro-node).
+Žádný addon, socket listener, nová závislost, produkční verifier, enrollment
+nebo wiring není tímto krokem vytvořen. Jeho skutečná akceptace patří do
+odděleného konkrétního infrastrukturního balíčku a společného testu COP–SIM.
+
 ## Před aktivací
 
 1. COP doloží přesnou stávající derivaci Router aliasu, issuer, všechny

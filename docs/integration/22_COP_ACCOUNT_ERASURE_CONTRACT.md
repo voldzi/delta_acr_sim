@@ -446,6 +446,93 @@ kapacitu i po timeoutu; pozdní odpověď nezaloží current CAS ani oprávněn�
 Test nesmí být zapojen do runtime, použit jako pozitivní proof nebo
 přejmenován na Linux akceptaci.
 
+### Oddělený offline kontrakt V5
+
+`cop-dormant-boundary-fixture-v5` je nový, výhradně testovací kontrakt
+`own-fixture-only`. Nenahrazuje zmrazený v1, nepřejmenovává výsledky v4
+a není přijatým produkčním wire protokolem. Python boundary má SHA-256
+`f0bffe6f0f6d3b26570050c2a0bcb59d27923e3a347f8967b9aba76240a859dd`;
+jeho `SOURCE-PINS.json` má
+`90814725db2f78232d401fbdf83f6f5d99a16a146b67e648adfb76d4d018523f`.
+
+Request obsahuje přesně `protocol`, `mode`, `requestId`, `bindingDigest`,
+`method`, `operation`, `args`. `operation` obsahuje pouze `operationId`,
+`bodyDigest`, `schemaDigest`, `operationCode`. Metody jsou `current`,
+`admit`, `begin_commit`, `unknown`, `settle`, `drain`. Pevný operation a
+binding určuje konfigurace testu, nikoli vlastník, socket, účet nebo
+oprávnění zaslané ve volném payloadu. Caller CAS má přesně osm polí;
+`scopeRef` musí odpovídat `operationId`. Registry digests lease a permitu
+jsou opaque: nejsou frame hash a klient z nich nemůže odvodit autoritu.
+
+Úspěšná odpověď se kontroluje proti původnímu requestu včetně method,
+bindingu, canonical frame a correlation digestu. Všech jedenáct přesných
+authority flags musí být `false`. `admit.ack` odpovídá historical markeru,
+`begin_commit.permit.leaseId` odpovídá požadované lease a `drain.scope`
+odpovídá actor/owner operation code; `pending` musí souhlasit se stavem.
+Marker historical, syntetické drained ani ACK neopravňují k novému
+admission, cleanupu nebo externímu efektu. Příslušnost lease, původ refs,
+skutečný grant a fence může ověřit jen registrující autorita, ne tento DTO.
+
+Rámec je 1–16 384 UTF-8 bajtů, bez BOM, duplicate keys, trailing JSON,
+float/exponent lexémů, nonfinite, unsafe integer a unpaired surrogate.
+Limity jsou hloubka 12 (root 0), 256 uzlů, pole 32, klíč 64 a string 256
+Unicode code points. Canonical bytes validovaných ASCII DTO používají
+řazené klíče a Python `ensure_ascii` escaping; nejde o obecné Unicode JCS.
+Chyba má pevný denied-or-unknown envelope. Null, chybně korelovaná nebo
+malformed odpověď, výpadek a deadline zůstávají unknown-not-settled.
+
+`scripts/lib/dormant-fixture-json.mts` je společná čistá JSON mechanika,
+nikoli validátor identity nebo protokolu. V5 validátor a klient jsou v
+`scripts/lib/dormant-v5-fixture-client.mts`. Klient přijímá jen explicitní
+testovací výměnu packetů, drží nejvýše čtyři rozpracované výměny až do
+skutečného ukončení jejich promises a nemá automatický retry či settlement.
+Žádný aplikační entrypoint jej neimportuje; negativní bridge vrací pouze
+`compatible:false` a `productionReady:false`.
+
+### Návrh nejmenšího nativního transportu pro Node
+
+Offline companion a skutečný transport jsou oddělené komponenty.
+Základní `node:net` poskytuje streamové IPC, nikoli packetový API, které
+by beze změny realizovalo zde požadovaný SEQPACKET kontrakt.
+[Dokumentace Node 24](https://nodejs.org/docs/latest-v24.x/api/net.html#class-netsocket).
+Linux `SOCK_SEQPACKET` zachovává hranice a pořadí zpráv. `SO_PASSCRED`
+poskytuje credentials odesílatele při příjmu zprávy; `SO_PEERCRED` popisuje
+credentials při vzniku spojení. Samotná kontrola spojení proto nenahradí
+kontrolu skutečného odesílatele po předání deskriptoru.
+[Linux unix(7)](https://man7.org/linux/man-pages/man7/unix.7.html).
+
+Pro budoucí implementaci navrhujeme malý in-process Node-API addon s
+Linux `socket/sendmsg/recvmsg`, pevně vybraným owner kanálem a přesnými
+packetovými limity. Odesílání z procesu Node zachová jeho skutečnou
+kernelovou identitu; samostatný helper by byl jiným odesílatelem a
+vyžadoval by vlastní přijatou proxy/operation registraci. Node-API nabízí
+stabilní C rozhraní pro addon, ale binární sestavení potřebuje samostatně
+připnutý toolchain a review.
+[Node-API pro Node 24](https://nodejs.org/docs/latest-v24.x/api/n-api.html#node-api).
+Jde o návrh, ne nainstalovanou závislost nebo přijatou provozní identitu.
+
+| Varianta | Posouzení v tomto návrhu |
+| --- | --- |
+| In-process Node-API a SEQPACKET | Nejmenší přímá varianta zachovávající proces odesílatele a packetový kontrakt; potřebuje vlastní zdrojové, binární a skutečné Linuxové testy. |
+| Oddělený pomocný proces | Může realizovat SEQPACKET, ale jeho PID/credentials nejsou původní Node actor. Přijetí helperu ani tvrzení rodiče nevytváří automaticky oprávnění aplikace. |
+| Čistý `node:net` STREAM | Není náhrada hotového SEQPACKET API. Nový framing a nativní evidence zpráv by vyžadovaly vlastní protokol a testy; pouhý JSON prefix či SO_PEERCRED nestačí. |
+
+Native komponenta nesmí přijímat owner, socket path, UID, image nebo
+oprávnění z klientského payloadu. Přijatý producer ověřuje každou zprávu
+proti pevné runtime/operation registraci; metadata procesu nejsou důkaz
+vlastnictví soukromých dat. Nečekané SCM_RIGHTS, truncation nebo neznámé
+ancillary data se odmítnou a každý skutečně přijatý FD se nezávisle zavře.
+Žádné předávání FD nebo svévolných systémových volání se nevystaví do JS.
+Pozdní odpověď a timeout zůstávají unknown, bez retry či inferred settlement.
+
+Před skutečným napojením musí projít vlastní neprivilegovaný Linuxový
+fixture se změnou odesílatele po předání FD, chybnými credentials,
+truncation/FD cleanup, pádem peeru a čekající operací po přijatém permitu.
+In-process transport sám nepotvrzuje bootstrap, owner refs, nezávislý
+anchor, výsledky externích efektů ani obnovu. Nový offline klient zůstane
+bez app importu, transportu a pozitivního verifieru; zmrazený v1 klient
+ani jeho 61 testů se nepřepíšou výsledky jiné verze.
+
 ## Pokyn pro COP
 
 Udržte account lock, send generation a durable erasure frontu nezávisle
