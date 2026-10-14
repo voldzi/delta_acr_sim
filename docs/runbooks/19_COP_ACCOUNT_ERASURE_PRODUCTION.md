@@ -158,6 +158,11 @@ počty se nesčítají s historickými native/SQL testy.
 Zmrazený vlastní rerun SIM a přesná dvojice s COP 898 jsou v
 [oddělené evidenci řadiče a peer fixtures](../archive/2026-10-14_COP_SIM_CONTROLLER_AND_PEER_FIXTURES.md).
 
+Doplňková [regresní evidence COP](../archive/2026-10-14_COP_REGRESSION_FOLLOWUP.md)
+v docs-only komitu ce052cf runtime 898 nemění. Její sjednocených 2 429
+PASS / 8 SKIP vzniklo z původního neúspěšného úplného běhu a cíleného
+PostGIS recovery; není to jedna bezchybná úplná sada ani produkční gate.
+
 ## Před aktivací
 
 1. COP doloží přesnou stávající derivaci Router aliasu, issuer, všechny

@@ -1,0 +1,138 @@
+{
+  "recordType": "sim_cop_regression_owner_evidence_followup_v1",
+  "date": "2026-10-14",
+  "copReceiptCommit": "ce052cf35b11071a49a62770ad03af2dde0cccee",
+  "copReceiptTree": "ab057fd8646ca24a403f8630e1d3424812b5c0b5",
+  "copReceiptPath": "docs/testing/account-erasure-final-regression-20261014.json",
+  "copReceiptSha256": "b080ce16a793f81980ffa410f22c6be78d23d19ab6e483c3616d30c6b0955030",
+  "runtimeRevision": "898cd5132f513259b226d5beff5c3876156b56e7",
+  "sourceDifferenceInAppsPackagesOpenapiDeploy": [],
+  "receiptOwner": "COP",
+  "copReceipt": {
+    "scope": "single full current COP suite plus only17 database cases recovered after real PostGIS environment correction",
+    "createdAt": "2026-10-14T10:03:39.879195+00:00",
+    "sourceHead": "4a1154146b1cd99daedb7e18956fd1c65fc2021b",
+    "sourceTree": "3c76652f424514e777c0988bc9f455e60ac80f05",
+    "runtimeImplementationRevision": "898cd5132f513259b226d5beff5c3876156b56e7",
+    "sourceUnchanged": true,
+    "installsPerformed": 0,
+    "productionMutations": 0,
+    "realAccountsDeleted": 0,
+    "initialFullRun": {
+      "files": 247,
+      "passed": 2412,
+      "failed": 4,
+      "skipped": 21,
+      "failedFiles": 2,
+      "exitCode": 1,
+      "cause": "native PG18.3 lacks real PostGIS, causing4startup failures and13beforeAll-blocked cases",
+      "rawReport": "/private/tmp/cop-final-candidate-full-suite-20261014.raw.json",
+      "rawReportSha256": "7a3ff010cc4070c34768a4be0e19f3ba865e3a7ef2fb4a6af0381d27ce7fa76a",
+      "evidence": "/private/tmp/cop-final-candidate-full-suite-20261014.evidence.json",
+      "evidenceSha256": "fa30fa1c6c3a7aa5bd14f1646050ef0c047d3bba86838a4f018025d053264656"
+    },
+    "boundedRecovery": {
+      "files": 2,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "environment": {
+        "version": "PostgreSQL 17.5 (Debian 17.5-1.pgdg110+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 10.2.1-6) 10.2.1 20210110, 64-bit",
+        "postgis": "3.5.2"
+      },
+      "imageId": "sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6",
+      "rawReport": "/private/tmp/cop-final-candidate-postgis-recovery-20261014.raw.json",
+      "rawReportSha256": "48ab01fb48ba2f3647aedbb4c86de02f06fae6f45ec3bd07726928a80b65cb9b",
+      "evidence": "/private/tmp/cop-final-candidate-postgis-recovery-20261014.evidence.json",
+      "evidenceSha256": "f32b57bb776a75f5d9119e03911672d3a00eb3a4ff1b0bbd3abdc31202da79bb"
+    },
+    "reconciledCases": {
+      "total": 2437,
+      "passed": 2429,
+      "failed": 0,
+      "skipped": 8,
+      "namesAndOccurrencesMatchedExactly": true,
+      "method": "preserve all parameterized case occurrences; replace only17blocked originalcases with17realPostGIS recoveryresults; no duplicate PASS summation"
+    },
+    "remainingSkipped": [
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/cop-account-profile-postgres.test.ts",
+        "test": "real PostgreSQL canonical avatar atomically creates/updates, rejects stale owner revisions and preserves preferences across restart",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/driver-measurement-postgres.test.ts",
+        "test": "driver measurement PostgreSQL consent store persists consent and deletion state across instances, serializes revoke, and detects secret rotation",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/mobility-mileage-postgres.test.ts",
+        "test": "real PostgreSQL completed rides v2 atomically appends both historical-revision trips once across connections/restart and covers them with a later reading",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/mobility-postgres.test.ts",
+        "test": "isolated actual PostgreSQL mobility rolls back, serializes writers across connections and preserves receipts after restart",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/mobility-postgres.test.ts",
+        "test": "isolated actual PostgreSQL mobility reacquires a terminated real connection repeatedly, invalidates shares and excludes contenders",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/mobility-record-details-postgres.test.ts",
+        "test": "real PostgreSQL shared receipt details persists complete details, receipts and omission protection across connections/restart",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/mobility-vehicle-audit-postgres.test.ts",
+        "test": "real PostgreSQL shared profile audit recovery serializes unique owner binding and retains corrections across fresh connections",
+        "occurrence": 0
+      },
+      {
+        "file": "/private/tmp/cop-runtime-source-recovery-20261013/apps/cop-api/src/safety-notification-store.postgres.test.ts",
+        "test": "PostgreSQL safety notification concurrency and restart persists consent, device eligibility, claims/cooldown and serializes concurrent workers",
+        "occurrence": 0
+      }
+    ],
+    "cleanup": {
+      "ownedPgClusterStopped": true,
+      "ownedPgDataRemoved": true,
+      "ownedPostgisContainerAbsent": true,
+      "temporarySyntheticSecretRemoved": true,
+      "otherDbOrContainerTouched": false
+    },
+    "limitations": [
+      "First complete run was not green; original raw failure report is preserved",
+      "Recovery uses actual PostgreSQL17/PostGIS3.5, not native PostgreSQL18.3+PostGIS",
+      "Eight old opt-in PostgreSQL cases remain unexecuted; no production or physical-device/restore acceptance claimed"
+    ],
+    "rootOriginalReportSha256": "a97f3e189be127514797382ada3fa28f08746fc4995413dd568875c2f214c5bf"
+  },
+  "simVerification": {
+    "receiptRead": true,
+    "receiptHashVerified": true,
+    "arithmeticVerified": true,
+    "rawAndEvidenceReportHashesVerifiedByReadOnlySimReview": true,
+    "caseNamesAndRepeatedOccurrencesReconciledByReadOnlySimReview": true,
+    "recoveryReplacedOriginalFailedCases": 4,
+    "recoveryReplacedOriginalSkippedCases": 13,
+    "alreadyPassedCasesAddedAgain": 0,
+    "remainingSkippedListMatchedExactly": true,
+    "actualCopSuiteExecutedBySim": false,
+    "productionRuntimeOrRestoreAccepted": false,
+    "originalSim61AndController8ReportsChanged": false
+  },
+  "scope": {
+    "documentationOnly": true,
+    "appsSourceChanged": false,
+    "positiveVerifierActivated": false,
+    "productionDeployment": false,
+    "productionDataChanged": false,
+    "realAccountDeleted": false,
+    "providerCalled": false,
+    "productionGo": false
+  }
+}

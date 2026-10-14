@@ -25,6 +25,8 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Integrace 22: mazání COP/Jízdy v SIM](integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)
 - [Runbook 19: omezené nasazení a rollback mazání COP/Jízdy](runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md)
 - [Archiv ověření: společná HTTP korekce COP–SIM 14. 10. 2026](archive/2026-10-14_COP_SIM_ERASURE_HTTP_CORRECTION.md)
+- [Archiv ověření: řadič COP–SIM a izolovaný peer klient](archive/2026-10-14_COP_SIM_CONTROLLER_AND_PEER_FIXTURES.md)
+- [Archiv ověření: navazující regrese COP 14. 10. 2026](archive/2026-10-14_COP_REGRESSION_FOLLOWUP.md)
 
 - [ADR 0036: fail-closed routing location errors](adr/0036_FAIL_CLOSED_ROUTING_LOCATION_ERRORS.md)
 
