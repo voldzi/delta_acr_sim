@@ -1,7 +1,9 @@
 # Mazání účtu COP v SIM
 
-Stav: návrh kontraktu a retenčních hranic pro review; nové operace nejsou
-produkční capability. Inventura vychází z revize SIM `ff5dc97`.
+Stav: pouze kontrakt a návrh; upřesnění identity ze 14. 10. 2026.
+Nové operace nejsou dostupnou capability; implementace, migrace, granty,
+aktivace ani mazání účtů nejsou v aktuálním rozsahu. Inventura běžných
+úložišť vychází z revize SIM `03b842e` a identity COP z `3be10da`.
 
 Machine-readable návrh je v
 [`openapi/proposals/account-erasure-v1.openapi.json`](../../openapi/proposals/account-erasure-v1.openapi.json).
@@ -20,7 +22,7 @@ jednoho dne měření nebo odstranění AI klíče neznamená dokončení celéh
 | `driver_measurement_receipts` | Denní HMAC, HMAC UUID a digest, receipt | SDA: expirace sedm dní od přijetí; běžící store čistí po minutě. |
 | `driver_measurement_intervals`, `driver_measurement_eta` | Odvozené hrany, okna a omezená ETA, vazba na receipt | SDA: FK cascade při odstranění receipt; žádné sloupce raw GPS. |
 | `driver_measurement_revocations` | Denní HMAC | SDA: sedmidenní ochrana proti pozdnímu commitu stejného pseudonymu. |
-| Scalar `latest.json` | Odvozené souhrny bez jednotlivých identit | SDA writer / SIM reader: po mazání invalidace nebo nový report; nutná ochrana souběžné publikace. |
+| Scalar `latest.json` | Budoucí odvozené souhrny bez jednotlivých identit | Není součástí zdrojového základu `03b842e`; případné samostatné nasazení reportu vyžaduje inventuru writerů a ochranu souběžné publikace. Absence writeru ve zdroji není důkazem absence externí kopie. |
 | `ai_router_user_key` | COP user hash, šifrovaný klíč, nonce, tag, fingerprint a časy | Router: DELETE odstraňuje pouze tento řádek; bez TTL. |
 | `ai_router_user_key_audit` | User hash, fingerprint, akce a čas | Router: bez TTL nebo cleanup; současný runtime má INSERT, ne DELETE. |
 | `ai_router_request` | Client namespace, user hash, request ID, model, tokeny a náklady | Router: bez TTL; časové filtry spotřeby fyzicky nemažou historii. |
@@ -37,16 +39,40 @@ pseudonymy a prahování souhrnů samy nejsou důkazem anonymizace.
 ## Identita a službová hranice
 
 Pouze COP API může odvodit účet ze své ověřené relace a vytvořit interní
-tvrzení. Navržený `x-cop-actor` je canonical base64url JSON s přesnými
-poli `sub`, `aud`, `iat`, `exp`, `operationId`; `aud` je
-`sim-account-erasure`, `sub` má 8–128 znaků `[A-Za-z0-9_-]`, platnost je
-nejvýše 60 sekund. `x-cop-actor-signature` je malými hex znaky HMAC-SHA256
-přesné encoded hodnoty. Příslušný dedikovaný COP bearer zůstává povinný.
-Podpis pro `sim-ai-router` se pro mazání odmítá.
+tvrzení. Navržený `x-cop-actor` je UTF-8 JSON bez mezer v přesném pořadí
+`iss`, `sub`, `aud`, `iat`, `exp`, `operationId`, `routerUserId`, zakódovaný
+canonical base64url bez paddingu. Neznámá, opakovaná nebo chybějící pole
+jsou neplatná. `iss` se přesně shoduje se samostatně schváleným issuerem;
+`sub` je neprázdný subject ověřené relace COP, nejvýše 512 znaků bez
+řídicích znaků. `aud` je `sim-account-erasure`. Celočíselné Unix časy
+musí splnit `iat <= now < exp` a `0 < exp - iat <= 60`; ID operace se
+musí shodovat s tělem nebo cestou. `x-cop-actor-signature` je malými hex
+znaky HMAC-SHA256 přesné encoded hodnoty. Příslušný dedikovaný COP bearer
+zůstává povinný. Podpis pro `sim-ai-router` se pro mazání odmítá.
+
+`routerUserId` se na serveru COP odvodí **stejnou existující funkcí** jako
+ordinary BYOK `actor.sub` a legacy COP chat `userId`:
+
+```text
+routerUserId = "cop_" + base64url(HMAC-SHA256(
+  existingCopUserIdSecret, "cop-router-chat-v1" + NUL + verifiedSessionSubject
+))
+targetUserHash = existingBudgetStore.hashUser("cop", routerUserId)
+```
+
+Vazba nové mazací operace na `iss` a `sub` je oddělená od cílového
+`targetUserHash`. Přímé hashování raw subjectu nebo nového erasure aliasu
+by hledalo jiný namespace a mohlo by falešně potvrdit nulový nález.
+Dosavadní derivace Router identity neobsahuje issuer; propojení proto
+vyžaduje doložení stávajícího issueru a všech použitých derivací/klíčových
+verzí. Neznámá historická identita znamená blokované preflight review,
+nikoli vytvoření nové identity nebo potvrzení smazání. SIM/IZS aliasy
+zůstávají oddělené. Běžný čtyřpolový BYOK actor se tímto návrhem nemění.
 
 Prohlížeč nesmí určovat cílovou identitu, plátce, pseudonymy, hlavičky
 služby nebo URL poskytovatele. Neznámé klíče, query a browser `Origin`
-se odmítnou. Podpis a tokeny se neukládají ani nelogují. Nový podpisový
+se odmítnou. Raw subject, alias, manifest, podpis a tokeny se neukládají
+do receipt ani nelogují; jsou pouze přechodným interním vstupem. Nový podpisový
 účel a jeho distribuce do SDA jsou samostatný deployment review.
 
 Server COP vytváří neprůhledné UUID `operationId` a zachovává je při
@@ -67,10 +93,16 @@ Router tělo obsahuje pouze `contractVersion=sim-account-erasure-v1`
 a `operationId`. SDA navíc dostane `contributors` s přesnými dvojicemi
 `contributorDay`, `contributorIdDay` a atestaci
 `cop-account-erasure-contributors-reviewed-v1`. Limit je 40 dvojic;
-překročení ani neznámá klíčová verze nesmějí znamenat tiché zkrácení.
+překročení nesmí znamenat tiché zkrácení. Tělo neobsahuje `keyVersion`,
+proto SIM nemůže rozpoznat chybějící historickou verzi klíče. COP musí
+úplnost verzí doložit před odesláním; neznámá verze blokuje preflight.
 
-COP sestaví celý možný retenční interval od `UTC-date(deleteAt − 8 dní)`
-po dnešek a datum přípustné tolerancí budoucího pozorování 30 sekund.
+COP sestaví celý možný retenční interval od `UTC-date(acceptedAt − 8 dní)`
+po UTC den prvního přijetí v SIM a datum přípustné tolerancí budoucího
+pozorování 30 sekund. `acceptedAt` uloží SIM při první operaci; COP navíc
+zahrne všechny doložené dny svého retained/outbox inventáře. Opožděné
+první doručení vyžaduje aktualizovat manifest před odesláním, ne opakovat
+starý rozsah jako domněle úplný.
 Zahrne všechny skutečně použité HMAC verze a retained/outbox dny. Při
 opakování přes půlnoc se úplnost hodnotí proti původnímu přijetí operace,
 nikoli novému času podpisu. SIM neumí samostatně prokázat příslušnost
@@ -81,6 +113,11 @@ POST nebo explicitní interní worker obnoví trvalý čekající stav; nemají
 neomezenou retry smyčku. 401/403, 400, 409, 429 a 503 jsou jednoznačné
 hranice, nikoli důvod obejít SIM, obnovit starý klíč nebo volat OpenAI přímo.
 
+Samostatná capability a actor-bound preflight rozhraní se musí před
+implementací sjednotit s COP v konkrétní revizi kontraktu. Capability
+nesmí vydávat stav uživatelského účtu; preflight nesmí mazat ani vytvářet
+fence. Žádná z těchto kontrol není nyní dostupným produkčním endpointem.
+
 ## Důkaz dokončení a závody
 
 HTTP 202 znamená například čekání na in-flight požadavek, nákladovou
@@ -88,6 +125,11 @@ politiku, replay záloh, report nebo kontrolu writerů. HTTP 200 potvrzuje
 jen pojmenovaný online rozsah po databázovém ověření a potvrzení odvozených
 kopií. Odpověď nikdy nevrací `wholeAccountComplete=true` ani dokončení
 u poskytovatele nebo ve fyzických zálohách.
+
+Návrh OpenAPI odděluje receipt schémata pro 200 a 202. Pending musí mít
+důvod a nesmí tvrdit online dokončení Routeru. GET pro cizí i neexistující
+operaci vrací totožné 404; konflikt neměnného těla vlastní operace patří
+do POST 409 a nesmí prozradit cizí stav.
 
 Commit dávky a revokace zamykají stejné pseudonymy. Pozdní commit po
 fence nesmí přidat řádek do agregace. Během AI mazání se zablokuje PUT,
@@ -99,6 +141,12 @@ Více writerů reportu vyžaduje sdílenou transakční/generační ochranu,
 nebo vynucený a doložený jediný writer. Bez tohoto důkazu je odpověď
 čekající, i když v databázi nezůstaly příspěvky. Starý report ze zálohy
 se před připojením readeru odstraní nebo zneplatní.
+
+Receipt rozlišuje `reportProtection=unverified|no_report|enforced_single_writer|shared_generation_fence`
+a `publicationFenceVerified`. `no_report` vyžaduje inventuru skutečně
+nasazených i externích kopií, nikoli jen absenci modulu ve zdroji.
+Dokončení vyžaduje skutečné potvrzení ochrany, replay a retenčního review;
+procesová epocha ani samotný příznak review nejsou důkazem vynucení.
 
 ## Retenční rozhodnutí k samostatnému schválení
 
@@ -115,6 +163,11 @@ měsíce po vypořádání všech rezervací relevantního období. Nevyřešen�
 jen podle času; správce musí schválit jejich konkrétní vypořádání a
 maximální horizont. Tento návrh není přijatou právní retenční politikou
 a netvrdí anonymitu při malém počtu uživatelů.
+
+Omezené runtime DML pro navázanou AI historii i nové operation/fence
+tabulky vyžadují výslovné samostatné schválení. Tento návrh neuděluje
+DELETE nad `ai_router_request`, `ai_router_billing_request` ani
+`ai_router_user_key_audit`; neobsahuje provozní SQL nebo migraci.
 
 Samostatné rozhodnutí vlastníka musí určit také horizont minimálního
 replay tombstone, erasure receipt, všech záloh/WAL a logů. Historické

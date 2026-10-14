@@ -1,8 +1,12 @@
 # ADR 0039 Mazání účtu COP v SIM
 
 Stav: návrh k bezpečnostnímu a retenčnímu posouzení. Není povolením produkčního mazání.
-Datum: 13. 10. 2026.
+Datum: 13. 10. 2026. Upřesnění rozsahu: 14. 10. 2026.
 Navazuje na ADR 0026, ADR 0030 a ADR 0038.
+
+Tento podklad zahrnuje pouze kontrakt a návrh. Sám nepovoluje runtime
+implementaci, migraci, nové granty, produkční aktivaci ani mazání syntetických
+nebo skutečných účtů. Retenční návrh zůstává k samostatnému schválení.
 
 ## Rozsah
 
@@ -28,7 +32,12 @@ ztratit údaje potřebné k odvození denních pseudonymů. Telefon ani prohlí�
 nevybírá cizí účet, plátce, pseudonymy, službový token ani podpis.
 
 Nové tvrzení služby má účel `aud=sim-account-erasure`, krátkou platnost
-a podpisem vázaný `operationId`. Běžný podpis pro AI chat není oprávněním
+a přesná pole `iss`, `sub`, `aud`, `iat`, `exp`, `operationId`, `routerUserId`.
+`iss` a `sub` vážou operaci na ověřenou relaci COP; `routerUserId` musí být
+přesně dosavadní neprůhledná identita pro BYOK a legacy COP chat, nikoli
+nový hash pro mazání. Backend používá zvlášť vazbu operace a zvlášť stávající
+klíč cílových dat. Neověřená historická derivace je blockerem, nikoli důkazem
+prázdného účtu. Běžný podpis pro AI chat není oprávněním
 mazat účet. Provozní schválení musí výslovně zahrnout nový účel podpisu,
 službové oprávnění a potřebné omezené DML granty; nový privilegovaný
 `SECURITY DEFINER` není součástí minimálního návrhu.
@@ -46,8 +55,9 @@ jeho závislostí a povinných retenčních výjimek.
 ## Měření a odvozené reporty
 
 Retence sedm dnů běží od přijetí dávky. Příjem navíc dovoluje pozorování
-staré 24 hodin. Manifest proto pokrývá den `UTC-date(deleteAt − 8 dní)`
-až dnešek, případně následující UTC den na hranici tolerance 30 sekund.
+staré 24 hodin. Manifest proto pokrývá den `UTC-date(acceptedAt − 8 dní)`
+až UTC den prvního přijetí operace v SIM, případně následující UTC den
+na hranici tolerance 30 sekund. COP zahrne také doložený outbox/retained inventář.
 Obsahuje všechny použité klíčové verze a doložené čekající dávky; nesmí
 být potichu zkrácen. SIM ověří tvar a rozsah, ale pravdivost příslušnosti
 pseudonymů k účtu a úplnost manifestu zaručuje COP.
