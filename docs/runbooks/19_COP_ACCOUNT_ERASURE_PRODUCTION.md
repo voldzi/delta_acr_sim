@@ -82,6 +82,7 @@ zdrojovou revizi a aktualizaci pinů; dirty nebo jiná revize skončí před
 importem COP a otevřením portu. Výsledek rozlišuje syntetickou HTTP
 akceptaci od produkční autorizace. Před produkčním rozhodnutím zaznamenat
 v archive přesnou dvojici zdrojových revizí, hashe a skutečný rozsah testu.
+Aktuální dvojice a důkazy jsou v [navazujícím zdrojovém ověření](../archive/2026-10-14_COP_SIM_ERASURE_HTTP_CORRECTION.md).
 
 ## Před aktivací
 
