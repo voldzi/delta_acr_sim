@@ -1,9 +1,9 @@
 {
-  "manifestVersion": 1,
+  "manifestVersion": 2,
   "artifactType": "documentation_source_inventory_not_installer_or_native_protocol",
   "status": "source_review_only_inactive_install_blocked",
-  "sourceRevision": "3691cea7cc5b1c01e5b06aea87581a02acd86d51",
-  "sourceTree": "c464b351f33d0d6334f2dd93601c562340e81b86",
+  "sourceRevision": "25de85abf2ab00ad125c9482f1ddb70bb81cfce2",
+  "sourceTree": "3342da69817b4f26d1dd5065aca7ba68c239e7a4",
   "preparedDate": "2026-10-14",
   "timezone": "Europe/Prague",
   "installAllowed": false,
@@ -11,7 +11,7 @@
   "productionAuthorization": false,
   "installation": {
     "destinationRoot": null,
-    "destinationRootProposal": "/srv/sim/account-safety-inactive/3691cea7/",
+    "destinationRootProposal": "/srv/sim/account-safety-inactive/25de85ab/",
     "owner": null,
     "group": null,
     "directoryMode": null,
@@ -70,7 +70,9 @@
           "DriverStore",
           "DriverMatcher",
           "DriverErasureStorageOptions.protectedProof",
-          "registerDriverMeasurementRoutes dependencies.accountErasureDerivedBarrier"
+          "registerDriverMeasurementRoutes dependencies.accountErasureDerivedBarrier",
+          "DriverRetentionControl.init/start/runOnce/close",
+          "DriverRetentionConsumer.execute: local typed seam only; no accepted native ABI"
         ],
         "actualNativePort": null,
         "actualRuntimeEnrollment": null
@@ -483,7 +485,7 @@
       },
       {
         "path": "scripts/driver-measurements-maintenance.mjs",
-        "change": "owner maintenance registration and immutable cutoff instead of adopting DB now as authority"
+        "change": "bind accepted owner maintenance/replay consumer to compiled lifecycle; direct SQL bypass removed, default unavailable"
       },
       {
         "path": "apps/ai-router-api/Dockerfile",
@@ -540,7 +542,17 @@
     "a2ApplyAuthorized": false,
     "actualIndependentAnchorAccepted": false,
     "actualRuntimeEnrollmentAccepted": false,
-    "actualRestoreAccepted": false
+    "actualRestoreAccepted": false,
+    "laterExactDcsKeyObservation": {
+      "observedAtUtc": "2026-10-14T12:24:58.110133+00:00",
+      "resultsSha256": "fa09f6580bcbe59536815d603ec54295413025de9aebaa9fa29b8618cdf8776c",
+      "scopedAcceptanceSha256": "e4fb8a303d48e91b857dd5d4a7f5f0f51d685025cb6185094dbc92d34d829d39",
+      "receiptContentAndHashesVerifiedBySim": true,
+      "secondHostReadBySim": false,
+      "keyRevisionDistinguishedFromGlobalEtcdRevision": true,
+      "futureCasWriteApproved": false,
+      "actualRuntimeOwnerOrEffectiveAuthenticationAccepted": false
+    }
   },
   "requiredBeforeInactiveInstall": [
     "direct human approval of exact inert bundle manifest and target custody",
@@ -555,7 +567,9 @@
     "actual native peer/FD/lifecycle and original effect settlement acceptance",
     "owner-wide reader/writer/report/cache/replay inventory; absence of source is not no_report",
     "startup/maintenance registration with immutable cutoff, shared SIM/IZS preservation",
-    "joint COP-SIM acceptance and direct exact activation approval"
+    "joint COP-SIM acceptance and direct exact activation approval",
+    "actual owner-maintenance/replay consumer in application and standalone retention; immutable cutoff and same transaction",
+    "immutable pending deployment target/body binding and actual native retarget rejection"
   ],
   "rollback": {
     "inactivePhase": "remove only separately approved non-running package; no DB/fence/keys/data changes",
@@ -574,14 +588,14 @@
     "apps/ai-router-api/src/config.ts": "808ba89765074a09292fa20657a72ffcbc77b1064b8f2cec9c57068ba8a687c1",
     "apps/ai-router-api/src/cop-actor.ts": "278091e1003130032915a20591d3fd0dd8fc10477cfb46364fb3a20dd9f443cd",
     "apps/ai-router-api/src/typed-context.ts": "cf0e92241ec5bef3d706bde573d25441e45cc20b5ceada2d3c77043012ca7ec0",
-    "apps/situation-data-api/src/app.ts": "781607b6818e1471636e61a98953d9992057b3dcf8b0a2f0780fb5a5944dafb7",
-    "apps/situation-data-api/src/driver-measurements.ts": "bf128290ecaca8250e763f2347b0733a66296c39ff8dd0411c82c5b1879d7652",
-    "apps/situation-data-api/src/driver-measurement-store.ts": "7561038dc459928a09b60d5bac6bb9a944813e6f1481d73f61d4cb2e39047609",
+    "apps/situation-data-api/src/app.ts": "82f8b8ae4b6a5510b468d682ee88a79075c23ae19b1ddabfe9c9e709f4631adb",
+    "apps/situation-data-api/src/driver-measurements.ts": "9083e6902f70f6f02d43c691bea5961126aa29b0649ddc0942e4cbd198b135b0",
+    "apps/situation-data-api/src/driver-measurement-store.ts": "cc7d103d28c9ff8b0b02b8e8d40db0fc0303a0f9cf5c219a4dfe796ea019c912",
     "apps/situation-data-api/src/driver-account-erasure.ts": "25e6c9731452150c4424b3bc60a0679d03b99044e824813d19a92674d342ca23",
     "apps/situation-data-api/src/driver-account-erasure-store.ts": "b387529d2fac4f28a01ff126ace9318703272dfd890f24affd853395d5657399",
     "apps/situation-data-api/Dockerfile": "71898506232bf8047f9f7b342efce0d7f873e6fe148b5a4695a17e0e4ae78014",
     "apps/ai-router-api/Dockerfile": "210da1ac86a5eb1de21ded4a33de7109c19bcccfb8cfd6ea282adb83553ae65f",
-    "scripts/driver-measurements-maintenance.mjs": "9a349d6c1b812747b2aad0f7aa5c274feb2d4f7544a735c489f605209608c537",
+    "scripts/driver-measurements-maintenance.mjs": "a0a3d5ee3a958e2858ea86449bc9d5d59cfd3de5100b2b5858c42def9e5ce42a",
     "scripts/configure-driver-measurements-production.mjs": "4a31e8f6c1a7b2a1a71396e942363f4038d72fb6659709a74cc51e807d5c295e",
     "deploy/ai-router/003_account_erasure.sql": "921e19e1bae334bb3ae84dadfc9ab4b9cd333b4f515e77a3a286b68649426a56",
     "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
@@ -592,6 +606,48 @@
     "openapi/fragments/account-erasure-v1.openapi.json": "367c9f07d50689e77333a1e0626bb0c6c96f51f540f21fbe321b4ff3c9da9252",
     "openapi/fragments/driver-measurements-v1.openapi.json": "829efd9355f14a0e97dedd08d87de5fba0b130b13b8895735a4b602ceec82553",
     "openapi/fragments/ai-router-v1.openapi.json": "9b781be36f2fd1847aa1665d869337c7d891dbdb9e5957062cb4025237386fa4",
-    "openapi/fragments/ai-router-separate-billing.openapi.json": "349b13dec673496cba593a3f4cbdc8400fb76bd9640e42d521d1572688691f62"
+    "openapi/fragments/ai-router-separate-billing.openapi.json": "349b13dec673496cba593a3f4cbdc8400fb76bd9640e42d521d1572688691f62",
+    "apps/situation-data-api/src/driver-retention-lifecycle.ts": "bc3f261916458a716121ed7b37d84800ba1fc904869834831325fe48aa161c93",
+    "apps/situation-data-api/src/driver-maintenance-cli.ts": "0712a41c77fdeca2d054f519d25c9eaa1e29d2a2276b85867fda44f00ef40f6b",
+    "apps/situation-data-api/test/driver-retention-lifecycle.test.ts": "9c9fed6767391b969da02b8f754386757993286b0f0f2a2f811255bca8e00598"
+  },
+  "supersedesInventory": {
+    "path": "docs/archive/2026-10-14_SIM_ACCOUNT_SAFETY_INACTIVE_INVENTORY_03f5408.json",
+    "sha256": "4a960447f6b15be5b781218b7b7f52ac6c68fab1d67458b097218751ccd20ebe",
+    "publishedRevision": "03f5408d979c3b6af9cf463afa775b3d03723cc4",
+    "sourceRevision": "3691cea7cc5b1c01e5b06aea87581a02acd86d51",
+    "historicalArtifactUnchanged": true
+  },
+  "localRetentionLifecycle": {
+    "implemented": true,
+    "constructorDispatchesTimerOrSql": false,
+    "actualInitializerRequiredBeforeStart": true,
+    "consumerOwner": "sim_driver_measurements",
+    "operationContextKeys": [
+      "owner",
+      "cutoff"
+    ],
+    "cutoffForm": "canonical UTC ISO with .sssZ",
+    "contextShapeIsAuthority": false,
+    "acceptedNativeOperationBody": null,
+    "actualProductionConsumerAccepted": false,
+    "defaultProductionConsumer": "UNBOUND",
+    "standaloneDirectSqlBypass": false,
+    "standaloneCreatesPoolOrReadsSecretsBeforeUnbound": false,
+    "twoExpirationDeletesInOneTransaction": true,
+    "permanentFenceAndErasureLedgerUntouched": true,
+    "nonOverlappingActualCleanup": true,
+    "closeWaitsActualCleanupCallbackNotOnlyConsumerPromise": true,
+    "closeIsNativeDrainOrAbortProof": false,
+    "otherSimIzsApiShutdownOnUnbound": false,
+    "deployableWithUnboundConsumer": false
+  },
+  "deploymentGuardReview": {
+    "pendingTargetQualificationSha256": "c63fd41cd3a691253fcb247ea967bbf6d263ad19bbf9165a86f2413a94d26781",
+    "frozenModelAndOriginal16TestsUnchanged": true,
+    "actualBypassEstablished": false,
+    "immutablePendingTargetBodyProven": false,
+    "actualPermissionAlwaysDenies": true,
+    "requiredFutureNativePatch": "bind exact immutable operation/release/image/source/profile/store/body through pre-exposure/recover/rollback; reject retargeting"
   }
 }

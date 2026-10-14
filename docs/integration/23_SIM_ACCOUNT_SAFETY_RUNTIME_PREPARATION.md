@@ -1,11 +1,15 @@
 # Příprava napojení ochrany účtu do SIM
 
 Přípravný krok pro COP Router a dobrovolná měření vychází ze zdroje
-`3691cea7cc5b1c01e5b06aea87581a02acd86d51`. Přesné HTTP kontrakty a
+`25de85abf2ab00ad125c9482f1ddb70bb81cfce2`. Přesné HTTP kontrakty a
 transakční ochrany existují; chybí skutečné nativní napojení jejich
 operací na přijatou autoritu. Tento plán vymezuje soubory a hranice další
 zdrojové změny. [Neaktivní instalační manifest](23_SIM_ACCOUNT_SAFETY_INACTIVE_INSTALL.json)
-je inventář k revizi, nikoli installer nebo nové wire schéma.
+je inventář k revizi, nikoli installer nebo nové wire schéma. Předchozí
+inventář z revize `03f5408` zůstává beze změny v
+[archivu](../archive/2026-10-14_SIM_ACCOUNT_SAFETY_INACTIVE_INVENTORY_03f5408.json).
+Ověření dokončeného lokálního úklidu je v
+[testovacím záznamu](../archive/2026-10-14_DRIVER_RETENTION_LIFECYCLE.md).
 
 ## Stávající spojení COP a SIM
 
@@ -46,7 +50,27 @@ V5 klient pod `scripts/lib` se do aplikace neimportuje. Budoucí in-process
 native binding má vlastní source/toolchain/binární gate podle
 [návrhu v integraci 22](22_COP_ACCOUNT_ERASURE_CONTRACT.md#návrh-nejmenšího-nativního-transportu-pro-node).
 
-### Přesná místa budoucího zapojení
+### Dokončený lokální životní cyklus retence
+
+Driver store už v konstruktoru nezakládá retenční časovač. Nový
+`driver-retention-lifecycle.ts` odděluje skutečný init, výslovné spuštění,
+jednotlivý úklid a close. API composition odmítne start bez maintenance
+consumeru ještě před retenčním init SQL; samostatný compiled
+`driver-maintenance-cli.ts` má bez této vazby stejný výsledek, bez čtení
+secrets či vytvoření DB poolu. Běžné ostatní API kvůli tomu nezanikne.
+
+Typovaný callback s přesným ownerem a neměnným UTC cutoff není native
+protokol nebo autorita. Skutečný consumer musí zvlášť prokázat přijatou
+owner operaci, replay a oprávnění k práci. Bez něj produkční factory vrací
+`DRIVER_RETENTION_UNBOUND`. Nová verze proto není způsobilá nahradit
+dosavadní fyzický úklid, dokud tato závislost a retence neprojdou akceptací.
+
+Oba dočasné DELETE používají jeden cutoff v jedné transakci. Permanentní
+fence a erasure ledger zůstávají nedotčené. Lifecycle sleduje skutečnou
+promise úklidu odděleně od promise consumeru, nepřekrývá práci a close na
+ni vyčká. Z toho neplyne nativní drain, abort ani potvrzení fyzické obnovy.
+
+### Přesná místa budoucího nativního zapojení
 
 | Soubor a současný port | Konkrétní potřebná změna po přijetí autority |
 | --- | --- |
@@ -57,26 +81,25 @@ native binding má vlastní source/toolchain/binární gate podle
 | Router `src/budget.ts:117`, `src/separate-billing.ts:53,110` | Native commit gate musí zachovat existing per-target fence ve stejné SQL transakci; key audit, reservation a finanční locky se nerozdělí. |
 | Router `src/budget.ts:178`, `src/separate-billing.ts:152` | Settlement vychází z původní trvalé rezervace a její lane, ne z nového caller principalu. `uncertain` zůstává pending i po restartu. |
 | Router `src/account-erasure.ts:161,188,245` | Fence/request, cleanup, zero readback a rollup expiry potřebují vlastní přijaté scopes; `processPending` není úplný replay. Worker 15 s ani startup policy DML nevytvářejí grant. |
-| SDA `src/app.ts:112` | Předat závislosti do `registerDriverMeasurementRoutes`; dnes jsou protected proof a derived barrier nezapojené. Zachovat measurement tracing exception na ř.101. |
-| SDA `src/driver-measurements.ts:208,240` | Actor-bound batch lookup, matcher, commit a response dostanou operation context bez raw GPS v native envelope. Neměnit `sim-driver-measurements-v1` ani `shadow_only`. |
-| SDA `src/driver-measurement-store.ts:25,44,124` | Lookup, commit a revoke zachovají batch/contributor zámky, permanent fence a příslušnou native hranici až k původnímu commit výsledku. |
+| SDA `src/app.ts:113,116` | Předat skutečné přijaté závislosti do `registerDriverMeasurementRoutes`; protected proof, derived barrier a maintenance consumer zůstávají nezapojené. Zachovat measurement tracing exception. |
+| SDA `src/driver-measurements.ts:213` | Actor-bound batch lookup, matcher, commit a response dostanou operation context bez raw GPS v native envelope. Neměnit `sim-driver-measurements-v1` ani `shadow_only`. |
+| SDA `src/driver-measurement-store.ts:31,67,147` | Lookup, commit a revoke zachovají batch/contributor zámky, permanent fence a příslušnou native hranici až k původnímu commit výsledku. |
 | SDA `src/driver-account-erasure-store.ts:6,13,89,113` | Nahradit nedostatečný zero-argument proof konkrétním operation/owner bound portem; erase a ACK mají zvlášť doložený drain, zero a publication/restore výsledek. |
-| SDA `src/driver-measurement-store.ts:85,104`, route `aggregates/quality` | Owner-wide snapshot a response generation, nikoli vymyšlený osobní principal. Současná quality jsou tři on-demand dotazy, ne jeden společný transakční snapshot. |
-| SDA `src/driver-measurement-store.ts:17,40`, `scripts/driver-measurements-maintenance.mjs` | Startup a oba retenční writers dostanou maintenance scope a přijatý immutable cutoff; dnešní DB `now()` se automaticky nevydává za operation body. Erasure ledger/fences se nečistí se sedmidenními měřeními. |
+| SDA `src/driver-measurement-store.ts:108,127`, route `aggregates/quality` | Owner-wide snapshot a response generation, nikoli vymyšlený osobní principal. Současná quality jsou tři on-demand dotazy, ne jeden společný transakční snapshot. |
+| SDA `src/driver-retention-lifecycle.ts`, store `src/driver-measurement-store.ts:45,56`, `src/driver-maintenance-cli.ts` | Připojit skutečný přijatý maintenance scope a immutable cutoff k dokončenému lokálnímu životnímu cyklu. DB metadata ani UTC tvar nejsou native operation body. Erasure ledger/fences se nečistí se sedmidenními měřeními. |
 | `apps/*/Dockerfile`, `docker-compose.yml` a opt-in overlay | Teprve samostatný schválený balíček může přidat připnutý native consumer/ABI a pevnou runtime vazbu. Žádný nový host port, Root klíč, Docker socket nebo široká DB role. |
 
 V tabulce Router `src` znamená `apps/ai-router-api/src`, SDA `src`
-znamená `apps/situation-data-api/src`. Všechny řádky jsou budoucí změny,
+znamená `apps/situation-data-api/src`. Všechny řádky vymezují budoucí nativní změny,
 nikoli již připojená autorita. Přesné současné piny souborů jsou v manifestu.
 
-SDA composition musí skutečně vytvořit scoped store a matcher:
-dependencies dnes vyžadují `store` i `matcher`. Pokud předá hotový store,
+SDA composition musí skutečně vytvořit scoped store a matcher. Pokud předá hotový store,
 route factory jej nepřestaví pomocí dodaného proof callbacku. Native port
 proto musí dostat přímo konstrukce `PostgresDriverMeasurementStore` /
-`PostgresDriverAccountErasureStore`, ne pouze závislost routes. Současný
-store navíc spouští cleanup timer už v konstruktoru; jeho budoucí start
-musí čekat na přijatý maintenance scope a aktuální replay. Nestačí změnit
-jeden call v `app.ts` nebo přidat boolean callback do `index.ts`.
+`PostgresDriverAccountErasureStore`, ne pouze závislost routes. Výslovný
+start retence už čeká na init a lokální consumer seam; přijetí skutečného
+maintenance scope a aktuální replay je další nativní gate. Nestačí přidat
+boolean callback do `index.ts`.
 
 ## Operace a jejich těla a schémata
 
@@ -146,6 +169,21 @@ nejde o druhý host běh, loaded-byte attestation nebo uzavření celé A1/A2.
 Přesný DCS config CAS, effective auth, nezávislý anchor, skutečné owner
 bootstrap/restore a app společná akceptace zůstávají konkrétními gates.
 Historické V5/SQL/HTTP testy ani empty metadata DB je nenahrazují.
+
+Navazující jediné čtení konkrétního DCS klíče v 14:24 Praha rozlišilo
+revizi klíče od globální revize etcd. SIM ověřil oba receipts
+fa09f658… / e4fb8a30…; neprovedl druhý host běh. Snapshot není budoucí
+CAS souhlas, přijetí skutečného ownera, effective auth ani restore.
+Před případnou pozdější schválenou změnou se přesná revize musí znovu
+číst a porovnat.
+
+U čistého infrastrukturního modelu deployment/rollback byla navíc
+vymezena nepokrytá vazba: samotné UUID čekající operace neprokazuje
+neměnný cílový release, obraz, zdroj a registrované tělo. Qualification
+c63fd41c… ponechává původní model a jeho 16 testů zmrazené. Budoucí
+nativní patch musí tuto vazbu držet i přes recover/rollback a otestovat
+odmítnutí přesměrování čekající operace na jiný schválený obraz. Nejde o
+prokázaný produkční obchvat; actual permission modelu stále odmítá.
 
 Následující balíček tedy řeší accepted operation registrations a boundary
 porty v uvedených souborech; nikoli další obecný fixture protokol. Bez

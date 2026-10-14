@@ -29,6 +29,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: řadič COP–SIM a izolovaný peer klient](archive/2026-10-14_COP_SIM_CONTROLLER_AND_PEER_FIXTURES.md)
 - [Archiv ověření: navazující regrese COP 14. 10. 2026](archive/2026-10-14_COP_REGRESSION_FOLLOWUP.md)
 - [Archiv ověření: offline V5 shoda Node–Python](archive/2026-10-14_DORMANT_V5_CODEC_CONFORMANCE.md)
+- [Archiv ověření: chráněný životní cyklus úklidu měření](archive/2026-10-14_DRIVER_RETENTION_LIFECYCLE.md)
 
 - [ADR 0036: fail-closed routing location errors](adr/0036_FAIL_CLOSED_ROUTING_LOCATION_ERRORS.md)
 

@@ -9,7 +9,10 @@
 - `DRIVER_MEASUREMENTS_ENABLED=false` výchozí; pouze `true` aktivuje příjem.
 - `DRIVER_MEASUREMENTS_REVOCATION_ENABLED=false`: oddělený režim pouze mazání.
   Při rollbacku příjmu nastavte `true` a zachovejte DB/token/HMAC konfiguraci;
-  příjem a čtení souhrnů zůstanou vypnuté. Režim aktivuje i retenční úklid DB.
+  příjem a čtení souhrnů zůstanou vypnuté. Příznak není oprávněním retenčního
+  úklidu. V erasure zdrojové větvi se úklid spustí pouze po skutečném init
+  a přijatém owner-bound maintenance consumeru; žádná nová env proměnná
+  nenahrazuje tuto závislost. Viz [runbook 19](19_COP_ACCOUNT_ERASURE_PRODUCTION.md).
 - `DRIVER_MEASUREMENTS_DATABASE_URL`: vyhrazená PostgreSQL DB přes HAProxy;
   runtime bez DDL, migrační SQL `deploy/driver-measurements/schema.sql`.
 - `DRIVER_MEASUREMENTS_COP_TOKEN`: oddělený vysokonáhodný službový token, ≥32 znaků.

@@ -81,6 +81,20 @@ Nový trvalý erasure ledger nemá vytvářet spojovací historii
 digest, stav a omezené výsledky; manifest může znovu dodat trvalá fronta COP.
 Případné ukládání širší vazby vyžaduje zvláštní změnu datového modelu a review.
 
+Retenční úklid má výslovný životní cyklus `init → start/runOnce → close`.
+Konstruktor nezakládá časovač ani nespouští SQL. Dvě expirace běží v jedné
+transakci s neměnným cutoff z owner-bound maintenance consumeru; nemažou
+permanentní fence nebo erasure ledger. Úklidy se nepřekrývají a `close`
+čeká na skutečnou práci callbacku i tehdy, když consumer předčasně ukončí
+svou vlastní promise. Toto čekání není důkaz nativního drain nebo abortu.
+
+Lokální TypeScript port a ověření tvaru cutoff nejsou infrastrukturní
+oprávnění. Produkční consumer zatím není připojený, takže úklid zůstává
+unavailable; stejně se chová samostatný maintenance entrypoint bez přímého
+SQL obchvatu. Příjem, revokace a ostatní SIM/IZS služby se kvůli chybějící
+maintenance závislosti plošně nevypínají. Tato zdrojová změna nesmí být
+nasazena bez přijaté skutečné autority a společné akceptace retence.
+
 ## AI náklady a rozpracované požadavky
 
 Zákaz po zahájení mazání se musí vztahovat na BYOK správu, rezervaci,

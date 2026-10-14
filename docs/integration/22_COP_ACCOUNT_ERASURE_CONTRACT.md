@@ -354,6 +354,16 @@ expirace nákladových součtů mají oddělenou maintenance capability. Native
 gate musí platit i po restartu a při obnovené prázdné/staré DB, ještě před
 vznikem workeru a prvním chráněným čtením; `processPending()` není replay.
 
+Zdrojový Driver retention lifecycle nyní odkládá SQL a časovač až za výslovný
+init a owner-bound maintenance consumer. Standalone maintenance používá
+stejnou bránu a nepřijímá alternativní DB URL, producer či readiness flag.
+Výchozí produkční consumer je nedostupný. Lokální context
+`{owner: "sim_driver_measurements", cutoff: <UTC ISO>}` je pouze typovaný
+callback, nikoli přijaté nativní operation body nebo důkaz replay.
+Dvě expirace se provedou pod jedním cutoff v jedné transakci; permanentní
+revokace a erasure ledger zůstávají mimo sedmidenní úklid. `close` vyčká
+skutečný SQL callback, ale neurčuje nativní terminal outcome.
+
 ### Přenosová data a chybějící bootstrap
 
 Nynější návrh `cop-private-admission-proposal-v1` je výslovně

@@ -48,11 +48,26 @@ Geografická jistota paralelních vozovek a reálný iPhone jsou další společ
 
 ## Sedm dní, úklid a zálohy
 
-Receipt a revocation tombstone expirují za 7 dní. Expirace je filtrována při
-čtení; cleanup každých 60 s maže receipt a FK cascade intervaly/ETA.
-Běží i v revocation-only. Doplňkový user cron po 15 minutách spouští
-`scripts/cleanup-driver-measurements-production.sh` v krátkodobém SDA obrazu
-s runtime účtem i při zastaveném SDA. Nezasahuje do jiných DB.
+Receipt a dočasný revocation tombstone expirují za 7 dní. Expirace je
+filtrována při čtení. Permanentní erasure fence a erasure ledger do této
+retence nepatří. Původní zdroj používá minutový úklid a doplňkový cron po
+15 minutách; erasure zdrojová větev jej nahrazuje chráněným životním cyklem.
+Nasazený obraz ani jeho cron se touto zdrojovou změnou nemění.
+
+V erasure kandidátu konstruktor neprovádí SQL a nezakládá časovač. Composition
+spustí retenční úklid až po skutečném init a přijetí owner-maintenance
+consumeru; jeho výchozí produkční vazba zatím chybí. Samostatný entrypoint
+`scripts/driver-measurements-maintenance.mjs` používá stejnou bránu a při
+nepřipojené autoritě skončí s chybou ještě před vytvořením DB poolu. Žádné
+parametry CLI, env flag nebo přímé SQL nejsou náhradou. Tento kandidát se
+do té doby nesmí nasadit, ani pouze s vypnutým příjmem.
+
+Po přijetí skutečného consumeru se oba retenční DELETE provedou v jedné
+transakci pod stejným neměnným cutoff. Časovač se nepřekrývá s vlastní
+rozpracovanou prací a zavření čeká na SQL callback před uzavřením poolu.
+Samotné dokončení promise consumeru není potvrzení dokončeného úklidu.
+Ověření retence v revocation-only i plánovaného entrypointu patří do
+[společné akceptace v runbooku 19](19_COP_ACCOUNT_ERASURE_PRODUCTION.md).
 
 Nezavádět dlouhodobé logical exporty těchto krátkodobých odvozených dat.
 Existující fyzické PBS/WAL/PITR zálohy clusteru tato aplikace nemění; mohou
@@ -72,7 +87,9 @@ označit rollback tagem. Stavět pouze SDA, OCI revision label a tag s plným SH
 Docker daemonu či jiných projektů. COP API recreate pouze pro secrets/cleanup.
 Web bránu reloadovat po `nginx -t` pro blokování nové interní cesty.
 
-Návrat vypíná sběr, nikoli revocation/cleanup. Zachovat DB, síť a stejná HMAC.
+Návrat vypíná sběr, nikoli revocation. Retenční úklid musí zachovat přijatou
+ochrannou bránu; nejde o povolení vrátit přímý SQL obchvat. Zachovat DB,
+síť a stejná HMAC.
 Preferovat poslední obraz podporující revocation-only. Nouzový návrat na starý
 provider obraz před touto funkcí ponechá COP deletion pending a nezávislý
 retenční cron; nesmí se hlásit úspěšné smazání, dokud jej SIM nepotvrdí.

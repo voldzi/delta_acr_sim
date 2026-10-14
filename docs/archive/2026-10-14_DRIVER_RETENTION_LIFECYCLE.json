@@ -1,0 +1,175 @@
+{
+  "recordType": "sim-source-only-driver-retention-lifecycle-verification",
+  "date": "2026-10-14",
+  "timezone": "Europe/Prague",
+  "sourceRevision": "25de85abf2ab00ad125c9482f1ddb70bb81cfce2",
+  "sourceTree": "3342da69817b4f26d1dd5065aca7ba68c239e7a4",
+  "branch": "codex/sim-account-erasure-release",
+  "ownRunner": {
+    "node": "24.16.0",
+    "pnpm": "10.33.0",
+    "vitest": "5.0.0"
+  },
+  "sourcePins": {
+    "apps/situation-data-api/src/app.ts": "82f8b8ae4b6a5510b468d682ee88a79075c23ae19b1ddabfe9c9e709f4631adb",
+    "apps/situation-data-api/src/driver-measurements.ts": "9083e6902f70f6f02d43c691bea5961126aa29b0649ddc0942e4cbd198b135b0",
+    "apps/situation-data-api/src/driver-measurement-store.ts": "cc7d103d28c9ff8b0b02b8e8d40db0fc0303a0f9cf5c219a4dfe796ea019c912",
+    "scripts/driver-measurements-maintenance.mjs": "a0a3d5ee3a958e2858ea86449bc9d5d59cfd3de5100b2b5858c42def9e5ce42a",
+    "apps/situation-data-api/src/driver-retention-lifecycle.ts": "bc3f261916458a716121ed7b37d84800ba1fc904869834831325fe48aa161c93",
+    "apps/situation-data-api/src/driver-maintenance-cli.ts": "0712a41c77fdeca2d054f519d25c9eaa1e29d2a2276b85867fda44f00ef40f6b",
+    "apps/situation-data-api/test/driver-retention-lifecycle.test.ts": "9c9fed6767391b969da02b8f754386757993286b0f0f2a2f811255bca8e00598"
+  },
+  "ownTests": {
+    "focused": {
+      "command": "node node_modules/vitest/vitest.mjs run test/driver-retention-lifecycle.test.ts",
+      "cwd": "apps/situation-data-api",
+      "passed": 37,
+      "failed": 0,
+      "exitCode": 0,
+      "syntheticSpiesOnly": true,
+      "postgresConnections": 0,
+      "httpListeners": 0,
+      "providerCalls": 0
+    },
+    "workspace": {
+      "command": "pnpm test",
+      "passed": 628,
+      "failed": 0,
+      "skipped": 6,
+      "exitCode": 0,
+      "byService": {
+        "ai_router_api": {
+          "passed": 53
+        },
+        "flight_data_api": {
+          "passed": 24
+        },
+        "safety_data_api": {
+          "passed": 35
+        },
+        "tak_gateway_api": {
+          "passed": 9
+        },
+        "situation_data_api": {
+          "passed": 472,
+          "skipped": 6
+        },
+        "simulator_api": {
+          "passed": 35
+        }
+      },
+      "focusedCasesIncludedInWorkspaceCount": true,
+      "otherPackageSmokeMessagesAreNotBrowserAcceptance": true,
+      "skips": "existing opt-in SDA PostgreSQL suite; not represented as passed"
+    },
+    "contract": {
+      "command": "node scripts/test-account-erasure-contract.mjs",
+      "passed": 70,
+      "failed": 0,
+      "exitCode": 0,
+      "syntheticSchemaCases": true
+    },
+    "typecheck": {
+      "command": "pnpm typecheck",
+      "exitCode": 0
+    },
+    "strictTestAndCliTypes": {
+      "command": "node ../../node_modules/typescript/bin/tsc --ignoreConfig --noEmit --target ES2022 --module NodeNext --moduleResolution NodeNext --strict --esModuleInterop --skipLibCheck test/driver-retention-lifecycle.test.ts src/driver-maintenance-cli.ts",
+      "cwd": "apps/situation-data-api",
+      "exitCode": 0
+    },
+    "build": {
+      "command": "pnpm build",
+      "exitCode": 0,
+      "dockerImageBuilt": false
+    },
+    "compiledStandalone": {
+      "result": "DRIVER_RETENTION_UNBOUND",
+      "expected": true,
+      "exitCode": 0,
+      "noProductionConfigurationRead": true
+    },
+    "syntax": {
+      "command": "node --check scripts/driver-measurements-maintenance.mjs",
+      "exitCode": 0
+    },
+    "skeleton": {
+      "command": "bash scripts/validate-skeleton.sh",
+      "exitCode": 0
+    },
+    "openapi": {
+      "command": "pnpm openapi:validate",
+      "exitCode": 0,
+      "paths": 151,
+      "schemas": 273,
+      "sha256": "4509ff5bd9931a011805984895254d6b19e75bfef2e5fa2efdb8b28ad8d90992",
+      "bindingChanged": false
+    },
+    "diffCheck": {
+      "exitCode": 0
+    }
+  },
+  "independentSourceReview": {
+    "fullRead": true,
+    "blockingP1P2Findings": 0,
+    "reviewerTestsRun": false,
+    "reviewedRuntimePinsUnchangedAfterReview": true,
+    "compositionCasesReadByMain": true
+  },
+  "boundaries": {
+    "constructorTimerOrSqlDispatch": false,
+    "explicitActualInit": true,
+    "defaultProductionConsumer": "UNBOUND",
+    "contextIsNativeAuthority": false,
+    "productionConsumerImplemented": false,
+    "standaloneDirectSqlBypass": false,
+    "nonOverlapTracksActualCleanup": true,
+    "closeWaitsActualCleanupNotOnlyConsumerPromise": true,
+    "oneImmutableCutoffAndTransactionForBothTemporaryDeletes": true,
+    "erasureLedgerAndPermanentFencesTouched": false,
+    "rawGpsOrIdentifiersStorageChanged": false,
+    "contract": "sim-driver-measurements-v1",
+    "mode": "shadow_only",
+    "publicRoutesOrAuthChanged": false,
+    "simIzsGlobalShutdown": false
+  },
+  "commandSetupNotes": [
+    "Agent focused run initially failed before tests at Vite cache write EPERM; same scoped local command rerun successfully with task-scoped escalation.",
+    "Main strict test invocation initially used service-local compiler path, then hit TypeScript 7 explicit-file config guard; corrected workspace compiler path and --ignoreConfig, final strict check PASS. No code changes for these startup failures.",
+    "Intermediate 27-case test revision was superseded by 37 cases; counts are not added together."
+  ],
+  "notPerformed": {
+    "actualPostgresRetentionTest": true,
+    "nativeCommitOrDrainAcceptance": true,
+    "actualRestoreOrPbsTest": true,
+    "productionInstall": true,
+    "productionMigrationOrGrant": true,
+    "productionSecretsOrNetworkChange": true,
+    "actualUserDeletion": true,
+    "openaiCall": true
+  },
+  "requiredBeforeDeployment": [
+    "accepted real owner-maintenance/replay consumer and exact production native contract",
+    "both application and standalone retention paths accepted with immutable cutoff and actual commit/outcome evidence",
+    "current restore authority, owner-wide replay/report boundaries and joint COP-SIM acceptance",
+    "separately approved production installation/activation package; no blind old-image rollback"
+  ],
+  "historicalInventory": {
+    "archivePath": "docs/archive/2026-10-14_SIM_ACCOUNT_SAFETY_INACTIVE_INVENTORY_03f5408.json",
+    "sha256": "4a960447f6b15be5b781218b7b7f52ac6c68fab1d67458b097218751ccd20ebe",
+    "unchanged": true
+  },
+  "retrievalReindex": {
+    "attemptsAfterMeaningfulChange": 1,
+    "exitCode": 2,
+    "result": "native CLI handoff refused: native retrieval does not accept a replacement repository identity",
+    "indexRebuiltOrIdentityBypassed": false,
+    "fallback": "direct full source read and read-only Git diff"
+  },
+  "deployment": {
+    "performed": false,
+    "imageIdentity": null,
+    "productionFlagsChanged": false,
+    "productionConsumerActivated": false
+  }
+}

@@ -37,6 +37,20 @@ obraz pouze s erasure flagem `false` a nepovažovat to za bezpečné nasazení.
 Nejprve dokončit zvlášť schválenou autoritu a společnou akceptaci; stávající
 zdravé služby se do té doby zachovají.
 
+Stejné omezení platí pro nový Driver retention lifecycle. Konstruktor již
+nespouští časovač. API composition zahájí úklid jen po skutečném init a
+owner-bound maintenance consumeru; samostatný cron entrypoint nemá přímý
+SQL bypass. Výchozí consumer je unbound, takže nový SDA obraz nesmí nahradit
+stávající pouze s vypnutým intake. Jinak by ustal retenční úklid bez
+přijaté náhrady. Chybějící maintenance závislost neodstaví ostatní SIM/IZS
+API a neuděluje oprávnění příjmu nebo mazání účtu.
+
+Před nasazením ověřit přijatý consumer i obě jeho cesty, replay a cutoff,
+retenci v revocation-only a close s rozpracovanou SQL transakcí. Úklid dvou
+dočasných tabulek musí mít jeden immutable cutoff a jednu transakci;
+permanentní fence/ledger se nesmějí smazat. Čekání na callback při close
+nenahrazuje nativní drain, známý abort nebo restore akceptaci.
+
 Linux peer/socket wrapper a jeho skutečný protocol/owner wiring nejsou
 zřízené. Přesná zdrojová mapa a potřebné per-principal i owner-wide
 hranice jsou v [integraci 22](../integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md#napojení-na-chráněnou-nativní-autoritu).
@@ -55,11 +69,14 @@ owner-wide replay/generation, skutečné identity a side-effect settlement.
 Nejmenší další zdrojový krok je konkrétně rozepsaný v
 [integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md).
 Její [neaktivní manifest](../integration/23_SIM_ACCOUNT_SAFETY_INACTIVE_INSTALL.json)
-mapuje 17 existujících HTTP operací a 29 přesně připnutých souborů; nemá
+mapuje 17 existujících HTTP operací a 32 přesně připnutých souborů; nemá
 schválený cílový adresář/owner/mode/archive ani proveditelné actions.
 Samostatné přijetí neaktivního balíčku nevyžaduje předstírat hotový B2
 producer, ale potřebuje svůj přesný souhlas; následná aktivace/wiring mají
 další společné gates. Compose, runtime flags, klíče a role se nyní nemění.
+Lokální retention lifecycle a composition mají samostatný
+[ověřovací záznam](../archive/2026-10-14_DRIVER_RETENTION_LIFECYCLE.md);
+37 cílených syntetických případů nedokazuje přijetí produkčního consumeru.
 
 Správce později doložil úzkou skutečnou invocation/public-package inventuru
 Patroni v 13:44 Praha. SIM ověřil oba receipts d6a0834d… / 7bf2ff93…;
