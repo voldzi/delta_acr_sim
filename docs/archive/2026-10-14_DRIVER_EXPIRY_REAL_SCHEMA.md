@@ -72,6 +72,15 @@ COP doložil vlastní PG18.6 devět případů a samostatný outer-seal případ
 SIM jejich zdroj, piny a proofs přečetl; nespouštěl je znovu a nepřičítá je
 k tomuto výsledku. Dřívější lifecycle/workspace testy mají vlastní záznam.
 
+COP následně uzavřel nezávislou čtecí revizi publikovaného SIM kandidáta
+`79acd91795902081558d95431a88d73fa81c5b6e`. Jeho záznam v COP revizi
+`2f94ec2`, `docs/testing/account-safety-driver-sql-candidate-review-20261014.json`,
+má SHA-256 `fce4a3854c49d89f1eba8a03e95c56e6a27006ed8f2bd4fd1025af0024b74521`.
+Čtyři source piny a proof souhlasí; samostatný reviewer doložil shodu těchto
+pěti pinů před a po své revizi a nenašel konkrétní P1/P2 v mechanickém rozsahu.
+SIM tento připnutý záznam přečetl a piny porovnal. Jde o čtecí kontrolu,
+nikoli nový PostgreSQL běh nebo produkční či restore akceptaci.
+
 Role a `SECURITY DEFINER` funkce v tomto kandidátu nejsou produkčním
 oprávněním. Skutečný Root producent musí vlastnit origin/control spojení,
 chráněný execution kanál a commit/readback handling. Dále musí být přijatá
