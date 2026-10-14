@@ -52,6 +52,22 @@ V1 nesmí být automaticky použit pro jinou verzi wrapperu. Pro skutečný
 provoz stále chybí peer/kernel/lifecycle akceptace, aktuální Root authority,
 owner-wide replay/generation, skutečné identity a side-effect settlement.
 
+Nejmenší další zdrojový krok je konkrétně rozepsaný v
+[integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md).
+Její [neaktivní manifest](../integration/23_SIM_ACCOUNT_SAFETY_INACTIVE_INSTALL.json)
+mapuje 17 existujících HTTP operací a 29 přesně připnutých souborů; nemá
+schválený cílový adresář/owner/mode/archive ani proveditelné actions.
+Samostatné přijetí neaktivního balíčku nevyžaduje předstírat hotový B2
+producer, ale potřebuje svůj přesný souhlas; následná aktivace/wiring mají
+další společné gates. Compose, runtime flags, klíče a role se nyní nemění.
+
+Správce později doložil úzkou skutečnou invocation/public-package inventuru
+Patroni v 13:44 Praha. SIM ověřil oba receipts d6a0834d… / 7bf2ff93…;
+známá gramatika a dpkg vlastnictví šesti vybraných souborů jsou doložené.
+To není loaded-module attestation, přesný DCS CAS, effective auth,
+uzavření celé A1/A2, independent anchor nebo runtime enrollment.
+Aktivace autority z tohoto výsledku automaticky neplyne.
+
 Správce následně doložil devět skutečných vlastních neprivilegovaných
 Linux fixture testů, včetně socket credentials, přijatých deskriptorů,
 smrti procesu a čekající lease. Jeho `ROOT-LINUX-RESULTS.json` má SHA-256

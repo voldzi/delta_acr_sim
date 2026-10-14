@@ -23,6 +23,7 @@ documents instead of duplicating flat files. The decision is recorded in
 
 - [ADR 0039: hranice mazání COP/Jízdy při zachování SIM](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md)
 - [Integrace 22: mazání COP/Jízdy v SIM](integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)
+- [Integrace 23: konkrétní příprava runtime napojení a neaktivní instalační inventář](integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md)
 - [Runbook 19: omezené nasazení a rollback mazání COP/Jízdy](runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md)
 - [Archiv ověření: společná HTTP korekce COP–SIM 14. 10. 2026](archive/2026-10-14_COP_SIM_ERASURE_HTTP_CORRECTION.md)
 - [Archiv ověření: řadič COP–SIM a izolovaný peer klient](archive/2026-10-14_COP_SIM_CONTROLLER_AND_PEER_FIXTURES.md)

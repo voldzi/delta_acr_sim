@@ -1,0 +1,597 @@
+{
+  "manifestVersion": 1,
+  "artifactType": "documentation_source_inventory_not_installer_or_native_protocol",
+  "status": "source_review_only_inactive_install_blocked",
+  "sourceRevision": "3691cea7cc5b1c01e5b06aea87581a02acd86d51",
+  "sourceTree": "c464b351f33d0d6334f2dd93601c562340e81b86",
+  "preparedDate": "2026-10-14",
+  "timezone": "Europe/Prague",
+  "installAllowed": false,
+  "inactiveInstallAuthorized": false,
+  "productionAuthorization": false,
+  "installation": {
+    "destinationRoot": null,
+    "destinationRootProposal": "/srv/sim/account-safety-inactive/3691cea7/",
+    "owner": null,
+    "group": null,
+    "directoryMode": null,
+    "archiveSha256": null,
+    "archiveProduced": false,
+    "installActions": [],
+    "serviceActions": [],
+    "migrationActions": [],
+    "mountActions": [],
+    "networkActions": [],
+    "secretActions": []
+  },
+  "runtimeObservation": {
+    "method": "SIM main passive Docker state/port/network/alias metadata only",
+    "observedDate": "2026-10-14",
+    "timezone": "Europe/Prague",
+    "authenticatedApiProbed": false,
+    "environmentOrCredentialsRead": false,
+    "runtimeFlagsRead": false,
+    "networkChanged": false,
+    "services": [
+      {
+        "container": "csm-sim-ai-router-api",
+        "state": "running",
+        "health": "healthy",
+        "httpPort": 4050,
+        "hostPortBindings": {},
+        "image": "sha256:2e21d0576a9cdc2626e3540da112211f7b425f76b3b51109f7cfcc5454bcef88",
+        "internalBaseUrl": "http://ai-router-api:4050",
+        "ownerBinding": {
+          "ownerTarget": "sim_ai_router",
+          "owner": "ai_router",
+          "scope": "cop_router_primary_database"
+        },
+        "currentTypeScriptPorts": [
+          "AccountErasureGate.assertActive(target, transaction?)",
+          "OwnerCheckpointVerifier(checkpoint): Promise<boolean>"
+        ],
+        "actualNativePort": null,
+        "actualRuntimeEnrollment": null
+      },
+      {
+        "container": "csm-sim-situation-data-api",
+        "state": "running",
+        "health": "healthy",
+        "httpPort": 4020,
+        "hostPortBindings": {},
+        "image": "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965",
+        "internalBaseUrl": "http://sim-driver-measurements:4020/api/v1/internal/driver-measurements/v1",
+        "ownerBinding": {
+          "ownerTarget": "sim_driver_measurements",
+          "owner": "sim_measurements",
+          "scope": "online_driver_scope"
+        },
+        "currentTypeScriptPorts": [
+          "DriverStore",
+          "DriverMatcher",
+          "DriverErasureStorageOptions.protectedProof",
+          "registerDriverMeasurementRoutes dependencies.accountErasureDerivedBarrier"
+        ],
+        "actualNativePort": null,
+        "actualRuntimeEnrollment": null
+      },
+      {
+        "container": "cop-cop-api-1",
+        "state": "running",
+        "health": "healthy",
+        "httpPort": 4310,
+        "existingHostPort": 4310,
+        "hostBindingObserved": "HostIp empty; HostPort4310",
+        "image": "sha256:a06c103764701e7debc6434e3dd98e9a6d5f218d30831cb62aad566265db392f",
+        "changeAllowed": false
+      }
+    ],
+    "networkAliases": [
+      {
+        "name": "/csm-sim-ai-router-api",
+        "networks": {
+          "cop_sim_ai_router_internal": {
+            "aliases": [
+              "csm-sim-ai-router-api",
+              "ai-router-api"
+            ]
+          },
+          "sim_default": {
+            "aliases": [
+              "csm-sim-ai-router-api",
+              "ai-router-api"
+            ]
+          }
+        }
+      },
+      {
+        "name": "/csm-sim-situation-data-api",
+        "networks": {
+          "cop_sim_driver_measurements_internal": {
+            "aliases": [
+              "csm-sim-situation-data-api",
+              "situation-data-api",
+              "sim-driver-measurements"
+            ]
+          },
+          "sim_default": {
+            "aliases": [
+              "csm-sim-situation-data-api",
+              "situation-data-api"
+            ]
+          }
+        }
+      },
+      {
+        "name": "/cop-cop-api-1",
+        "networks": {
+          "cop_default": {
+            "aliases": [
+              "cop-cop-api-1",
+              "cop-api"
+            ]
+          },
+          "cop_sim_ai_router_internal": {
+            "aliases": [
+              "cop-cop-api-1",
+              "cop-api"
+            ]
+          },
+          "cop_sim_driver_measurements_internal": {
+            "aliases": [
+              "cop-cop-api-1",
+              "cop-api"
+            ]
+          }
+        }
+      }
+    ],
+    "existingConnectingNetworks": [
+      {
+        "name": "cop_sim_ai_router_internal",
+        "internal": true
+      },
+      {
+        "name": "cop_sim_driver_measurements_internal",
+        "internal": true
+      }
+    ],
+    "newListenersOrHostPorts": [],
+    "observationIsSourceDeploymentOrNativeAuthorityAcceptance": false
+  },
+  "bindingOpenapi": {
+    "path": "openapi/openapi.json",
+    "sha256": "4509ff5bd9931a011805984895254d6b19e75bfef2e5fa2efdb8b28ad8d90992",
+    "changed": false,
+    "httpPaths": 151,
+    "schemas": 273
+  },
+  "httpOperations": [
+    {
+      "method": "POST",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/batches",
+      "directPath": "/api/v1/internal/driver-measurements/v1/batches",
+      "httpOperationId": "driverMeasurements_ingestDriverMeasurementBatch",
+      "requestSchema": {
+        "$ref": "#/components/schemas/DriverMeasurementsBatch"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/aggregates",
+      "directPath": "/api/v1/internal/driver-measurements/v1/aggregates",
+      "httpOperationId": "driverMeasurements_getDriverMeasurementAggregates",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/quality",
+      "directPath": "/api/v1/internal/driver-measurements/v1/quality",
+      "httpOperationId": "driverMeasurements_getDriverMeasurementQuality",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "DELETE",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/contributions",
+      "directPath": "/api/v1/internal/driver-measurements/v1/contributions",
+      "httpOperationId": "driverMeasurements_revokeDriverContributions",
+      "requestSchema": {
+        "$ref": "#/components/schemas/DriverMeasurementsRevoke"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "POST",
+      "compositePath": "/api/v1/ai-router/generate",
+      "directPath": "/api/v1/ai-router/generate",
+      "httpOperationId": "aiRouter_aiRouterGenerate",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AiRouterAiRouterGenerateRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/api/v1/ai-router/cop/users/me/openai-key",
+      "directPath": "/api/v1/ai-router/cop/users/me/openai-key",
+      "httpOperationId": "aiRouterSeparate_copUserKeyStatus",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "PUT",
+      "compositePath": "/api/v1/ai-router/cop/users/me/openai-key",
+      "directPath": "/api/v1/ai-router/cop/users/me/openai-key",
+      "httpOperationId": "aiRouterSeparate_copPutUserKey",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AiRouterSeparateUserKeyPutRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "DELETE",
+      "compositePath": "/api/v1/ai-router/cop/users/me/openai-key",
+      "directPath": "/api/v1/ai-router/cop/users/me/openai-key",
+      "httpOperationId": "aiRouterSeparate_copDeleteUserKey",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "POST",
+      "compositePath": "/api/v1/ai-router/cop/chat",
+      "directPath": "/api/v1/ai-router/cop/chat",
+      "httpOperationId": "aiRouterSeparate_copChatByok",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AiRouterSeparateCopByokChatRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/account-erasure-operations/capability",
+      "directPath": "/api/v1/internal/driver-measurements/v1/account-erasure-operations/capability",
+      "httpOperationId": "accountErasure_getDriverErasureCapability",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "POST",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/account-erasure-operations/preflight",
+      "directPath": "/api/v1/internal/driver-measurements/v1/account-erasure-operations/preflight",
+      "httpOperationId": "accountErasure_preflightDriverErasure",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AccountErasureDriverErasureRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/api/v1/ai-router/cop/users/me/erasure-operations/capability",
+      "directPath": "/api/v1/ai-router/cop/users/me/erasure-operations/capability",
+      "httpOperationId": "accountErasure_getRouterErasureCapability",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "POST",
+      "compositePath": "/api/v1/ai-router/cop/users/me/erasure-operations/preflight",
+      "directPath": "/api/v1/ai-router/cop/users/me/erasure-operations/preflight",
+      "httpOperationId": "accountErasure_preflightRouterErasure",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AccountErasureRouterErasureRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "POST",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/account-erasure-operations",
+      "directPath": "/api/v1/internal/driver-measurements/v1/account-erasure-operations",
+      "httpOperationId": "accountErasure_startDriverAccountErasure",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AccountErasureDriverErasureRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/situation-data/api/v1/internal/driver-measurements/v1/account-erasure-operations/{operationId}",
+      "directPath": "/api/v1/internal/driver-measurements/v1/account-erasure-operations/{operationId}",
+      "httpOperationId": "accountErasure_getDriverAccountErasure",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "POST",
+      "compositePath": "/api/v1/ai-router/cop/users/me/erasure-operations",
+      "directPath": "/api/v1/ai-router/cop/users/me/erasure-operations",
+      "httpOperationId": "accountErasure_startRouterAccountErasure",
+      "requestSchema": {
+        "$ref": "#/components/schemas/AccountErasureRouterErasureRequest"
+      },
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    },
+    {
+      "method": "GET",
+      "compositePath": "/api/v1/ai-router/cop/users/me/erasure-operations/{operationId}",
+      "directPath": "/api/v1/ai-router/cop/users/me/erasure-operations/{operationId}",
+      "httpOperationId": "accountErasure_getRouterAccountErasure",
+      "requestSchema": null,
+      "nativeRegistration": null,
+      "nativeOperationCode": null,
+      "nativeBodyCanonicalization": null,
+      "nativeOperationSchemaDigest": null
+    }
+  ],
+  "bodyAndSchemaLayers": [
+    {
+      "kind": "router_erasure_http_idempotence",
+      "source": "apps/ai-router-api/src/account-erasure.ts:133,163",
+      "schema": "AccountErasureRouterErasureRequest",
+      "contractVersion": "sim-account-erasure-v1",
+      "bodyNormalization": "JSON.stringify({contractVersion:'sim-account-erasure-v1',operationId}) with exact field order",
+      "digest": "SHA-256 hex",
+      "nativeAuthority": false
+    },
+    {
+      "kind": "driver_batch_http_idempotence",
+      "source": "apps/situation-data-api/src/driver-measurements.ts:244",
+      "schema": "DriverMeasurementsBatch",
+      "contractVersion": "sim-driver-measurements-v1",
+      "bodyNormalization": "parseDriverBatch then JSON.stringify(batch)",
+      "digest": "HMAC-SHA256 of 'request:' + normalized body using existing private hashSecret",
+      "nativeAuthority": false,
+      "rawBodyAllowedInNativePacket": false
+    },
+    {
+      "kind": "driver_erasure_http_idempotence",
+      "source": "apps/situation-data-api/src/driver-account-erasure.ts:56,89",
+      "schema": "AccountErasureDriverErasureRequest",
+      "contractVersion": "sim-account-erasure-v1",
+      "bodyNormalization": "parseDriverErasureRequest: exact keys, normalized operation UUID, sorted contributorDay/contributorIdDay pairs",
+      "digest": "driverErasureHash(secret,'cop:account-erasure-request',JSON.stringify(request))",
+      "nativeAuthority": false,
+      "manifestPersistenceAllowed": false
+    },
+    {
+      "kind": "router_db_checkpoint",
+      "source": "apps/ai-router-api/src/account-erasure.ts:75",
+      "operationDigest": "SQL hash of ordered ledger operation_id/owner_hash/target_hash/body_digest/status",
+      "schemaDigest": "SQL hash of reviewed function definitions, trigger definitions and RLS policies",
+      "nativeAuthority": false,
+      "openapiDigestSubstitutionAllowed": false
+    },
+    {
+      "kind": "accepted_native_operation",
+      "operationCode": null,
+      "canonicalBodyRule": null,
+      "operationSchemaDigest": null,
+      "registeredLeaseDigestRule": null,
+      "acceptedRegistration": null,
+      "unknownMeans": "STOP; not a sendable placeholder"
+    }
+  ],
+  "futureSourceChanges": {
+    "proposedNewFiles": [
+      {
+        "path": "packages/account-safety-client/src/ports.ts",
+        "purpose": "typed native consumer boundaries only after exact production contract review",
+        "created": false,
+        "appImportAllowed": false
+      },
+      {
+        "path": "packages/account-safety-client/src/bindings.ts",
+        "purpose": "fixed Router/Measurements owner scopes; unregistered returns unavailable without effects",
+        "created": false,
+        "appImportAllowed": false
+      }
+    ],
+    "existingFiles": [
+      {
+        "path": "apps/ai-router-api/src/index.ts",
+        "change": "composition root and protected COP startup/worker enrollment before dispatch"
+      },
+      {
+        "path": "apps/ai-router-api/src/account-erasure.ts",
+        "change": "operation/current/frontier/held permit/drain/readback ports; preserve local SQL fences"
+      },
+      {
+        "path": "apps/ai-router-api/src/app.ts",
+        "change": "legacy COP generate plus protected COP owner reads/response publication boundaries"
+      },
+      {
+        "path": "apps/ai-router-api/src/separate-routes.ts",
+        "change": "key read/write and separate provider key-validation operation; BYOK dispatch/output"
+      },
+      {
+        "path": "apps/ai-router-api/src/budget.ts",
+        "change": "native reservation commit and original outcome; same-transaction local fence preserved"
+      },
+      {
+        "path": "apps/ai-router-api/src/separate-billing.ts",
+        "change": "key/audit/reservation commit, original finish; preserve lane limits"
+      },
+      {
+        "path": "apps/ai-router-api/src/separate-provider.ts",
+        "change": "dispatch and typed original provider evidence; no new calls or key validation in preparation"
+      },
+      {
+        "path": "apps/situation-data-api/src/app.ts",
+        "change": "explicit Driver dependency composition and protected COP startup"
+      },
+      {
+        "path": "apps/situation-data-api/src/driver-measurements.ts",
+        "change": "operation-aware lookup/matching/commit/response/revoke and erase barriers"
+      },
+      {
+        "path": "apps/situation-data-api/src/driver-measurement-store.ts",
+        "change": "same-transaction commits and owner-wide read/publication/maintenance scopes"
+      },
+      {
+        "path": "apps/situation-data-api/src/driver-account-erasure-store.ts",
+        "change": "replace insufficient boolean-only/zero-argument proof with accepted scoped authority"
+      },
+      {
+        "path": "scripts/driver-measurements-maintenance.mjs",
+        "change": "owner maintenance registration and immutable cutoff instead of adopting DB now as authority"
+      },
+      {
+        "path": "apps/ai-router-api/Dockerfile",
+        "change": "only separately reviewed future native artifact/toolchain packaging"
+      },
+      {
+        "path": "apps/situation-data-api/Dockerfile",
+        "change": "only separately reviewed future native artifact/toolchain packaging"
+      },
+      {
+        "path": "docker-compose.yml",
+        "change": "future approved fixed consumer binding only; no current edits or new host ports"
+      }
+    ],
+    "currentlyImplemented": false,
+    "productionFixtureClientImportAllowed": false,
+    "acceptedNativeTransportArtifact": null,
+    "nativeToolchainOrBinaryIdentity": null,
+    "existingMigrationsReferencedOnly": [
+      "deploy/ai-router/003_account_erasure.sql",
+      "deploy/driver-measurements/002_account_erasure.sql"
+    ],
+    "migrationsApplied": false,
+    "configOrFlagsChanged": false
+  },
+  "preservation": {
+    "copLocalSameTransactionLifecycleFence": true,
+    "routerTargetAdvisoryLock": "634020/hashtext(target)",
+    "driverSameContributorTransactionLock": true,
+    "receiptInvokersAndScopedDeleteRlsPreserved": true,
+    "durableErasureFencesNotSevenDayRetention": true,
+    "driverContract": "sim-driver-measurements-v1",
+    "driverApplicationMode": "shadow_only",
+    "liveSpeedsOrEtaChanged": false,
+    "rawGpsPersistenceOrLoggingChangeAllowed": false,
+    "durableAccountToDayJoinIntroduced": false,
+    "sharedSimIzsIdentitySessionsRolesPreserved": true,
+    "simProjectBillingAndFinancialLimitsPreserved": true,
+    "uncertainProviderOutcomeRemainsPending": true,
+    "nativePermitBoundary": "accepted immutable permit; no inferred timeout/death abort or invented continuous executable condition across external commit"
+  },
+  "infrastructureEvidence": {
+    "observedAtLocal": "2026-10-14T13:44:35+02:00",
+    "resultsSha256": "d6a0834dba77c6c720eef12cb6f6ae86083e744552c39d57d8ecd0c066730e43",
+    "scopedAcceptanceSha256": "7bf2ff93d732ceb76c77083dbb8f817c5fc4721a32acfff446fb85968554886d",
+    "receiptContentAndHashesVerifiedBySim": true,
+    "secondLiveHostRunBySim": false,
+    "scope": "bounded invocation/public dpkg package inventory only",
+    "missingSelectedFields": [],
+    "actualLoadedModuleIdentityProven": false,
+    "exactDcsConfigCasAccepted": false,
+    "effectiveAuthAccepted": false,
+    "a1OverallComplete": false,
+    "a2ApplyAuthorized": false,
+    "actualIndependentAnchorAccepted": false,
+    "actualRuntimeEnrollmentAccepted": false,
+    "actualRestoreAccepted": false
+  },
+  "requiredBeforeInactiveInstall": [
+    "direct human approval of exact inert bundle manifest and target custody",
+    "exact archive file set and SHA-256; reviewed destination owner/group/mode",
+    "no daemon hooks/imports/env/migration/grants/keys/mounts/listeners or runtime changes",
+    "installer review and rollback removes only approved inactive bundle"
+  ],
+  "requiredBeforeActivation": [
+    "accepted actual native production contract and exact runtime operation/body/schema registration",
+    "independently resolved existing Router alias and Driver daily scope ownership",
+    "actual current owner/store/incarnation/frontier, effective authentication and independent anchor",
+    "actual native peer/FD/lifecycle and original effect settlement acceptance",
+    "owner-wide reader/writer/report/cache/replay inventory; absence of source is not no_report",
+    "startup/maintenance registration with immutable cutoff, shared SIM/IZS preservation",
+    "joint COP-SIM acceptance and direct exact activation approval"
+  ],
+  "rollback": {
+    "inactivePhase": "remove only separately approved non-running package; no DB/fence/keys/data changes",
+    "activePhaseRunbook": "docs/runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md",
+    "oldUnfencedImageAllowed": false,
+    "ledgerOrTombstoneDeletionAllowed": false
+  },
+  "sourcePins": {
+    "apps/ai-router-api/src/index.ts": "a581b42803c564c238e5002568d5f0b12eb014e1c01dc9af1e9509b4120c22ed",
+    "apps/ai-router-api/src/account-erasure.ts": "0d59e2009749dc973b76f9fa3b15da1afe28c2eaeb5589b3ce32f2fa93c39d7a",
+    "apps/ai-router-api/src/app.ts": "e298137791c2240aab3f2d0996fbb1ed6d1b0e9e91b881520f47e676bd5dce37",
+    "apps/ai-router-api/src/separate-routes.ts": "8dc69b5c40c1102bc09759c20dc6affd6acddb990f04a34dc29cc74439ffc47a",
+    "apps/ai-router-api/src/separate-billing.ts": "fc0291efc39f63878129a790463edcae0c3c6c32c4cb9452fa8e747dc73c681a",
+    "apps/ai-router-api/src/budget.ts": "4bc134da33863487fe3ddb731c00d2cf0f9e37679c55d81ecbcbb9aeb6d684ef",
+    "apps/ai-router-api/src/separate-provider.ts": "86d327fc67eb45d761b540e4fa1bc91b46c854d72fd361e305627cfe2caa127a",
+    "apps/ai-router-api/src/config.ts": "808ba89765074a09292fa20657a72ffcbc77b1064b8f2cec9c57068ba8a687c1",
+    "apps/ai-router-api/src/cop-actor.ts": "278091e1003130032915a20591d3fd0dd8fc10477cfb46364fb3a20dd9f443cd",
+    "apps/ai-router-api/src/typed-context.ts": "cf0e92241ec5bef3d706bde573d25441e45cc20b5ceada2d3c77043012ca7ec0",
+    "apps/situation-data-api/src/app.ts": "781607b6818e1471636e61a98953d9992057b3dcf8b0a2f0780fb5a5944dafb7",
+    "apps/situation-data-api/src/driver-measurements.ts": "bf128290ecaca8250e763f2347b0733a66296c39ff8dd0411c82c5b1879d7652",
+    "apps/situation-data-api/src/driver-measurement-store.ts": "7561038dc459928a09b60d5bac6bb9a944813e6f1481d73f61d4cb2e39047609",
+    "apps/situation-data-api/src/driver-account-erasure.ts": "25e6c9731452150c4424b3bc60a0679d03b99044e824813d19a92674d342ca23",
+    "apps/situation-data-api/src/driver-account-erasure-store.ts": "b387529d2fac4f28a01ff126ace9318703272dfd890f24affd853395d5657399",
+    "apps/situation-data-api/Dockerfile": "71898506232bf8047f9f7b342efce0d7f873e6fe148b5a4695a17e0e4ae78014",
+    "apps/ai-router-api/Dockerfile": "210da1ac86a5eb1de21ded4a33de7109c19bcccfb8cfd6ea282adb83553ae65f",
+    "scripts/driver-measurements-maintenance.mjs": "9a349d6c1b812747b2aad0f7aa5c274feb2d4f7544a735c489f605209608c537",
+    "scripts/configure-driver-measurements-production.mjs": "4a31e8f6c1a7b2a1a71396e942363f4038d72fb6659709a74cc51e807d5c295e",
+    "deploy/ai-router/003_account_erasure.sql": "921e19e1bae334bb3ae84dadfc9ab4b9cd333b4f515e77a3a286b68649426a56",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "docker-compose.yml": "41fe52309c05dd8be6f0660535f0c5549cd30be90e1bd2bfa31cb5a4fe0e379c",
+    "docker-compose.driver-measurements.yml": "9f70a3e1d43439e38675a4e1def9be3664efd7c2bae7e9f50aa46f8d306b51b2",
+    "apps/simulator-web/nginx/default.conf": "94f57965665af40fb7ba8a373e7b30ae5308b0460ccbfa99fc61e6fe4f1e2434",
+    "openapi/openapi.json": "4509ff5bd9931a011805984895254d6b19e75bfef2e5fa2efdb8b28ad8d90992",
+    "openapi/fragments/account-erasure-v1.openapi.json": "367c9f07d50689e77333a1e0626bb0c6c96f51f540f21fbe321b4ff3c9da9252",
+    "openapi/fragments/driver-measurements-v1.openapi.json": "829efd9355f14a0e97dedd08d87de5fba0b130b13b8895735a4b602ceec82553",
+    "openapi/fragments/ai-router-v1.openapi.json": "9b781be36f2fd1847aa1665d869337c7d891dbdb9e5957062cb4025237386fa4",
+    "openapi/fragments/ai-router-separate-billing.openapi.json": "349b13dec673496cba593a3f4cbdc8400fb76bd9640e42d521d1572688691f62"
+  }
+}

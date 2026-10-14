@@ -154,3 +154,12 @@ závislosti, binárního sestavení nebo produkčního zapojení. Přijatý perm
 je hranice autorizace původního efektu; timeout ani změna procesu z něj
 neodvozují známý abort. Skutečný transport, bootstrap, nezávislý anchor,
 restore a následná společná aplikační akceptace zůstávají oddělené gates.
+
+[Konkrétní zdrojová příprava 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md)
+mapuje současné HTTP kontrakty a transakční švy na budoucí consumer boundary.
+Její instalační manifest je neaktivní inventář bez proveditelných actions,
+nových operation codes nebo pozitivního verifieru. Existující HTTP/DB
+digests se nepřijímají jako Root schema, registered lease nebo oprávnění.
+Neaktivní B1 balíček a skutečná B2/B3 autorita se přijímají odděleně;
+žádná zdrojová mapa nesmí rozdělit same-transaction fence nebo globálně
+odvolat shared SIM/IZS identitu a přístup.

@@ -297,6 +297,11 @@ se musí zaznamenat zvlášť; žádný test nemaže skutečný účet nebo vol�
 
 ## Napojení na chráněnou nativní autoritu
 
+Konkrétní současné operation/body/schema vazby, runtime porty a souborový
+plán dalšího kroku jsou v [integraci 23](23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md).
+Její neaktivní instalační inventář nemá install/start/migrate actions ani
+produkční oprávnění; V5 se do aplikací neimportuje.
+
 Zdrojová kontrola SIM `fe0eec5` potvrzuje chybějící runtime propojení,
 nikoli hotového klienta brokeru. Router předává do `PgAccountErasure`
 výchozí verifier `false`; SDA registruje Driver bez protected-proof a
