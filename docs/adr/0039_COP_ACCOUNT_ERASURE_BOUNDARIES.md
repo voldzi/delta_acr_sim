@@ -224,3 +224,65 @@ historického origin probe. Runtime nedostává nové EXECUTE ani grant RPC.
 Přesný wire a vlastnictví jsou v integraci 23. Inline podepsané přijetí
 nevytváří trvalou account/day historii a nenahrazuje generation/drain
 nebo ochranu obnovy.
+
+### Root checkpoint metadata a AI čtecí hranice
+
+Driver SQL `005_root_checkpoint.sql` a AI Router SQL
+`004_root_checkpoint_facts.sql` / `005_root_checkpoint.sql` jsou oddělené
+zdrojové rozšíření, nikoli produkčně aplikované migrace nebo aktivace.
+Předpokládají existující omezené role. Read-only AI 004 vytvoří prázdnou
+privátní binding tabulku, nikoli vazbu; teprve oba settery vyžadují předem
+přijatý store binding i existující singleton. Nevytvářejí role, secrets,
+přístupové údaje, enrollment nebo novou inkarnaci. Aplikační tabulky
+zůstávají dosavadním migrátorům. Každý setter přidává jen šest výslovných
+UPDATE sloupců vlastním NOLOGIN ownerům a
+EXECUTE pouze pevnému control kanálu, nikoli aplikačnímu runtime.
+
+Root před aplikací nezávisle ověřuje skutečné aktuální podepsané
+identity/continuity/replay a retenční/report/cost podklady. Typovaný
+`rootRecordRef` se jen vrací, neukládá; sám není podpisem ani oprávněním.
+Zámek checkpointu má limit jednu sekundu a proof deadline musí být po
+získání zámku budoucí nejvýše o 30 sekund. Driver uloží platnost do
+existujícího proof sloupce. AI ji pouze ověří a vrátí, bez nového TTL
+sloupce a bez automatického zániku či odvození autority z DB flags.
+
+Driver CAS porovná předchozí checkpoint hash, včetně skutečně null
+počátečního stavu. AI CAS porovná ID i kanonickou bigint generaci a dovolí
+jen přesné `+1` bez overflow. Aktivní a výslovně karanténní režim jsou
+oddělené; smíšené readiness booleany se odmítají. Settery neprovádějí
+mazání, neovlivní ledger/fences/klíče/náklady a nevolají se per-chat.
+Změna jejich funkcí či ACL vyžaduje nový nezávisle přijatý privilege pin;
+starý pin se nesmí potichu obejít nebo nahradit hodnotou z kontrolované DB.
+
+AI read-only 004 zachovává dosavadní operation/schema digests a finanční
+RLS, invoker views i retenční pravidla. Čistý validátor pozorování není
+Root verifier. Pevný `root-checkpoint-read.mjs` před i po skutečném čtení
+kontroluje podepsané permit/evidence, peer, registry/frontier,
+boot/cluster/timeline a policy; vydává pouze krátkodobý inline podepsaný
+read admission. Přesný wire je v integraci 23 a veřejné HTTP/OpenAPI
+endpointy se nemění.
+
+COP potvrdil nové čerstvé per-inspect permit/delivery v chráněném tmpfs,
+bez trvalé per-read identity historie. Nemění to immutable execution
+origin, jeho nejistý commit ani potřebu výslovné maintenance lease.
+Potvrzený kontrakt není skutečné produkční doručení nebo akceptace obnovy.
+
+[Driver005 důkaz](../archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.json)
+dokládá 8/8 nových syntetických PostgreSQL 18.3 skupin; AI čistá validace
+prošla 10/10. [AI Linux ověření](../archive/2026-10-15_AI_ROOT_CHECKPOINT.md)
+prošlo 14/14 skutečnými Root/TLS/SQL/compiled-BYOK skupinami, s výslovně
+syntetickým peer, registry a provider odpověďmi. Při podpisu se zachovává
+původní ověřený keyring snapshot a kontroluje neměnnost signer/keyringu;
+nepřejímá se nový trust set pro staré důkazy.
+
+Konkrétní Router composition pevně načítá COP nativní factory pouze z
+předem ověřeného Root code tree, žádné env/HTTP selektory. Pro každý
+snapshot vyžaduje fresh inspect, bez kladného fallbacku či HTTP cache.
+Jeho třináct nových unit případů jsou pouze composition/FS stub testy,
+nikoli skutečné Root přijetí. Nezávislá autorita, config/generation lease
+a explicitní background maintenance lease zůstávají povinné.
+
+Tyto výsledky se nepřičítají ke starším případům a neprokazují produkční
+enrollment, produkční BYOK/key/chat paritu, nativní delivery nebo fyzický
+restore. Tyto společné gates zůstávají otevřené; chat ani produkce se
+nepřepínají.

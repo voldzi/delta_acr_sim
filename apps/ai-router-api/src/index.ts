@@ -3,6 +3,7 @@ import { BudgetStore } from "./budget.js";
 import { loadConfig } from "./config.js";
 import { PgSeparateBilling } from "./separate-billing.js";
 import { PgAccountErasure } from "./account-erasure.js";
+import { loadProductionOwnerCheckpointVerifier } from "./owner-checkpoint.js";
 
 const config = loadConfig();
 if (!["gpt-6-luna", "gpt-6-sol"].includes(config.economyModel) || config.economyModel !== "gpt-6-luna" || config.advancedModel !== "gpt-6-sol") {
@@ -14,7 +15,8 @@ const store = new BudgetStore(config.databaseUrl, config.userHashSecret, {
   perUserDailyRequests: config.perUserDailyRequests
 });
 await store.init();
-const erasure = new PgAccountErasure(store.pool, config.accountErasureCostPolicy ?? "pending_requires_review", config.accountErasureReplayReady === true);
+const verifyCheckpoint = await loadProductionOwnerCheckpointVerifier();
+const erasure = new PgAccountErasure(store.pool, config.accountErasureCostPolicy ?? "pending_requires_review", config.accountErasureReplayReady === true, verifyCheckpoint);
 await erasure.checkSchema();
 store.accountErasure = erasure;
 const separate = config.copByokEnabled || config.simIzsEnabled ? new PgSeparateBilling(store.pool, config.credentialEncryptionKey!, erasure) : undefined;

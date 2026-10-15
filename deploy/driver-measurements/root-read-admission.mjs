@@ -129,9 +129,13 @@ async function current(metadata, permitRecord, request, peer, keys) {
   requireGuard(Number.isFinite(proofExpiry) && proofExpiry > Date.now(), 'GUARD_READ_PROOF_EXPIRED');
   return { registration, expiresAt: Math.min(evidenceExpiry, Date.parse(c.expiresAt), Date.parse(a.expiresAt), proofExpiry) };
 }
-function issue(permit, request, facts, peer, authority) {
-  const keys = canonicalJson(readRootFile(join(ETC, 'public', 'verification-keys.json')));
-  const key = createPrivateKey(readRootFile(join(STATE, 'authority', 'signing-key.pkcs8'), { secret: true }));
+function issue(permit, request, facts, peer, authority, keys, keysBytes) {
+  // Use the SAME trust set that verified the permit/evidence/registry. Never
+  // sign a new-key admission over evidence accepted by an already revoked set.
+  requireGuard(sha256(readRootFile(join(ETC, 'public', 'verification-keys.json'))) === sha256(keysBytes), 'GUARD_KEYRING_CHANGED');
+  const signingPath = join(STATE, 'authority', 'signing-key.pkcs8');
+  const signingBytes = readRootFile(signingPath, { secret: true });
+  const key = createPrivateKey(signingBytes);
   requireGuard(key.asymmetricKeyType === 'ed25519', 'GUARD_SIGNING_KEY');
   const pub = createPublicKey(key).export({ format: 'jwk' });
   const matches = keys.keys?.filter(k => k.kty === 'OKP' && k.crv === 'Ed25519' && k.x === pub.x);
@@ -152,6 +156,8 @@ function issue(permit, request, facts, peer, authority) {
   const bytes = Buffer.from(canonical({ keyId: matches[0].kid, payload,
     signature: sign(null, Buffer.from(canonical(payload)), key).toString('base64url') }) + '\n');
   verifyRootRecord(bytes, keys, 'driver-read-admission');
+  requireGuard(sha256(readRootFile(join(ETC, 'public', 'verification-keys.json'))) === sha256(keysBytes) &&
+    sha256(readRootFile(signingPath, { secret: true })) === sha256(signingBytes), 'GUARD_SIGNING_CONFIGURATION_CHANGED');
   // Inline, bounded, short-lived result. No durable per-read actor/day journal.
   return Object.freeze({ admission: Object.freeze({ contractVersion: 'sim-driver-guarded-read-admission-v1', ...request,
     checkpointHash: facts.state.checkpointHash, reportProtection: p.reportProtection,
@@ -186,7 +192,7 @@ export async function inspectRootDriver(readPermitId, input, peer) {
     await target.query('COMMIT');
     const authority = await current(metadata, permit, request, peer, keys);
     requireGuard(sha256(readRootFile(join(ETC, 'public', 'verification-keys.json'))) === sha256(keysBytes), 'GUARD_KEYRING_CHANGED');
-    return issue(permit, request, facts, peer, authority);
+    return issue(permit, request, facts, peer, authority, keys, keysBytes);
   } finally {
     try {
       await target.query('ROLLBACK').catch(() => {});

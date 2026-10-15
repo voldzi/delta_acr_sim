@@ -1,0 +1,85 @@
+{
+  "status": "SOURCE_DRIVER_ROOT_CHECKPOINT_SQL_ONLY",
+  "startedAt": "2026-10-15T07:21:49.965Z",
+  "completedAt": "2026-10-15T07:21:52.291Z",
+  "postgresVersion": "18.3",
+  "passed": 8,
+  "cases": [
+    {
+      "case": "fixed Root control RPC and column grants do not grant application metadata DML",
+      "passed": true
+    },
+    {
+      "case": "strict twelve-key body, two modes, Root reference and canonical UTC reject malformed input",
+      "passed": true
+    },
+    {
+      "case": "initial NULL CAS applies active metadata and returns exact actual five-key/seven-state readback",
+      "passed": true
+    },
+    {
+      "case": "stale previous checkpoint and wrong store are rejected without changing the singleton",
+      "passed": true
+    },
+    {
+      "case": "explicit three-false unverified quarantine cannot satisfy even matching read-facts policy",
+      "passed": true
+    },
+    {
+      "case": "past or over-thirty-second proof and actual one-second row-lock timeout have no effect",
+      "passed": true
+    },
+    {
+      "case": "two concurrent CAS requests with the same previous checkpoint have exactly one winner",
+      "passed": true
+    },
+    {
+      "case": "metadata-only effects preserve rows and transient reference; old privilege pin fails while runtime profile remains narrow",
+      "passed": true
+    }
+  ],
+  "sourcePins": {
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "deploy/driver-measurements/005_root_checkpoint.sql": "77faac125f6133a774e6d9e900c2dcbfc3b86419d3179bfb4d5bcf64eb3bb3cb",
+    "scripts/test-driver-expiry-real-schema.mts": "61ff2bfe5b3510fa0c8d4a2be61bc8cea83fb798695d35713b0681634f5e2b6f",
+    "scripts/fixtures/driver-retention-real-schema/expiry-source.sql": "1561825849c8990526af26eae3866ee2100072db72bed638997a2eec7a8afb7a",
+    "docs/archive/2026-10-14_DRIVER_EXPIRY_REAL_SCHEMA.json": "8dac0d99b4add01446b05e8fdc6cd752f5d754328754fc46fe5848b954841396",
+    "scripts/test-driver-guarded-operations-postgres.mts": "547c0486f7a902c6bd4b920139b50178de392f2b3f91f27f3b1d177becf80e97",
+    "docs/archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.json": "80ea5fb1a4e914a5439dba901bfee528c1136c1ed812aee9c7bfb82ebe869c42",
+    "deploy/driver-measurements/guarded-runtime-verification.sql": "3ef5ad53b2e4f94d143636e7bf2e26108fd10d3d34c2a0521ca4760d95ca88a2",
+    "scripts/test-driver-read-admission-postgres.mts": "a84618b475c1f3707941e2290982a6069a4888461eea3f0a10fc5e6305e98e5f",
+    "docs/archive/2026-10-15_DRIVER_READ_ADMISSION_SQL.json": "656e141ca0469693917e7268000a390952326647ffc6f475666d26b5a7f9b755",
+    "scripts/test-driver-read-root.mts": "d478ca2597e38f95a93325614f3d90360665bc712169b180c3ab3483f431319c",
+    "scripts/fixtures/driver-read-root/harness.mjs": "fe4eca9f99f4082c86fc1229554a78bac7187f017ee5b141952d7491d81dce02",
+    "docs/archive/2026-10-15_DRIVER_READ_ROOT.json": "4d50470cc6398b8108fef3aad622a3fa747f749d8d8d0414854d36a7ee14c249",
+    "deploy/driver-measurements/root-read-admission.mjs": "cbd1b4c4fa6d8c75ff06a9f5ea9aef0948477a530e73bc7e8c85cfe464197192",
+    "deploy/driver-measurements/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "scripts/test-driver-root-checkpoint-postgres.mts": "7aadf226dc7733d5345e7f4c227ed21222dacace781f716d2e71d8ceb6b6d9a1"
+  },
+  "priorFrozenEvidenceUnchanged": true,
+  "providerCalls": 0,
+  "isolation": {
+    "newOwnedCluster": true,
+    "tcpListener": false,
+    "externalTargetsAccepted": false,
+    "secrets": false,
+    "dataRemoved": true
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootVerification": false,
+    "rootSignaturesVerified": false,
+    "acceptedRootRecords": false,
+    "rootEnrollment": false,
+    "nativeAuthority": false,
+    "actualWriterIntegration": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "realAccountDeleted": false,
+    "wholeAccountComplete": false
+  },
+  "interpretation": "Eight NEW synthetic SQL checkpoint groups only; typed references and DB flags are not independently verified Root authority. Prior 11/14/15/18 cases are not rerun or counted."
+}

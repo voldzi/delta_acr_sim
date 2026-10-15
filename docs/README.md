@@ -18,6 +18,7 @@ documents instead of duplicating flat files. The decision is recorded in
 | Runbook        | [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md)                                                                                                                                         |
 | ADRs           | [`adr/00_INDEX.md`](adr/00_INDEX.md)                                                                                                                                                   |
 | Environment    | [`../.env.example`](../.env.example) and [`runbooks/03_ENVIRONMENT_CONFIGURATION.md`](runbooks/03_ENVIRONMENT_CONFIGURATION.md)                                                        |
+| Account safety | [ADR 0039](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md), [runtime preparation 23](integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md), and [coordinated cutover/rollback 19](runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md) |
 
 ## Active Documentation Indexes
 
@@ -35,6 +36,13 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: opt-in aplikační napojení guarded driver operací](archive/2026-10-15_DRIVER_GUARDED_APPLICATION.md)
 - [Archiv ověření: privátní read-only stav měření](archive/2026-10-15_DRIVER_READ_ADMISSION_SQL.md)
 - [Archiv ověření: chráněný Linux reader měření](archive/2026-10-15_DRIVER_READ_ROOT.md)
+- [Archiv ověření: samostatná bezpečnostní revize Driver keyringu — 16/16](archive/2026-10-15_DRIVER_READ_KEYRING.md)
+- [Archiv ověření: Driver Root metadata checkpoint SQL — 8/8](archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.md)
+- [Archiv ověření: AI Root/SQL a compiled BYOK — 14/14, před production loaderem](archive/2026-10-15_AI_ROOT_CHECKPOINT.md)
+- Zdrojová AI composition: [pevný Root checkpoint loader/consumer](../apps/ai-router-api/src/owner-checkpoint.ts)
+  a [aplikační entrypoint](../apps/ai-router-api/src/index.ts). Její unit ověření
+  není produkční Root enrollment nebo deploy; rozsah zdroje a otevřené gates
+  jsou v runbooku 19.
 
 - [ADR 0036: fail-closed routing location errors](adr/0036_FAIL_CLOSED_ROUTING_LOCATION_ERRORS.md)
 

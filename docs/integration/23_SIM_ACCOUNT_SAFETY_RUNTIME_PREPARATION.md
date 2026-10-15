@@ -35,8 +35,8 @@ Fingerprint je PG SHA-256 UTF-8 `jsonb::text`, nikoli JavaScript JSON hash.
 Schema core `sim-driver-schema-fingerprint-v1` zahrnuje sedm tabulek,
 definice, indexy, constraints, triggery a původní receipt guard.
 Privilege core `sim-driver-privilege-fingerprint-v1` zahrnuje pevné role,
-členství, ACL, účinná práva včetně PUBLIC column grantů a šest privátních
-funkcí. NULL a explicitní prázdné ACL nejsou stejný pin. `ledgerDigest`
+členství, ACL, účinná práva včetně PUBLIC column grantů a skutečné privátní
+funkce. NULL a explicitní prázdné ACL nejsou stejný pin. `ledgerDigest`
 je zvláštní PG SHA-256 celého skutečného řádku ledgeru v UTC. Očekávané
 piny přijímá nezávislý Root publisher; nezískávají autoritu tím, že je
 vrátí samotná kontrolovaná DB.
@@ -105,6 +105,218 @@ ověřilo SQL fakta a zákaz vedlejších účinků.
 ověřilo skutečné podpisy/custody/TLS/SQL readeru se syntetickými Root
 záznamy a peer. Neprokazuje to produkční permit, nativní peer, enrollment
 nebo obnovu skutečné zálohy.
+
+Následná bezpečnostní revize zachovává při podpisu původní ověřený
+keyring snapshot a ověřuje neměnnost keyring/signer bytes před i po něm,
+shodně s AI readerem níže. Má [nový samostatný 16skupinový důkaz](../archive/2026-10-15_DRIVER_READ_KEYRING.md),
+nikoli přepsané předchozí výsledky. Negativní signer/keyring případy
+nedokládají deterministický race test rotace ani produkční config lease.
+
+## Omezená publikace Root checkpointů
+
+Následující dva soubory `005_root_checkpoint.sql` jsou oddělené zdrojové
+publikátory metadat, nikoli produkčně aplikované migrace nebo přijetí autority.
+Vyžadují předem existující pevné omezené role, přijatou inkarnaci v
+privátním `store_binding` a existující singleton checkpointu. Nevytvářejí
+role, členství, secrets, přístupové údaje, singleton ani automatickou vazbu úložiště.
+Tabulky zůstávají vlastněné dosavadním migrátorem; běžná aplikace nedostává
+EXECUTE, široký UPDATE ani nové oprávnění k mazání.
+
+Root musí před voláním nezávisle ověřit skutečné podepsané aktuální
+owner/continuity/replay a příslušné retenční, publikační či nákladové
+podklady. SQL tyto podpisy neověřuje a z vlastních booleanů nevytváří
+pravdivý důkaz. Přesný `rootRecordRef={recordId,digest}` obsahuje UUID a
+lowercase hex64; je pouze dočasně přijat a vrácen, nikde se neukládá.
+Jeho skutečný původ a nejisté doručení řeší chráněný Root journal.
+
+Oba settery mají pevný `session_user`, `SECURITY DEFINER` pod NOLOGIN
+ownerem, UTC, `row_security=off` a `lock_timeout=1000ms`. Zamknou předvazbu
+store pro čtení a existující checkpoint pro zápis. Kanonický UTC důkaz s
+milisekundami musí být po získání zámku budoucí nejvýše o 30 sekund a stále
+platný po UPDATE. To není síťový deadline ani náhrada Root/client watchdogu.
+Smí se použít pouze pod výslovnou aktuální maintenance/review autoritou;
+setter se nevolá pro každý chat nebo běžný aplikační požadavek.
+
+### Driver SQL 005
+
+`deploy/driver-measurements/005_root_checkpoint.sql` přidává pouze
+`sim_driver_guard_source.apply_root_checkpoint(jsonb)` pro existující
+`sim_driver_guard_control` v DB `sim_driver_measurements`. Request má
+přesně 12 polí:
+
+```text
+contractVersion=sim-driver-root-checkpoint-v1, owner=sim_driver_measurements,
+scope=online_driver_scope, storeIncarnation, expectedPreviousCheckpointHash,
+checkpointHash, proofValidUntilUTC, replayReady, retentionReviewed,
+reportProtection, publicationFenceVerified, rootRecordRef
+```
+
+Checkpoint je hex64. `expectedPreviousCheckpointHash:null` je přijatelný
+jen při skutečně null počátečním checkpointu; jinak musí přesně odpovídat
+uzamčené dosavadní hodnotě. Aktivní režim vyžaduje všechny tři readiness
+booleany true a chráněný report režim. Karanténa vyžaduje všechny false a
+`reportProtection=unverified`; smíšené stavy se odmítají.
+
+Owner dostane jen explicitní UPDATE sloupců `replay_ready`,
+`replay_checkpoint_hash`, `proof_valid_until`, `retention_reviewed`,
+`report_protection`, `publication_fence_verified`. Původní úzké
+`UPDATE(singleton)` potřebné pro 003 share-lock zůstává beze změny.
+Žádný ledger, origin, receipt, contributor fence, report ani store binding
+se nemění. Čas důkazu se zapisuje do již existujícího `proof_valid_until`;
+nevzniká nová TTL tabulka nebo vazba na účet.
+
+Výsledek `sim-driver-root-checkpoint-result-v1` má přesně
+`contractVersion`, `storeIncarnation`, `rootRecordRef`, `appliedAtUTC`,
+`state`; poslední položka je skutečný sedmipolový readback odpovídající
+Driver 004. Nejde o podepsané přijetí ani dokončení mazání.
+[Samostatný záznam](../archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.json)
+dokládá 8/8 nových syntetických skupin na skutečném PostgreSQL 18.3:
+ACL/kontrakt, CAS, karanténu, expiraci/zámek, souběh a metadata-only efekty.
+Cluster byl pouze soukromý Unix socket a byl odstraněn. Tento důkaz
+neobsahuje skutečný Root podpis, delivery, restore nebo nasazení a
+nepřičítá starší 11/14/15/18 případy.
+
+### AI Router: čtecí fakta 004
+
+`deploy/ai-router/004_root_checkpoint_facts.sql` definuje
+`sim_ai_guard_source.read_checkpoint_facts(jsonb)` v DB `sim_ai_router`.
+Existující `sim_ai_guard_owner` je NOLOGIN, control je pevný
+`sim_ai_guard_control`; runtime `ai_router_runtime` nemá privátní
+USAGE/EXECUTE. Příprava vyžaduje prázdné vlastněné privátní schéma a
+vytvoří prázdný `store_binding`, bez generované inkarnace či automatického
+enrollmentu. Před setterem 005 musí být vazba zvlášť skutečně přijata.
+
+STABLE reader vyžaduje `BEGIN READ ONLY`, nezapisuje a nespouští origin
+probe, maintenance nebo poskytovatele. `search_path=pg_catalog,public`
+zachovává dosavadní viditelnost definic pro legacy schema digest; všechny
+relace jsou kvalifikované a runtime/guard/control nesmějí CREATE v public.
+Request obsahuje přesně:
+
+```text
+owner=sim_ai_router, scope=cop_router_primary_database, purpose=checkpoint,
+expectedSnapshot={checkpointId,generation,operationDigest,schemaDigest}
+```
+
+`generation` je kanonický nezáporný desetinný text v rozsahu PostgreSQL
+bigint, nikoli JSON number. `sim-ai-checkpoint-facts-v1` vrací request,
+čas a inkarnaci, `snapshotMatches`, schema/permission fingerprinty,
+čtyři invarianty a nejvýše tento sedmipolový checkpoint:
+`identity_reviewed`, `replay_ready`, `cost_policy`, `checkpoint_id`,
+`checkpoint_generation`, `operation_digest`, `schema_digest`.
+Nezveřejňuje jednotlivé účty, klíče, requesty ani finanční řádky.
+
+Legacy operation/schema digests mají stejné PostgreSQL byte pravidlo jako
+dosavadní Router; nejsou přepsány na JavaScript hash. Nové schema a
+privilege fingerprinty zvlášť vážou skutečný katalog, RLS, fence triggery,
+finanční invoker views, retenční pravidla, role a účinné column ACL.
+`snapshotMatches` je pouze shoda faktů, ne Root oprávnění.
+Čistý `checkpoint-facts.mjs` kontroluje přesný tvar a stáří nejvýše pět
+sekund a znovu odvodí shodu snapshotu. Jeho samostatné testy prošly 10/10;
+to není zkouška PostgreSQL, podpisu, peer transportu nebo produkční autority.
+
+### AI Router: publikace metadat 005
+
+`deploy/ai-router/005_root_checkpoint.sql` přidává pouze control-only
+`sim_ai_guard_source.apply_root_checkpoint(jsonb)`. Pevný owner dostane
+šest explicitních UPDATE sloupců `identity_reviewed`, `replay_ready`,
+`cost_policy`, `checkpoint_id`, `checkpoint_generation`, `updated_at`;
+tabulka zůstává vlastněná `ai_router_migrator`. Request má přesně:
+
+```text
+contractVersion=sim-ai-root-checkpoint-v1, owner=sim_ai_router,
+scope=cop_router_primary_database, storeIncarnation, expectedCheckpointId,
+expectedGeneration, checkpointId, generation, proofValidUntilUTC,
+rootRecordRef, identityReviewed, replayReady, costPolicy
+```
+
+CAS porovnává skutečné ID i generaci. Nová generace musí být přesně stará
+plus jedna, bez přeskočení, zaokrouhlení nebo bigint overflow. Aktivní režim
+vyžaduje oba booleany true a `aggregate-costs-current-month-v1`; karanténa
+oba false a `pending_requires_review`. Smíšené stavy jsou neplatné.
+
+Výsledek `sim-ai-root-checkpoint-result-v1` má přesně `contractVersion`,
+`storeIncarnation`, `rootRecordRef`, `appliedAtUTC`, `proofValidUntilUTC`,
+`checkpoint`; checkpoint nese jen pět camelCase metadat
+`checkpointId`, `generation`, `identityReviewed`, `replayReady`, `costPolicy`.
+Operation/schema digests získá Root až novým čerstvým read-only čtením 004.
+Na rozdíl od Driveru zde TTL není sloupec: deadline se jen ověří a vrátí,
+nevytváří trvalou platnost readiness. Nemění se ledger, costs/rollups,
+BYOK klíče, finanční views, RLS, fences ani billing pravidla.
+
+Instalace kterékoli 005 změní skutečný privilege fingerprint funkcí a
+sloupcových ACL. Root musí nezávisle přijmout nový pin; nesmí ho jen
+převzít z kontrolované DB nebo obejít kontrolu shody. Staré piny musí
+selhat uzavřeně, přestože správný úzký runtime profil zůstane zachovaný.
+
+### AI Root reader a čerstvé per-inspect doručení
+
+`deploy/ai-router/root-checkpoint-read.mjs` je zdrojový pevný Root reader,
+nikoli už připojený produkční verifier nebo metadata setter.
+`inspectRootAiCheckpoint(readPermitId, request, peer)` volá pouze COP
+nativní broker; ten podle potvrzeného COP kontraktu vybírá právě čerstvý
+permit z chráněného per-inspect delivery. Aplikace nesmí vybrat UUID permitu,
+cestu, callback, DSN nebo údaje vydávané za kernelový peer.
+Nejprve se ověří Root-owned code tree a chráněné soubory. Ed25519
+podpisy, registry/frontier, boot/cluster/timeline a peer binding se
+kontrolují před i po SQL 004.
+Profily `registry-probe` a `ai-router-control` mají pevnou ověřenou TLS
+CA/server name. Klientský i serverový timeout doplňuje 15sekundový
+watchdog včetně cleanup; není SQL ani poskytovatelský fallback.
+
+Permit kind je `ai-router-read-permit`, registrace
+`ai-router-client-registration`. Čtyři přesné podepsané evidence kinds
+jsou `ai-router-read-identity`, `ai-router-read-retention`,
+`ai-router-read-cost`, `ai-router-read-schema`; vážou stejný request,
+store, dataset/runtime/proof, policy/frontier a schválený cost policy.
+Kontrola očekává COP potvrzený `cop-sim-ai-projection-v1` a
+`cop-jizda-only-sim-preserved-v1`, nikoli nový rozsah globální identity.
+Výstup `{admission,record}` obsahuje
+`sim-ai-router-checkpoint-admission-v1` a inline podepsaný kind
+`ai-router-read-admission`, korelovaný přes přesné bajty včetně newline.
+Platnost je nejvýše pět sekund od pozorování i vydání a nikdy déle než
+permit, evidence, registrace, frontier a skutečný runtime proof.
+
+COP potvrdil čerstvý krátkodobý permit pro každé `inspect` a delivery v
+chráněném tmpfs, bez nové trvalé per-read identity historie. To je kontrakt
+dalšího skutečného zapojení, nikoli důkaz přijatého enrollmentu nebo
+nasazeného produceru. Immutable execution origin a jeho známý/nejistý
+commit mají oddělený životní cyklus: fresh read permit neopravňuje založit
+nový origin místo původního. Maintenance lease pro změnu checkpointu je
+rovněž výslovný a oddělený od chat/read oprávnění.
+
+[Samostatný skutečný Linux test](../archive/2026-10-15_AI_ROOT_CHECKPOINT.md)
+prošel 14/14 novými skupinami: skutečné SQL 001–005, Root podpisy/custody,
+TLS a zkompilovaná BYOK key/chat cesta při vypnuté aktivaci mazání.
+Prošlý nebo odvolaný důkaz vracel 503 před providerem a změnou dat.
+Dvě provider odpovědi byly syntetické, žádné externí volání neproběhlo.
+Fixture peer a metadata nejsou nativní enrollment a výsledek předchází
+níže popsanému production composition loaderu. Starší případy se nepřičítají.
+
+Reader při podpisu používá tentýž keyring snapshot jako při ověření
+permit/evidence; signer musí patřit právě do něj. Před i po podpisu
+se kontroluje neměnnost keyring/signer bytes. Změněná konfigurace se
+odmítne, nezkouší se znovu s novým trust setem. To nenahrazuje skutečně
+drženou Root config/generation lease při aktualizaci nebo obnově.
+
+`apps/ai-router-api/src/owner-checkpoint.ts` nyní tvoří konkrétní zdrojový
+adaptér. Pevně načítá pouze Root-owned ordinary code tree
+`/opt/cop-account-safety/ai-root-inspect.mjs` a COP potvrzený export
+`createProductionAiCheckpointAdmissionPort()`. Před importem kontroluje
+i všechny závislosti, ne pouze vstupní soubor; nepřijímá cestu či factory
+z env nebo HTTP. Pro každý checkpoint vyžádá nové `inspect`, předá pouze
+přesný typovaný snapshot bez user/key/URL/permit selektoru a zkontroluje
+shodu přijetí. Kryptografii a kernelový peer ověřuje skutečný COP nativní
+klient, nikoli tento shape adaptér. Chybějící modul, port, neplatné přijetí
+nebo výjimka skončí `false`, nikdy kladným fallbackem. `index.ts` jej
+předává skutečnému `PgAccountErasure`; příznak vypnutého mazání tuto
+kontrolu COP chatu neobchází. Třináct nových unit případů používá stub port
+nebo filesystem a nedokládá produkční autoritu.
+
+Před aktivací zůstávají společné gates: připnuté skutečné instalované bytes a enrollment,
+aktuální nezávislá autorita, nativní peer/delivery, SQL 004/005 a podepsaný
+readback, produkční BYOK key/chat/legacy parita včetně nákladů a výpadků, zachování
+SIM/IZS identity a fyzická restore/replay akceptace. Produkce ani chat
+nebyly tímto zdrojovým doplněním přepnuty.
 
 ## Stávající spojení COP a SIM
 
