@@ -48,6 +48,9 @@ fi
 admin_psql() {
   psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$PGUSER" -d postgres "$@"
 }
+router_admin_psql() {
+  psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$PGUSER" -d "$database" "$@"
+}
 
 is_superuser=$(admin_psql -A -t -c 'SELECT rolsuper FROM pg_roles WHERE rolname = current_user')
 [[ $is_superuser == t ]] || {
@@ -55,6 +58,28 @@ is_superuser=$(admin_psql -A -t -c 'SELECT rolsuper FROM pg_roles WHERE rolname 
   exit 1
 }
 existing=$(admin_psql -A -t -c "SELECT (SELECT count(*) FROM pg_roles WHERE rolname IN ('$migrator','$runtime')) + (SELECT count(*) FROM pg_database WHERE datname = '$database')")
+# Never rotate credentials, replay legacy grants or rewrite a credentials file
+# after even a partial protected installation. Namespace detection is only a
+# negative safety guard, not runtime profile verification or Root authority.
+guarded=f
+if [[ $existing == 3 ]]; then
+  if ! guarded=$(router_admin_psql -A -t -c "SELECT to_regnamespace('sim_ai_guard_source') IS NOT NULL" 2>/dev/null); then
+    printf 'Cannot inspect the AI Router guard namespace; refusing legacy provisioning/recovery. No changes made.\n' >&2
+    exit 1
+  fi
+  [[ $guarded == t || $guarded == f ]] || {
+    printf 'Unexpected AI Router guard diagnostic; refusing legacy provisioning/recovery. No changes made.\n' >&2
+    exit 1
+  }
+fi
+if [[ $guarded == t ]]; then
+  if [[ $mode != --check ]]; then
+    printf 'Guarded AI Router namespace detected; refusing legacy provisioning/recovery. No grants or credentials changed.\n' >&2
+    exit 1
+  fi
+  printf 'Guarded AI Router namespace detected through HAProxy. Read-only diagnostic only; not runtime privilege verification, restore/Root readiness or activation.\n'
+  exit 0
+fi
 if [[ $mode == --check ]]; then
   printf 'HAProxy connection and administrator rights verified. Existing AI Router objects: %s.\n' "$existing"
   exit 0

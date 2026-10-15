@@ -199,6 +199,16 @@ blanket checkpoint grantem, automatickým přijetím nového pinu nebo
 resetem generace. Bez kompatibilního přijatého image zůstanou pozastavené
 jen dotčené COP cesty; nikoli účet a přístup do nezávislého SIM/IZS.
 
+AI provisioning skript při nalezeném namespace `sim_ai_guard_source`
+odmítne legacy `--apply` i `--recover` ještě před rotací přístupových údajů
+nebo udělením grantů, včetně částečné chráněné instalace. `--check` je
+pouze čtecí detekce, nikoli ověření runtime profilu, Root readiness nebo
+aktivace. Výpadek či neplatná odpověď namespace kontroly nesmí otevřít
+legacy recovery; ochranu neobcházet ruční rotací či blanket grantem.
+Osm scénářů `scripts/test-ai-provisioning-guard.mjs` prošlo s úplným
+zachycením `psql` a `openssl`, bez skutečné DB nebo vytvoření přístupů.
+Je to kontrola CLI flow, nikoli další PostgreSQL nebo Root důkaz.
+
 ## Rozsah a aktuální gate
 
 Zdrojová větev `codex/sim-account-erasure-release` vychází z nasazeného SDA
