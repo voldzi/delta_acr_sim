@@ -1,0 +1,51 @@
+{
+  "status": "PARTIAL_COP_SIM_HTTP_POSTGRESQL_ACCEPTANCE_NOT_WHOLE_ACCOUNT",
+  "date": "2026-10-15",
+  "simRevision": "8fd4b6b3b665babd4a9e8a5af08fce8a0567cbc1",
+  "copBaseRevision": "5df26bbfc69cd98d4ea508f7d66b7bd1b1e916f1",
+  "copTestSourceSha256": "cbeb2c5d48ceea120bdf291152e95aa88f4d614ba91fbe79e4b7c56220bd7c8f",
+  "copContinuitySourceSha256": "f4979d6607a2bcdad4bc56deed55fa15499af502d9118df7a78f8b5b092426d8",
+  "rawVitestReportSha256": "45296cba57f0bb89fabdfd0907f77598e8d6b16fee387229c4f5c22518a26a59",
+  "rawVitestReportCopiedIntoSim": false,
+  "result": {
+    "success": true,
+    "passed": 9,
+    "failed": 0,
+    "composition": "Eight PostgreSQL continuity/identity/inventory cases and one joint authenticated COP HTTP to actual SIM HTTP/PostgreSQL case",
+    "jointSelectedOwners": {"sim_measurements": "completed", "ai_router": "online_complete"},
+    "copAccountDeleted": false,
+    "copHttpStatus": 202
+  },
+  "simSourceSha256": {
+    "deploy/account-safety/database-erasure-guard.mjs": "bf67670902450009e012e3813ff4f5b556f0668eadcfddfd194200cfedb8d86f",
+    "deploy/account-safety/010_sim_database_safety_v2.sql": "c7865609b4ccb88b220026f5a5844cfcdd9e492a6dbdf1da50471f062b95c3fa",
+    "deploy/account-safety/011_sim_target_binding.sql": "fbd9e8230e8b2ef3bcbbc20bf023e3828fd004dd57f3042d6a210b286f5244ac",
+    "deploy/driver-measurements/008_eta_contributor_binding_database_v2.sql": "4a156baee81ded14d01b9ce261cca82a4f835905d32f91418fc8f67038b3f185"
+  },
+  "actual": {
+    "postgresqlCopGuardDriverRouter": true,
+    "restrictedSimGuardAndTargetRuntimeRoles": true,
+    "copRs256AuthenticationWithSyntheticJwks": true,
+    "copPreflightAndConfirmHttpHandlers": true,
+    "copControllerAndSimHttpAdapters": true,
+    "simProductionDatabaseLoadersAndStores": true,
+    "admittedUncommittedBatchWaitObservedByPgBlockingPids": true,
+    "batchCommitThenDriverReceiptIntervalEtaZero": true,
+    "foreignEtaRejected23503": true,
+    "otherDriverReceiptAndEtaPreserved": true,
+    "copRouterKeyZeroSimNamespaceKeyPreserved": true,
+    "oldActorJwt403OtherActor200ForeignReceipt404": true,
+    "localCopFenceReplayAfterRollback": true
+  },
+  "limits": {
+    "otherOwnerReadinessAndPreflightAreSyntheticFixtures": true,
+    "otherOwnerEffectsRemainPending": true,
+    "noProductionReadinessOrWholeAccountAcceptance": true,
+    "syntheticAccountsAndOpaqueCiphertextOnly": true,
+    "providerCalls": 0,
+    "productionChanged": false,
+    "physicalBackupRestoreAccepted": false,
+    "realIphoneAccepted": false
+  },
+  "earlierEvidence": "Ten actual SIM owner HTTP/PG cases passed before ETA008; they are not counted as the final joint gate. The initial COP Router seed used a wrong hash derivation and was corrected before the passing report."
+}
