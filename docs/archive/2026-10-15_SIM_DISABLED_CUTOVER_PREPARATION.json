@@ -1,0 +1,60 @@
+{
+  "status": "SOURCE_TESTED_AND_NONROOT_HOST_PREFLIGHT_ONLY",
+  "checkedAtUTC": "2026-10-15T19:03:32Z",
+  "runtimeSourceRevision": "ca1fd6b6046745e91cca6648e1e5bd3f93fc8422",
+  "entrypointSha256": "8bd44449c853d12a28ce02f2982ba01e0236da59ace04fca5dc635914e732def",
+  "dependencyManifestSha256": "8e67b368d189271d43dbf784347d677da47cfe42987c36009aff4d3d41c603af",
+  "host": "docker.home.cz",
+  "actualHostPreflight": {
+    "uid": 1000,
+    "candidateImportsInNetworkNone": true,
+    "candidateSourcePinsVerified": true,
+    "currentComposeEnvironmentDigestsMatch": true,
+    "currentPerServiceComposeSetsPreserved": true,
+    "currentNetworksAndMountsRecorded": true,
+    "publicPortBindings": {},
+    "driverCandidateImage": "sha256:ff8e60608936d4c97cba01e8d96ad064ce3950c6e2a9a115df88dd75fb8fb23d",
+    "routerCandidateImage": "sha256:d4176d79106315d8fe8df1649c7755d1bc2b5189f390fca796a4dbd23778cd2e",
+    "driverStillRunningImage": "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965",
+    "routerStillRunningImage": "sha256:2e21d0576a9cdc2626e3540da112211f7b425f76b3b51109f7cfcc5454bcef88"
+  },
+  "copFieldSourceReview": {
+    "revision": "05e37f6e141887706094b3ad4a0f6349b449403b",
+    "path": "apps/cop-api/src/server.ts",
+    "fileSha256": "cdd56054ac1eed03b0738ac1700adee29d4dfb0169ff3513a2f8221e13570d42",
+    "exactFieldUsedByBothAdapters": "COP_SIM_ERASURE_ACTOR_SECRET",
+    "existingRouterActorPreserved": true,
+    "productionSecretValuesDisplayedOrChangedInPreparation": false
+  },
+  "tests": {
+    "newSyntheticInstallAndInventoryChecks": {"passed": 23, "failed": 0},
+    "rerunActualIsolatedPostgresqlInstallerReportAndRestore": {"passed": 23, "failed": 0, "providerCalls": 0},
+    "nodeRuntime": "24.16.0",
+    "postgresRuntime": "18.3",
+    "regression": {"passed": 873, "optionalPostgresSkipped": 6},
+    "typecheck": "passed",
+    "build": "passed",
+    "skeleton": "passed",
+    "openapi": {"passed": true, "paths": 151, "schemas": 274},
+    "newScriptsFormatting": "passed",
+    "shellSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "initialAttempts": [
+    "Root-level --import tsx could not resolve a package; rerun used the already installed service-local loader and completed all 23 PG cases.",
+    "One source-string assertion was whitespace-sensitive after formatting; changed only the assertion to allow whitespace and reran all 23 new checks successfully.",
+    "A shell command chain inherited Node26 for later commands; every prescribed check was repeated with an exported fixed Node24 PATH and passed."
+  ],
+  "notProvenByTheseTests": [
+    "Actual human sudo maintenance sequence",
+    "Production migrations, grants, role enrollment or post-stop inventory",
+    "Production disabled capability responses after cutover",
+    "Whole COP account acceptance and backup/operator acceptance"
+  ],
+  "productionMigrationApplied": false,
+  "productionCronChanged": false,
+  "productionServicesStoppedOrRecreated": false,
+  "productionFlagsChanged": false,
+  "realAccountDeletion": false,
+  "wholeAccountComplete": false
+}

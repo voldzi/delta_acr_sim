@@ -25,6 +25,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [ADR 0039: hranice mazání COP/Jízdy při zachování SIM](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md)
 - [ADR 0040: aktuální DB-backed cesta bez dalšího Root/native protokolu](adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md)
 - [Runbook 20: skutečný HTTP/PG test, jeden přípravný installer, ověřené TLS, enrollment a restore pro DBv2](runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md)
+- [DBv2 disabled cutover: konkrétní instalační vstup, 23 nových kontrol, opakovaný PG/restore test a skutečný non-root preflight](archive/2026-10-15_SIM_DISABLED_CUTOVER_PREPARATION.json)
 - [Společný DBv2 průchod COP HTTP → SIM HTTP → PostgreSQL; vybrané ownery dokončeny, celý účet čestně pending](archive/2026-10-15_DATABASE_ERASURE_HTTP_ACCEPTANCE.md)
 - [Skutečný report export/erase závod, ztráta PG spojení a izolovaný pg_dump/restore s produkčními factories](archive/2026-10-15_SIM_REPORT_RESTORE_ACCEPTANCE.json)
 - [Integrace 22: mazání COP/Jízdy v SIM](integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)

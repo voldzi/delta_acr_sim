@@ -171,6 +171,85 @@ instalován Root guarded SQL s jinými právy, samotný env přepínač nestač�
 
 ## Skutečné ověření
 
+### Konkrétní disabled-only vstup připravený 15.10.2026
+
+`scripts/install-sim-erasure-disabled.sh --apply` skládá již existující
+provisioner a dva přesně omezené runtime kroky. Nezavádí další Root
+autorizační protokol. Vyžaduje jediný skrytý terminálový prompt PostgreSQL
+administrátora; žádné třetí JSON s tajemstvím člověk nevytváří.
+
+Přijatý skutečný readonly výstup je uložen v
+`deploy/account-safety/20261015-root-inventory.json`: digest
+`12e5f824e2aa9f8f740cc4fded7589743902243c0ba641c943b14ab4054ec705`,
+0 report souborů / 0 bytes, žádný aktivní producent, jediný cron match
+`ecfbe4cdf043c72d8e8704cc624442615f8aaebee995e05e0832ec8eb0e3a0f1`.
+Tento výstup není post-stop enrollment. Wrapper před změnou porovná živý
+inventář, zdroje, PostgreSQL administrátorský přístup a oba kandidátní
+obrazy. Při driftu se zastaví před zastavením služeb.
+
+Produkční runtime zdroj zůstává
+`ca1fd6b6046745e91cca6648e1e5bd3f93fc8422`; skutečně sestavené obrazy:
+
+| Služba | Neměnný image ID |
+| --- | --- |
+| situation-data-api | `sha256:ff8e60608936d4c97cba01e8d96ad064ce3950c6e2a9a115df88dd75fb8fb23d` |
+| ai-router-api | `sha256:d4176d79106315d8fe8df1649c7755d1bc2b5189f390fca796a4dbd23778cd2e` |
+
+Host příprava a runtime revize jsou odlišné: nový commit balí jen konkrétní
+instalační postup kolem těchto již připnutých runtime bytů. Starý readonly
+stage se nepřepisuje a dirty `/srv/sim` se nepulluje/nečistí.
+
+COP `apps/cop-api/src/server.ts` používá přesné pole
+`COP_SIM_ERASURE_ACTOR_SECRET` pro oba SIM erasure adaptéry. Proto se
+**zachová existující `AI_ROUTER_COP_ACTOR_SECRET`** a stejná hodnota se
+doplní jen do chybějícího Driver actor pole a chybějícího COP signer pole.
+Přítomná odlišná hodnota či odlišný issuer znamená odmítnutí; žádná tichá
+rotace. Hodnoty se čtou výhradně z `/srv/sim/.env` a `/srv/cop/.env`,
+přecházejí pouze pamětí a atomickým mode600 zápisem zpět do těchto souborů.
+Všechny namespace/hash/encryption klíče, bearery, ostatní nastavení a
+vlastník souborů se zachovají. COP služba se tímto wrapperem nerestartuje.
+Pád mezi oběma zápisy lze opakovat se stejným zachovaným klíčem.
+
+Po zastavení pouze SDA/Routeru se odstraní jen aktivní řádek s již
+schváleným SHA256 `c46a03b13ee8d39860fb7bd72df740006f8762fd421ded44e1b2cac990d15d78`.
+Ostatní řádky a ostatní cron/systemd soubory se kontrolují a zachovají.
+Řádek se nekomentuje, protože inventura právem vidí i obsah komentářů.
+Nový skutečný inventář musí mít 0 souborů, 0 bytes, žádný match, žádného
+aktivního producenta a žádný mutex. Starý i nový digest se uloží do
+Root-only `/srv/sim/.sim-erasure-cutover/inventory-transition.json`.
+Teprve nový digest je podkladem `reportPublication` pro původní provisioner.
+
+UUID bindingy a skutečné konfigurační fingerprinty se vytvoří jednou a
+uloží mode600 pod stejnou Root-only složku. Konfigurační review potvrzuje
+zachování nasazených identity tajemství a schválený konfigurační rozsah;
+není důkazem dokončené COP uživatelské akceptace nebo všech ownerů.
+Opakování drží původní enrollment, role/passwordy i namespace. Současný
+druhý běh blokuje lokální `flock`. Pád po odstranění cron řádku dohledá
+uložený přesný stop-transition intent; jiná konfigurace se nepřijme.
+
+Start i `--rollback-disabled` používají pouze oba kompatibilní obrazy a
+literal false overlay. Po pokusu o migraci není automatický návrat starého
+writeru. Při neúspěšném startu/kontrole se zastaví jen již spuštěné nové
+SIM kontejnery; journal ani přijaté fences se nevracejí. Ověření
+`--verify` nic nerestartuje. Oba capability endpointy musí vrátit
+`enabled=false`, `ready=false`, všechny strukturální checks true a
+`wholeAccountComplete=false`; kontrolují se i skutečné sítě, aliases,
+porty, zachované mounty a read-only CA. Pokud nové služby ještě neběží,
+není příprava ani lokální test vydávána za tento produkční výsledek.
+
+Testy nového vstupu:
+`node --test scripts/test-stage-sim-erasure-identity.mjs scripts/test-sim-erasure-runtime-step.mjs scripts/test-install-sim-erasure-disabled.mjs scripts/test-sim-root-inventory.mjs`.
+Jde o syntetické souborové/pure kontroly včetně částečného zápisu secrets a
+opakování po cron retirement, ne simulované potvrzení skutečného sudo
+nebo celé produkční sekvence. Původní skutečná PostgreSQL/restore sada se
+spouští zvlášť; její historické receipts se nepřepisují.
+
+Před lidským Root spuštěním ověřit externě oznámený hash shell vstupu a
+manifest jeho úplných zdrojových závislostí. Manifest neobsahuje secrets.
+Příprava/nahrání ani non-root `--plan` neprovádějí migraci, zastavení,
+cron editaci nebo aktivaci mazání. Produkční výsledek se dokládá až
+skutečným výstupem lidského běhu.
+
 Přípravný installer prošel 15.10.2026 **13/13** izolovanými kontrolami se
 skutečným PostgreSQL18, omezenými SCRAM účty a produkčními factories.
 Regrese: 873 PASS, 6 volitelných PG SKIP, typecheck/build/skeleton/OpenAPI

@@ -1,0 +1,28 @@
+{
+  "sourceRevision": "ca1fd6b6046745e91cca6648e1e5bd3f93fc8422",
+  "verifiedSourceFiles": 3,
+  "legacyCleanupCron": {
+    "owner": "voldzi",
+    "expectedSha256": "c46a03b13ee8d39860fb7bd72df740006f8762fd421ded44e1b2cac990d15d78",
+    "state": "exact_expected_line_still_active",
+    "activeMeasurementLineCount": 1,
+    "lineNumber": 5,
+    "mutated": false
+  },
+  "reportInventory": {
+    "contractVersion": "sim-driver-report-inventory-v1",
+    "directory": "/srv/x5-production/cache/csm-sim/driver-measurement-reports",
+    "fileCount": 0,
+    "bytes": 0,
+    "lockPresent": false,
+    "producerMatches": [{ "path": "/var/spool/cron/crontabs/voldzi", "sha256": "ecfbe4cdf043c72d8e8704cc624442615f8aaebee995e05e0832ec8eb0e3a0f1" }],
+    "activeProducerCount": 0,
+    "inventoryDigest": "12e5f824e2aa9f8f740cc4fded7589743902243c0ba641c943b14ab4054ec705",
+    "requiresOperatorReview": true
+  },
+  "readOnly": true,
+  "cronChanged": false,
+  "servicesChanged": false,
+  "databaseContacted": false,
+  "productionEnrollmentAccepted": false
+}

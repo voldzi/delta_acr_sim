@@ -100,6 +100,13 @@ Instalační psql i produkční runtime TCP vyžadují ověřené TLS se správn
 hostname a explicitní již schválenou veřejnou CA; žádné přijetí nové CA
 podle prvního spojení, přenos privátního klíče či změna COP Unix transportu.
 Instalace nezapíná mazání ani nepotvrzuje bezpečnost externích reportů.
+Konkrétní disabled-only wrapper v [runbooku 20](../runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md)
+zachovává existující Router actor; přesné COP pole `COP_SIM_ERASURE_ACTOR_SECRET`
+ověřené ve zdroji COP používají oba adaptéry. Hodnoty se nepředávají
+člověkem ani třetím secret JSON, pouze pamětí mezi dvěma produkčními `.env`.
+Odlišný existující signer/issuer je blokující nesoulad, nikoli důvod k rotaci.
+Skutečný post-stop report digest se přijímá odděleně od readonly inventáře;
+žádný source-only test nemůže potvrdit skutečné produkční přijetí.
 
 Aktuální DBv2 source doplňuje konkrétní soukromý report store, skutečné
 atomické zápisy, PG shared/exclusive publication lock a filesystem interlock
