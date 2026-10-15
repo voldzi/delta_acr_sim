@@ -11,8 +11,9 @@ import {issueRootRecord,storeRootRecord} from './root-record-issuer.mjs';
 import {verifyRootJws} from './root-jws.mjs';
 import {nativeModule} from './root-native.mjs';
 import {connectionProfile,RootDriverAuthority} from './root-driver-runtime.mjs';
-import {parseDriverReadRequest,validateDriverReadFacts} from './read-admission-facts.mjs';
-import {parseAiCheckpointRequest,validateAiCheckpointFacts} from './checkpoint-facts.mjs';
+import {parseDriverReadRequest,validateDriverReadFacts,matchDriverReadPolicy} from './read-admission-facts.mjs';
+import {parseAiCheckpointRequest,validateAiCheckpointFacts,matchAiCheckpointPolicy} from './checkpoint-facts.mjs';
+import {verifyOwnerPolicyLineage} from './root-owner-policy-lineage.mjs';
 import {BASE,BINDING,LIVE,READ_BINDING,COST,DRIVER_DECISIONS,AI_DECISIONS,SPEC,need,copy,freeze,ref,stamp,peerValid,
   equalBinding,domainPolicy,observation,transitionBody,readFactsShape} from './root-owner-authority-protocol.mjs';
 export {assertCopJournalActor,assertCopRevocationIntent,assertCopDriverErasureManifest} from './root-cop-actor.mjs';
@@ -35,9 +36,18 @@ const SQL=`SELECT row_to_json(i) AS identity,
   'expected_fence_sequence',r.expected_fence_sequence::text,'expected_cleanup_sequence',r.expected_cleanup_sequence::text,
   'fence_sequence',r.fence_sequence::text,'cleanup_sequence',r.cleanup_sequence::text,'attempt',r.attempt::text) END AS receipt,
  row_to_json(o) AS replay,(to_jsonb(h)||jsonb_build_object('frontier_sequence',h.frontier_sequence::text)) AS receipt_proof,
+ (to_jsonb(pc)||jsonb_build_object('generation',pc.generation::text,'policy_generation',pc.policy_generation::text,
+  'accepted_frontier_sequence',pc.accepted_frontier_sequence::text,'fence_sequence',pc.fence_sequence::text,'cleanup_sequence',pc.cleanup_sequence::text)) AS previous_acceptance,
+ (to_jsonb(pr)||jsonb_build_object('expected_checkpoint_generation',pr.expected_checkpoint_generation::text,
+  'expected_fence_sequence',pr.expected_fence_sequence::text,'expected_cleanup_sequence',pr.expected_cleanup_sequence::text,
+  'fence_sequence',pr.fence_sequence::text,'cleanup_sequence',pr.cleanup_sequence::text,'attempt',pr.attempt::text)) AS previous_receipt,
+ row_to_json(po) AS previous_replay,
  encode(sha256(convert_to(to_jsonb(c)::text,'UTF8')),'hex') AS acceptance_digest,
  encode(sha256(convert_to(to_jsonb(r)::text,'UTF8')),'hex') AS receipt_digest,
  encode(sha256(convert_to(to_jsonb(o)::text,'UTF8')),'hex') AS replay_digest,
+ encode(sha256(convert_to(to_jsonb(pc)::text,'UTF8')),'hex') AS previous_acceptance_digest,
+ encode(sha256(convert_to(to_jsonb(pr)::text,'UTF8')),'hex') AS previous_receipt_digest,
+ encode(sha256(convert_to(to_jsonb(po)::text,'UTF8')),'hex') AS previous_replay_digest,
  CASE WHEN r.cleanup_sequence=0 THEN i.initial_prefix_digest ELSE
   (SELECT entry_digest FROM cop_guard.fence_journal WHERE sequence=r.cleanup_sequence) END AS cleanup_prefix,
  coalesce((SELECT sequence::text FROM cop_guard.fence_journal ORDER BY sequence DESC LIMIT 1),'0') AS frontier_sequence,
@@ -67,6 +77,9 @@ const SQL=`SELECT row_to_json(i) AS identity,
  LEFT JOIN cop_guard.owner_receipts r ON r.receipt_id=c.receipt_id
  LEFT JOIN cop_guard.replay_operations o ON o.operation_id=r.replay_operation_id
  LEFT JOIN cop_guard.accepted_runtime_proofs h ON h.proof_id=r.source_proof_id
+ LEFT JOIN cop_guard.checkpoint_acceptances pc ON pc.acceptance_id=c.previous_acceptance_id
+ LEFT JOIN cop_guard.owner_receipts pr ON pr.receipt_id=pc.receipt_id
+ LEFT JOIN cop_guard.replay_operations po ON po.operation_id=pr.replay_operation_id
  WHERE i.singleton`;
 function root() {
   need(process.getuid?.()===0&&process.geteuid?.()===0,'ROOT_EXECUTION_REQUIRED');requireRootCodeTree(ROOT);
@@ -189,6 +202,35 @@ function policyEvidence(policy,binding,owner,keys) {
       canonical(p.transition)===canonical(transition),'GUARD_OWNER_TRANSITION_REFERENCE');
   }
 }
+function checkpointPolicyLineage(entry,row,source,prior,binding,keys) {
+  if(canonical(prior.ownerPolicyRef)===canonical(source.ownerPolicyRef))return null;
+  // A different policy is NEVER admitted by its shape alone. The complete
+  // archived A -> signed original transition/intent/dispatch -> current B is
+  // necessary in addition to every existing P0/P1, registry and cohort check.
+  const lineage=verifyOwnerPolicyLineage({owner:entry.owner,binding,priorRef:prior.ownerPolicyRef,currentRef:source.ownerPolicyRef});
+  need(canonical(canonicalJson(readRootFile(KEYRING)))===canonical(keys),'GUARD_OWNER_KEYRING_CHANGED');
+  const c=row.acceptance,r=row.receipt,pc=row.previous_acceptance,pr=row.previous_receipt,po=row.previous_replay;
+  need(ref(prior.checkpointAcceptanceRef)&&pc&&pr&&po&&
+    prior.checkpointAcceptanceRef.recordId===c.previous_acceptance_id&&c.previous_acceptance_id===pc.acceptance_id&&
+    r.expected_checkpoint_id===pc.acceptance_id&&/^[1-9][0-9]*$/.test(pc.generation)&&
+    pc.generation===r.expected_checkpoint_generation&&BigInt(c.generation)===BigInt(pc.generation)+1n&&
+    pc.dataset_binding_id===binding.datasetBindingId&&pc.policy_generation===String(binding.policyGeneration)&&pc.policy_digest===binding.policyDigest&&
+    pc.protected_config_id===binding.protectedConfigId&&pc.continuity_epoch===binding.continuityEpoch&&pc.admission_policy_id===c.admission_policy_id&&
+    pc.root_evidence_ref===pc.acceptance_id&&pc.receipt_id===pr.receipt_id&&pr.owner_id===entry.owner&&pr.binding_id===binding.runtimeBindingId&&
+    pr.production_authorization===false&&pr.replay_operation_id===po.operation_id&&pr.source_proof_id===po.source_proof_id&&po.binding_id===binding.runtimeBindingId&&
+    [row.previous_acceptance_digest,row.previous_receipt_digest,row.previous_replay_digest].every(hex),'GUARD_OWNER_POLICY_LINEAGE_ACCEPTANCE');
+  const original=signed(STATE+'/checkpoint-acceptances/'+pc.acceptance_id+'.json',keys,'checkpoint-acceptance',prior.checkpointAcceptanceRef,true).payload;
+  need(exact(original,[...BASE,'acceptanceId','datasetBindingId','receiptId','replayOperationId','sourceProofId','acceptanceDigest','receiptDigest','replayDigest'])&&
+    original.recordId===pc.acceptance_id&&original.acceptanceId===pc.acceptance_id&&original.datasetBindingId===binding.datasetBindingId&&original.receiptId===pr.receipt_id&&
+    original.replayOperationId===po.operation_id&&original.sourceProofId===pr.source_proof_id&&original.acceptanceDigest===row.previous_acceptance_digest&&
+    original.receiptDigest===row.previous_receipt_digest&&original.replayDigest===row.previous_replay_digest,'GUARD_OWNER_POLICY_LINEAGE_PREVIOUS');
+  const intent=signed(STATE+'/checkpoint-intents/'+lineage.operationId+'.json',keys,'owner-checkpoint-intent',lineage.intentRef,true).payload;
+  const dispatch=signed(STATE+'/checkpoint-dispatches/'+lineage.operationId+'.json',keys,'checkpoint-dispatch',lineage.dispatchRef,true).payload;
+  need(Date.parse(prior.issuedAt)<=Date.parse(intent.issuedAt)&&Date.parse(intent.issuedAt)<=Date.parse(dispatch.issuedAt)&&
+    Date.parse(dispatch.issuedAt)<Date.parse(prior.expiresAt)&&
+    Date.parse(intent.originalBody.proofValidUntilUTC)<=Date.parse(prior.expiresAt),'GUARD_OWNER_POLICY_LINEAGE_SOURCE_TIME');
+  return lineage;
+}
 function checkpointAcceptance(entry,row,source,binding,policy,keys) {
   const c=row.acceptance,r=row.receipt,o=row.replay,h=row.receipt_proof;
   if(source.checkpointAcceptanceRef===null) {
@@ -216,21 +258,39 @@ function checkpointAcceptance(entry,row,source,binding,policy,keys) {
     exact(q.binding,BINDING)&&equalBinding(q.binding,binding)&&q.operationId===o.operation_id&&q.operationKind===o.operation_kind&&q.trustProfileId===h.trust_profile_id,
   'GUARD_OWNER_CHECKPOINT_SOURCE');
   const prior=observation(q.observation,entry.owner);
-  need(canonical(q.ownerPolicyRef)===canonical(source.ownerPolicyRef)&&(q.checkpointAcceptanceRef===null||ref(q.checkpointAcceptanceRef))&&
+  need((q.checkpointAcceptanceRef===null||ref(q.checkpointAcceptanceRef))&&
     row.receipt_proof_exact_milliseconds===true&&q.issuedAt===row.receipt_proof_issued&&q.expiresAt===row.receipt_proof_expires&&prior.observedAtUTC===row.receipt_proof_observed&&
     Date.parse(prior.observedAtUTC)<=Date.parse(q.issuedAt)&&Date.parse(q.expiresAt)-Date.parse(prior.observedAtUTC)<=30000&&
     Date.parse(prior.observedAtUTC)<=Date.parse(source.observation.observedAtUTC)&&canonical({...prior,observedAtUTC:null})===canonical({...source.observation,observedAtUTC:null})&&
     q.frontierSequence===source.frontierSequence&&q.frontierDigest===source.frontierDigest&&h.frontier_sequence===String(source.frontierSequence)&&h.frontier_digest===source.frontierDigest&&
     q.clusterId===source.clusterId&&q.timelineId===source.timelineId,'GUARD_OWNER_CHECKPOINT_COHORT');
+  const lineage=checkpointPolicyLineage(entry,row,source,q,binding,keys);
   const frontier=row.frontier_sequence,digest=row.frontier_digest;
   need(c.accepted_frontier_sequence===frontier&&c.accepted_frontier_digest===digest&&c.fence_sequence===frontier&&c.fence_digest===digest&&
     r.fence_sequence===frontier&&r.fence_digest===digest&&c.cleanup_sequence===r.cleanup_sequence&&c.cleanup_digest===r.cleanup_digest&&
     c.cleanup_status===r.cleanup_status&&['pending','complete'].includes(c.cleanup_status)&&/^(0|[1-9][0-9]*)$/.test(c.cleanup_sequence)&&
     BigInt(c.cleanup_sequence)<=BigInt(frontier)&&c.cleanup_digest===row.cleanup_prefix,'GUARD_OWNER_CHECKPOINT_FRONTIER');
   if(['read','checkpoint-read'].includes(entry.purpose))need(c.cleanup_status==='complete'&&c.cleanup_sequence===frontier&&c.cleanup_digest===digest,'GUARD_OWNER_CHECKPOINT_PENDING');
-  return {recordId:p.recordId,digest:accepted.digest};
+  return {reference:{recordId:p.recordId,digest:accepted.digest},lineage};
 }
-async function targetPins(entry,policy,binding) {
+function consumedCheckpointTransition(entry,policy,binding,keys) {
+  const t=policy.transition,body=transitionBody(policy,entry.owner,binding.storeIncarnation),bodyDigest=sha256(canonical(body));
+  const facts={...binding,owner:entry.owner,scope:policy.scope,operationId:t.operationId,transitionIntentRef:t.intentRef,bodyDigest,originalBody:body};
+  const intent=signed(STATE+'/checkpoint-intents/'+t.operationId+'.json',keys,'owner-checkpoint-intent',undefined,true),ip=intent.payload;
+  need(exact(ip,[...BASE,...Object.keys(facts)])&&ip.recordId===t.operationId&&
+    Object.keys(facts).every(k=>canonical(ip[k])===canonical(facts[k])),'GUARD_OWNER_POST_TRANSITION_INTENT');
+  const expected={owner:entry.owner,scope:policy.scope,operationId:t.operationId,storeIncarnation:binding.storeIncarnation,
+    guardStoreId:binding.guardStoreId,continuityEpoch:binding.continuityEpoch,protectedConfigId:binding.protectedConfigId,
+    datasetBindingId:binding.datasetBindingId,runtimeBindingId:binding.runtimeBindingId,transitionIntentRef:t.intentRef,
+    intentRef:{recordId:ip.recordId,digest:intent.digest},bodyDigest};
+  const dp=signed(STATE+'/checkpoint-dispatches/'+t.operationId+'.json',keys,'checkpoint-dispatch',undefined,true).payload;
+  need(exact(dp,[...BASE,...Object.keys(expected)])&&dp.recordId===t.operationId&&
+    Object.keys(expected).every(k=>canonical(dp[k])===canonical(expected[k])),'GUARD_OWNER_POST_TRANSITION_DISPATCH');
+  const deadline=Date.parse(t.proofValidUntilUTC);
+  need(Date.parse(ip.issuedAt)<=Date.parse(dp.issuedAt)&&Date.parse(ip.issuedAt)<deadline&&
+    deadline-Date.parse(ip.issuedAt)<=30000&&Date.parse(dp.issuedAt)<deadline,'GUARD_OWNER_POST_TRANSITION_DEADLINE');
+}
+async function targetPins(entry,policy,binding,lineage,keys) {
   const owner=entry.owner,spec=SPEC[owner],driver=owner==='sim_driver_measurements';
   const request=driver?parseDriverReadRequest({owner,scope:spec.scope,purpose:'capability'}):
     parseAiCheckpointRequest({owner,scope:spec.scope,purpose:'checkpoint',expectedSnapshot:policy.expectedSnapshot});
@@ -240,7 +300,47 @@ async function targetPins(entry,policy,binding) {
     const f=driver?validateDriverReadFacts(r.rows[0].value,request):validateAiCheckpointFacts(r.rows[0].value,request),permissions=driver?f.privileges:f.permissions,now=Date.now();
     need(Date.parse(f.observedAtUTC)<=now&&now-Date.parse(f.observedAtUTC)<=5000&&f.storeIncarnation===binding.storeIncarnation&&f.schema.ready&&
       f.schema.fingerprint===policy.schemaFingerprint&&permissions.runtimeProfileMatches&&permissions.fingerprint===policy.privilegeFingerprint,'GUARD_OWNER_TARGET_PINS');
-    if(!driver)need(f.invariants.rlsEnabled&&f.invariants.fencesReady&&f.invariants.financialViewsReady,'GUARD_OWNER_TARGET_INVARIANTS');
+    let authorizedPost=false;
+    if(entry.purpose!=='checkpoint-publish') {
+      if(driver)matchDriverReadPolicy(f,request,{storeIncarnation:binding.storeIncarnation,checkpointHash:policy.expectedCheckpointHash,
+        schemaFingerprint:policy.schemaFingerprint,privilegeFingerprint:policy.privilegeFingerprint,reportProtection:policy.reportProtection},now);
+      else matchAiCheckpointPolicy(f,request,{storeIncarnation:binding.storeIncarnation,schemaFingerprint:policy.schemaFingerprint,
+        privilegeFingerprint:policy.privilegeFingerprint,costPolicy:policy.costPolicy},now);
+    }else {
+      // Only the independently signed transition permits the exact old OR new
+      // target during a publisher's actual exclusive lease. Never adopt a
+      // third checkpoint, mixed flags, changed digest, or arbitrary DB state.
+      const t=policy.transition;need(t,'GUARD_OWNER_TRANSITION_REQUIRED');
+      if(driver) {
+        const post=['checkpointHash','proofValidUntilUTC','replayReady','retentionReviewed','reportProtection','publicationFenceVerified'].every(k=>f.state[k]===t[k]);
+        const pre=f.state.checkpointHash===t.expectedPreviousCheckpointHash&&(t.expectedPreviousCheckpointHash===null?
+          !f.state.replayReady&&!f.state.retentionReviewed&&!f.state.publicationFenceVerified&&f.state.reportProtection==='unverified'&&
+            f.state.proofValidUntilUTC===null&&!f.state.proofCurrent:
+          f.state.checkpointHash===policy.expectedCheckpointHash&&
+            (f.state.replayReady&&f.state.retentionReviewed&&f.state.publicationFenceVerified&&f.state.reportProtection===policy.reportProtection||
+              !f.state.replayReady&&!f.state.retentionReviewed&&!f.state.publicationFenceVerified&&f.state.reportProtection==='unverified'));
+        need(pre||post,'GUARD_OWNER_TARGET_CHECKPOINT');
+        if(!pre){consumedCheckpointTransition(entry,policy,binding,keys);authorizedPost=true;}
+      }else {
+        const cp=f.checkpoint;
+        need(cp&&f.invariants.rlsEnabled&&f.invariants.fencesReady&&f.invariants.financialViewsReady&&
+          cp.operation_digest===t.operationDigest&&cp.schema_digest===t.schemaDigest,'GUARD_OWNER_TARGET_INVARIANTS');
+        const pre=cp.checkpoint_id===t.expectedCheckpointId&&cp.checkpoint_generation===t.expectedGeneration&&f.snapshotMatches&&
+          (cp.identity_reviewed&&cp.replay_ready&&cp.cost_policy===COST&&f.invariants.costRetentionReady||
+            !cp.identity_reviewed&&!cp.replay_ready&&cp.cost_policy==='pending_requires_review'&&!f.invariants.costRetentionReady);
+        const post=cp.checkpoint_id===t.checkpointId&&cp.checkpoint_generation===t.generation&&cp.identity_reviewed===t.identityReviewed&&
+          cp.replay_ready===t.replayReady&&cp.cost_policy===t.costPolicy&&f.invariants.costRetentionReady===(t.costPolicy===COST);
+        need(pre||post,'GUARD_OWNER_TARGET_CHECKPOINT');
+        if(!pre){consumedCheckpointTransition(entry,policy,binding,keys);authorizedPost=true;}
+      }
+    }
+    // A's old receipt cannot approve B against a different current target.
+    if(lineage&&!authorizedPost) {
+      if(driver)need(Object.keys(lineage.expectedDriverState).every(k=>f.state[k]===lineage.expectedDriverState[k]),'GUARD_OWNER_POLICY_LINEAGE_TARGET');
+      else need(f.checkpoint&&f.checkpoint.checkpoint_id===lineage.expectedAiSnapshot.checkpointId&&
+        f.checkpoint.checkpoint_generation===lineage.expectedAiSnapshot.generation&&f.checkpoint.operation_digest===lineage.expectedAiSnapshot.operationDigest&&
+        f.checkpoint.schema_digest===lineage.expectedAiSnapshot.schemaDigest,'GUARD_OWNER_POLICY_LINEAGE_TARGET');
+    }
     await query('COMMIT');return f;
   });
 }
@@ -274,8 +374,8 @@ async function inspectCurrent(entry) {
     typeof a.clusterId==='string'&&/^[0-9]{1,20}$/.test(a.clusterId)&&a.clusterId===row.cluster_id&&s.clusterId===a.clusterId&&
     Number.isSafeInteger(a.timelineId)&&a.timelineId>0&&a.timelineId===row.timeline_id&&s.timelineId===a.timelineId&&
     Date.parse(a.expiresAt)-Date.parse(a.issuedAt)<=30000,'GUARD_OWNER_FRONTIER');
-  const acceptanceRef=checkpointAcceptance(entry,row,s,binding,policy,before.keys);
-  policyEvidence(policy,binding,entry.owner,before.keys);await targetPins(entry,policy,binding);
+  const acceptance=checkpointAcceptance(entry,row,s,binding,policy,before.keys),acceptanceRef=acceptance?.reference??null;
+  policyEvidence(policy,binding,entry.owner,before.keys);await targetPins(entry,policy,binding,acceptance?.lineage,before.keys);
   const second=await metadata(entry,SQL,[reg.payload.datasetBindingId,reg.payload.runtimeBindingId]);
   const lastReg=registration(entry.owner,entry.peer,before.keys),lastPolicy=signed(STATE+'/owner-policies/'+entry.owner+'.json',before.keys,'owner-policy',policyRef,true);
   const lastProof=verifyRootJws(readRootFile(STATE+'/runtime-proofs/'+row.proof.proof_id+'.jws',{secret:true}),before.keys,'runtime-proof');
@@ -284,7 +384,7 @@ async function inspectCurrent(entry) {
   const lastAcceptance=checkpointAcceptance(entry,row,s,binding,policy,before.keys);
   const {observed:lastObservation}=currentHost(entry.owner,before.keys);
   need(second.rows.length===1&&canonical(second.rows[0])===canonical(row)&&sha256(readRootFile(KEYRING))===sha256(before.bytes)&&
-    lastReg.digest===reg.digest&&lastPolicy.digest===policyRecord.digest&&lastProof.digest===proof.digest&&lastAnchor.digest===anchor.digest&&canonical(lastAcceptance)===canonical(acceptanceRef)&&
+    lastReg.digest===reg.digest&&lastPolicy.digest===policyRecord.digest&&lastProof.digest===proof.digest&&lastAnchor.digest===anchor.digest&&canonical(lastAcceptance)===canonical(acceptance)&&
     canonical({...lastObservation,observedAtUTC:null})===canonical({...live,observedAtUTC:null})&&Date.parse(lastObservation.observedAtUTC)>=Date.parse(live.observedAtUTC)&&
     Date.parse(lastObservation.observedAtUTC)<=Date.now()&&Date.now()-Date.parse(lastObservation.observedAtUTC)<=5000&&!globalHold&&!entry.hold,'GUARD_OWNER_CONTINUITY_CHANGED');
   const expiresAtUTC=new Date(Math.min(Date.parse(s.expiresAt),Date.parse(reg.payload.expiresAt),Date.parse(a.expiresAt))).toISOString();
@@ -381,6 +481,25 @@ export async function issueOwnerEphemeralRecord(ctx,kind,facts,recordId=randomUU
   return signedCurrent(entry,kind,value,id=>PRIVATE+'/'+plan.directory+'/'+id+'.json',recordId);
 }
 function exists(path) {try{lstatSync(path);return true;}catch(error){if(error?.code==='ENOENT')return false;throw error;}}
+export async function archiveCurrentOwnerPolicy(ctx) {
+  const entry=entryFor(ctx);need(entry.purpose==='checkpoint-publish','GUARD_OWNER_CHECKPOINT_PURPOSE');
+  return serial(entry,async()=>{
+    await inspectCurrent(entry);
+    const directory=STATE+'/owner-policy-history';requireRootDirectory(directory,{secret:true});
+    need((lstatSync(directory).mode&0o777)===0o700,'GUARD_OWNER_POLICY_HISTORY_CUSTODY');
+    const reference=entry.state.rootPolicy.reference,currentPath=STATE+'/owner-policies/'+entry.owner+'.json';
+    const bytes=readRootFile(currentPath,{secret:true}),record=verifyRootRecord(bytes,entry.state.keys,'owner-policy',{historical:true});
+    need(record.digest===reference.digest&&record.payload.recordId===reference.recordId,'GUARD_OWNER_POLICY_HISTORY_REFERENCE');
+    const path=directory+'/'+reference.recordId+'.json';
+    try{storeRootRecord(path,bytes);}catch(error){if(error?.code!=='EEXIST')throw error;}
+    const archived=readRootFile(path,{secret:true});
+    need(archived.equals(bytes)&&sha256(archived)===reference.digest,'GUARD_OWNER_POLICY_HISTORY_IMMUTABLE');
+    verifyRootRecord(archived,entry.state.keys,'owner-policy',{historical:true});
+    await inspectCurrent(entry);
+    need(readRootFile(currentPath,{secret:true}).equals(bytes)&&readRootFile(path,{secret:true}).equals(bytes),'GUARD_OWNER_POLICY_HISTORY_CHANGED');
+    return freeze(copy(reference));
+  });
+}
 export async function beginOwnerPublicationIntent(ctx,body) {
   const entry=entryFor(ctx);need(entry.purpose==='checkpoint-publish','GUARD_OWNER_CHECKPOINT_PURPOSE');await current(entry);
   const t=ctx.rootPolicy.transition;need(t,'GUARD_OWNER_TRANSITION_REQUIRED');

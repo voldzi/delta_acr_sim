@@ -15,7 +15,7 @@
  */
 import {createRequire} from 'node:module';
 import {lstatSync} from 'node:fs';
-import {requireCurrentOwner, beginOwnerPublicationIntent, holdOwnerLease} from './root-owner-authority.mjs';
+import {requireCurrentOwner, archiveCurrentOwnerPolicy, beginOwnerPublicationIntent, holdOwnerLease} from './root-owner-authority.mjs';
 import {connectionProfile} from './root-driver-runtime.mjs';
 import {issueRootRecord, storeRootRecord} from './root-record-issuer.mjs';
 import {canonical, canonicalJson, exact, hex, uuid, sha256, requireGuard, readRootFile,
@@ -268,6 +268,11 @@ async function publish(peer, owner) {
   let state, intent, claimed = false, commitAcknowledged = false, output;
   try {
     state = stateOf(ctx, owner, peer); await current(ctx, state, peer, expired);
+    // Preserve the exact accepted pre-transition policy before an intent or
+    // target write. This is not issuance, renewal, policy adoption or a new
+    // acceptance: only the actual exclusive common context may archive it.
+    const archivedPolicy = await archiveCurrentOwnerPolicy(ctx);
+    requireGuard(canonical(archivedPolicy) === canonical(state.rootPolicy.reference), 'GUARD_CHECKPOINT_POLICY_HISTORY');
     const spec = SPEC[owner], base = baseBody(state), operationId = state.rootPolicy.transition.operationId;
     // Original canonical Root JSON, without rootRecordRef. Never the distinct
     // PostgreSQL JSONB-text digest used by guarded erasure origin mechanics.

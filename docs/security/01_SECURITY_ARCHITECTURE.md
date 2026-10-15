@@ -137,6 +137,14 @@ process-global HOLD a odmítnout další writer. Nejistý SQL výsledek se
 řeší jen nad původním neměnným originem/dispatch claimem; ne s novým
 časem, UUID nebo nahrazeným tělem.
 
+Různé historické/aktuální owner politiky jsou přijatelné jen s ověřeným
+originálem A, předem podepsaným T, neměnným intent/dispatch a nezávisle
+podepsanou B. Skutečný common opakuje DB C1/C2, globální policy,
+procesní cohort, frontier a target kontroly. Archivace je povolena jen
+skutečnému exkluzivnímu `checkpoint-publish` kontextu; kopie objektu ani
+samotný helper historie nejsou autorita. Vypršelý target se pro běžné
+čtení nikdy neoznačuje za aktuální.
+
 Tyto požadavky nejsou tvrzení o aktuálně přijaté produkční instalaci.
 Izolované SQL a Root fixture důkazy i jejich omezení jsou v
 [integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md)

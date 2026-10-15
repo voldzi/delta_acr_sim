@@ -29,7 +29,9 @@ Root14/16 výsledkům.
   zámky a vlastní kernel/proc identitu Root procesu. Host/app pozorování
   a přijetí politik jsou syntetické. Neověřuje celý mutation executor,
   publication/checkpoint writer, ztracený COMMIT, cílový neznámý session
-  END ani obnovu po HOLD. P0/P1 policy reference zůstává přísně stejná.
+  END ani obnovu po HOLD. Tento běh předchází rozšíření historie A/T/B
+  a používal přísně stejnou P0/P1 policy reference; jeho výsledek se na
+  novou kompozici nepřipisuje.
 - [Driver005 8/8](../archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.md)
   ověřilo nový metadata setter v soukromém Unix-only PostgreSQL 18.3:
   úzká práva, přesný kontrakt, CAS, karanténu, expiraci, zámek, souběh
@@ -55,6 +57,26 @@ Root14/16 výsledkům.
   Připravená composition sama tyto závislosti nezřizuje. Nový Router se
   nesmí recreate jen s erasure flagem false: bez skutečné autority by
   správně odmítl i dosavadní chráněný COP chat/BYOK.
+
+Zdrojové rozšíření historie politik vyžaduje samostatnou novou akceptaci
+dependency closure. Installer musí předem zřídit Root-only 0700
+`/var/lib/cop-account-safety/owner-policy-history`; běžící verifier složku
+nevytváří. Historii A, transition, původní intent/dispatch a C1/C2 artefakty
+nepřepisovat a neobnovovat jejich čas. Přesný aktuální target a všechny
+nezávislé binding/cohort/frontier kontroly zůstávají povinné. Oprava
+vypršeného targetu patří pouze do výslovně podepsaného `checkpoint-publish`,
+nikoli do automatického obnovení při čtení. Výsledek
+`checkpoint-readback-known` neznamená původní COMMIT ani produkční readiness.
+
+[Nový izolovaný důkaz 8/8](../archive/2026-10-15_ROOT_OWNER_POLICY_LINEAGE.md)
+ověřuje přesné historie i skutečné Driver/AI writery, nikoli skutečný
+produkční publisher či enrollment. Starý common 22/22 ani native writer
+receipt COP se nové kompozici automaticky nepřipisují.
+
+Při návratu ke starému commonu se nepřevádí nová historie na shodnou
+referenci, nemažou se claimy a nemění se proofy. Starší revize může novou
+historii bezpečně odmítnout; provoz musí zůstat v chráněné karanténě do
+samostatně přijatého replay/obnovy. Rollback není důvod obejít ochrany.
 
 ### Co musí být skutečně připravené před servisním oknem
 

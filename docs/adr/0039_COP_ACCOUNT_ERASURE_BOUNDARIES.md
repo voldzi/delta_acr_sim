@@ -382,8 +382,25 @@ Common má samostatný [izolovaný důkaz 22/22](../archive/2026-10-15_ROOT_OWNE
 nad skutečným metadata/target SQL, podpisy, session zámky a vlastní
 pidfd/proc identitou Root procesu. Syntetické app/host podklady se
 neprohlašují za runtime enrollment. Historický P0 a aktuální P1 proof
-smějí mít různá ID, ale jejich `ownerPolicyRef` zůstává shodná;
-odlišná policy reference je výslovně negativní případ.
+smějí mít různá ID. Tento historický běh používal shodnou `ownerPolicyRef`
+a odlišnou referenci ověřil jako negativní případ.
+
+Po výslovném souhlasu z 15. 10. 2026 je zdrojová hranice rozšířena o
+úplnou historii A, předem podepsaný přechod T a nezávisle podepsanou B.
+Původní A se archivuje beze změny bajtů pod skutečnou exkluzivní Root lease
+před intentem/setterem. Chybějící archiv, nesouhlas podpisu, evidence,
+databázové či globální vazby, procesní kohorty, frontier nebo předchozího
+acceptance znamená odmítnutí. Common ověřuje i skutečné C1/C2 CAS vazby
+a původní PG row digesty; pouhá platná reference nebo cílové `ready`
+nenahradí tuto historii. Původní intent/dispatch a jejich deadline se
+neobnovují. Helper historie sám nevydává žádné oprávnění.
+
+Běžné účely vyžadují přesný cílový checkpoint a aktivní stav. Jen
+`checkpoint-publish` dovoluje výslovně podepsanou opravu přesného
+vypršeného/karanténního předchozího stavu a následné čtení přesného
+podepsaného výsledku se skutečným původním dispatch. Změna nepřijímá
+prvotní Driver `null` jako historický přechod dvou politik, neobnovuje
+source proof a nezapíná produkční mazání.
 
 Před skutečným cutoverem je nezbytná technicky vynucená startup/publish
 karanténa i pro starý/restored image, který common ignoruje. Přijetí

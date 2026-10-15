@@ -142,11 +142,47 @@ ověření porovnají s čerstvým podepsaným host pozorováním. Záznam jiné
 Root instance nelze převzít jen proto, že ještě nevypršelo jeho 5 s.
 
 Historický důkaz P0, skutečný replay/receipt a checkpoint acceptance
-navazují na aktuální source P1. Důkazy P0 a P1 mají různá ID; reference
-`ownerPolicyRef` ale v této revizi musí být totožná. Podepsaný acceptance
-artefakt obsahuje SHA-256 skutečných úplných PostgreSQL JSONB řádků
-acceptance/receipt/replay v UTC. Jiná reference politiky zůstává odmítnuta;
-rozšíření této hranice není součástí přijaté implementace.
+navazují na aktuální source P1. Důkazy P0 a P1 mají různá ID. Shodná
+`ownerPolicyRef` zůstává základní cestou; odlišné reference vyžadují úplnou
+ověřenou návaznost původní politiky A, jejího předem podepsaného přechodu T
+a aktuální politiky B. Pouhá platná struktura reference nestačí.
+Podepsaný acceptance artefakt obsahuje SHA-256 skutečných úplných
+PostgreSQL JSONB řádků acceptance/receipt/replay v UTC.
+
+Samotný source `refresh` nesmí vytvořit nový checkpoint acceptance.
+Metadata rozlišují obnovení důkazu od samostatně přijatého replay/nasazení.
+P0 pro nový checkpoint proto musí patřit příslušné schválené operaci
+`deployment`, `restore`, `rollback` nebo `enrollment`; první testovací
+přechody zde používají výslovné syntetické checkpoint `deployment`.
+Aktuální následný P1 může být běžný `refresh`. Omezení metadata SQL se
+kvůli této cestě nerozšiřuje.
+
+Soukromý helper `verifyOwnerPolicyLineage({owner,binding,priorRef,currentRef})`
+čte pouze pevné Root cesty. Ověřuje originál A v
+`/var/lib/cop-account-safety/owner-policy-history/<recordId>.json`, aktuální B,
+všech pět důkazů každé politiky, podpis přechodu a jeho původní neměnný
+intent i dispatch. Obě politiky musí mít stejné globální/databázové vazby
+a schema/privilege piny. Driver navazuje nenulový předchozí hash na přesný
+nový hash; AI zachovává operation/schema digests a zvyšuje textovou bigint
+generaci přesně o jedna. Nový přechod v B musí mít jiné ID i referenci T.
+Prvotní Driver přechod z `null` tato odlišná historická cesta nepřijímá.
+
+Výstup helperu není autorita. Skutečný common navíc ověřuje historický
+P0 a aktuální P1 ve stejné procesní kohortě, cluster/timeline, frontier,
+aktuální globální politice a všech osmi binding polích. P0 musí odkazovat
+na skutečný předchozí acceptance C1; ten se kontroluje proti podepsanému
+artefaktu a původním úplným PG row digestům. Aktuální C2 i jeho receipt
+musí mít tentýž předchozí C1 a přesnou generaci C1 + 1. Původní intent
+a dispatch musely vzniknout za platnosti P0 a jeho neměnný deadline
+nesmí překročit expiraci P0. Všechny bigint projekce zůstávají textové;
+digesty se stále počítají nad nezměněným původním PG JSONB řádkem.
+
+Každý běžný účel vyžaduje přesný aktuální cílový checkpoint a readiness;
+Driver navíc skutečný nevypršený target proof. Výhradně `checkpoint-publish`
+smí při exkluzivním zámku provést předem podepsanou opravu přesně určeného
+vypršeného či karanténního předchozího stavu. Po zápisu musí odpovídat
+přesnému T a skutečnému původnímu intent/dispatch. Totéž dovolí další
+schválený přechod B na C; žádný třetí libovolný stav se nepřebírá.
 
 Expirace oprávnění odmítne práci, ale sama neodemkne session. `close()`
 čeká na skutečné ukončení a souběžní volající sdílejí stejný výsledek.
@@ -157,7 +193,11 @@ musí mít samostatně přijatou novou kohortu a doložený drain.
 `root-owner-read.mjs` skládá existující skutečné SQL/crypto readery a
 vydává jen krátké typované záznamy do soukromého tmpfs. Checkpoint writer
 `root-owner-checkpoint.mjs` ukládá neměnný intent i dispatch claim před
-setterem. Po prvním claimu smí pouze ověřit stejný původní stav; nesmí
+setterem. Ještě před nimi `archiveCurrentOwnerPolicy(ctx)` pod skutečným
+WeakMap kontextem `checkpoint-publish` uloží přesné původní bajty politiky
+pomocí O_EXCL a fsync do předem zřízené Root-only složky 0700. Existující
+originál musí být bajtově shodný; nelze jej přepsat, obnovit či vyrobit
+ze stavu databáze. Po prvním claimu smí writer pouze ověřit stejný původní stav; nesmí
 obnovit deadline, UUID nebo tělo. Jeho stav `checkpoint-readback-known`
 není potvrzení původního COMMIT ani přijetí nové Root policy.
 
@@ -175,6 +215,12 @@ Samostatný skutečný izolovaný common běh **22/22** a přesné rozdíly mezi
 skutečnými a syntetickými podklady dokládá
 [záznam z 15. 10. 2026](../archive/2026-10-15_ROOT_OWNER_AUTHORITY.md).
 Nedokládá checkpoint writer, native transport ani produkční restore.
+
+Nová [samostatná sada historie politik](../archive/2026-10-15_ROOT_OWNER_POLICY_LINEAGE.md)
+prošla 8/8 skupinami se skutečným Driver/AI checkpoint writerem a SQL005,
+včetně navazujícího Driver přechodu, chybných podkladů a nesprávného cíle.
+Politiky, host a enrollment jsou syntetické; skutečný producer, native
+transport a produkční restore zůstávají oddělené podmínky aktivace.
 
 Historické Root14/16 testy níže používaly původní layout a nejsou
 přičítány jako důkaz této nové cesty. Samostatná

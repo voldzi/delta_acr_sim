@@ -40,6 +40,12 @@
   TLS CA/server name; nelze vybírat credential, DSN, profil nebo SQL z HTTP.
   Produkční vytvoření a předání souborů je oddělený omezený instalační
   krok, nikoli součást source testu nebo automatická adopce z `.env`.
+- Podepsaná historie owner politik zůstává oddělená v Root-only 0700
+  `/var/lib/cop-account-safety/owner-policy-history`. Obsahuje přesné
+  původní bajty politik, nikoli principály, daily joiny nebo nové kopie
+  přístupových klíčů. Neměnný archiv se zapisuje před prvním checkpoint
+  intentem/setterem a nikdy se při chybě neskládá z cílové DB. App jej
+  nedostává přes bind mount; obnova archivu sama neuděluje oprávnění.
 
 ## Konfigurační typy
 
