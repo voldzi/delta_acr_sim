@@ -1,0 +1,38 @@
+{
+  "evidenceKind": "read-only-production-inventory-and-refused-deletion-plan",
+  "date": "2026-10-15",
+  "scope": "SIM artefacts on docker.home.cz only",
+  "situationDataImages": {
+    "total": 20,
+    "containerReferenced": 1,
+    "withoutContainerReference": 19,
+    "explicitReturnAliasImages": 11,
+    "currentImage": "sha256:2f3aa1659d03c5eaf014353071e38f6abc1d2da1419a9ac2205a05b5873a5965",
+    "allRunningAndStoppedContainerReferencesChecked": true,
+    "nonreferenceDoesNotProveSafeDeletion": true
+  },
+  "filesystemSnapshot": {
+    "rootUsedPercent": 95,
+    "rootAvailableHumanRounded": "14G",
+    "x5AvailableHumanRounded": "48G",
+    "dockerImageStoreMoved": false
+  },
+  "releaseInventory": {
+    "canonicalReleaseDirectoriesFound": false,
+    "protectedExistingBackupDirectories": ["/srv/sim/.deploy-crisis-backups", "/srv/sim/.deploy-routing-unroutable-backups", "/srv/sim/.deploy-search-backups"],
+    "backupSecretContentsRead": false,
+    "sharedDeploymentLockIntegrationEstablished": false,
+    "twoCompleteSchemaCompatibleVerifiedReturnGenerationsEstablished": false,
+    "pendingAccountErasureSourceHold": "ca1fd6b6046745e91cca6648e1e5bd3f93fc8422"
+  },
+  "decision": {
+    "apply": "refused-fail-closed",
+    "candidateDeletionAuthorized": false,
+    "imageOrReleaseDeletionAttempted": false,
+    "cronOrSystemdApplyActivated": false,
+    "bytesReclaimed": 0,
+    "servicesRestarted": false,
+    "productionConfigChanged": false,
+    "secretsOrPartnerDataExported": false
+  }
+}

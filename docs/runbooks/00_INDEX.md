@@ -3,6 +3,7 @@
 Tento index odkazuje dokumenty v daném adresáři.
 
 - [20_DATABASE_ERASURE_ACCEPTANCE.md](20_DATABASE_ERASURE_ACCEPTANCE.md) — aktuální DBv2 cesta mazání COP/Jízdy.
+- [21_SIM_RELEASE_RETENTION.md](21_SIM_RELEASE_RETENTION.md) — inventura a podmínky retence; mazání nyní zastavené.
 
 - [01_LOCAL_DEVELOPMENT.md](01_LOCAL_DEVELOPMENT.md)
 - [02_DOCKER_COMPOSE.md](02_DOCKER_COMPOSE.md)
