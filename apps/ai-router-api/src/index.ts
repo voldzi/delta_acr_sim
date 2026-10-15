@@ -15,8 +15,11 @@ const store = new BudgetStore(config.databaseUrl, config.userHashSecret, {
   perUserDailyRequests: config.perUserDailyRequests
 });
 await store.init();
-const verifyCheckpoint = await loadProductionOwnerCheckpointVerifier();
-const erasure = new PgAccountErasure(store.pool, config.accountErasureCostPolicy ?? "pending_requires_review", config.accountErasureReplayReady === true, verifyCheckpoint);
+const safetyMode=process.env.SIM_ACCOUNT_ERASURE_AUTHORITY_MODE??"root_native_v1";
+if(!["root_native_v1","database_v2"].includes(safetyMode))throw new Error("Invalid SIM account-erasure authority mode");
+const databaseBinding=safetyMode==="database_v2"?await (await import("./database-erasure.js")).loadDatabaseRouterGuard(store.pool):undefined;
+const verifyCheckpoint = databaseBinding?(checkpoint:import("./account-erasure.js").Checkpoint)=>databaseBinding.safety.verifyRouterCheckpoint(checkpoint):await loadProductionOwnerCheckpointVerifier();
+const erasure = new PgAccountErasure(store.pool, config.accountErasureCostPolicy ?? "pending_requires_review", config.accountErasureReplayReady === true, verifyCheckpoint,databaseBinding?.safety);
 await erasure.checkSchema();
 store.accountErasure = erasure;
 const separate = config.copByokEnabled || config.simIzsEnabled ? new PgSeparateBilling(store.pool, config.credentialEncryptionKey!, erasure) : undefined;
@@ -41,7 +44,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () =>
     server.close(() => {
       clearInterval(cleanup);
-      void store.close().finally(() => process.exit(0));
+      void store.close().finally(()=>databaseBinding?.close()).finally(() => process.exit(0));
     })
   );
 }

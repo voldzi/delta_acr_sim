@@ -1,4 +1,5 @@
 import type {Pool,PoolClient} from "pg";
+import type {DatabaseErasureGuard} from "../../../deploy/account-safety/database-erasure-guard.mjs";
 import {types} from "node:util";
 import {DriverGuardedOperationRunner,readDriverGuardedAdmission,snapshotDriverGuardedOperationContext} from "./driver-guarded-execution.js";
 import type {DriverGuardedOperationContext,DriverGuardedReadRequest,DriverGuardedRecordRef,DriverGuardedStoreOptions,DriverGuardedAckBody} from "./driver-guarded-execution-port.js";
@@ -6,7 +7,7 @@ import {DRIVER_ACCOUNT_ERASURE_CONTRACT,DriverAccountErasureError,driverErasureH
   type DriverErasureInput,type DriverErasureReceipt,type DriverErasureCapability,type DriverErasurePreflight,type DriverErasureReportProtection,type DriverErasureBlocker} from "./driver-account-erasure.js";
 /** Supplied only by a protected current-deployment guard, never a client/body/env flag. */
 export interface DriverErasureProtectedProof {checkpoint:string;restoreCheckpointCurrent:boolean;identityReviewed:boolean;retentionReviewed:boolean;publicationFenceVerified:boolean;reportProtection:DriverErasureReportProtection}
-export interface DriverErasureStorageOptions {enabled?:boolean;expectedCheckpoint?:string;identityConfigured?:boolean;protectedProof?:()=>Promise<DriverErasureProtectedProof>;guarded?:DriverGuardedStoreOptions}
+export interface DriverErasureStorageOptions {enabled?:boolean;expectedCheckpoint?:string;identityConfigured?:boolean;protectedProof?:()=>Promise<DriverErasureProtectedProof>;guarded?:DriverGuardedStoreOptions;databaseSafety?:DatabaseErasureGuard}
 type Queryable=Pick<PoolClient,"query">;
 interface Gate {installed:boolean;permissions:boolean;identity:boolean;replay:boolean;retention:boolean;publication:boolean;protection:DriverErasureReportProtection;checkpoint:string|null;checkedAt:string;active:boolean}
 /** Only scalar operation evidence and unlinked daily fences are durable. */
@@ -196,6 +197,11 @@ export class PostgresDriverAccountErasureStore {
   }
   async erase(input:DriverErasureInput,context?:DriverGuardedOperationContext):Promise<DriverErasureReceipt>{
     if(this.#guardedMode)return this.guardedAttempt(input,context,"erase");
+    if(this.options.databaseSafety){
+      const preflight=await this.preflight(input);
+      if(!Object.values(preflight.checks).every(Boolean))throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_NOT_READY");
+      await this.options.databaseSafety.recordDriver(input,this.options.enabled===true);
+    }
     const c=await this.pool.connect(),key=this.key(input.operationId);try{
     await c.query("BEGIN");await c.query("SET LOCAL lock_timeout='1500ms'");const gate=await this.gate(c);
     if(!gate.installed)throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE");await this.lockOp(c,key);

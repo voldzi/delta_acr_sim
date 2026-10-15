@@ -18,11 +18,13 @@ documents instead of duplicating flat files. The decision is recorded in
 | Runbook        | [`runbooks/00_INDEX.md`](runbooks/00_INDEX.md)                                                                                                                                         |
 | ADRs           | [`adr/00_INDEX.md`](adr/00_INDEX.md)                                                                                                                                                   |
 | Environment    | [`../.env.example`](../.env.example) and [`runbooks/03_ENVIRONMENT_CONFIGURATION.md`](runbooks/03_ENVIRONMENT_CONFIGURATION.md)                                                        |
-| Account safety | [ADR 0039](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md), [runtime preparation 23](integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md), and [coordinated cutover/rollback 19](runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md) |
+| Account safety | [ADR 0039](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md), [current DBv2 ADR0040](adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md), [DBv2 acceptance/restore 20](runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md), and [historical Root candidate 23](integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md) |
 
 ## Active Documentation Indexes
 
 - [ADR 0039: hranice mazání COP/Jízdy při zachování SIM](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md)
+- [ADR 0040: aktuální DB-backed cesta bez dalšího Root/native protokolu](adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md)
+- [Runbook 20: skutečný HTTP/PG test, enrollment a restore pro DBv2](runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md)
 - [Integrace 22: mazání COP/Jízdy v SIM](integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)
 - [Integrace 23: konkrétní příprava runtime napojení a neaktivní instalační inventář](integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md)
 - [Runbook 19: omezené nasazení a rollback mazání COP/Jízdy](runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md)

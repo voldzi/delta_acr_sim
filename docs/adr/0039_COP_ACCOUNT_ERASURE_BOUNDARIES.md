@@ -4,6 +4,12 @@ Stav: schválená zdrojová implementace s oddělenou produkční akceptací.
 Datum: 13. 10. 2026. Upřesnění rozsahu: 15. 10. 2026.
 Navazuje na ADR 0026, ADR 0030 a ADR 0038.
 
+Aktuální implementační zúžení: [ADR0040](0040_DATABASE_BACKED_ACCOUNT_ERASURE.md)
+nahrazuje dosud nenasazenou privilegovanou Root/native cestu pro explicitní
+režim `database_v2`. Rozsah účtu, auth, minimalizace, finanční retence a
+restore ochrana níže zůstávají. Root pododdíly jsou zachovaným zdrojovým
+kandidátem, nikoli další podmínkou DBv2 nebo tvrzením o produkční instalaci.
+
 Vlastník 14. 10. 2026 přímo v chatu SIM schválil implementaci, omezené
 migrace a práva, izolované syntetické PostgreSQL testy a nasazení po společném
 ověření s COP. Nejde o souhlas k mazání skutečných účtů pro test, ke změně

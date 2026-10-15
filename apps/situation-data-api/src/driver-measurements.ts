@@ -214,6 +214,7 @@ export function driverSettings(): DriverSettings {
 }
 
 export interface DriverMeasurementDependencies {
+  databaseSafety?: import("../../../deploy/account-safety/database-erasure-guard.mjs").DatabaseErasureGuard;
   store?: DriverStore;
   matcher?: DriverMatcher;
   now?: () => number;
@@ -241,7 +242,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
   const erasureReadConfigured=identityConfigured&&!!settings.databaseUrl&&!!settings.hashSecret&&settings.hashSecret.length>=32;
   const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled || settings.driverAccountErasureEnabled || erasureReadConfigured) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!,{
     enabled:settings.driverAccountErasureEnabled,expectedCheckpoint:settings.driverAccountErasureReplayCheckpoint,identityConfigured,protectedProof:dependencies?.accountErasureProtectedProof,
-    retentionConsumer:dependencies?.retentionConsumer,guarded:dependencies?.guarded}) : undefined);
+    retentionConsumer:dependencies?.retentionConsumer,guarded:dependencies?.guarded,databaseSafety:dependencies?.databaseSafety}) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
   let minute=0, requests=0, inflight=0;
@@ -314,7 +315,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
           source:"jizda_consented_gps",items,
           limits:{minimumAttestedContributors:5,minimumIntervals:10,maximumRows:1000},independentContributorsVerified:false};
       };
-      if(guarded)await publishDriverReport(res,"aggregates",dependencies?.publication,result);
+      if(guarded||dependencies?.databaseSafety)await publishDriverReport(res,"aggregates",dependencies?.publication,result);
       else res.json(await result());
     } catch(error) { failure(req,res,error); }
   });
@@ -323,7 +324,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     try {
       const result=async(publication?:DriverPublicationLease)=>({contractVersion:DRIVER_CONTRACT,applicationMode:"shadow_only",etaEvidence:"client_reported_not_ground_truth",
         summary:guarded?await store!.quality(new Date(now()).toISOString(),publication):await store!.quality(new Date(now()).toISOString())});
-      if(guarded)await publishDriverReport(res,"quality",dependencies?.publication,result);
+      if(guarded||dependencies?.databaseSafety)await publishDriverReport(res,"quality",dependencies?.publication,result);
       else res.json(await result());
     }
     catch(error) { failure(req,res,error); }

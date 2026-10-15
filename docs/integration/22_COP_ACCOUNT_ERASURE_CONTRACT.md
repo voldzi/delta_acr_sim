@@ -1,5 +1,10 @@
 # Mazání účtu COP v SIM
 
+Aktuální vnitřní implementace: [ADR0040](../adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md)
+vybírá explicitní DBv2 bez nativního Root protokolu. REST tvary a účetní
+rozsahy níže zůstávají; staré Root wire návrhy nejsou podmínkou této cesty.
+Samotný token nebo source test neopravňuje k produkčnímu zapnutí.
+
 Stav: implementační kontrakt v1; upřesnění ze 14. 10. 2026.
 Zdrojová implementace a omezené migrace byly výslovně schváleny. Nasazení
 je oddělené od aktivace a od důkazu smazání účtu. Inventura běžných

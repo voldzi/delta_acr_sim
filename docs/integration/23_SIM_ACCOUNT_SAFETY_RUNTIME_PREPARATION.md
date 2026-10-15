@@ -1,5 +1,11 @@
 # Příprava napojení ochrany účtu do SIM
 
+Aktuální DBv2 cesta je v [ADR0040](../adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md)
+a [runbook20](../runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md). Níže zachovaný
+Root/native návrh a jeho neměnné důkazy se k této cestě nepřičítají a jejich
+další dokončování není její podmínkou. DBv2 má konkrétní PG guard, skutečný
+replay, transakční fences a výslovnou správu obnovy, ne kladné porty.
+
 Přípravný krok pro COP Router a dobrovolná měření vychází ze zdroje
 `25de85abf2ab00ad125c9482f1ddb70bb81cfce2`. Přesné HTTP kontrakty a
 transakční ochrany existují; chybí skutečné nativní napojení jejich

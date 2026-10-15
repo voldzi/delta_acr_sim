@@ -65,7 +65,8 @@ export type Checkpoint = { identity_reviewed: boolean; replay_ready: boolean; co
 export type OwnerCheckpointVerifier = (checkpoint: Checkpoint) => Promise<boolean>;
 export class PgAccountErasure implements AccountErasureStore {
   constructor(private readonly pool: pg.Pool, private readonly policy: CostErasurePolicy, private readonly replayReady: boolean,
-    private readonly verifyCheckpoint: OwnerCheckpointVerifier = async () => false) {}
+    private readonly verifyCheckpoint: OwnerCheckpointVerifier = async () => false,
+    private readonly databaseSafety?: import("../../../deploy/account-safety/database-erasure-guard.mjs").DatabaseErasureGuard) {}
   async checkSchema(): Promise<void> {
     await this.pool.query("SELECT operation_id FROM ai_router_account_erasure LIMIT 0");
     await this.pool.query("SELECT record_count FROM ai_router_budget_usage LIMIT 0");
@@ -159,6 +160,11 @@ export class PgAccountErasure implements AccountErasureStore {
     if (!cp.identity_reviewed || !cp.replay_ready || !this.replayReady || !await this.schemaReady(transaction??this.pool) || !await this.verifyCheckpoint(cp)) throw new Error("erasure_checkpoint_not_current");
   }
   async request(identity: ErasureIdentity, operationId: string): Promise<RouterErasureReceipt> {
+    if(this.databaseSafety){
+      const cp=await this.checkpoint();
+      if(!cp.identity_reviewed||!cp.replay_ready||!this.replayReady||!await this.schemaReady(this.pool)||!await this.permissionsReady(this.pool)||!await this.verifyCheckpoint(cp))throw new AccountErasureError("erasure_review_required");
+      await this.databaseSafety.recordRouter(identity,operationId);
+    }
     const client = await this.pool.connect();
     const digest = createHash("sha256").update(JSON.stringify({ contractVersion: "sim-account-erasure-v1", operationId })).digest("hex");
     try {

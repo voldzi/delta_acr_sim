@@ -1,5 +1,11 @@
 # Nasazení mazání COP/Jízdy při zachování SIM
 
+Aktualizace 15. 10. 2026: aktuální DB-backed zdrojovou cestu řídí
+[ADR0040](../adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md) a
+[runbook20](20_DATABASE_ERASURE_ACCEPTANCE.md). Root/native cutover níže
+je zachovaný nenasazený kandidát, nikoli zbývající požadavek DBv2.
+Produkční instalace nebo aktivace žádné varianty zde není prohlášena.
+
 ## Aktuální koordinovaný cutover Driver 003–006 a AI Routeru — 15. 10. 2026
 
 Cutover zatím provedený není. Tento oddíl řídí schválené dokončení a

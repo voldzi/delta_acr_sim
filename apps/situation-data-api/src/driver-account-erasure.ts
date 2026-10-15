@@ -11,7 +11,8 @@ export interface DriverErasureRequest {
   contributors: { contributorDay: string; contributorIdDay: string }[];
   attestation: "cop-account-erasure-contributors-reviewed-v1";
 }
-/** Ephemeral only: never persist the manifest or an account-to-day join. */
+/** Raw days/pseudonyms are ephemeral. ADR0040 permits only final HMAC hashes
+ * in the independently scoped erasure replay journal, never an account-to-day join. */
 export interface DriverErasureInput {
   operationId: string; actorHash: string; requestHash: string;
   contributors: { contributorDay: string; contributorHash: string }[];

@@ -83,6 +83,13 @@ roli, token, projekt a audit; jen syntetické či zveřejněné agregáty.
 
 ## Zákazy
 
+Pro explicitní `database_v2` platí aktuální [ADR0040](../adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md):
+důvěryhodný aplikační backend/správce, samostatný append-only PG journal,
+actual target binding, startup replay a transakční fences. Root/native
+scopes v následujícím odstavci zůstávají pouze alternativním zdrojovým
+kandidátem, ne další bezpečnostní podmínkou této DB cesty. Selhání jedné
+varianty nikdy automaticky nepřepíná na druhou.
+
 Privátní Driver mutation scope je pouze interní korelace na skutečný Root
 kontext. SIM snapshotuje chráněný kontext před prvním await a vyžaduje
 stejný scope v pre/post admission a dispatchi. Scoped v2 se nesmí snížit
