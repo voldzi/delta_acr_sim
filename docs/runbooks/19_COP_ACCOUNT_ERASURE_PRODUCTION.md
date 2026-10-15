@@ -63,6 +63,14 @@ ověřené quiescence. Otestovat i chybu portu před dokončením dotazu,
 release chybu po HTTP 200 a souběžné mazání. Stará již publikovaná data
 vyžadují samostatnou inventuru, ne jen akceptaci nového API wrapperu.
 
+Guarded revoke nově vyžaduje podepsaný actor `sim-driver-revocation`
+podle kontraktu 20. COP/SIM musí před cutoverem porovnat přesné compact
+JSON/HMAC bajty se skutečným pure parserem a oba zdroje actoru.
+Root nezávisle ověří consent ledger a historický daily-key inventory;
+samotný podpis, službový token nebo app pole není tato autorita.
+Chybějící actor 401, vadné tělo nadále 400, chybějící skutečný Root
+kontext 503 před SQL. Legacy před cutoverem zůstává beze změny.
+
 - DBA doloží pevnou DB `sim_driver_measurements`, původních sedm tabulek
   vlastněných `driver_measurements_migrator`, bez RLS, dvě původní receipt
   `ON DELETE CASCADE` vazby a původní SECURITY INVOKER receipt guard.

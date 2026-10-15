@@ -317,3 +317,16 @@ Ověření 611 PASS / 6 opt-in PG SKIP zahrnuje 40 nových lokálních
 syntetických případů. Nenahrazuje skutečné COP factories/transport,
 enrollment, publikační lease nebo produkční obnovu a neopravňuje samo
 o sobě k deploy či aktivaci.
+
+### Identita odvolání denního měření
+
+Původní service-only revoke s denním opaque ID nedokáže Rootu nezávisle
+prokázat účet/consent intent. V guarded režimu proto vyžadujeme nový
+typed signed actor `aud=sim-driver-revocation`, nejvýše 60 s,
+s konkrétním UTC dnem, stejným denním ID a zdrojem `verified_session`
+nebo `consent_ledger`. Použije již existující serverový actor secret a
+issuer; nerozšiřuje se veřejný endpoint, klientský přístup ani oprávnění.
+Lokální HMAC parser je pouze nutná strukturální kontrola. Skutečný
+Root ověřuje historickou derivaci denního ID a konkrétní consent intent;
+nikdy nehádá accountMAC z opaque pseudonymu. Revoke nevytváří globální
+account-deletion fence. Před společným cutoverem se legacy režim nemění.

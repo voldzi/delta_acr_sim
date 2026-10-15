@@ -1,5 +1,6 @@
 import express from "express";
 import request from "supertest";
+import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const pg = vi.hoisted(() => ({ query: vi.fn(), connect: vi.fn(), end: vi.fn(), on: vi.fn() }));
 vi.mock("pg", () => ({ Pool: function() { return pg; } }));
@@ -9,6 +10,12 @@ import type { SituationDataConfig } from "../src/config.js";
 import type { DriverRetentionControl } from "../src/driver-retention-lifecycle.js";
 
 const PREFIX = "/api/v1/internal/driver-measurements/v1", token = "synthetic-service-token-at-least-thirty-two";
+const actorSecret = "synthetic-actor-secret-at-least-thirty-two", issuer = "https://synthetic.invalid/realm", now = Date.parse("2026-10-15T12:00:00.000Z");
+function revocationHeaders(actorSource: "verified_session" | "consent_ledger" = "consent_ledger") {
+  const actor = Buffer.from(JSON.stringify({ iss: issuer, sub: "synthetic-user", aud: "sim-driver-revocation", iat: now / 1000,
+    exp: now / 1000 + 60, contributorDay: "2026-10-15", contributorIdDay: "x".repeat(43), actorSource })).toString("base64url");
+  return { "x-cop-actor": actor, "x-cop-actor-signature": createHmac("sha256", actorSecret).update(actor).digest("hex") };
+}
 let control: DriverRetentionControl | undefined;
 beforeEach(() => { vi.resetAllMocks(); pg.end.mockResolvedValue(undefined); });
 afterEach(async () => { await control?.close(); control = undefined; });
@@ -22,9 +29,9 @@ function fixture() {
   const dataset = vi.fn(async () => "sim-routing-2026-10-15-1792022400");
   control = registerDriverMeasurementRoutes(app, {} as SituationDataConfig, { enabled: true, revocationEnabled: true,
     databaseUrl: "postgresql://synthetic.invalid/sim_driver_measurements", token, hashSecret: "synthetic-storage-secret-at-least-thirty-two",
-    ratePerMinute: 120, driverAccountErasureEnabled: true, driverAccountErasureIssuer: "https://synthetic.invalid/realm",
-    driverAccountErasureActorSecret: "synthetic-actor-secret-at-least-thirty-two", driverAccountErasureReplayCheckpoint: undefined },
-  { ...owner.driverMeasurements, matcher: { match: vi.fn(), dataset } });
+    ratePerMinute: 120, driverAccountErasureEnabled: true, driverAccountErasureIssuer: issuer,
+    driverAccountErasureActorSecret: actorSecret, driverAccountErasureReplayCheckpoint: undefined },
+  { ...owner.driverMeasurements, now: () => now, matcher: { match: vi.fn(), dataset } });
   return { app, current, dataset };
 }
 function noSql() { expect(pg.query).not.toHaveBeenCalled(); expect(pg.connect).not.toHaveBeenCalled(); }
@@ -42,8 +49,14 @@ describe("actual Driver HTTP ordering with rejected local scope (no native autho
     const { app, current } = fixture(); await request(app).post(PREFIX + "/account-erasure-operations").set("authorization", "Bearer " + token).send({}).expect(400);
     expect(current).not.toHaveBeenCalled(); noSql();
   });
-  it("returns 503 for valid revoke without current protected delivery, never legacy DELETE", async () => {
+  it("returns 401 for a guarded revoke without its signed actor, before Root context or SQL", async () => {
+    const { app, current } = fixture(); const result = await request(app).delete(PREFIX + "/contributions").set("authorization", "Bearer " + token)
+      .send({ contractVersion: "sim-driver-measurements-v1", contributorIdDay: "x".repeat(43) }).expect(401);
+    expect(result.body.error.code).toBe("DRIVER_REVOCATION_ACTOR_INVALID"); expect(current).not.toHaveBeenCalled(); noSql();
+  });
+  it.each(["verified_session", "consent_ledger"] as const)("returns 503 for signed %s revoke without current protected delivery, never legacy DELETE", async source => {
     const { app, current } = fixture(); await request(app).delete(PREFIX + "/contributions").set("authorization", "Bearer " + token)
+      .set(revocationHeaders(source))
       .send({ contractVersion: "sim-driver-measurements-v1", contributorIdDay: "x".repeat(43) }).expect(503);
     expect(current).toHaveBeenCalledExactlyOnceWith("revoke"); noSql();
   });

@@ -9,6 +9,7 @@ import type {DriverErasureProtectedProof} from "./driver-account-erasure-store.j
 import {DriverRetentionLifecycleError,type DriverRetentionConsumer,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
 import type { DriverGuardedOperationContext, DriverGuardedRequestContextPort, DriverGuardedStoreOptions } from "./driver-guarded-execution-port.js";
 import { publishDriverReport, type DriverPublicationLease, type DriverPublicationPort } from "./driver-publication.js";
+import { DriverRevocationActorError, verifyDriverRevocationActor } from "./driver-revocation-actor.js";
 
 export const DRIVER_CONTRACT = "sim-driver-measurements-v1";
 const PREFIX = "/api/v1/internal/driver-measurements/v1";
@@ -272,7 +273,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     return true;
   }
   const failure=(req:Request,res:Response,error:unknown)=>{
-    const e=error instanceof DriverMeasurementError||error instanceof DriverAccountErasureError ? error : new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
+    const e=error instanceof DriverMeasurementError||error instanceof DriverAccountErasureError||error instanceof DriverRevocationActorError ? error : new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
     problem(req,res,e.status,e.code,"Driver measurement operation could not be completed.");
   };
   app.post(`${PREFIX}/batches`,async(req,res)=>{
@@ -332,7 +333,15 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     try {
       const raw=object(req.body,["contractVersion","contributorIdDay"]);
       if (raw.contractVersion!==DRIVER_CONTRACT) invalid();
-      const contributor=hashContributor(opaque(raw.contributorIdDay));
+      const id=opaque(raw.contributorIdDay);
+      if(guarded){
+        if(!identityConfigured)throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
+        // Necessary local signed-claim check only. Actual daily-key derivation
+        // and current consent intent are independently verified by Root.
+        verifyDriverRevocationActor(req.get("x-cop-actor"),req.get("x-cop-actor-signature"),settings.driverAccountErasureActorSecret,
+          settings.driverAccountErasureIssuer,id,now());
+      }
+      const contributor=hashContributor(id);
       const count=guarded ? await store!.revoke("cop",contributor,await operationContext("revoke")) : await store!.revoke("cop",contributor);
       res.json({contractVersion:DRIVER_CONTRACT,deletedBatchCount:count});
     } catch(error) { failure(req,res,error); }

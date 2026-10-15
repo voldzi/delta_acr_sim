@@ -25,6 +25,12 @@ const headers = () => {
   return { Authorization: `Bearer ${token}`, "x-cop-actor": actor,
     "x-cop-actor-signature": createHmac("sha256", actorSecret).update(actor).digest("hex") };
 };
+const revokeHeaders = () => {
+  const actor = Buffer.from(JSON.stringify({ iss: issuer, sub: "synthetic-subject", aud: "sim-driver-revocation", iat: now / 1000,
+    exp: now / 1000 + 60, contributorDay: "2026-10-15", contributorIdDay: "d".repeat(40), actorSource: "consent_ledger" })).toString("base64url");
+  return { Authorization: `Bearer ${token}`, "x-cop-actor": actor,
+    "x-cop-actor-signature": createHmac("sha256", actorSecret).update(actor).digest("hex") };
+};
 function pending(): DriverErasureReceipt {
   return { contractVersion: "sim-account-erasure-v1", operationId: businessId, status: "pending", scope: "online_driver_scope",
     wholeAccountComplete: false, backupReplayRequired: true, acceptedAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString(),
@@ -56,7 +62,7 @@ describe("guarded route composition, synthetic constructor/ports only", () => {
   });
   it("missing delivery fails closed before revoke or erase store calls", async () => {
     const f = fixture();
-    const revoke = await request(f.app).delete(`${prefix}/contributions`).set("Authorization", `Bearer ${token}`)
+    const revoke = await request(f.app).delete(`${prefix}/contributions`).set(revokeHeaders())
       .send({ contractVersion: "sim-driver-measurements-v1", contributorIdDay: "d".repeat(40) });
     expect(revoke.status).toBe(503); expect(revoke.body.error.code).toBe("DRIVER_MEASUREMENTS_UNAVAILABLE");
     const erase = await request(f.app).post(`${prefix}/account-erasure-operations`).set(headers()).send(body());
@@ -64,7 +70,7 @@ describe("guarded route composition, synthetic constructor/ports only", () => {
   });
   it("delivers only the internal revoke context alongside server HMAC, not raw day ID", async () => {
     const context = { operation: { operationId: originId, kind: "revoke" as const } }, f = fixture(vi.fn(async () => context));
-    const r = await request(f.app).delete(`${prefix}/contributions`).set("Authorization", `Bearer ${token}`)
+    const r = await request(f.app).delete(`${prefix}/contributions`).set(revokeHeaders())
       .send({ contractVersion: "sim-driver-measurements-v1", contributorIdDay: "d".repeat(40) });
     expect(r.status).toBe(200); expect(r.body.deletedBatchCount).toBe(3);
     expect(f.store.revoke).toHaveBeenCalledExactlyOnceWith("cop", createHmac("sha256", secret).update(`cop:${"d".repeat(40)}`).digest("hex"), context);

@@ -5037,12 +5037,41 @@
           "Driver Measurements: Driver Measurements"
         ],
         "summary": "Delete one daily pseudonym and reject queued uploads for 7 days",
-        "description": "Available with enabled intake or the independent default-off DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true mode. Dedicated authentication, database and HMAC configuration remain required. Revocation-only mode enables neither batch intake nor aggregate reads and does not require map matching. Storage failure returns 503, not a successful deletion receipt.",
+        "description": "Available with enabled intake or the independent default-off DRIVER_MEASUREMENTS_REVOCATION_ENABLED=true mode. Dedicated authentication, database and HMAC configuration remain required. In guarded mode both signed actor headers are mandatory: compact JSON in exact key order iss,sub,aud,iat,exp,contributorDay,contributorIdDay,actorSource; aud=sim-driver-revocation, lifetime at most 60 seconds, actorSource=verified_session|consent_ledger. The claim daily ID must equal the body; the actual Root authority independently verifies historical daily-key derivation and current consent intent. A locally valid signature alone is not deletion authority. Before coordinated cutover the legacy headerless route is unchanged. Revocation-only mode enables neither batch intake nor aggregate reads and does not require map matching. Storage failure returns 503, never a successful deletion receipt. Revocation does not create an account-deletion fence.",
         "security": [
           {
             "driverMeasurementCopBearer": [
 
             ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "x-cop-actor",
+            "in": "header",
+            "required": false,
+            "description": "Required in guarded mode. Canonical unpadded base64url UTF-8 compact JSON signed server-side by COP; never supplied by a browser. Exact ordered claims are documented in DriverRevocationActorClaim. Local validation does not establish Root consent/daily-key authority.",
+            "schema": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "contentEncoding": "base64url",
+              "contentMediaType": "application/json",
+              "contentSchema": {
+                "$ref": "#/components/schemas/DriverMeasurementsDriverRevocationActorClaim"
+              }
+            }
+          },
+          {
+            "name": "x-cop-actor-signature",
+            "in": "header",
+            "required": false,
+            "description": "Required with x-cop-actor in guarded mode. Lowercase HMAC-SHA256 of the exact encoded header using the existing server-only driver actor secret.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
           }
         ],
         "responses": {
@@ -5067,7 +5096,7 @@
             }
           },
           "401": {
-            "description": "COP service authentication required",
+            "description": "COP service authentication required; in guarded mode a missing or invalid signed revocation actor returns DRIVER_REVOCATION_ACTOR_INVALID before Root context or SQL",
             "content": {
               "application/json": {
                 "schema": {
@@ -17769,6 +17798,65 @@
           }
         },
         "additionalProperties": false
+      },
+      "DriverMeasurementsDriverRevocationActorClaim": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Decoded server-only signed revocation actor. The encoded header must be exact compact UTF-8 JSON in required-key order, canonical unpadded base64url, without escaped variants or duplicate keys. Lifetime <=60s; iat<=now<exp. contributorDay must be a real UTC calendar day no later than UTC(now+30s); historical days remain subject to independent Root daily-key/consent verification. This is not a Root authorization proof and is not stored or logged.",
+        "required": [
+          "iss",
+          "sub",
+          "aud",
+          "iat",
+          "exp",
+          "contributorDay",
+          "contributorIdDay",
+          "actorSource"
+        ],
+        "properties": {
+          "iss": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 512
+          },
+          "sub": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "aud": {
+            "type": "string",
+            "const": "sim-driver-revocation"
+          },
+          "iat": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "exp": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contributorDay": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "contributorIdDay": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "actorSource": {
+            "type": "string",
+            "enum": [
+              "verified_session",
+              "consent_ledger"
+            ]
+          }
+        }
       },
       "DriverMeasurementsPoint": {
         "type": "object",

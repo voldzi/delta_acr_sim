@@ -59,3 +59,19 @@ výslovné `allowPaidEscalation=false`, přesnou atestaci
 provozní přepínač. Router odmítá neznámé klíče a volný text v položkách;
 samotný token ani atestace nedokazují skutečnou minimalizaci. Tu musí před
 odesláním zajistit COP. Běžný `internal` zůstává výhradně lokální.
+## Chráněné odvolání dobrovolných měření
+
+V guarded nasazení vyžaduje službové `DELETE /contributions` kromě
+stávajícího bearer tokenu i serverem COP podepsané hlavičky
+`x-cop-actor` / `x-cop-actor-signature`. Přesný kompaktní kontrakt
+`aud=sim-driver-revocation`, životnost nejvýše 60 s a vazbu denního
+pseudonymu popisuje [Driver kontrakt 20](../integration/20_JIZDA_DRIVER_MEASUREMENTS_CONTRACT.md#podepsaný-actor-odvolání-v-chráněném-režimu)
+a závazné OpenAPI. Použije již existující serverový actor secret/issuer;
+žádné nové tajemství či identity se nevystavují klientům.
+
+Lokální kontrola HMAC/struktury neprokazuje souhlas ani pravdivou derivaci
+denního ID. Nezávislá Root ochrana musí ověřit historický daily-key
+inventory a konkrétní consent intent; bez toho zůstane mutace nedostupná.
+Samotné odvolání není globální account-deletion fence a nemaže sdílený
+Keycloak účet ani přístup SIM. Před koordinovaným cutoverem legacy cesta
+zůstává zachována. Hlavičky a claim se neukládají ani nelogují.

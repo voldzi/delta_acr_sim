@@ -219,6 +219,36 @@ contributorIdDay:"<denní pseudonym>"}`. COP odvodí pseudonymy všech dosud
 uchovaných dnů (a případného pozdního outboxu), požádá o jejich smazání,
 zastaví budoucí odesílání. SIM zachová 7denní HMAC tombstone bez GPS.
 
+### Podepsaný actor odvolání v chráněném režimu
+
+Guarded režim navíc vyžaduje `x-cop-actor` a `x-cop-actor-signature`.
+První hlavička je canonical unpadded base64url přesného compact UTF-8 JSON
+v tomto pořadí klíčů:
+`iss,sub,aud,iat,exp,contributorDay,contributorIdDay,actorSource`.
+`aud` je přesně `sim-driver-revocation`, časy jsou celé UTC sekundy,
+`iat <= now < exp` a životnost nejvýše 60 s. Denní ID musí odpovídat
+JSON tělu; den je platný UTC kalendářní den, nejpozději UTC(now + 30 s).
+Historická data se nezkracují automaticky na posledních devět dnů.
+`actorSource` je pouze `verified_session` nebo `consent_ledger`;
+běžný COP pending-deletion worker používá skutečný `consent_ledger`,
+nikoli odhad relace z aktuálního OIDC nastavení.
+
+Podpis je lowercase HMAC-SHA256 přes přesné bajty encoded hlavičky,
+stejným již zavedeným serverovým actor secret/issuer jako u Driver
+account erasure. Nevzniká nový klientský token; nic z toho nepatří do
+prohlížeče či iPhonu. SIM lokálně ověří podpis, přesnou strukturu,
+čas/den a shodu ID. **Neprokazuje tím původ denního pseudonymu ani
+skutečný souhlas**: Root musí nezávisle ověřit historickou derivaci klíče
+a konkrétní consent intent. Bez toho mutace není povolena.
+
+Chybějící/neplatný actor vrací v guarded režimu 401
+`DRIVER_REVOCATION_ACTOR_INVALID` po běžném službovém přihlášení a
+validaci těla, před Root operation context nebo SQL. Chybějící serverová
+actor konfigurace je 503. Legacy headerless cesta před koordinovaným
+cutoverem se nemění. Odvolání jednoho dne nevytváří globální account
+fence v Root journalu a nemaže společnou identitu nebo přístup SIM.
+Hlavičky, subject, daily ID ani signed claim se neukládají a nelogují.
+
 ## Úložiště, nasazení a návrat
 
 Raw GPS existuje pouze přechodně v paměti SIM a Valhally při zpracování;

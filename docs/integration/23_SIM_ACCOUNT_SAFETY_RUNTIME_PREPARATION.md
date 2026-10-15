@@ -114,6 +114,31 @@ nedokládají deterministický race test rotace ani produkční config lease.
 
 ## Omezená publikace Root checkpointů
 
+Čisté doménové moduly pod `deploy/account-safety/` připravují přesné
+transientní JSON struktury pro skutečné Root pluginy; samy nejsou těmito
+pluginy ani verifikátorem. Driver používá pevné sibling importy skutečného
+compiled `driver-account-erasure.js` a `driver-revocation-actor.js`,
+neduplikuje HMAC/parser/coverage pravidla. Připravuje revoke/erase/ACK/
+expire těla; nevyrábí origin, cutoff, permit, accountMAC nebo `no_report`
+autoritu. ACK kontext je jen strukturálně validovaný vstup, nikoli důkaz
+podpisu, freshness, nezávislého inventory či bariéry.
+
+AI `buildAiRootCheckpointBody(transition, previousFacts, now)` skládá
+přesné třináctipolové SQL005 tělo z přesné čtrnáctipolové transition.
+Skutečný Root common musí nezávisle ověřit její původ, referenci a
+výhradní maintenance lease. Helper požaduje actual SQL004 snapshot,
+schema/priv piny z transition, přesné bigint +1 a proof <=30 s. Rozlišuje
+konzistentní předchozí active/quarantine stav, ale nepovažuje quarantine
+facts za oprávnění aktivovat. Žádné ID nebo pin sám negeneruje/adoptuje.
+
+Reprodukovatelné `node scripts/test-account-safety-owner-domains.mjs --run`
+vyžaduje Node 24 a již sestavené, připnuté skutečné pure siblings. Staging
+je izolovaný v `/private/tmp`, bez databáze, síťového volání či production
+secrets a po běhu se smaže. **30 PASS jsou pouze pure wire/byte testy**,
+nikoli Root publisher, native lease, restore nebo produkční akceptace.
+Skutečné fixed Root pluginy, target profily a přijatý common authority ABI
+zůstávají samostatnou nedokončenou integrační částí.
+
 Následující dva soubory `005_root_checkpoint.sql` jsou oddělené zdrojové
 publikátory metadat, nikoli produkčně aplikované migrace nebo přijetí autority.
 Vyžadují předem existující pevné omezené role, přijatou inkarnaci v
