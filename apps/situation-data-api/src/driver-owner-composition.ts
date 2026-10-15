@@ -29,7 +29,7 @@ export interface DriverRootHttpScope {
 }
 export interface DriverRootRequestScope {
   readonly context: DriverGuardedRequestContextPort;
-  run<T>(scope: DriverRootHttpScope, work: () => T): T;
+  run<T>(scope: DriverRootHttpScope, work: () => T, settled: AbortSignal): T;
 }
 export interface DriverOwnerBindings {
   readonly execution: DriverGuardedExecutionPort;
@@ -61,13 +61,25 @@ function unbound(): DriverOwnerComposition {
  * the real Root ports independently verify each delivery and operation.
  */
 export function composeDriverOwnerBindings(bindings: DriverOwnerBindings): DriverOwnerComposition {
-  const driverScopeMiddleware: RequestHandler = (request, _response, next) => {
+  const driverScopeMiddleware: RequestHandler = (request, response, next) => {
     const method = request.method, path = request.path;
     if (!((method === "DELETE" && path === `${PREFIX}/contributions`) ||
       (method === "POST" && path === `${PREFIX}/account-erasure-operations`))) {
       next();
       return;
     }
+    const controller = new AbortController();
+    const settle = (): void => {
+      // HTTP settlement stops future exchanges only. It does NOT attest SQL
+      // END, native-flight quiescence or release a real Root lease/HOLD.
+      try { controller.abort(); } finally {
+        response.removeListener("finish", settle);
+        response.removeListener("close", settle);
+      }
+    };
+    response.once("finish", settle);
+    response.once("close", settle);
+    if (response.writableEnded || response.destroyed) settle();
     let forwarded = false;
     try {
       bindings.requestScope.run({
@@ -79,8 +91,11 @@ export function composeDriverOwnerBindings(bindings: DriverOwnerBindings): Drive
       }, () => {
         forwarded = true;
         next();
-      });
+      }, controller.signal);
     } catch {
+      // Even after forwarding, stop new exchanges without pretending the
+      // already-started handler/native/SQL work has drained or been canceled.
+      settle();
       // A malformed scope must not pre-empt normal handler authentication/body
       // errors. No Root context is available on this unbound continuation.
       // Never forward twice if run() already invoked its work callback.

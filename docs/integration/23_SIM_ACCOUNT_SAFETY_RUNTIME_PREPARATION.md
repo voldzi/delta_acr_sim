@@ -1170,3 +1170,61 @@ výjimku pro globální `pending` stav. Nový privátní scope nesmí změnit p�
 origin, tělo, checkpoint ani deadline; HTTP finish/close nenahrazuje skutečný
 SQL a native drain. Dokud není tento řetězec doložen společným testem, tato
 oprava store sama o sobě neopravňuje zapnout produkční mazání.
+
+## Privátní v2 vazba jednotlivého požadavku
+
+Stav k 15. 10. 2026: aplikační validace a předávání níže jsou ve zdroji;
+Root keeper, nový podepsaný scoped admission a nativní v2 přenos ještě
+nejsou společně akceptované ani aktivované. Nový Root podpis je samostatný
+bezpečnostní krok čekající na výslovné potvrzení. Pouhý kladný návrat
+testového portu nepředstavuje tento podpis. Veřejné HTTP/OpenAPI se nemění.
+
+`mutationScopeRef` je přesně `{recordId,digest}`: UUID a SHA-256, bez dalších
+klíčů, getterů či proxy. Dodává jej pouze chráněný interní port. Nejde o
+veřejný business operation ID ani oprávnění odvozené ze samotného UUID.
+
+| Aplikační hranice | Přesný privátní tvar |
+| --- | --- |
+| Kontext mutace | `{operation,mutationScopeRef?,publicationContext?}`; publikace jen pro ACK, scope nikdy pro `expire` |
+| Execute | `{operation,body,mutationScopeRef?}`; původní operation a tělo se nemění |
+| Probe | `probe(operation,mutationScopeRef?)`; nový scope po pending nepovolí nové execute |
+| Čtení | `inspect(request,expectedMutationScopeRef?)`; scope pouze pro actor-bound preflight/status/receipt |
+| Scoped admission | `contractVersion=sim-driver-mutation-read-admission-v2`, přesně request pole owner/scope/purpose/operationHash/actorHash a checkpointHash/reportProtection/mutationScopeRef/reference |
+
+Pokud store očekává scope, přijme jen v2 se stejnou referencí, nikoli v1.
+Bez očekávaného scope naopak nepřijme v2 ani v1 s přidaným scope. Běžné
+capability/intake zůstává oddělené a nesmí dostat actor/operation pole.
+Kryptografickou a skutečnou aktuální autoritu musí stále ověřit chráněný
+port; aplikační porovnání tvaru/reference ji nevytváří.
+
+Store vlastní neměnný snapshot kontextu již před prvním await a použije jej
+pro obě kontroly i execute. Aktivní lokální volání stejného originu nelze
+sloučit s jiným scope. Po pending lze s novým scope pouze probe téhož
+originu a stejného těla. Tato místní ochrana neprokazuje SQL abort, Root
+drain nebo správné chování nativního brokeru.
+
+HTTP scope wrapper má povinné `run(scope,work,settled:AbortSignal)`. Middleware
+naváže jednorázové finish/close posluchače před předáním handleru; první
+událost synchronně zruší signál a odstraní oba posluchače. Zrušení zakazuje
+nové výměny, ale nepotvrzuje dokončení již běžící SQL ani nativní práce.
+Není zde časovač uvolňující autoritu. Skutečný Root drain a ukončení lease
+musí samostatně doložit vlastník nativního spojení.
+
+Common `readDriverMutationFacts(ctx,input)` vrací pouze nutná fakta. Vyžaduje
+skutečný WeakMap Driver kontext pro mutation, živý podepsaný erase intent,
+stejný peer/binding/hash/checkpoint a jednu serializovanou kontrolu před i
+po pevném read-only SQL004 s potvrzeným COMMIT a END. Neotevírá další
+metadata lease, nezavírá vypůjčený kontext a nevydává běžný read permit.
+Přesné vstupní klíče jsou intentRef, purpose, operationHash, actorHash,
+requestHash a checkpointHash.
+
+U v1 intentu zůstává výslovný limit: čas preflightu před prvním zápisem není
+pozdější skutečný ledger `created_at`. Jejich nesoulad se odmítá bez časové
+tolerance. Trvalá podepsaná vazba na původní origin a skutečný čas ledgeru
+je další samostatná implementace, ne vlastnost tohoto facts helperu.
+
+Samostatný [nový izolovaný důkaz 8/8](../archive/2026-10-15_DRIVER_MUTATION_SCOPE_BOUNDARY.md)
+ověřil facts-only helper nad skutečnými podpisy, cílovým SQL a drženou
+metadata session. Nevydal scoped admission a netestoval nový Root keeper,
+packet transport ani celý řetězec prvního smazání. Dřívější důkazy zůstávají
+připnuté ke svým původním zdrojům a nesčítají se s tímto během.

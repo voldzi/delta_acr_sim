@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import type {Pool} from "pg";
 import {PostgresDriverAccountErasureStore} from "../src/driver-account-erasure-store.js";
 import {driverErasureHash,driverErasureRequiredDays,type DriverErasureInput} from "../src/driver-account-erasure.js";
-import type {DriverGuardedExecutionRequest,DriverGuardedExecutionResult,DriverGuardedOperationContext,DriverGuardedReadRequest,DriverGuardedStoreOptions} from "../src/driver-guarded-execution-port.js";
+import type {DriverGuardedExecutionRequest,DriverGuardedExecutionResult,DriverGuardedOperationContext,DriverGuardedReadRequest,DriverGuardedRecordRef,DriverGuardedStoreOptions} from "../src/driver-guarded-execution-port.js";
 import {DriverReadFactsError,matchDriverReadPolicy} from "../../../deploy/driver-measurements/read-admission-facts.mjs";
 
 // All ports, references and rows below are synthetic mocks. Passing these tests
@@ -13,6 +13,7 @@ const checkpointHash=driverErasureHash(secret,"cop:account-erasure-checkpoint",c
 const syntheticPolicy={storeIncarnation:"30000000-0000-4000-8000-000000000001",checkpointHash,schemaFingerprint:"7".repeat(64),privilegeFingerprint:"8".repeat(64),reportProtection:"no_report"};
 const input=():DriverErasureInput=>({operationId:business,actorHash:"a".repeat(64),requestHash:"b".repeat(64),contributors:driverErasureRequiredDays(now).map((day,index)=>({contributorDay:day,contributorHash:index.toString(16).repeat(64)}))});
 const context=(kind:"erase"|"ack"="erase"):DriverGuardedOperationContext=>({operation:{operationId:origin,kind}});
+const mutationScope={recordId:"70000000-0000-4000-8000-000000000001",digest:"7".repeat(64)};
 const publication={contractVersion:"cop-driver-publication-context-v1" as const,recordId:"20000000-0000-4000-8000-000000000001",recordDigest:"1".repeat(64),storeIncarnation:"30000000-0000-4000-8000-000000000001",operationDigest:"2".repeat(64),readbackDigest:"3".repeat(64),reportProtection:"no_report" as const,observedAtUTC:"2026-10-14T12:00:00.000Z"};
 function outcome(id:string,state:"origin-commit-known"|"origin-no-effects-closed"|"pending"="origin-commit-known"):DriverGuardedExecutionResult{
   const binding={contractVersion:"cop-driver-origin-result-v1" as const,operationId:id};
@@ -21,7 +22,7 @@ function outcome(id:string,state:"origin-commit-known"|"origin-no-effects-closed
     effectQuiescenceRef:{recordId:"50000000-0000-4000-8000-000000000001",digest:"5".repeat(64)}};
 }
 function fixture(options:{enabled?:boolean;execution?:boolean;admission?:boolean;permissions?:boolean;state?:"origin-commit-known"|"origin-no-effects-closed"|"pending"|"throw";
-  admissionPatch?:Record<string,unknown>;onExecute?:(request:DriverGuardedExecutionRequest)=>void}={}){
+  admissionPatch?:Record<string,unknown>;mutationScopeRef?:DriverGuardedRecordRef;onInspect?:()=>void;onExecute?:(request:DriverGuardedExecutionRequest)=>void}={}){
   const rows=new Map<string,Record<string,any>>(),calls:Array<{sql:string;params:unknown[]}>=[];
   const database={checkpointHash,protection:"no_report",valid:true};
   const result=(values:unknown[])=>({rows:values,rowCount:values.length});
@@ -42,7 +43,9 @@ function fixture(options:{enabled?:boolean;execution?:boolean;admission?:boolean
   const execute=vi.fn(async(request:DriverGuardedExecutionRequest)=>{options.onExecute?.(request);if(options.state==="throw")throw new Error("Synthetic unavailable transport");return outcome(request.operation.operationId,options.state);});
   const probe=vi.fn(async(operation:{operationId:string})=>outcome(operation.operationId));
   const observations:Array<{purpose:DriverGuardedReadRequest["purpose"];hasOperation:boolean}>=[];
-  const inspect=vi.fn(async(request:DriverGuardedReadRequest)=>{
+  const readScopes:Array<DriverGuardedRecordRef|undefined>=[];
+  const inspect=vi.fn(async(request:DriverGuardedReadRequest,expectedScope?:DriverGuardedRecordRef)=>{
+    readScopes.push(expectedScope);options.onInspect?.();
     const row=request.operationHash?rows.get(request.operationHash):undefined;
     const owned=row?.actor_hash===request.actorHash?row:undefined;
     const operation=owned?{operationHash:request.operationHash,actorHash:owned.actor_hash,requestHash:owned.request_hash,contributorCount:owned.contributor_count,
@@ -57,15 +60,22 @@ function fixture(options:{enabled?:boolean;execution?:boolean;admission?:boolean
         retentionReviewed:true,reportProtection:database.protection,publicationFenceVerified:true},
       schema:{ready:true,fingerprint:syntheticPolicy.schemaFingerprint},privileges:{runtimeProfileMatches:options.permissions!==false,fingerprint:syntheticPolicy.privilegeFingerprint},operation},request,syntheticPolicy,now);
     }catch(error){if(error instanceof DriverReadFactsError)return undefined;throw error;}
-    return {contractVersion:"sim-driver-guarded-read-admission-v1" as const,...request,checkpointHash,reportProtection:"no_report" as const,
-      reference:{recordId:"60000000-0000-4000-8000-000000000001",digest:"6".repeat(64)},...options.admissionPatch};
+    const common={...request,checkpointHash,reportProtection:"no_report" as const,
+      reference:{recordId:"60000000-0000-4000-8000-000000000001",digest:"6".repeat(64)}};
+    if(options.mutationScopeRef){
+      if(!["preflight","status","receipt"].includes(request.purpose))return undefined;
+      return {contractVersion:"sim-driver-mutation-read-admission-v2" as const,...common,
+        purpose:request.purpose as "preflight"|"status"|"receipt",operationHash:request.operationHash!,actorHash:request.actorHash!,
+        mutationScopeRef:{...options.mutationScopeRef},...options.admissionPatch};
+    }
+    return {contractVersion:"sim-driver-guarded-read-admission-v1" as const,...common,...options.admissionPatch};
   });
   const protectedProof=vi.fn(async()=>({checkpoint,identityReviewed:true,restoreCheckpointCurrent:true,retentionReviewed:true,publicationFenceVerified:true,reportProtection:"no_report" as const}));
   const guarded:DriverGuardedStoreOptions={...(options.execution===false?{}:{execution:{execute,probe}}),...(options.admission===false?{}:{admission:{inspect}})};
   const store=new PostgresDriverAccountErasureStore(pool,secret,{enabled:options.enabled??true,expectedCheckpoint:checkpoint,identityConfigured:true,protectedProof,guarded});
   const seed=(patch:Record<string,unknown>={})=>{const value=input();const key=driverErasureHash(secret,"cop:account-erasure-operation",value.operationId);
     const row={actor_hash:value.actorHash,request_hash:value.requestHash,created_at:new Date(now),updated_at:new Date(now),contributor_count:9,deleted_batch_count:2,remaining_batch_count:0,database_zero_verified:true,derived_report_acknowledged:false,replay_checkpoint_hash:checkpointHash,status:"pending",...patch};rows.set(key,row);return row;};
-  return {store,guarded,pool,rows,calls,database,execute,probe,inspect,observations,protectedProof,seed};
+  return {store,guarded,pool,rows,calls,database,execute,probe,inspect,observations,readScopes,protectedProof,seed};
 }
 describe("guarded driver erasure store (synthetic ports; no Root acceptance)",()=>{
   it("starts the first ERASE on an empty ledger through preflight, then requires a fresh receipt without runtime DML",async()=>{
@@ -88,6 +98,25 @@ describe("guarded driver erasure store (synthetic ports; no Root acceptance)",()
     expect(f.execute.mock.calls[0][0].body).toEqual(expect.objectContaining({publicationContext:publication,checkpointHash}));
     expect(f.observations).toEqual([{purpose:"receipt",hasOperation:true},{purpose:"receipt",hasOperation:true}]);
     expect(f.inspect.mock.calls.every(([request])=>request.purpose==="receipt"&&request.actorHash===input().actorHash&&request.operationHash===driverErasureHash(secret,"cop:account-erasure-operation",business))).toBe(true);
+  });
+  it("binds both reads and execute to the same owned v2 invocation scope even if the caller changes it during admission",async()=>{
+    const caller={...context(),mutationScopeRef:{...mutationScope}};
+    let f:ReturnType<typeof fixture>;f=fixture({mutationScopeRef:mutationScope,onInspect:()=>{caller.mutationScopeRef.digest="8".repeat(64);},onExecute:()=>{f.seed();}});
+    const receipt=await f.store.erase(input(),caller);expect(receipt.status).toBe("pending");
+    expect(f.readScopes).toEqual([mutationScope,mutationScope]);
+    expect(f.execute.mock.calls[0][0].mutationScopeRef).toEqual(mutationScope);
+    expect(f.observations).toEqual([{purpose:"preflight",hasOperation:false},{purpose:"receipt",hasOperation:true}]);
+  });
+  it("requires the same v2 scope for ACK admission and its publication-bound dispatch",async()=>{
+    const f=fixture({mutationScopeRef:mutationScope});f.seed({status:"completed",derived_report_acknowledged:true});
+    expect((await f.store.acknowledge(input(),{...context("ack"),mutationScopeRef:mutationScope,publicationContext:publication})).status).toBe("completed");
+    expect(f.readScopes).toEqual([mutationScope,mutationScope]);expect(f.execute.mock.calls[0][0].mutationScopeRef).toEqual(mutationScope);
+    expect(f.execute.mock.calls[0][0].body).toEqual(expect.objectContaining({publicationContext:publication}));
+  });
+  it.each(["downgrade","unscoped","foreign-scope"] as const)("rejects %s admission without a fallback or dispatch",async mode=>{
+    const f=fixture(mode==="downgrade"?{}:{mutationScopeRef:mode==="foreign-scope"?{...mutationScope,digest:"8".repeat(64)}:mutationScope});f.seed();
+    await expect(f.store.erase(input(),mode==="unscoped"?context():{...context(),mutationScopeRef:mutationScope})).rejects.toMatchObject({status:503});
+    expect(f.execute).not.toHaveBeenCalled();expect(f.probe).not.toHaveBeenCalled();expect(f.protectedProof).not.toHaveBeenCalled();
   });
   it("requires an existing actor-bound receipt before ACK dispatch",async()=>{
     const f=fixture();await expect(f.store.acknowledge(input(),{...context("ack"),publicationContext:publication})).rejects.toMatchObject({status:503});

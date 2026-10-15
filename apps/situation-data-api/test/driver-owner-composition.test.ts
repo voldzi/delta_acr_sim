@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { EventEmitter } from "node:events";
 import type { NextFunction, Request, Response } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -31,8 +32,11 @@ function bindings(run?: DriverRootRequestScope["run"]): DriverOwnerBindings {
 function request(method: string, path: string, body: unknown = {}, headers: Record<string, string> = {}) {
   return { method, path, body, get: vi.fn((name: string) => headers[name]) } as unknown as Request;
 }
-function invoke(owner: ReturnType<typeof composeDriverOwnerBindings>, input: Request, next = vi.fn()) {
-  owner.driverScopeMiddleware(input, {} as Response, next as NextFunction);
+function response(): Response {
+  return Object.assign(new EventEmitter(), { writableEnded: false, destroyed: false }) as unknown as Response;
+}
+function invoke(owner: ReturnType<typeof composeDriverOwnerBindings>, input: Request, next = vi.fn(), output = response()) {
+  owner.driverScopeMiddleware(input, output, next as NextFunction);
   return next;
 }
 beforeEach(() => {
@@ -59,7 +63,7 @@ describe("Driver owner composition: synthetic local mechanics only", () => {
 
   it.each([["DELETE", "/contributions"], ["POST", "/account-erasure-operations"]])(
     "passes only the exact six routing fields for %s %s", (method, suffix) => {
-      const run = vi.fn((_scope: DriverRootHttpScope, work: () => unknown) => work());
+      const run = vi.fn((_scope: DriverRootHttpScope, work: () => unknown, _settled: AbortSignal) => work());
       const body = { contractVersion: "synthetic-test-only" };
       const input = request(method, PREFIX + suffix, body, { authorization: "Bearer synthetic", "x-cop-actor": "actor", "x-cop-actor-signature": "signature", "x-extra": "not-forwarded" });
       const next = invoke(composeDriverOwnerBindings(bindings(run as DriverRootRequestScope["run"])), input);
@@ -67,6 +71,8 @@ describe("Driver owner composition: synthetic local mechanics only", () => {
       expect(run).toHaveBeenCalledTimes(1);
       expect(run.mock.calls[0]?.[0]).toEqual({ method, path: PREFIX + suffix, authorization: "Bearer synthetic", actor: "actor", actorSignature: "signature", body });
       expect(run.mock.calls[0]?.[0].body).toBe(body);
+      expect(run.mock.calls[0]?.[2]).toBeInstanceOf(AbortSignal);
+      expect(run.mock.calls[0]?.[2].aborted).toBe(false);
     });
 
   it.each([
@@ -76,9 +82,10 @@ describe("Driver owner composition: synthetic local mechanics only", () => {
     ["POST", "/account-erasure-operations/"], ["OPTIONS", "/account-erasure-operations"]
   ])("never forwards GPS/other route bodies to Root scope: %s %s", (method, suffix) => {
     const run = vi.fn((_scope: DriverRootHttpScope, work: () => unknown) => work());
-    const input = request(method, PREFIX + suffix, { points: [{ lat: 50.1, lon: 14.2 }] });
-    expect(invoke(composeDriverOwnerBindings(bindings(run as DriverRootRequestScope["run"])), input)).toHaveBeenCalledExactlyOnceWith();
+    const input = request(method, PREFIX + suffix, { points: [{ lat: 50.1, lon: 14.2 }] }), output = response();
+    expect(invoke(composeDriverOwnerBindings(bindings(run as DriverRootRequestScope["run"])), input, vi.fn(), output)).toHaveBeenCalledExactlyOnceWith();
     expect(run).not.toHaveBeenCalled(); expect(input.get).not.toHaveBeenCalled();
+    expect(output.listenerCount("finish")).toBe(0); expect(output.listenerCount("close")).toBe(0);
   });
 
   it("continues unbound when scope validation throws before forwarding, preserving handler 401/400 ordering", () => {
@@ -91,8 +98,46 @@ describe("Driver owner composition: synthetic local mechanics only", () => {
   });
 
   it("never forwards twice if the scope wrapper throws after invoking work", () => {
-    const run: DriverRootRequestScope["run"] = (_scope, work) => { work(); throw new Error("synthetic after-forward failure"); };
-    expect(invoke(composeDriverOwnerBindings(bindings(run)), request("DELETE", `${PREFIX}/contributions`))).toHaveBeenCalledExactlyOnceWith();
+    let signal!: AbortSignal;
+    const run: DriverRootRequestScope["run"] = (_scope, work, settled) => { signal = settled; work(); throw new Error("synthetic after-forward failure"); };
+    const output = response();
+    expect(invoke(composeDriverOwnerBindings(bindings(run)), request("DELETE", `${PREFIX}/contributions`), vi.fn(), output)).toHaveBeenCalledExactlyOnceWith();
+    expect(signal.aborted).toBe(true); expect(output.listenerCount("finish")).toBe(0); expect(output.listenerCount("close")).toBe(0);
+  });
+
+  it.each(["finish", "close"])("synchronously aborts on %s during forwarding and removes both one-shot listeners", event => {
+    const output = response(), aborted = vi.fn(); let signal!: AbortSignal;
+    const run: DriverRootRequestScope["run"] = (_scope, work, settled) => {
+      signal = settled; expect(settled.aborted).toBe(false); settled.addEventListener("abort", aborted); return work();
+    };
+    const next = vi.fn(() => { output.emit(event); expect(signal.aborted).toBe(true); });
+    invoke(composeDriverOwnerBindings(bindings(run)), request("POST", `${PREFIX}/account-erasure-operations`), next, output);
+    expect(next).toHaveBeenCalledExactlyOnceWith(); expect(aborted).toHaveBeenCalledTimes(1);
+    expect(output.listenerCount("finish")).toBe(0); expect(output.listenerCount("close")).toBe(0);
+    output.emit("finish"); output.emit("close"); expect(aborted).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts and cleans up before an unbound continuation when scope validation throws", () => {
+    const output = response(); let signal!: AbortSignal;
+    const run: DriverRootRequestScope["run"] = (_scope, _work, settled) => { signal = settled; throw new Error("synthetic invalid scope"); };
+    const next = vi.fn(() => { expect(signal.aborted).toBe(true); });
+    invoke(composeDriverOwnerBindings(bindings(run)), request("POST", `${PREFIX}/account-erasure-operations`), next, output);
+    expect(next).toHaveBeenCalledExactlyOnceWith(); expect(output.listenerCount("finish")).toBe(0); expect(output.listenerCount("close")).toBe(0);
+  });
+
+  it("uses different settlement controllers for concurrent responses without a TTL release", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [], run: DriverRootRequestScope["run"] = (_scope, work, settled) => { signals.push(settled); return work(); };
+      const owner = composeDriverOwnerBindings(bindings(run)), first = response(), second = response();
+      for (const output of [first, second]) invoke(owner, request("POST", `${PREFIX}/account-erasure-operations`), vi.fn(), output);
+      expect(signals).toHaveLength(2); expect(signals[0]).not.toBe(signals[1]);
+      await vi.advanceTimersByTimeAsync(60_000); expect(signals.every(signal => !signal.aborted)).toBe(true);
+      first.emit("close"); expect(signals[0].aborted).toBe(true); expect(signals[1].aborted).toBe(false);
+      expect(second.listenerCount("finish")).toBe(1); expect(second.listenerCount("close")).toBe(1);
+      second.emit("finish"); expect(signals[1].aborted).toBe(true);
+      for (const output of [first, second]) { expect(output.listenerCount("finish")).toBe(0); expect(output.listenerCount("close")).toBe(0); }
+    } finally { vi.useRealTimers(); }
   });
 
   it("keeps concurrent local async scopes separate without treating ALS as authority", async () => {

@@ -63,6 +63,7 @@ export type DriverGuardedExecutionRequest = {
   [K in DriverGuardedKind]: {
     readonly operation: DriverGuardedOperationRef<K>;
     readonly body: BodyByKind[K];
+    readonly mutationScopeRef?: DriverGuardedRecordRef;
   }
 }[DriverGuardedKind];
 
@@ -111,13 +112,14 @@ export type DriverGuardedExecutionResult = DriverGuardedResultBinding & (
 export interface DriverGuardedExecutionPort {
   execute(request: DriverGuardedExecutionRequest): Promise<DriverGuardedExecutionResult>;
   // May durably seal this exact origin via resolve_or_seal. Not a read-only GET.
-  probe(operation: DriverGuardedOperationRef): Promise<DriverGuardedExecutionResult>;
+  probe(operation: DriverGuardedOperationRef, mutationScopeRef?: DriverGuardedRecordRef): Promise<DriverGuardedExecutionResult>;
 }
 
 /** Supplied per invocation by protected delivery, never by public HTTP input. */
 export interface DriverGuardedOperationContext {
   readonly operation: DriverGuardedOperationRef;
   readonly publicationContext?: DriverGuardedPublicationContext;
+  readonly mutationScopeRef?: DriverGuardedRecordRef;
 }
 
 export type DriverGuardedReadPurpose = "capability" | "intake" | "preflight" | "status" | "receipt";
@@ -131,14 +133,23 @@ export interface DriverGuardedReadRequest {
 
 /** The actual delivery implementation verifies current signed Root evidence.
  * Shape/reference equality in the application alone is NOT that verification. */
-export interface DriverGuardedReadAdmission extends DriverGuardedReadRequest {
+export interface DriverGuardedReadAdmissionV1 extends DriverGuardedReadRequest {
   readonly contractVersion: "sim-driver-guarded-read-admission-v1";
   readonly checkpointHash: string;
   readonly reportProtection: "no_report" | "enforced_single_writer" | "shared_generation_fence";
   readonly reference: DriverGuardedRecordRef;
 }
+/** Per-mutation binding only; the protected port still verifies real authority. */
+export interface DriverGuardedMutationReadAdmissionV2 extends Omit<DriverGuardedReadAdmissionV1, "contractVersion" | "purpose" | "operationHash" | "actorHash"> {
+  readonly contractVersion: "sim-driver-mutation-read-admission-v2";
+  readonly purpose: "preflight" | "status" | "receipt";
+  readonly operationHash: string;
+  readonly actorHash: string;
+  readonly mutationScopeRef: DriverGuardedRecordRef;
+}
+export type DriverGuardedReadAdmission = DriverGuardedReadAdmissionV1 | DriverGuardedMutationReadAdmissionV2;
 export interface DriverGuardedReadAdmissionPort {
-  inspect(request: DriverGuardedReadRequest): Promise<DriverGuardedReadAdmission | undefined>;
+  inspect(request: DriverGuardedReadRequest, expectedMutationScopeRef?: DriverGuardedRecordRef): Promise<DriverGuardedReadAdmission | undefined>;
 }
 
 /** Presence opts in; an empty/unbound value must NEVER select legacy SQL. */

@@ -581,6 +581,16 @@ nejsou uzavřené produkční gates.
 
 ## Omezená migrace a obraz
 
+Privátní v2 scope validace a facts-only common zdroj nejsou instalační
+manifest ani důkaz dokončeného keeper/signature/transport řetězce.
+Nenasazovat je jako opravu celé cesty jen na základě syntetických portů.
+Nový scoped Root podpis čeká na samostatné výslovné potvrzení zdrojové
+změny; produkční příznaky a oprávnění se tímto krokem nemění.
+Před společnou akceptací musí být doložen i původní business anchor vůči
+skutečnému ledger created_at, bez nové časové tolerance nebo přepočtu
+manifestu při retry. Přesný privátní kontrakt je v
+[integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md#privátní-v2-vazba-jednotlivého-požadavku).
+
 - Zdrojový SQL007 zpřísňuje ETA→receipt contributor vazbu bez změny
   funkcí SQL003 nebo oprávnění. Před případným použitím ověřit historické
   nesoulady; při 23514 skončit bez změny, neodstraňovat ani nepřeznačovat

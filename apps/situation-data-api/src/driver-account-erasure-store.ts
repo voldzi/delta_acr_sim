@@ -1,7 +1,7 @@
 import type {Pool,PoolClient} from "pg";
 import {types} from "node:util";
-import {DriverGuardedOperationRunner,readDriverGuardedAdmission} from "./driver-guarded-execution.js";
-import type {DriverGuardedOperationContext,DriverGuardedReadRequest,DriverGuardedStoreOptions,DriverGuardedAckBody} from "./driver-guarded-execution-port.js";
+import {DriverGuardedOperationRunner,readDriverGuardedAdmission,snapshotDriverGuardedOperationContext} from "./driver-guarded-execution.js";
+import type {DriverGuardedOperationContext,DriverGuardedReadRequest,DriverGuardedRecordRef,DriverGuardedStoreOptions,DriverGuardedAckBody} from "./driver-guarded-execution-port.js";
 import {DRIVER_ACCOUNT_ERASURE_CONTRACT,DriverAccountErasureError,driverErasureHash,validateDriverErasureCoverage,
   type DriverErasureInput,type DriverErasureReceipt,type DriverErasureCapability,type DriverErasurePreflight,type DriverErasureReportProtection,type DriverErasureBlocker} from "./driver-account-erasure.js";
 /** Supplied only by a protected current-deployment guard, never a client/body/env flag. */
@@ -67,7 +67,7 @@ export class PostgresDriverAccountErasureStore {
           AND p.proname IN ('register_origin','claim_origin','execute_origin','resolve_or_seal','read_publication_context'))
       AND NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls),false)
     END AS ready FROM pg_roles WHERE rolname=current_user`);}
-  async gate(c:Queryable=this.pool,ordinaryIntake=false,request?:Pick<DriverGuardedReadRequest,"purpose"|"operationHash"|"actorHash">):Promise<Gate>{
+  async gate(c:Queryable=this.pool,ordinaryIntake=false,request?:Pick<DriverGuardedReadRequest,"purpose"|"operationHash"|"actorHash">,mutationScopeRef?:DriverGuardedRecordRef):Promise<Gate>{
     const schema=await c.query(`SELECT now() AS at,to_regclass('public.driver_account_erasure_state') IS NOT NULL
       AND to_regclass('public.driver_account_erasure_operations') IS NOT NULL AND to_regclass('public.driver_account_erasure_revocations') IS NOT NULL
       AND EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid=to_regclass('public.driver_measurement_receipts')
@@ -87,7 +87,7 @@ export class PostgresDriverAccountErasureStore {
     const state=await c.query("SELECT *,proof_valid_until>now() AS valid FROM driver_account_erasure_state WHERE singleton=true");
     const active=(await c.query("SELECT EXISTS(SELECT 1 FROM driver_account_erasure_operations) OR EXISTS(SELECT 1 FROM driver_account_erasure_revocations) AS active")).rows[0].active===true;
     const proof=!guarded&&this.options.protectedProof&&(!ordinaryIntake||active)?await this.options.protectedProof():undefined;
-    const admission=guarded?await readDriverGuardedAdmission(this.options.guarded,{owner:"sim_driver_measurements",scope:"online_driver_scope",purpose:ordinaryIntake?"intake":"capability",...request}):undefined;
+    const admission=guarded?await readDriverGuardedAdmission(this.options.guarded,{owner:"sim_driver_measurements",scope:"online_driver_scope",purpose:ordinaryIntake?"intake":"capability",...request},mutationScopeRef):undefined;
     const configuredCheckpoint=this.options.expectedCheckpoint?driverErasureHash(this.secret,"cop:account-erasure-checkpoint",this.options.expectedCheckpoint):null;
     const checkpoint=guarded?(admission?.checkpointHash??null):configuredCheckpoint;
     const row=state.rows[0],valid=state.rowCount===1&&row.valid===true&&!!checkpoint&&row.replay_checkpoint_hash===checkpoint&&
@@ -159,7 +159,10 @@ export class PostgresDriverAccountErasureStore {
     const request={purpose:kind==="erase"?"preflight" as const:"receipt" as const,operationHash:this.key(input.operationId),actorHash:input.actorHash};
     let publication=false;
     try{
-      const gate=await this.gate(this.pool,false,request);
+      // Capture protected invocation data before the first await. A later
+      // caller mutation cannot switch the scope between admission and execute.
+      const invocation=snapshotDriverGuardedOperationContext(context,kind),mutationScopeRef=invocation.mutationScopeRef;
+      const gate=await this.gate(this.pool,false,request,mutationScopeRef);
       if(!this.guardedReadReady(gate)||!gate.checkpoint)throw unavailable();
       if(this.options.enabled!==true){
         const prior=await this.pool.query("SELECT * FROM driver_account_erasure_operations WHERE operation_hash=$1 AND actor_hash=$2",[request.operationHash,input.actorHash]);
@@ -169,18 +172,18 @@ export class PostgresDriverAccountErasureStore {
         actorHash:input.actorHash,requestHash:input.requestHash,contributors:input.contributors.map(row=>({...row})),checkpointHash:gate.checkpoint};
       // Read only a data descriptor; do not invoke a context getter before the
       // shared runner's exact-key/proxy validation. HTTP never supplies context.
-      if(context&&typeof context==="object"&&!types.isProxy(context)){
-        const value=Object.getOwnPropertyDescriptor(context,"publicationContext");
+      if(invocation&&typeof invocation==="object"&&!types.isProxy(invocation)){
+        const value=Object.getOwnPropertyDescriptor(invocation,"publicationContext");
         if(value){if(kind!=="ack"||!("value" in value))throw unavailable();
           if(value.value!==undefined){Object.assign(body,{publicationContext:value.value});publication=true;}}
       }
       if(kind==="ack"&&!publication)throw unavailable();
       // Missing/ambiguous/no-effect outcomes are unavailable on a mutating call,
       // even if an older ledger exists. GET alone may project that older row.
-      if((await this.guardedRunner.execute(context,kind,body)).state!=="origin-commit-known")throw unavailable();
+      if((await this.guardedRunner.execute(invocation,kind,body)).state!=="origin-commit-known")throw unavailable();
       const c=await this.pool.connect();try{
         await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-        const current=await this.gate(c,false,{...request,purpose:"receipt"});
+        const current=await this.gate(c,false,{...request,purpose:"receipt"},mutationScopeRef);
         if(!this.guardedReadReady(current)||current.checkpoint!==gate.checkpoint)throw unavailable();
         const rows=await c.query("SELECT * FROM driver_account_erasure_operations WHERE operation_hash=$1 AND actor_hash=$2",[request.operationHash,input.actorHash]);
         const row=rows.rows[0];

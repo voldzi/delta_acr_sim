@@ -83,6 +83,14 @@ roli, token, projekt a audit; jen syntetické či zveřejněné agregáty.
 
 ## Zákazy
 
+Privátní Driver mutation scope je pouze interní korelace na skutečný Root
+kontext. SIM snapshotuje chráněný kontext před prvním await a vyžaduje
+stejný scope v pre/post admission a dispatchi. Scoped v2 se nesmí snížit
+na ordinary v1 a nesmí rozšířit ordinary read při pending cleanup.
+Samotné UUID/reference, syntetický port nebo databázové ready nepředstavují
+Root oprávnění. Nový scoped podpis a nativní transport vyžadují samostatné
+ověření; nejsou touto aplikační validací aktivované.
+
 Systém nesmí obsahovat reálná operační data, secrets v repozitáři, targeting, navádění nebo bojové workflow.
 
 ## Traffic freshness security boundary

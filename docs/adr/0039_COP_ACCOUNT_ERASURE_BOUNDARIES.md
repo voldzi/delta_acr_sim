@@ -444,3 +444,18 @@ operaci se shodným request hashem. Jde o opravu aplikačního pořadí kontrol,
 nikoli výjimku z Root autority, aktuálního checkpointu nebo publikace.
 Samostatné syntetické testy store nenahrazují ověření držené mutation lease,
 nativního přenosu, restore karantény ani společnou produkční akceptaci.
+
+### Neměnný scope pro odložený dispatch
+
+Privátní v2 aplikační hranice předává Rootem dodanou referenci scope do
+execute, probe i actor-bound čtení. Store ji vlastní před prvním await;
+nepřijme scoped v2 jako ordinary v1 ani obráceně. Aktivní volání stejného
+originu se nesmí sloučit přes různé scopes. Nový scope po nejasném výsledku
+opravňuje nanejvýš předání probe téhož originu chráněnému portu, nikoli
+nový dispatch nebo oprávnění odvozené z lokální cache.
+
+Facts-only common čtení používá skutečný držený mutation kontext, ne novou
+shared session ani globální read výjimku pro pending cleanup. Nový Root
+podpis, keeper, transport, vazba původního anchoru a společná akceptace
+zůstávají samostatnými kroky. Nejasný END nadále znamená HOLD; expirace
+ani HTTP close nepovoluje odemknutí nebo obnovu autority.

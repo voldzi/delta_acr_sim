@@ -39,6 +39,20 @@ function publicationContext(value: unknown): boolean {
   return Number.isFinite(at) && new Date(at).toISOString() === value.observedAtUTC &&
     typeof value.reportProtection === "string" && ["no_report", "enforced_single_writer", "shared_generation_fence"].includes(value.reportProtection);
 }
+/** Own immutable shape snapshot only, never authentication or Root authority. */
+export function snapshotDriverGuardedOperationContext(value: DriverGuardedOperationContext | undefined,
+  kind: DriverGuardedKind): DriverGuardedOperationContext {
+  if (!["expire", "revoke", "erase", "ack"].includes(kind) ||
+    !keys(value, ["operation"], ["publicationContext", "mutationScopeRef"]) || !keys(value.operation, ["operationId", "kind"]) ||
+    value.operation.kind !== kind || typeof value.operation.operationId !== "string" || !UUID.test(value.operation.operationId) ||
+    (Object.hasOwn(value, "publicationContext") && (kind !== "ack" || !publicationContext(value.publicationContext))) ||
+    (Object.hasOwn(value, "mutationScopeRef") && (kind === "expire" || !reference(value.mutationScopeRef)))) return unavailable();
+  const snapshot = structuredClone(value) as DriverGuardedOperationContext;
+  Object.freeze(snapshot.operation);
+  if (snapshot.publicationContext) Object.freeze(snapshot.publicationContext);
+  if (snapshot.mutationScopeRef) Object.freeze(snapshot.mutationScopeRef);
+  return Object.freeze(snapshot);
+}
 function bodyShape(kind: DriverGuardedKind, body: unknown): boolean {
   if (!plain(body) || body.contractVersion !== "sim-driver-guarded-db-v1") return false;
   if (kind === "expire") return keys(body, ["contractVersion"]);
@@ -81,22 +95,31 @@ function result(value: unknown, operationId: string, kind: DriverGuardedKind): D
 /** No production factory/transport or positive verifier. An absent admission
  * remains unavailable; neither booleans nor a catalog flag create this result. */
 export async function readDriverGuardedAdmission(options: DriverGuardedStoreOptions | undefined,
-  request: DriverGuardedReadRequest): Promise<DriverGuardedReadAdmission | undefined> {
+  request: DriverGuardedReadRequest, expectedMutationScopeRef?: DriverGuardedRecordRef): Promise<DriverGuardedReadAdmission | undefined> {
   try {
-    if (!keys(request, ["owner", "scope", "purpose"], ["operationHash", "actorHash"]) || request.owner !== "sim_driver_measurements" ||
-      request.scope !== "online_driver_scope" || !["capability", "intake", "preflight", "status", "receipt"].includes(request.purpose)) return undefined;
-    for (const key of ["operationHash", "actorHash"] as const) if (Object.hasOwn(request, key) &&
-      (typeof request[key] !== "string" || !HEX.test(request[key]!))) return undefined;
+    if (!plain(request) || !["capability", "intake", "preflight", "status", "receipt"].includes(request.purpose as string)) return undefined;
+    const actorBound = ["preflight", "status", "receipt"].includes(request.purpose);
+    const requestKeys = ["owner", "scope", "purpose", ...(actorBound ? ["operationHash", "actorHash"] : [])];
+    if (!keys(request, requestKeys) || request.owner !== "sim_driver_measurements" || request.scope !== "online_driver_scope") return undefined;
+    if (actorBound && (typeof request.operationHash !== "string" || !HEX.test(request.operationHash) ||
+      typeof request.actorHash !== "string" || !HEX.test(request.actorHash))) return undefined;
+    if (expectedMutationScopeRef !== undefined && (!actorBound || !reference(expectedMutationScopeRef))) return undefined;
+    const requestSnapshot = Object.freeze({ ...request });
+    const scopeSnapshot = expectedMutationScopeRef === undefined ? undefined : Object.freeze({ ...expectedMutationScopeRef });
     if (!options?.admission || typeof options.admission.inspect !== "function") return undefined;
-    const value = await options.admission.inspect(Object.freeze({ ...request }));
-    if (!keys(value, ["owner", "scope", "purpose", "contractVersion", "checkpointHash", "reportProtection", "reference"], ["operationHash", "actorHash"]) ||
-      value.contractVersion !== "sim-driver-guarded-read-admission-v1" || value.owner !== request.owner || value.scope !== request.scope ||
-      value.purpose !== request.purpose || value.operationHash !== request.operationHash || value.actorHash !== request.actorHash ||
+    const value = scopeSnapshot === undefined ? await options.admission.inspect(requestSnapshot) : await options.admission.inspect(requestSnapshot, scopeSnapshot);
+    if (!keys(value, [...requestKeys, "contractVersion", "checkpointHash", "reportProtection", "reference", ...(scopeSnapshot ? ["mutationScopeRef"] : [])]) ||
+      value.contractVersion !== (scopeSnapshot ? "sim-driver-mutation-read-admission-v2" : "sim-driver-guarded-read-admission-v1") ||
+      value.owner !== requestSnapshot.owner || value.scope !== requestSnapshot.scope || value.purpose !== requestSnapshot.purpose ||
+      value.operationHash !== requestSnapshot.operationHash || value.actorHash !== requestSnapshot.actorHash ||
       typeof value.checkpointHash !== "string" || !HEX.test(value.checkpointHash) || !reference(value.reference) ||
       typeof value.reportProtection !== "string" || !["no_report", "enforced_single_writer", "shared_generation_fence"].includes(value.reportProtection)) return undefined;
-    for (const key of ["operationHash", "actorHash"]) if (Object.hasOwn(value, key) &&
-      (typeof value[key] !== "string" || !HEX.test(value[key] as string))) return undefined;
-    return structuredClone(value) as unknown as DriverGuardedReadAdmission;
+    if (scopeSnapshot && (!reference(value.mutationScopeRef) || value.mutationScopeRef.recordId !== scopeSnapshot.recordId ||
+      value.mutationScopeRef.digest !== scopeSnapshot.digest)) return undefined;
+    const snapshot = structuredClone(value) as unknown as DriverGuardedReadAdmission;
+    Object.freeze(snapshot.reference);
+    if (snapshot.contractVersion === "sim-driver-mutation-read-admission-v2") Object.freeze(snapshot.mutationScopeRef);
+    return Object.freeze(snapshot);
   } catch { return undefined; }
 }
 
@@ -105,7 +128,7 @@ export async function readDriverGuardedAdmission(options: DriverGuardedStoreOpti
 export class DriverGuardedOperationRunner {
   #port?: DriverGuardedExecutionPort;
   #pending = new Map<string, string>();
-  #flights = new Map<string, { fingerprint: string; promise: Promise<DriverGuardedExecutionResult> }>();
+  #flights = new Map<string, { fingerprint: string; scopeFingerprint: string; promise: Promise<DriverGuardedExecutionResult> }>();
   #closed = false;
   constructor(port?: DriverGuardedExecutionPort) {
     if (port && typeof port.execute === "function" && typeof port.probe === "function")
@@ -116,17 +139,19 @@ export class DriverGuardedOperationRunner {
     body: DriverGuardedExecutionRequest["body"]): Promise<DriverGuardedExecutionResult> {
     try {
       if (this.#closed || !this.#port || typeof this.#port.execute !== "function" || typeof this.#port.probe !== "function" ||
-        !keys(context, ["operation"], ["publicationContext"]) || !keys(context.operation, ["operationId", "kind"]) ||
-        context.operation.kind !== kind || typeof context.operation.operationId !== "string" || !UUID.test(context.operation.operationId)) return Promise.reject(new DriverGuardedUnavailable());
-      if (!bodyShape(kind, body) || (Object.hasOwn(context, "publicationContext") && (kind !== "ack" || !publicationContext(context.publicationContext))) ||
-        (kind === "ack" && JSON.stringify(context.publicationContext) !== JSON.stringify((body as { publicationContext?: unknown }).publicationContext))) return Promise.reject(new DriverGuardedUnavailable());
-      const operation = Object.freeze({ operationId: context.operation.operationId, kind });
+        !context) return Promise.reject(new DriverGuardedUnavailable());
+      const captured = snapshotDriverGuardedOperationContext(context, kind);
+      if (!bodyShape(kind, body) || (kind === "ack" && JSON.stringify(captured.publicationContext) !==
+        JSON.stringify((body as { publicationContext?: unknown }).publicationContext))) return Promise.reject(new DriverGuardedUnavailable());
+      const operation = Object.freeze({ operationId: captured.operation.operationId, kind });
+      const mutationScopeRef = captured.mutationScopeRef;
+      const scopeFingerprint = mutationScopeRef ? `${mutationScopeRef.recordId}:${mutationScopeRef.digest}` : "";
       // This hash is local retry correlation ONLY, never the PG/Root bodyDigest.
       const bodyText = JSON.stringify(body);
       if (typeof bodyText !== "string" || Buffer.byteLength(bodyText, "utf8") > 16_384) return Promise.reject(new DriverGuardedUnavailable());
       const fingerprint = createHash("sha256").update(kind).update("\0").update(bodyText).digest("hex");
       const active = this.#flights.get(operation.operationId);
-      if (active) return active.fingerprint === fingerprint ? active.promise : Promise.reject(new DriverGuardedUnavailable());
+      if (active) return active.fingerprint === fingerprint && active.scopeFingerprint === scopeFingerprint ? active.promise : Promise.reject(new DriverGuardedUnavailable());
       const previous = this.#pending.get(operation.operationId);
       if ((previous !== undefined && previous !== fingerprint) || (previous === undefined && this.#pending.size >= 128)) return Promise.reject(new DriverGuardedUnavailable());
       const snapshot = JSON.parse(bodyText) as DriverGuardedExecutionRequest["body"];
@@ -138,14 +163,14 @@ export class DriverGuardedOperationRunner {
       this.#pending.set(operation.operationId, fingerprint);
       const promise = Promise.resolve().then(async () => {
         try {
-          const raw = previous !== undefined ? await this.#port!.probe(operation) :
-            await this.#port!.execute({ operation, body: snapshot } as DriverGuardedExecutionRequest);
+          const raw = previous !== undefined ? await (mutationScopeRef ? this.#port!.probe(operation, mutationScopeRef) : this.#port!.probe(operation)) :
+            await this.#port!.execute({ operation, body: snapshot, ...(mutationScopeRef ? { mutationScopeRef } : {}) } as DriverGuardedExecutionRequest);
           const checked = result(raw, operation.operationId, kind);
           if (checked.state !== "pending") this.#pending.delete(operation.operationId);
           return checked;
         } catch { return unavailable(); }
       });
-      this.#flights.set(operation.operationId, { fingerprint, promise });
+      this.#flights.set(operation.operationId, { fingerprint, scopeFingerprint, promise });
       void promise.then(() => this.#flights.delete(operation.operationId), () => this.#flights.delete(operation.operationId));
       return promise;
     } catch { return Promise.reject(new DriverGuardedUnavailable()); }
