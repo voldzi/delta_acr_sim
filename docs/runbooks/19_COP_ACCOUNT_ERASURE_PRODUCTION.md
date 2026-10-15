@@ -13,6 +13,15 @@ Tento postup nemění ani neoznačuje za aktuální starý neaktivní instalačn
 manifest. Původní minimální migrační postup níže sám neopravňuje k novým
 privátním 004/005 instalacím. Historické source/fixture výsledky nejsou aktivace.
 
+Privátní per-read záznamy musí být v Root-only tmpfs
+`/run/cop-account-safety/private`, odděleně od trvalých mutation/ACK
+evidence v `/var/lib/cop-account-safety/evidence`. App bind mount smí
+obsahovat pouze socket soubor a veřejný bootstrap, nikoli celý Root run
+adresář. Chybějící tmpfs, Root epoch continuity, skutečný held writer nebo
+peer drain znamená odmítnutí aktivace; nepřenášet staré read soubory ze
+záloh. Nový layout má oddělený testovací checkpoint, ne připsaný starým
+Root14/16 výsledkům.
+
 ### Dokončený zdroj a dosud otevřená provozní hranice
 
 - [Driver005 8/8](../archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.md)

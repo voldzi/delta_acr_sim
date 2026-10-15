@@ -51,7 +51,7 @@ ověřenou TLS CA/server name. Volající nevybírá DSN, cestu, klíč ani call
 Broker volá `inspectRootDriver(readPermitId, request, peer)`; peer pochází
 výhradně z nativního kernelového transportu COP, ne z HTTP.
 
-Root čte `/var/lib/cop-account-safety/read-permits/<UUID>.json`, kind
+Root čte `/run/cop-account-safety/private/read-permits/<UUID>.json`, kind
 `driver-read-permit`. K běžným pěti polím Root recordu přidává přesně:
 
 ```text
@@ -88,6 +88,26 @@ nezávislý aktuální frontier, boot, cluster/timeline, živou registry,
 owner/dataset/runtime/proof/policy a peer. Neshoda s permit piny nevydá
 admission. Dotazy mají klientský i serverový timeout a celá operace
 15sekundový watchdog včetně cleanup; výpadek nemá SQL fallback.
+
+Aktuálně dohodnutý privátní Root layout je
+`/run/cop-account-safety/private/{read-permits,ai-read-permits,read-deliveries,ai-read-deliveries,read-evidence,request-contexts,maintenance-deliveries,owner-authority}`.
+Vše musí být Root-only 0700 na explicitním tmpfs. Čtyři per-read evidence
+Driver/AI i Driver read inventory používají `read-evidence`; stará
+`/var/lib/cop-account-safety/evidence` zůstává jen pro trvalé immutable
+mutation evidence a ACK inventory. Starý soubor nesmí nahradit chybějící
+privátní read evidence/permit. Krátké TTL nebo pozdější unlink na SSD
+nejsou totéž jako neretenční úložiště.
+
+Do app kontejneru patří jen konkrétní socket a veřejný bootstrap/keyring
+adresář, nikdy celý `/run/cop-account-safety`, ani když app běží jako
+UID 0. Nový service epoch musí projít skutečným peer/cohort drain a
+enrollmentem; absence souboru po restartu není důkaz quiescence.
+Historické Root14/16 testy níže používaly původní layout a nejsou
+přičítány jako důkaz této nové cesty. Samostatná
+[kontrola nového layoutu](../archive/2026-10-15_ROOT_READ_EVIDENCE_LAYOUT.md)
+prošla 10/10 novými případy nad skutečnými Root podpisy, TLS a PostgreSQL.
+Jde pouze o layout readerů se syntetickým peerem; produkční tmpfs/installer,
+společná owner autorita, native transport a obnova zálohy nejsou přijaty.
 
 Výstup je `{admission,record}`: existující
 `sim-driver-guarded-read-admission-v1` a inline kanonický podepsaný kind

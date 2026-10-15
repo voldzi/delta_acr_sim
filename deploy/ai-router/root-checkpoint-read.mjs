@@ -14,6 +14,7 @@ import { canonical, canonicalJson, exact, hex, uuid, sha256, requireGuard, readR
 import { parseAiCheckpointRequest, aiCheckpointRequestDigest, matchAiCheckpointPolicy } from './checkpoint-facts.mjs';
 
 const ETC = '/etc/cop-account-safety', STATE = '/var/lib/cop-account-safety';
+const PRIVATE = '/run/cop-account-safety/private';
 const BASE = ['contractVersion', 'kind', 'recordId', 'issuedAt', 'expiresAt'];
 const COST_POLICY = 'aggregate-costs-current-month-v1';
 const EVIDENCE = ['ai-router-read-identity', 'ai-router-read-retention', 'ai-router-read-cost', 'ai-router-read-schema'];
@@ -64,7 +65,7 @@ function peerRegistration(peer, keys) {
   return r;
 }
 function readPermit(id, request, keys) {
-  const r = verifyRootRecord(readRootFile(join(STATE, 'ai-read-permits', id + '.json'), { secret: true }), keys, 'ai-router-read-permit');
+  const r = verifyRootRecord(readRootFile(join(PRIVATE, 'ai-read-permits', id + '.json'), { secret: true }), keys, 'ai-router-read-permit');
   const p = r.payload;
   requireGuard(exact(p, [...BASE, 'request', 'requestDigest', 'guardStoreId', 'continuityEpoch', 'datasetBindingId', 'runtimeBindingId',
     'sourceProofId', 'policyGeneration', 'frontierSequence', 'frontierDigest', 'storeIncarnation',
@@ -82,7 +83,7 @@ function signedEvidence(p, keys) {
   let expiresAt = Date.parse(p.expiresAt);
   for (const kind of EVIDENCE) {
     const link = p.evidence[kind]; requireGuard(ref(link), 'GUARD_AI_READ_EVIDENCE_REFERENCE');
-    const r = verifyRootRecord(readRootFile(join(STATE, 'evidence', link.recordId + '.json'), { secret: true }), keys, kind);
+    const r = verifyRootRecord(readRootFile(join(PRIVATE, 'read-evidence', link.recordId + '.json'), { secret: true }), keys, kind);
     requireGuard(r.digest === link.digest && r.payload.recordId === link.recordId &&
       exact(r.payload, [...BASE, ...BINDING, 'costPolicy', 'decision']) && BINDING.every(k => r.payload[k] === binding[k]) &&
       r.payload.costPolicy === p.costPolicy && r.payload.decision === ({

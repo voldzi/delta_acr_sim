@@ -11,6 +11,7 @@ import { canonical, canonicalJson, exact, hex, uuid, sha256, requireGuard, readR
 import { parseDriverReadRequest, driverReadRequestDigest, matchDriverReadPolicy } from './read-admission-facts.mjs';
 
 const ETC = '/etc/cop-account-safety', STATE = '/var/lib/cop-account-safety';
+const PRIVATE = '/run/cop-account-safety/private';
 const BASE = ['contractVersion', 'kind', 'recordId', 'issuedAt', 'expiresAt'];
 const EVIDENCE = ['driver-read-identity', 'driver-read-retention', 'driver-read-report', 'driver-read-schema'];
 const BINDING = ['readPermitId', 'requestDigest', 'owner', 'scope', 'guardStoreId', 'continuityEpoch',
@@ -60,7 +61,7 @@ function peerRegistration(peer, keys) {
   return r;
 }
 function readPermit(id, request, keys) {
-  const r = verifyRootRecord(readRootFile(join(STATE, 'read-permits', id + '.json'), { secret: true }), keys, 'driver-read-permit');
+  const r = verifyRootRecord(readRootFile(join(PRIVATE, 'read-permits', id + '.json'), { secret: true }), keys, 'driver-read-permit');
   const p = r.payload;
   requireGuard(exact(p, [...BASE, 'request', 'requestDigest', 'guardStoreId', 'continuityEpoch', 'datasetBindingId', 'runtimeBindingId',
     'sourceProofId', 'policyGeneration', 'frontierSequence', 'frontierDigest', 'storeIncarnation', 'expectedCheckpointHash',
@@ -79,7 +80,7 @@ function signedEvidence(p, keys) {
   let expiresAt = Date.parse(p.expiresAt);
   for (const kind of EVIDENCE) {
     const link = p.evidence[kind]; requireGuard(ref(link), 'GUARD_READ_EVIDENCE_REFERENCE');
-    const r = verifyRootRecord(readRootFile(join(STATE, 'evidence', link.recordId + '.json'), { secret: true }), keys, kind);
+    const r = verifyRootRecord(readRootFile(join(PRIVATE, 'read-evidence', link.recordId + '.json'), { secret: true }), keys, kind);
     requireGuard(r.digest === link.digest && r.payload.recordId === link.recordId &&
       exact(r.payload, [...BASE, ...BINDING, 'decision']) &&
       BINDING.every(k => r.payload[k] === binding[k]) && r.payload.decision === ({
@@ -88,7 +89,7 @@ function signedEvidence(p, keys) {
       })[kind], 'GUARD_READ_EVIDENCE_BINDING');
     expiresAt = Math.min(expiresAt, Date.parse(r.payload.expiresAt));
   }
-  const r = verifyRootRecord(readRootFile(join(STATE, 'evidence', p.reportInventoryRef.recordId + '.json'), { secret: true }), keys,
+  const r = verifyRootRecord(readRootFile(join(PRIVATE, 'read-evidence', p.reportInventoryRef.recordId + '.json'), { secret: true }), keys,
     'driver-report-inventory');
   requireGuard(r.digest === p.reportInventoryRef.digest && r.payload.recordId === p.reportInventoryRef.recordId &&
     exact(r.payload, [...BASE, ...BINDING, 'reportProtection', 'checkpointHash', 'schemaFingerprint', 'privilegeFingerprint', 'decision']) &&

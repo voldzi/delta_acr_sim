@@ -1,0 +1,416 @@
+{
+  "status": "SOURCE_ROOT_READ_EVIDENCE_LAYOUT_LINUX_ONLY",
+  "startedAt": "2026-10-15T08:50:13.026Z",
+  "completedAt": "2026-10-15T08:50:19.059Z",
+  "passed": 10,
+  "results": [
+    {
+      "contractVersion": "sim-root-read-evidence-layout-linux-v1",
+      "owner": "driver",
+      "scope": "five_new_read_layout_groups_only_not_prior_root_keyring_or_byok_reacceptance",
+      "passed": 5,
+      "cases": [
+        {
+          "name": "new private tmpfs permits/evidence succeed with actual signed Root/TLS/PG chain",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "valid read evidence in the durable mutation directory alone is never a fallback",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "a valid durable copy cannot rescue forged evidence in the authoritative tmpfs path",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "read-evidence private file custody and symlinks are rejected by the actual reader",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "valid legacy STATE permit cannot substitute for a missing tmpfs permit",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        }
+      ],
+      "startedAt": "2026-10-15T08:50:15.062Z",
+      "completedAt": "2026-10-15T08:50:15.876Z",
+      "node": "v24.20.0",
+      "postgres": "18.6",
+      "platform": "linux",
+      "architecture": "arm64",
+      "nodeImageId": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+      "postgresImageId": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873",
+      "sourcePins": {
+        "/fixture/sql/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+        "/fixture/sql/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+        "/fixture/sql/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+        "/fixture/sql/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+        "/opt/cop-account-safety/root-records.mjs": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+        "/opt/cop-account-safety/root-read-admission.mjs": "3cab7320add0af3f6eac9a6b091ac21d0e222894b68710f7fbbb2a88dfc057c4",
+        "/opt/cop-account-safety/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456"
+      },
+      "privateTmpfs": "/run/cop-account-safety/private",
+      "privateRootMode0700": true,
+      "perReadEvidenceInTmpfs": true,
+      "durableMutationDirectorySentinelUnchanged": true,
+      "actualMutationAckPathsRetested": false,
+      "realEd25519": true,
+      "realRootFileCustody": true,
+      "realLoopbackStrictTls": true,
+      "realPostgres": true,
+      "targetAndRegistryRowsUnchangedByReader": true,
+      "unconditionalPositiveCallbacks": 0,
+      "pgStubs": 0,
+      "originRpcCalls": 0,
+      "externalNetworkInterfaces": 0,
+      "providerCalls": 0,
+      "peerSource": "frozen_synthetic_fixture_not_kernel_observation",
+      "productionEnrollment": false,
+      "nativePeerAcceptance": false,
+      "deployment": false,
+      "activation": false,
+      "wholeAccountComplete": false
+    },
+    {
+      "contractVersion": "sim-root-read-evidence-layout-linux-v1",
+      "owner": "ai",
+      "scope": "five_new_read_layout_groups_only_not_prior_root_keyring_or_byok_reacceptance",
+      "passed": 5,
+      "cases": [
+        {
+          "name": "new private tmpfs permits/evidence succeed with actual signed Root/TLS/PG chain",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "valid read evidence in the durable mutation directory alone is never a fallback",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "a valid durable copy cannot rescue forged evidence in the authoritative tmpfs path",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "read-evidence private file custody and symlinks are rejected by the actual reader",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        },
+        {
+          "name": "valid legacy STATE permit cannot substitute for a missing tmpfs permit",
+          "passed": true,
+          "targetAndRegistryRowsUnchanged": true
+        }
+      ],
+      "startedAt": "2026-10-15T08:50:17.925Z",
+      "completedAt": "2026-10-15T08:50:18.929Z",
+      "node": "v24.20.0",
+      "postgres": "18.6",
+      "platform": "linux",
+      "architecture": "arm64",
+      "nodeImageId": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+      "postgresImageId": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873",
+      "sourcePins": {
+        "/fixture/sql/001_schema.sql": "b6e48ea50286f25a16262e4e8f7c2f57a9629ea09e163db473820618bcb1a92b",
+        "/fixture/sql/002_separate_billing.sql": "e016cfa95cf228c4781780d844e9bc0c784aade6c36a21fa9667923d9b0bfbcb",
+        "/fixture/sql/003_account_erasure.sql": "921e19e1bae334bb3ae84dadfc9ab4b9cd333b4f515e77a3a286b68649426a56",
+        "/fixture/sql/004_root_checkpoint_facts.sql": "29f8f8bf6b5091de86bb143c30fa61b5773973f0cfb81efbe8714ba6d1981617",
+        "/fixture/sql/005_root_checkpoint.sql": "220ff12cf5fe3e78885139c3d1bf53a1d700769dbb53707a3d73e6682d2d05b4",
+        "/opt/cop-account-safety/root-records.mjs": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+        "/opt/cop-account-safety/root-checkpoint-read.mjs": "ee65770eeec3403c9cf0fe5901c6241833c7015219d15c4b7a73b7162c582874",
+        "/opt/cop-account-safety/checkpoint-facts.mjs": "bcc476814331e1bf4fc68e552f8f4ca28f3b61a1ca32ebf7d6fbdbc6ef8d183f"
+      },
+      "privateTmpfs": "/run/cop-account-safety/private",
+      "privateRootMode0700": true,
+      "perReadEvidenceInTmpfs": true,
+      "durableMutationDirectorySentinelUnchanged": true,
+      "actualMutationAckPathsRetested": false,
+      "realEd25519": true,
+      "realRootFileCustody": true,
+      "realLoopbackStrictTls": true,
+      "realPostgres": true,
+      "targetAndRegistryRowsUnchangedByReader": true,
+      "unconditionalPositiveCallbacks": 0,
+      "pgStubs": 0,
+      "originRpcCalls": 0,
+      "externalNetworkInterfaces": 0,
+      "providerCalls": 0,
+      "peerSource": "frozen_synthetic_fixture_not_kernel_observation",
+      "productionEnrollment": false,
+      "nativePeerAcceptance": false,
+      "deployment": false,
+      "activation": false,
+      "wholeAccountComplete": false
+    }
+  ],
+  "derivations": {
+    "driver": {
+      "frozenSourceSha256": "8992fdd14310ed9fece233ba0a3a8eea7272c4740550f9a863bede8a1a5c0c85",
+      "generatedSourceSha256": "572d1570e91346dc1e0154cc68be2f8c29ca8c13c91f9cc5b2d0af6e8b80bbcb",
+      "edits": [
+        {
+          "name": "new reviewed actual reader pin",
+          "count": 1
+        },
+        {
+          "name": "new fixture deadline label",
+          "count": 1
+        },
+        {
+          "name": "new empty tmpfs precondition after isolated-container checks",
+          "count": 1
+        },
+        {
+          "name": "read evidence publishers only",
+          "count": 2
+        },
+        {
+          "name": "read permit publisher only",
+          "count": 1
+        },
+        {
+          "name": "new failure receipt contract",
+          "count": 1
+        }
+      ]
+    },
+    "ai": {
+      "frozenSourceSha256": "f6dd9f778444f7946bd73dd8c9ee31c0438463c1ef9dd2fe20da8a02b9eeda15",
+      "generatedSourceSha256": "24d1372af0e698b4b45e3608d8c4b3a9d05bbf1a3d685ecb3fff622595d1c9a0",
+      "edits": [
+        {
+          "name": "new reviewed actual reader pin",
+          "count": 1
+        },
+        {
+          "name": "new fixture deadline label",
+          "count": 1
+        },
+        {
+          "name": "new empty tmpfs precondition after isolated-container checks",
+          "count": 1
+        },
+        {
+          "name": "read evidence publishers only",
+          "count": 1
+        },
+        {
+          "name": "read permit publisher only",
+          "count": 1
+        },
+        {
+          "name": "new failure receipt contract",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "executingRunnerSha256": "e9b57185d1be52123bfd1102dc601c4deeca6a139977bf7df5347b0982e130a3",
+  "deriverSha256": "39000fb4383ae73c3ca7dcd9021f536f049da78376f5b434e572ead7b98b7600",
+  "sourcePins": {
+    "deploy/driver-measurements/root-read-admission.mjs": "3cab7320add0af3f6eac9a6b091ac21d0e222894b68710f7fbbb2a88dfc057c4",
+    "deploy/driver-measurements/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "deploy/ai-router/root-checkpoint-read.mjs": "ee65770eeec3403c9cf0fe5901c6241833c7015219d15c4b7a73b7162c582874",
+    "deploy/ai-router/checkpoint-facts.mjs": "bcc476814331e1bf4fc68e552f8f4ca28f3b61a1ca32ebf7d6fbdbc6ef8d183f",
+    "deploy/ai-router/001_schema.sql": "b6e48ea50286f25a16262e4e8f7c2f57a9629ea09e163db473820618bcb1a92b",
+    "deploy/ai-router/002_separate_billing.sql": "e016cfa95cf228c4781780d844e9bc0c784aade6c36a21fa9667923d9b0bfbcb",
+    "deploy/ai-router/003_account_erasure.sql": "921e19e1bae334bb3ae84dadfc9ab4b9cd333b4f515e77a3a286b68649426a56",
+    "deploy/ai-router/004_root_checkpoint_facts.sql": "29f8f8bf6b5091de86bb143c30fa61b5773973f0cfb81efbe8714ba6d1981617",
+    "deploy/ai-router/005_root_checkpoint.sql": "220ff12cf5fe3e78885139c3d1bf53a1d700769dbb53707a3d73e6682d2d05b4"
+  },
+  "frozenPins": {
+    "scripts/test-driver-read-keyring.mts": "7c8ef1a76407caebcee4ef1ed3503ea5f7805da3cad4044cd438ba96b67910ca",
+    "scripts/fixtures/driver-read-keyring/harness.mjs": "8992fdd14310ed9fece233ba0a3a8eea7272c4740550f9a863bede8a1a5c0c85",
+    "docs/archive/2026-10-15_DRIVER_READ_KEYRING_FINAL.json": "04231a1fdbad9d5ea29d49d6c3470b7178551e277f64883b560cc45824035ce5",
+    "scripts/test-ai-root-checkpoint.mts": "11e02ff4eb52ea85e3d1b2da9e0c93c573fc61ddb558a2072573baa9220e43fc",
+    "scripts/fixtures/ai-checkpoint-root/harness.mjs": "f6dd9f778444f7946bd73dd8c9ee31c0438463c1ef9dd2fe20da8a02b9eeda15",
+    "docs/archive/2026-10-15_AI_ROOT_CHECKPOINT.json": "afb73435faaaa2129e8e270c1266a431099c54bb25681ec8ba10b903b10f16cc"
+  },
+  "frozenInputsUnchangedBeforeAndAfter": true,
+  "compiledAppPins": {
+    "account-erasure.js": "07468ab21ab4e44288ffa323fd4e6cd3067a9add0eb8fdcf5b8f80b0fa3c1cd8",
+    "account-erasure.test.js": "cb6ddfaae0e434a50e31bc7a968b6568107dbd0717dc0522eebb4f00b2d80135",
+    "app.js": "be9c4b56c650534208135f8b97a944ba4e8f8b27b1df4b363a48db95609c7f5a",
+    "app.test.js": "6d69c923f3b05be5aca060df972f70a4dc75edf96694aa1309c757fdac6b6b64",
+    "budget.js": "f16046b8b093463f1104ad62475badecfc4348ef12f130714fe7a8526ddbc477",
+    "budget.test.js": "1c54b20d6d14dfc656ca7922dbb3fa237d67283945b1abd1debae95c3fd1967d",
+    "config.js": "9c1bde9f2ad537709d6216b4a818a7c9155715f6344c0c31660b0f0d65be63a0",
+    "cop-actor.js": "5e36cac4b0b1a946845e60befa1e1d4e0fbc8dc669a6e270b0c1ed0d82848e7e",
+    "cop-actor.test.js": "35326b8cafcd38fe3b20cc8a52410e2aed4d6044413d3926e0c203bf993121ef",
+    "cop-context.js": "1a5929e57bde1c3c6e3e30b5c5e53305eb9f0990e96861ac3dcb21d0a840b1ee",
+    "index.js": "e6ed35437674726f65bd78953ba3100c634122fb7a197a4794f29a148b7fb20f",
+    "owner-checkpoint-loader.test.js": "9ef6603d377c1989ac199348fa4c44a100a89518a63e9766624f2d977b62e3df",
+    "owner-checkpoint.js": "1a19c145ffec40fdb4f116f853cc4d7f0d1ff4740b36165554dc917fbf67bd64",
+    "owner-checkpoint.test.js": "eea0522e176fb16d5f6cc27826bdcdd71fb26bda3fb5b9ba0b7d6f4bda936f13",
+    "routing.js": "db33cacead8621b42ed93e1d68dcbf22741bcf853994ac235399de0b99ea53dd",
+    "routing.test.js": "8a13b36b3716c8a545b513e79f9598cbe1c826e177ad08b02cfe21abb097594a",
+    "separate-billing.js": "7721fa3073e67f8403afd3e76fc627228cf7d5c77067874a1f1c4fe0ca57abab",
+    "separate-billing.test.js": "a88edc30cc612b573e48847c4d0272ebb0083a6426711b6ad5d6edc4f7bb7e72",
+    "separate-provider.js": "b0228cad0c891897c6caddcdf733886643e8442fea71297368289e69e8725db3",
+    "separate-routes.js": "eaf638f84c084e6e3d293a3e51bc98b93ac9d9ebc35a553c52967fc5bfa100f1",
+    "separate-routes.test.js": "af7863d5f03d503608e27322939b7ed43459e59f40d4c960be0f3bd72c532664",
+    "typed-context.js": "8cdac4b8eb14097f04bdb20caae2c455add6ebf678b0439ec6adf5f886efe031",
+    "typed-context.test.js": "18065a66347c93333181a704b5594ed3ac38c340ccaeefa8d89cf3dcb8d9980d"
+  },
+  "packageVersions": {
+    "driver": {
+      "node_modules/pg": "8.23.0",
+      "node_modules/pg/node_modules/pg-connection-string": "2.14.0",
+      "node_modules/pg/node_modules/pg-pool": "3.14.0",
+      "node_modules/pg/node_modules/pg-protocol": "1.16.0",
+      "node_modules/pg/node_modules/pg-types": "2.2.0",
+      "node_modules/pg/node_modules/pgpass": "1.0.5",
+      "node_modules/pg/node_modules/pg-cloudflare": "1.4.0",
+      "node_modules/pg/node_modules/pg-types/node_modules/pg-int8": "1.0.1",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-array": "2.0.0",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-bytea": "1.0.1",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-date": "1.0.7",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval": "1.2.0",
+      "node_modules/pg/node_modules/pgpass/node_modules/split2": "4.2.0",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval/node_modules/xtend": "4.0.2"
+    },
+    "ai": {
+      "node_modules/pg": "8.23.0",
+      "node_modules/express": "5.2.1",
+      "node_modules/pg/node_modules/pg-connection-string": "2.14.0",
+      "node_modules/pg/node_modules/pg-pool": "3.14.0",
+      "node_modules/pg/node_modules/pg-protocol": "1.16.0",
+      "node_modules/pg/node_modules/pg-types": "2.2.0",
+      "node_modules/pg/node_modules/pgpass": "1.0.5",
+      "node_modules/pg/node_modules/pg-cloudflare": "1.4.0",
+      "node_modules/express/node_modules/accepts": "2.0.0",
+      "node_modules/express/node_modules/body-parser": "2.3.0",
+      "node_modules/express/node_modules/content-disposition": "1.1.0",
+      "node_modules/express/node_modules/content-type": "1.0.5",
+      "node_modules/express/node_modules/cookie": "0.7.2",
+      "node_modules/express/node_modules/cookie-signature": "1.2.2",
+      "node_modules/express/node_modules/debug": "4.4.3",
+      "node_modules/express/node_modules/depd": "2.0.0",
+      "node_modules/express/node_modules/encodeurl": "2.0.0",
+      "node_modules/express/node_modules/escape-html": "1.0.3",
+      "node_modules/express/node_modules/etag": "1.8.1",
+      "node_modules/express/node_modules/finalhandler": "2.1.1",
+      "node_modules/express/node_modules/fresh": "2.0.0",
+      "node_modules/express/node_modules/http-errors": "2.0.1",
+      "node_modules/express/node_modules/merge-descriptors": "2.0.0",
+      "node_modules/express/node_modules/mime-types": "3.0.2",
+      "node_modules/express/node_modules/on-finished": "2.4.1",
+      "node_modules/express/node_modules/once": "1.4.0",
+      "node_modules/express/node_modules/parseurl": "1.3.3",
+      "node_modules/express/node_modules/proxy-addr": "2.0.7",
+      "node_modules/express/node_modules/qs": "6.16.0",
+      "node_modules/express/node_modules/range-parser": "1.3.0",
+      "node_modules/express/node_modules/router": "2.2.0",
+      "node_modules/express/node_modules/send": "1.2.1",
+      "node_modules/express/node_modules/serve-static": "2.2.1",
+      "node_modules/express/node_modules/statuses": "2.0.2",
+      "node_modules/express/node_modules/type-is": "2.1.0",
+      "node_modules/express/node_modules/vary": "1.1.2",
+      "node_modules/pg/node_modules/pg-types/node_modules/pg-int8": "1.0.1",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-array": "2.0.0",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-bytea": "1.0.1",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-date": "1.0.7",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval": "1.2.0",
+      "node_modules/pg/node_modules/pgpass/node_modules/split2": "4.2.0",
+      "node_modules/express/node_modules/accepts/node_modules/negotiator": "1.1.0",
+      "node_modules/express/node_modules/body-parser/node_modules/bytes": "3.1.2",
+      "node_modules/express/node_modules/body-parser/node_modules/content-type": "2.1.0",
+      "node_modules/express/node_modules/body-parser/node_modules/iconv-lite": "0.7.3",
+      "node_modules/express/node_modules/body-parser/node_modules/raw-body": "3.0.2",
+      "node_modules/express/node_modules/debug/node_modules/ms": "2.1.3",
+      "node_modules/express/node_modules/http-errors/node_modules/inherits": "2.0.4",
+      "node_modules/express/node_modules/http-errors/node_modules/setprototypeof": "1.2.0",
+      "node_modules/express/node_modules/http-errors/node_modules/toidentifier": "1.0.1",
+      "node_modules/express/node_modules/mime-types/node_modules/mime-db": "1.54.0",
+      "node_modules/express/node_modules/on-finished/node_modules/ee-first": "1.1.1",
+      "node_modules/express/node_modules/once/node_modules/wrappy": "1.0.2",
+      "node_modules/express/node_modules/proxy-addr/node_modules/forwarded": "0.2.0",
+      "node_modules/express/node_modules/proxy-addr/node_modules/ipaddr.js": "1.9.1",
+      "node_modules/express/node_modules/qs/node_modules/es-define-property": "1.0.1",
+      "node_modules/express/node_modules/qs/node_modules/side-channel": "1.1.1",
+      "node_modules/express/node_modules/router/node_modules/is-promise": "4.0.0",
+      "node_modules/express/node_modules/router/node_modules/path-to-regexp": "8.4.2",
+      "node_modules/express/node_modules/send/node_modules/ms": "2.1.3",
+      "node_modules/express/node_modules/type-is/node_modules/content-type": "2.1.0",
+      "node_modules/express/node_modules/type-is/node_modules/media-typer": "1.1.1",
+      "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval/node_modules/xtend": "4.0.2",
+      "node_modules/express/node_modules/accepts/node_modules/negotiator/node_modules/content-type": "2.1.0",
+      "node_modules/express/node_modules/body-parser/node_modules/iconv-lite/node_modules/safer-buffer": "2.1.2",
+      "node_modules/express/node_modules/body-parser/node_modules/raw-body/node_modules/unpipe": "1.0.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/es-errors": "1.3.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/object-inspect": "1.13.4",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-list": "1.0.1",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map": "1.0.1",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap": "1.0.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/call-bound": "1.0.4",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic": "1.3.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/call-bound": "1.0.4",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic": "1.3.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/call-bound/node_modules/call-bind-apply-helpers": "1.0.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/call-bind-apply-helpers": "1.0.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/es-object-atoms": "1.1.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/function-bind": "1.1.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/get-proto": "1.0.1",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/gopd": "1.2.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/has-symbols": "1.1.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/hasown": "2.0.4",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/math-intrinsics": "1.1.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/call-bound/node_modules/call-bind-apply-helpers": "1.0.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/call-bind-apply-helpers": "1.0.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/es-object-atoms": "1.1.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/function-bind": "1.1.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/get-proto": "1.0.1",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/gopd": "1.2.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/has-symbols": "1.1.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/hasown": "2.0.4",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/math-intrinsics": "1.1.0",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/call-bound/node_modules/call-bind-apply-helpers/node_modules/function-bind": "1.1.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-map/node_modules/get-intrinsic/node_modules/get-proto/node_modules/dunder-proto": "1.0.1",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/call-bound/node_modules/call-bind-apply-helpers/node_modules/function-bind": "1.1.2",
+      "node_modules/express/node_modules/qs/node_modules/side-channel/node_modules/side-channel-weakmap/node_modules/get-intrinsic/node_modules/get-proto/node_modules/dunder-proto": "1.0.1"
+    }
+  },
+  "copRootHelperSha256": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+  "images": {
+    "node": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+    "postgres": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+  },
+  "interpretation": "Ten NEW layout groups only; frozen sixteen-case Driver and fourteen-case AI receipts remain untouched. Their original groups are not rerun or reattributed. Durable namespace sentinel does not test mutation/ACK execution.",
+  "isolation": {
+    "externalNetwork": false,
+    "hostBindMounts": false,
+    "volumes": false,
+    "privateTmpfs": true,
+    "publicPorts": false,
+    "imagePull": false,
+    "imageBuild": false,
+    "sourceNodeContainerStarted": false,
+    "fixturePeerIsNotNativeAttestation": true
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootEnrollment": false,
+    "acceptedOwnerEvidence": false,
+    "nativeTransport": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "realAccountDeleted": false,
+    "externalProviderCalls": false,
+    "mutationAckAcceptance": false
+  },
+  "cleanup": {
+    "ownedContainersRemoved": true,
+    "ownedImplicitVolumesRemoved": true,
+    "sourceContextRemoved": true,
+    "globalPrune": false
+  }
+}
