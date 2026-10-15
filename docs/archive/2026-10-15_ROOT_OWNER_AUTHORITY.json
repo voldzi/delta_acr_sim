@@ -1,0 +1,334 @@
+{
+  "status": "SOURCE_ROOT_OWNER_AUTHORITY_LINUX_ONLY",
+  "startedAt": "2026-10-15T09:45:45.134Z",
+  "completedAt": "2026-10-15T09:46:13.148Z",
+  "result": {
+    "contractVersion": "sim-root-owner-authority-isolated-linux-v1",
+    "passed": 22,
+    "cases": [
+      {
+        "name": "existing original intent survives its real deadline without resigning or changing body",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "actual Root Ed25519/JWS/TLS/full metadata001 and both target SQL chains",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "shared leases block real PG904214 exclusive until both actual closes",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "exclusive lease blocks actual shared/exclusive and competing common acquire",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "ordinary proof expiry rejects authority but never unlocks before known explicit close",
+        "passed": true,
+        "readOnly": false,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "actual fresh per-inspect typed records/permit and no durable fallback: sim_driver_measurements",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "actual fresh per-inspect typed records/permit and no durable fallback: sim_ai_router",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "wrong kernel peer tuple cannot select an owner registration",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "forged current source JWS is rejected by actual cryptographic verifier",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "frontier signed mismatch is not repaired from target state",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "boot registration mismatch is rejected",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "actual schema drift rejects independently accepted catalog pin",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "actual runtime privilege drift rejects least-privilege profile/pin",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "owner policy record substitution cannot satisfy signed source reference",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "changed verification keyring cannot authenticate existing signed authority inputs",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "expired signed host observation cannot be relabeled current",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "fresh correctly signed observation of another broker instance fails exact actual SELF gate",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "fresh signed acceptance artifact must match actual immutable PG row digests",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "cross-owner receipt reference in a signed acceptance artifact is rejected",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "fresh current source proof cannot point to an older metadata acceptance generation",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "different policyRef without the separately approved historical-policy seam remains denied",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      },
+      {
+        "name": "forced metadata disconnect retains process-global HOLD despite free PG lock",
+        "passed": true,
+        "readOnly": true,
+        "hostObservationSynthetic": true
+      }
+    ],
+    "startedAt": "2026-10-15T09:45:47.425Z",
+    "completedAt": "2026-10-15T09:46:13.008Z",
+    "postgres": "18.6",
+    "node": "v24.20.0",
+    "hostObservationSynthetic": true,
+    "appPeerSynthetic": true,
+    "actualHostObserverExecuted": false,
+    "actualPidfdProcObserver": false,
+    "actualPidfdSelf": true,
+    "actualBrokerStartTicks": true,
+    "actualBrokerExecutableDigest": true,
+    "singleRootProcess": true,
+    "syntheticAcceptedMetadata": true,
+    "realRootCustody": true,
+    "realEd25519": true,
+    "realJws": true,
+    "realStrictTls": true,
+    "realMetadata001": true,
+    "realTargetSql": true,
+    "realPg904214Leases": true,
+    "pgStubs": 0,
+    "authorityCallbacks": 0,
+    "providerCalls": 0,
+    "checkpointWriterIntegrationExercised": false,
+    "differentPolicyAdvanceAccepted": false,
+    "unknownTargetEndExercised": false,
+    "lostCommitExercised": false,
+    "nativeTransport": false,
+    "hostDeploymentAccepted": false,
+    "productionEnrollment": false,
+    "productionChanged": false,
+    "wholeAccountComplete": false
+  },
+  "executingRunnerSha256": "ec64cb120683e9d5b2eb7b78c287d1f7ae35989d6ef42830d9738aa8e6b05cf0",
+  "sourcePins": {
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/account-safety/root-owner-read.mjs": "b870e7ba7c123b1bff5695aeebfea03172b5a3606c981b825a1cdf34747b037e",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/root-checkpoint-read.mjs": "ee65770eeec3403c9cf0fe5901c6241833c7015219d15c4b7a73b7162c582874",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/checkpoint-facts.mjs": "bcc476814331e1bf4fc68e552f8f4ca28f3b61a1ca32ebf7d6fbdbc6ef8d183f",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-records.mjs": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/root-read-admission.mjs": "3cab7320add0af3f6eac9a6b091ac21d0e222894b68710f7fbbb2a88dfc057c4",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/account-safety/root-owner-authority.mjs": "4842899595b9b2efa9c913057ad1978208e44042ee39d7f009faf49565921d06",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-cop-actor.mjs": "15aa316297eb419fe8ecea23cc5e967a4af4a1adb5eaf7d35db97cb175dfcd6d",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-cop-identity.mjs": "32c23bf9df56e306f6bb5fe5ebb11f8a9e074bf68014e529066352d7dce284cf",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/ai-root-inspect.mjs": "996457027cb1e009068c47bfda190b767d3e1609f3fa3e9a11327b07575579e0",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-native.mjs": "0085e026f6a595afd385959dac5af3374875a9a3ed5581a53f895edb87d85d7a",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/driver-root-channel.mjs": "3cb8e727648820a910ddb36e69c8b27a0b6a161d314c800b46c5fac88ecd3da4",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-publication-leases.mjs": "5691880259189f16025e0234d05ee9ddba5c79e36eccbf1d81a5aed73561a245",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/driver-root-publication.mjs": "ba05e97ed410c9deb26e75a194b4c705ba78ef359765756ea8c088f6b079a502",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-record-issuer.mjs": "fd988670c59a123e1c204ef826f73610cfa43ec488eb41eb464cf361e6d5f854",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-driver-retention-delivery.mjs": "6310dff30c131e3359c8c037b0cc1213385ac7612244b26d664c0e0c47d189d3",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/driver-root-retention.mjs": "93012157bf8dce6edc15de14af10e829c3fdf8868f446f95b889204efc03f942",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-driver-runtime.mjs": "d96debb5229a524926608140322bbaf8a5ba512249890d9e304e3ef9d5e44c7b",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-outcome-records.mjs": "37234a9c2fdbc8a5fff26a68948b5d7d53ed3d341835fd6dbfbe271d569b327b",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/driver-origin-producer.mjs": "d5d4ded08966d9f41941f110dffdb743cb340397bc58e2e2290cddf845df04ee",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-publication.mjs": "aec35c9e46664ce9c3f879b8f6a0f806eb47e36ca68b09f812264a38aca6bc5c",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-driver-context-delivery.mjs": "8bdbbd5ce1ad955707c4b3c9bd7d9f9c1e09b90b35f873599302fcbae2d20610",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/driver-root-context.mjs": "639509bc8c9dac4d29591a7d235f1f0eb9cb89114efa0f19ad1442852abd37b6",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/driver-root-inspect.mjs": "c283826f6ee18d27aa0b883ad9f06ba7b42cc1531c84c78b8edffd58954540e6",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/cop-root-continuity.mjs": "1dcc62e5f1e40fca4dc1d95d55e0dc918a40966652b1ef7c0708b9006b107a2f",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-fence-journal.mjs": "02cd94e20671e6e26ab36f4c65e7ae1091fe49172e5e65f37b3661edb5965421",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/account-safety/root-owner-authority-protocol.mjs": "0fab874389fdc5660241f7b26ead63a7b9003b06915a78dcbec4b744614632a3",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/root-jws.mjs": "e233abd0a0d9d2ad3b3d27a03cfafebb0e46f7070216a1b8047f1edf6ce14703",
+    "/Users/voldzi/Documents/Codex/2026-07-19/upgrade-proxmox-clusteru-c-lem-je-2/reports/cop-account-safety-20261014/isolated-continuity/001-guard-metadata.sql": "a29369e48a1380bb12ce3b40b9254d924e0d98a3b90f7cdcdc0fb7e9ba27aaba",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/002-root-reader.sql": "9a08e4174f25a64cf9c1897d5df1c9b772d7ab072c5bb8cffc5a8f0e7939476a",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/005_root_checkpoint.sql": "77faac125f6133a774e6d9e900c2dcbfc3b86419d3179bfb4d5bcf64eb3bb3cb",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/006_inventory_candidates.sql": "bd69ca4e58746c852b49bf0ad1f59465a64fc781a59c4c9fe88073199080efe0",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/001_schema.sql": "b6e48ea50286f25a16262e4e8f7c2f57a9629ea09e163db473820618bcb1a92b",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/002_separate_billing.sql": "e016cfa95cf228c4781780d844e9bc0c784aade6c36a21fa9667923d9b0bfbcb",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/003_account_erasure.sql": "921e19e1bae334bb3ae84dadfc9ab4b9cd333b4f515e77a3a286b68649426a56",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/004_root_checkpoint_facts.sql": "29f8f8bf6b5091de86bb143c30fa61b5773973f0cfb81efbe8714ba6d1981617",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/ai-router/005_root_checkpoint.sql": "220ff12cf5fe3e78885139c3d1bf53a1d700769dbb53707a3d73e6682d2d05b4",
+    "/private/tmp/cop-root-seqpacket-arm64-20261015.node": "283f528f6ffce67c46e180a8a7ddcf215c1588dd579cbf36ca507b8896802d20",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/fixtures/root-owner-authority/harness.mjs": "8e48b668b319b1a8153809c081c4fd4066f5da8f80bdb058284a27f473f5ae46",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/fixtures/driver-read-keyring/harness.mjs": "8992fdd14310ed9fece233ba0a3a8eea7272c4740550f9a863bede8a1a5c0c85"
+  },
+  "stagedSourcePins": {
+    "/opt/cop-account-safety/root-owner-read.mjs": "b870e7ba7c123b1bff5695aeebfea03172b5a3606c981b825a1cdf34747b037e",
+    "/opt/cop-account-safety/root-checkpoint-read.mjs": "ee65770eeec3403c9cf0fe5901c6241833c7015219d15c4b7a73b7162c582874",
+    "/opt/cop-account-safety/checkpoint-facts.mjs": "bcc476814331e1bf4fc68e552f8f4ca28f3b61a1ca32ebf7d6fbdbc6ef8d183f",
+    "/opt/cop-account-safety/root-records.mjs": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+    "/opt/cop-account-safety/root-read-admission.mjs": "3cab7320add0af3f6eac9a6b091ac21d0e222894b68710f7fbbb2a88dfc057c4",
+    "/opt/cop-account-safety/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "/opt/cop-account-safety/root-owner-authority.mjs": "4842899595b9b2efa9c913057ad1978208e44042ee39d7f009faf49565921d06",
+    "/opt/cop-account-safety/root-cop-actor.mjs": "15aa316297eb419fe8ecea23cc5e967a4af4a1adb5eaf7d35db97cb175dfcd6d",
+    "/opt/cop-account-safety/root-cop-identity.mjs": "32c23bf9df56e306f6bb5fe5ebb11f8a9e074bf68014e529066352d7dce284cf",
+    "/opt/cop-account-safety/ai-root-inspect.mjs": "996457027cb1e009068c47bfda190b767d3e1609f3fa3e9a11327b07575579e0",
+    "/opt/cop-account-safety/root-native.mjs": "0085e026f6a595afd385959dac5af3374875a9a3ed5581a53f895edb87d85d7a",
+    "/opt/cop-account-safety/driver-root-channel.mjs": "3cb8e727648820a910ddb36e69c8b27a0b6a161d314c800b46c5fac88ecd3da4",
+    "/opt/cop-account-safety/root-publication-leases.mjs": "5691880259189f16025e0234d05ee9ddba5c79e36eccbf1d81a5aed73561a245",
+    "/opt/cop-account-safety/driver-root-publication.mjs": "ba05e97ed410c9deb26e75a194b4c705ba78ef359765756ea8c088f6b079a502",
+    "/opt/cop-account-safety/root-record-issuer.mjs": "fd988670c59a123e1c204ef826f73610cfa43ec488eb41eb464cf361e6d5f854",
+    "/opt/cop-account-safety/root-driver-retention-delivery.mjs": "6310dff30c131e3359c8c037b0cc1213385ac7612244b26d664c0e0c47d189d3",
+    "/opt/cop-account-safety/driver-root-retention.mjs": "93012157bf8dce6edc15de14af10e829c3fdf8868f446f95b889204efc03f942",
+    "/opt/cop-account-safety/root-driver-runtime.mjs": "d96debb5229a524926608140322bbaf8a5ba512249890d9e304e3ef9d5e44c7b",
+    "/opt/cop-account-safety/root-outcome-records.mjs": "37234a9c2fdbc8a5fff26a68948b5d7d53ed3d341835fd6dbfbe271d569b327b",
+    "/opt/cop-account-safety/driver-origin-producer.mjs": "d5d4ded08966d9f41941f110dffdb743cb340397bc58e2e2290cddf845df04ee",
+    "/opt/cop-account-safety/root-publication.mjs": "aec35c9e46664ce9c3f879b8f6a0f806eb47e36ca68b09f812264a38aca6bc5c",
+    "/opt/cop-account-safety/root-driver-context-delivery.mjs": "8bdbbd5ce1ad955707c4b3c9bd7d9f9c1e09b90b35f873599302fcbae2d20610",
+    "/opt/cop-account-safety/driver-root-context.mjs": "639509bc8c9dac4d29591a7d235f1f0eb9cb89114efa0f19ad1442852abd37b6",
+    "/opt/cop-account-safety/driver-root-inspect.mjs": "c283826f6ee18d27aa0b883ad9f06ba7b42cc1531c84c78b8edffd58954540e6",
+    "/opt/cop-account-safety/cop-root-continuity.mjs": "1dcc62e5f1e40fca4dc1d95d55e0dc918a40966652b1ef7c0708b9006b107a2f",
+    "/opt/cop-account-safety/root-fence-journal.mjs": "02cd94e20671e6e26ab36f4c65e7ae1091fe49172e5e65f37b3661edb5965421",
+    "/opt/cop-account-safety/root-owner-authority-protocol.mjs": "0fab874389fdc5660241f7b26ead63a7b9003b06915a78dcbec4b744614632a3",
+    "/opt/cop-account-safety/root-jws.mjs": "e233abd0a0d9d2ad3b3d27a03cfafebb0e46f7070216a1b8047f1edf6ce14703",
+    "/opt/cop-account-safety/native/root-seqpacket.node": "283f528f6ffce67c46e180a8a7ddcf215c1588dd579cbf36ca507b8896802d20",
+    "/fixture/sql/metadata/001-guard-metadata.sql": "a29369e48a1380bb12ce3b40b9254d924e0d98a3b90f7cdcdc0fb7e9ba27aaba",
+    "/fixture/sql/metadata/002-root-reader.sql": "9a08e4174f25a64cf9c1897d5df1c9b772d7ab072c5bb8cffc5a8f0e7939476a",
+    "/fixture/sql/driver/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "/fixture/sql/driver/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "/fixture/sql/driver/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "/fixture/sql/driver/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "/fixture/sql/driver/005_root_checkpoint.sql": "77faac125f6133a774e6d9e900c2dcbfc3b86419d3179bfb4d5bcf64eb3bb3cb",
+    "/fixture/sql/driver/006_inventory_candidates.sql": "bd69ca4e58746c852b49bf0ad1f59465a64fc781a59c4c9fe88073199080efe0",
+    "/fixture/sql/ai/001_schema.sql": "b6e48ea50286f25a16262e4e8f7c2f57a9629ea09e163db473820618bcb1a92b",
+    "/fixture/sql/ai/002_separate_billing.sql": "e016cfa95cf228c4781780d844e9bc0c784aade6c36a21fa9667923d9b0bfbcb",
+    "/fixture/sql/ai/003_account_erasure.sql": "921e19e1bae334bb3ae84dadfc9ab4b9cd333b4f515e77a3a286b68649426a56",
+    "/fixture/sql/ai/004_root_checkpoint_facts.sql": "29f8f8bf6b5091de86bb143c30fa61b5773973f0cfb81efbe8714ba6d1981617",
+    "/fixture/sql/ai/005_root_checkpoint.sql": "220ff12cf5fe3e78885139c3d1bf53a1d700769dbb53707a3d73e6682d2d05b4",
+    "/fixture/harness.mjs": "8e48b668b319b1a8153809c081c4fd4066f5da8f80bdb058284a27f473f5ae46",
+    "/fixture/certificates.mjs": "953449b38a72d4d58625572c7e78122b3763a94e2333610925252962994828fb"
+  },
+  "certificateDerivation": {
+    "frozenSource": "scripts/fixtures/driver-read-keyring/harness.mjs",
+    "frozenSha256": "8992fdd14310ed9fece233ba0a3a8eea7272c4740550f9a863bede8a1a5c0c85",
+    "generatedSha256": "953449b38a72d4d58625572c7e78122b3763a94e2333610925252962994828fb"
+  },
+  "nativeSelfArtifact": {
+    "path": "/private/tmp/cop-root-seqpacket-arm64-20261015.node",
+    "sha256": "283f528f6ffce67c46e180a8a7ddcf215c1588dd579cbf36ca507b8896802d20",
+    "abi": "Node24.20.0-linux-arm64-musl",
+    "kernelSelfOnly": true,
+    "packetTransportTested": false
+  },
+  "images": {
+    "node": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+    "postgres": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+  },
+  "packageVersions": {
+    "node_modules/pg": "8.23.0",
+    "node_modules/pg/node_modules/pg-connection-string": "2.14.0",
+    "node_modules/pg/node_modules/pg-pool": "3.14.0",
+    "node_modules/pg/node_modules/pg-protocol": "1.16.0",
+    "node_modules/pg/node_modules/pg-types": "2.2.0",
+    "node_modules/pg/node_modules/pgpass": "1.0.5",
+    "node_modules/pg/node_modules/pg-cloudflare": "1.4.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/pg-int8": "1.0.1",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-array": "2.0.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-bytea": "1.0.1",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-date": "1.0.7",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval": "1.2.0",
+    "node_modules/pg/node_modules/pgpass/node_modules/split2": "4.2.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval/node_modules/xtend": "4.0.2"
+  },
+  "isolation": {
+    "externalNetwork": false,
+    "hostBindMounts": false,
+    "volumes": false,
+    "publicPorts": false,
+    "privateTmpfs": true,
+    "imagePull": false,
+    "imageBuild": false,
+    "sourceContainersStarted": false
+  },
+  "actual": {
+    "productionChanged": false,
+    "acceptedOwnerEvidence": false,
+    "nativeTransport": false,
+    "nativeHostDeployment": false,
+    "restoreAccepted": false,
+    "realAccounts": false,
+    "externalProviderCalls": false,
+    "hostObservationSynthetic": true,
+    "actualHostObserverExecuted": false,
+    "actualPidfdProcObserver": false,
+    "actualPidfdSelf": true,
+    "actualBrokerStartTicks": true,
+    "actualBrokerExecutableDigest": true,
+    "singleRootProcess": true,
+    "appPeerSynthetic": true,
+    "nativePeerTransport": false
+  },
+  "cleanup": {
+    "ownedContainersRemoved": true,
+    "ownedVolumesRemoved": true,
+    "privateContextRemoved": true,
+    "globalPrune": false
+  }
+}

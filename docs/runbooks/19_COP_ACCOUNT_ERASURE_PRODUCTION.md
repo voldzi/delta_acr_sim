@@ -24,6 +24,12 @@ Root14/16 výsledkům.
 
 ### Dokončený zdroj a dosud otevřená provozní hranice
 
+- [Root owner common 22/22](../archive/2026-10-15_ROOT_OWNER_AUTHORITY.md)
+  ověřilo skutečné metadata SQL, TLS, podpisy, sdílené/exkluzivní session
+  zámky a vlastní kernel/proc identitu Root procesu. Host/app pozorování
+  a přijetí politik jsou syntetické. Neověřuje celý mutation executor,
+  publication/checkpoint writer, ztracený COMMIT, cílový neznámý session
+  END ani obnovu po HOLD. P0/P1 policy reference zůstává přísně stejná.
 - [Driver005 8/8](../archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.md)
   ověřilo nový metadata setter v soukromém Unix-only PostgreSQL 18.3:
   úzká práva, přesný kontrakt, CAS, karanténu, expiraci, zámek, souběh
@@ -51,6 +57,14 @@ Root14/16 výsledkům.
   správně odmítl i dosavadní chráněný COP chat/BYOK.
 
 ### Co musí být skutečně připravené před servisním oknem
+
+Nezávislá startup/publish karanténa musí zadržet i starý či obnovený
+obraz, který nový common vůbec nevolá, ještě před zpřístupněním dat.
+Starý runtime má vlastní SELECT práva; samotná nová kontrola v API,
+Root podpis nebo textový zákaz rollbacku ho technicky nezablokují.
+Před aktivací doložit skutečnou integrační/restore hranu a její test,
+nikoli pouze simulovaný Docker model. Žádná nová síťová či globální
+Docker změna není tímto zdrojovým ověřením povolena nebo provedena.
 
 SDA má nově pevný owner loader pro execution/read/context/retention
 factories a stejné zapojení ve standalone úklidu. Místní sada prošla

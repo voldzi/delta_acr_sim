@@ -44,6 +44,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: signed revoke a čisté Driver/AI owner-domain struktury](archive/2026-10-15_SIGNED_REVOCATION_OWNER_DOMAINS.md)
 - [Archiv ověření: oddělená dočasná Root read evidence — 10/10 nových případů](archive/2026-10-15_ROOT_READ_EVIDENCE_LAYOUT.md)
 - [Archiv ověření: omezená inventura denních kandidátů — 12/12 PostgreSQL případů](archive/2026-10-15_DRIVER_INVENTORY_CANDIDATES_SQL.md)
+- [Archiv ověření: skutečný Root owner common — 22/22 izolovaných případů, bez produkční akceptace](archive/2026-10-15_ROOT_OWNER_AUTHORITY.md)
 - Zdrojová AI composition: [pevný Root checkpoint loader/consumer](../apps/ai-router-api/src/owner-checkpoint.ts)
   a [aplikační entrypoint](../apps/ai-router-api/src/index.ts). Její unit ověření
   není produkční Root enrollment nebo deploy; rozsah zdroje a otevřené gates

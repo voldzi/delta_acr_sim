@@ -120,3 +120,24 @@ cleanup. The production consumer is unbound, so this candidate must not replace
 the running image until guarded retention is accepted. Restore quarantine is mandatory;
 physical cluster backup expiry is not guaranteed by SQL deletion. See
 [production runbook 17](../runbooks/17_DRIVER_MEASUREMENTS_PRODUCTION.md).
+
+## Nezávislá ochrana obnovy účtu — připravovaný koordinovaný cutover
+
+Schválené mazání COP/Jízdy nesmí odvolat společnou identitu ani oprávnění
+SIM/IZS. Obnovené `ready` nebo platně podepsaná historická odpověď nejsou
+oprávnění vrátit účet do provozu. Aktuální nezávislá registry, frontier,
+runtime/source proof, owner policy a přesná cílová schema/privilege fakta
+musí souhlasit. Nová obnova nebo Root epoch vyžaduje kontrolovaný replay
+a skutečný consumer drain/cohort; samotná absence souboru nebo TTL nestačí.
+
+Root čtení/reporty drží sdílený session zámek, mutation a přechody jeho
+exkluzivní protějšek. Ztráta spojení může odstranit PostgreSQL zámek,
+aniž prokáže dokončení cílové práce: Root proto musí uchovat nezávislý
+process-global HOLD a odmítnout další writer. Nejistý SQL výsledek se
+řeší jen nad původním neměnným originem/dispatch claimem; ne s novým
+časem, UUID nebo nahrazeným tělem.
+
+Tyto požadavky nejsou tvrzení o aktuálně přijaté produkční instalaci.
+Izolované SQL a Root fixture důkazy i jejich omezení jsou v
+[integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md)
+a [runbooku 19](../runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md).

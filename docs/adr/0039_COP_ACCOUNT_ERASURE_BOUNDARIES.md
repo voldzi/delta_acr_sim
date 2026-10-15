@@ -377,3 +377,16 @@ nemá origin transaction marker, výsledek se jmenuje pouze
 Následné přijetí nové policy je samostatný krok. Zdroj těchto modulů
 a izolované dílčí testy nejsou jejich produkční enrollment či restore
 akceptace; společná aktivace zůstává podmíněna jejich doložením.
+
+Common má samostatný [izolovaný důkaz 22/22](../archive/2026-10-15_ROOT_OWNER_AUTHORITY.md)
+nad skutečným metadata/target SQL, podpisy, session zámky a vlastní
+pidfd/proc identitou Root procesu. Syntetické app/host podklady se
+neprohlašují za runtime enrollment. Historický P0 a aktuální P1 proof
+smějí mít různá ID, ale jejich `ownerPolicyRef` zůstává shodná;
+odlišná policy reference je výslovně negativní případ.
+
+Před skutečným cutoverem je nezbytná technicky vynucená startup/publish
+karanténa i pro starý/restored image, který common ignoruje. Přijetí
+nového read wrapperu ani zákaz rollbacku v dokumentaci tuto nezávislou
+hranu nenahrazuje. Její zdroj, omezená instalace a skutečná restore
+akceptace musí být doloženy odděleně, bez rozšíření oprávnění aplikací.

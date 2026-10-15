@@ -90,7 +90,7 @@ admission. Dotazy mají klientský i serverový timeout a celá operace
 15sekundový watchdog včetně cleanup; výpadek nemá SQL fallback.
 
 Aktuálně dohodnutý privátní Root layout je
-`/run/cop-account-safety/private/{read-permits,ai-read-permits,read-deliveries,ai-read-deliveries,read-evidence,request-contexts,maintenance-deliveries,owner-authority}`.
+`/run/cop-account-safety/private/{read-permits,ai-read-permits,read-deliveries,ai-read-deliveries,read-evidence,request-contexts,maintenance-deliveries,owner-authority,runtime-observations}`.
 Vše musí být Root-only 0700 na explicitním tmpfs. Čtyři per-read evidence
 Driver/AI i Driver read inventory používají `read-evidence`; stará
 `/var/lib/cop-account-safety/evidence` zůstává jen pro trvalé immutable
@@ -102,6 +102,80 @@ Do app kontejneru patří jen konkrétní socket a veřejný bootstrap/keyring
 adresář, nikdy celý `/run/cop-account-safety`, ani když app běží jako
 UID 0. Nový service epoch musí projít skutečným peer/cohort drain a
 enrollmentem; absence souboru po restartu není důkaz quiescence.
+Host runtime pozorování publikuje samostatný Root watcher do pevné
+`runtime-observations/<owner>.json`: podepsaný kind
+`host-runtime-observation`, přesně základ Root recordu a `observation`,
+platnost nejvýše 5 s. Watcher pozoruje skutečný proces a konfiguraci,
+ale nepřijímá image/policy, nemění Docker a nezřizuje enrollment.
+Broker nemusí dostat administrátorský Docker socket; čte pouze tento
+chráněný aktuální fakt. Fakt sám není přijatou source/replay autoritou.
+
+### Pevný Root owner common protokol — neaktivní zdroj
+
+`deploy/account-safety/root-owner-authority.mjs` a jeho čistý
+`root-owner-authority-protocol.mjs` definují skutečnou pevnou autoritu,
+nikoli pozitivní callback dodaný aplikací. Exporty jsou
+`requireCurrentOwner`, `holdOwnerLease`, `issueOwnerEphemeralRecord`,
+`beginOwnerPublicationIntent` a `requirePublicationBarrier`. Kontroly COP
+aktéra se přebírají z připnutého chráněného COP modulu. Import vyžaduje
+celý revidovaný souborový uzávěr v `/opt/cop-account-safety`; samotná
+typová deklarace nebo přítomnost jednotlivého souboru není instalace.
+
+Kontext `cop-root-owner-authority-v1` má přesně 22 polí:
+`contractVersion`, `owner`, `scope`, `purpose`, `registration`, `peer`,
+`guardStoreId`, `continuityEpoch`, `protectedConfigId`, `datasetBindingId`,
+`runtimeBindingId`, `sourceProofId`, `policyGeneration`, `frontierSequence`,
+`frontierDigest`, `storeIncarnation`, `expiresAtUTC`, `reference`,
+`rootPolicy`, `keys`, `assertCurrent`, `close`. Jeho skutečnost se drží
+v privátním WeakMap; kopie stejných polí se za kontext nepřijímá.
+
+| Účel | Skutečně držená metadata session |
+| --- | --- |
+| Driver `read`, AI `checkpoint-read` | Sdílený advisory zámek `(hashtext(current_database()),904214)` |
+| `mutation`, `publication`, `retention`, `checkpoint-publish` | Exkluzivní protějšek stejného zámku |
+
+Autorita porovnává aktuální registry, globální politiku, frontier,
+source JWS, podepsanou owner policy, přesný schema/privilege fingerprint,
+inkarnaci databáze a skutečný vlastní Root proces. Jeho pidfd identita,
+start ticks, boot a hash běžícího executable se před databází i před/po
+ověření porovnají s čerstvým podepsaným host pozorováním. Záznam jiné
+Root instance nelze převzít jen proto, že ještě nevypršelo jeho 5 s.
+
+Historický důkaz P0, skutečný replay/receipt a checkpoint acceptance
+navazují na aktuální source P1. Důkazy P0 a P1 mají různá ID; reference
+`ownerPolicyRef` ale v této revizi musí být totožná. Podepsaný acceptance
+artefakt obsahuje SHA-256 skutečných úplných PostgreSQL JSONB řádků
+acceptance/receipt/replay v UTC. Jiná reference politiky zůstává odmítnuta;
+rozšíření této hranice není součástí přijaté implementace.
+
+Expirace oprávnění odmítne práci, ale sama neodemkne session. `close()`
+čeká na skutečné ukončení a souběžní volající sdílejí stejný výsledek.
+Nejasná SQL/session odpověď vyvolá process-global HOLD; ztracený PG zámek
+ani následný reconnect jej nesmí automaticky vymazat. Nová Root instance
+musí mít samostatně přijatou novou kohortu a doložený drain.
+
+`root-owner-read.mjs` skládá existující skutečné SQL/crypto readery a
+vydává jen krátké typované záznamy do soukromého tmpfs. Checkpoint writer
+`root-owner-checkpoint.mjs` ukládá neměnný intent i dispatch claim před
+setterem. Po prvním claimu smí pouze ověřit stejný původní stav; nesmí
+obnovit deadline, UUID nebo tělo. Jeho stav `checkpoint-readback-known`
+není potvrzení původního COMMIT ani přijetí nové Root policy.
+
+Tento společný modul sám neprokazuje, že všechny produkční mutation,
+publication, retence a HTTP odpovědi skutečně drží zámek až do drain.
+Před aktivací je nutné společně připojit a otestovat skutečné executory
+a protistranu COP. Obnovení starého obrazu, který common ignoruje, musí
+zablokovat nezávislá chráněná startup/publish karanténa ještě před
+zpřístupněním dat; zákaz rollbacku pouze v textu nestačí. Produkční
+Root instalace, přijetí skutečných politik a obnova po HOLD zůstávají
+samostatnými neuzavřenými gates. Veřejný OpenAPI se tímto soukromým ABI
+nemění.
+
+Samostatný skutečný izolovaný common běh **22/22** a přesné rozdíly mezi
+skutečnými a syntetickými podklady dokládá
+[záznam z 15. 10. 2026](../archive/2026-10-15_ROOT_OWNER_AUTHORITY.md).
+Nedokládá checkpoint writer, native transport ani produkční restore.
+
 Historické Root14/16 testy níže používaly původní layout a nejsou
 přičítány jako důkaz této nové cesty. Samostatná
 [kontrola nového layoutu](../archive/2026-10-15_ROOT_READ_EVIDENCE_LAYOUT.md)

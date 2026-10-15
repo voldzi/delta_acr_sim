@@ -26,6 +26,20 @@
   `AI_ROUTER_IZS_TOKEN` jsou vzájemně oddělené tajné hodnoty. Šifrovací
   klíč nesmí zaniknout, dokud existují zašifrované uživatelské klíče;
   změna vyžaduje přešifrování, ne pouhé přepsání proměnné.
+- Připravovaná account-safety autorita drží podpisový klíč, omezené
+  PostgreSQL control profily a schválené identity/klíčové historie pouze
+  v chráněné Root instalaci. App kontejner nesmí dostat tyto soubory,
+  control credentials, signer nebo celý privátní run adresář; jen konkrétní
+  socket a veřejný ověřovací bootstrap. Veřejný keyring není oprávnění.
+- Historie denních HMAC klíčů musí mít doložené meze skutečného vydávání;
+  datum prvního příjmu ani prázdná databáze je nenahrazují. Pseudonymy,
+  principál i spojení kandidátů s dny zůstávají při Root ověření pouze
+  v RAM, bez logu nebo trvalého denního joinu. Chybějící klíčová verze
+  znamená HOLD. Mazání z SQL neruší existenci tajemství či dat v zálohách.
+- Připravené soukromé profily používají přesný fixovaný formát a ověřenou
+  TLS CA/server name; nelze vybírat credential, DSN, profil nebo SQL z HTTP.
+  Produkční vytvoření a předání souborů je oddělený omezený instalační
+  krok, nikoli součást source testu nebo automatická adopce z `.env`.
 
 ## Konfigurační typy
 
