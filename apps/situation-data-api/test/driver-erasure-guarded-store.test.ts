@@ -3,12 +3,14 @@ import type {Pool} from "pg";
 import {PostgresDriverAccountErasureStore} from "../src/driver-account-erasure-store.js";
 import {driverErasureHash,driverErasureRequiredDays,type DriverErasureInput} from "../src/driver-account-erasure.js";
 import type {DriverGuardedExecutionRequest,DriverGuardedExecutionResult,DriverGuardedOperationContext,DriverGuardedReadRequest,DriverGuardedStoreOptions} from "../src/driver-guarded-execution-port.js";
+import {DriverReadFactsError,matchDriverReadPolicy} from "../../../deploy/driver-measurements/read-admission-facts.mjs";
 
 // All ports, references and rows below are synthetic mocks. Passing these tests
 // proves application control flow, NOT signed Root delivery or production use.
 const secret="s".repeat(40),checkpoint="c".repeat(40),now=Date.parse("2026-10-14T12:00:00.000Z");
 const business="00000000-0000-4000-8000-000000000001",origin="10000000-0000-4000-8000-000000000001";
 const checkpointHash=driverErasureHash(secret,"cop:account-erasure-checkpoint",checkpoint);
+const syntheticPolicy={storeIncarnation:"30000000-0000-4000-8000-000000000001",checkpointHash,schemaFingerprint:"7".repeat(64),privilegeFingerprint:"8".repeat(64),reportProtection:"no_report"};
 const input=():DriverErasureInput=>({operationId:business,actorHash:"a".repeat(64),requestHash:"b".repeat(64),contributors:driverErasureRequiredDays(now).map((day,index)=>({contributorDay:day,contributorHash:index.toString(16).repeat(64)}))});
 const context=(kind:"erase"|"ack"="erase"):DriverGuardedOperationContext=>({operation:{operationId:origin,kind}});
 const publication={contractVersion:"cop-driver-publication-context-v1" as const,recordId:"20000000-0000-4000-8000-000000000001",recordDigest:"1".repeat(64),storeIncarnation:"30000000-0000-4000-8000-000000000001",operationDigest:"2".repeat(64),readbackDigest:"3".repeat(64),reportProtection:"no_report" as const,observedAtUTC:"2026-10-14T12:00:00.000Z"};
@@ -39,31 +41,57 @@ function fixture(options:{enabled?:boolean;execution?:boolean;admission?:boolean
   const pool={query,connect:vi.fn(async()=>({query,release:vi.fn()}))} as unknown as Pool;
   const execute=vi.fn(async(request:DriverGuardedExecutionRequest)=>{options.onExecute?.(request);if(options.state==="throw")throw new Error("Synthetic unavailable transport");return outcome(request.operation.operationId,options.state);});
   const probe=vi.fn(async(operation:{operationId:string})=>outcome(operation.operationId));
-  const inspect=vi.fn(async(request:DriverGuardedReadRequest)=>({contractVersion:"sim-driver-guarded-read-admission-v1" as const,...request,checkpointHash,reportProtection:"no_report" as const,
-    reference:{recordId:"60000000-0000-4000-8000-000000000001",digest:"6".repeat(64)},...options.admissionPatch}));
+  const observations:Array<{purpose:DriverGuardedReadRequest["purpose"];hasOperation:boolean}>=[];
+  const inspect=vi.fn(async(request:DriverGuardedReadRequest)=>{
+    const row=request.operationHash?rows.get(request.operationHash):undefined;
+    const owned=row?.actor_hash===request.actorHash?row:undefined;
+    const operation=owned?{operationHash:request.operationHash,actorHash:owned.actor_hash,requestHash:owned.request_hash,contributorCount:owned.contributor_count,
+      status:owned.status,createdAtUTC:owned.created_at.toISOString(),updatedAtUTC:owned.updated_at.toISOString(),deletedBatchCount:owned.deleted_batch_count,
+      remainingBatchCount:owned.remaining_batch_count,databaseZeroVerified:owned.database_zero_verified,derivedReportAcknowledged:owned.derived_report_acknowledged,
+      replayCheckpointHash:owned.replay_checkpoint_hash,ledgerDigest:"9".repeat(64)}:null;
+    observations.push({purpose:request.purpose,hasOperation:operation!==null});
+    // Exercise the real pure target-facts boundary: preflight may have no row;
+    // receipt may not. These synthetic facts still provide NO Root authority.
+    try{matchDriverReadPolicy({contractVersion:"sim-driver-read-facts-v1",request,observedAtUTC:new Date(now).toISOString(),storeIncarnation:syntheticPolicy.storeIncarnation,
+      state:{checkpointHash:database.checkpointHash,replayReady:true,proofValidUntilUTC:new Date(now+60_000).toISOString(),proofCurrent:database.valid,
+        retentionReviewed:true,reportProtection:database.protection,publicationFenceVerified:true},
+      schema:{ready:true,fingerprint:syntheticPolicy.schemaFingerprint},privileges:{runtimeProfileMatches:options.permissions!==false,fingerprint:syntheticPolicy.privilegeFingerprint},operation},request,syntheticPolicy,now);
+    }catch(error){if(error instanceof DriverReadFactsError)return undefined;throw error;}
+    return {contractVersion:"sim-driver-guarded-read-admission-v1" as const,...request,checkpointHash,reportProtection:"no_report" as const,
+      reference:{recordId:"60000000-0000-4000-8000-000000000001",digest:"6".repeat(64)},...options.admissionPatch};
+  });
   const protectedProof=vi.fn(async()=>({checkpoint,identityReviewed:true,restoreCheckpointCurrent:true,retentionReviewed:true,publicationFenceVerified:true,reportProtection:"no_report" as const}));
   const guarded:DriverGuardedStoreOptions={...(options.execution===false?{}:{execution:{execute,probe}}),...(options.admission===false?{}:{admission:{inspect}})};
   const store=new PostgresDriverAccountErasureStore(pool,secret,{enabled:options.enabled??true,expectedCheckpoint:checkpoint,identityConfigured:true,protectedProof,guarded});
   const seed=(patch:Record<string,unknown>={})=>{const value=input();const key=driverErasureHash(secret,"cop:account-erasure-operation",value.operationId);
     const row={actor_hash:value.actorHash,request_hash:value.requestHash,created_at:new Date(now),updated_at:new Date(now),contributor_count:9,deleted_batch_count:2,remaining_batch_count:0,database_zero_verified:true,derived_report_acknowledged:false,replay_checkpoint_hash:checkpointHash,status:"pending",...patch};rows.set(key,row);return row;};
-  return {store,guarded,pool,rows,calls,database,execute,probe,inspect,protectedProof,seed};
+  return {store,guarded,pool,rows,calls,database,execute,probe,inspect,observations,protectedProof,seed};
 }
 describe("guarded driver erasure store (synthetic ports; no Root acceptance)",()=>{
-  it("dispatches only the Root operation/body, then reads a fresh actor-bound ledger without runtime DML",async()=>{
-    const f=fixture();f.seed();const receipt=await f.store.erase(input(),context());
+  it("starts the first ERASE on an empty ledger through preflight, then requires a fresh receipt without runtime DML",async()=>{
+    let f:ReturnType<typeof fixture>;f=fixture({onExecute:()=>{expect(f.rows.size).toBe(0);f.seed();}});
+    const receipt=await f.store.erase(input(),context());
     expect(receipt.status).toBe("pending");expect(receipt.wholeAccountComplete).toBe(false);
     expect(f.execute).toHaveBeenCalledExactlyOnceWith({operation:context().operation,body:{contractVersion:"sim-driver-guarded-db-v1",operationHash:driverErasureHash(secret,"cop:account-erasure-operation",business),actorHash:input().actorHash,requestHash:input().requestHash,contributors:input().contributors,checkpointHash}});
     expect(f.calls.some(call=>call.sql.includes("WHERE operation_hash=$1 AND actor_hash=$2"))).toBe(true);
     expect(f.calls.some(call=>call.sql.includes("REPEATABLE READ READ ONLY"))).toBe(true);
+    expect(f.observations).toEqual([{purpose:"preflight",hasOperation:false},{purpose:"receipt",hasOperation:true}]);
+    expect(f.inspect.mock.invocationCallOrder[0]).toBeLessThan(f.execute.mock.invocationCallOrder[0]);
+    expect(f.execute.mock.invocationCallOrder[0]).toBeLessThan(f.inspect.mock.invocationCallOrder[1]);
     expect(f.protectedProof).not.toHaveBeenCalled();expect(f.probe).not.toHaveBeenCalled();
     expect(f.calls.some(call=>/^(INSERT|UPDATE|DELETE|TRUNCATE)/i.test(call.sql))).toBe(false);
   });
   it("accepts an ACK receipt only from a known commit plus fresh independent ledger/admission",async()=>{
-    const f=fixture();f.seed({status:"completed",derived_report_acknowledged:true});
+    let f:ReturnType<typeof fixture>;f=fixture({onExecute:()=>{f.seed({status:"completed",derived_report_acknowledged:true});}});f.seed();
     const receipt=await f.store.acknowledge(input(),{...context("ack"),publicationContext:publication});
     expect(receipt.status).toBe("completed");expect(receipt.backupReplayRequired).toBe(true);
     expect(f.execute.mock.calls[0][0].body).toEqual(expect.objectContaining({publicationContext:publication,checkpointHash}));
+    expect(f.observations).toEqual([{purpose:"receipt",hasOperation:true},{purpose:"receipt",hasOperation:true}]);
     expect(f.inspect.mock.calls.every(([request])=>request.purpose==="receipt"&&request.actorHash===input().actorHash&&request.operationHash===driverErasureHash(secret,"cop:account-erasure-operation",business))).toBe(true);
+  });
+  it("requires an existing actor-bound receipt before ACK dispatch",async()=>{
+    const f=fixture();await expect(f.store.acknowledge(input(),{...context("ack"),publicationContext:publication})).rejects.toMatchObject({status:503});
+    expect(f.observations).toEqual([{purpose:"receipt",hasOperation:false}]);expect(f.execute).not.toHaveBeenCalled();expect(f.probe).not.toHaveBeenCalled();
   });
   it("can resume an actor/request-owned durable operation with current admission after the feature flag is disabled",async()=>{
     for(const kind of ["erase","ack"] as const){
@@ -77,9 +105,11 @@ describe("guarded driver erasure store (synthetic ports; no Root acceptance)",()
     }
   });
   it("cannot start a new operation while disabled or substitute a different durable actor/request",async()=>{
-    for(const patch of [undefined,{actor_hash:"d".repeat(64)},{request_hash:"d".repeat(64)}]){
+    for(const kind of ["erase","ack"] as const)for(const patch of [undefined,{actor_hash:"d".repeat(64)},{request_hash:"d".repeat(64)}]){
       const f=fixture({enabled:false});if(patch)f.seed(patch);
-      await expect(f.store.erase(input(),context())).rejects.toMatchObject({status:503});expect(f.execute).not.toHaveBeenCalled();expect(f.probe).not.toHaveBeenCalled();
+      const attempt=kind==="ack"?f.store.acknowledge(input(),{...context("ack"),publicationContext:publication}):f.store.erase(input(),context());
+      await expect(attempt).rejects.toMatchObject({status:503});expect(f.execute).not.toHaveBeenCalled();expect(f.probe).not.toHaveBeenCalled();
+      expect(f.protectedProof).not.toHaveBeenCalled();expect(f.calls.some(call=>/^(INSERT|UPDATE|DELETE|TRUNCATE)/i.test(call.sql))).toBe(false);
     }
   });
   it.each(["pending","origin-no-effects-closed","throw"] as const)("never masks %s with a previous completed ledger",async state=>{
@@ -113,8 +143,13 @@ describe("guarded driver erasure store (synthetic ports; no Root acceptance)",()
     const replacement=vi.fn(async()=>({...await f.protectedProof(),identityReviewed:false}));caller.protectedProof=replacement;
     expect((await store.capability()).ready).toBe(false);expect(replacement).toHaveBeenCalledTimes(1);expect(f.inspect).not.toHaveBeenCalled();
   });
-  it.each([{actor_hash:"d".repeat(64)},{request_hash:"d".repeat(64)},undefined])("requires actor/request-bound fresh rows after known commit: %j",async patch=>{
-    const f=fixture();if(patch)f.seed(patch);await expect(f.store.erase(input(),context())).rejects.toMatchObject({status:503});expect(f.execute).toHaveBeenCalledTimes(1);
+  it.each([{actor_hash:"d".repeat(64)},{request_hash:"d".repeat(64)}])("requires actor/request-bound fresh rows after known commit: %j",async patch=>{
+    const f=fixture();f.seed(patch);await expect(f.store.erase(input(),context())).rejects.toMatchObject({status:503});expect(f.execute).toHaveBeenCalledTimes(1);
+  });
+  it("does not turn a known ERASE commit into success without a newly readable receipt",async()=>{
+    const f=fixture();await expect(f.store.erase(input(),context())).rejects.toMatchObject({status:503});expect(f.execute).toHaveBeenCalledTimes(1);
+    expect(f.observations).toEqual([{purpose:"preflight",hasOperation:false},{purpose:"receipt",hasOperation:false}]);
+    expect(f.probe).not.toHaveBeenCalled();expect(f.protectedProof).not.toHaveBeenCalled();
   });
   it.each([{purpose:"status"},{actorHash:"d".repeat(64)},{operationHash:"d".repeat(64)},{checkpointHash:"d".repeat(64)},{reportProtection:"shared_generation_fence"},{reference:{recordId:"invalid",digest:"6".repeat(64)}}])("rejects mismatched/malformed read admission %j",async admissionPatch=>{
     const f=fixture({admissionPatch});f.seed();await expect(f.store.erase(input(),context())).rejects.toMatchObject({status:503});expect(f.execute).not.toHaveBeenCalled();

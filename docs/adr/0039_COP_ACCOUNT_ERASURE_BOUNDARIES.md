@@ -434,3 +434,13 @@ dvousloupcový FK validovaným immediate composite FK nad owner, batch ID
 a contributor hashem. Historický nesoulad znamená abort před DDL, nikoli
 automatické přeznačení nebo smazání cizích dat. Funkce zmrazeného SQL003
 se nepřepisují; nový schema fingerprint vyžaduje nezávislé přijetí.
+
+### První ERASE nemůže vyžadovat již hotový receipt
+
+Před ERASE se ověřuje actor-bound preflight, který připouští chybějící
+ledger operace; před ACK a po obou mutacích je receipt povinný. Vypnutý
+příznak nadále odmítá novou operaci a připouští jen vlastněnou durable
+operaci se shodným request hashem. Jde o opravu aplikačního pořadí kontrol,
+nikoli výjimku z Root autority, aktuálního checkpointu nebo publikace.
+Samostatné syntetické testy store nenahrazují ověření držené mutation lease,
+nativního přenosu, restore karantény ani společnou produkční akceptaci.

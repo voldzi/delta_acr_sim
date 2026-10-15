@@ -154,7 +154,9 @@ export class PostgresDriverAccountErasureStore {
   private guardedReadReady(gate:Gate):boolean{return gate.installed&&gate.permissions&&gate.identity&&gate.replay&&gate.retention&&gate.publication&&!!gate.checkpoint;}
   private async guardedAttempt(input:DriverErasureInput,context:DriverGuardedOperationContext|undefined,kind:"erase"|"ack"):Promise<DriverErasureReceipt>{
     const unavailable=()=>new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE");
-    const request={purpose:"receipt" as const,operationHash:this.key(input.operationId),actorHash:input.actorHash};
+    // A first ERASE has no ledger row yet. Only preflight admits that state;
+    // receipt is reserved for ACK and the committed post-mutation readback.
+    const request={purpose:kind==="erase"?"preflight" as const:"receipt" as const,operationHash:this.key(input.operationId),actorHash:input.actorHash};
     let publication=false;
     try{
       const gate=await this.gate(this.pool,false,request);
@@ -178,7 +180,7 @@ export class PostgresDriverAccountErasureStore {
       if((await this.guardedRunner.execute(context,kind,body)).state!=="origin-commit-known")throw unavailable();
       const c=await this.pool.connect();try{
         await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-        const current=await this.gate(c,false,request);
+        const current=await this.gate(c,false,{...request,purpose:"receipt"});
         if(!this.guardedReadReady(current)||current.checkpoint!==gate.checkpoint)throw unavailable();
         const rows=await c.query("SELECT * FROM driver_account_erasure_operations WHERE operation_hash=$1 AND actor_hash=$2",[request.operationHash,input.actorHash]);
         const row=rows.rows[0];

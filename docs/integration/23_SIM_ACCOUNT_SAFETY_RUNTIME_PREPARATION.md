@@ -1149,3 +1149,24 @@ pozitivního verifieru. Migrace 002/003 jsou pouze současné source reference,
 v tomto kroku se nespouštějí. Návrat neaktivních souborů odstraní jen tento
 samostatný balíček; po skutečné aktivaci platí přísnější
 [runbook 19](../runbooks/19_COP_ACCOUNT_ERASURE_PRODUCTION.md#návrat-a-incident).
+
+## První ERASE a kontrola jeho výsledku
+
+Guarded store před ERASE požaduje actor-bound `preflight`: před prvním
+zápisem ještě nemusí existovat řádek operace. ACK naopak již před dispatch
+vyžaduje `receipt`. Po potvrzeném ERASE i ACK se vždy znovu vyžaduje
+`receipt` stejné operace, účastníka, request hashe a nezměněného checkpointu.
+Potvrzený origin bez čitelného výsledku není úspěšné smazání.
+
+Vypnutý příznak nepovoluje nový ERASE. Obnovit lze pouze skutečně existující
+operaci se stejnou actor/request vazbou a aktuální autoritou. Chyba kontrol
+zůstává 503 bez legacy proofu, náhradního dispatch či automatického probe.
+[Regrese 25 testů](../archive/2026-10-15_FIRST_ERASE_PREFLIGHT.md) používá
+skutečný čistý matcher nad syntetickými porty; není Root ani produkční akceptací.
+
+Navazující držení jedné mutation autority přes preflight, ERASE, receipt,
+publikaci a ACK se implementuje samostatně s COP. Běžné čtení nesmí získat
+výjimku pro globální `pending` stav. Nový privátní scope nesmí změnit původní
+origin, tělo, checkpoint ani deadline; HTTP finish/close nenahrazuje skutečný
+SQL a native drain. Dokud není tento řetězec doložen společným testem, tato
+oprava store sama o sobě neopravňuje zapnout produkční mazání.
