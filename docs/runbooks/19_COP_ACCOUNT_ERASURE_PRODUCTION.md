@@ -1,5 +1,114 @@
 # Nasazení mazání COP/Jízdy při zachování SIM
 
+## Aktuální koordinovaný cutover Driver 003/004 — 15. 10. 2026
+
+Tento oddíl řídí již schválené dokončení a nasazení: SQL 003/004, skutečný
+Root reader a opt-in stores z `0f56fc0` se přijímají společně, nikoli jako
+samostatný databázový nebo image update. Obecný souhlas s nasazením nechybí;
+otevřené jsou níže uvedené konkrétní provozní a bezpečnostní podmínky.
+Podrobné kontrakty jsou v [integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md#chráněné-čtení-skutečného-stavu-měření).
+Tento postup nemění ani neoznačuje za aktuální starý neaktivní instalační
+manifest. Historické source/fixture výsledky níže nejsou aktivace.
+
+### Co musí být skutečně připravené před servisním oknem
+
+- DBA doloží pevnou DB `sim_driver_measurements`, původních sedm tabulek
+  vlastněných `driver_measurements_migrator`, bez RLS, dvě původní receipt
+  `ON DELETE CASCADE` vazby a původní SECURITY INVOKER receipt guard.
+  Před 003 musí být `sim_driver_guard_source` prázdné a vlastněné
+  `sim_driver_guard_owner`. Existující migrační owner
+  `driver_measurements_migrator` se tímto postupem nemění. Předem existují
+  omezené role: `sim_driver_guard_owner` NOLOGIN;
+  `driver_measurements_runtime`, `sim_driver_guard_control` a
+  `sim_driver_guard_exec` LOGIN; všechny čtyři bez superuser/CREATEDB/
+  CREATEROLE/REPLICATION/BYPASSRLS. Jediné povolené chráněné členství je
+  **guard_owner MEMBER OF guard_exec**, tedy `sim_driver_guard_exec` udělená
+  ownerovi, nikoli opačně; runtime ani control se nesmějí stát ownerem.
+  004 vyžaduje přijatou 003 a dosud neexistující `read_admission_facts`.
+- Správce a COP doloží skutečnou Root custody: připnuté Root-owned soubory
+  readeru a `root-records.mjs` pod `/opt/cop-account-safety`, nepřístupný
+  podpisový klíč, pevné soukromé profily `registry-probe` a `driver-control`
+  s ověřenou TLS CA a server name. DSN, cesta, signer nebo callback nesmějí
+  být volbou aplikace/HTTP. Tento runbook nezřizuje role, granty, secrets,
+  HBA, sudo přístupy ani vlastní transport.
+- Publisher nezávisle přijme skutečnou store incarnation, cluster/timeline,
+  boot, guard-store, continuity epoch, dataset/runtime/source-proof a
+  policy binding, checkpoint i přesné očekávané schema/privilege fingerprinty.
+  Aktuální podepsaný frontier musí mít nezávislou kotvu a živou registry;
+  očekávané piny se nesmějí automaticky schválit z téže kontrolované DB.
+  Součástí je ověřená report inventory pro `no_report` nebo skutečnou
+  publikační bariéru, owner-wide generation/drain a přijatý restore/replay
+  gate. Prázdný výsledek, DB flag ani čerstvý hash tyto podmínky nenahradí.
+- COP dodá přijatý kernelový peer transport, klientskou registraci a
+  enrollment, signer/evidence a per-request delivery. Každé čtení má přesný
+  podepsaný read permit a čtyři evidence podle integrace 23; každý writer
+  svůj původní registrovaný origin, body/schema/cutoff binding a interní
+  kontext právě autentizovaného volání. SIM smí zapojit pouze skutečné
+  execution/admission/current-context porty a maintenance consumer;
+  výchozí unbound factory ani funkce vracející kladné booleany nestačí.
+
+### Jedno omezené servisní okno
+
+1. Předem uložit přesné revize, image digesty, SQL hashe, schválené bindingy
+   a přístupový profil. Až do přijetí všech závislostí zachovat stávající
+   zdravé služby. Pozastavit pouze dotčený Driver intake a všechny jeho
+   writery včetně revoke, erase/ACK a obou retenčních entrypointů; ne celý
+   SIM, COP chat, Router, databázový cluster ani jiné projekty. Předem určit
+   způsob pozastavení všech těchto cest, nikoli pouze nového intake.
+   Dokončit rozpracované transakce a doložit skutečný drain/generation stav,
+   ne jen zavření JavaScript callbacku nebo kontejneru.
+2. Při stále pozastavených writerech provede správce připnutou 003 a poté
+   004 a současně připraví guarded-kompatibilní writery. Zúžení grantů
+   nesmí předběhnout jejich náhrady. 003 se nepoužívá k adopci neznámého
+   existujícího namespace; skutečnou inkarnaci sváže Root, nikoli app UUID.
+   004 je privátní control-only EXECUTE v `BEGIN READ ONLY`, STABLE, bez
+   probe/seal, DML nebo explicitních row/advisory zámků.
+3. Ověřit přesný runtime profil: SELECT pouze na sedmi jmenovaných Driver
+   tabulkách, INSERT pouze receipts/intervals/eta a UPDATE pouze sloupce
+   `driver_measurement_receipts.receipt`, plus původní receipt-guard EXECUTE.
+   Žádné runtime DELETE/TRUNCATE, ledger/fence DML, REFERENCES/TRIGGER,
+   CREATE/TEMP, CREATE ve schématu ani USAGE/EXECUTE privátního guard RPC.
+   Žádné table/column granty nebo SELECT pro PUBLIC, žádné `ALL TABLES`
+   rozšíření; ověřit i účinná zděděná práva. Read facts EXECUTE má pouze
+   `sim_driver_guard_control`, nikoli runtime, executor nebo PUBLIC.
+4. Přijmout skutečné post-migration fingerprinty nezávislým publisherem a
+   zapojit stores s interní opt-in volbou `guarded`. Ověřit všechny čtyři
+   writer cesty i pět read purposes, actor/operation binding a aktuální
+   podpisy před i po SQL. Read admission má nejvýše pět sekund a nepřekročí
+   platnost permitu/evidence/registrace/frontier/proofs; nenahrazuje drženou
+   generation/read lease. Běžný HTTP GET nesmí spustit resolution/seal.
+   Nejasný COMMIT nebo restart pokračuje jen probe stejného originu.
+5. Teprve po společné akceptaci COP–SIM–Root obnovit dotčený Driver provoz.
+   Doložit revokaci s původním scalar receipt, erase→202→samostatný ACK,
+   retention s neměnným cutoff, souběh s intake, výpadek a recovery; bez
+   testovacího smazání reálného účtu. Zkontrolovat ostatní SIM/IZS API,
+   routing, stávající COP AI cestu a nezměněné finanční limity. Pokud binding
+   nebo reader chybí, Driver zůstává explicitně unavailable, nikoli legacy
+   fallback; nezávislé zdravé služby zůstávají zachované.
+
+### Akceptační hranice a návrat
+
+[14 PASS v novém PostgreSQL ověření](../archive/2026-10-15_DRIVER_READ_ADMISSION_SQL.md)
+dokládá read-only SQL fakta, ACL a nulové vedlejší efekty v soukromém
+syntetickém clusteru. Nedokládá skutečný Root permit/signature/peer,
+enrollment, produkční wiring ani obnovu.
+[15 nových Linux případů](../archive/2026-10-15_DRIVER_READ_ROOT.md)
+ověřilo skutečný reader, podpisy, custody, TLS/SQL a timeout nad
+syntetickými profily, registry a peer. Produkční přijetí skutečné kotvy,
+owner evidence, nativního klienta a obnovy zůstává otevřené; fixture je
+nenahrazuje. Bez těchto provozních výsledků cutover neoznačit za
+akceptovaný ani nepovolit běžné nové chráněné dispatch.
+
+Před 003 lze vrátit původní image při zachovaném původním režimu. **Po 003
+není rollback návrat k blanket DELETE/UPDATE, legacy apply/recover grantům
+nebo starému writeru.** Zastavit nové dispatch, bezpečně uzavřít admission
+leases a vyřešit již přijaté původní originy chráněným resolution tokem;
+timeout se nesmí opravit novým UUID, cutoffem nebo opakováním DELETE.
+Zachovat ledger, permanentní i dočasné fences, origin/scalar receipts,
+audit a finanční stropy. Použít pouze poslední guarded-kompatibilní image,
+nebo nechat Driver pozastavený a ostatní služby běžet. Restore nesmí vrátit
+data přes existující fences ani obejít quarantine/replay gate.
+
 ## Rozsah a aktuální gate
 
 Zdrojová větev `codex/sim-account-erasure-release` vychází z nasazeného SDA

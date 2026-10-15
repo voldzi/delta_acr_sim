@@ -11,6 +11,101 @@ inventář z revize `03f5408` zůstává beze změny v
 Ověření dokončeného lokálního úklidu je v
 [testovacím záznamu](../archive/2026-10-14_DRIVER_RETENTION_LIFECYCLE.md).
 
+## Chráněné čtení skutečného stavu měření
+
+Privátní `004_read_admission_facts.sql` přidává
+`sim_driver_guard_source.read_admission_facts(jsonb)`. EXECUTE dostává
+pouze existující `sim_driver_guard_control`, nikoli runtime, executor
+nebo PUBLIC. Nevytváří role, hesla ani enrollment. Vyžaduje
+`BEGIN READ ONLY`, pevný `session_user`, UTC a `search_path=pg_catalog`.
+Funkce je STABLE, nezapisuje a nevolá origin probe, seal ani explicitní
+row/advisory lock. Veřejný OpenAPI kontrakt se nemění.
+
+Request obsahuje přesně `owner=sim_driver_measurements`,
+`scope=online_driver_scope` a `purpose`. `capability|intake` nepřijímají
+identitu; `preflight|status|receipt` navíc vyžadují oba lowercase hex64
+`operationHash` a `actorHash`. Neznámé klíče nebo špatná struktura končí
+SQLSTATE 22023. Cizí actor a neexistující operace mají shodně
+`operation:null`. Výstup `sim-driver-read-facts-v1` nese skutečnou
+inkarnaci, checkpoint/proof/report stav, schema/privilege fingerprint
+a nejvýše jeden přesný scalar ledger readback. Nevrací contributor
+inventory, manifest, GPS, raw SQL ani account→day vazbu.
+
+Fingerprint je PG SHA-256 UTF-8 `jsonb::text`, nikoli JavaScript JSON hash.
+Schema core `sim-driver-schema-fingerprint-v1` zahrnuje sedm tabulek,
+definice, indexy, constraints, triggery a původní receipt guard.
+Privilege core `sim-driver-privilege-fingerprint-v1` zahrnuje pevné role,
+členství, ACL, účinná práva včetně PUBLIC column grantů a šest privátních
+funkcí. NULL a explicitní prázdné ACL nejsou stejný pin. `ledgerDigest`
+je zvláštní PG SHA-256 celého skutečného řádku ledgeru v UTC. Očekávané
+piny přijímá nezávislý Root publisher; nezískávají autoritu tím, že je
+vrátí samotná kontrolovaná DB.
+
+### Skutečný Root reader a přesný permit
+
+`read-admission-facts.mjs` je pouze čistá validace pozorování a nezbytných
+podmínek. Skutečný `root-read-admission.mjs` patří jako obyčejný Root-owned
+soubor vedle připnutého COP `root-records.mjs` pod `/opt/cop-account-safety`.
+Pevné soukromé profily `registry-probe` a `driver-control` používají
+ověřenou TLS CA/server name. Volající nevybírá DSN, cestu, klíč ani callback.
+Broker volá `inspectRootDriver(readPermitId, request, peer)`; peer pochází
+výhradně z nativního kernelového transportu COP, ne z HTTP.
+
+Root čte `/var/lib/cop-account-safety/read-permits/<UUID>.json`, kind
+`driver-read-permit`. K běžným pěti polím Root recordu přidává přesně:
+
+```text
+request, requestDigest, guardStoreId, continuityEpoch, datasetBindingId,
+runtimeBindingId, sourceProofId, policyGeneration, frontierSequence,
+frontierDigest, storeIncarnation, expectedCheckpointHash,
+expectedSchemaFingerprint, expectedPrivilegeFingerprint,
+reportProtection, reportInventoryRef, evidence
+```
+
+`requestDigest` je SHA-256 plochého kanonického JSON requestu se seřazenými
+klíči, bez newline. `evidence` má přesně čtyři `{recordId,digest}` reference
+s kinds `driver-read-identity`, `driver-read-retention`, `driver-read-report`
+a `driver-read-schema`. Každá podepsaná evidence má kromě běžného Root
+základu přesně:
+
+```text
+readPermitId, requestDigest, owner, scope, guardStoreId, continuityEpoch,
+datasetBindingId, runtimeBindingId, sourceProofId, storeIncarnation,
+policyGeneration, frontierSequence, frontierDigest, decision
+```
+
+Rozhodnutí v tomto pořadí jsou `cop-jizda-owned-sim-preserved`,
+`bounded-read-permitted`, `verified-report-inventory` a
+`exact-read-facts-policy-verified`. `reportInventoryRef` odkazuje na kind
+`driver-report-inventory`: stejný základ a navíc `reportProtection`,
+`checkpointHash`, `schemaFingerprint`, `privilegeFingerprint`. Rozhodnutí
+je `verified-no-derived-publication` pro `no_report`, jinak
+`verified-derived-barrier`. Inventuru musí skutečně přijmout COP publisher;
+prázdný dotaz ani DB boolean nevytvoří `no_report`.
+
+Reader před i po skutečném read-only SQL ověřuje skutečné Ed25519 podpisy,
+nezávislý aktuální frontier, boot, cluster/timeline, živou registry,
+owner/dataset/runtime/proof/policy a peer. Neshoda s permit piny nevydá
+admission. Dotazy mají klientský i serverový timeout a celá operace
+15sekundový watchdog včetně cleanup; výpadek nemá SQL fallback.
+
+Výstup je `{admission,record}`: existující
+`sim-driver-guarded-read-admission-v1` a inline kanonický podepsaný kind
+`driver-read-admission`. Jeho reference váže SHA-256 přesných bajtů recordu
+včetně newline. Record váže request/facts/ledger digests, peer/registraci
+a všechny aktuální vazby a piny. COP klient musí ověřit podpis i korelaci.
+Platnost je nejvýše pět sekund od pozorování, nikdy déle než permit,
+evidence/inventura, registrace, frontier a runtime/target proofs.
+Nevzniká trvalý per-read actor/day soubor. Výsledek nenahrazuje drženou
+generation/read lease, drain, journal ani restore replay COP.
+
+[14 skutečných PostgreSQL případů](../archive/2026-10-15_DRIVER_READ_ADMISSION_SQL.md)
+ověřilo SQL fakta a zákaz vedlejších účinků.
+[15 Linux integračních případů](../archive/2026-10-15_DRIVER_READ_ROOT.md)
+ověřilo skutečné podpisy/custody/TLS/SQL readeru se syntetickými Root
+záznamy a peer. Neprokazuje to produkční permit, nativní peer, enrollment
+nebo obnovu skutečné zálohy.
+
 ## Stávající spojení COP a SIM
 
 Čtecí kontrola na `docker.home.cz` dne 14. 10. 2026 potvrdila níže uvedené

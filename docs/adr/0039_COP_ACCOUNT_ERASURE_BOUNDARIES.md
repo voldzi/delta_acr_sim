@@ -215,3 +215,12 @@ Výchozí neguarded režim zůstává zachovaný do koordinované migrace.
 Guarded read/intake gate ověřuje zúžená práva a účelový Root admission,
 nikoli původní zero-argument verifier. Syntetické testovací porty nemění
 stav chybějícího produkčního delivery, enrollmentu nebo restore.
+
+Privátní read-only SQL funkce 004 vrací Driver pozorování, nikoli
+oprávnění. Nezávislý Root vydavatel přijímá skutečné schema/privilege piny,
+checkpoint a report inventory a váže je do krátkodobého účelového permitu.
+Reader ověřuje aktuální registry/frontier/peer před i po čtení, bez
+historického origin probe. Runtime nedostává nové EXECUTE ani grant RPC.
+Přesný wire a vlastnictví jsou v integraci 23. Inline podepsané přijetí
+nevytváří trvalou account/day historii a nenahrazuje generation/drain
+nebo ochranu obnovy.

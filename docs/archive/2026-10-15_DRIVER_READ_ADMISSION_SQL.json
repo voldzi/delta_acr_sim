@@ -1,0 +1,114 @@
+{
+  "status": "SOURCE_DRIVER_READ_ADMISSION_SQL_FACTS_ONLY",
+  "startedAt": "2026-10-15T06:53:32.383Z",
+  "completedAt": "2026-10-15T06:53:33.664Z",
+  "postgresVersion": "18.3",
+  "cases": [
+    {
+      "case": "control-only STABLE fixed-policy facts function has no SQL writer, seal or RPC path",
+      "passed": true
+    },
+    {
+      "case": "runtime and executor cannot invoke read facts, assume control or create TEMP",
+      "passed": true
+    },
+    {
+      "case": "all five purposes return exact bounded facts in an actual read-only transaction",
+      "passed": true
+    },
+    {
+      "case": "unknown keys, invalid purpose/hash and incomplete identity pairs are rejected",
+      "passed": true
+    },
+    {
+      "case": "wrong actor or operation returns null operation without exposing another ledger",
+      "passed": true
+    },
+    {
+      "case": "store incarnation is the actual binding and an unbound store stays null",
+      "passed": true
+    },
+    {
+      "case": "state facts reflect actual checkpoint, current proof and report protection, not Root authority",
+      "passed": true
+    },
+    {
+      "case": "expired proof, changed checkpoint and absent state remain explicit non-current facts",
+      "passed": true
+    },
+    {
+      "case": "actual receipt-trigger drift makes schema not ready and changes its fingerprint",
+      "passed": true
+    },
+    {
+      "case": "effective PUBLIC column INSERT drift is detected with a changed privilege fingerprint",
+      "passed": true
+    },
+    {
+      "case": "role inheritance and CREATE TEMP drift fail the actual runtime profile",
+      "passed": true
+    },
+    {
+      "case": "ledger projection has immutable accepted time/counts and no manifest, GPS or collection data",
+      "passed": true
+    },
+    {
+      "case": "read-only facts neither wait on contributor/state row locks nor acquire write/advisory locks",
+      "passed": true
+    },
+    {
+      "case": "all data/origin effects stay stable and missing or revoked read RPC is unavailable",
+      "passed": true
+    }
+  ],
+  "passed": 14,
+  "providerCalls": 0,
+  "isolation": {
+    "newOwnedCluster": true,
+    "tcpListener": false,
+    "externalTargetsAccepted": false,
+    "dataRemoved": true
+  },
+  "sourcePins": {
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "scripts/test-driver-guarded-operations-postgres.mts": "547c0486f7a902c6bd4b920139b50178de392f2b3f91f27f3b1d177becf80e97",
+    "docs/archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.json": "80ea5fb1a4e914a5439dba901bfee528c1136c1ed812aee9c7bfb82ebe869c42",
+    "scripts/test-driver-expiry-real-schema.mts": "61ff2bfe5b3510fa0c8d4a2be61bc8cea83fb798695d35713b0681634f5e2b6f",
+    "scripts/fixtures/driver-retention-real-schema/expiry-source.sql": "1561825849c8990526af26eae3866ee2100072db72bed638997a2eec7a8afb7a",
+    "docs/archive/2026-10-14_DRIVER_EXPIRY_REAL_SCHEMA.json": "8dac0d99b4add01446b05e8fdc6cd752f5d754328754fc46fe5848b954841396",
+    "scripts/test-driver-read-admission-postgres.mts": "a84618b475c1f3707941e2290982a6069a4888461eea3f0a10fc5e6305e98e5f"
+  },
+  "initialHarnessSha256": "a84618b475c1f3707941e2290982a6069a4888461eea3f0a10fc5e6305e98e5f",
+  "harnessUnchangedDuringRun": true,
+  "sourceUnchangedDuringRun": true,
+  "priorFrozenEvidenceUnchanged": true,
+  "coverage": {
+    "readOnlyTransaction": true,
+    "allFivePurposes": true,
+    "exactIdentityProjection": true,
+    "actualCatalogFingerprints": true,
+    "publicColumnGrantDrift": true,
+    "roleAndTempDrift": true,
+    "proofAndStoreFacts": true,
+    "noDataOrOriginMutation": true,
+    "noAdvisoryOrRowLocks": true
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootVerification": false,
+    "rootSignaturesVerified": false,
+    "acceptedRootRecords": false,
+    "rootReadAdmissionAccepted": false,
+    "nativeAuthority": false,
+    "nativeTransport": false,
+    "actualWriterIntegration": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "realAccountDeleted": false,
+    "providerCalls": false
+  },
+  "interpretation": "14 NEW owned PostgreSQL read-facts cases only. Database facts/fingerprints and synthetic fixtures are not signed Root admission, acceptance, or authority; prior 18/11 and COP cases are not counted."
+}

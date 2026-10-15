@@ -33,6 +33,8 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: pevná expirace nad skutečným driver schématem](archive/2026-10-14_DRIVER_EXPIRY_REAL_SCHEMA.md)
 - [Archiv ověření: koordinované guarded driver SQL operace](archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md)
 - [Archiv ověření: opt-in aplikační napojení guarded driver operací](archive/2026-10-15_DRIVER_GUARDED_APPLICATION.md)
+- [Archiv ověření: privátní read-only stav měření](archive/2026-10-15_DRIVER_READ_ADMISSION_SQL.md)
+- [Archiv ověření: chráněný Linux reader měření](archive/2026-10-15_DRIVER_READ_ROOT.md)
 
 - [ADR 0036: fail-closed routing location errors](adr/0036_FAIL_CLOSED_ROUTING_LOCATION_ERRORS.md)
 
