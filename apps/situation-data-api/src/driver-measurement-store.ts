@@ -118,6 +118,10 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     finally {client.release();}
   }
   async aggregates(dataset:string,since:string,now:string):Promise<unknown[]> {
+    // A five-second facts admission is NOT a held generation/publication lease.
+    // Until the actual protected report reader is accepted, guarded mode must
+    // not expose restored or in-flight stale summaries through this raw query.
+    if(this.guarded)throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
     // Each attested contributor gets equal weight; a phone cannot dominate by oversampling.
     const r=await this.pool.query(`WITH per_contributor AS (
       SELECT i.dataset,i.edge_id,i.window_start,r.contributor_hash,count(*) AS intervals,
@@ -137,6 +141,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     return r.rows;
   }
   async quality(now:string):Promise<unknown> {
+    if(this.guarded)throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
     const r=await this.pool.query(`SELECT count(*)::integer AS "retainedBatchCount",
       max(received_at) AS "lastAcceptedAt",coalesce(sum((receipt->>'acceptedIntervalCount')::integer),0)::integer AS "acceptedIntervalCount"
       FROM driver_measurement_receipts WHERE expires_at>$1`,[now]);

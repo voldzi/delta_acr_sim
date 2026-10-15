@@ -4,7 +4,9 @@ import { loadConfig } from "./config.js";
 const observability = await initializeObservability({ serviceName: "csm-sim-situation-data-api" });
 const { createApp } = await import("./app.js");
 const config = await loadConfig();
-const { app, context } = await createApp(config);
+const { loadProductionDriverOwnerComposition } = await import("./driver-owner-composition.js");
+const ownerBinding = await loadProductionDriverOwnerComposition();
+const { app, context } = await createApp(config, ownerBinding);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {

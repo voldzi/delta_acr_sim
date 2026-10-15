@@ -320,6 +320,50 @@ nebyly tímto zdrojovým doplněním přepnuty.
 
 ## Stávající spojení COP a SIM
 
+### Zdrojové production composition měření — 15. 10. 2026
+
+`driver-owner-composition.ts` nyní pevně načítá čtyři COP moduly pod
+`/opt/cop-account-safety`: `driver-root-channel.mjs`,
+`driver-root-inspect.mjs`, `driver-root-context.mjs` a
+`driver-root-retention.mjs`. Kontroluje Root custody celé obyčejné closure
+před importem a přijme pouze pevné factories execution, read admission,
+request scope a maintenance consumer. Chybějící kterýkoli modul, factory
+nebo potřebná metoda vrací explicitní `guarded:{}`, nikdy legacy SQL.
+Nejde o env přepínač nebo důkaz aktuální skutečné Root autority.
+
+Skutečný SDA `index.ts` tuto kompozici předává do `createApp`. Middleware
+po body parseru předává do lokálního ALS scope pouze přesný POST mazání
+účtu nebo DELETE odvolání měření, se šesti poli method/path/auth/actor/
+actorSignature/body. Dávky GPS, preflight, GET/read ani jiné endpointy se
+do scope nepředávají. ALS není lease, podpis nebo drain. Odmítnutá lokální
+scope validace pokračuje bez kontextu, aby skutečný handler zachoval
+401/400; platná mutace bez chráněného kontextu vrací 503 před SQL.
+Ani chyba po předání callbacku nevyvolá `next()` podruhé.
+
+Standalone `driver-maintenance-cli.ts` používá
+`createProductionDriverMaintenanceControl()` se stejným loaderem,
+guarded porty a výslovným maintenance consumerem. Bez consumeru skončí
+unbound před konfigurací/pool init; není vlastní cutoff, alternativní SQL
+cesta ani CLI selektor. Init/run/close jsou skutečně awaitnuté a close
+proběhne i při selhání. Faktories jsou zdrojové vstupy; jejich produkční
+enrollment, immutable origin a nativní lifecycle se přijímají samostatně.
+
+Před cutoverem byla nalezena další mezera: raw SQL čtení `aggregates` a
+`quality` neprocházelo chráněnou publikační hranicí. **Guarded režim je
+nyní odmítne 503 ještě před SQL**, dokud není přijata skutečně držená
+generation/read/publication bariéra. Pětisekundový checkpoint admission
+ji nenahrazuje. Původní režim před koordinovaným cutoverem se nemění.
+OpenAPI fragment i závazný JSON výslovně dokumentují tuto nedostupnost.
+Stávající odvozené soubory/cache musí navíc projít Root report inventory;
+zavření endpointu samo nedokazuje odstranění dříve publikovaného souboru.
+
+[Nové aplikační ověření](../archive/2026-10-15_DRIVER_OWNER_COMPOSITION.md)
+má 611 PASS a 6 opt-in PostgreSQL SKIP, celkem 617. Zahrnuje 40 nových
+composition, custody, CLI, HTTP ordering a publication-denial unit případů;
+všechny nové porty/storage/filesystemy v těchto případech jsou syntetické.
+Není to skutečný Root transport, podpis, produkční restore nebo activation.
+Typecheck, build a OpenAPI validace prošly. Produkční služby nebyly změněny.
+
 Čtecí kontrola na `docker.home.cz` dne 14. 10. 2026 potvrdila níže uvedené
 kontejnery, port bindings, DNS aliasy a společné sítě. Neprováděla HTTP
 dotazy s tokenem, změny sítě nebo zkoušku mazání. Obě spojovací sítě mají
@@ -527,7 +571,7 @@ provisioningu. Ověřuje SQL mechaniku, nikoli skutečný Root podpis,
 delivery, restore, aplikační wiring nebo nasazení. Starší důkazy se
 nepřepisují ani nepřičítají. Závazný REST kontrakt zůstává nezměněný.
 
-### Přesná místa budoucího nativního zapojení
+### Přesná místa nativního zapojení
 
 #### Interní driver execution port a opt-in zapojení
 
@@ -577,7 +621,9 @@ operace, nikdy dosavadní read-only HTTP GET/status nebo preflight.
 Přítomnost interní constructor volby `guarded` zapíná pouze tuto zdrojovou
 větev; i prázdná nebo null hodnota ji ponechá nedostupnou, nikdy nevybere
 legacy SQL. Bez této volby zůstává původní režim před koordinovaným
-přechodem. Není přidaný environment přepínač ani produkční factory.
+přechodem. Není přidaný environment přepínač. Pevný zdrojový production
+loader výše nyní dodává pouze skutečné COP porty, nebo explicitně unbound
+guarded režim; není to přijaté produkční spojení.
 Volba guarded režimu se zachytí při konstrukci a pozdější změna caller
 options ji nesmí přepnout zpět na aplikační DML.
 
@@ -589,7 +635,7 @@ options ji nesmí přepnout zpět na aplikační DML.
 | `driver-account-erasure-store.ts` — `acknowledge` | Místo aplikačního UPDATE vyžaduje samostatný ACK origin a Root publication context. DB flag ani `no_report` příznak jej nevytváří. |
 | `driver-measurements.ts` — composition a account POST | Předává guarded volby přímo do skutečných store konstruktorů a kontext jen interním argumentem. Kombinace guarded voleb s předkonstruovaným store je odmítnutá. ACK nevzniká z `no_report` nebo void callbacku. HTTP actor, auth, parser, limity a 200/202 kontrakt zůstávají. |
 | `driver-retention-lifecycle.ts` | Přijímá volitelnou přesnou expire origin reference v interním kontextu; lokální consumer/časovač řídí pouze životní cyklus. Guarded cleanup bez reference selže. `close()` čeká na skutečné lokální promises, bez tvrzení native drain. |
-| `app.ts`, `driver-maintenance-cli.ts` | Umožňují výslovné interní předání stejných přijatých závislostí/control; výchozí produkční factory zůstává unbound. Žádný alternativní SQL pool nebo nový CLI selector nevzniká. |
+| `index.ts`, `app.ts`, `driver-maintenance-cli.ts` | Používají pevný owner loader a stejné guarded/maintenance závislosti. Při chybě zůstává explicitně unbound guarded větev; žádný legacy fallback, alternativní SQL pool nebo CLI selector nevzniká. |
 
 Driver metody dostávají operation reference pouze interním per-call
 argumentem. `DriverGuardedRequestContextPort.current(kind)` je předávací

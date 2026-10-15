@@ -286,3 +286,24 @@ Tyto výsledky se nepřičítají ke starším případům a neprokazují produk
 enrollment, produkční BYOK/key/chat paritu, nativní delivery nebo fyzický
 restore. Tyto společné gates zůstávají otevřené; chat ani produkce se
 nepřepínají.
+
+### Pevná Driver kompozice a publikační read gate
+
+Production entrypoint SDA a samostatný maintenance CLI nyní načítají
+stejné čtyři pevné COP factories z předem zkontrolovaného Root code tree.
+Absence kterékoli části znamená explicitní `guarded:{}`, nikoli návrat k
+legacy SQL. Lokální ALS předává pouze dvě typované mutace a neobsahuje
+GPS dávky; neoznačuje se za autoritu nebo held lease. Chyba scope nesmí
+předběhnout stávající autentizaci a validaci 401/400.
+
+Agregáty/quality dosud četly raw SQL bez této hranice. Guarded instance
+je nyní vrací jako 503 před SQL až do přijetí skutečné držené
+generation/publication bariéry; checkpoint admission není její náhradou.
+To zachovává fail-closed obnovu i při chybě klienta. Před cutoverem se
+legacy režim nemění a existující publikované soubory vyžadují vlastní
+Root inventory/drain, nikoli automatické přijetí `no_report`.
+
+Ověření 611 PASS / 6 opt-in PG SKIP zahrnuje 40 nových lokálních
+syntetických případů. Nenahrazuje skutečné COP factories/transport,
+enrollment, publikační lease nebo produkční obnovu a neopravňuje samo
+o sobě k deploy či aktivaci.

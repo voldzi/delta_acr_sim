@@ -218,7 +218,8 @@ export interface DriverMeasurementDependencies {
   accountErasureDerivedBarrier?: () => Promise<void>;
   accountErasureProtectedProof?: () => Promise<DriverErasureProtectedProof>;
   retentionConsumer?: DriverRetentionConsumer;
-  /** Source opt-in only. No env switch or production factory is supplied. */
+  /** Internal opt-in. Production selects only the fixed protected owner loader;
+   * there is no env switch or HTTP-selected factory/operation. */
   guarded?: DriverGuardedStoreOptions;
   guardedRequestContext?: DriverGuardedRequestContextPort;
 }

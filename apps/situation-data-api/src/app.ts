@@ -1,6 +1,6 @@
 import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
 import cors, { type CorsOptions } from "cors";
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type RequestHandler } from "express";
 import { SituationAggregationService } from "./aggregation.js";
 import { buildSituationMapCatalog } from "./catalog.js";
 import { ChmiWeatherStationDetailService } from "./chmi-weather-station-detail.js";
@@ -61,7 +61,7 @@ export interface SituationDataAppContext {
   driverMeasurements: DriverRetentionControl;
 }
 
-export async function createApp(config: SituationDataConfig, dependencies?: { driverMeasurements?: DriverMeasurementDependencies }): Promise<{ app: Express; context: SituationDataAppContext }> {
+export async function createApp(config: SituationDataConfig, dependencies?: { driverMeasurements?: DriverMeasurementDependencies; driverScopeMiddleware?: RequestHandler }): Promise<{ app: Express; context: SituationDataAppContext }> {
   const sources = createSituationDataSources(config);
   const sharedCache = await createSharedResponseCacheStore(config);
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
@@ -102,6 +102,10 @@ export async function createApp(config: SituationDataConfig, dependencies?: { dr
   app.use((req,res,next)=>req.path.startsWith("/api/v1/internal/driver-measurements/") ? next() : traceRequest(req,res,next));
   app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
+  // Scope only carries the two exact typed mutations in memory. The fixed
+  // production module excludes batch/GPS bodies and does not replace handler
+  // authentication, validation, Root admission or generation/maintenance leases.
+  if (dependencies?.driverScopeMiddleware) app.use(dependencies.driverScopeMiddleware);
 
   registerHealthRoutes(app, context);
   registerMetadataRoutes(app, context);
@@ -111,8 +115,8 @@ export async function createApp(config: SituationDataConfig, dependencies?: { dr
   registerValhallaTrafficRoutes(app, context);
   registerGeoRoutingRoutes(app, config, routing);
   context.driverMeasurements = registerDriverMeasurementRoutes(app, config, undefined, dependencies?.driverMeasurements);
-  // Actual maintenance/replay admission is not bound yet. This blocks only
-  // maintenance, BEFORE its init/SQL, while preserving the established APIs.
+  // A missing accepted Root maintenance consumer blocks before init/SQL. The
+  // other APIs remain independent; a guarded deployment has no legacy fallback.
   await context.driverMeasurements.start().catch(()=>undefined);
   registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);

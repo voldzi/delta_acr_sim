@@ -43,6 +43,16 @@ privátním 004/005 instalacím. Historické source/fixture výsledky nejsou akt
 
 ### Co musí být skutečně připravené před servisním oknem
 
+SDA má nově pevný owner loader pro execution/read/context/retention
+factories a stejné zapojení ve standalone úklidu. Místní sada prošla
+611 PASS / 6 opt-in PG SKIP; [rozsah důkazu](../archive/2026-10-15_DRIVER_OWNER_COMPOSITION.md)
+je pouze syntetická aplikační kompozice. Chybějící modul zůstává
+`guarded:{}` a neotevře legacy DML. Guarded `aggregates`/`quality` jsou
+zatím explicitně 503 před SQL, protože ještě chybí přijatá held
+generation/publication read bariéra. Ta a inventura dříve generovaných
+souborů/cache jsou další konkrétní podmínkou plné funkční akceptace;
+nepovažovat krátkodobý checkpoint podpis za náhradu.
+
 - DBA doloží pevnou DB `sim_driver_measurements`, původních sedm tabulek
   vlastněných `driver_measurements_migrator`, bez RLS, dvě původní receipt
   `ON DELETE CASCADE` vazby a původní SECURITY INVOKER receipt guard.
@@ -249,7 +259,8 @@ zdravé služby se do té doby zachovají.
 Stejné omezení platí pro nový Driver retention lifecycle. Konstruktor již
 nespouští časovač. API composition zahájí úklid jen po skutečném init a
 owner-bound maintenance consumeru; samostatný cron entrypoint nemá přímý
-SQL bypass. Výchozí consumer je unbound, takže nový SDA obraz nesmí nahradit
+SQL bypass. Pevný zdrojový loader je připravený, ale skutečný produkční
+consumer zůstává nepřijatý/unbound, takže nový SDA obraz nesmí nahradit
 stávající pouze s vypnutým intake. Jinak by ustal retenční úklid bez
 přijaté náhrady. Chybějící maintenance závislost neodstaví ostatní SIM/IZS
 API a neuděluje oprávnění příjmu nebo mazání účtu.
