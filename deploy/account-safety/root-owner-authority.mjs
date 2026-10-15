@@ -11,7 +11,7 @@ import {issueRootRecord,issueRootJws,storeRootRecord} from './root-record-issuer
 import {verifyRootJws} from './root-jws.mjs';
 import {nativeModule} from './root-native.mjs';
 import {connectionProfile,RootDriverAuthority} from './root-driver-runtime.mjs';
-import {parseDriverReadRequest,validateDriverReadFacts,matchDriverReadPolicy} from './read-admission-facts.mjs';
+import {parseDriverReadRequest,driverReadRequestDigest,validateDriverReadFacts,matchDriverReadPolicy} from './read-admission-facts.mjs';
 import {parseAiCheckpointRequest,validateAiCheckpointFacts,matchAiCheckpointPolicy} from './checkpoint-facts.mjs';
 import {verifyOwnerPolicyLineage} from './root-owner-policy-lineage.mjs';
 import {BASE,BINDING,LIVE,READ_BINDING,COST,DRIVER_DECISIONS,AI_DECISIONS,SPEC,need,copy,freeze,ref,stamp,peerValid,
@@ -504,45 +504,103 @@ export async function issueOwnerEphemeralRecord(ctx,kind,facts,recordId=randomUU
  * an exact mismatch after a first ERASE remains unavailable, without a time
  * tolerance or an invented replacement intent/accepted-at timestamp.
  */
-export async function readDriverMutationFacts(ctx,input) {
+function mutationFactsInput(ctx,input,scoped=false) {
   const entry=entryFor(ctx);
   need(entry.owner==='sim_driver_measurements'&&entry.purpose==='mutation','GUARD_OWNER_MUTATION_PURPOSE');
-  need(exact(input,['intentRef','purpose','operationHash','actorHash','requestHash','checkpointHash'])&&ref(input.intentRef)&&
+  need(exact(input,[...(scoped?['mutationScopeRef']:[]),'intentRef','purpose','operationHash','actorHash','requestHash','checkpointHash'])&&ref(input.intentRef)&&
+    (!scoped||ref(input.mutationScopeRef))&&
     ['preflight','status','receipt'].includes(input.purpose)&&['operationHash','actorHash','requestHash','checkpointHash'].every(k=>hex(input[k])),
   'GUARD_OWNER_MUTATION_FACTS_REQUEST');
   const value=freeze(copy(input)),request=parseDriverReadRequest({owner:entry.owner,scope:SPEC[entry.owner].scope,
     purpose:value.purpose,operationHash:value.operationHash,actorHash:value.actorHash});
+  return {entry,value,request};
+}
+function mutationIntent(entry,value) {
+  const record=signed(PRIVATE+'/owner-authority/'+value.intentRef.recordId+'.json',entry.state.keys,'cop-driver-mutation-intent',value.intentRef),p=record.payload;
+  need(exact(p,[...BASE,'guardStoreId','continuityEpoch','datasetBindingId','runtimeBindingId','peer','scopeDigest','actionKind','businessOperationId',
+    'operationHash','actorHash','requestHash','contributorCount','manifestRef','journalRef','originalAcceptedAt'])&&
+    ['guardStoreId','continuityEpoch','datasetBindingId','runtimeBindingId'].every(k=>uuid(p[k])&&p[k]===entry.state.binding[k])&&
+    peerValid(p.peer)&&canonical(p.peer)===canonical(entry.peer)&&hex(p.scopeDigest)&&p.actionKind==='erase'&&uuid(p.businessOperationId)&&
+    ['operationHash','actorHash','requestHash'].every(k=>p[k]===value[k])&&Number.isSafeInteger(p.contributorCount)&&p.contributorCount>=9&&p.contributorCount<=40&&
+    ref(p.manifestRef)&&ref(p.journalRef)&&stamp(p.originalAcceptedAt)&&Date.parse(p.originalAcceptedAt)<=Date.parse(p.issuedAt)&&
+    Date.parse(p.expiresAt)-Date.parse(p.issuedAt)<=5000&&value.checkpointHash===entry.state.rootPolicy.expectedCheckpointHash&&
+    Date.now()<Date.parse(entry.state.expiresAtUTC)&&Date.now()<Date.parse(p.expiresAt),'GUARD_OWNER_MUTATION_INTENT');
+  return record;
+}
+function mutationScope(entry,value,intent) {
+  const directory=PRIVATE+'/mutation-scopes';requireRootDirectory(directory,{secret:true});
+  need((lstatSync(directory).mode&0o777)===0o700&&statfsSync(directory).type===0x01021994,'GUARD_OWNER_MUTATION_SCOPE_CUSTODY');
+  const record=signed(directory+'/'+value.mutationScopeRef.recordId+'.json',entry.state.keys,'driver-mutation-scope',value.mutationScopeRef),p=record.payload;
+  need(exact(p,[...BASE,'scopeId','requestDigest','peer','owner','scope','actionKind','intentRef','authorityRef','guardStoreId','continuityEpoch',
+    'datasetBindingId','runtimeBindingId','sourceProofId','storeIncarnation','frontierSequence','frontierDigest'])&&uuid(p.scopeId)&&
+    p.owner===entry.owner&&p.scope===SPEC[entry.owner].scope&&p.actionKind==='erase'&&peerValid(p.peer)&&canonical(p.peer)===canonical(entry.peer)&&
+    p.requestDigest===intent.payload.scopeDigest&&ref(p.intentRef)&&canonical(p.intentRef)===canonical(value.intentRef)&&
+    ref(p.authorityRef)&&canonical(p.authorityRef)===canonical(entry.ctx.reference)&&
+    ['guardStoreId','continuityEpoch','datasetBindingId','runtimeBindingId','storeIncarnation'].every(k=>p[k]===entry.state.binding[k])&&
+    p.sourceProofId===entry.state.sourceProofId&&p.frontierSequence===entry.state.frontierSequence&&p.frontierDigest===entry.state.frontierDigest&&
+    Date.parse(p.expiresAt)-Date.parse(p.issuedAt)<=5000&&Date.parse(p.issuedAt)>=Date.parse(intent.payload.issuedAt)&&
+    Date.parse(p.expiresAt)<=Date.parse(intent.payload.expiresAt)&&Date.parse(p.expiresAt)<=Date.parse(entry.state.expiresAtUTC),
+  'GUARD_OWNER_MUTATION_SCOPE');
+  return record;
+}
+async function mutationFacts(entry,value,request) {
+  await inspectCurrent(entry);
+  const intent=mutationIntent(entry,value),scope=value.mutationScopeRef?mutationScope(entry,value,intent):undefined;
+  const expected={storeIncarnation:entry.state.binding.storeIncarnation,checkpointHash:entry.state.rootPolicy.expectedCheckpointHash,
+    schemaFingerprint:entry.state.rootPolicy.schemaFingerprint,privilegeFingerprint:entry.state.rootPolicy.privilegeFingerprint,
+    reportProtection:entry.state.rootPolicy.reportProtection};
+  const facts=await target(entry,async query=>{
+    await query('BEGIN READ ONLY');await query("SET LOCAL statement_timeout='3000ms'");await query("SET LOCAL lock_timeout='1000ms'");
+    const result=await query(SPEC[entry.owner].facts,[JSON.stringify(request)]);need(result.rows.length===1,'GUARD_OWNER_MUTATION_FACTS');
+    const checked=matchDriverReadPolicy(result.rows[0].value,request,expected,Date.now()),operation=checked.operation;
+    need(operation===null||operation.requestHash===value.requestHash&&operation.contributorCount===intent.payload.contributorCount&&
+      operation.createdAtUTC===intent.payload.originalAcceptedAt,'GUARD_OWNER_MUTATION_ORIGINAL_ANCHOR');
+    await query('COMMIT');return checked;
+  });
+  // Private inspections reuse the SAME metadata session and serial entry;
+  // public assertCurrent/read helpers would self-queue or reacquire 904214.
+  // The fixed target's actual COMMIT and END have completed before inspection.
+  await inspectCurrent(entry);
+  const currentIntent=mutationIntent(entry,value);
+  need(currentIntent.digest===intent.digest&&(!scope||mutationScope(entry,value,currentIntent).digest===scope.digest)&&
+    sha256(readRootFile(KEYRING))===entry.state.keysDigest,'GUARD_OWNER_MUTATION_INTENT_CHANGED');
+  return {facts:freeze(copy(matchDriverReadPolicy(facts,request,expected,Date.now()))),intent,scope,expected};
+}
+export async function readDriverMutationFacts(ctx,input) {
+  const {entry,value,request}=mutationFactsInput(ctx,input);
+  return serial(entry,async()=> (await mutationFacts(entry,value,request)).facts);
+}
+/** Dedicated scoped admission only: it cannot issue ordinary read permits,
+ * assert report inventory, close the borrowed lease, or renew any deadline. */
+export async function inspectDriverMutationAdmission(ctx,input) {
+  const {entry,value,request}=mutationFactsInput(ctx,input,true);
   return serial(entry,async()=>{
+    const {facts,intent,scope,expected}=await mutationFacts(entry,value,request);
+    const ceiling=Math.min(Date.parse(entry.state.expiresAtUTC),Date.parse(intent.payload.expiresAt),Date.parse(scope.payload.expiresAt),
+      Date.parse(facts.state.proofValidUntilUTC),Date.parse(facts.observedAtUTC)+5000,Date.now()+5000);
+    const lifetimeMs=ceiling-Date.now()-100;need(Number.isSafeInteger(lifetimeMs)&&lifetimeMs>0&&lifetimeMs<=5000,'GUARD_OWNER_MUTATION_ADMISSION_EXPIRED');
+    const fields={request,requestDigest:driverReadRequestDigest(request),guardStoreId:entry.state.binding.guardStoreId,continuityEpoch:entry.state.binding.continuityEpoch,
+      datasetBindingId:entry.state.binding.datasetBindingId,runtimeBindingId:entry.state.binding.runtimeBindingId,sourceProofId:entry.state.sourceProofId,
+      policyGeneration:entry.state.binding.policyGeneration,frontierSequence:entry.state.frontierSequence,frontierDigest:entry.state.frontierDigest,
+      storeIncarnation:entry.state.binding.storeIncarnation,checkpointHash:expected.checkpointHash,reportProtection:expected.reportProtection,
+      schemaFingerprint:facts.schema.fingerprint,privilegeFingerprint:facts.privileges.fingerprint,factsDigest:sha256(canonical(facts)),
+      operationDigest:facts.operation?.ledgerDigest??null,peer:entry.peer,clientRegistrationRef:entry.state.registrationRef,authorityRef:entry.ctx.reference,
+      mutationScopeRef:value.mutationScopeRef,intentRef:value.intentRef,requestHash:value.requestHash};
+    const issued=issueRootRecord('driver-mutation-read-admission',fields,{lifetimeMs,expectedKeyringDigest:entry.state.keysDigest});
+    const checked=verifyRootRecord(issued.bytes,entry.state.keys,'driver-mutation-read-admission'),p=checked.payload;
+    need(exact(p,[...BASE,...Object.keys(fields)])&&Object.keys(fields).every(k=>canonical(p[k])===canonical(fields[k]))&&
+      issued.digest===checked.digest&&Date.parse(p.expiresAt)<=ceiling&&Date.parse(p.expiresAt)-Date.parse(p.issuedAt)<=5000,
+    'GUARD_OWNER_MUTATION_ADMISSION_BINDING');
     await inspectCurrent(entry);
-    const readIntent=()=>{
-      const record=signed(PRIVATE+'/owner-authority/'+value.intentRef.recordId+'.json',entry.state.keys,'cop-driver-mutation-intent',value.intentRef),p=record.payload;
-      need(exact(p,[...BASE,'guardStoreId','continuityEpoch','datasetBindingId','runtimeBindingId','peer','scopeDigest','actionKind','businessOperationId',
-        'operationHash','actorHash','requestHash','contributorCount','manifestRef','journalRef','originalAcceptedAt'])&&
-        ['guardStoreId','continuityEpoch','datasetBindingId','runtimeBindingId'].every(k=>uuid(p[k])&&p[k]===entry.state.binding[k])&&
-        peerValid(p.peer)&&canonical(p.peer)===canonical(entry.peer)&&hex(p.scopeDigest)&&p.actionKind==='erase'&&uuid(p.businessOperationId)&&
-        ['operationHash','actorHash','requestHash'].every(k=>p[k]===value[k])&&Number.isSafeInteger(p.contributorCount)&&p.contributorCount>=9&&p.contributorCount<=40&&
-        ref(p.manifestRef)&&ref(p.journalRef)&&stamp(p.originalAcceptedAt)&&Date.parse(p.originalAcceptedAt)<=Date.parse(p.issuedAt)&&
-        Date.parse(p.expiresAt)-Date.parse(p.issuedAt)<=5000&&value.checkpointHash===entry.state.rootPolicy.expectedCheckpointHash&&
-        Date.now()<Date.parse(entry.state.expiresAtUTC)&&Date.now()<Date.parse(p.expiresAt),'GUARD_OWNER_MUTATION_INTENT');
-      return record;
-    };
-    const intent=readIntent(),expected={storeIncarnation:entry.state.binding.storeIncarnation,checkpointHash:entry.state.rootPolicy.expectedCheckpointHash,
-      schemaFingerprint:entry.state.rootPolicy.schemaFingerprint,privilegeFingerprint:entry.state.rootPolicy.privilegeFingerprint,
-      reportProtection:entry.state.rootPolicy.reportProtection};
-    const facts=await target(entry,async query=>{
-      await query('BEGIN READ ONLY');await query("SET LOCAL statement_timeout='3000ms'");await query("SET LOCAL lock_timeout='1000ms'");
-      const result=await query(SPEC[entry.owner].facts,[JSON.stringify(request)]);need(result.rows.length===1,'GUARD_OWNER_MUTATION_FACTS');
-      const checked=matchDriverReadPolicy(result.rows[0].value,request,expected,Date.now()),operation=checked.operation;
-      need(operation===null||operation.requestHash===value.requestHash&&operation.contributorCount===intent.payload.contributorCount&&
-        operation.createdAtUTC===intent.payload.originalAcceptedAt,'GUARD_OWNER_MUTATION_ORIGINAL_ANCHOR');
-      await query('COMMIT');return checked;
-    });
-    // Private inspection reuses this SAME metadata session and serial entry;
-    // a public assertCurrent/read helper here would self-queue or reacquire
-    // 904214. Actual target COMMIT and END have already completed above.
-    await inspectCurrent(entry);
-    need(readIntent().digest===intent.digest&&sha256(readRootFile(KEYRING))===entry.state.keysDigest,'GUARD_OWNER_MUTATION_INTENT_CHANGED');
-    return freeze(copy(matchDriverReadPolicy(facts,request,expected,Date.now())));
+    const currentIntent=mutationIntent(entry,value);
+    need(currentIntent.digest===intent.digest&&mutationScope(entry,value,currentIntent).digest===scope.digest&&
+      sha256(readRootFile(KEYRING))===entry.state.keysDigest,'GUARD_OWNER_MUTATION_INTENT_CHANGED');
+    matchDriverReadPolicy(facts,request,expected,Date.now());
+    verifyRootRecord(issued.bytes,entry.state.keys,'driver-mutation-read-admission');
+    need(Date.parse(p.expiresAt)<=ceiling&&Date.parse(p.expiresAt)>Date.now(),'GUARD_OWNER_MUTATION_ADMISSION_EXPIRED');
+    return freeze({admission:{contractVersion:'sim-driver-mutation-read-admission-v2',...request,checkpointHash:expected.checkpointHash,
+      reportProtection:expected.reportProtection,mutationScopeRef:value.mutationScopeRef,reference:{recordId:p.recordId,digest:checked.digest}},
+    record:issued.bytes.toString('utf8')});
   });
 }
 function exists(path) {try{lstatSync(path);return true;}catch(error){if(error?.code==='ENOENT')return false;throw error;}}

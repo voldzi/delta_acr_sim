@@ -1173,11 +1173,13 @@ oprava store sama o sobě neopravňuje zapnout produkční mazání.
 
 ## Privátní v2 vazba jednotlivého požadavku
 
-Stav k 15. 10. 2026: aplikační validace a předávání níže jsou ve zdroji;
-Root keeper, nový podepsaný scoped admission a nativní v2 přenos ještě
-nejsou společně akceptované ani aktivované. Nový Root podpis je samostatný
-bezpečnostní krok čekající na výslovné potvrzení. Pouhý kladný návrat
-testového portu nepředstavuje tento podpis. Veřejné HTTP/OpenAPI se nemění.
+Stav k 15. 10. 2026: aplikační validace, předávání níže a úzce omezený
+Root scoped admission signer jsou ve zdroji. Jeho implementaci a izolované
+testy uživatel výslovně schválil; souhlas nemění produkční oprávnění ani
+nezapíná mazání. Nový signer prošel samostatným izolovaným důkazem 9/9
+níže. Root keeper a úplný nativní v2 řetězec ještě nejsou společně
+akceptované nebo aktivované. Kladný návrat testového portu tento řetězec
+nenahrazuje. Veřejné HTTP/OpenAPI se nemění.
 
 `mutationScopeRef` je přesně `{recordId,digest}`: UUID a SHA-256, bez dalších
 klíčů, getterů či proxy. Dodává jej pouze chráněný interní port. Nejde o
@@ -1218,6 +1220,59 @@ metadata lease, nezavírá vypůjčený kontext a nevydává běžný read permi
 Přesné vstupní klíče jsou intentRef, purpose, operationHash, actorHash,
 requestHash a checkpointHash.
 
+### Omezený podpis kontrolního výsledku
+
+Privátní `inspectDriverMutationAdmission(ctx,input)` přidává k uvedeným šesti
+klíčům pouze `mutationScopeRef`. Účel je výhradně preflight/status/receipt.
+Vstup neobsahuje callback, SQL klienta, cestu, vlastní facts, výběr ownera
+ani veřejné user ID. Autentický kontext vybírá pevný Driver owner, profil,
+SQL, nezávislou politiku a její piny.
+
+Pevný soubor `/run/cop-account-safety/private/mutation-scopes/<recordId>.json`
+musí být aktuální podepsaný `driver-mutation-scope` v Root-only adresáři
+0700 na tmpfs. Podpis obsahuje přesně Root envelope a pole:
+
+```text
+scopeId requestDigest peer owner scope actionKind intentRef authorityRef
+guardStoreId continuityEpoch datasetBindingId runtimeBindingId sourceProofId
+storeIncarnation frontierSequence frontierDigest
+```
+
+`scopeId` je samostatné UUID korelace, nikoli origin nebo oprávnění.
+`requestDigest` zde odpovídá celému původnímu HTTP scope a musí být shodný
+s podepsaným intent `scopeDigest`. `authorityRef` musí odkazovat na právě
+držený skutečný kontext; peer, owner, store, source a frontier se také
+porovnají přesně. Scope nesmí přežít původní intent ani kontext.
+
+Výsledek má přesně `{admission,record}`. Admission používá výše uvedený
+typovaný v2 tvar. `record` je inline podepsaný Root záznam druhu
+`driver-mutation-read-admission`; kromě Root envelope obsahuje přesně:
+
+```text
+request requestDigest guardStoreId continuityEpoch datasetBindingId
+runtimeBindingId sourceProofId policyGeneration frontierSequence
+frontierDigest storeIncarnation checkpointHash reportProtection
+schemaFingerprint privilegeFingerprint factsDigest operationDigest peer
+clientRegistrationRef authorityRef mutationScopeRef intentRef requestHash
+```
+
+Tento `requestDigest` je na rozdíl od scope digestu hash přesného Driver read
+requestu. `operationDigest` může být null u chybějící operace pro preflight
+nebo status; receipt vyžaduje skutečný actor-bound ledger. `requestHash`
+musí odpovídat původnímu intentu a případnému ledgeru.
+
+Signer sám provede skutečné read-only SQL a ověří jeho známé COMMIT/END;
+nepřebírá kladná fakta od volajícího. Celá kontrola používá jedinou serial
+operaci a stejnou metadata lease. Výsledná expirace nepřekročí žádný
+z původních limitů kontextu, intentu, scope, target proofu, stáří facts
+ani pětisekundového podpisu. Rozhodují skutečné podepsané časy ověřené
+po podpisu a znovu před návratem, nikoli samotný vypočtený TTL.
+
+Podpis nevytváří durable permit, neobnovuje kontext a nepotvrzuje inventář
+reportů. Běžné `issueOwnerEphemeralRecord` zůstává omezené na ordinary
+read/checkpoint-read. Chybějící keeper, transport nebo vazba původního
+originu se nesmí nahradit tímto signed readbackem.
+
 U v1 intentu zůstává výslovný limit: čas preflightu před prvním zápisem není
 pozdější skutečný ledger `created_at`. Jejich nesoulad se odmítá bez časové
 tolerance. Trvalá podepsaná vazba na původní origin a skutečný čas ledgeru
@@ -1228,3 +1283,10 @@ ověřil facts-only helper nad skutečnými podpisy, cílovým SQL a drženou
 metadata session. Nevydal scoped admission a netestoval nový Root keeper,
 packet transport ani celý řetězec prvního smazání. Dřívější důkazy zůstávají
 připnuté ke svým původním zdrojům a nesčítají se s tímto během.
+
+Navazující [samostatný scoped signer důkaz 9/9](../archive/2026-10-15_DRIVER_MUTATION_ADMISSION.md)
+ověřil skutečný nový podpis, všechny uvedené vazby, expirace, běžné čtení
+blokované při pending i HOLD při ztrátě cílového spojení. Intent/scope jsou
+syntetické; keeper, nativní transport a pozitivní první ERASE zůstávají
+neověřené. Common neexportuje `assertDriverMutationIntent` a nevytváří
+durable A/B anchor; chybějící vazba musí odmítnout, ne použít náhradní port.

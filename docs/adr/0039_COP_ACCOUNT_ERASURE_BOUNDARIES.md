@@ -459,3 +459,11 @@ shared session ani globální read výjimku pro pending cleanup. Nový Root
 podpis, keeper, transport, vazba původního anchoru a společná akceptace
 zůstávají samostatnými kroky. Nejasný END nadále znamená HOLD; expirace
 ani HTTP close nepovoluje odemknutí nebo obnovu autority.
+
+Po výslovném souhlasu z 15. 10. 2026 může common vydat samostatný privátní
+`driver-mutation-read-admission` jen pod autentickou drženou mutation lease.
+Signer nepřebírá kladná facts od aplikace: načte pevné SQL004, ověří skutečné
+ukončení spojení, scope/intent/peer/owner/frontier i nezávislé piny a vydá
+inline potvrzení pod nejkratším původním deadlinem. Nedává mutation účelu
+právo podepisovat ordinary read permits nebo inventář reportů. Produkční
+instalace a aktivace nejsou tímto zdrojovým souhlasem povoleny.

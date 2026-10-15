@@ -584,8 +584,12 @@ nejsou uzavřené produkční gates.
 Privátní v2 scope validace a facts-only common zdroj nejsou instalační
 manifest ani důkaz dokončeného keeper/signature/transport řetězce.
 Nenasazovat je jako opravu celé cesty jen na základě syntetických portů.
-Nový scoped Root podpis čeká na samostatné výslovné potvrzení zdrojové
-změny; produkční příznaky a oprávnění se tímto krokem nemění.
+Úzký scoped Root podpis byl výslovně schválen pouze pro zdroj a izolované
+testy a je součástí kandidáta; produkční příznaky a oprávnění se nemění.
+Nový [izolovaný důkaz 9/9](../archive/2026-10-15_DRIVER_MUTATION_ADMISSION.md)
+ověřil skutečný signer nad pevnými SQL a zámky, ne celou produkční cestu.
+Přijetí tohoto helperu není přijetím keeperu, A/B origin vazby, nativního
+přenosu ani celého skutečného mazacího požadavku.
 Před společnou akceptací musí být doložen i původní business anchor vůči
 skutečnému ledger created_at, bez nové časové tolerance nebo přepočtu
 manifestu při retry. Přesný privátní kontrakt je v

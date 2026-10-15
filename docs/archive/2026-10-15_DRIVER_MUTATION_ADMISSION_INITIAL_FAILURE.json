@@ -1,0 +1,20 @@
+{
+  "status": "TEST_PACKAGING_FAILED_BEFORE_DOCKER",
+  "dateUtc": "2026-10-15",
+  "runnerSha256": "114df82d808c24d56a304b159cf0f43e1c4888eb93bad7b931b9b7177c757147",
+  "fixtureSha256": "47b515b2fc8f49eae072ca6af60fe7d3541216dfe65e69728e4027a76f588606",
+  "commonSha256": "09457545a9fa57ffd95507637efdde11c768a9561e42851b543b3f5406ee8f72",
+  "failure": "Frozen derivation site changed.",
+  "actualSplitLength": 3,
+  "expectedSplitLength": 2,
+  "site": "scripts/test-driver-mutation-admission.mts:39",
+  "cause": "The repo-declaration needle matched both the actual declaration and a quoted substitution inside the frozen source.",
+  "attemptsBeforeDocker": 2,
+  "secondAttemptRunnerSha256": "cb5443861f8f550c6015eae8e325753922dbe9dc8ee0c6b0f1ca04f2e54f6026",
+  "diagnosticCorrection": "The first repair narrowed the separate fixture declaration, but the failure remained at the earlier repo declaration.",
+  "repair": "Select the repo declaration together with the immediately following finalReceipt declaration; keep the exact single-match assertion.",
+  "containersCreated": false,
+  "databaseStarted": false,
+  "positiveReceiptWritten": false,
+  "productionChanged": false
+}

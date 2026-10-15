@@ -49,6 +49,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: source refresh SQL 8/8, Root 6/6 a ETA contributor vazba 6/6 — bez aktivace produkce](archive/2026-10-15_SOURCE_REFRESH_AND_ETA_BINDING.md)
 - [Archiv ověření: první ERASE přes preflight a povinný následný receipt — 25 syntetických regresí, bez aktivace produkce](archive/2026-10-15_FIRST_ERASE_PREFLIGHT.md)
 - [Archiv ověření: mutation facts pod drženou autoritou 8/8 a privátní v2 aplikační hranice, bez nového Root podpisu a produkční aktivace](archive/2026-10-15_DRIVER_MUTATION_SCOPE_BOUNDARY.md)
+- [Archiv ověření: omezený Root scoped podpis výsledku — 9/9 nových izolovaných skupin, bez keeperu a produkční aktivace](archive/2026-10-15_DRIVER_MUTATION_ADMISSION.md)
 - Zdrojová AI composition: [pevný Root checkpoint loader/consumer](../apps/ai-router-api/src/owner-checkpoint.ts)
   a [aplikační entrypoint](../apps/ai-router-api/src/index.ts). Její unit ověření
   není produkční Root enrollment nebo deploy; rozsah zdroje a otevřené gates
