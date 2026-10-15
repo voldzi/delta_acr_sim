@@ -90,6 +90,17 @@ scopes v následujícím odstavci zůstávají pouze alternativním zdrojovým
 kandidátem, ne další bezpečnostní podmínkou této DB cesty. Selhání jedné
 varianty nikdy automaticky nepřepíná na druhou.
 
+DBv2 přípravný installer nevytváří nový systém autority: přes existující
+DB explicitně přijme store/incarnation/checkpoint/generation a fingerprinty
+skutečných identity secrets/issuerů. Skutečná změna identity konfigurace
+odmítne start, nikoli zápis do prázdného namespace. Root-owned soukromý
+manifest pouze zaznamenává kontrolu správce; sám nedokazuje správnost
+identity. Omezené guard účty nemají členství ani změnu ready/enrollment.
+Instalační psql i produkční runtime TCP vyžadují ověřené TLS se správným
+hostname a explicitní již schválenou veřejnou CA; žádné přijetí nové CA
+podle prvního spojení, přenos privátního klíče či změna COP Unix transportu.
+Instalace nezapíná mazání ani nepotvrzuje bezpečnost externích reportů.
+
 Privátní Driver mutation scope je pouze interní korelace na skutečný Root
 kontext. SIM snapshotuje chráněný kontext před prvním await a vyžaduje
 stejný scope v pre/post admission a dispatchi. Scoped v2 se nesmí snížit
@@ -114,6 +125,7 @@ Missing/invalid timestamps or a corrupt applied-edge ledger fail closed. A
 provider/report outage removes live-speed authority without exposing raw data
 or replacing the traffic feed with a public browser integration. See
 [ADR 0028](../adr/0028_TRAFFIC_FRESHNESS_AND_EXPIRY_BOUNDARY.md).
+
 ## Consented Jízda measurements
 
 The dedicated COP bearer authenticates the service, not a claimed client user.

@@ -26,6 +26,23 @@ Aktivace, retence, revokace a rollback jsou v
 
 ### Ostatní proměnné
 
+DBv2 mazání má explicitní samostatnou konfiguraci v
+[runbooku 20](20_DATABASE_ERASURE_ACCEPTANCE.md):
+`SIM_ACCOUNT_ERASURE_AUTHORITY_MODE=database_v2`, guard store/config pin,
+`SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT` a
+`SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT`. Komponentové fingerprinty
+se počítají ze skutečného owner hash secretu, actor secretu a issueru;
+změna skutečného klíče bez nové přijaté konfigurace start odmítne.
+Nejsou to credentials ani důkaz pravdivosti identity review.
+`DRIVER_ERASURE_GUARD_DATABASE_URL` a `AI_ROUTER_ERASURE_GUARD_DATABASE_URL`
+jsou nové oddělené secrets; neexistuje fallback na COP guard účet.
+`SIM_ERASURE_PG_ROOT_CERT_FILE` ukazuje jen na schválenou veřejnou Root-owned
+CA. Produkční target/guard TCP používají verify-full a read-only CA mount;
+žádný `sslmode=disable`, automatické přijetí certifikátu či GSS fallback.
+Přípravný overlay drží oba account-erasure flags false a nemění ostatní
+provozní příznaky. Legacy full-stack deploy se po enrollmentu zastaví před
+přepsáním `.env`; další release musí zachovat koordinovaný image/overlay set.
+
 - `SIM_SOURCE_SYSTEM_ID`
 - `SIM_ADAPTER_VERSION`
 - `SIM_PUBLISHER_MODE`

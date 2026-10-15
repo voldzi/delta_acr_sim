@@ -1,0 +1,24 @@
+{
+  "contractVersion": "sim-erasure-production-enrollment-v2",
+  "guardStoreId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+  "configurationFingerprint": "COPY_FROM_THE_READ_ONLY_CHECK",
+  "driverIdentityFingerprint": "COPY_FROM_THE_READ_ONLY_CHECK",
+  "routerIdentityFingerprint": "COPY_FROM_THE_READ_ONLY_CHECK",
+  "identityReviewed": true,
+  "identityReviewEvidenceDigest": "SHA256_OF_THE_ACTUAL_REVIEWED_IDENTITY_EVIDENCE",
+  "postgresCaSha256": "SHA256_OF_THE_APPROVED_PUBLIC_CA_PEM_BYTES",
+  "retentionPolicy": "driver-7-days-v1",
+  "costPolicy": "aggregate-costs-current-month-v1",
+  "driver": {
+    "storeId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+    "incarnationId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+    "checkpointId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+    "restoreGeneration": 1
+  },
+  "router": {
+    "storeId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+    "incarnationId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+    "checkpointId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
+    "restoreGeneration": 1
+  }
+}

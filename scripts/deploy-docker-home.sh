@@ -3,6 +3,13 @@ set -euo pipefail
 
 cd /srv/sim
 
+# SIM_DATABASE_V2_DEPLOY_GUARD: this legacy script rewrites .env and would lose
+# the independent continuity enrollment. Use the coordinated pinned-image path.
+if [ -f .env ] && grep -Eq '^SIM_ACCOUNT_ERASURE_AUTHORITY_MODE="?database_v2"?$' .env; then
+  printf 'DBv2 is enrolled. Refusing legacy full-stack/environment rewrite; use runbook 20.\n' >&2
+  exit 1
+fi
+
 if [ ! -d .git ]; then
   : "${SIM_GIT_REPOSITORY_URL:?Set SIM_GIT_REPOSITORY_URL to the SIM repository clone URL.}"
   git clone "$SIM_GIT_REPOSITORY_URL" .

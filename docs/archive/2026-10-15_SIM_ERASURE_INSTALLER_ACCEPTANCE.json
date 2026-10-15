@@ -1,0 +1,72 @@
+{
+  "evidenceKind": "curated-summary-of-observed-tool-results-not-a-runtime-authorization",
+  "date": "2026-10-15",
+  "baseCommit": "4ea1e40bb036948e4fc9f3300e9bf9b57182fc62",
+  "sourceSha256": {
+    "scripts/provision-sim-erasure-production.mjs": "e5e3bcbe27a9f28893d80f2157b8207a19d0e7708dd35a19ee07c0a484ec144e",
+    "scripts/provision-sim-erasure-production.sh": "e0734cba1d7e562d489e0d22c1dd151e1edade46b8c704f83840dc6ab7fbf8cf",
+    "scripts/test-sim-erasure-installer.mts": "774064002d073e4af3807976c2dcf7785f375ac0087cc62b736787f609e195bd",
+    "deploy/account-safety/database-erasure-guard.mjs": "cda21697798828011f75a1bcacef6b93a825345f548d9b90cd1027967bd4ed12",
+    "deploy/account-safety/database-v2.prepare.compose.yml": "def5b1f12fb69d0e83161b34020884fb6ed008d02f763766cf8dd255d5f2f918",
+    "deploy/account-safety/production-enrollment.example.json": "35a1395aa8895a672926a61e060f897a45210bea2b93bcb9791a524a8a8af1a5"
+  },
+  "installer": {
+    "command": "node --import ./apps/ai-router-api/node_modules/tsx/dist/loader.mjs scripts/test-sim-erasure-installer.mts --run",
+    "scope": "actual_isolated_postgresql_installer",
+    "passed": 13,
+    "failed": 0,
+    "checks": [
+      "read-only preflight and actual identity fingerprints",
+      "wrong reviewed configuration rejected before changes",
+      "historical cross-owner ETA blocks without repairing data",
+      "actual migrations and explicit enrollment with erasure flags false",
+      "same manifest retry reuses passwords and stored credentials",
+      "quarantine cannot be reenrolled or rewrite environment",
+      "existing cop_guard sentinel and offline role isolation preserved",
+      "actual hash secret or issuer changes fail identity verification",
+      "legacy deployment guard preserves local script edits",
+      "production psql TLS mode cannot inherit downgrade",
+      "production runtime rejects TLS downgrade, wrong host, duplicate parameters and global bypass",
+      "Compose preparation preserves other services, networks, ports and existing mounts",
+      "actual production factories accept enrolled databases and reject changed keys before serving"
+    ],
+    "productionChanged": false,
+    "servicesStarted": false,
+    "providerCalls": 0,
+    "ownedFixtureStoppedAndRemoved": true,
+    "localPgTransport": "verified-owned-loopback-fixture-without-TLS",
+    "rootCliAndProductionDockerStopChecksExecuted": false
+  },
+  "repositoryChecks": {
+    "typecheck": "passed",
+    "test": {"passed": 873, "skippedOptionalPostgresTests": 6},
+    "build": "passed",
+    "compiledDatabaseFactoryImports": "passed",
+    "skeleton": "passed",
+    "openapi": {"passed": true, "paths": 151, "schemas": 274, "contractChanged": false},
+    "shellAndNodeSyntax": "passed",
+    "gitDiffWhitespace": "passed"
+  },
+  "independentProductionTlsHandshake": {
+    "transport": "PostgreSQL SSLRequest then TLS, no authentication or SQL",
+    "host": "haproxy.home.cz",
+    "port": 5000,
+    "publicCaSource": "existing COP API read-only mount /etc/vcode-cop-pgbouncer/postgres-ca.crt",
+    "publicCaPemSha256": "7a3f9d9373cd63361148230e6c2804c6fb76dc204e18d5039aad7c7838d7a14a",
+    "authorized": true,
+    "protocol": "TLSv1.3",
+    "peerCommonName": "haproxy.home.cz",
+    "trustOnFirstUse": false,
+    "privateKeyAccessed": false,
+    "productionDatabaseLoginVerified": false
+  },
+  "notProvenOrActivated": [
+    "production provisioning, grants, enrollment or new service images",
+    "external report exporter publication protection",
+    "physical backup restore and guard frontier recovery",
+    "new revision whole COP controller acceptance",
+    "all COP account owner deletion completion",
+    "deletion of a real account"
+  ],
+  "previousJointHttpEvidence": "2026-10-15_DATABASE_ERASURE_HTTP_ACCEPTANCE.json remains pinned to its original source and is not retargeted"
+}

@@ -8,6 +8,27 @@ const need=(v)=>{if(!v)throw new Error('SIM_DATABASE_SAFETY_UNAVAILABLE');};
 const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
 const equal=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
 const BINDING='guard_store_id,store_id,incarnation_id,configuration_fingerprint,checkpoint_id,restore_generation::text';
+export function runtimeIdentityFingerprint(owner,hashSecret,actorSecret,issuer) {
+ need(['sim_measurements','ai_router'].includes(owner)&&typeof hashSecret==='string'&&hashSecret.length>=24&&typeof actorSecret==='string'&&actorSecret.length>=32&&typeof issuer==='string'&&issuer.startsWith('https://'));
+ return createHash('sha256').update(JSON.stringify({contractVersion:'sim-erasure-runtime-identity-v2',owner,hashSecret,actorSecret,issuer})).digest('hex');
+}
+export function configurationFingerprint(driver,router) {
+ need(HEX.test(driver)&&HEX.test(router));return createHash('sha256').update(JSON.stringify({contractVersion:'sim-erasure-configuration-v2',driver,router})).digest('hex');
+}
+export function verifyRuntimeIdentity(owner,hashSecret,actorSecret,issuer,env=process.env) {
+ const driver=env.SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT,router=env.SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT;
+ need(configurationFingerprint(driver,router)===env.SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT&&runtimeIdentityFingerprint(owner,hashSecret,actorSecret,issuer)===(owner==='sim_measurements'?driver:router));
+}
+/** Production uses only the reviewed, hostname-verified HAProxy TCP route.
+ * Isolated loopback fixtures do not run with NODE_ENV=production. */
+export function verifyProductionDatabaseTransport(connectionString,database,env=process.env) {
+ if(env.NODE_ENV!=='production')return;
+ let u;try{u=new URL(connectionString);}catch{throw new Error('SIM_DATABASE_SAFETY_UNAVAILABLE');}
+ need(['postgresql:','postgres:'].includes(u.protocol)&&u.hostname==='haproxy.home.cz'&&u.port==='5000'&&u.pathname==='/'+database&&
+  u.searchParams.getAll('sslmode').length===1&&u.searchParams.get('sslmode')==='verify-full'&&
+  u.searchParams.getAll('sslrootcert').length===1&&u.searchParams.get('sslrootcert')==='/etc/csm-sim/postgresql-ca.pem'&&
+  [...u.searchParams.keys()].every(k=>['sslmode','sslrootcert'].includes(k))&&env.NODE_TLS_REJECT_UNAUTHORIZED!=='0');
+}
 export class DatabaseErasureGuard {
  constructor({guardPool,targetPool,owner,guardStoreId,configurationFingerprint,driverHashSecret}) {
   need(['sim_measurements','ai_router'].includes(owner)&&UUID.test(guardStoreId)&&HEX.test(configurationFingerprint));

@@ -60,3 +60,17 @@ carry-forward denních/měsíčních součtů bez dvojího účtování, nejist�
 provider rezervace a zachování SIM/IZS. Žádný skutečný účet ani OpenAI
 není testovacím cílem. Produkční obnova PBS/WAL, nezávislá autoritativní
 fence a společná COP akceptace jsou zvláštní gates, ne jednotkové testy.
+
+DBv2 instalační test `scripts/test-sim-erasure-installer.mts --run` používá
+stejnou implementaci jako produkční offline installer proti vlastněnému
+loopback PostgreSQL18 clusteru. Ověřuje skutečné migrace, SCRAM přihlášení
+omezených účtů, zachování cizího guard schématu, opakování bez rotace,
+quarantine/ETA mismatch, false flags, skutečné produkční loadery a odmítnutí
+změněných identity secrets. Jednotkové části navíc ověřují odmítnutí TLS
+downgrade/hosta/duplicitních parametrů a zachování legacy deploy úprav.
+Loopback fixture používá nešifrované izolované spojení; není vydávána za
+produkční TLS login. Credential-free TLS handshake s již schválenou CA je
+samostatný důkaz v [runbooku 20](../runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md).
+Root CLI permissions, skutečné zastavení Docker writerů a fyzická obnova
+se ověřují až ve společném instalačním kroku. Předchozí archivovaný společný
+HTTP report se nepřepíše a nepovažuje se automaticky za důkaz nové revize.

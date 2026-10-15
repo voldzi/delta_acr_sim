@@ -1,5 +1,9 @@
 interface PoolLike {query(text:string,values?:any[]):Promise<any>;connect():Promise<any>}
 interface DriverInput {operationId:string;actorHash:string;requestHash:string;contributors:readonly {contributorHash:string}[]}
+export function runtimeIdentityFingerprint(owner:"sim_measurements"|"ai_router",hashSecret:string,actorSecret:string,issuer:string):string;
+export function configurationFingerprint(driver:string,router:string):string;
+export function verifyProductionDatabaseTransport(connectionString:string|undefined,database:string,env?:NodeJS.ProcessEnv):void;
+export function verifyRuntimeIdentity(owner:"sim_measurements"|"ai_router",hashSecret:string|undefined,actorSecret:string|undefined,issuer:string|undefined,env?:NodeJS.ProcessEnv):void;
 export class DatabaseErasureGuard {
  constructor(options:{guardPool:PoolLike;targetPool:PoolLike;owner:"sim_measurements"|"ai_router";guardStoreId:string;configurationFingerprint:string;driverHashSecret?:string});
  init():Promise<void>;

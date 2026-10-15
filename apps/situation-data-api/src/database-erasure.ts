@@ -1,5 +1,5 @@
 import {Pool} from "pg";
-import {DatabaseErasureGuard} from "../../../deploy/account-safety/database-erasure-guard.mjs";
+import {DatabaseErasureGuard,verifyRuntimeIdentity,verifyProductionDatabaseTransport} from "../../../deploy/account-safety/database-erasure-guard.mjs";
 import type {DriverMeasurementDependencies} from "./driver-measurements.js";
 import type {DriverRetentionConsumer} from "./driver-retention-lifecycle.js";
 
@@ -10,6 +10,9 @@ export async function loadDatabaseDriverOwnerComposition():Promise<{driverMeasur
  for(const pool of [guardPool,targetPool])pool.on("error",()=>{});
  try {
   if(!/^postgres(?:ql)?:\/\//.test(process.env.SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL??"")||!/^postgres(?:ql)?:\/\//.test(process.env.DRIVER_MEASUREMENTS_DATABASE_URL??"")||!process.env.DRIVER_MEASUREMENTS_HASH_SECRET||process.env.DRIVER_MEASUREMENTS_HASH_SECRET.length<32)throw new Error("SIM_DATABASE_SAFETY_CONFIGURATION_REQUIRED");
+  verifyRuntimeIdentity("sim_measurements",process.env.DRIVER_MEASUREMENTS_HASH_SECRET,process.env.DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET,process.env.DRIVER_ACCOUNT_ERASURE_ISSUER);
+  verifyProductionDatabaseTransport(process.env.SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL,"cop_account_safety_guard");
+  verifyProductionDatabaseTransport(process.env.DRIVER_MEASUREMENTS_DATABASE_URL,"sim_driver_measurements");
   const safety=new DatabaseErasureGuard({guardPool,targetPool,owner:"sim_measurements",guardStoreId:process.env.SIM_ACCOUNT_ERASURE_GUARD_STORE_ID??"",configurationFingerprint:process.env.SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT??"",driverHashSecret:process.env.DRIVER_MEASUREMENTS_HASH_SECRET});
   await safety.init();
   return {driverMeasurements:{databaseSafety:safety,accountErasureProtectedProof:()=>safety.driverProof(),accountErasureDerivedBarrier:()=>safety.publicationBarrier(),publication:safety,

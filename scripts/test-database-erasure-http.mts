@@ -6,7 +6,7 @@ import {createRequire} from "node:module";
 import {readFile,writeFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
-import {DatabaseErasureGuard} from "../deploy/account-safety/database-erasure-guard.mjs";
+import {DatabaseErasureGuard,configurationFingerprint,runtimeIdentityFingerprint} from "../deploy/account-safety/database-erasure-guard.mjs";
 import {loadDatabaseDriverOwnerComposition} from "../apps/situation-data-api/src/database-erasure.js";
 import {registerDriverMeasurementRoutes} from "../apps/situation-data-api/src/driver-measurements.js";
 import {driverErasureRequiredDays} from "../apps/situation-data-api/src/driver-account-erasure.js";
@@ -27,9 +27,11 @@ const owned=(await admin.query("SELECT current_setting('cluster_name') AS name,c
 assert.equal(owned.name,"cop_erasure_owned_test");assert.match(owned.directory,/^\/private\/tmp\/cop-erasure-owned-[0-9]+\/pg$/);assert.match(owned.version,/PostgreSQL 18\./);
 const guardAdmin=pool("cop_account_safety_guard","cop_safety_test_admin");
 const source=async(path:string)=>readFile(resolve(root,path),"utf8");
-let guardId=randomUUID();const fingerprint=createHash("sha256").update("synthetic-sim-database-safety-http-v2").digest("hex");
+let guardId=randomUUID();
 const secret="synthetic-driver-HMAC-with-32-characters-minimum",actorSecret="synthetic-actor-HMAC-with-32-characters-minimum",copToken="synthetic-service-token-with-32-characters-minimum";
 const issuer="https://issuer.example.invalid/realms/synthetic";
+const driverFingerprint=runtimeIdentityFingerprint('sim_measurements',secret,actorSecret,issuer),routerFingerprint=runtimeIdentityFingerprint('ai_router',secret,actorSecret,issuer);
+const fingerprint=configurationFingerprint(driverFingerprint,routerFingerprint);
 const hash=(text:string)=>createHmac("sha256",secret).update(text).digest("hex");
 const urls=(db:string,user:string)=>`postgresql://${user}@127.0.0.1:${port}/${db}`;
 const servers:any[]=[],closers:Array<()=>Promise<unknown>>=[];
@@ -78,7 +80,8 @@ try {
   for(const [name,owner] of [["sim_measurements",dOwner],["ai_router",aOwner]] as const){const b=(await owner.query("SELECT * FROM sim_erasure_dataset_binding WHERE singleton")).rows[0];assert.equal(b.guard_store_id,guardId);assert.equal(b.configuration_fingerprint,fingerprint);checkpoints[name]=b.checkpoint_id;}
   await seed(dOwner,hash("cop:"+dayIds.at(-1)!.contributorIdDay));
  }
- Object.assign(process.env,{SIM_ACCOUNT_ERASURE_AUTHORITY_MODE:"database_v2",SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL:urls("cop_account_safety_guard","sim_measurements_guard_runtime"),SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:guardId,SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT:fingerprint,
+ Object.assign(process.env,{NODE_ENV:"test",SIM_ACCOUNT_ERASURE_AUTHORITY_MODE:"database_v2",SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL:urls("cop_account_safety_guard","sim_measurements_guard_runtime"),SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:guardId,SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT:fingerprint,
+  SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT:driverFingerprint,SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT:routerFingerprint,AI_ROUTER_USER_HASH_SECRET:secret,AI_ROUTER_COP_ACTOR_SECRET:actorSecret,AI_ROUTER_ACCOUNT_ERASURE_ISSUER:issuer,
   DRIVER_MEASUREMENTS_DATABASE_URL:urls("sim_driver_measurements","driver_measurements_runtime"),DRIVER_MEASUREMENTS_HASH_SECRET:secret,DRIVER_MEASUREMENTS_COP_TOKEN:copToken,DRIVER_MEASUREMENTS_ENABLED:"true",DRIVER_ACCOUNT_ERASURE_ENABLED:"true",DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET:actorSecret,DRIVER_ACCOUNT_ERASURE_ISSUER:issuer,DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT:checkpoints.sim_measurements});
  const dBinding=await loadDatabaseDriverOwnerComposition();closers.push(dBinding.close);
  const dApp=express();dApp.use(express.json());const retention=registerDriverMeasurementRoutes(dApp,{} as any,undefined,dBinding.driverMeasurements);closers.push(()=>retention.close());

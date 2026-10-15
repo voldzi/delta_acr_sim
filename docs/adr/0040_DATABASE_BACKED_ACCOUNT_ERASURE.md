@@ -41,10 +41,20 @@ Nezávislá DB `cop_account_safety_guard` obsahuje oddělené schéma
 SIM vlastní pouze `store`, `owner_binding`, `tombstone`. Žádná legacy guard
 tabulka se nemění. Enrollment je výslovný, nikoli odvozený z prázdné DB.
 
-Každá cílová DB obsahuje read-only `sim_erasure_dataset_binding` z migrace
-011. Aplikace porovná skutečně načtený guard store, config fingerprint,
+Každá cílová DB obsahuje read-only `sim_erasure_dataset_binding` z migrace 011. Aplikace porovná skutečně načtený guard store, config fingerprint,
 store/incarnation, restore generation a checkpoint s nezávislou registrací.
 Chybějící, cizí, quarantined nebo změněná vazba znamená odmítnutí.
+
+Instalaci provede jeden koordinovaný offline administrační skript nad
+stávající guard DB, nikoli další Root runtime. Komponentový fingerprint
+zahrnuje skutečný hash secret, actor secret a issuer každé služby; společný
+fingerprint váže oba. Loadery přepočítají vlastní komponentu při startu,
+aby chybná rotace klíče nemohla cílit na zdánlivě prázdný namespace.
+Privátní výslovně přijatý manifest sám není důkaz pravdivosti identity.
+Příprava ponechá oba erasure flags vypnuté a report inventory nepotvrzený.
+Target i guard TCP přes HAProxy vyžadují ověřený hostname/certifikát se
+stávající schválenou veřejnou CA; COPův chráněný Unix socket se nemění.
+Legacy deploy nesmí zahodit enrollment přepsáním `.env`.
 
 Guard runtime má jen vlastní řádky, SELECT/INSERT tombstones a UPDATE
 jediného `replay_sequence`. Nemůže měnit přijaté vazby nebo ready stav,

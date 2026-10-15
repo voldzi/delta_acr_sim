@@ -1,0 +1,48 @@
+# Preparation only: exact reviewed images, unchanged networks/ports/mounts.
+# Append to each service's EXISTING production Compose file set.
+services:
+  situation-data-api:
+    image: ${SIM_ERASURE_DRIVER_IMAGE:?Set the reviewed immutable Driver image}
+    pull_policy: never
+    volumes:
+      - type: bind
+        source: ${SIM_ERASURE_PG_ROOT_CERT_FILE:?Missing reviewed PostgreSQL CA}
+        target: /etc/csm-sim/postgresql-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      DRIVER_MEASUREMENTS_DATABASE_URL: ${DRIVER_MEASUREMENTS_DATABASE_URL:?Missing verified Driver database credential}
+      SIM_ACCOUNT_ERASURE_AUTHORITY_MODE: database_v2
+      SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL: ${DRIVER_ERASURE_GUARD_DATABASE_URL:?Missing Driver guard credential}
+      SIM_ACCOUNT_ERASURE_GUARD_STORE_ID: ${SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:?Missing guard enrollment}
+      SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT: ${SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT:?Missing config binding}
+      SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT: ${SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT:?Missing Driver identity binding}
+      SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT: ${SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT:?Missing Router identity binding}
+      DRIVER_ACCOUNT_ERASURE_ENABLED: "false"
+      DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET: ${DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET:?Missing coordinated actor credential}
+      DRIVER_ACCOUNT_ERASURE_ISSUER: ${DRIVER_ACCOUNT_ERASURE_ISSUER:?Missing reviewed issuer}
+      DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT: ${DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT:?Missing accepted checkpoint}
+  ai-router-api:
+    image: ${SIM_ERASURE_ROUTER_IMAGE:?Set the reviewed immutable Router image}
+    pull_policy: never
+    volumes:
+      - type: bind
+        source: ${SIM_ERASURE_PG_ROOT_CERT_FILE:?Missing reviewed PostgreSQL CA}
+        target: /etc/csm-sim/postgresql-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      AI_ROUTER_DATABASE_URL: ${AI_ROUTER_DATABASE_URL:?Missing verified Router database credential}
+      SIM_ACCOUNT_ERASURE_AUTHORITY_MODE: database_v2
+      SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL: ${AI_ROUTER_ERASURE_GUARD_DATABASE_URL:?Missing Router guard credential}
+      SIM_ACCOUNT_ERASURE_GUARD_STORE_ID: ${SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:?Missing guard enrollment}
+      SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT: ${SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT:?Missing config binding}
+      SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT: ${SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT:?Missing Driver identity binding}
+      SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT: ${SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT:?Missing Router identity binding}
+      AI_ROUTER_ACCOUNT_ERASURE_ENABLED: "false"
+      AI_ROUTER_ACCOUNT_ERASURE_REPLAY_READY: "true"
+      AI_ROUTER_ACCOUNT_ERASURE_COST_POLICY: aggregate-costs-current-month-v1
+      AI_ROUTER_ACCOUNT_ERASURE_ISSUER: ${AI_ROUTER_ACCOUNT_ERASURE_ISSUER:?Missing reviewed issuer}
+      AI_ROUTER_COP_ACTOR_SECRET: ${AI_ROUTER_COP_ACTOR_SECRET:?Missing coordinated actor credential}
