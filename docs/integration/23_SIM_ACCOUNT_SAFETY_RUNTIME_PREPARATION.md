@@ -222,6 +222,119 @@ nepřepisují ani nepřičítají. Závazný REST kontrakt zůstává nezměněn
 
 ### Přesná místa budoucího nativního zapojení
 
+#### Minimální interní driver execution port
+
+Konkrétní typy jsou v
+`apps/situation-data-api/src/driver-guarded-execution-port.ts`.
+Soubor obsahuje pouze typové deklarace, nikoli runtime factory, transport,
+registraci nebo kladný verifier. `DriverGuardedExecutionPort` má dvě metody:
+
+```ts
+execute(request: DriverGuardedExecutionRequest): Promise<DriverGuardedExecutionResult>;
+probe(operation: DriverGuardedOperationRef): Promise<DriverGuardedExecutionResult>;
+```
+
+Request spojuje Root-delivered `{operationId, kind}` s přesně typovaným
+transient tělem odpovídajícího kind. Obsahuje jen již definovaná privátní
+SQL těla. Typ není důkazem přijetí: skutečný adaptér musí ověřit podpisy,
+pevný owner/store, registrovaný body/schema digest, aktuální frontier a
+vazbu ke konkrétnímu autentizovanému požadavku. Reference nesmí přijít z
+nového HTTP pole/hlavičky, vzniknout náhodným UUID v aplikaci ani být zvolena
+podle samotného neprůhledného ID klienta. Cesta tohoto skutečného delivery
+a jeho enrollment jsou vstup navazujícího wiring; nejsou implementované
+typovou deklarací.
+
+Výsledek rozlišuje `pending`, `origin-commit-known` a
+`origin-no-effects-closed`. Terminal musí nést ověřené `sqlOutcomeRef` a
+`effectQuiescenceRef` ze stejného Root originu a aktuálního přijatého
+bindingu. Vnitřní SQL JSON, timeout nebo odpověď procesu bez těchto ověření
+nesmí vytvořit terminal. Wire pending nyní nemusí obsahovat operation ID;
+adaptér zachová jeho místní korelaci z původního požadavku, ale nevydává ji
+za podepsaný Root údaj.
+
+Root `operation.operationId` je UUID původního execution originu, nikoli
+veřejné `DriverErasureInput.operationId` ani jeho HMAC `operationHash`.
+ERASE a ACK mají různé Root origin UUID, ale stejné base business vazby.
+Adaptér musí toto rozlišení zachovat při korelaci i po restartu.
+
+Po ztracené odpovědi nebo restartu pokračuje pouze `probe` stejného originu.
+Nový UUID, permit, cutoff nebo nový DELETE nejsou opravou ztraceného
+potvrzení. `origin-no-effects-closed` uzavírá efekt přesného originu;
+neprokazuje SQL rollback, owner-wide drain ani úspěšné smazání účtu.
+`probe` navíc není čtecí metoda: SQL `resolve_or_seal` může trvale uzavřít
+neprovedený origin. Smí jej vyvolat jen chráněný resolution tok původní
+operace, nikdy dosavadní read-only HTTP GET/status nebo preflight.
+
+| Místo ve zdroji | Minimální koordinovaná náhrada |
+| --- | --- |
+| `driver-measurement-store.ts` — `cleanup` | Odstranit oba app-pool DELETE i jejich BEGIN/COMMIT. S Root-delivered expire originem volat pouze `execute` a tělo `{contractVersion}`. Cutoff je pouze neměnný z registrovaného originu, ne z nového app clocku. |
+| `driver-measurement-store.ts` — `revoke` | Odstranit app upsert revokace, DELETE a transakci. Volat `execute` s kind revoke a stávajícím serverovým contributor HMAC. Lock/upsert/cascade/marker vlastní SQL 003 a původní Root transakce. |
+| `driver-account-erasure-store.ts` — `erase` | Nahradit celou mutující transakci včetně INSERT fences/ledger a UPDATE součtů jedním execute kind erase. Zachovat serverovou přípravu operation/actor/request hash a manifestu. Root dodá registrovanou operaci a checkpoint binding. |
+| `driver-account-erasure-store.ts` — `acknowledge` | Odstranit app-pool UPDATE. Samostatný Root ACK origin nese stejné base tělo a Root publication context; aktuální DB flag ani `no_report` příznak kontext nevytváří. |
+| `driver-measurements.ts` — composition a account POST | Předat port přímo do obou skutečných store konstruktorů. Přestat spouštět ACK jen podle `reportProtection === no_report` nebo zero-argument derived callbacku; vyžadovat skutečný Root-delivered ACK. HTTP actor, auth, parser, limity a 200/202 kontrakt zachovat. |
+| `driver-retention-lifecycle.ts` | Doplnit do interního maintenance contextu původní Root operation reference; lokální consumer/časovač pouze řídí životní cyklus. Callback nesmí provádět SQL nebo sám udělit oprávnění. `close()` nadále čeká na skutečnou rozpracovanou promise, bez tvrzení native drain. |
+| `app.ts`, `driver-maintenance-cli.ts` | Stejný přijatý production delivery adaptér v API i samostatném úklidu. Chybějící binding zůstane unbound/unavailable bez alternativního poolu, SQL nebo pozitivního callbacku. |
+
+Driver public methods musí dostat operation reference pouze interním
+per-call delivery kontextem, nikoli z veřejného body. Konkrétní způsob
+tohoto doručení se zmrazí s Root transportem; nyní se nevymýšlí registrační
+metoda nebo lookup na straně aplikace. Běžné `lookup`/`commit` zůstanou na
+omezeném runtime poolu se stejným batch → contributor pořadím, receipt
+triggerem a temporary/permanent fence. Zúžení grantů musí proběhnout až
+společně s funkčními náhradami všech čtyř cest.
+
+Maintenance context dnes povoluje přesně `owner` a `cutoff`; jeho strict
+validátor `operation()` proto musí být rozšířen zároveň s typem a cleanup
+argumentem. Pouhé přidání origin klíče by bylo správně odmítnuté. Adaptér
+nesmí hledat origin globálně podle času, doplňovat nový cutoff nebo vydávat
+zmrazený JavaScript objekt za oprávnění.
+
+Samotný execution port nenahrazuje chráněnou čtecí/admission hranici.
+`PostgresDriverAccountErasureStore.gate` dnes požaduje původní ledger DML
+práva a používá zero-argument proof. Při wiring musí porovnávat nový úzký
+runtime profil a skutečný scope/operation-bound Root důkaz. Status,
+preflight a receipt projekce se nesmějí označit za aktuální pouze podle
+DB metadata. Capability zůstává not ready, dokud toto skutečné napojení
+chybí. Není dovoleno nahradit proof funkcí vracející kladné booleany.
+
+Po `origin-commit-known` může erase/ACK provést nový read-only actor-bound
+ledger readback a vytvořit stávající `DriverErasureReceipt` jen pod platnou
+chráněnou čtecí hranicí. Erase marker sám neznamená `completed`; do ACK
+zůstává HTTP 202. `wholeAccountComplete=false` se nemění.
+HTTP receipt přebírá kumulativní ledger `deleted_batch_count` a první
+`created_at`; nepoužije per-invocation SQL počet, který je při opakování
+legitimně nula, ani nový čas aplikačního pokusu.
+
+Revoke potřebuje původní počet smazaných dávek pro stávající HTTP odpověď.
+Proto má commit výsledek volitelné `revokeEffect.deletedBatchCount`.
+Root jej smí vydat jen z původního pozorovaného scalar receipt svázaného
+s origin/body digestem a až po potvrzeném commit. Scalar se musí zapsat a
+fsyncnout před pokusem o původní COMMIT, aby šel po restartu ověřit; při
+no-effects nebo pending se nevydává. Chybějící/poškozený receipt při známém
+commit znamená v SIM 503, ne vymyšlenou nulu nebo nové mazání. Jde o
+samostatné Root custody rozšíření, nikoli změnu frozen SQL journalu 003.
+
+Pro revoke `pending`, no-effects nebo chybějící count znamenají 503
+`DRIVER_MEASUREMENTS_UNAVAILABLE`. Pro erase/ACK lze pending promítnout jako
+202 pouze při již existující actor-owned ledger operaci; před jejím
+přijetím nebo při neověřitelném readbacku je to 503
+`DRIVER_ACCOUNT_ERASURE_UNAVAILABLE`. Retenční cleanup uspěje pouze při
+ověřeném commit, jinak `DRIVER_RETENTION_UNAVAILABLE` a evidence téhož
+neuzavřeného originu u chráněného vlastníka. Žádný obecný SQLSTATE, návrat
+procesu nebo no-effects stav se nemapuje na potvrzené odvolání souhlasu.
+
+Typový soubor se zatím neimportuje do běžící aplikace. Jeho přísná
+kompilace ověřuje pouze TypeScript kontrakt; před nasazením jsou nutné
+společné testy skutečného delivery, signed výsledků a chráněných readbacků,
+zejména ztraceného COMMIT potvrzení, scalar receipt recovery a souběhu s
+příjmem. Veřejný OpenAPI a `sim-driver-measurements-v1` se nemění.
+Samostatná přísná kompilace typového souboru, SDA typecheck, skeleton,
+OpenAPI sanity a diff check prošly. Nový runtime test ani produkční
+zapojení se touto typovou změnou neprohlašuje; dřívější SQL důkaz zůstává
+beze změny.
+
+#### Ostatní aplikační hranice před zapojením autority
+
 | Soubor a současný port | Konkrétní potřebná změna po přijetí autority |
 | --- | --- |
 | Router `src/index.ts:17`, `PgAccountErasure` | Composition root předá skutečný consumer; nynější výchozí `OwnerCheckpointVerifier` je false. Před chráněnými COP pracovníky ověří enrollment/replay, nikoli pouze DB schema. |

@@ -202,3 +202,11 @@ registrace. Kontext z aplikace ani pozitivní testovací fixture nestačí.
 Bez něj ACK ledger nemění. Osmnáct nových izolovaných SQL případů má
 [samostatný záznam](../archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md);
 neprokazuje nasazení, restore ani whole-account completion.
+
+Minimální návrh aplikačního napojení je vyjádřen type-only
+`DriverGuardedExecutionPort` v SDA a konkrétními náhradami čtyř mutujících
+cest v integraci 23. Typové deklarace nejsou transport ani oprávnění.
+Reference Root originu se odděluje od business operation ID; nejasný efekt
+se zjišťuje pouze na stejném originu. `probe` může sealovat a nesmí se
+volat z čtecího HTTP statusu. Chybějící původní scalar count po známém
+revoke commit vrací nedostupnost, nikoli odhad nebo opakovaný DELETE.
