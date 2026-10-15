@@ -1,5 +1,5 @@
 /**
- * Internal application boundary proposal; type declarations only.
+ * Internal application boundary; type declarations only.
  *
  * No runtime implementation, transport, registrar, factory or positive verifier
  * exists in this module. These fields do not prove authority. A real protected
@@ -82,7 +82,7 @@ export type DriverGuardedExecutionResult = DriverGuardedResultBinding & (
   | {
       readonly state: "pending";
       readonly reason: "origin-busy" | "origin-unresolved" | "store-unavailable" |
-        "authority-unavailable" | "transport-unavailable";
+        "authority-unavailable" | "transport-unavailable" | "effect-observation-unavailable";
       readonly sqlOutcomeRef?: never;
       readonly effectQuiescenceRef?: never;
       readonly revokeEffect?: never;
@@ -112,4 +112,42 @@ export interface DriverGuardedExecutionPort {
   execute(request: DriverGuardedExecutionRequest): Promise<DriverGuardedExecutionResult>;
   // May durably seal this exact origin via resolve_or_seal. Not a read-only GET.
   probe(operation: DriverGuardedOperationRef): Promise<DriverGuardedExecutionResult>;
+}
+
+/** Supplied per invocation by protected delivery, never by public HTTP input. */
+export interface DriverGuardedOperationContext {
+  readonly operation: DriverGuardedOperationRef;
+  readonly publicationContext?: DriverGuardedPublicationContext;
+}
+
+export type DriverGuardedReadPurpose = "capability" | "intake" | "preflight" | "status" | "receipt";
+export interface DriverGuardedReadRequest {
+  readonly owner: "sim_driver_measurements";
+  readonly scope: "online_driver_scope";
+  readonly purpose: DriverGuardedReadPurpose;
+  readonly operationHash?: string;
+  readonly actorHash?: string;
+}
+
+/** The actual delivery implementation verifies current signed Root evidence.
+ * Shape/reference equality in the application alone is NOT that verification. */
+export interface DriverGuardedReadAdmission extends DriverGuardedReadRequest {
+  readonly contractVersion: "sim-driver-guarded-read-admission-v1";
+  readonly checkpointHash: string;
+  readonly reportProtection: "no_report" | "enforced_single_writer" | "shared_generation_fence";
+  readonly reference: DriverGuardedRecordRef;
+}
+export interface DriverGuardedReadAdmissionPort {
+  inspect(request: DriverGuardedReadRequest): Promise<DriverGuardedReadAdmission | undefined>;
+}
+
+/** Presence opts in; an empty/unbound value must NEVER select legacy SQL. */
+export interface DriverGuardedStoreOptions {
+  readonly execution?: DriverGuardedExecutionPort;
+  readonly admission?: DriverGuardedReadAdmissionPort;
+}
+
+/** Current authenticated invocation only. No application-side permit issuance. */
+export interface DriverGuardedRequestContextPort {
+  current(kind: "revoke" | "erase" | "ack"): Promise<DriverGuardedOperationContext | undefined>;
 }

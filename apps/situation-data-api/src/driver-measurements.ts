@@ -7,6 +7,7 @@ import {DRIVER_ACCOUNT_ERASURE_CONTRACT,DriverAccountErasureError,driverErasureH
   type DriverErasureMethods,type DriverErasureCapability,type DriverErasureBlocker} from "./driver-account-erasure.js";
 import type {DriverErasureProtectedProof} from "./driver-account-erasure-store.js";
 import {DriverRetentionLifecycleError,type DriverRetentionConsumer,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
+import type { DriverGuardedOperationContext, DriverGuardedRequestContextPort, DriverGuardedStoreOptions } from "./driver-guarded-execution-port.js";
 
 export const DRIVER_CONTRACT = "sim-driver-measurements-v1";
 const PREFIX = "/api/v1/internal/driver-measurements/v1";
@@ -67,7 +68,7 @@ export interface DriverStore extends Partial<DriverErasureMethods> {
   commit(owner: string, contributor: string, hash: string, batch: DriverBatch, intervals: DriverInterval[], receipt: DriverReceipt): Promise<DriverReceipt>;
   aggregates(dataset: string, since: string, now: string): Promise<unknown[]>;
   quality(now: string): Promise<unknown>;
-  revoke(owner: string, contributor: string): Promise<number>;
+  revoke(owner: string, contributor: string, context?: DriverGuardedOperationContext): Promise<number>;
   /** Optional for injected legacy fixtures; absence never counts as completed initialization. */
   init?():Promise<void>;
   startRetention?():Promise<void>;
@@ -210,8 +211,21 @@ export function driverSettings(): DriverSettings {
   return { enabled,revocationEnabled,databaseUrl,token,hashSecret,ratePerMinute,driverAccountErasureEnabled,driverAccountErasureActorSecret,driverAccountErasureIssuer,driverAccountErasureReplayCheckpoint };
 }
 
+export interface DriverMeasurementDependencies {
+  store?: DriverStore;
+  matcher?: DriverMatcher;
+  now?: () => number;
+  accountErasureDerivedBarrier?: () => Promise<void>;
+  accountErasureProtectedProof?: () => Promise<DriverErasureProtectedProof>;
+  retentionConsumer?: DriverRetentionConsumer;
+  /** Source opt-in only. No env switch or production factory is supplied. */
+  guarded?: DriverGuardedStoreOptions;
+  guardedRequestContext?: DriverGuardedRequestContextPort;
+}
 export function registerDriverMeasurementRoutes(app: Express, config: SituationDataConfig, settings=driverSettings(),
-  dependencies?: { store?: DriverStore; matcher?: DriverMatcher; now?:()=>number;accountErasureDerivedBarrier?:()=>Promise<void>;accountErasureProtectedProof?:()=>Promise<DriverErasureProtectedProof>;retentionConsumer?:DriverRetentionConsumer }): DriverRetentionControl {
+  dependencies?: DriverMeasurementDependencies): DriverRetentionControl {
+  // A preconstructed store cannot silently ignore guarded constructor options.
+  if (dependencies?.guarded !== undefined && dependencies.store) throw new Error("DRIVER_GUARDED_STORE_COMPOSITION_INVALID");
   // Body parser errors otherwise escape to Express's default HTML/error logging.
   app.use(PREFIX,(error:unknown,req:Request,res:Response,_next:NextFunction)=>{
     res.set("Cache-Control","no-store");
@@ -222,12 +236,26 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
   const erasureReadConfigured=identityConfigured&&!!settings.databaseUrl&&!!settings.hashSecret&&settings.hashSecret.length>=32;
   const store=dependencies?.store ?? ((settings.enabled || settings.revocationEnabled || settings.driverAccountErasureEnabled || erasureReadConfigured) ? new PostgresDriverMeasurementStore(settings.databaseUrl!,settings.hashSecret!,{
     enabled:settings.driverAccountErasureEnabled,expectedCheckpoint:settings.driverAccountErasureReplayCheckpoint,identityConfigured,protectedProof:dependencies?.accountErasureProtectedProof,
-    retentionConsumer:dependencies?.retentionConsumer}) : undefined);
+    retentionConsumer:dependencies?.retentionConsumer,guarded:dependencies?.guarded}) : undefined);
   const matcher=dependencies?.matcher ?? (config.valhallaBaseUrl ? new ValhallaDriverMatcher(config.valhallaBaseUrl) : undefined);
   const now=dependencies?.now ?? Date.now;
   let minute=0, requests=0, inflight=0;
   const contributors=new Map<string,{at:number; count:number}>();
   const hashContributor=(id:string)=>createHmac("sha256",settings.hashSecret!).update(`cop:${id}`).digest("hex");
+  const guarded = dependencies?.guarded !== undefined;
+  const operationContext = async (kind: "revoke" | "erase" | "ack", required=true): Promise<DriverGuardedOperationContext | undefined> => {
+    if (!guarded) return undefined;
+    // The actual connector owns current authenticated delivery. No request
+    // header/body, business UUID or local random value selects a Root origin.
+    let context:DriverGuardedOperationContext|undefined;
+    try { context=await dependencies?.guardedRequestContext?.current(kind); } catch { /* No private transport detail. */ }
+    if (!context || context.operation?.kind!==kind) {
+      if(!required)return undefined;
+      throw kind==="revoke" ? new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE") :
+        new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_UNAVAILABLE");
+    }
+    return context;
+  };
   function auth(req:Request,res:Response,revocationOnly=false,erasureMode?:"read_only"|"resume_existing"): boolean {
     res.set("Cache-Control","no-store");
     if (req.get("origin")) { problem(req,res,403,"BROWSER_ACCESS_FORBIDDEN","Backend service access only."); return false; }
@@ -290,7 +318,8 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
     try {
       const raw=object(req.body,["contractVersion","contributorIdDay"]);
       if (raw.contractVersion!==DRIVER_CONTRACT) invalid();
-      const count=await store!.revoke("cop",hashContributor(opaque(raw.contributorIdDay)));
+      const contributor=hashContributor(opaque(raw.contributorIdDay));
+      const count=guarded ? await store!.revoke("cop",contributor,await operationContext("revoke")) : await store!.revoke("cop",contributor);
       res.json({contractVersion:DRIVER_CONTRACT,deletedBatchCount:count});
     } catch(error) { failure(req,res,error); }
   });
@@ -335,9 +364,14 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
         const accepted=store.accountErasureStatus?await store.accountErasureStatus(input.operationId,input.actorHash):undefined;
         if(!accepted)throw new DriverAccountErasureError(503,"DRIVER_ACCOUNT_ERASURE_DISABLED");
       }
-      let result=await store.accountErasure(input);
+      let result=guarded ? await store.accountErasure(input,await operationContext("erase")) : await store.accountErasure(input);
       if(result.publicationFenceVerified){
-        if(result.reportProtection==="no_report")result=await store.acknowledgeAccountErasure(input);
+        if(guarded){
+          // No report flag or void callback can manufacture a Root ACK context.
+          const context=await operationContext("ack",false);
+          if(context?.publicationContext)result=await store.acknowledgeAccountErasure(input,context);
+        }
+        else if(result.reportProtection==="no_report")result=await store.acknowledgeAccountErasure(input);
         else if(dependencies?.accountErasureDerivedBarrier){try{await dependencies.accountErasureDerivedBarrier();result=await store.acknowledgeAccountErasure(input);}catch{
           res.status(202).json({...result,status:"pending",derivedReportAcknowledged:false,pendingReason:"derived_report_pending"});return;}}
       }

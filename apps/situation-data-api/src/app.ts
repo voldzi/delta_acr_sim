@@ -8,7 +8,7 @@ import { ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { registerGeoRoutingRoutes } from "./geo-routing.js";
-import { registerDriverMeasurementRoutes } from "./driver-measurements.js";
+import { registerDriverMeasurementRoutes, type DriverMeasurementDependencies } from "./driver-measurements.js";
 import {createProductionDriverRetentionLifecycle,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
@@ -61,7 +61,7 @@ export interface SituationDataAppContext {
   driverMeasurements: DriverRetentionControl;
 }
 
-export async function createApp(config: SituationDataConfig): Promise<{ app: Express; context: SituationDataAppContext }> {
+export async function createApp(config: SituationDataConfig, dependencies?: { driverMeasurements?: DriverMeasurementDependencies }): Promise<{ app: Express; context: SituationDataAppContext }> {
   const sources = createSituationDataSources(config);
   const sharedCache = await createSharedResponseCacheStore(config);
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
@@ -110,7 +110,7 @@ export async function createApp(config: SituationDataConfig): Promise<{ app: Exp
   registerRoutingRoutes(app, context);
   registerValhallaTrafficRoutes(app, context);
   registerGeoRoutingRoutes(app, config, routing);
-  context.driverMeasurements = registerDriverMeasurementRoutes(app, config);
+  context.driverMeasurements = registerDriverMeasurementRoutes(app, config, undefined, dependencies?.driverMeasurements);
   // Actual maintenance/replay admission is not bound yet. This blocks only
   // maintenance, BEFORE its init/SQL, while preserving the established APIs.
   await context.driverMeasurements.start().catch(()=>undefined);

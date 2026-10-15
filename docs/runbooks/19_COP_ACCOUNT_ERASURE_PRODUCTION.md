@@ -89,6 +89,16 @@ Při rollbacku zachovat ledger/fences, zastavit nové chráněné operace a
 zjišťovat nejasné původní origin výsledky; starý obraz s požadavkem na přímé
 DELETE není kompatibilní návrat po tomto přechodu.
 
+SDA už obsahuje konkrétní opt-in guarded náhrady erase, ACK, revoke a
+retence. Jsou přístupné pouze interními constructor/dependency volbami;
+nový env přepínač nebo produkční Root factory nevznikly. Bez skutečného
+execution/admission/current-context portu jsou nedostupné. Původní režim
+se zachovává pouze před koordinovanou migrací, nikoli jako fallback
+po selhání guarded větve. Konkrétní předání je v integraci 23 a lokální
+[ověření aplikace](../archive/2026-10-15_DRIVER_GUARDED_APPLICATION.md)
+není společná produkční akceptace. Samotná publikace zdroje nevyžaduje
+recreate kontejneru, instalaci 003 nebo změnu secrets.
+
 Správce později doložil úzkou skutečnou invocation/public-package inventuru
 Patroni v 13:44 Praha. SIM ověřil oba receipts d6a0834d… / 7bf2ff93…;
 známá gramatika a dpkg vlastnictví šesti vybraných souborů jsou doložené.

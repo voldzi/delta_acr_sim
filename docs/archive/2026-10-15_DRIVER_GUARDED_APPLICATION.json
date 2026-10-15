@@ -1,0 +1,60 @@
+{
+  "status": "OPT_IN_APPLICATION_SOURCE_ONLY",
+  "baselineRevision": "e47f08f1142a6ad65ed1ac66c59ffa0033fd204b",
+  "startedAt": "2026-10-15T06:03:25.521Z",
+  "completedAt": "2026-10-15T06:03:26.561Z",
+  "validation": {
+    "situationDataTypecheck": "passed",
+    "situationDataBuild": "passed",
+    "serviceTestTotal": 577,
+    "serviceTestPassed": 571,
+    "serviceTestFailed": 0,
+    "serviceTestSkipped": 6,
+    "newSyntheticMockTests": 99,
+    "newTestFiles": {
+      "driver-erasure-guarded-store.test.ts": 24,
+      "driver-guarded-execution.test.ts": 21,
+      "driver-guarded-measurement-store.test.ts": 46,
+      "driver-guarded-routes.test.ts": 8
+    },
+    "fullVitestReportSha256": "1530f732c36b1675b484a283d8db4859d967ab46d664676d4fa001396501842f",
+    "sourcePinsCaptured": "after_successful_final_test_run",
+    "testDatabaseUrlUnset": true,
+    "routingExternalContractFixtureDirUnset": true
+  },
+  "sourcePins": {
+    "apps/situation-data-api/src/app.ts": "41c38eb19dc6c0bcb98af63ba26dd6ff5118bfb073587b054e9942ebc1b9975e",
+    "apps/situation-data-api/src/driver-account-erasure.ts": "c6ec867ab1efa2211fd5611d9801338045ac9ac89a9e91e523b0119785885170",
+    "apps/situation-data-api/src/driver-account-erasure-store.ts": "704afad36731144144196489a50f0f874eba05e14ef92c096ee370bd6fd056b3",
+    "apps/situation-data-api/src/driver-guarded-execution.ts": "3d4041d36358d282db3d93a179b7ae644752eb50c2a399fd865bb06f4f529e2a",
+    "apps/situation-data-api/src/driver-guarded-execution-port.ts": "92af6b4f3546924b9c4cff80304f6394d67d9703e57ba3bd2332e7197f38b4bb",
+    "apps/situation-data-api/src/driver-maintenance-cli.ts": "294f75aba10ee2ac5c66240e33a910f2535fa5f63de04a2e2efd57019e303076",
+    "apps/situation-data-api/src/driver-measurement-store.ts": "1a8431e2efad93be19a04c35ca865c466bdcaf90ef6000eb46584201def448d4",
+    "apps/situation-data-api/src/driver-measurements.ts": "8dbcc311f8c877bf8c856a8d0a87470d3575e6e3d8591b70b933b0e25f7606d6",
+    "apps/situation-data-api/src/driver-retention-lifecycle.ts": "9035581c622a0ca53ea3ca4f0a854d707f055dcc12f136ecbc4771101c6b2a26",
+    "apps/situation-data-api/test/driver-erasure-guarded-store.test.ts": "fc52bba758d4f2ee5dfbf664731f37ec9600d79e2f5994012f9fe4c05c029bf7",
+    "apps/situation-data-api/test/driver-guarded-execution.test.ts": "011a513337eaf13dee5ee16be7ed7d5dd134198d6aca3e2f1fe6d8bda17a2a69",
+    "apps/situation-data-api/test/driver-guarded-measurement-store.test.ts": "e0991a98c68b592b5198b34f945f2b46a35e02f1855ab80a6132ec6f822a3e95",
+    "apps/situation-data-api/test/driver-guarded-routes.test.ts": "35e990c440111a4a22e28219912c9c6215e3aceb996b6f4e7281d97c37edc524",
+    "apps/situation-data-api/test/driver-measurement-provision.test.ts": "2180001a6ed6441594fb509b008986dfbc9e7845094d7ef663ba46a1460f1c80"
+  },
+  "frozenSqlInputsUnchanged": {
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "scripts/fixtures/driver-retention-real-schema/expiry-source.sql": "1561825849c8990526af26eae3866ee2100072db72bed638997a2eec7a8afb7a",
+    "docs/archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.json": "80ea5fb1a4e914a5439dba901bfee528c1136c1ed812aee9c7bfb82ebe869c42"
+  },
+  "actual": {
+    "productionChanged": false,
+    "newProductionSecrets": false,
+    "newProductionGrants": false,
+    "rootDeliveryFactory": false,
+    "rootReadAdmissionAccepted": false,
+    "enrollmentAccepted": false,
+    "restoreAccepted": false,
+    "jointAcceptance": false,
+    "realAccountDeleted": false,
+    "openAiCalls": false,
+    "newPostgresExecution": false
+  },
+  "interpretation": "Final SDA unit/regression run only. The 99 new cases use synthetic ports/database mocks and are included in the 571 passed tests, not additional. Earlier SQL and COP tests are separate evidence. This is not production or Root authority acceptance."
+}

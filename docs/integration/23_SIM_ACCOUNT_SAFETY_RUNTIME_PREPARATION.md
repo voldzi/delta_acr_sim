@@ -222,12 +222,14 @@ nepřepisují ani nepřičítají. Závazný REST kontrakt zůstává nezměněn
 
 ### Přesná místa budoucího nativního zapojení
 
-#### Minimální interní driver execution port
+#### Interní driver execution port a opt-in zapojení
 
 Konkrétní typy jsou v
 `apps/situation-data-api/src/driver-guarded-execution-port.ts`.
-Soubor obsahuje pouze typové deklarace, nikoli runtime factory, transport,
-registraci nebo kladný verifier. `DriverGuardedExecutionPort` má dvě metody:
+Soubor obsahuje typové deklarace. Lokální adaptace a ověření přesné
+struktury jsou v `driver-guarded-execution.ts`; skutečná Root runtime
+factory, transport a registrace nejsou součástí SIM implementace.
+`DriverGuardedExecutionPort` má dvě metody:
 
 ```ts
 execute(request: DriverGuardedExecutionRequest): Promise<DriverGuardedExecutionResult>;
@@ -265,37 +267,48 @@ neprokazuje SQL rollback, owner-wide drain ani úspěšné smazání účtu.
 neprovedený origin. Smí jej vyvolat jen chráněný resolution tok původní
 operace, nikdy dosavadní read-only HTTP GET/status nebo preflight.
 
-| Místo ve zdroji | Minimální koordinovaná náhrada |
-| --- | --- |
-| `driver-measurement-store.ts` — `cleanup` | Odstranit oba app-pool DELETE i jejich BEGIN/COMMIT. S Root-delivered expire originem volat pouze `execute` a tělo `{contractVersion}`. Cutoff je pouze neměnný z registrovaného originu, ne z nového app clocku. |
-| `driver-measurement-store.ts` — `revoke` | Odstranit app upsert revokace, DELETE a transakci. Volat `execute` s kind revoke a stávajícím serverovým contributor HMAC. Lock/upsert/cascade/marker vlastní SQL 003 a původní Root transakce. |
-| `driver-account-erasure-store.ts` — `erase` | Nahradit celou mutující transakci včetně INSERT fences/ledger a UPDATE součtů jedním execute kind erase. Zachovat serverovou přípravu operation/actor/request hash a manifestu. Root dodá registrovanou operaci a checkpoint binding. |
-| `driver-account-erasure-store.ts` — `acknowledge` | Odstranit app-pool UPDATE. Samostatný Root ACK origin nese stejné base tělo a Root publication context; aktuální DB flag ani `no_report` příznak kontext nevytváří. |
-| `driver-measurements.ts` — composition a account POST | Předat port přímo do obou skutečných store konstruktorů. Přestat spouštět ACK jen podle `reportProtection === no_report` nebo zero-argument derived callbacku; vyžadovat skutečný Root-delivered ACK. HTTP actor, auth, parser, limity a 200/202 kontrakt zachovat. |
-| `driver-retention-lifecycle.ts` | Doplnit do interního maintenance contextu původní Root operation reference; lokální consumer/časovač pouze řídí životní cyklus. Callback nesmí provádět SQL nebo sám udělit oprávnění. `close()` nadále čeká na skutečnou rozpracovanou promise, bez tvrzení native drain. |
-| `app.ts`, `driver-maintenance-cli.ts` | Stejný přijatý production delivery adaptér v API i samostatném úklidu. Chybějící binding zůstane unbound/unavailable bez alternativního poolu, SQL nebo pozitivního callbacku. |
+Přítomnost interní constructor volby `guarded` zapíná pouze tuto zdrojovou
+větev; i prázdná nebo null hodnota ji ponechá nedostupnou, nikdy nevybere
+legacy SQL. Bez této volby zůstává původní režim před koordinovaným
+přechodem. Není přidaný environment přepínač ani produkční factory.
+Volba guarded režimu se zachytí při konstrukci a pozdější změna caller
+options ji nesmí přepnout zpět na aplikační DML.
 
-Driver public methods musí dostat operation reference pouze interním
-per-call delivery kontextem, nikoli z veřejného body. Konkrétní způsob
-tohoto doručení se zmrazí s Root transportem; nyní se nevymýšlí registrační
-metoda nebo lookup na straně aplikace. Běžné `lookup`/`commit` zůstanou na
+| Místo ve zdroji | Implementace guarded větve |
+| --- | --- |
+| `driver-measurement-store.ts` — `cleanup` | Deleguje oba DELETE i původní transakci na expire port s tělem `{contractVersion}`. Aplikační pool neprovádí DML. Cutoff je neměnný z registrovaného originu, ne nový app clock. |
+| `driver-measurement-store.ts` — `revoke` | Deleguje upsert, DELETE a transakci na revoke port se stávajícím serverovým contributor HMAC. Lock/upsert/cascade/marker vlastní SQL 003 a původní Root transakce. |
+| `driver-account-erasure-store.ts` — `erase` | Deleguje celou mutaci fences/cascade/ledger na erase port. Zachovává serverovou přípravu operation/actor/request hash a manifestu; Root dodává registrovanou operaci a checkpoint binding. |
+| `driver-account-erasure-store.ts` — `acknowledge` | Místo aplikačního UPDATE vyžaduje samostatný ACK origin a Root publication context. DB flag ani `no_report` příznak jej nevytváří. |
+| `driver-measurements.ts` — composition a account POST | Předává guarded volby přímo do skutečných store konstruktorů a kontext jen interním argumentem. Kombinace guarded voleb s předkonstruovaným store je odmítnutá. ACK nevzniká z `no_report` nebo void callbacku. HTTP actor, auth, parser, limity a 200/202 kontrakt zůstávají. |
+| `driver-retention-lifecycle.ts` | Přijímá volitelnou přesnou expire origin reference v interním kontextu; lokální consumer/časovač řídí pouze životní cyklus. Guarded cleanup bez reference selže. `close()` čeká na skutečné lokální promises, bez tvrzení native drain. |
+| `app.ts`, `driver-maintenance-cli.ts` | Umožňují výslovné interní předání stejných přijatých závislostí/control; výchozí produkční factory zůstává unbound. Žádný alternativní SQL pool nebo nový CLI selector nevzniká. |
+
+Driver metody dostávají operation reference pouze interním per-call
+argumentem. `DriverGuardedRequestContextPort.current(kind)` je předávací
+hranice právě autentizovaného volání, nikoli registrátor nebo lookup podle
+HTTP pole. Jeho skutečný konektor musí dodat Root transport. Běžné `lookup`/`commit` zůstávají na
 omezeném runtime poolu se stejným batch → contributor pořadím, receipt
 triggerem a temporary/permanent fence. Zúžení grantů musí proběhnout až
 společně s funkčními náhradami všech čtyř cest.
 
-Maintenance context dnes povoluje přesně `owner` a `cutoff`; jeho strict
-validátor `operation()` proto musí být rozšířen zároveň s typem a cleanup
-argumentem. Pouhé přidání origin klíče by bylo správně odmítnuté. Adaptér
+Maintenance context a jeho strict validátor `operation()` zachovávají
+`owner` a `cutoff` a nově ověřují volitelný přesný expire origin se dvěma
+poli `operationId`, `kind`. Vnořená metadata se kopírují a zmrazí. Adaptér
 nesmí hledat origin globálně podle času, doplňovat nový cutoff nebo vydávat
 zmrazený JavaScript objekt za oprávnění.
 
 Samotný execution port nenahrazuje chráněnou čtecí/admission hranici.
-`PostgresDriverAccountErasureStore.gate` dnes požaduje původní ledger DML
-práva a používá zero-argument proof. Při wiring musí porovnávat nový úzký
-runtime profil a skutečný scope/operation-bound Root důkaz. Status,
-preflight a receipt projekce se nesmějí označit za aktuální pouze podle
-DB metadata. Capability zůstává not ready, dokud toto skutečné napojení
-chybí. Není dovoleno nahradit proof funkcí vracející kladné booleany.
+Guarded `PostgresDriverAccountErasureStore.gate` kontroluje úzký read/intake
+profil bez ledger DML práv a nepoužívá legacy zero-argument proof.
+`DriverGuardedReadAdmissionPort.inspect` vyžaduje pevný owner/scope a účel
+`capability`, `intake`, `preflight`, `status` nebo `receipt`; kde patří,
+váže actor i operation hash. Přesný checkpoint/report protection a Root
+reference musejí odpovídat databázi i skutečnému aktuálnímu Root ověření.
+Lokální kontrola tvaru/reference není ověření podpisu nebo frontier.
+Bez přijatého admission portu je capability not ready a guarded intake i
+mutace jsou nedostupné, i při prázdném ledgeru. Není dovolena funkce
+vracející kladné booleany. Starý gate zůstává jen v původní neguarded větvi.
 
 Po `origin-commit-known` může erase/ACK provést nový read-only actor-bound
 ledger readback a vytvořit stávající `DriverErasureReceipt` jen pod platnou
@@ -315,23 +328,36 @@ commit znamená v SIM 503, ne vymyšlenou nulu nebo nové mazání. Jde o
 samostatné Root custody rozšíření, nikoli změnu frozen SQL journalu 003.
 
 Pro revoke `pending`, no-effects nebo chybějící count znamenají 503
-`DRIVER_MEASUREMENTS_UNAVAILABLE`. Pro erase/ACK lze pending promítnout jako
-202 pouze při již existující actor-owned ledger operaci; před jejím
-přijetím nebo při neověřitelném readbacku je to 503
-`DRIVER_ACCOUNT_ERASURE_UNAVAILABLE`. Retenční cleanup uspěje pouze při
+`DRIVER_MEASUREMENTS_UNAVAILABLE`. Mutující erase/ACK při chybějícím
+kontextu, pending, no-effects nebo neověřitelném readbacku vracejí 503
+`DRIVER_ACCOUNT_ERASURE_UNAVAILABLE`, ani starý completed ledger chybu
+nezamaskuje. Po známém erase commit může stávající receipt zůstat 202,
+dokud Root nedoručí ACK; read-only GET může vrátit dříve přijatou pending
+operaci bez spuštění resolution. Retenční cleanup uspěje pouze při
 ověřeném commit, jinak `DRIVER_RETENTION_UNAVAILABLE` a evidence téhož
 neuzavřeného originu u chráněného vlastníka. Žádný obecný SQLSTATE, návrat
 procesu nebo no-effects stav se nemapuje na potvrzené odvolání souhlasu.
 
-Typový soubor se zatím neimportuje do běžící aplikace. Jeho přísná
-kompilace ověřuje pouze TypeScript kontrakt; před nasazením jsou nutné
-společné testy skutečného delivery, signed výsledků a chráněných readbacků,
+Vypnutý erasure flag zakazuje nové operace, nikoli dokončení již přijaté.
+Guarded resume před dispatch vyžaduje existující durable ledger se stejným
+actor i request hashem a všechny aktuální admission/gate kontroly.
+Chybějící nebo jinak vázaná operace zůstane 503 bez dispatch. Pouhé
+vypnutí příjmu měření ani mazání nesmaže stávající trvalé fences.
+
+Runner si v paměti drží pouze místní fingerprint nejasného pokusu pro
+korelaci opakování, nikoli PG/Root body digest. Překrývající se pokusy
+stejného originu sloučí, změněné tělo odmítne a neurčitý výsledek opakuje
+jen přes probe. Má limit 128 neuzavřených lokálních originů; další odmítne
+bez vygenerování náhrady. Durable recovery po restartu vlastní Root,
+nikoli tato lokální mapa. Přesné tělo se znovu validuje po JSON snapshotu.
+
+Zdrojové opt-in zapojení ještě není aktivní produkční spojení. Před
+nasazením jsou nutné společné testy skutečného delivery, signed výsledků a chráněných readbacků,
 zejména ztraceného COMMIT potvrzení, scalar receipt recovery a souběhu s
 příjmem. Veřejný OpenAPI a `sim-driver-measurements-v1` se nemění.
-Samostatná přísná kompilace typového souboru, SDA typecheck, skeleton,
-OpenAPI sanity a diff check prošly. Nový runtime test ani produkční
-zapojení se touto typovou změnou neprohlašuje; dřívější SQL důkaz zůstává
-beze změny.
+Lokální syntetické testy portů a aplikačního toku mají samostatný
+[záznam](../archive/2026-10-15_DRIVER_GUARDED_APPLICATION.md). Nejsou důkazem
+skutečného Root delivery nebo restore; dřívější SQL důkaz zůstává beze změny.
 
 #### Ostatní aplikační hranice před zapojením autority
 

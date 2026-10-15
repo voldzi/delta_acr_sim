@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import type { DriverGuardedOperationContext } from "./driver-guarded-execution-port.js";
 
 export const DRIVER_ACCOUNT_ERASURE_CONTRACT = "sim-account-erasure-v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,9 +37,9 @@ export interface DriverErasurePreflight extends Omit<DriverErasureCapability,"ch
   operationId: string; manifestValid: true; identityBinding:"cop_attested_daily_manifest";coverageAnchor:{kind:"checked_at"|"first_accepted_at";at:string};contributorCount:number;
 }
 export interface DriverErasureMethods {
-  accountErasure(input: DriverErasureInput): Promise<DriverErasureReceipt>;
+  accountErasure(input: DriverErasureInput, context?: DriverGuardedOperationContext): Promise<DriverErasureReceipt>;
   accountErasureStatus(id: string, actorHash: string): Promise<DriverErasureReceipt | undefined>;
-  acknowledgeAccountErasure(input: DriverErasureInput): Promise<DriverErasureReceipt>;
+  acknowledgeAccountErasure(input: DriverErasureInput, context?: DriverGuardedOperationContext): Promise<DriverErasureReceipt>;
   accountErasureCapability(): Promise<DriverErasureCapability>;
   accountErasurePreflight(input: DriverErasureInput): Promise<DriverErasurePreflight>;
 }

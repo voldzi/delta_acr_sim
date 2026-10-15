@@ -4,6 +4,8 @@ import { DriverMeasurementError, type DriverBatch, type DriverInterval, type Dri
 import {PostgresDriverAccountErasureStore,type DriverErasureStorageOptions} from "./driver-account-erasure-store.js";
 import type {DriverErasureInput} from "./driver-account-erasure.js";
 import {DriverRetentionLifecycle,DriverRetentionLifecycleError,type DriverRetentionConsumer,type DriverRetentionOperationContext,type DriverRetentionScheduler} from "./driver-retention-lifecycle.js";
+import {DriverGuardedOperationRunner} from "./driver-guarded-execution.js";
+import type {DriverGuardedOperationContext} from "./driver-guarded-execution-port.js";
 
 export type DriverMeasurementStorageOptions=DriverErasureStorageOptions&{retentionConsumer?:DriverRetentionConsumer;retentionScheduler?:DriverRetentionScheduler};
 
@@ -13,10 +15,13 @@ export class PostgresDriverMeasurementStore implements DriverStore {
   private retention:DriverRetentionLifecycle;
   private closing?:Promise<void>;
   private erasures:PostgresDriverAccountErasureStore;
+  private guarded?:DriverGuardedOperationRunner;
   constructor(url: string, private hashSecret: string, options:DriverMeasurementStorageOptions={}) {
     if (hashSecret.length < 32) throw new Error("Invalid driver storage secret");
     this.pool=new Pool({connectionString:url,max:4,connectionTimeoutMillis:1500,statement_timeout:5000,idleTimeoutMillis:10000});
     this.pool.on("error",()=>{ /* No connection string/error payload is logged. */ });
+    // Presence opts in even when unbound: never fall back to application DML.
+    if(options.guarded!==undefined)this.guarded=new DriverGuardedOperationRunner(options.guarded?.execution);
     this.erasures=new PostgresDriverAccountErasureStore(this.pool,hashSecret,options);
     this.retention=new DriverRetentionLifecycle({initialize:()=>this.initializeRetentionStorage(),cleanup:context=>this.cleanup(context),
       consumer:options.retentionConsumer,scheduler:options.retentionScheduler});
@@ -54,6 +59,13 @@ export class PostgresDriverMeasurementStore implements DriverStore {
   startRetention():Promise<void> {return this.retention.start();}
   runRetentionOnce():Promise<void> {return this.retention.runOnce();}
   private async cleanup(context:DriverRetentionOperationContext):Promise<void> {
+    if(this.guarded){
+      try {
+        const result=await this.guarded.execute(context.operation?{operation:context.operation}:undefined,"expire",{contractVersion:"sim-driver-guarded-db-v1"});
+        if(result.state!=="origin-commit-known")throw new DriverRetentionLifecycleError("DRIVER_RETENTION_UNAVAILABLE");
+      }catch{throw new DriverRetentionLifecycleError("DRIVER_RETENTION_UNAVAILABLE");}
+      return;
+    }
     const client=await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -144,7 +156,16 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       WHERE r.expires_at>$1 GROUP BY reason`,[now]);
     return {...r.rows[0],rejectionCounts:Object.fromEntries(rejected.rows.map(x=>[x.reason,x.count])),eta:eta.rows};
   }
-  async revoke(owner:string,contributor:string):Promise<number> {
+  async revoke(owner:string,contributor:string,context?:DriverGuardedOperationContext):Promise<number> {
+    if(this.guarded){
+      try {
+        if(owner!=="cop"||typeof contributor!=="string"||!/^[0-9a-f]{64}$/u.test(contributor))throw new Error("Invalid guarded owner/contributor");
+        const result=await this.guarded.execute(context,"revoke",{contractVersion:"sim-driver-guarded-db-v1",contributorHash:contributor});
+        const count=result.state==="origin-commit-known"?result.revokeEffect?.deletedBatchCount:undefined;
+        if(!Number.isSafeInteger(count)||count===undefined||count<0||count>2_147_483_647)throw new Error("Missing guarded revoke receipt");
+        return count;
+      }catch{throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");}
+    }
     const c=await this.pool.connect();
     try {
       await c.query("BEGIN"); await c.query("SET LOCAL lock_timeout='1500ms'");
@@ -155,12 +176,23 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     } catch(error) { await c.query("ROLLBACK").catch(()=>undefined); throw error; } finally {c.release();}
   }
   close():Promise<void> {
-    if(!this.closing)this.closing=(async()=>{try{await this.retention.close();}finally{await this.pool.end();}})();
+    if(!this.closing)this.closing=(async()=>{
+      try{await this.retention.close();}
+      finally{
+        try{
+          if(this.guarded){
+            const settled=await Promise.allSettled([this.guarded.close(),this.erasures.closeGuarded()]);
+            for(const result of settled)if(result.status==="rejected")throw result.reason;
+          }
+        }
+        finally{await this.pool.end();}
+      }
+    })();
     return this.closing;
   }
-  accountErasure(input:DriverErasureInput){return this.erasures.erase(input);}
+  accountErasure(input:DriverErasureInput,context?:DriverGuardedOperationContext){return this.erasures.erase(input,context);}
   accountErasureStatus(id:string,actorHash:string){return this.erasures.status(id,actorHash);}
-  acknowledgeAccountErasure(input:DriverErasureInput){return this.erasures.acknowledge(input);}
+  acknowledgeAccountErasure(input:DriverErasureInput,context?:DriverGuardedOperationContext){return this.erasures.acknowledge(input,context);}
   accountErasureCapability(){return this.erasures.capability();}
   accountErasurePreflight(input:DriverErasureInput){return this.erasures.preflight(input);}
 }

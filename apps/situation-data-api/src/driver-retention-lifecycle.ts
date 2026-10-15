@@ -1,9 +1,12 @@
 import { types } from "node:util";
+import type { DriverGuardedOperationRef } from "./driver-guarded-execution-port.js";
 
 /** Local lifecycle seam ONLY, not a native protocol, grant or producer proof. */
 export interface DriverRetentionOperationContext {
   readonly owner: "sim_driver_measurements";
   readonly cutoff: string;
+  /** Protected-delivery routing metadata only; never application authority. */
+  readonly operation?: DriverGuardedOperationRef<"expire">;
 }
 /**
  * An accepted owner-bound consumer must admit and track this precise maintenance
@@ -52,11 +55,16 @@ function own(value: unknown, keys: readonly string[], optional: readonly string[
   return snapshot;
 }
 function operation(value: unknown): DriverRetentionOperationContext {
-  const v = own(value, ["owner", "cutoff"]);
+  const v = own(value, ["owner", "cutoff"], ["operation"]);
   need(Object.isFrozen(value) && v.owner === "sim_driver_measurements", "DRIVER_RETENTION_INVALID_CONTEXT");
   need(typeof v.cutoff === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(v.cutoff), "DRIVER_RETENTION_INVALID_CONTEXT");
   const time = Date.parse(v.cutoff);
   need(Number.isFinite(time) && new Date(time).toISOString() === v.cutoff, "DRIVER_RETENTION_INVALID_CONTEXT");
+  if(Object.hasOwn(v,"operation")){
+    const root = own(v.operation,["operationId","kind"]);
+    need(root.kind==="expire"&&typeof root.operationId==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(root.operationId),"DRIVER_RETENTION_INVALID_CONTEXT");
+    return Object.freeze({owner:"sim_driver_measurements",cutoff:v.cutoff,operation:Object.freeze({operationId:root.operationId,kind:"expire"})});
+  }
   return Object.freeze({ owner: "sim_driver_measurements", cutoff: v.cutoff });
 }
 const unavailable = (): never => { throw new DriverRetentionLifecycleError("DRIVER_RETENTION_UNAVAILABLE"); };

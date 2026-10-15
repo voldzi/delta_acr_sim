@@ -10,8 +10,9 @@ const directories:string[]=[];
 afterEach(()=>{for(const directory of directories.splice(0))rmSync(directory,{recursive:true,force:true});});
 function run(args:string[], extra:Record<string,string>={}) {
   const dir=mkdtempSync(join(tmpdir(),"sim-driver-provision-")); directories.push(dir);
-  // Never contacts PostgreSQL: fail any command other than the two read-only checks.
-  writeFileSync(join(dir,"psql"),`#!/bin/sh\ncase "$*" in\n *rolsuper*) printf '%s\\n' "\${TEST_SUPERUSER:-t}";;\n *'count(*)'*) printf '%s\\n' "\${TEST_OBJECT_COUNT:-0}";;\n *) echo unexpected-write >&2; exit 98;;\nesac\n`,{mode:0o700});
+  // Never contacts PostgreSQL: accept only the fixed legacy read-only checks,
+  // including the guarded-schema detection added before legacy provisioning.
+  writeFileSync(join(dir,"psql"),`#!/bin/sh\ncase "$*" in\n *rolsuper*) printf '%s\\n' "\${TEST_SUPERUSER:-t}";;\n *'count(*)'*) printf '%s\\n' "\${TEST_OBJECT_COUNT:-0}";;\n *"SELECT to_regnamespace('sim_driver_guard_source') IS NOT NULL"*) printf '%s\\n' f;;\n *) echo unexpected-write >&2; exit 98;;\nesac\n`,{mode:0o700});
   const result=spawnSync("/bin/bash",[script,...args],{encoding:"utf8",env:{...process.env,
     PATH:`${dir}:/usr/bin:/bin`,PGUSER:"postgres",PGPASSWORD:"synthetic-not-a-secret",
     PGHOST:"haproxy.home.cz",PGPORT:"5000",...extra}});

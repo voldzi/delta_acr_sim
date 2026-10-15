@@ -203,10 +203,15 @@ Bez něj ACK ledger nemění. Osmnáct nových izolovaných SQL případů má
 [samostatný záznam](../archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md);
 neprokazuje nasazení, restore ani whole-account completion.
 
-Minimální návrh aplikačního napojení je vyjádřen type-only
-`DriverGuardedExecutionPort` v SDA a konkrétními náhradami čtyř mutujících
-cest v integraci 23. Typové deklarace nejsou transport ani oprávnění.
+Opt-in aplikační napojení používá explicitní `DriverGuardedExecutionPort`
+v SDA a náhrady čtyř mutujících cest v integraci 23. Guarded přítomnost
+bez doručeného kontextu/portu/admission nepropadne do legacy SQL.
+Typové deklarace a lokální adapter nejsou Root transport ani oprávnění.
 Reference Root originu se odděluje od business operation ID; nejasný efekt
 se zjišťuje pouze na stejném originu. `probe` může sealovat a nesmí se
 volat z čtecího HTTP statusu. Chybějící původní scalar count po známém
 revoke commit vrací nedostupnost, nikoli odhad nebo opakovaný DELETE.
+Výchozí neguarded režim zůstává zachovaný do koordinované migrace.
+Guarded read/intake gate ověřuje zúžená práva a účelový Root admission,
+nikoli původní zero-argument verifier. Syntetické testovací porty nemění
+stav chybějícího produkčního delivery, enrollmentu nebo restore.
