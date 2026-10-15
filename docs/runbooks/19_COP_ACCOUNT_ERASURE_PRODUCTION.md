@@ -53,6 +53,16 @@ generation/publication read bariéra. Ta a inventura dříve generovaných
 souborů/cache jsou další konkrétní podmínkou plné funkční akceptace;
 nepovažovat krátkodobý checkpoint podpis za náhradu.
 
+Pro reporty už existuje interní HTTP adapter `withLease({kind}, work)`.
+Jeho port je nadále produkčně unbound. Před připojením ověřit, že Root
+drží sdílenou ochranu po celou skutečnou SQL práci a odesílání odpovědi,
+zatímco revoke/erase/ACK/expire i policy/restore přechody mají exkluzivní
+protějšek. Klientské zavření ani response timeout 15 s nesmí být vydány
+za SQL drain; Root HOLD musí trvat do skutečného release nebo nezávisle
+ověřené quiescence. Otestovat i chybu portu před dokončením dotazu,
+release chybu po HTTP 200 a souběžné mazání. Stará již publikovaná data
+vyžadují samostatnou inventuru, ne jen akceptaci nového API wrapperu.
+
 - DBA doloží pevnou DB `sim_driver_measurements`, původních sedm tabulek
   vlastněných `driver_measurements_migrator`, bez RLS, dvě původní receipt
   `ON DELETE CASCADE` vazby a původní SECURITY INVOKER receipt guard.

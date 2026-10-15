@@ -8,6 +8,7 @@ import {DRIVER_ACCOUNT_ERASURE_CONTRACT,DriverAccountErasureError,driverErasureH
 import type {DriverErasureProtectedProof} from "./driver-account-erasure-store.js";
 import {DriverRetentionLifecycleError,type DriverRetentionConsumer,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
 import type { DriverGuardedOperationContext, DriverGuardedRequestContextPort, DriverGuardedStoreOptions } from "./driver-guarded-execution-port.js";
+import { publishDriverReport, type DriverPublicationLease, type DriverPublicationPort } from "./driver-publication.js";
 
 export const DRIVER_CONTRACT = "sim-driver-measurements-v1";
 const PREFIX = "/api/v1/internal/driver-measurements/v1";
@@ -66,8 +67,8 @@ export interface DriverReceipt {
 export interface DriverStore extends Partial<DriverErasureMethods> {
   lookup(owner: string, batchId: string, hash: string): Promise<DriverReceipt | undefined>;
   commit(owner: string, contributor: string, hash: string, batch: DriverBatch, intervals: DriverInterval[], receipt: DriverReceipt): Promise<DriverReceipt>;
-  aggregates(dataset: string, since: string, now: string): Promise<unknown[]>;
-  quality(now: string): Promise<unknown>;
+  aggregates(dataset: string, since: string, now: string, publication?: DriverPublicationLease): Promise<unknown[]>;
+  quality(now: string, publication?: DriverPublicationLease): Promise<unknown>;
   revoke(owner: string, contributor: string, context?: DriverGuardedOperationContext): Promise<number>;
   /** Optional for injected legacy fixtures; absence never counts as completed initialization. */
   init?():Promise<void>;
@@ -222,6 +223,8 @@ export interface DriverMeasurementDependencies {
    * there is no env switch or HTTP-selected factory/operation. */
   guarded?: DriverGuardedStoreOptions;
   guardedRequestContext?: DriverGuardedRequestContextPort;
+  /** Internal held-lease port only. No request field selects publication authority. */
+  publication?: DriverPublicationPort;
 }
 export function registerDriverMeasurementRoutes(app: Express, config: SituationDataConfig, settings=driverSettings(),
   dependencies?: DriverMeasurementDependencies): DriverRetentionControl {
@@ -303,15 +306,25 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
       if (Object.keys(req.query).some(k=>k!=="since")) invalid();
       const since=req.query.since===undefined ? new Date(now()-86400000).toISOString() : stamp(req.query.since);
       if (Date.parse(since)<now()-604800000 || Date.parse(since)>now()) invalid();
-      const dataset=await matcher!.dataset();
-      res.json({contractVersion:DRIVER_CONTRACT,applicationMode:"shadow_only",routingDataset:dataset,generatedAt:new Date(now()).toISOString(),
-        source:"jizda_consented_gps",items:await store!.aggregates(dataset,since,new Date(now()).toISOString()),
-        limits:{minimumAttestedContributors:5,minimumIntervals:10,maximumRows:1000},independentContributorsVerified:false});
+      const result=async(publication?:DriverPublicationLease)=>{
+        const dataset=await matcher!.dataset(),at=new Date(now()).toISOString();
+        const items=guarded?await store!.aggregates(dataset,since,at,publication):await store!.aggregates(dataset,since,at);
+        return {contractVersion:DRIVER_CONTRACT,applicationMode:"shadow_only",routingDataset:dataset,generatedAt:at,
+          source:"jizda_consented_gps",items,
+          limits:{minimumAttestedContributors:5,minimumIntervals:10,maximumRows:1000},independentContributorsVerified:false};
+      };
+      if(guarded)await publishDriverReport(res,"aggregates",dependencies?.publication,result);
+      else res.json(await result());
     } catch(error) { failure(req,res,error); }
   });
   app.get(`${PREFIX}/quality`,async(req,res)=>{
     if (!auth(req,res)) return;
-    try { res.json({contractVersion:DRIVER_CONTRACT,applicationMode:"shadow_only",etaEvidence:"client_reported_not_ground_truth",summary:await store!.quality(new Date(now()).toISOString())}); }
+    try {
+      const result=async(publication?:DriverPublicationLease)=>({contractVersion:DRIVER_CONTRACT,applicationMode:"shadow_only",etaEvidence:"client_reported_not_ground_truth",
+        summary:guarded?await store!.quality(new Date(now()).toISOString(),publication):await store!.quality(new Date(now()).toISOString())});
+      if(guarded)await publishDriverReport(res,"quality",dependencies?.publication,result);
+      else res.json(await result());
+    }
     catch(error) { failure(req,res,error); }
   });
   app.delete(`${PREFIX}/contributions`,async(req,res)=>{

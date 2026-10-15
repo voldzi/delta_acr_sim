@@ -19,12 +19,13 @@ function fixture() {
     requestScope: { run, context: { current } }, retentionConsumer: { owner: "sim_driver_measurements", execute: vi.fn() } });
   const app = express(); app.use(express.json()); app.use(owner.driverScopeMiddleware);
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
+  const dataset = vi.fn(async () => "sim-routing-2026-10-15-1792022400");
   control = registerDriverMeasurementRoutes(app, {} as SituationDataConfig, { enabled: true, revocationEnabled: true,
     databaseUrl: "postgresql://synthetic.invalid/sim_driver_measurements", token, hashSecret: "synthetic-storage-secret-at-least-thirty-two",
     ratePerMinute: 120, driverAccountErasureEnabled: true, driverAccountErasureIssuer: "https://synthetic.invalid/realm",
     driverAccountErasureActorSecret: "synthetic-actor-secret-at-least-thirty-two", driverAccountErasureReplayCheckpoint: undefined },
-  { ...owner.driverMeasurements, matcher: { match: vi.fn(), dataset: vi.fn() } });
-  return { app, current };
+  { ...owner.driverMeasurements, matcher: { match: vi.fn(), dataset } });
+  return { app, current, dataset };
 }
 function noSql() { expect(pg.query).not.toHaveBeenCalled(); expect(pg.connect).not.toHaveBeenCalled(); }
 describe("actual Driver HTTP ordering with rejected local scope (no native authority)", () => {
@@ -49,5 +50,17 @@ describe("actual Driver HTTP ordering with rejected local scope (no native autho
   it("preserves an unrelated healthy endpoint", async () => {
     const { app, current } = fixture(); await request(app).get("/health").expect(200, { status: "ok" });
     expect(current).not.toHaveBeenCalled(); noSql();
+  });
+  it.each(["aggregates", "quality"])("keeps %s unavailable without a held publication port before SQL or matcher", async path => {
+    const { app, dataset } = fixture(); await request(app).get(PREFIX + "/" + path).set("authorization", "Bearer " + token).expect(503);
+    expect(dataset).not.toHaveBeenCalled(); noSql();
+  });
+  it("keeps an invalid report query 400 before the missing publication gate", async () => {
+    const { app, dataset } = fixture(); await request(app).get(PREFIX + "/aggregates?unknown=true").set("authorization", "Bearer " + token).expect(400);
+    expect(dataset).not.toHaveBeenCalled(); noSql();
+  });
+  it("does not accept a publication port selected by an HTTP query", async () => {
+    const { app, dataset } = fixture(); await request(app).get(PREFIX + "/aggregates?publication=anything").set("authorization", "Bearer " + token).expect(400);
+    expect(dataset).not.toHaveBeenCalled(); noSql();
   });
 });

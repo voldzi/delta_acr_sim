@@ -137,7 +137,7 @@
           "Driver Measurements"
         ],
         "summary": "Read contributor-balanced, graph-scoped shadow aggregates",
-        "description": "In a guarded deployment this report remains unavailable (503) until an actual held generation/publication barrier is accepted. A short-lived checkpoint admission alone does not authorize publication. No raw-query or legacy fallback is permitted.",
+        "description": "In a guarded deployment this report remains unavailable (503) until an actual held generation/publication barrier is accepted and bound. The internal callback must cover actual SQL work and HTTP finish/close; a response timeout does not establish SQL drain. A short-lived checkpoint admission alone does not authorize publication. No raw-query, client-selected lease or legacy fallback is permitted.",
         "security": [
           {
             "driverMeasurementCopBearer": []
@@ -253,7 +253,7 @@
           "Driver Measurements"
         ],
         "summary": "Read intake rejections and client-reported ETA comparison",
-        "description": "In a guarded deployment this report remains unavailable (503) until an actual held generation/publication barrier is accepted. Restored or in-flight stale measurement summaries must not bypass the erasure/replay boundary.",
+        "description": "In a guarded deployment this report remains unavailable (503) until an actual held generation/publication barrier is accepted and bound. The internal callback must cover actual SQL work and HTTP finish/close; a response timeout does not establish SQL drain. Restored or in-flight stale summaries must not bypass the erasure/replay boundary. No request field selects publication authority.",
         "security": [
           {
             "driverMeasurementCopBearer": []

@@ -303,6 +303,16 @@ To zachovává fail-closed obnovu i při chybě klienta. Před cutoverem se
 legacy režim nemění a existující publikované soubory vyžadují vlastní
 Root inventory/drain, nikoli automatické přijetí `no_report`.
 
+Interní `DriverPublicationPort` má callbackové `withLease({kind}, work)`
+a `lease.assertCurrent()`. Wrapper čeká přes skutečné SQL i dokončení
+HTTP; patnáctisekundový response timeout není SQL drain. Bez portu 503
+před SQL, při předčasném settle portu žádný pozdější JSON. Chyba po
+hlavičkách nezmění již odeslanou odpověď ani nevyvolá druhý zápis.
+Tento adapter není vlastní Root autoritou: production loader zůstává
+unbound do přijetí skutečného sdíleného/exkluzivního zámku, retained
+peer continuity a release/quiescence. Samotný typ ani kladný unit stub
+neopravňuje odemknout reporty nebo označit obnovu za bezpečnou.
+
 Ověření 611 PASS / 6 opt-in PG SKIP zahrnuje 40 nových lokálních
 syntetických případů. Nenahrazuje skutečné COP factories/transport,
 enrollment, publikační lease nebo produkční obnovu a neopravňuje samo

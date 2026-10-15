@@ -357,6 +357,26 @@ OpenAPI fragment i závazný JSON výslovně dokumentují tuto nedostupnost.
 Stávající odvozené soubory/cache musí navíc projít Root report inventory;
 zavření endpointu samo nedokazuje odstranění dříve publikovaného souboru.
 
+Nový interní adapter `driver-publication.ts` připravuje přesnou hranici
+pro budoucí skutečný Root port:
+`withLease({kind: "aggregates" | "quality"}, async lease => ...)` a
+`lease.assertCurrent(): Promise<void>`. Žádné HTTP pole ani proměnná
+prostředí port nevybírá. Wrapper drží callback přes skutečné SQL, poslední
+ověření před JSON a skutečné `finish`/`close` odpovědi. Časový limit 15 s
+od vstupu pouze zavře HTTP; není důkazem zrušení SQL ani quiescence.
+Předčasné ukončení portu zablokuje pozdější publikování, ale wrapper dál
+čeká na zahájenou práci. Před hlavičkami je chyba 503; po odeslání nebo
+zavření se nedělá druhý zápis, pouze pevná neidentifikující výstraha.
+
+Store v guarded režimu přijme interní lease interface a kontroluje jej
+před a po skutečných dotazech. **Interface ani syntetický unit port nejsou
+Root autoritou. Produkční loader jej dosud nepřipojuje**, takže guarded
+reporty dál vracejí 503 před SQL i před dotazem na dataset. Připojení
+vyžaduje přijatý Root sdílený publikační zámek, exkluzivní protějšek pro
+všechny destruktivní writery a policy/restore přechody, nativní peer
+continuity a skutečný release/drain test. Root nesmí HOLD uvolnit jen
+podle TTL nebo chyby spojení. Existující report inventory zůstává zvlášť.
+
 [Nové aplikační ověření](../archive/2026-10-15_DRIVER_OWNER_COMPOSITION.md)
 má 611 PASS a 6 opt-in PostgreSQL SKIP, celkem 617. Zahrnuje 40 nových
 composition, custody, CLI, HTTP ordering a publication-denial unit případů;

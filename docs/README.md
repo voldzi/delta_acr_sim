@@ -40,6 +40,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: Driver Root metadata checkpoint SQL — 8/8](archive/2026-10-15_DRIVER_ROOT_CHECKPOINT_SQL.md)
 - [Archiv ověření: AI Root/SQL a compiled BYOK — 14/14, před production loaderem](archive/2026-10-15_AI_ROOT_CHECKPOINT.md)
 - [Archiv ověření: pevná Driver HTTP/maintenance kompozice a zavřená report read gate](archive/2026-10-15_DRIVER_OWNER_COMPOSITION.md)
+- [Archiv ověření: HTTP lifecycle adapter pro drženou publikační ochranu Driver reportů](archive/2026-10-15_DRIVER_PUBLICATION_ADAPTER.md)
 - Zdrojová AI composition: [pevný Root checkpoint loader/consumer](../apps/ai-router-api/src/owner-checkpoint.ts)
   a [aplikační entrypoint](../apps/ai-router-api/src/index.ts). Její unit ověření
   není produkční Root enrollment nebo deploy; rozsah zdroje a otevřené gates

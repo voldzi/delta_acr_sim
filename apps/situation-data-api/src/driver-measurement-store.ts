@@ -6,6 +6,7 @@ import type {DriverErasureInput} from "./driver-account-erasure.js";
 import {DriverRetentionLifecycle,DriverRetentionLifecycleError,type DriverRetentionConsumer,type DriverRetentionOperationContext,type DriverRetentionScheduler} from "./driver-retention-lifecycle.js";
 import {DriverGuardedOperationRunner} from "./driver-guarded-execution.js";
 import type {DriverGuardedOperationContext} from "./driver-guarded-execution-port.js";
+import type {DriverPublicationLease} from "./driver-publication.js";
 
 export type DriverMeasurementStorageOptions=DriverErasureStorageOptions&{retentionConsumer?:DriverRetentionConsumer;retentionScheduler?:DriverRetentionScheduler};
 
@@ -117,11 +118,17 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     } catch(error) { await client.query("ROLLBACK").catch(()=>undefined); throw error; }
     finally {client.release();}
   }
-  async aggregates(dataset:string,since:string,now:string):Promise<unknown[]> {
-    // A five-second facts admission is NOT a held generation/publication lease.
-    // Until the actual protected report reader is accepted, guarded mode must
-    // not expose restored or in-flight stale summaries through this raw query.
-    if(this.guarded)throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
+  private async assertPublication(publication?:DriverPublicationLease):Promise<void> {
+    if(!this.guarded)return;
+    // Only an already held production Root publication port may supply this
+    // callback. A short-lived read admission is not a publication/drain lease.
+    try {
+      if(!publication||typeof publication.assertCurrent!=="function")throw new Error();
+      await publication.assertCurrent();
+    }catch{throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");}
+  }
+  async aggregates(dataset:string,since:string,now:string,publication?:DriverPublicationLease):Promise<unknown[]> {
+    await this.assertPublication(publication);
     // Each attested contributor gets equal weight; a phone cannot dominate by oversampling.
     const r=await this.pool.query(`WITH per_contributor AS (
       SELECT i.dataset,i.edge_id,i.window_start,r.contributor_hash,count(*) AS intervals,
@@ -138,10 +145,11 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       CASE WHEN window_start+interval '5 minutes'>$3 THEN 'current' ELSE 'historical' END AS state
       FROM per_contributor GROUP BY dataset,edge_id,window_start HAVING count(*)>=5 AND sum(intervals)>=10
       ORDER BY window_start DESC,edge_id LIMIT 1000`,[dataset,since,now]);
+    await this.assertPublication(publication);
     return r.rows;
   }
-  async quality(now:string):Promise<unknown> {
-    if(this.guarded)throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");
+  async quality(now:string,publication?:DriverPublicationLease):Promise<unknown> {
+    await this.assertPublication(publication);
     const r=await this.pool.query(`SELECT count(*)::integer AS "retainedBatchCount",
       max(received_at) AS "lastAcceptedAt",coalesce(sum((receipt->>'acceptedIntervalCount')::integer),0)::integer AS "acceptedIntervalCount"
       FROM driver_measurement_receipts WHERE expires_at>$1`,[now]);
@@ -159,6 +167,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     const rejected=await this.pool.query(`SELECT reason,sum(value::integer)::integer AS count
       FROM driver_measurement_receipts r CROSS JOIN LATERAL jsonb_each_text(r.receipt->'rejectionCounts') AS v(reason,value)
       WHERE r.expires_at>$1 GROUP BY reason`,[now]);
+    await this.assertPublication(publication);
     return {...r.rows[0],rejectionCounts:Object.fromEntries(rejected.rows.map(x=>[x.reason,x.count])),eta:eta.rows};
   }
   async revoke(owner:string,contributor:string,context?:DriverGuardedOperationContext):Promise<number> {
