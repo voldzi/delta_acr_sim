@@ -53,6 +53,16 @@ export function verifyPreservedIdentity(envText, driverEnv, routerEnv) {
   need(selected(envText, "SIM_OIDC_ISSUER") === ISSUER, "ACTUAL_SIM_ISSUER_REVIEW_REQUIRED");
   return { routerActorPreserved: true, namespaceAndEncryptionKeysPreserved: true, issuer: ISSUER };
 }
+export function verifyEnrolledIdentity(checked, enrollment, stage) {
+  need(
+    stage.simChanged === false &&
+      stage.copChanged === false &&
+      checked.configurationFingerprint === enrollment.configurationFingerprint &&
+      checked.identityFingerprints?.driver === enrollment.driverIdentityFingerprint &&
+      checked.identityFingerprints?.router === enrollment.routerIdentityFingerprint,
+    "ENROLLED_IDENTITY_CHANGED_BEFORE_RETRY"
+  );
+}
 export function bindPostStopEnrollment(enrollment, original, post) {
   need(
     original.sourceRevision === SOURCE_REVISION &&
@@ -174,12 +184,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       need(process.env.PGPASSWORD, "HIDDEN_POSTGRES_PASSWORD_REQUIRED");
       process.env.SIM_ERASURE_PG_ROOT_CERT_FILE = CA;
       need(sha(readFileSync(CA)) === "7a3f9d9373cd63361148230e6c2804c6fb76dc204e18d5039aad7c7838d7a14a", "APPROVED_POSTGRES_CA_REQUIRED");
+      const identityStage = stageCoordinatedIdentity({ mode: "check", expectedIssuer: ISSUER });
+      if (state?.enrollment) need(identityStage.simChanged === false && identityStage.copChanged === false, "ENROLLED_IDENTITY_CHANGED_BEFORE_RETRY");
       if (state?.complete === true) {
         console.log(JSON.stringify(runtime(["--verify", "--plan-file", planFile]), null, 2));
         process.exit(0);
       }
       // Administrator credentials and schema state are checked BEFORE stopping.
       const checked = provision({ mode: "check", user: process.env.PGUSER ?? "postgres", password: process.env.PGPASSWORD });
+      if (state?.enrollment) verifyEnrolledIdentity(checked, state.enrollment, identityStage);
       if (!state) {
         need(!checked.driver.erasure && !checked.driver.binding && !checked.ai.erasure && !checked.ai.binding, "UNADOPTED_EXISTING_SCHEMA_REQUIRES_REVIEW");
         const original = JSON.parse(readFileSync(root + "/deploy/account-safety/20261015-root-inventory.json", "utf8"));

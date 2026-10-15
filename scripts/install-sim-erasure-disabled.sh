@@ -8,7 +8,7 @@ umask 077
 case ${1:---apply} in --apply|--verify|--rollback-disabled) ;; *) exit 2 ;; esac
 source_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$source_root"
-printf '%s  %s\n' 8e67b368d189271d43dbf784347d677da47cfe42987c36009aff4d3d41c603af deploy/account-safety/disabled-install.sha256 | /usr/bin/sha256sum --check --status
+printf '%s  %s\n' 897f9d6327992a2112eb85b4ee3cd14451b6bde91a04deee80e778fe325ff201 deploy/account-safety/disabled-install.sha256 | /usr/bin/sha256sum --check --status
 /usr/bin/sha256sum --check --status deploy/account-safety/disabled-install.sha256
 # Serialize the fixed maintenance, without storing any credential in /run.
 lockdir=/run/sim-erasure-maintenance

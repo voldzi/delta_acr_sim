@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { bindPostStopEnrollment, verifyPreservedIdentity } from "./install-sim-erasure-disabled.mjs";
+import { bindPostStopEnrollment, verifyPreservedIdentity, verifyEnrolledIdentity } from "./install-sim-erasure-disabled.mjs";
 import { SOURCE_REVISION, EXPECTED_CLEANUP_HASH } from "./inspect-sim-root-inventory.mjs";
 const original = JSON.parse(readFileSync(new URL("../deploy/account-safety/20261015-root-inventory.json", import.meta.url)));
 const enrollment = {
@@ -70,4 +70,17 @@ test("root entrypoint and rollback remain disabled-only, no secret-input JSON or
   assert.ok(main.includes("stageCoordinatedIdentity"));
   assert.match(main, /oldImageFallback:\s*false/);
   assert.match(main, /wholeAccountComplete:\s*false/);
+});
+test("retry rejects any changed enrolled fingerprint or missing coordinated identity field before stop", () => {
+  const accepted = { configurationFingerprint: "c".repeat(64), driverIdentityFingerprint: "d".repeat(64), routerIdentityFingerprint: "e".repeat(64) };
+  const checked = {
+    configurationFingerprint: accepted.configurationFingerprint,
+    identityFingerprints: { driver: accepted.driverIdentityFingerprint, router: accepted.routerIdentityFingerprint }
+  };
+  const stage = { simChanged: false, copChanged: false };
+  verifyEnrolledIdentity(checked, accepted, stage);
+  assert.throws(() => verifyEnrolledIdentity(checked, accepted, { ...stage, copChanged: true }));
+  assert.throws(() => verifyEnrolledIdentity(checked, accepted, { ...stage, simChanged: true }));
+  assert.throws(() => verifyEnrolledIdentity({ ...checked, configurationFingerprint: "wrong" }, accepted, stage));
+  assert.throws(() => verifyEnrolledIdentity({ ...checked, identityFingerprints: { ...checked.identityFingerprints, router: "wrong" } }, accepted, stage));
 });

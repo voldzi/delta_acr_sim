@@ -226,6 +226,9 @@ není důkazem dokončené COP uživatelské akceptace nebo všech ownerů.
 Opakování drží původní enrollment, role/passwordy i namespace. Současný
 druhý běh blokuje lokální `flock`. Pád po odstranění cron řádku dohledá
 uložený přesný stop-transition intent; jiná konfigurace se nepřijme.
+Před každým opakováním se navíc znovu čtou obě produkční secrets a skutečné
+identity fingerprinty se porovnají s původním enrollmentem ještě před stop.
+Chybějící či změněný signer/issuer nebo namespace znamená konec bez rotace.
 
 Start i `--rollback-disabled` používají pouze oba kompatibilní obrazy a
 literal false overlay. Po pokusu o migraci není automatický návrat starého

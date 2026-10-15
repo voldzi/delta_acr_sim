@@ -1,0 +1,21 @@
+{
+  "status": "SOURCE_RETRY_IDENTITY_CHECK_ONLY",
+  "basePreparationCommit": "f14939180438a9bf9ee6831e9c7a96644f09aa71",
+  "baseEvidence": "2026-10-15_SIM_DISABLED_CUTOVER_PREPARATION.json",
+  "baseEvidenceUnchanged": true,
+  "runtimeSourceRevision": "ca1fd6b6046745e91cca6648e1e5bd3f93fc8422",
+  "entrypointSha256": "5bafdb1aee9954dceea73873dde62bc02d70f976132df98e5dd1ffba1505654a",
+  "dependencyManifestSha256": "897f9d6327992a2112eb85b4ee3cd14451b6bde91a04deee80e778fe325ff201",
+  "change": "Recheck both coordinated secrets files and compare actual identity fingerprints to the original enrollment before retry can stop writers. No new keys, no namespace rotation.",
+  "newInstallAndInventoryTests": {"passed": 24, "failed": 0, "node": "24.16.0"},
+  "dependencyManifestCheck": "all 16 files passed",
+  "shellSyntax": "passed",
+  "diffWhitespace": "passed",
+  "unchangedRuntimeBuildAndPgEvidence": "See base preparation receipt; no application, SQL migration or Docker image changed in this retry check.",
+  "productionMigrationApplied": false,
+  "productionCronChanged": false,
+  "productionServicesStoppedOrRecreated": false,
+  "productionSecretsChanged": false,
+  "realAccountDeletion": false,
+  "wholeAccountComplete": false
+}

@@ -1,4 +1,4 @@
-7bf1eadc3b430f5545671666e078dc5c56b62f1a29251aae9782cb64732334e7  scripts/install-sim-erasure-disabled.mjs
+73a903365867301a4ad37aa7cdc839145320207f1d213269e9bca8f3b0b25968  scripts/install-sim-erasure-disabled.mjs
 b4b271071919bec36157b46ebc471fadc0cff2b37147ceb240579247091f1dc9  scripts/stage-sim-erasure-identity.mjs
 2d3d3ed4031c15ac838e0ac1589ab52fcb673636d9cc879a099e4148471e797d  scripts/sim-erasure-runtime-step.mjs
 6f7a27942469ce98feda3c50959b4d1bc07cc7ca3c711a8990eee0a69e0efc05  scripts/provision-sim-erasure-production.mjs
