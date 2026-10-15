@@ -1,9 +1,9 @@
 # Nasazení mazání COP/Jízdy při zachování SIM
 
-## Aktuální koordinovaný cutover Driver 003–005 a AI Routeru — 15. 10. 2026
+## Aktuální koordinovaný cutover Driver 003–006 a AI Routeru — 15. 10. 2026
 
 Cutover zatím provedený není. Tento oddíl řídí schválené dokončení a
-nasazení Driver SQL 003–005, AI SQL 004/005, skutečných Root readerů a
+nasazení Driver SQL 003–006, AI SQL 004/005, skutečných Root readerů a
 aplikačního zapojení. Opt-in Driver stores navazují na `0f56fc0`;
 nová AI composition se přijímá spolu s odpovídajícím Root klientem,
 nikoli jako samostatný image nebo databázový update. Obecný souhlas s
@@ -93,6 +93,13 @@ kontext 503 před SQL. Legacy před cutoverem zůstává beze změny.
   **guard_owner MEMBER OF guard_exec**, tedy `sim_driver_guard_exec` udělená
   ownerovi, nikoli opačně; runtime ani control se nesmějí stát ownerem.
   004 vyžaduje přijatou 003 a dosud neexistující `read_admission_facts`.
+  Nová 006 navíc vyžaduje již přijatý store binding a neměnné původní
+  receipt FK/columns; nesmí se spustit jako enrollment nebo adopce store.
+  Přidává jen control EXEC a NOLOGIN owner SELECT dvou ETA sloupců.
+  Nový skutečný privilege fingerprint musí být zvlášť revidován a přijat
+  nezávislým Root publisherem. [Izolovaných 12/12](../archive/2026-10-15_DRIVER_INVENTORY_CANDIDATES_SQL.md)
+  tuto produkční akceptaci nenahrazuje. Root musí držet úplnou doloženou
+  historii klíčových verzí; prázdná DB neprokazuje správnost derivace.
 - Pro AI DBA doloží `sim_ai_router` a nezměněné 001–003, sedm tabulek a
   dvě finanční invoker views pod `ai_router_migrator`, skutečné RLS,
   fence triggery a nákladovou retenci. Před AI004 musí být

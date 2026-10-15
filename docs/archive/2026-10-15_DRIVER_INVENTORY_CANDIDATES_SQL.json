@@ -1,0 +1,98 @@
+{
+  "status": "SOURCE_DRIVER_INVENTORY_CANDIDATES_SQL_ONLY",
+  "startedAt": "2026-10-15T09:13:03.629Z",
+  "completedAt": "2026-10-15T09:13:04.744Z",
+  "passed": 12,
+  "cases": [
+    {
+      "case": "new STABLE control-only function, narrow ETA grant and independent privilege-pin change",
+      "passed": true
+    },
+    {
+      "case": "zero-accepted receipts and expired-but-still-stored receipts are inventory members",
+      "passed": true
+    },
+    {
+      "case": "ETA-only contributor is included and intervals remain covered by the unchanged receipt FK",
+      "passed": true
+    },
+    {
+      "case": "current/expired temporary fences and permanent-only fences are included without expiry guessing",
+      "passed": true
+    },
+    {
+      "case": "only the caller candidate subset is returned; unrelated/ledger/unknown hashes do not leak",
+      "passed": true
+    },
+    {
+      "case": "matched hashes are distinct/sorted across source overlap and the 4096-candidate bound is usable",
+      "passed": true
+    },
+    {
+      "case": "null/duplicate/invalid/oversized candidates reject with 22023, never normalization or truncation",
+      "passed": true
+    },
+    {
+      "case": "runtime/executor/PUBLIC access and non-read-only control calls fail closed",
+      "passed": true
+    },
+    {
+      "case": "actual store binding is returned; missing binding is unavailable and is never adopted",
+      "passed": true
+    },
+    {
+      "case": "read-only function leaves every row unchanged and takes no write/advisory/tuple locks or XID",
+      "passed": true
+    },
+    {
+      "case": "RLS drift is unavailable rather than a false empty inventory",
+      "passed": true
+    },
+    {
+      "case": "actual owner/hash index prefixes remain usable with input char64 casts and no new day column",
+      "passed": true
+    }
+  ],
+  "postgres": "18.3",
+  "transport": "new_owned_unix_socket_only_no_tcp",
+  "sourcePins": {
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "deploy/driver-measurements/006_inventory_candidates.sql": "bd69ca4e58746c852b49bf0ad1f59465a64fc781a59c4c9fe88073199080efe0"
+  },
+  "frozenPins": {
+    "scripts/test-driver-read-admission-postgres.mts": "a84618b475c1f3707941e2290982a6069a4888461eea3f0a10fc5e6305e98e5f",
+    "docs/archive/2026-10-15_DRIVER_READ_ADMISSION_SQL.json": "656e141ca0469693917e7268000a390952326647ffc6f475666d26b5a7f9b755"
+  },
+  "executingRunnerSha256": "b4dd82d5a95826d934697544a22117ebf602e62330fdc61f731969183eb27ab2",
+  "inputsUnchangedBeforeAndAfter": true,
+  "previousEvidenceUnchanged": true,
+  "privilegeChange": {
+    "beforeFingerprint": "d6353006adf28b171de35120b56b0d8d3ac37403e4fc8515e84cab7dcffd9679",
+    "afterFingerprint": "5a673589f3f68fc11c65d7eeb7488dacd75d160cdb35ae4c68bd511259fcd7f7",
+    "requiresIndependentRootPolicyReview": true,
+    "grants": [
+      "SELECT(owner,contributor_hash) ON driver_measurement_eta TO sim_driver_guard_owner",
+      "EXECUTE read_inventory_candidates(jsonb) TO sim_driver_guard_control"
+    ]
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootAuthorityVerified": false,
+    "accountCandidateDerivationVerified": false,
+    "completeDailyInventoryVerified": false,
+    "rootEnrollment": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "realAccountDeleted": false,
+    "providerCalls": 0
+  },
+  "cleanup": {
+    "ownedClusterStopped": true,
+    "ownedDirectoryRemoved": true,
+    "globalPrune": false
+  },
+  "interpretation": "Twelve new actual SQL006 groups. Candidate membership does not determine contributor days, account ownership, complete key history, Root authority or erasure completion."
+}

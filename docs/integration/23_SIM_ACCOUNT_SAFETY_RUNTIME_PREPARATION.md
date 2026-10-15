@@ -134,6 +134,51 @@ nedokládají deterministický race test rotace ani produkční config lease.
 
 ## Omezená publikace Root checkpointů
 
+### Privátní ověření uchovaných kandidátů denní identity
+
+Zdrojový `006_inventory_candidates.sql` přidává pouze
+`sim_driver_guard_source.read_inventory_candidates(p_hashes jsonb)`.
+Volající je pevný `sim_driver_guard_control` v `BEGIN READ ONLY`; PUBLIC,
+runtime ani executor nemají EXECUTE. Funkce je STABLE SECURITY DEFINER pod
+existujícím NOLOGIN ownerem, s pevným `search_path=pg_catalog`, UTC a
+`row_security=off`. Nepřidává roli, sloupec, vazbu účtu na dny nebo nový
+store binding. Chybějící přijatá inkarnace znamená nedostupnost.
+
+Vstup je JSON pole 1–4096 unikátních lowercase hex64 řetězců, nejvýše
+278528 bajtů kanonického PG JSONB textu. NULL, jiný tvar, duplicity,
+neplatné hodnoty či překročení meze mají SQLSTATE 22023. Control bez
+read-only transakce nebo bez předem existujícího bindingu má P0001;
+neoprávněné role mají 42501. Caller musí nastavit omezený statement/lock
+timeout; chyba se nesmí vykládat jako prázdná inventura.
+
+Přesný výstup obsahuje jen:
+
+```text
+contractVersion = sim-driver-inventory-candidates-v1
+observedAtUTC   = skutečný čas pozorování v kanonickém UTC
+storeIncarnation = skutečný předem přijatý UUID
+candidateCount  = počet vstupních kandidátů, nikoli počet nálezů
+matchedHashes   = seřazený unikátní podvýběr předaných hashů
+```
+
+Čte pouze členství v COP receipts, ETA a dočasných/trvalých revokacích.
+Vrací i prošlou, dosud uloženou dávku a receipt bez přijatých intervalů;
+intervaly pokrývá původní receipt FK. ETA contributor může být odlišný od
+parent receipt, proto má vlastní kontrolu. Nevydává nepředané hashe,
+receipt JSON, GPS, dny, ledger nebo účet. Indexované zdrojové sloupce se
+nepřetypovávají; validované vstupy se převádějí na `char(64)`.
+
+Root musí sám odvodit kandidáty z ověřeného účtu a nezávisle přijaté
+historie klíčů s doloženou mezí vydávání. Výsledek DB nedokazuje účet ani
+úplnost historie. Root v RAM spojí nálezy s povinnými nedávnými dny a
+skutečným COP outboxem. Přes 4096 kandidátů nebo 40 manifest položek se
+nesmí tiše zkracovat. Nový EXEC a úzký ETA SELECT pro NOLOGIN ownera mění
+privilege pin; jeho hodnotu nelze automaticky převzít z cílové databáze.
+
+[12 skutečných izolovaných PG případů](../archive/2026-10-15_DRIVER_INVENTORY_CANDIDATES_SQL.md)
+ověřilo tuto SQL funkci a neměnnost dat. Nejde o produkční instalaci,
+Root derivaci, úplnou inventuru, obnovu nebo společnou akceptaci.
+
 Čisté doménové moduly pod `deploy/account-safety/` připravují přesné
 transientní JSON struktury pro skutečné Root pluginy; samy nejsou těmito
 pluginy ani verifikátorem. Driver používá pevné sibling importy skutečného

@@ -330,3 +330,50 @@ Lokální HMAC parser je pouze nutná strukturální kontrola. Skutečný
 Root ověřuje historickou derivaci denního ID a konkrétní consent intent;
 nikdy nehádá accountMAC z opaque pseudonymu. Revoke nevytváří globální
 account-deletion fence. Před společným cutoverem se legacy režim nemění.
+
+### Úplnost historického denního manifestu
+
+Původní denní datum se neodvozuje z `received_at`: přijetí dávky není
+datum denního pseudonymu. Nepřidáváme proto nový denní sloupec ani
+zpětně vyplňovanou vazbu účet–den. Root od COP získá nezávisle přijatou
+historii klíčových verzí s doloženým prvním a posledním možným dnem vydání.
+Pouze v RAM odvodí kandidáty pro konkrétní ověřený účet. Chybějící verze
+nebo nedoložený počátek znamená HOLD, nikoli odhad sedmi dnů.
+
+Privátní SQL006 umí pouze ověřit přítomnost 1–4096 předaných unikátních
+hashů v COP namespace skutečných receipts, ETA a dočasných i trvalých
+revokací. Započítá také uložené prošlé receipts a receipts bez jediného
+přijatého intervalu. Nevrací jiné hashe, data jízd, datum nebo identitu.
+Přístup má pouze existující `sim_driver_guard_control` v read-only
+transakci; veřejný HTTP/OpenAPI kontrakt se nemění.
+
+Úplný manifest tvoří povinné nedávné dny, nalezené uchované kandidáty
+a skutečný čekající outbox COP napříč přijatými klíčovými verzemi. Limit
+40 položek zůstává závazný: překročení vyžaduje změnu kontraktu, nikoli
+truncation. Přidání funkce i úzkého ETA SELECT grantu pro NOLOGIN ownera
+mění privilege fingerprint a vyžaduje nezávislé přijetí nového pinu.
+
+### Skutečně držená nezávislá ochrana
+
+Společný Root owner modul nesmí odvozovat autoritu ze své typové
+deklarace, aplikačního callbacku nebo samotného DB `ready`. Vyžaduje
+aktuální podepsaný frontier a source JWS, nezávislou podepsanou owner
+policy, skutečné host/process pozorování, přijaté registry vazby i
+aktuální schema/privilege fakta cílové DB. Pevné profily, cesty a role
+nevybírá HTTP požadavek.
+
+Čtení drží skutečný session shared advisory zámek guard DB 904214;
+mutation, retence a přechody drží exkluzivní protějšek. TTL důkazu
+neukončuje práci ani neodemyká zámek. Neznámé ukončení cílové databázové
+session vyvolá HOLD; `close()` jej nesmí zaměnit za potvrzenou quiescence.
+Pád/restart Root služby vyžaduje skutečný nový consumer cohort a drain,
+nikoli automatické přijetí procesů nebo souborů ze zálohy.
+
+Checkpoint publication před prvním setterem trvale uloží neměnný
+podepsaný dispatch claim. Další pokus smí pouze číst skutečný stav stejné
+operace, nikdy měnit UUID, tělo nebo původní deadline. Protože SQL005
+nemá origin transaction marker, výsledek se jmenuje pouze
+`checkpoint-readback-known`, nikoli původní commit nebo Root readiness.
+Následné přijetí nové policy je samostatný krok. Zdroj těchto modulů
+a izolované dílčí testy nejsou jejich produkční enrollment či restore
+akceptace; společná aktivace zůstává podmíněna jejich doložením.
