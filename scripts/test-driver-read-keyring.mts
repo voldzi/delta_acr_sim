@@ -14,7 +14,7 @@ import { promisify } from 'node:util';
 assert.equal(process.argv.length, 5);
 assert.equal(process.argv[2], '--run'); assert.equal(process.argv[3], '--cop-source');
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..'), cop = resolve(process.argv[4]);
-const receiptPath = join(repo, 'docs/archive/2026-10-15_DRIVER_READ_KEYRING.json');
+const receiptPath = join(repo, 'docs/archive/2026-10-15_DRIVER_READ_KEYRING_FINAL.json');
 assert.ok(!existsSync(receiptPath), 'Existing test evidence must not be overwritten.');
 const hash = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
 const selfPath = fileURLToPath(import.meta.url), selfPin = hash(await readFile(selfPath));
@@ -29,6 +29,7 @@ const frozenEvidencePins: Record<string, string> = {
   'scripts/fixtures/driver-read-root/Dockerfile': '532d8783661a025b720fd01ba82b829bb60fe50fac386170a3a004b34e66c998',
   'docs/archive/2026-10-15_DRIVER_READ_ROOT.json': '4d50470cc6398b8108fef3aad622a3fa747f749d8d8d0414854d36a7ee14c249',
   'docs/archive/2026-10-15_DRIVER_READ_ROOT.md': 'c8329c7e5aedd1ca929ec21aa83031d6d23b8f0f1fd05fe0134718b8d476fed4',
+  'docs/archive/2026-10-15_DRIVER_READ_KEYRING.json': 'e2746c3f2fcb1e39dd248ef643d573fabc802c7db22bb3ad494f72a3927ca29c',
 };
 for (const [name, pin] of Object.entries(frozenEvidencePins))
   assert.equal(hash(await readFile(join(repo, name))), pin, 'Frozen earlier evidence must remain unchanged.');
@@ -45,7 +46,7 @@ for (const name of ownInputs) sourcePins[name] = hash(await readFile(join(repo, 
 for (const [name, pin] of Object.entries(sqlPins)) assert.equal(sourcePins['deploy/driver-measurements/' + name], pin);
 assert.equal(sourcePins['deploy/driver-measurements/root-read-admission.mjs'], '259d53669e7f90d940a9c3c9eb8fffd964a3e2b6a364169af480631ba22fde56');
 assert.equal(sourcePins['deploy/driver-measurements/read-admission-facts.mjs'], '756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456');
-assert.equal(sourcePins['scripts/fixtures/driver-read-keyring/harness.mjs'], 'bc51a3d5fafacf5bdf7056178c8ea81d63d4da4707d0fa02dd3bf324a31083e1');
+assert.equal(sourcePins['scripts/fixtures/driver-read-keyring/harness.mjs'], '8992fdd14310ed9fece233ba0a3a8eea7272c4740550f9a863bede8a1a5c0c85');
 
 const execute = promisify(execFile), env = Object.fromEntries(Object.entries(process.env).filter(([k]) => ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR'].includes(k)));
 const docker = async (args: string[], timeout = 30_000) => execute('docker', ['--host', 'unix:///Users/voldzi/.docker/run/docker.sock', ...args],
@@ -139,4 +140,3 @@ assert.ok(success && cleanupComplete, 'Owned test containers must be removed bef
 receipt.cleanup = { ownedContainersRemoved: true, ownedImplicitVolumesRemoved: true, sourceContextRemoved: true, globalPrune: false };
 await writeFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
 console.log(JSON.stringify({ receiptPath, passed: receipt.result.passed, productionChanged: false }));
-

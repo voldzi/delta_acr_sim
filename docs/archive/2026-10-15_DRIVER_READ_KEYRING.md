@@ -5,6 +5,13 @@
 [Receipt](2026-10-15_DRIVER_READ_KEYRING.json) má SHA-256
 `e2746c3f2fcb1e39dd248ef643d573fabc802c7db22bb3ad494f72a3927ca29c`.
 
+Po odstranění dvou nadbytečných EOF prázdných řádků pouze v testovacích
+souborech proběhlo nové ověření finálních bajtů, opět **16/16**, od
+`07:48:52.103Z` do `07:49:05.784Z`. [Finální receipt](2026-10-15_DRIVER_READ_KEYRING_FINAL.json)
+má SHA-256 `04231a1fdbad9d5ea29d49d6c3470b7178551e277f64883b560cc45824035ce5`.
+Předchozí receipt zůstal beze změny a byl připnut i v novém běhu; nejde o
+dalších šestnáct případů. Reader a SQL se v tomto kroku nezměnily.
+
 Nová revize `root-read-admission.mjs` má SHA-256
 `259d53669e7f90d940a9c3c9eb8fffd964a3e2b6a364169af480631ba22fde56`.
 Při vydání admission používá původní ověřený keyring snapshot. Signer

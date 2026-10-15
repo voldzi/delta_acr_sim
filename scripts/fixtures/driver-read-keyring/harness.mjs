@@ -427,4 +427,3 @@ finally {
   clearTimeout(deadline);
 }
 process.stdout.write(JSON.stringify(failure ?? output) + '\n');
-

@@ -1,0 +1,198 @@
+{
+  "status": "SOURCE_DRIVER_READ_KEYRING_LINUX_ONLY",
+  "startedAt": "2026-10-15T07:48:52.103Z",
+  "completedAt": "2026-10-15T07:49:05.784Z",
+  "result": {
+    "contractVersion": "sim-driver-read-keyring-isolated-linux-evidence-v1",
+    "scope": "synthetic_driver_keyring_revision_and_actual_sql004_only",
+    "passed": 16,
+    "cases": [
+      {
+        "name": "valid signed Root chain and actual TLS/SQL facts for all five purposes",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "validly signed permit cannot authorize a different request",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "forged Ed25519 permit is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "expired but correctly signed permit is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "Root record symlink is rejected by actual file custody",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "group-readable private Root record is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "actual target schema drift cannot reuse accepted fingerprints",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "actual effective column privilege drift is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "actual target checkpoint drift is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "synthetic peer mismatch cannot borrow a signed client registration",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "independent signed frontier mismatch is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "actual live registry frontier drift is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "actual live accepted proof expiration is rejected",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "valid signatures cannot hide report-inventory checkpoint mismatch",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "frozen trust-set signer/keyring negatives and unchanged successful configuration",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      },
+      {
+        "name": "actual post-TLS-startup silent TCP is bounded through query and cleanup",
+        "passed": true,
+        "targetAndRegistryRowsUnchanged": true
+      }
+    ],
+    "startedAt": "2026-10-15T07:48:54.139Z",
+    "completedAt": "2026-10-15T07:49:05.635Z",
+    "node": "v24.20.0",
+    "postgres": "18.6",
+    "platform": "linux",
+    "architecture": "arm64",
+    "nodeImageId": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+    "postgresImageId": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873",
+    "sourcePins": {
+      "/fixture/sql/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+      "/fixture/sql/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+      "/fixture/sql/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+      "/fixture/sql/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+      "/opt/cop-account-safety/root-records.mjs": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+      "/opt/cop-account-safety/root-read-admission.mjs": "259d53669e7f90d940a9c3c9eb8fffd964a3e2b6a364169af480631ba22fde56",
+      "/opt/cop-account-safety/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456"
+    },
+    "peerSource": "frozen_synthetic_fixture_not_kernel_observation",
+    "realEd25519": true,
+    "realRootFileCustody": true,
+    "realLoopbackStrictTls": true,
+    "realPostgres": true,
+    "positiveVerificationCallbacks": 0,
+    "pgStubs": 0,
+    "originRpcCalls": 0,
+    "externalNetworkInterfaces": 0,
+    "targetAndRegistryRowsUnchangedByReader": true,
+    "keyringChecks": {
+      "unchangedSuccess": true,
+      "signerOutsideTrustSetRejected": true,
+      "replacedKeyringRejected": true,
+      "deterministicIssueRaceTested": false
+    },
+    "fixtureRegistrationIsNotLoadedSourceAttestation": true,
+    "productionEnrollment": false,
+    "nativePeerAcceptance": false,
+    "deployment": false,
+    "activation": false,
+    "wholeAccountComplete": false
+  },
+  "images": {
+    "node": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+    "postgres": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+  },
+  "sourcePins": {
+    "deploy/driver-measurements/root-read-admission.mjs": "259d53669e7f90d940a9c3c9eb8fffd964a3e2b6a364169af480631ba22fde56",
+    "deploy/driver-measurements/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "scripts/fixtures/driver-read-keyring/harness.mjs": "8992fdd14310ed9fece233ba0a3a8eea7272c4740550f9a863bede8a1a5c0c85",
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d"
+  },
+  "copRootHelperSha256": "ad203b1a1858bea7f8f799a6147720d1d0d6df790bfc1d4c866a12c45d6bb7fd",
+  "packageVersions": {
+    "pg": "8.23.0",
+    "pg-connection-string": "2.14.0",
+    "pg-pool": "3.14.0",
+    "pg-protocol": "1.16.0",
+    "pg-types": "2.2.0",
+    "pgpass": "1.0.5",
+    "pg-cloudflare": "1.4.0",
+    "pg-int8": "1.0.1",
+    "postgres-array": "2.0.0",
+    "postgres-bytea": "1.0.1",
+    "postgres-date": "1.0.7",
+    "postgres-interval": "1.2.0",
+    "split2": "4.2.0",
+    "xtend": "4.0.2"
+  },
+  "executingHarnessSha256": "7c8ef1a76407caebcee4ef1ed3503ea5f7805da3cad4044cd438ba96b67910ca",
+  "sourceUnchangedDuringRun": true,
+  "frozenEvidencePins": {
+    "scripts/test-driver-read-root.mts": "d478ca2597e38f95a93325614f3d90360665bc712169b180c3ab3483f431319c",
+    "scripts/fixtures/driver-read-root/harness.mjs": "fe4eca9f99f4082c86fc1229554a78bac7187f017ee5b141952d7491d81dce02",
+    "scripts/fixtures/driver-read-root/Dockerfile": "532d8783661a025b720fd01ba82b829bb60fe50fac386170a3a004b34e66c998",
+    "docs/archive/2026-10-15_DRIVER_READ_ROOT.json": "4d50470cc6398b8108fef3aad622a3fa747f749d8d8d0414854d36a7ee14c249",
+    "docs/archive/2026-10-15_DRIVER_READ_ROOT.md": "c8329c7e5aedd1ca929ec21aa83031d6d23b8f0f1fd05fe0134718b8d476fed4",
+    "docs/archive/2026-10-15_DRIVER_READ_KEYRING.json": "e2746c3f2fcb1e39dd248ef643d573fabc802c7db22bb3ad494f72a3927ca29c"
+  },
+  "priorFrozenEvidenceUnchanged": true,
+  "interpretation": "16 cases in a NEW keyring reader revision; the original fifteen-case receipt is unchanged and is not reattributed. Replaced-keyring negative is not a deterministic issue race test.",
+  "isolation": {
+    "externalNetwork": false,
+    "hostMounts": false,
+    "publicPorts": false,
+    "imagePull": false,
+    "imageBuild": false,
+    "sourceNodeContainerStarted": false,
+    "fixturePeerIsNotNativeAttestation": true
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootEnrollment": false,
+    "acceptedOwnerEvidence": false,
+    "nativeTransport": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "realAccountDeleted": false,
+    "providerCalls": false
+  },
+  "cleanup": {
+    "ownedContainersRemoved": true,
+    "ownedImplicitVolumesRemoved": true,
+    "sourceContextRemoved": true,
+    "globalPrune": false
+  }
+}
