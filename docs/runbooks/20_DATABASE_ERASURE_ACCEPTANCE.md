@@ -108,6 +108,20 @@ Správce/COP sestaví **jednu** společnou údržbu s těmito kroky:
 
 Příkazy **uvnitř schválené společné Root údržby**, nikoli další úkol uživateli:
 
+Pro samostatnou předběžnou čtecí kontrolu slouží
+`scripts/inspect-sim-root-inventory.mjs` v novém soukromém stage, nikoli
+reset/pull `/srv/sim`. Ověří přesné SHA tří spouštěných souborů původního
+`ca1fd6b`, Root/host/private source path a skutečně přečte pouze crontab
+účtu `voldzi` (do výstupu nedává příkaz). Přijatý starý aktivní řádek má
+SHA256 `c46a03b13ee8d39860fb7bd72df740006f8762fd421ded44e1b2cac990d15d78`.
+Změněný nebo další measurement řádek odmítne; odstraněný/zakomentovaný řádek
+označí pravdivě jako nepřítomný. Pak zavolá **stávající**
+`--inventory-reports` bez PostgreSQL hesla a vrátí skutečný `inventoryDigest`.
+Neprovádí SQL, editaci cron, chmod/chown, stop/start služeb ani invalidaci.
+To není enrollment ani předběžné schválení publication; aktivní cleanup se
+pouze zaznamená, nevypne. Root inventory provedený při běžících producentech
+je nutné před skutečným apply zopakovat po jejich koordinovaném zastavení.
+
 ```sh
 SIM_ERASURE_PG_ROOT_CERT_FILE=/etc/vcode-cop-pgbouncer/postgres-ca.crt \
   bash /path/to/pinned-sim-release/scripts/provision-sim-erasure-production.sh --check
