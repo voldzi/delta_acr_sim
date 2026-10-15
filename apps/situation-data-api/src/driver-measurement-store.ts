@@ -17,10 +17,12 @@ export class PostgresDriverMeasurementStore implements DriverStore {
   private closing?:Promise<void>;
   private erasures:PostgresDriverAccountErasureStore;
   private guarded?:DriverGuardedOperationRunner;
+  private databaseSafety?:import("../../../deploy/account-safety/database-erasure-guard.mjs").DatabaseErasureGuard;
   constructor(url: string, private hashSecret: string, options:DriverMeasurementStorageOptions={}) {
     if (hashSecret.length < 32) throw new Error("Invalid driver storage secret");
     this.pool=new Pool({connectionString:url,max:4,connectionTimeoutMillis:1500,statement_timeout:5000,idleTimeoutMillis:10000});
     this.pool.on("error",()=>{ /* No connection string/error payload is logged. */ });
+    this.databaseSafety=options.databaseSafety;
     // Presence opts in even when unbound: never fall back to application DML.
     if(options.guarded!==undefined)this.guarded=new DriverGuardedOperationRunner(options.guarded?.execution);
     this.erasures=new PostgresDriverAccountErasureStore(this.pool,hashSecret,options);
@@ -180,6 +182,10 @@ export class PostgresDriverMeasurementStore implements DriverStore {
         return count;
       }catch{throw new DriverMeasurementError(503,"DRIVER_MEASUREMENTS_UNAVAILABLE");}
     }
+    if(this.databaseSafety)return this.databaseSafety.withReportMaintenance(()=>this.revokeStored(owner,contributor));
+    return this.revokeStored(owner,contributor);
+  }
+  private async revokeStored(owner:string,contributor:string):Promise<number>{
     const c=await this.pool.connect();
     try {
       await c.query("BEGIN"); await c.query("SET LOCAL lock_timeout='1500ms'");

@@ -5,6 +5,7 @@ import { createHash, randomBytes, pbkdf2Sync, createHmac } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configurationFingerprint, runtimeIdentityFingerprint } from "../deploy/account-safety/database-erasure-guard.mjs";
+import { reportInventory } from "./driver-report-inventory.mjs";
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const HEX = /^[a-f0-9]{64}$/;
 const need = (v, code) => {
@@ -196,6 +197,22 @@ export function provision(o) {
         m[owner].restoreGeneration >= 1,
       "EXACT_TARGET_ENROLLMENT_REQUIRED"
     );
+  const reports = m.reportPublication;
+  let inventory;
+  if (reports) {
+    need(
+      reports.policy === "shared_generation_fence-v1" && reports.externalProducersReviewed === true && HEX.test(reports.inventoryDigest),
+      "EXPLICIT_REPORT_PRODUCER_REVIEW_REQUIRED"
+    );
+    inventory = reportInventory(o.synthetic ? { syntheticRoot: dirname(envPath) } : {});
+    need(
+      inventory.inventoryDigest === reports.inventoryDigest &&
+        inventory.producerMatches.length === 0 &&
+        inventory.activeProducerCount === 0 &&
+        !inventory.lockPresent,
+      "REPORT_PRODUCER_INVENTORY_CHANGED_OR_ACTIVE"
+    );
+  }
   if (!o.synthetic) {
     for (const container of ["csm-sim-situation-data-api", "csm-sim-ai-router-api"])
       need(
@@ -311,6 +328,7 @@ export function provision(o) {
     AI_ROUTER_ACCOUNT_ERASURE_COST_POLICY: m.costPolicy,
     DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT: m.driver.checkpointId
   };
+  if (reports) update.DRIVER_MEASUREMENT_REPORTS_DIR = o.synthetic ? dirname(envPath) + "/driver-report-files" : "/driver-measurement-reports";
   if (!o.synthetic) {
     update.SIM_ERASURE_PG_ROOT_CERT_FILE = rootCert;
     for (const [key, db, user] of [
@@ -461,6 +479,18 @@ export function provision(o) {
     "sim_driver_measurements",
     `UPDATE driver_account_erasure_state SET replay_ready=true,replay_checkpoint_hash=${literal(checkpoint)},proof_valid_until='infinity',retention_reviewed=true,publication_fence_verified=false,report_protection='unverified' WHERE singleton AND replay_checkpoint_hash IS NULL;`
   );
+  if (reports) {
+    // The actual directory is mounted only into the reviewed SDA image; its
+    // writer and invalidator hold the same target advisory lock. No no_report.
+    need(
+      reportInventory(o.synthetic ? { syntheticRoot: dirname(envPath) } : {}).inventoryDigest === inventory.inventoryDigest,
+      "REPORT_INVENTORY_CHANGED_DURING_INSTALL"
+    );
+    sql(
+      "sim_driver_measurements",
+      "UPDATE driver_account_erasure_state SET publication_fence_verified=true,report_protection='shared_generation_fence' WHERE singleton"
+    );
+  }
   sql(
     "sim_ai_router",
     `UPDATE ai_router_erasure_checkpoint SET identity_reviewed=true,replay_ready=true,cost_policy='aggregate-costs-current-month-v1',checkpoint_id=${literal(m.router.checkpointId)},checkpoint_generation=${m.router.restoreGeneration} WHERE id=1 AND NOT identity_reviewed AND NOT replay_ready;`

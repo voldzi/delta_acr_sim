@@ -74,3 +74,11 @@ samostatný důkaz v [runbooku 20](../runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md
 Root CLI permissions, skutečné zastavení Docker writerů a fyzická obnova
 se ověřují až ve společném instalačním kroku. Předchozí archivovaný společný
 HTTP report se nepřepíše a nepovažuje se automaticky za důkaz nové revize.
+
+Aktuální stejná skutečná fixture zahrnuje 23 kontrol: report producer cron,
+atomický souborový zápis, actual PG exporter/delete závod a ukončení publisher
+backendu při drženém FS mutexu, actor/symlink odmítnutí, `pg_dump/pg_restore`
+obou targetů se zachovaným nezávislým guardem, quarantine/startup replay,
+novou incarnation/generation, aktuální přepočtené identity fingerprinty,
+zero A + zachování B/SIM a samostatný skutečný retention/revoke úklid reportů.
+Neprovádí Root inventory na produkci ani fyzickou obnovu PBS.

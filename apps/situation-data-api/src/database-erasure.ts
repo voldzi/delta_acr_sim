@@ -13,10 +13,10 @@ export async function loadDatabaseDriverOwnerComposition():Promise<{driverMeasur
   verifyRuntimeIdentity("sim_measurements",process.env.DRIVER_MEASUREMENTS_HASH_SECRET,process.env.DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET,process.env.DRIVER_ACCOUNT_ERASURE_ISSUER);
   verifyProductionDatabaseTransport(process.env.SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL,"cop_account_safety_guard");
   verifyProductionDatabaseTransport(process.env.DRIVER_MEASUREMENTS_DATABASE_URL,"sim_driver_measurements");
-  const safety=new DatabaseErasureGuard({guardPool,targetPool,owner:"sim_measurements",guardStoreId:process.env.SIM_ACCOUNT_ERASURE_GUARD_STORE_ID??"",configurationFingerprint:process.env.SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT??"",driverHashSecret:process.env.DRIVER_MEASUREMENTS_HASH_SECRET});
+  const safety=new DatabaseErasureGuard({guardPool,targetPool,owner:"sim_measurements",guardStoreId:process.env.SIM_ACCOUNT_ERASURE_GUARD_STORE_ID??"",configurationFingerprint:process.env.SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT??"",driverHashSecret:process.env.DRIVER_MEASUREMENTS_HASH_SECRET,reportDirectory:process.env.DRIVER_MEASUREMENT_REPORTS_DIR});
   await safety.init();
-  return {driverMeasurements:{databaseSafety:safety,accountErasureProtectedProof:()=>safety.driverProof(),accountErasureDerivedBarrier:()=>safety.publicationBarrier(),publication:safety,
-   retentionConsumer:Object.freeze({owner:"sim_driver_measurements" as const,execute:async(work:Parameters<DriverRetentionConsumer["execute"]>[0])=>{await safety.assertCurrent();await work(Object.freeze({owner:"sim_driver_measurements",cutoff:new Date().toISOString()}));await safety.assertCurrent();}})},
+  return {driverMeasurements:{databaseSafety:safety,accountErasureProtectedProof:()=>safety.driverProof(),accountErasureDerivedBarrier:input=>safety.publicationBarrier(input),publication:safety,
+   retentionConsumer:Object.freeze({owner:"sim_driver_measurements" as const,execute:async(work:Parameters<DriverRetentionConsumer["execute"]>[0])=>safety.withReportMaintenance(()=>work(Object.freeze({owner:"sim_driver_measurements",cutoff:new Date().toISOString()})) )})},
    close:async()=>{await guardPool.end();await targetPool.end();}};
  }catch{await guardPool.end();await targetPool.end();throw new Error("SIM_DATABASE_SAFETY_UNAVAILABLE");}
 }

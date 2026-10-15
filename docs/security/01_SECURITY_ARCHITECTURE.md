@@ -101,6 +101,15 @@ hostname a explicitní již schválenou veřejnou CA; žádné přijetí nové C
 podle prvního spojení, přenos privátního klíče či změna COP Unix transportu.
 Instalace nezapíná mazání ani nepotvrzuje bezpečnost externích reportů.
 
+Aktuální DBv2 source doplňuje konkrétní soukromý report store, skutečné
+atomické zápisy, PG shared/exclusive publication lock a filesystem interlock
+pro ztrátu PG socketu. Potvrzení mazání je navázané na původní journal
+operaci, actor/request a skutečnou invalidaci souborů. Startup replay
+odstraní obnovený cache před expozicí. Root pouze inventarizuje konkrétní
+report/cron/producer rozsah a výslovně přijme stav; není pozitivním
+verifikátorem libovolných procesů. Neexistuje obecný filesystem endpoint,
+automatické převzetí mutexu, `no_report` výjimka ani nový Root runtime.
+
 Privátní Driver mutation scope je pouze interní korelace na skutečný Root
 kontext. SIM snapshotuje chráněný kontext před prvním await a vyžaduje
 stejný scope v pre/post admission a dispatchi. Scoped v2 se nesmí snížit

@@ -5,6 +5,9 @@ set +x
 umask 077
 [[ ${EUID} == 0 ]] || { printf 'Run this production installer as Root.\n' >&2; exit 2; }
 command -v node >/dev/null
+if [[ ${1:-} == --inventory-reports && $# == 1 ]]; then
+  exec node "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/driver-report-inventory.mjs"
+fi
 command -v psql >/dev/null
 if [[ -z ${PGPASSWORD:-} ]]; then
   printf 'PostgreSQL administrator password (not echoed): ' >/dev/tty

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import {createHash,createHmac,randomBytes,randomUUID} from "node:crypto";
 import {createRequire} from "node:module";
-import {readFile,writeFile} from "node:fs/promises";
+import {readFile,writeFile,mkdir} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {resolve,dirname} from "node:path";
 import {DatabaseErasureGuard,configurationFingerprint,runtimeIdentityFingerprint} from "../deploy/account-safety/database-erasure-guard.mjs";
@@ -25,6 +25,7 @@ const pools:any[]=[];const pool=(db:string,user:string)=>{const p=new Pool(confi
 const admin=pool("postgres","cop_safety_test_admin");
 const owned=(await admin.query("SELECT current_setting('cluster_name') AS name,current_setting('data_directory') AS directory,version() AS version")).rows[0];
 assert.equal(owned.name,"cop_erasure_owned_test");assert.match(owned.directory,/^\/private\/tmp\/cop-erasure-owned-[0-9]+\/pg$/);assert.match(owned.version,/PostgreSQL 18\./);
+const reportDirectory=dirname(owned.directory)+'/driver-report-files';await mkdir(reportDirectory,{mode:0o700}).catch(e=>{if(e.code!=='EEXIST')throw e;});
 const guardAdmin=pool("cop_account_safety_guard","cop_safety_test_admin");
 const source=async(path:string)=>readFile(resolve(root,path),"utf8");
 let guardId=randomUUID();
@@ -80,7 +81,7 @@ try {
   for(const [name,owner] of [["sim_measurements",dOwner],["ai_router",aOwner]] as const){const b=(await owner.query("SELECT * FROM sim_erasure_dataset_binding WHERE singleton")).rows[0];assert.equal(b.guard_store_id,guardId);assert.equal(b.configuration_fingerprint,fingerprint);checkpoints[name]=b.checkpoint_id;}
   await seed(dOwner,hash("cop:"+dayIds.at(-1)!.contributorIdDay));
  }
- Object.assign(process.env,{NODE_ENV:"test",SIM_ACCOUNT_ERASURE_AUTHORITY_MODE:"database_v2",SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL:urls("cop_account_safety_guard","sim_measurements_guard_runtime"),SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:guardId,SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT:fingerprint,
+ Object.assign(process.env,{NODE_ENV:"test",DRIVER_MEASUREMENT_REPORTS_DIR:reportDirectory,SIM_ACCOUNT_ERASURE_AUTHORITY_MODE:"database_v2",SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL:urls("cop_account_safety_guard","sim_measurements_guard_runtime"),SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:guardId,SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT:fingerprint,
   SIM_ACCOUNT_ERASURE_DRIVER_IDENTITY_FINGERPRINT:driverFingerprint,SIM_ACCOUNT_ERASURE_ROUTER_IDENTITY_FINGERPRINT:routerFingerprint,AI_ROUTER_USER_HASH_SECRET:secret,AI_ROUTER_COP_ACTOR_SECRET:actorSecret,AI_ROUTER_ACCOUNT_ERASURE_ISSUER:issuer,
   DRIVER_MEASUREMENTS_DATABASE_URL:urls("sim_driver_measurements","driver_measurements_runtime"),DRIVER_MEASUREMENTS_HASH_SECRET:secret,DRIVER_MEASUREMENTS_COP_TOKEN:copToken,DRIVER_MEASUREMENTS_ENABLED:"true",DRIVER_ACCOUNT_ERASURE_ENABLED:"true",DRIVER_ACCOUNT_ERASURE_ACTOR_SECRET:actorSecret,DRIVER_ACCOUNT_ERASURE_ISSUER:issuer,DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT:checkpoints.sim_measurements});
  const dBinding=await loadDatabaseDriverOwnerComposition();closers.push(dBinding.close);

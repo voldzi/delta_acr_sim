@@ -6,7 +6,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY packages/observability ./packages/observability
 COPY apps/situation-data-api ./apps/situation-data-api
-COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/database-erasure-guard.d.mts ./deploy/account-safety/
+COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/database-erasure-guard.d.mts deploy/account-safety/driver-report-files.mjs ./deploy/account-safety/
 COPY openapi/fragments/road-trip-v1.schemas.json ./openapi/fragments/road-trip-v1.schemas.json
 COPY openapi/fragments/known-road-closures.schema.json ./openapi/fragments/known-road-closures.schema.json
 COPY openapi/fragments/mapped-road-profile-v1.schemas.json ./openapi/fragments/mapped-road-profile-v1.schemas.json

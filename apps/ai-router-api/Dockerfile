@@ -4,7 +4,7 @@ COPY .corepack-pnpm-10.33.0.tgz /tmp/corepack-pnpm-10.33.0.tgz
 RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm /tmp/corepack-pnpm-10.33.0.tgz
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/ai-router-api ./apps/ai-router-api
-COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/database-erasure-guard.d.mts ./deploy/account-safety/
+COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/database-erasure-guard.d.mts deploy/account-safety/driver-report-files.mjs ./deploy/account-safety/
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/ai-router-api build
 

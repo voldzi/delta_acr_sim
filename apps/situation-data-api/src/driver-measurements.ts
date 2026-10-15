@@ -218,7 +218,7 @@ export interface DriverMeasurementDependencies {
   store?: DriverStore;
   matcher?: DriverMatcher;
   now?: () => number;
-  accountErasureDerivedBarrier?: () => Promise<void>;
+  accountErasureDerivedBarrier?: (input:import("./driver-account-erasure.js").DriverErasureInput) => Promise<void>;
   accountErasureProtectedProof?: () => Promise<DriverErasureProtectedProof>;
   retentionConsumer?: DriverRetentionConsumer;
   /** Internal opt-in. Production selects only the fixed protected owner loader;
@@ -396,7 +396,7 @@ export function registerDriverMeasurementRoutes(app: Express, config: SituationD
           if(context?.publicationContext)result=await store.acknowledgeAccountErasure(input,context);
         }
         else if(result.reportProtection==="no_report")result=await store.acknowledgeAccountErasure(input);
-        else if(dependencies?.accountErasureDerivedBarrier){try{await dependencies.accountErasureDerivedBarrier();result=await store.acknowledgeAccountErasure(input);}catch{
+        else if(dependencies?.accountErasureDerivedBarrier){try{await dependencies.accountErasureDerivedBarrier(input);result=await store.acknowledgeAccountErasure(input);}catch{
           res.status(202).json({...result,status:"pending",derivedReportAcknowledged:false,pendingReason:"derived_report_pending"});return;}}
       }
       res.status(result.status==="completed"?200:202).json(result);

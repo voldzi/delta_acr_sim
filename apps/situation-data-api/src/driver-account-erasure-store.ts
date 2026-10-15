@@ -228,6 +228,7 @@ export class PostgresDriverAccountErasureStore {
   }catch(error){await c.query("ROLLBACK").catch(()=>undefined);throw error;}finally{c.release();}}
   async acknowledge(input:DriverErasureInput,context?:DriverGuardedOperationContext):Promise<DriverErasureReceipt>{
     if(this.#guardedMode)return this.guardedAttempt(input,context,"ack");
+    if(this.options.databaseSafety)await this.options.databaseSafety.publicationBarrier(input);
     const c=await this.pool.connect(),key=this.key(input.operationId);try{
     await c.query("BEGIN");await c.query("SET LOCAL lock_timeout='1500ms'");const gate=await this.gate(c);await this.lockOp(c,key);
     const prior=await c.query("SELECT * FROM driver_account_erasure_operations WHERE operation_hash=$1",[key]);

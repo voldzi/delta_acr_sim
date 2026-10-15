@@ -1,0 +1,68 @@
+{
+  "evidenceKind": "curated-summary-of-observed-tool-results-not-a-production-authorization",
+  "date": "2026-10-15",
+  "baseCommit": "1fa945b8a95a9baf0b59116a8f6d0a9916016ea1",
+  "sourceSha256": {
+    "deploy/account-safety/database-erasure-guard.mjs": "d0b2a47ef42ecac6f9ba9fb46a50540dc3d1ea1c2e6fb03143f51215156ee77a",
+    "deploy/account-safety/driver-report-files.mjs": "7c749eb4cfe8748ed7c84671c825e3c3f691fa4a455375694d220fe85ff9416c",
+    "scripts/provision-sim-erasure-production.mjs": "6f7a27942469ce98feda3c50959b4d1bc07cc7ca3c711a8990eee0a69e0efc05",
+    "scripts/provision-sim-erasure-production.sh": "7fa8ea541ab14b799cc490f0fccd09cf74666da93ca7779709e124c505523531",
+    "scripts/driver-report-inventory.mjs": "b868b72fcd3148a79a9f8caa222402a1203e60598f2af5e72bcd9289b30aae12",
+    "scripts/test-sim-erasure-installer.mts": "4298f44920d21b2db648f1b736422301db869827158658a29c7d37eab9453890",
+    "deploy/account-safety/database-v2.prepare.compose.yml": "ac882dcf898153df596952263f897a21d960ffb12705285649fb3daa2a6aeeb4"
+  },
+  "actualOwnedFixture": {
+    "command": "node --import ./apps/ai-router-api/node_modules/tsx/dist/loader.mjs scripts/test-sim-erasure-installer.mts --run",
+    "postgresMajor": 18,
+    "passed": 23,
+    "failed": 0,
+    "priorInstallerCasesRetained": 13,
+    "additionalChecks": [
+      "real cron fixture detected and enrollment rejected before environment changes",
+      "explicit actual report inventory accepts shared_generation_fence only",
+      "leftover filesystem mutex refuses actual factory startup without automatic takeover",
+      "actual quality report includes A and B before actual pg_dump snapshots",
+      "real shared-lock exporter versus erasure blocking confirmed by pg_blocking_pids, actual invalidation before operation-bound acknowledgement and B retained",
+      "wrong actor and filesystem symlink refuse acknowledgement",
+      "pg_terminate_backend cannot bypass filesystem interlock or acknowledge before writer settles",
+      "actual pg_restore resurrects A and old report but quarantined factory refuses exposure",
+      "explicit new incarnation/checkpoint/generation and real factories replay independent journal before exposure",
+      "separate actual retention/revoke consumer invalidates reports under the same lock"
+    ],
+    "actualRestore": {
+      "targetDatabasesDumpedAndRestored": ["sim_driver_measurements", "sim_ai_router"],
+      "independentGuardDatabaseRestoredFromOldSnapshot": false,
+      "oldQualityReportRestored": true,
+      "quarantineRefusedActualFactoryStart": true,
+      "restoreGeneration": 2,
+      "actualCurrentIdentityFingerprintsVerified": true,
+      "namespaceSecretsRotated": false,
+      "restoredAccountADriverRowsAfterReplay": 0,
+      "accountBDriverRowsAfterReplay": 1,
+      "restoredAccountAKeyRowsAfterReplay": 0,
+      "accountBAndSimNamespaceKeysPreserved": true,
+      "historicalReportsAfterReplay": 0,
+      "physicalPbsOrWalRestoreAccepted": false
+    },
+    "productionChanged": false,
+    "realAccountDeleted": false,
+    "providerCalls": 0,
+    "ownedFixtureAndDumpsStoppedAndRemoved": true
+  },
+  "repositoryChecks": {
+    "typecheck": "passed",
+    "regressionTestsPassed": 873,
+    "optionalPostgresTestsSkipped": 6,
+    "build": "passed",
+    "skeleton": "passed",
+    "openapi": { "paths": 151, "schemas": 274, "contractChanged": false },
+    "syntaxAndDiffWhitespace": "passed"
+  },
+  "remainingProductionAcceptance": [
+    "actual Root report inventory and explicit review of indirect or ad-hoc producers",
+    "coordinated schema/enrollment and compatible pinned images while old writers are stopped",
+    "physical backup recovery and independent guard frontier policy",
+    "current joint COP HTTP acceptance and all other account owners"
+  ],
+  "previousArtifacts": "Earlier HTTP and 13-case installer archives remain immutable and pinned to their original tested bytes."
+}

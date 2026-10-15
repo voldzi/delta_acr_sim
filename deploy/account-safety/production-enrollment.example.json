@@ -9,6 +9,11 @@
   "postgresCaSha256": "SHA256_OF_THE_APPROVED_PUBLIC_CA_PEM_BYTES",
   "retentionPolicy": "driver-7-days-v1",
   "costPolicy": "aggregate-costs-current-month-v1",
+  "reportPublication": {
+    "policy": "shared_generation_fence-v1",
+    "externalProducersReviewed": true,
+    "inventoryDigest": "COPY_FROM_ACTUAL_STOPPED_WRITER_ROOT_REPORT_INVENTORY"
+  },
   "driver": {
     "storeId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",
     "incarnationId": "REPLACE_WITH_EXPLICITLY_REVIEWED_UUID",

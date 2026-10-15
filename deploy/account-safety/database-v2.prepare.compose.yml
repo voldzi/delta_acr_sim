@@ -6,6 +6,11 @@ services:
     pull_policy: never
     volumes:
       - type: bind
+        source: /srv/x5-production/cache/csm-sim/driver-measurement-reports
+        target: /driver-measurement-reports
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${SIM_ERASURE_PG_ROOT_CERT_FILE:?Missing reviewed PostgreSQL CA}
         target: /etc/csm-sim/postgresql-ca.pem
         read_only: true
@@ -13,6 +18,7 @@ services:
           create_host_path: false
     environment:
       DRIVER_MEASUREMENTS_DATABASE_URL: ${DRIVER_MEASUREMENTS_DATABASE_URL:?Missing verified Driver database credential}
+      DRIVER_MEASUREMENT_REPORTS_DIR: ${DRIVER_MEASUREMENT_REPORTS_DIR:-}
       SIM_ACCOUNT_ERASURE_AUTHORITY_MODE: database_v2
       SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL: ${DRIVER_ERASURE_GUARD_DATABASE_URL:?Missing Driver guard credential}
       SIM_ACCOUNT_ERASURE_GUARD_STORE_ID: ${SIM_ACCOUNT_ERASURE_GUARD_STORE_ID:?Missing guard enrollment}

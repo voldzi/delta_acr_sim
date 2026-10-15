@@ -43,6 +43,13 @@ Přípravný overlay drží oba account-erasure flags false a nemění ostatní
 provozní příznaky. Legacy full-stack deploy se po enrollmentu zastaví před
 přepsáním `.env`; další release musí zachovat koordinovaný image/overlay set.
 
+`DRIVER_MEASUREMENT_REPORTS_DIR` se nastaví až s přijatým skutečným report
+inventářem; v produkčním SDA smí ukazovat jen na chráněný measurement mount
+`/driver-measurement-reports`. RW bind je omezen na existující
+`/srv/x5-production/cache/csm-sim/driver-measurement-reports`, nikoli celý X5.
+Bez skutečné file ochrany nestačí DB publication flag. Mutex po pádu nemá
+automatickou expiraci; vyžaduje kontrolovanou údržbu podle runbooku20.
+
 - `SIM_SOURCE_SYSTEM_ID`
 - `SIM_ADAPTER_VERSION`
 - `SIM_PUBLISHER_MODE`

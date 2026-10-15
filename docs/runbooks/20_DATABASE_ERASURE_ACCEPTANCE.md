@@ -38,7 +38,7 @@ Správce/COP sestaví **jednu** společnou údržbu s těmito kroky:
    `/srv/sim`; obsahuje vlastní provozní změny Compose, OTEL a deploymentu.
    Zapsat přesné lokální image IDs (ne pohyblivé tagy) jako
    `SIM_ERASURE_DRIVER_IMAGE` a `SIM_ERASURE_ROUTER_IMAGE` do chráněné
-   release konfigurace. Síť, veřejné porty, ostatní služby a X5 mounty neměnit.
+   release konfigurace. Síť, veřejné porty, ostatní služby a existující X5 mounty neměnit.
 2. Do existujícího chráněného `/srv/sim/.env` koordinovaně připravit chybějící
    actor secrets/issuery pro obě služby. Existující
    `DRIVER_MEASUREMENTS_HASH_SECRET`, `AI_ROUTER_USER_HASH_SECRET` ani
@@ -63,6 +63,20 @@ Správce/COP sestaví **jednu** společnou údržbu s těmito kroky:
    `--apply --enrollment /root/<reviewed-file>.json`. AI SQL003 vyžaduje
    kompatibilní writer i při vypnutém mazání, proto nesmí běžet původní
    Router pod novými triggery.
+   V témže již schváleném Root postupu poté spustit `--inventory-reports`
+   (nepotřebuje PostgreSQL heslo). Ověří skutečné X5 UUID a jiný device než
+   `/`, soukromý measurement report adresář, metadata souborů a skutečně
+   přečte `/etc/crontab`, `/etc/cron.d`, root/user crontabs pod
+   `/var/spool/cron/crontabs`, systemd unit soubory a odpovídající procesy.
+   Do výstupu nedává report filenames/obsah, cron obsah ani process args.
+   Správce musí navíc zkontrolovat případné nepřímé/ad-hoc producenty;
+   nulový automatický match není důkaz o libovolném privilegovaném programu.
+   Při producer matchi, běžícím writeru nebo zbylém `.publication-lock`
+   installer report enrollment odmítne. Žádnou cizí službu automaticky
+   nevypíná. Nezbytná oprávnění jsou root:root 0700 pro přesný report
+   adresář/podadresáře a soukromé root soubory; mimo tento rozsah nic neměnit.
+   `reportPublication` v manifestu vyplnit teprve po skutečném review,
+   s přesným aktuálním `inventoryDigest`. Změna inventáře před apply odmítne.
 6. Skript atomicky zachová ostatní `.env` hodnoty a mode600, uloží nové
    guard credentials přímo tam a použije SQL002+008+011 Driver,
    SQL003+011 AI a oddělené SIM schema010. Vlastní pouze NOLOGIN
@@ -77,8 +91,11 @@ Správce/COP sestaví **jednu** společnou údržbu s těmito kroky:
    Compose soubory. Dne 15.10.2026 měl SDA navíc X5 + driver-measurements
    overlay, Router X5 + ai-router overlay; použít aktuální container labels,
    ne sjednocení naslepo. Overlay předá oba target DSN i guard DSN a přidá
-   pouze read-only public CA mount na `/etc/csm-sim/postgresql-ca.pem`
-   (`create_host_path=false`). Target i guard TCP mají explicitní
+   read-only public CA mount na `/etc/csm-sim/postgresql-ca.pem` a jen SDA
+   úzce omezený RW report bind z přesného X5 adresáře na
+   `/driver-measurement-reports` (`create_host_path=false`). Žádná obecná
+   host složka, Docker socket či jiná služba tento přístup nezískává.
+   Target i guard TCP mají explicitní
    `sslmode=verify-full`; produkční loadery odmítnou downgrade, jiný host,
    duplicitní či nepovolené TLS parametry i `NODE_TLS_REJECT_UNAUTHORIZED=0`.
    COP vlastní chráněný lokální PgBouncer Unix socket se tímto nemění.
@@ -94,14 +111,21 @@ Příkazy **uvnitř schválené společné Root údržby**, nikoli další úkol
 ```sh
 SIM_ERASURE_PG_ROOT_CERT_FILE=/etc/vcode-cop-pgbouncer/postgres-ca.crt \
   bash /path/to/pinned-sim-release/scripts/provision-sim-erasure-production.sh --check
+# Po zastavení obou konkrétních writerů; stále pouze čtení:
+bash /path/to/pinned-sim-release/scripts/provision-sim-erasure-production.sh --inventory-reports
 SIM_ERASURE_PG_ROOT_CERT_FILE=/etc/vcode-cop-pgbouncer/postgres-ca.crt \
   bash /path/to/pinned-sim-release/scripts/provision-sim-erasure-production.sh \
   --apply --enrollment /root/sim-erasure-reviewed-enrollment.json
 ```
 
 Instalace drží **oba erasure enabled flags=false**. Inicializuje pouze
-výslovně přijatou binding/replay konfiguraci; Driver publication zůstává
-`false` a report protection `unverified`, nikoli smyšlené `no_report`.
+výslovně přijatou binding/replay konfiguraci; bez přijatého skutečného
+`reportPublication` inventáře zůstává Driver publication `false` a ochrana
+`unverified`. S přijatým inventářem se připraví konkrétní
+`shared_generation_fence` a přesný report mount, nikdy smyšlené `no_report`.
+Samotná DB hodnota nestačí: factory vyžaduje skutečný chráněný adresář,
+startup invalidaci a operation-bound invalidátor. Erasure flags zůstávají
+false i po přijetí report ochrany.
 Driver DBv2 `proof_valid_until=infinity` znamená platnost tohoto přijatého
 konfiguračního checkpointu do explicitní změny binding/incarnation/generation,
 ne potlačení nativního TTL nebo důkaz bezpečné obnovy. Startup replay a
@@ -141,6 +165,52 @@ sítě, porty a mounty; nic nebylo spuštěno. Přesné SHA a omezení důkazu j
 [kurátorovaném instalačním souhrnu](../archive/2026-10-15_SIM_ERASURE_INSTALLER_ACCEPTANCE.json).
 Root CLI a produkční zastavení writerů zůstávají součástí skutečné údržby,
 nikoli tvrzením lokálního testu. Místní fixture byla zastavena a odstraněna.
+
+Navazující aktuální sada má **23/23 PASS**: skutečný atomic file export,
+PG blokování potvrzené `pg_blocking_pids`, ukončení publisher backendu,
+odmítnutí ACK během drženého filesystem mutexu, startup odmítnutí zbylého mutexu, chybný actor/symlink,
+cron fixture, reálné `pg_dump`/`pg_restore` obou target DB a starého reportu.
+Guard DB se neobnovovala se snapshotem. Karanténa zabránila factory startu;
+po výslovné syntetické nové incarnation/checkpoint/generation2 skutečné
+factories s aktuálními fingerprinty odstranily A, zachovaly B i SIM klíč
+a invalidovaly historický report před expozicí. Skutečná retence/revoke
+byla ověřena samostatně po kontrole zachování B. Hash secrets se nerotovaly:
+to by rozbilo namespace historického replay. Tato sada není fyzickou
+obnovou PBS, produkčním Root inventářem ani akceptací všech ownerů COP.
+Aktuální SHA, pozorované výsledky a omezení jsou v
+[samostatném report/restore souhrnu](../archive/2026-10-15_SIM_REPORT_RESTORE_ACCEPTANCE.json);
+starší 13-case ani společný HTTP artefakt se nepřepisují.
+
+## Report mutex a přesný postup obnovy
+
+Reporty jsou pouze obnovitelná cache. `writeFileReport` zapisuje jen
+`quality.json`/`aggregates.json`, soukromě a atomicky s fsync, pod skutečným
+PG shared lockem i lokálním atomickým `.publication-lock` adresářem.
+ERASE, ACK, retence, revoke a startup invalidace používají exkluzivní
+protějšek a skutečně mažou celý odvozený cache, nikoli jiná aplikační data.
+ACK ověřuje původní operation/actor/request v nezávislém journalu a target
+zero readback; samotný callback nemůže smazání potvrdit.
+
+Ztráta PG spojení nesmí odstranit filesystem interlock běžícího exportéru.
+Po pádu procesu zbylý mutex **nemá automatické převzetí ani TTL**. Odmítnout
+novou publikaci/mazací ACK, zastavit přesné SDA producenty, prokázat jejich
+ukončení a až ve stejné schválené údržbě odstranit prázdný vlastní mutex
+uvnitř tohoto jediného adresáře. Nikdy nesmazat neznámý/neprázdný mutex,
+symlink nebo obejít odmítnutí změnou publication/no_report. Runtime nemusí
+mít obecné Root oprávnění; má jen tento soukromý mount.
+
+Při obnově nejprve zastavit target writery a expozici, dát nezávislé guard
+bindingy do quarantine a obnovit pouze target DB. Starý marker/env není
+nový enrollment. Správce ověří souvislý nejnovější nezávislý journal,
+explicitně přijme novou incarnation/checkpoint/generation v guard i target
+markeru, přesný Driver checkpoint HMAC a Router checkpoint; zachová skutečné
+identity/hash secrets. Guard backup se nesmí přetočit na starou app kopii.
+Potom izolovaně spustit skutečné factories: Driver před listen přehraje
+fences a odstraní obnovené reporty; Router replayne fences/klíč a před listen
+vypořádá způsobilé pending primary řádky. Nejisté provider rezervace zůstávají
+pending a účet je fenced, nikoli obnovený do provozu. Bez zero/B/SIM readbacku
+a kontroly report adresáře se expozice nevrací. Původní first-install skript
+záměrně odmítne automatické reenrollment obnoveného starého bindingu.
 
 Loadery před listen replaynou všechny vlastní tombstones do skutečných
 target fences. Journal COMMIT předchází target změně; nejistota se řeší

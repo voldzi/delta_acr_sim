@@ -90,6 +90,24 @@ neprokazuje bezpečnost externího souborového exporteru: před produkční
 akceptací musí být inventarizován a zastaven/invalidován nebo připojen ke
 stejné ochraně. Existence reportů vylučuje nepravdivé `no_report`.
 
+Konkrétní file-report implementace používá pouze soukromý adresář měřicích
+reportů na X5. Actual `writeFileReport` drží PG publication lock po celý
+dotaz i atomický zápis/fsync. Stejnou operaci navíc obklopuje jednoduchý
+atomický adresářový mutex: ztráta PG socketu tak nemůže dovolit souběžné
+ACK a opožděný zápis. Neexistuje TTL, převzetí cizího mutexu ani obecné
+Root oprávnění; zbylý mutex po pádu znamená odmítnutí a kontrolovanou údržbu.
+ERASE i ACK ověří původní journal operation/actor/request a skutečně
+zneplatní celý obnovitelný report cache pod exkluzivním protějškem.
+Retence a odvolání souhlasu používají tutéž ochranu. Startup replay před
+listen odstraní také obnovené historické reporty. Symlinky, hardlinky,
+cizí mount, nechráněné oprávnění a mimořádný rozsah se odmítnou.
+
+Root inventory pouze čte konkrétní report metadata, cron/systemd zdroje
+a odpovídající procesy; nezveřejňuje obsah ani argumenty. Nenahrazuje
+výslovnou kontrolu správce ani neprokazuje absenci libovolného root programu.
+Bez skutečného přijatého inventáře zůstává publication neověřené. Po jeho
+přijetí se používá `shared_generation_fence`, nikdy domnělé `no_report`.
+
 Správce zastaví služby i vnější expozici před obnovou; guard se neobnovuje
 spolu s aplikačními databázemi. Explicitně se zaregistruje nová incarnation,
 provede replay a ověření všech owner rozsahů před povolením provozu.

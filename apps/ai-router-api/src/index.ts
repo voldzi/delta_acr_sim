@@ -22,6 +22,9 @@ const verifyCheckpoint = databaseBinding?(checkpoint:import("./account-erasure.j
 const erasure = new PgAccountErasure(store.pool, config.accountErasureCostPolicy ?? "pending_requires_review", config.accountErasureReplayReady === true, verifyCheckpoint,databaseBinding?.safety);
 await erasure.checkSchema();
 store.accountErasure = erasure;
+// Restore replay creates actual pending fences. Settle eligible primary rows
+// before exposing this DBv2 runtime; uncertain provider reservations stay fenced.
+if(databaseBinding)await erasure.processPending();
 const separate = config.copByokEnabled || config.simIzsEnabled ? new PgSeparateBilling(store.pool, config.credentialEncryptionKey!, erasure) : undefined;
 if (separate) await separate.checkSchema();
 const server = createApp(config, store, separate, erasure).listen(config.port, "0.0.0.0", () => {

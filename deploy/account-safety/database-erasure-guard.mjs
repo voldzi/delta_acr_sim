@@ -2,6 +2,7 @@
  * No signatures, native broker, auto-enrollment, network fallback or positive
  * callback. This module accepts actual pg pools, never caller-provided facts. */
 import {createHash,createHmac} from 'node:crypto';
+import {DriverReportFiles} from './driver-report-files.mjs';
 const HEX=/^[a-f0-9]{64}$/,UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const exact=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
 const need=(v)=>{if(!v)throw new Error('SIM_DATABASE_SAFETY_UNAVAILABLE');};
@@ -30,10 +31,11 @@ export function verifyProductionDatabaseTransport(connectionString,database,env=
   [...u.searchParams.keys()].every(k=>['sslmode','sslrootcert'].includes(k))&&env.NODE_TLS_REJECT_UNAUTHORIZED!=='0');
 }
 export class DatabaseErasureGuard {
- constructor({guardPool,targetPool,owner,guardStoreId,configurationFingerprint,driverHashSecret}) {
+ constructor({guardPool,targetPool,owner,guardStoreId,configurationFingerprint,driverHashSecret,reportDirectory}) {
   need(['sim_measurements','ai_router'].includes(owner)&&UUID.test(guardStoreId)&&HEX.test(configurationFingerprint));
   this.guard=guardPool;this.target=targetPool;this.owner=owner;this.guardStoreId=guardStoreId;this.fingerprint=configurationFingerprint;
   this.secret=driverHashSecret;this.binding=undefined;this.ready=false;
+  this.reports=owner==='sim_measurements'&&reportDirectory?new DriverReportFiles(reportDirectory):undefined;
  }
  async bindingNow(query=this.guard,target=this.target) {
   const configuration=await query.query('SELECT current_database() AS db,store_id,configuration_fingerprint FROM sim_erasure_guard_v2.store WHERE singleton');
@@ -55,7 +57,9 @@ export class DatabaseErasureGuard {
  async init() {
   need(!this.ready);this.binding=(await this.bindingNow()).fixed;
   // Always replay all tombstones, not a cursor restored with an application DB.
-  await this.replay();await this.bindingNow();this.ready=true;
+  await this.replay();await this.bindingNow();
+  if(this.reports){const c=await this.target.connect();try{await c.query('BEGIN');await c.query('SELECT pg_advisory_xact_lock(612031,1)');await this.bindingNow(this.guard,c);await this.reports.withLock(()=>this.reports.invalidateAll());await c.query('COMMIT');}catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}}
+  this.ready=true;
  }
  async assertCurrent() {need(this.ready);await this.bindingNow();}
  validate(row) {
@@ -108,6 +112,9 @@ export class DatabaseErasureGuard {
     const deleted=await c.query("DELETE FROM driver_measurement_receipts WHERE owner='cop' AND contributor_hash=ANY($1::text[])",[p.contributorHashes]);
     const zero=await c.query("SELECT count(*)::int n FROM driver_measurement_receipts WHERE owner='cop' AND contributor_hash=ANY($1::text[])",[p.contributorHashes]);need(zero.rows[0].n===0);
     await c.query('UPDATE driver_account_erasure_operations SET deleted_batch_count=deleted_batch_count+$2,remaining_batch_count=0,database_zero_verified=true,updated_at=now() WHERE operation_hash=$1',[p.operationHash,deleted.rowCount]);
+    // Same exclusive lock as the actual report writer; discard the whole
+    // reproducible cache rather than retaining a mixed-account old report.
+    if(this.reports)await this.reports.withLock(()=>this.reports.invalidateAll());
    } else {
     await c.query('SELECT pg_advisory_xact_lock(634020,hashtext($1))',[p.targetHash]);
     const prior=await c.query('SELECT operation_id,owner_hash,target_hash,body_digest FROM ai_router_account_erasure WHERE operation_id=$1 OR target_hash=$2',[row.operation_id,p.targetHash]);
@@ -135,20 +142,36 @@ export class DatabaseErasureGuard {
   const r=await this.target.query('SELECT *,proof_valid_until>now() AS valid FROM driver_account_erasure_state WHERE singleton');need(r.rowCount===1);
   const p=r.rows[0],checkpoint=this.binding.checkpoint_id;
   need(p.replay_checkpoint_hash===createHmac('sha256',this.secret).update('cop:account-erasure-checkpoint:'+checkpoint).digest('hex'));
-  return {checkpoint,restoreCheckpointCurrent:p.replay_ready===true&&p.valid===true,identityReviewed:true,retentionReviewed:p.retention_reviewed===true,publicationFenceVerified:p.publication_fence_verified===true,reportProtection:p.report_protection};
+  const filesProtected=!!this.reports&&!!this.reports.assertProtected();
+  return {checkpoint,restoreCheckpointCurrent:p.replay_ready===true&&p.valid===true,identityReviewed:true,retentionReviewed:p.retention_reviewed===true,publicationFenceVerified:p.publication_fence_verified===true&&p.report_protection==='shared_generation_fence'&&filesProtected,reportProtection:filesProtected?p.report_protection:'unverified'};
  }
  async verifyRouterCheckpoint(checkpoint) {
   try {await this.assertCurrent();need(this.owner==='ai_router');const r=await this.target.query('SELECT checkpoint_id,checkpoint_generation::text,identity_reviewed,replay_ready,cost_policy FROM ai_router_erasure_checkpoint WHERE id=1');need(r.rowCount===1);
    const p=r.rows[0];return p.checkpoint_id===this.binding.checkpoint_id&&p.checkpoint_generation===this.binding.restore_generation&&p.identity_reviewed===true&&p.replay_ready===true&&p.cost_policy==='aggregate-costs-current-month-v1'&&checkpoint.checkpoint_id===p.checkpoint_id&&checkpoint.checkpoint_generation===p.checkpoint_generation;
   } catch{return false;}
  }
- async publicationBarrier() {
-  await this.assertCurrent();const c=await this.target.connect();try{await c.query('BEGIN');await c.query('SELECT pg_advisory_xact_lock(612031,1)');await this.assertCurrent();await c.query('COMMIT');}
+ async publicationBarrier(input) {
+  await this.assertCurrent();need(this.owner==='sim_measurements'&&this.reports&&input);const c=await this.target.connect();try{await c.query('BEGIN');await c.query('SELECT pg_advisory_xact_lock(612031,1)');await this.bindingNow(this.guard,c);
+   const op=await this.guard.query('SELECT * FROM sim_erasure_guard_v2.tombstone WHERE owner=$1 AND operation_id=$2',[this.owner,input.operationId]);
+   need(op.rowCount===1&&op.rows[0].actor_hash===input.actorHash&&op.rows[0].request_hash===input.requestHash);this.validate(op.rows[0]);
+   const local=await c.query('SELECT database_zero_verified,remaining_batch_count FROM driver_account_erasure_operations WHERE operation_hash=$1 AND actor_hash=$2 AND request_hash=$3',[op.rows[0].payload.operationHash,input.actorHash,input.requestHash]);need(local.rowCount===1&&local.rows[0].database_zero_verified===true&&local.rows[0].remaining_batch_count===0);
+   await this.reports.withLock(()=>this.reports.invalidateAll());await c.query('COMMIT');}
   catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}
+ }
+ async writeFileReport(kind,work) {
+  need(this.reports);return this.withLease({kind},lease=>this.reports.withLock(async()=>{const value=await work(lease);await lease.assertCurrent();this.reports.write(kind,value);}));
+ }
+ async withReportMaintenance(work) {
+  await this.assertCurrent();need(this.owner==='sim_measurements');const c=await this.target.connect();
+  try{await c.query('BEGIN');await c.query('SELECT pg_advisory_xact_lock(612031,1)');await this.bindingNow(this.guard,c);
+   const run=async()=>{const result=await work();await this.bindingNow(this.guard,c);this.reports?.invalidateAll();return result;};
+   const result=this.reports?await this.reports.withLock(run):await run();await c.query('COMMIT');return result;
+  }catch(error){await c.query('ROLLBACK').catch(()=>{});throw error;}finally{c.release();}
  }
  async withLease(request,work) {
   need(this.owner==='sim_measurements'&&['aggregates','quality'].includes(request.kind));await this.assertCurrent();const c=await this.target.connect();
-  try {await c.query('SELECT pg_advisory_lock_shared(612031,1)');await this.bindingNow(this.guard,c);return await work({assertCurrent:async()=>{need(this.ready);await this.bindingNow(this.guard,c);}});}
-  finally {try{await c.query('SELECT pg_advisory_unlock_shared(612031,1)');c.release();}catch{c.release(true);}}
+  let lost=false;const failed=()=>{lost=true;};c.on('error',failed);
+  try {await c.query('SELECT pg_advisory_lock_shared(612031,1)');await this.bindingNow(this.guard,c);const result=await work({assertCurrent:async()=>{need(this.ready&&!lost);await this.bindingNow(this.guard,c);}});need(!lost);return result;}
+  finally {try{await c.query('SELECT pg_advisory_unlock_shared(612031,1)');c.release();}catch{c.release(true);}finally{c.removeListener('error',failed);}}
  }
 }

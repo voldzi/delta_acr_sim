@@ -2,8 +2,8 @@
  * URL/secret is accepted; its private cluster is verified before every apply. */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, statSync } from "node:fs";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, statSync, readdirSync, symlinkSync, unlinkSync, rmdirSync } from "node:fs";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createServer } from "node:net";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,12 @@ import {
 import { loadDatabaseDriverOwnerComposition } from "../apps/situation-data-api/src/database-erasure.js";
 import { loadDatabaseRouterGuard } from "../apps/ai-router-api/src/database-erasure.js";
 import { PgAccountErasure } from "../apps/ai-router-api/src/account-erasure.js";
+import { BudgetStore } from "../apps/ai-router-api/src/budget.js";
+import { PgSeparateBilling } from "../apps/ai-router-api/src/separate-billing.js";
+import { PostgresDriverAccountErasureStore } from "../apps/situation-data-api/src/driver-account-erasure-store.js";
+import { PostgresDriverMeasurementStore } from "../apps/situation-data-api/src/driver-measurement-store.js";
+import { driverErasureRequiredDays, prepareDriverErasureInput } from "../apps/situation-data-api/src/driver-account-erasure.js";
+import { reportInventory } from "./driver-report-inventory.mjs";
 assert.deepEqual(process.argv.slice(2), ["--run"]);
 const source = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pg = process.env.PG_BIN ?? execFileSync("pg_config", ["--bindir"], { encoding: "utf8" }).trim();
@@ -286,9 +292,14 @@ try {
       assert.equal(ca.read_only, true);
       assert.equal(ca.bind.create_host_path, false);
       assert.deepEqual(
-        s.volumes.filter((v: any) => v !== ca),
+        s.volumes.filter((v: any) => v !== ca && v.target !== "/driver-measurement-reports"),
         b.volumes ?? []
       );
+      const report = s.volumes.find((v: any) => v.target === "/driver-measurement-reports");
+      if (name === "situation-data-api") {
+        assert.equal(report.source, "/srv/x5-production/cache/csm-sim/driver-measurement-reports");
+        assert.equal(report.bind.create_host_path, false);
+      } else assert.equal(report, undefined);
     }
   });
   const installed = Object.fromEntries(
@@ -337,6 +348,331 @@ try {
     await targetPool.end();
     for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
     Object.assign(process.env, previous);
+  }
+  // Real report publication and pg_dump/restore, retaining the independent
+  // guard journal. No Root callbacks or substitute positive verifier.
+  const reportDir = root + "/driver-report-files";
+  mkdirSync(reportDir, { mode: 0o700 });
+  mkdirSync(root + "/producer-fixtures", { mode: 0o700 });
+  check("report producer inventory detects cron and blocks admission without changing env", () => {
+    const cron = root + "/producer-fixtures/root-cron";
+    writeFileSync(cron, "* * * * * curl http://synthetic/api/v1/internal/driver-measurements/v1/quality\n", { mode: 0o600 });
+    const inv = reportInventory({ syntheticRoot: root });
+    assert.equal(inv.producerMatches.length, 1);
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        reportPublication: { policy: "shared_generation_fence-v1", externalProducersReviewed: true, inventoryDigest: inv.inventoryDigest }
+      })
+    );
+    const before = readFileSync(envPath, "utf8");
+    assert.throws(() => provision({ ...options, mode: "apply" }), /REPORT_PRODUCER_INVENTORY_CHANGED_OR_ACTIVE/);
+    assert.equal(readFileSync(envPath, "utf8"), before);
+    unlinkSync(cron);
+  });
+  check("explicit reviewed real report inventory enrolls only shared-generation protection", () => {
+    const inv = reportInventory({ syntheticRoot: root });
+    assert.equal(inv.producerMatches.length, 0);
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        reportPublication: { policy: "shared_generation_fence-v1", externalProducersReviewed: true, inventoryDigest: inv.inventoryDigest }
+      })
+    );
+    const r = provision({ ...options, mode: "apply" });
+    assert.equal(r.driverPublicationVerified, true);
+    assert.equal(r.erasureEnabled, false);
+  });
+  const savedEnv = { ...process.env };
+  Object.assign(process.env, installed, {
+    NODE_ENV: "test",
+    DRIVER_MEASUREMENT_REPORTS_DIR: reportDir,
+    DRIVER_MEASUREMENTS_DATABASE_URL: runtimeUrl("sim_driver_measurements", "driver_measurements_runtime"),
+    SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL: installed.DRIVER_ERASURE_GUARD_DATABASE_URL
+  });
+  const driverRuntime = new Pool({ connectionString: runtimeUrl("sim_driver_measurements", "driver_measurements_runtime"), max: 4 });
+  let bound = await loadDatabaseDriverOwnerComposition();
+  const driver = bound.driverMeasurements.databaseSafety!;
+  mkdirSync(reportDir + "/.publication-lock", { mode: 0o700 });
+  await assert.rejects(() => loadDatabaseDriverOwnerComposition());
+  assert.ok(readdirSync(reportDir).includes(".publication-lock"));
+  rmdirSync(reportDir + "/.publication-lock");
+  passed++;
+  console.log("PASS leftover filesystem mutex refuses actual factory start and is never automatically stolen or expired");
+  const erasureStore = new PostgresDriverAccountErasureStore(driverRuntime, secret, {
+    enabled: true,
+    expectedCheckpoint: manifest.driver.checkpointId,
+    identityConfigured: true,
+    protectedProof: () => driver.driverProof(),
+    databaseSafety: driver
+  });
+  const measurementStore = new PostgresDriverMeasurementStore(runtimeUrl("sim_driver_measurements", "driver_measurements_runtime"), secret);
+  const budget = new BudgetStore(runtimeUrl("sim_ai_router", "ai_router_runtime"), secret, {
+    dailyMicrousd: 1000000,
+    monthlyMicrousd: 10000000,
+    perUserDailyRequests: 10
+  });
+  await budget.init();
+  process.env.SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL = installed.AI_ROUTER_ERASURE_GUARD_DATABASE_URL;
+  let routerBound = await loadDatabaseRouterGuard(budget.pool);
+  const routerEraser = new PgAccountErasure(
+    budget.pool,
+    "aggregate-costs-current-month-v1",
+    true,
+    (cp) => routerBound.safety.verifyRouterCheckpoint(cp),
+    routerBound.safety
+  );
+  const keys = new PgSeparateBilling(budget.pool, createHash("sha256").update("synthetic-report-restore-encryption").digest("base64"), routerEraser);
+  const operationId = randomUUID(),
+    days = driverErasureRequiredDays(Date.now());
+  const input = prepareDriverErasureInput(
+    {
+      contractVersion: "sim-account-erasure-v1",
+      operationId,
+      attestation: "cop-account-erasure-contributors-reviewed-v1",
+      contributors: days.map((day, i) => ({ contributorDay: day, contributorIdDay: hash("synthetic-restored-A-day-" + i) }))
+    },
+    { iss: issuer, sub: "synthetic-restore-A", aud: "sim-account-erasure", operationId, iat: 1, exp: 2, routerUserId: "cop_" + "A".repeat(43) },
+    secret
+  );
+  const ah = input.contributors.at(-1)!.contributorHash,
+    bh = hash("synthetic-preserved-B");
+  const keyA = budget.hashUser("cop", "cop_" + "A".repeat(43)),
+    keyB = budget.hashUser("cop", "cop_" + "B".repeat(43)),
+    keySim = budget.hashUser("sim", "same-shared-person");
+  const routerIdentity = { ownerHash: hash("synthetic-router-owner-A"), targetHash: keyA };
+  let restoredDriver: Awaited<ReturnType<typeof loadDatabaseDriverOwnerComposition>> | undefined,
+    restoredRouter: Awaited<ReturnType<typeof loadDatabaseRouterGuard>> | undefined,
+    restoredBudget: BudgetStore | undefined;
+  try {
+    for (const h of [ah, bh])
+      q(
+        "sim_driver_measurements",
+        `INSERT INTO driver_measurement_receipts VALUES('cop','${randomUUID()}','${h}','${"d".repeat(64)}',now(),now()+interval '7 days','{"acceptedIntervalCount":1}')`
+      );
+    for (const key of [keyA, keyB, keySim]) await keys.putKey(key, "sk-synthetic-restore-key-only-no-provider-contact");
+    await driver.writeFileReport("quality", (lease) => measurementStore.quality(new Date().toISOString(), lease));
+    const historicalReport = readFileSync(reportDir + "/quality.json");
+    assert.equal(JSON.parse(historicalReport.toString()).retainedBatchCount, 2);
+    for (const db of ["sim_driver_measurements", "sim_ai_router"])
+      execFileSync(resolve(pg, "pg_dump"), ["-h", "127.0.0.1", "-p", String(port), "-U", "postgres", "-Fc", "-f", root + "/" + db + ".dump", db], {
+        env,
+        stdio: "pipe"
+      });
+    passed++;
+    console.log("PASS actual report contains both contributors and real pre-erasure target snapshots are created");
+    let release!: () => void, entered!: () => void;
+    const started = new Promise<void>((r) => (entered = r)),
+      hold = new Promise<void>((r) => (release = r));
+    const writing = driver.writeFileReport("quality", async (lease) => {
+      const result = await measurementStore.quality(new Date().toISOString(), lease);
+      entered();
+      await hold;
+      return result;
+    });
+    await started;
+    const releaseTimeout = setTimeout(() => release(), 6000);
+    releaseTimeout.unref();
+    let eraseDone = false;
+    const erasing = erasureStore.erase(input).finally(() => {
+      eraseDone = true;
+    });
+    void erasing.catch(() => {});
+    let blocked = false;
+    for (let i = 0; i < 100; i++) {
+      if (
+        Number(
+          q("sim_driver_measurements", "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND cardinality(pg_blocking_pids(pid))>0")
+        ) > 0
+      ) {
+        blocked = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.equal(blocked, true);
+    assert.equal(eraseDone, false);
+    release();
+    clearTimeout(releaseTimeout);
+    await writing;
+    await erasing;
+    assert.deepEqual(readdirSync(reportDir), []);
+    await driver.publicationBarrier(input);
+    assert.equal((await erasureStore.acknowledge(input)).status, "completed");
+    assert.equal(q("sim_driver_measurements", `SELECT count(*) FROM driver_measurement_receipts WHERE contributor_hash='${bh}'`), "1");
+    passed++;
+    console.log("PASS actual exporter lock blocks erasure until atomic publication then invalidates every old report before ACK");
+    await assert.rejects(() => driver.publicationBarrier({ ...input, actorHash: "f".repeat(64) }));
+    symlinkSync(root + "/sim_ai_router.dump", reportDir + "/bad-link");
+    await assert.rejects(() => driver.publicationBarrier(input));
+    unlinkSync(reportDir + "/bad-link");
+    passed++;
+    console.log("PASS wrong erasure identity and report symlink refuse publication acknowledgement");
+    await driver.writeFileReport("quality", (lease) => measurementStore.quality(new Date().toISOString(), lease));
+    assert.equal(JSON.parse(readFileSync(reportDir + "/quality.json", "utf8")).retainedBatchCount, 1);
+    const inputC = {
+      ...input,
+      operationId: randomUUID(),
+      actorHash: hash("synthetic-actor-C"),
+      requestHash: hash("synthetic-request-C"),
+      contributors: input.contributors.map((x, i) => ({ ...x, contributorHash: hash("synthetic-C-" + i) }))
+    };
+    const ch = inputC.contributors.at(-1)!.contributorHash,
+      cpHash = createHmac("sha256", secret)
+        .update("cop:account-erasure-checkpoint:" + manifest.driver.checkpointId)
+        .digest("hex");
+    q(
+      "sim_driver_measurements",
+      `BEGIN;SELECT set_config('sim.driver_erasure_context','driver-account-erasure-v1',true),set_config('sim.driver_erasure_checkpoint','${cpHash}',true);INSERT INTO driver_measurement_receipts VALUES('cop','${randomUUID()}','${ch}','${"e".repeat(64)}',now(),now()+interval '7 days','{}');COMMIT;`
+    );
+    let finishLost!: () => void, signalLost!: () => void;
+    const materialized = new Promise<void>((r) => (signalLost = r)),
+      holdLost = new Promise<void>((r) => (finishLost = r));
+    const lostWrite = driver.writeFileReport("quality", async (lease) => {
+      const value = await measurementStore.quality(new Date().toISOString(), lease);
+      assert.equal((value as any).retainedBatchCount, 2);
+      signalLost();
+      await holdLost;
+      return value;
+    });
+    void lostWrite.catch(() => {});
+    await materialized;
+    const lostTimer = setTimeout(() => finishLost(), 6000);
+    lostTimer.unref();
+    const publisherPid = q(
+      "sim_driver_measurements",
+      "SELECT pid FROM pg_locks WHERE locktype='advisory' AND classid=612031 AND objid=1 AND mode='ShareLock' AND granted"
+    );
+    assert.match(publisherPid, /^[0-9]+$/);
+    assert.equal(q("postgres", `SELECT pg_terminate_backend(${publisherPid})`), "t");
+    await new Promise((r) => setTimeout(r, 20));
+    await assert.rejects(() => erasureStore.erase(inputC));
+    assert.ok(readdirSync(reportDir).includes(".publication-lock"));
+    finishLost();
+    clearTimeout(lostTimer);
+    await assert.rejects(() => lostWrite);
+    await erasureStore.erase(inputC);
+    assert.equal((await erasureStore.acknowledge(inputC)).status, "completed");
+    assert.deepEqual(readdirSync(reportDir), []);
+    passed++;
+    console.log("PASS actual publisher backend termination cannot release the filesystem interlock or acknowledge deletion before the old writer settles");
+    await routerEraser.request(routerIdentity, randomUUID());
+    await routerEraser.processPending();
+    await assert.rejects(() => keys.getKey(keyA));
+    assert.equal(q("sim_ai_router", `SELECT count(*) FROM ai_router_user_key WHERE user_hash='${keyA}'`), "0");
+    assert.ok(await keys.getKey(keyB));
+    assert.ok(await keys.getKey(keySim));
+    await bound.close();
+    await routerBound.close();
+    await driverRuntime.end();
+    await measurementStore.close();
+    await budget.close();
+    q("cop_account_safety_guard", "UPDATE sim_erasure_guard_v2.owner_binding SET state='quarantined'");
+    for (const [db, owner] of [
+      ["sim_driver_measurements", "driver_measurements_migrator"],
+      ["sim_ai_router", "ai_router_migrator"]
+    ]) {
+      q("postgres", `DROP DATABASE ${db}`);
+      q("postgres", `CREATE DATABASE ${db} OWNER ${owner}`);
+      execFileSync(
+        resolve(pg, "pg_restore"),
+        ["-h", "127.0.0.1", "-p", String(port), "-U", "postgres", "--exit-on-error", "-d", db, root + "/" + db + ".dump"],
+        { env, stdio: "pipe" }
+      );
+    }
+    writeFileSync(reportDir + "/quality.json", historicalReport, { mode: 0o600 });
+    assert.equal(q("sim_driver_measurements", `SELECT count(*) FROM driver_measurement_receipts WHERE contributor_hash='${ah}'`), "1");
+    process.env.SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL = installed.DRIVER_ERASURE_GUARD_DATABASE_URL;
+    await assert.rejects(() => loadDatabaseDriverOwnerComposition());
+    assert.equal(JSON.parse(readFileSync(reportDir + "/quality.json", "utf8")).retainedBatchCount, 2);
+    passed++;
+    console.log("PASS actual pg_restore resurrects A and historical report but quarantined factory refuses exposure");
+    // Explicit synthetic restore administration, never runtime auto-enrollment.
+    for (const [name, db, key] of [
+      ["sim_measurements", "sim_driver_measurements", "driver"],
+      ["ai_router", "sim_ai_router", "router"]
+    ] as const) {
+      const incarnation = randomUUID(),
+        cp = randomUUID();
+      q(
+        "cop_account_safety_guard",
+        `UPDATE sim_erasure_guard_v2.owner_binding SET incarnation_id='${incarnation}',checkpoint_id='${cp}',restore_generation=2,state='ready' WHERE owner='${name}'`
+      );
+      q(db, `UPDATE sim_erasure_dataset_binding SET incarnation_id='${incarnation}',checkpoint_id='${cp}',restore_generation=2`);
+      if (key === "driver") {
+        process.env.DRIVER_ACCOUNT_ERASURE_REPLAY_CHECKPOINT = cp;
+        q(
+          db,
+          `UPDATE driver_account_erasure_state SET replay_checkpoint_hash='${createHmac("sha256", secret)
+            .update("cop:account-erasure-checkpoint:" + cp)
+            .digest("hex")}'`
+        );
+      } else q(db, `UPDATE ai_router_erasure_checkpoint SET checkpoint_id='${cp}',checkpoint_generation=2`);
+    }
+    // Current source identity fingerprints remain recomputed from the SAME
+    // actual secrets; rotating namespace secrets would break historical replay.
+    process.env.DRIVER_MEASUREMENTS_HASH_SECRET = secret + "wrong";
+    await assert.rejects(() => loadDatabaseDriverOwnerComposition());
+    process.env.DRIVER_MEASUREMENTS_HASH_SECRET = secret;
+    restoredDriver = await loadDatabaseDriverOwnerComposition();
+    assert.equal(q("sim_driver_measurements", `SELECT count(*) FROM driver_measurement_receipts WHERE contributor_hash='${ah}'`), "0");
+    assert.equal(q("sim_driver_measurements", `SELECT count(*) FROM driver_measurement_receipts WHERE contributor_hash='${bh}'`), "1");
+    assert.deepEqual(readdirSync(reportDir), []);
+    restoredBudget = new BudgetStore(runtimeUrl("sim_ai_router", "ai_router_runtime"), secret, {
+      dailyMicrousd: 1000000,
+      monthlyMicrousd: 10000000,
+      perUserDailyRequests: 10
+    });
+    await restoredBudget.init();
+    process.env.SIM_ACCOUNT_ERASURE_GUARD_DATABASE_URL = installed.AI_ROUTER_ERASURE_GUARD_DATABASE_URL;
+    restoredRouter = await loadDatabaseRouterGuard(restoredBudget.pool);
+    const after = new PgAccountErasure(
+      restoredBudget.pool,
+      "aggregate-costs-current-month-v1",
+      true,
+      (cp) => restoredRouter!.safety.verifyRouterCheckpoint(cp),
+      restoredRouter.safety
+    );
+    await after.processPending();
+    const restoredKeys = new PgSeparateBilling(restoredBudget.pool, createHash("sha256").update("synthetic-report-restore-encryption").digest("base64"), after);
+    await assert.rejects(() => restoredKeys.getKey(keyA));
+    assert.equal(q("sim_ai_router", `SELECT count(*) FROM ai_router_user_key WHERE user_hash='${keyA}'`), "0");
+    assert.ok(await restoredKeys.getKey(keyB));
+    assert.ok(await restoredKeys.getKey(keySim));
+    passed++;
+    console.log(
+      "PASS new generation and actual identity-bound factories replay independent guard after real restore; A is zero, B and SIM keys survive, old reports are gone"
+    );
+    const restoredStore = new PostgresDriverMeasurementStore(runtimeUrl("sim_driver_measurements", "driver_measurements_runtime"), secret, {
+      databaseSafety: restoredDriver.driverMeasurements.databaseSafety,
+      retentionConsumer: restoredDriver.driverMeasurements.retentionConsumer
+    });
+    try {
+      await restoredStore.init();
+      await restoredDriver.driverMeasurements.databaseSafety!.writeFileReport("quality", (lease) => restoredStore.quality(new Date().toISOString(), lease));
+      await restoredStore.runRetentionOnce();
+      assert.deepEqual(readdirSync(reportDir), []);
+      await restoredDriver.driverMeasurements.databaseSafety!.writeFileReport("quality", (lease) => restoredStore.quality(new Date().toISOString(), lease));
+      assert.equal(await restoredStore.revoke("cop", bh), 1);
+      assert.deepEqual(readdirSync(reportDir), []);
+    } finally {
+      await restoredStore.close();
+    }
+    passed++;
+    console.log("PASS actual accepted retention consumer and separate consent revocation invalidate cached reports under the same lock");
+  } finally {
+    await restoredDriver?.close();
+    await restoredRouter?.close();
+    await restoredBudget?.close();
+    await bound.close().catch(() => {});
+    await routerBound.close().catch(() => {});
+    await driverRuntime.end().catch(() => {});
+    await measurementStore.close().catch(() => {});
+    await budget.close().catch(() => {});
+    for (const k of Object.keys(process.env)) if (!(k in savedEnv)) delete process.env[k];
+    Object.assign(process.env, savedEnv);
   }
   console.log(JSON.stringify({ passed, scope: "actual_isolated_postgresql_installer", productionChanged: false, servicesStarted: false, providerCalls: 0 }));
 } finally {
