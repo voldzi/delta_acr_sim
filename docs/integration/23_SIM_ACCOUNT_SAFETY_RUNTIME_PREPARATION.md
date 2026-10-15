@@ -13,6 +13,31 @@ Ověření dokončeného lokálního úklidu je v
 
 ## Chráněné čtení skutečného stavu měření
 
+### Vazba ETA na přispěvatele dávky
+
+Původní ETA cizí klíč kontroluje pouze `(owner, batch_id)`, nikoli shodu
+denního contributor hashe s rodičovským receipt. Inventura SQL006 přitom
+správně zahrnuje také vlastní ETA hash. Při historickém nesouladu by
+mazání receipts podle hashe mohlo ponechat ETA a nesprávně potvrdit nulu.
+
+Oddělený forward zdroj `007_eta_contributor_binding.sql` proto přidává
+receipt UNIQUE `(owner, batch_id, contributor_hash)` a nahrazuje původní
+ETA FK stejnou trojicí. Vazba je validovaná, immediate/nondeferrable
+a zachovává ON DELETE CASCADE i přesně dva receipt cascades pro reader004.
+Pod omezenými table locks nejprve ověří původní katalog i všechna data;
+orphan nebo jiný contributor hash odmítne SQLSTATE 23514 před DDL.
+Nikdy nepřepisuje hash, nemaže cizí rodičovskou dávku ani neopravuje
+historická data automaticky. Existující nesoulad vyžaduje samostatné
+rozhodnutí správce. Nový skutečný schema fingerprint musí nezávisle
+přijmout Root policy; není oprávněním převzít aktuální hash z DB.
+Zmrazené SQL003, SQL006 a jejich historické důkazy se tím nepřepisují.
+
+Samostatné [ověření SQL007](../archive/2026-10-15_SOURCE_REFRESH_AND_ETA_BINDING.md)
+prošlo 6/6 skupinami včetně skutečného FK souběhu oběma směry. Neprokazuje
+Root enrollment nebo produkční mazání.
+
+### Chráněná fakta pro admission
+
 Privátní `004_read_admission_facts.sql` přidává
 `sim_driver_guard_source.read_admission_facts(jsonb)`. EXECUTE dostává
 pouze existující `sim_driver_guard_control`, nikoli runtime, executor
@@ -116,7 +141,8 @@ chráněný aktuální fakt. Fakt sám není přijatou source/replay autoritou.
 `root-owner-authority-protocol.mjs` definují skutečnou pevnou autoritu,
 nikoli pozitivní callback dodaný aplikací. Exporty jsou
 `requireCurrentOwner`, `holdOwnerLease`, `issueOwnerEphemeralRecord`,
-`beginOwnerPublicationIntent` a `requirePublicationBarrier`. Kontroly COP
+`beginOwnerPublicationIntent`, `requirePublicationBarrier` a samostatný
+`refreshRootOwnerSource`. Kontroly COP
 aktéra se přebírají z připnutého chráněného COP modulu. Import vyžaduje
 celý revidovaný souborový uzávěr v `/opt/cop-account-safety`; samotná
 typová deklarace nebo přítomnost jednotlivého souboru není instalace.
@@ -132,7 +158,7 @@ v privátním WeakMap; kopie stejných polí se za kontext nepřijímá.
 | Účel | Skutečně držená metadata session |
 | --- | --- |
 | Driver `read`, AI `checkpoint-read` | Sdílený advisory zámek `(hashtext(current_database()),904214)` |
-| `mutation`, `publication`, `retention`, `checkpoint-publish` | Exkluzivní protějšek stejného zámku |
+| `mutation`, `publication`, `retention`, `checkpoint-publish`, `source-refresh` | Exkluzivní protějšek stejného zámku |
 
 Autorita porovnává aktuální registry, globální politiku, frontier,
 source JWS, podepsanou owner policy, přesný schema/privilege fingerprint,
@@ -210,6 +236,65 @@ zpřístupněním dat; zákaz rollbacku pouze v textu nestačí. Produkční
 Root instalace, přijetí skutečných politik a obnova po HOLD zůstávají
 samostatnými neuzavřenými gates. Veřejný OpenAPI se tímto soukromým ABI
 nemění.
+
+### Obnovení aktuálního source proofu
+
+`refreshRootOwnerSource(owner, peer)` vytváří jediný nový podepsaný
+runtime proof, pouze dokud původní autorita stále platí. Volající nepředává
+UUID, tělo, profil, cestu ani callback. Pevný Root profil
+`registry-source-refresh` vybírá výhradně databázi
+`cop_account_safety_guard` a omezený účet `cop_guard_source_refresher`.
+Nová SQL migrace `deploy/account-safety/004_source_refresh_cas.sql` je
+neaktivní zdroj; vytváří NOLOGIN role, nikoli produkční přihlašovací účet.
+Reader `cop_guard_root_reader` nezískává právo zápisu ani spuštění RPC.
+
+Původní kontext má stále stejných 22 neměnných polí. Nový proof neobnovuje
+jeho deadline, frontier anchor, registraci procesu, cílový checkpoint ani
+Driver target proof. Nenahrazuje enrollment, přijetí nové politiky nebo
+opravu vypršené autority. Root před zápisem ověří úplný současný stav,
+stejnou procesní kohortu, podpisy, frontier a skutečné cílové piny.
+Novou platnost omezí původní registrace a anchor a nejvýše 30 sekund
+od skutečného pozorování; budoucí pozorování není přijatelné.
+
+Privátní SQL volání je pevně
+`SELECT cop_guard.refresh_runtime_proof($1::jsonb) AS value`. Tělo má
+přesně `contractVersion=cop-root-source-refresh-cas-v1`, `owner`,
+`binding`, `expected`, `refresh`; neznámá pole se odmítnou. Všech osm
+binding hodnot, patnáct expected hodnot a sedm refresh hodnot jsou řetězce.
+SQL `policyGeneration` je kanonický desetinný řetězec; tím se nemění
+samostatný podepsaný JWS kontrakt. Přesné názvy a chybové SQLSTATE jsou
+závazně vypsané v hlavičce SQL004. `expected` zahrnuje úplné původní
+PG/UTC row digesty identity, globální policy, datasetu, runtime, současného
+proofu, acceptance, receipt, replay a historického receipt source proofu,
+jejich ID/generace a přesný frontier. Tyto digesty se nepřepočítávají
+z JavaScriptem znovu zakódovaného JSON.
+
+Root ukládá nové JWS, podepsaný původní intent a dispatch přes O_EXCL
+a fsync před jediným RPC. SQL vyžaduje tutéž fyzickou session se skutečně
+drženým exkluzivním zámkem 904214, READ COMMITTED a READ WRITE. Přidává
+jediný `refresh` řádek; nemění checkpoint, politiku, replay nebo receipt.
+ALWAYS BEFORE INSERT trigger stejným zámkem serializuje všechny insertery
+runtime proofů včetně původního enrolleru. Kontrola `pg_locks` sama
+nedokazuje Root WeakMap kontext ani správný životní cyklus zámku.
+
+Před COMMIT i po potvrzení musí stále platit původní deadline. Dvě úplná
+čtení potvrzeného stavu navíc ověří přesný nový JWS, operation ID, časy
+a digest vloženého řádku; ostatní původní stav zůstává beze změny. Výsledek
+`refresh-readback-known` je dílčí potvrzený readback, ne readiness nebo
+nový autorizační kontext. Ten lze získat až po známém uzavření původní
+session a novém úplném ověření.
+
+Timeout nebo neznámý výsledek po dispatch přepne proces do HOLD a zachová
+původní ID a tělo. Patnáctisekundový watchdog nesmí zavřít metadata socket
+držící nezávislou bariéru. Neexistuje automatický retry, nová lhůta,
+reconnect ani odemknutí podle TTL. Dohledání původního refresh originu
+po restartu, drain a přijetí nové kohorty zůstávají samostatnou
+neuzavřenou podmínkou před produkčním zapnutím této cesty.
+
+Samostatně prošel [SQL CAS 8/8 a Root integrační sada 6/6](../archive/2026-10-15_SOURCE_REFRESH_AND_ETA_BINDING.md).
+Root sada používá skutečné podpisy/TLS/zámky, ale syntetické přijaté
+metadata a host/app pozorování. Neověřovala ztracený COMMIT, nejasný END,
+nativní packet transport, produkční enrollment nebo obnovu.
 
 Samostatný skutečný izolovaný common běh **22/22** a přesné rozdíly mezi
 skutečnými a syntetickými podklady dokládá

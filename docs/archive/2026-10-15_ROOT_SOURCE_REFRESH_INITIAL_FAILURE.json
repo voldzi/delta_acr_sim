@@ -1,0 +1,25 @@
+{
+  "status": "FAILED_BEFORE_CASE_GROUPS",
+  "observedAtUTC": "2026-10-15T11:30:06.000Z",
+  "stage": "bootstrap.metadata-004-source-refresh",
+  "completedCaseGroups": 0,
+  "failure": "FIXTURE_ASSERTION_FAILED",
+  "failureSite": "generated harness.mjs:257:3",
+  "diagnosticLimitation": "The original fixture suppressed SQLSTATE and the fixed source exception; no specific root cause is claimed in this record.",
+  "sourcePins": {
+    "root-owner-authority.mjs": "34a601aec8ad8d32095c9baf778a3a829dbda6159f7c4fd1e28aa22be6d0feb0",
+    "004_source_refresh_cas.sql": "bae95683bcbcf1e55dc3c38060a5abec2e5db9d782c8f45547857d09940cdd2f",
+    "test-root-source-refresh.mts": "523dbbc5fe7db7656c1eeed609815e8596684150cb4a4d26d84e97d827a7a4e7",
+    "root-source-refresh/harness.mjs": "4a72778fc1bb6c0f9d9c8dd4996ba89dbe5b73a9a0cc427c174aa5846f7da227"
+  },
+  "cleanup": {
+    "ownedContainersAbsentVerified": true,
+    "failedPrivateSyntheticContextsRetained": true,
+    "globalPrune": false
+  },
+  "productionChanged": false,
+  "realAccounts": false,
+  "providerCalls": 0,
+  "restoreAccepted": false,
+  "wholeAccountComplete": false
+}

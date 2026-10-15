@@ -1,0 +1,137 @@
+{
+  "status": "SOURCE_REFRESH_CAS_SQL_ONLY",
+  "startedAt": "2026-10-15T11:35:16.555Z",
+  "completedAt": "2026-10-15T11:35:20.417Z",
+  "result": {
+    "contractVersion": "sim-source-refresh-cas-sql-test-v1",
+    "passed": 8,
+    "cases": [
+      {
+        "name": "valid-one-insert",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": false
+      },
+      {
+        "name": "reader-runtime-denied",
+        "passed": true,
+        "proofRowsAddedDuringCase": 0,
+        "directSyntheticProofAppendIncluded": false
+      },
+      {
+        "name": "duplicate-and-bad-shape",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": false
+      },
+      {
+        "name": "cas-drift",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": true
+      },
+      {
+        "name": "expiry",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": true
+      },
+      {
+        "name": "other-rows-immutable",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": false
+      },
+      {
+        "name": "concurrent-cas-one-winner",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": false
+      },
+      {
+        "name": "direct-enroller-insert-obeys-904214",
+        "passed": true,
+        "proofRowsAddedDuringCase": 1,
+        "directSyntheticProofAppendIncluded": true
+      }
+    ],
+    "startedAt": "2026-10-15T11:35:18.529Z",
+    "completedAt": "2026-10-15T11:35:20.270Z",
+    "actualPostgres": true,
+    "syntheticMetadataOnly": true,
+    "rootAuthorityVerified": false,
+    "rootSignaturesVerified": false,
+    "nativeTransport": false,
+    "lostCommitExercised": false,
+    "realAccounts": false,
+    "providerCalls": 0,
+    "productionChanged": false,
+    "wholeAccountComplete": false
+  },
+  "sourcePins": {
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/test-source-refresh-cas-postgres.mts": "2d6caa9053f729c17b4d356d0ec9b54ad5a36496f07b6d56d8aebd3a69457872",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/fixtures/source-refresh-cas/harness.mjs": "88915e18cd270b2bfd667d2ce2bb7e793d6974eb59a6093a9b16567de4209e01",
+    "/Users/voldzi/Documents/Codex/2026-07-19/upgrade-proxmox-clusteru-c-lem-je-2/reports/cop-account-safety-20261014/isolated-continuity/001-guard-metadata.sql": "a29369e48a1380bb12ce3b40b9254d924e0d98a3b90f7cdcdc0fb7e9ba27aaba",
+    "/private/tmp/cop-runtime-source-recovery-20261013/scripts/account-safety/002-root-reader.sql": "9a08e4174f25a64cf9c1897d5df1c9b772d7ab072c5bb8cffc5a8f0e7939476a",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/account-safety/004_source_refresh_cas.sql": "48dbf4f816af0b89c913a5361ae9ddf61b827dc61db0ce242100ea5189a958cf"
+  },
+  "frozenEvidence": {
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/docs/archive/2026-10-15_ROOT_OWNER_AUTHORITY.json": "a88fa4788a9e0fa6fb3265310e7f3038282cfa417ce45311ce092a7413b3f49a",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/docs/archive/2026-10-15_ROOT_OWNER_POLICY_LINEAGE.json": "6691948fc7e2393de9147b7f9c543e030482f1eaf0c9e9af25e2ab095685e168",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/docs/archive/2026-10-14_DRIVER_RETENTION_LIFECYCLE.json": "447039b47a3e9eb33ef7ed73f762ff29191864a3427a8bff64b082fd1926484d"
+  },
+  "stagedSourcePins": {
+    "/fixture/harness.mjs": "88915e18cd270b2bfd667d2ce2bb7e793d6974eb59a6093a9b16567de4209e01",
+    "/fixture/sql/001-guard-metadata.sql": "a29369e48a1380bb12ce3b40b9254d924e0d98a3b90f7cdcdc0fb7e9ba27aaba",
+    "/fixture/sql/002-root-reader.sql": "9a08e4174f25a64cf9c1897d5df1c9b772d7ab072c5bb8cffc5a8f0e7939476a",
+    "/fixture/sql/004_source_refresh_cas.sql": "48dbf4f816af0b89c913a5361ae9ddf61b827dc61db0ce242100ea5189a958cf"
+  },
+  "packageVersions": {
+    "node_modules/pg": "8.23.0",
+    "node_modules/pg/node_modules/pg-connection-string": "2.14.0",
+    "node_modules/pg/node_modules/pg-pool": "3.14.0",
+    "node_modules/pg/node_modules/pg-protocol": "1.16.0",
+    "node_modules/pg/node_modules/pg-types": "2.2.0",
+    "node_modules/pg/node_modules/pgpass": "1.0.5",
+    "node_modules/pg/node_modules/pg-cloudflare": "1.4.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/pg-int8": "1.0.1",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-array": "2.0.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-bytea": "1.0.1",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-date": "1.0.7",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval": "1.2.0",
+    "node_modules/pg/node_modules/pgpass/node_modules/split2": "4.2.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval/node_modules/xtend": "4.0.2"
+  },
+  "images": {
+    "node": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+    "postgres": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+  },
+  "isolation": {
+    "newOwnedCluster": true,
+    "externalNetwork": false,
+    "hostBindMounts": false,
+    "volumes": false,
+    "publicPorts": false,
+    "tcpListener": false,
+    "imagePull": false,
+    "imageBuild": false,
+    "sourceContainersStarted": false
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootAuthorityVerified": false,
+    "rootSignaturesVerified": false,
+    "nativeTransport": false,
+    "realAccounts": false,
+    "providerCalls": 0,
+    "lostCommitExercised": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "wholeAccountComplete": false
+  },
+  "cleanup": {
+    "ownedContainersRemoved": true,
+    "privateContextRemoved": true,
+    "globalPrune": false
+  }
+}

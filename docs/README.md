@@ -46,6 +46,7 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Archiv ověření: omezená inventura denních kandidátů — 12/12 PostgreSQL případů](archive/2026-10-15_DRIVER_INVENTORY_CANDIDATES_SQL.md)
 - [Archiv ověření: skutečný Root owner common — 22/22 izolovaných případů, bez produkční akceptace](archive/2026-10-15_ROOT_OWNER_AUTHORITY.md)
 - [Archiv ověření: návaznost podepsaných politik a skutečný checkpoint writer — 8/8 nových skupin](archive/2026-10-15_ROOT_OWNER_POLICY_LINEAGE.md)
+- [Archiv ověření: source refresh SQL 8/8, Root 6/6 a ETA contributor vazba 6/6 — bez aktivace produkce](archive/2026-10-15_SOURCE_REFRESH_AND_ETA_BINDING.md)
 - Zdrojová AI composition: [pevný Root checkpoint loader/consumer](../apps/ai-router-api/src/owner-checkpoint.ts)
   a [aplikační entrypoint](../apps/ai-router-api/src/index.ts). Její unit ověření
   není produkční Root enrollment nebo deploy; rozsah zdroje a otevřené gates

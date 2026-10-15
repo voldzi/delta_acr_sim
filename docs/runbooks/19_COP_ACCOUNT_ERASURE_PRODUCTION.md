@@ -546,6 +546,21 @@ Root 34 a v1 61 se k tomuto počtu nepřičítají.
 
 ## Před aktivací
 
+Zdrojové rozšíření `source-refresh` není produkční instalace. Samostatně
+ověřit nový SQL CAS a skutečný Root/JWS/TLS průchod; historické common
+22/22 a policy-lineage 8/8 se k novým výsledkům nepřičítají. SQL004
+vyžaduje předchozí přesnou metadata foundation a reader002. Nové role
+zůstávají NOLOGIN a pevný profil ani Root-only složky se tím nevytvoří.
+Původní reader nesmí získat INSERT nebo EXECUTE refresh RPC.
+
+Před případným zprovozněním musí existovat omezený instalační manifest
+pro samostatný profil, přijaté aktuální vazby a skutečný životní cyklus
+registrace, anchoru a cílového proofu. Refresh neobnovuje tyto jiné TTL.
+Nejistý origin se řeší pod původním ID/plánem; restart služby nesmí sám
+vymazat HOLD nebo z nejasného výsledku vytvořit nový pokus. Dohledání
+refresh originu po restartu a nezávislá startup/restore karanténa dosud
+nejsou uzavřené produkční gates.
+
 1. COP doloží přesnou stávající derivaci Router aliasu, issuer, všechny
    používané driver HMAC verze a retained/outbox dny. Unknown znamená
    blokovaný preflight; nesmí se změnit derivace na nový prázdný namespace.
@@ -566,6 +581,11 @@ Root 34 a v1 61 se k tomuto počtu nepřičítají.
 
 ## Omezená migrace a obraz
 
+- Zdrojový SQL007 zpřísňuje ETA→receipt contributor vazbu bez změny
+  funkcí SQL003 nebo oprávnění. Před případným použitím ověřit historické
+  nesoulady; při 23514 skončit bez změny, neodstraňovat ani nepřeznačovat
+  data automaticky. Nový schema fingerprint vyžaduje nezávislé přijetí.
+  Samotné úspěšné DDL není readiness ani souhlas k aktivaci mazání.
 - Zaznamenat přesné aktuální ID SDA a Router obrazu, zdrojovou revizi a
   neměnné env/mount/network nastavení. `.env` a keys nikdy nevypisovat.
 - Před změnou ověřit X5 UUID `2f93f595-b61b-4eea-9054-7afa9b275b5b`,

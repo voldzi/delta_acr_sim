@@ -145,6 +145,16 @@ skutečnému exkluzivnímu `checkpoint-publish` kontextu; kopie objektu ani
 samotný helper historie nejsou autorita. Vypršelý target se pro běžné
 čtení nikdy neoznačuje za aktuální.
 
+Samostatný `source-refresh` smí Root provést jen za stále platné původní
+autority, v téže exkluzivní metadata session a přes pevný omezený SQL RPC.
+Porovnávají se celé původní PG řádky, nikoli jen vybrané atributy. Nový
+proof nepřepisuje existující kontext, checkpoint nebo procesní registraci.
+Před RPC vznikne neměnný podepsaný intent a dispatch; neznámý výsledek
+nesmí vytvořit další pokus s novým UUID. Watchdog přepne HOLD, ale nezavírá
+metadata socket držící bariéru. Restartové vyřešení původního originu
+a nová nezávisle přijatá kohorta zůstávají podmínkou aktivace, nikoli
+automatickým reconnectem.
+
 Tyto požadavky nejsou tvrzení o aktuálně přijaté produkční instalaci.
 Izolované SQL a Root fixture důkazy i jejich omezení jsou v
 [integraci 23](../integration/23_SIM_ACCOUNT_SAFETY_RUNTIME_PREPARATION.md)

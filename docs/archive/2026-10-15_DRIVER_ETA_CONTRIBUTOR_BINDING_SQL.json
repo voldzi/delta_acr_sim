@@ -1,0 +1,139 @@
+{
+  "status": "SOURCE_DRIVER_ETA_CONTRIBUTOR_BINDING_SQL_ONLY",
+  "startedAt": "2026-10-15T11:36:40.601Z",
+  "completedAt": "2026-10-15T11:36:43.419Z",
+  "result": {
+    "contractVersion": "sim-driver-eta-binding-sql-test-v1",
+    "passed": 6,
+    "cases": [
+      {
+        "name": "legacy-mismatch-rolls-back-without-changes",
+        "passed": true
+      },
+      {
+        "name": "clean-forward-migration-preserves-data-and-authority",
+        "passed": true
+      },
+      {
+        "name": "wrong-hash-insert-update-denied-same-hash-allowed",
+        "passed": true
+      },
+      {
+        "name": "parent-cascade-preserves-other-contributor",
+        "passed": true
+      },
+      {
+        "name": "concurrent-insert-delete-is-serialized-by-real-fk",
+        "passed": true
+      },
+      {
+        "name": "reader-ready-new-schema-pin-old-policy-rejected",
+        "passed": true
+      }
+    ],
+    "startedAt": "2026-10-15T11:36:42.590Z",
+    "completedAt": "2026-10-15T11:36:43.295Z",
+    "postgres": "18.6",
+    "actualSql": true,
+    "syntheticDataOnly": true,
+    "transport": "fresh-private-unix-socket-no-tcp",
+    "schemaChange": {
+      "beforeFingerprint": "5fdf09226bcad9cb5d90a60138d8cafc0c86f78ca200360fb8ba131cac750f83",
+      "afterFingerprint": "1f0118fa00180c26fb9682505c1d440b1d73e0d3f319448fed395f9866382a59",
+      "privilegeFingerprintUnchanged": true,
+      "requiresIndependentRootPolicyReview": true
+    },
+    "concurrency": {
+      "actualFkBlockingObserved": true,
+      "deleteFirstAndInsertFirst": true,
+      "noEtaAfterParentCommit": true
+    },
+    "rootAuthorityVerified": false,
+    "rootSignaturesVerified": false,
+    "nativeTransport": false,
+    "realAccounts": false,
+    "providerCalls": 0,
+    "productionChanged": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "wholeAccountComplete": false,
+    "cleanup": {
+      "clusterStopped": true,
+      "connectionsClosed": true
+    }
+  },
+  "sourcePins": {
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/test-driver-eta-binding-postgres.mts": "acc5fd0f238e4b245d91b911da59a1977820210dfc372ff668c7cf77ef019543",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/fixtures/driver-eta-binding/harness.mjs": "b344a76042ff0e61bd6fe7054d7ac26ea8a626cce005c6a5314fdd20a0d33b13",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/005_root_checkpoint.sql": "77faac125f6133a774e6d9e900c2dcbfc3b86419d3179bfb4d5bcf64eb3bb3cb",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/006_inventory_candidates.sql": "bd69ca4e58746c852b49bf0ad1f59465a64fc781a59c4c9fe88073199080efe0",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/deploy/driver-measurements/007_eta_contributor_binding.sql": "135acb29c58734e232891aa9b61fac3e6520b6dd7209a57dbd5dc8240fbc5942"
+  },
+  "frozenPins": {
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/scripts/test-driver-inventory-candidates-postgres.mts": "b4dd82d5a95826d934697544a22117ebf602e62330fdc61f731969183eb27ab2",
+    "/Users/voldzi/.codex/worktrees/sim-account-erasure/02 SIM/docs/archive/2026-10-15_DRIVER_INVENTORY_CANDIDATES_SQL.json": "b9c698eb6eb38a25517e17198849a0ca5814d8953d07c83436e4cc7f00e266c2"
+  },
+  "stagedSourcePins": {
+    "/fixture/harness.mjs": "b344a76042ff0e61bd6fe7054d7ac26ea8a626cce005c6a5314fdd20a0d33b13",
+    "/sql-test/read-admission-facts.mjs": "756d25ae2ce00c9a02a6295a5d00812732a04b01ace82c347f68e58a902d0456",
+    "/fixture/sql/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "/fixture/sql/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "/fixture/sql/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "/fixture/sql/004_read_admission_facts.sql": "791545b9df91e65bb555c68a44dadd73a847ca64fde0c31a9036f9f555ba1d2d",
+    "/fixture/sql/005_root_checkpoint.sql": "77faac125f6133a774e6d9e900c2dcbfc3b86419d3179bfb4d5bcf64eb3bb3cb",
+    "/fixture/sql/006_inventory_candidates.sql": "bd69ca4e58746c852b49bf0ad1f59465a64fc781a59c4c9fe88073199080efe0",
+    "/fixture/sql/007_eta_contributor_binding.sql": "135acb29c58734e232891aa9b61fac3e6520b6dd7209a57dbd5dc8240fbc5942"
+  },
+  "packageVersions": {
+    "node_modules/pg": "8.23.0",
+    "node_modules/pg/node_modules/pg-connection-string": "2.14.0",
+    "node_modules/pg/node_modules/pg-pool": "3.14.0",
+    "node_modules/pg/node_modules/pg-protocol": "1.16.0",
+    "node_modules/pg/node_modules/pg-types": "2.2.0",
+    "node_modules/pg/node_modules/pgpass": "1.0.5",
+    "node_modules/pg/node_modules/pg-cloudflare": "1.4.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/pg-int8": "1.0.1",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-array": "2.0.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-bytea": "1.0.1",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-date": "1.0.7",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval": "1.2.0",
+    "node_modules/pg/node_modules/pgpass/node_modules/split2": "4.2.0",
+    "node_modules/pg/node_modules/pg-types/node_modules/postgres-interval/node_modules/xtend": "4.0.2"
+  },
+  "images": {
+    "node": "sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+    "postgres": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+  },
+  "isolation": {
+    "newOwnedCluster": true,
+    "externalNetwork": false,
+    "hostBindMounts": false,
+    "volumes": false,
+    "publicPorts": false,
+    "tcpListener": false,
+    "imagePull": false,
+    "imageBuild": false,
+    "nodeSourceContainerStarted": false
+  },
+  "actual": {
+    "productionChanged": false,
+    "rootAuthorityVerified": false,
+    "rootSignaturesVerified": false,
+    "nativeTransport": false,
+    "realAccounts": false,
+    "providerCalls": 0,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "wholeAccountComplete": false
+  },
+  "cleanup": {
+    "ownedContainersRemoved": true,
+    "privateContextRemoved": true,
+    "globalPrune": false
+  }
+}

@@ -46,6 +46,15 @@
   přístupových klíčů. Neměnný archiv se zapisuje před prvním checkpoint
   intentem/setterem a nikdy se při chybě neskládá z cílové DB. App jej
   nedostává přes bind mount; obnova archivu sama neuděluje oprávnění.
+- Pro připravovaný source refresh je vyhrazen pevný Root-only profil
+  `registry-source-refresh`, nikoli doplnění zápisových práv do readeru.
+  Dvě NOLOGIN role v SQL004 samy nevytvoří produkční credential. Nové
+  `/var/lib/cop-account-safety/source-refresh-intents` a
+  `/var/lib/cop-account-safety/source-refresh-dispatches` musí být předem
+  zřízené Root-only 0700; verifier je automaticky nezakládá. Obsahují
+  podepsané původní vazby a digesty, nikoli klíče, principály nebo GPS.
+  Zachovávají se i při nejistém výsledku; automatické smazání podle TTL
+  nebo obnova ze staré aplikační zálohy nejsou bezpečným vyřešením originu.
 
 ## Konfigurační typy
 

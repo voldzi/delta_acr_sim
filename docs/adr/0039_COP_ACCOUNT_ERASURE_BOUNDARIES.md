@@ -407,3 +407,30 @@ karanténa i pro starý/restored image, který common ignoruje. Přijetí
 nového read wrapperu ani zákaz rollbacku v dokumentaci tuto nezávislou
 hranu nenahrazuje. Její zdroj, omezená instalace a skutečná restore
 akceptace musí být doloženy odděleně, bez rozšíření oprávnění aplikací.
+
+### Oddělené obnovení source důkazu
+
+Obnovení čerstvosti používá samostatný pevný Root účel `source-refresh`
+a úzký SQL CAS nad přesnými původními PG/UTC row digesty. Nepřenáší právo
+INSERT na reader ani aplikaci. SQL004 vytváří dvě neaktivní NOLOGIN role,
+jediný RPC a povinnou serializaci všech INSERTů runtime proofu pod 904214.
+Původní platný Root kontext autorizuje jediný nový refresh; jeho vlastní
+22polový kontrakt, deadline a ostatní vazby se nesmějí změnit.
+
+Refresh neobnovuje target checkpoint, registraci, frontier anchor nebo
+enrollment a není opravou již vypršeného důkazu. Root trvale uloží původní
+plán a dispatch před zápisem a po známém COMMIT dvakrát ověří přesný nový
+JWS i metadata. Neznámý výsledek znamená HOLD při původních ID; watchdog
+nesmí časem uvolnit metadata session. Zdrojový RPC, jeho izolovaný SQL
+test ani kladný readback neřeší restartové dohledání originu a skutečnou
+produkční restore karanténu. Tyto podmínky zůstávají povinné před aktivací.
+
+### Shodná identita rodičovské dávky a ETA
+
+Před pozitivním ověřením nulových zbytků musí databáze vynucovat stejný
+contributor hash ETA a její rodičovské dávky. Aplikační konvence tuto
+vazbu nenahrazuje. Oddělený forward SQL007 atomicky nahrazuje původní
+dvousloupcový FK validovaným immediate composite FK nad owner, batch ID
+a contributor hashem. Historický nesoulad znamená abort před DDL, nikoli
+automatické přeznačení nebo smazání cizích dat. Funkce zmrazeného SQL003
+se nepřepisují; nový schema fingerprint vyžaduje nezávislé přijetí.

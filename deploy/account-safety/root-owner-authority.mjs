@@ -7,7 +7,7 @@ import {createRequire} from 'node:module';
 import {randomUUID} from 'node:crypto';
 import {lstatSync,readFileSync,statfsSync} from 'node:fs';
 import {canonical,canonicalJson,exact,hex,uuid,sha256,readRootFile,requireRootCodeTree,requireRootDirectory,verifyRootRecord} from './root-records.mjs';
-import {issueRootRecord,storeRootRecord} from './root-record-issuer.mjs';
+import {issueRootRecord,issueRootJws,storeRootRecord} from './root-record-issuer.mjs';
 import {verifyRootJws} from './root-jws.mjs';
 import {nativeModule} from './root-native.mjs';
 import {connectionProfile,RootDriverAuthority} from './root-driver-runtime.mjs';
@@ -22,7 +22,7 @@ const ROOT='/opt/cop-account-safety',STATE='/var/lib/cop-account-safety',PRIVATE
 const KEYRING='/etc/cop-account-safety/public/verification-keys.json';
 const contexts=new WeakMap(),heldSessions=new Set(); let globalHold=false;
 let ownProcessFacts,ownNative;
-const PURPOSES=['read','checkpoint-read','mutation','publication','retention','checkpoint-publish'];
+const PURPOSES=['read','checkpoint-read','mutation','publication','retention','checkpoint-publish','source-refresh'];
 // Digest the complete ORIGINAL rows inside PG/UTC, before bigint JSON parsing.
 // Data used for comparisons casts every bigint to canonical decimal text.
 const SQL=`SELECT row_to_json(i) AS identity,
@@ -42,6 +42,12 @@ const SQL=`SELECT row_to_json(i) AS identity,
   'expected_fence_sequence',pr.expected_fence_sequence::text,'expected_cleanup_sequence',pr.expected_cleanup_sequence::text,
   'fence_sequence',pr.fence_sequence::text,'cleanup_sequence',pr.cleanup_sequence::text,'attempt',pr.attempt::text)) AS previous_receipt,
  row_to_json(po) AS previous_replay,
+ encode(sha256(convert_to(to_jsonb(i)::text,'UTF8')),'hex') AS identity_digest,
+ encode(sha256(convert_to(to_jsonb(p)::text,'UTF8')),'hex') AS policy_digest,
+ encode(sha256(convert_to(to_jsonb(d)::text,'UTF8')),'hex') AS dataset_digest,
+ encode(sha256(convert_to(to_jsonb(b)::text,'UTF8')),'hex') AS runtime_digest,
+ encode(sha256(convert_to(to_jsonb(a)::text,'UTF8')),'hex') AS proof_row_digest,
+ encode(sha256(convert_to(to_jsonb(h)::text,'UTF8')),'hex') AS receipt_source_proof_digest,
  encode(sha256(convert_to(to_jsonb(c)::text,'UTF8')),'hex') AS acceptance_digest,
  encode(sha256(convert_to(to_jsonb(r)::text,'UTF8')),'hex') AS receipt_digest,
  encode(sha256(convert_to(to_jsonb(o)::text,'UTF8')),'hex') AS replay_digest,
@@ -344,7 +350,7 @@ async function targetPins(entry,policy,binding,lineage,keys) {
     await query('COMMIT');return f;
   });
 }
-async function inspectCurrent(entry) {
+async function inspectCurrent(entry,refresh) {
   root();
   need(!globalHold&&!entry.hold&&!entry.closed&&entry.locked,'GUARD_OWNER_HOLD');
   const before=keyring();if(entry.keysDigest)need(sha256(before.bytes)===entry.keysDigest,'GUARD_OWNER_KEYRING_CHANGED');
@@ -392,12 +398,22 @@ async function inspectCurrent(entry) {
   const state=freeze({binding,registration:reg.payload,registrationRef:{recordId:reg.payload.recordId,digest:reg.digest},keys:before.keys,keysDigest:sha256(before.bytes),
     rootPolicy:{...policy,reference:policyRef},sourceProofId:s.recordId,frontierSequence:a.sequence,frontierDigest:a.digest,expiresAtUTC,
     checkpointAcceptanceRef:acceptanceRef,proofDigest:proof.digest,anchorDigest:anchor.digest,observationDigest:sha256(canonical({...observed,observedAtUTC:null}))});
-  if(entry.state)need(canonical(state)===canonical(entry.state),'GUARD_OWNER_CONTEXT_CHANGED');return state;
+  if(refresh) {
+    need(entry.purpose==='source-refresh'&&entry.refresh===refresh&&entry.refreshCommitted===true&&entry.state&&
+      state.sourceProofId===refresh.proofId&&state.proofDigest===refresh.proofJwsDigest&&s.operationKind==='refresh'&&s.operationId===refresh.operationId&&
+      s.issuedAt===refresh.issuedAtUTC&&s.expiresAt===refresh.expiresAtUTC&&observed.observedAtUTC===refresh.observedAtUTC&&
+      state.expiresAtUTC===refresh.expiresAtUTC&&row.proof_row_digest===refresh.rowDigest,'GUARD_SOURCE_REFRESH_POST_BINDING');
+    const invariant=value=>Object.fromEntries(Object.entries(value).filter(([k])=>!['sourceProofId','proofDigest','expiresAtUTC'].includes(k)));
+    need(canonical(invariant(state))===canonical(invariant(entry.state))&&Date.now()<Date.parse(entry.state.expiresAtUTC),'GUARD_SOURCE_REFRESH_POST_CHANGED');
+  }else if(entry.state)need(canonical(state)===canonical(entry.state),'GUARD_OWNER_CONTEXT_CHANGED');
+  // A private observed snapshot, not an application-selected proof or ctx.
+  // This does not replace the immutable state behind an existing context.
+  entry.verifiedRow=freeze(copy(row));return state;
 }
 function serial(entry,work) {
   // A known authorization expiry rejects work but is not an unknown session.
   // Only explicit close after the caller's drain can release this real lease.
-  const next=entry.queue.then(async()=>{need(!entry.closing&&!entry.closed&&!entry.hold&&!globalHold,'GUARD_OWNER_HOLD');return work();});
+  const next=entry.queue.then(async()=>{need(!entry.retired&&!entry.closing&&!entry.closed&&!entry.hold&&!globalHold,'GUARD_OWNER_HOLD');return work();});
   entry.queue=next.catch(()=>undefined);return next;
 }
 async function current(entry) {return serial(entry,()=>inspectCurrent(entry));}
@@ -419,7 +435,8 @@ export async function requireCurrentOwner(owner,peer,purpose) {
   // Reject a prior broker's snapshot before even opening the registry socket.
   currentHost(owner,keyring().keys);
   const entry={owner,peer:freeze(copy(peer)),purpose,locked:false,acquiring:false,hold:false,closed:false,closing:false,queue:Promise.resolve(),targets:new Set()};
-  entry.client=newClient('registry-probe','cop_account_safety_guard','cop_guard_root_reader',entry);
+  entry.client=purpose==='source-refresh'?newClient('registry-source-refresh','cop_account_safety_guard','cop_guard_source_refresher',entry):
+    newClient('registry-probe','cop_account_safety_guard','cop_guard_root_reader',entry);
   try {
     await entry.client.client.connect();need(!globalHold,'GUARD_OWNER_HOLD');
     entry.acquiring=true;
@@ -427,7 +444,8 @@ export async function requireCurrentOwner(owner,peer,purpose) {
     const r=await metadata(entry,`SELECT pg_catalog.${sql}(pg_catalog.hashtext(current_database()),904214) AS held`);
     need(r.rows.length===1&&typeof r.rows[0].held==='boolean','GUARD_OWNER_LOCK_UNKNOWN');
     entry.acquiring=false;if(!r.rows[0].held){await endKnown(entry.client,entry);throw new Error('GUARD_OWNER_LEASE_BUSY');}
-    entry.locked=true;heldSessions.add(entry);need(!globalHold,'GUARD_OWNER_HOLD');await metadata(entry,'BEGIN READ ONLY');await metadata(entry,"SET LOCAL TimeZone='UTC'");
+    entry.locked=true;heldSessions.add(entry);need(!globalHold,'GUARD_OWNER_HOLD');
+    await metadata(entry,purpose==='source-refresh'?'BEGIN READ WRITE':'BEGIN READ ONLY');await metadata(entry,"SET LOCAL TimeZone='UTC'");
     await metadata(entry,'SET LOCAL search_path=pg_catalog');
     entry.state=await inspectCurrent(entry);entry.keysDigest=entry.state.keysDigest;const s=entry.state;
     const authority=await signedCurrent(entry,'owner-authority',{...s.binding,owner,scope:SPEC[owner].scope,purpose,sourceProofId:s.sourceProofId,
@@ -499,6 +517,87 @@ export async function archiveCurrentOwnerPolicy(ctx) {
     need(readRootFile(currentPath,{secret:true}).equals(bytes)&&readRootFile(path,{secret:true}).equals(bytes),'GUARD_OWNER_POLICY_HISTORY_CHANGED');
     return freeze(copy(reference));
   });
+}
+/** SOURCE ONLY: one original, fixed-profile freshness CAS. No enrollment,
+ * checkpoint/anchor/registration renewal, authority callback or new ctx.
+ * A lost COMMIT/query/END retains HOLD, not a fresh retry or implicit recovery.
+ * The all-proof INSERT serialization guard and separate narrow RPC/role must
+ * already exist. Absence of that fixed protected profile fails closed. */
+export async function refreshRootOwnerSource(owner,peer) {
+  const ctx=await requireCurrentOwner(owner,peer,'source-refresh'),entry=entryFor(ctx);
+  let claimed=false,commitAcknowledged=false,plan,result;
+  const watchdog=setTimeout(()=>{if(!entry.closed)hold(entry);},15000);
+  try {
+    result=await serial(entry,async()=>{
+      await inspectCurrent(entry);const old=entry.state,row=entry.verifiedRow;
+      const original=verifyRootJws(readRootFile(STATE+'/runtime-proofs/'+old.sourceProofId+'.jws',{secret:true}),old.keys,'runtime-proof');
+      need(original.digest===old.proofDigest,'GUARD_SOURCE_REFRESH_ORIGINAL');
+      const {observed}=currentHost(owner,old.keys);
+      need(sha256(canonical({...observed,observedAtUTC:null}))===old.observationDigest,'GUARD_SOURCE_REFRESH_COHORT');
+      const currentRegistration=registration(owner,entry.peer,old.keys),anchor=signed(STATE+'/authority/current-frontier.json',old.keys,'current-frontier');
+      const ceiling=Math.min(Date.parse(observed.observedAtUTC)+30000,Date.parse(currentRegistration.payload.expiresAt),Date.parse(anchor.payload.expiresAt));
+      const lifetimeMs=Math.floor(Math.min(29900,ceiling-Date.now()-100));need(lifetimeMs>1000,'GUARD_SOURCE_REFRESH_DEADLINE');
+      const proofId=randomUUID(),operationId=randomUUID();
+      const facts=Object.fromEntries(Object.entries(original.payload).filter(([k])=>!BASE.includes(k)));
+      const next=issueRootJws('runtime-proof',{...facts,operationId,operationKind:'refresh',observation:observed},
+        {recordId:proofId,lifetimeMs,expectedKeyringDigest:old.keysDigest});
+      verifyRootJws(next.bytes,old.keys,'runtime-proof');
+      need(Date.parse(next.payload.expiresAt)<=ceiling&&Date.parse(next.payload.expiresAt)-Date.parse(observed.observedAtUTC)<=30000,'GUARD_SOURCE_REFRESH_DEADLINE');
+      const refresh={proofId,operationId,proofJwsDigest:next.digest,trustProfileId:original.payload.trustProfileId,
+        observedAtUTC:observed.observedAtUTC,issuedAtUTC:next.payload.issuedAt,expiresAtUTC:next.payload.expiresAt};
+      const expected={identityRowDigest:row.identity_digest,policyRowDigest:row.policy_digest,datasetRowDigest:row.dataset_digest,
+        runtimeRowDigest:row.runtime_digest,latestProofId:old.sourceProofId,latestProofJwsDigest:old.proofDigest,latestProofRowDigest:row.proof_row_digest,
+        frontierSequence:row.frontier_sequence,frontierDigest:row.frontier_digest,acceptanceId:row.acceptance.acceptance_id,
+        acceptanceGeneration:row.acceptance.generation,acceptanceRowDigest:row.acceptance_digest,receiptRowDigest:row.receipt_digest,
+        replayRowDigest:row.replay_digest,receiptSourceProofRowDigest:row.receipt_source_proof_digest};
+      const body={contractVersion:'cop-root-source-refresh-cas-v1',owner,binding:{...old.binding,policyGeneration:String(old.binding.policyGeneration)},expected,refresh};
+      const priorProofRef={recordId:old.sourceProofId,digest:old.proofDigest},proposedProofRef={recordId:proofId,digest:next.digest};
+      plan=freeze({operationId,priorProofRef,proposedProofRef,refresh,bodyDigest:sha256(canonical(body)),originalBody:body});
+      const intentDirectory=STATE+'/source-refresh-intents',dispatchDirectory=STATE+'/source-refresh-dispatches';
+      for(const directory of [intentDirectory,dispatchDirectory]) {
+        requireRootDirectory(directory,{secret:true});need((lstatSync(directory).mode&0o777)===0o700,'GUARD_SOURCE_REFRESH_CUSTODY');
+      }
+      // Durable JWS then original plan precede the only database reference.
+      storeRootRecord(STATE+'/runtime-proofs/'+proofId+'.jws',next.bytes);
+      const intent=issueRootRecord('source-refresh-intent',{...old.binding,owner,scope:ctx.scope,...plan},
+        {recordId:operationId,lifetimeMs:300000,expectedKeyringDigest:old.keysDigest});
+      storeRootRecord(intentDirectory+'/'+operationId+'.json',intent.bytes);
+      await inspectCurrent(entry);
+      const dispatch=issueRootRecord('source-refresh-dispatch',{...old.binding,owner,scope:ctx.scope,operationId,priorProofRef,proposedProofRef,
+        intentRef:{recordId:operationId,digest:intent.digest},bodyDigest:plan.bodyDigest},
+        {recordId:operationId,lifetimeMs:300000,expectedKeyringDigest:old.keysDigest});
+      storeRootRecord(dispatchDirectory+'/'+operationId+'.json',dispatch.bytes);claimed=true;
+      need(Date.now()<Date.parse(old.expiresAtUTC),'GUARD_SOURCE_REFRESH_ORIGINAL_EXPIRED');
+      const applied=await metadata(entry,'SELECT cop_guard.refresh_runtime_proof($1::jsonb) AS value',[JSON.stringify(body)]),value=applied.rows[0]?.value;
+      need(applied.rows.length===1&&exact(value,['contractVersion','proofId','proofJwsDigest','acceptedJwsRef','acceptedAtUTC','rowDigest'])&&
+        value.contractVersion==='cop-root-source-refresh-cas-result-v1'&&value.proofId===proofId&&value.proofJwsDigest===next.digest&&
+        value.acceptedJwsRef===proofId+':'+next.digest&&stamp(value.acceptedAtUTC)&&hex(value.rowDigest),'GUARD_SOURCE_REFRESH_APPLY_RESULT');
+      // The old source must still authorize the commit. The target-row insert
+      // is not permission to extend an already expired Root context.
+      const beforeCommit=await metadata(entry,'SELECT clock_timestamp() < $1::timestamptz AS current',[old.expiresAtUTC]);
+      need(beforeCommit.rows[0]?.current===true&&Date.now()<Date.parse(old.expiresAtUTC),'GUARD_SOURCE_REFRESH_ORIGINAL_EXPIRED');
+      await metadata(entry,'COMMIT');commitAcknowledged=true;
+      need(Date.now()<Date.parse(old.expiresAtUTC),'GUARD_SOURCE_REFRESH_ORIGINAL_EXPIRED');
+      entry.refresh=freeze({...refresh,rowDigest:value.rowDigest});entry.refreshCommitted=true;
+      await metadata(entry,'BEGIN READ ONLY');await metadata(entry,"SET LOCAL TimeZone='UTC'");await metadata(entry,'SET LOCAL search_path=pg_catalog');
+      // Two complete fresh committed inspections, exact new JWS/row digest,
+      // otherwise the complete original immutable state. Never amend ctx22.
+      await inspectCurrent(entry,entry.refresh);await inspectCurrent(entry,entry.refresh);
+      entry.retired=true;
+      return freeze({contractVersion:'cop-root-source-refresh-result-v1',owner,scope:ctx.scope,status:'refresh-readback-known',
+        operationId,priorProofRef,proposedProofRef,commitAcknowledged:true});
+    });
+  }catch(error) {
+    if(claimed||entry.hold||globalHold){hold(entry);result=plan?freeze({contractVersion:'cop-root-source-refresh-result-v1',owner,scope:ctx.scope,
+      status:'pending',operationId:plan.operationId,priorProofRef:plan.priorProofRef,proposedProofRef:plan.proposedProofRef,
+      commitAcknowledged,reason:'source_refresh_unresolved'}):undefined;}
+    else throw error;
+  }finally {
+    try{await ctx.close();}catch{hold(entry);if(plan)result=freeze({contractVersion:'cop-root-source-refresh-result-v1',owner,scope:ctx.scope,status:'pending',
+      operationId:plan.operationId,priorProofRef:plan.priorProofRef,proposedProofRef:plan.proposedProofRef,commitAcknowledged,reason:'source_refresh_unresolved'});}
+    finally{if(entry.closed)clearTimeout(watchdog);}
+  }
+  need(result,'GUARD_SOURCE_REFRESH_UNAVAILABLE');return result;
 }
 export async function beginOwnerPublicationIntent(ctx,body) {
   const entry=entryFor(ctx);need(entry.purpose==='checkpoint-publish','GUARD_OWNER_CHECKPOINT_PURPOSE');await current(entry);
