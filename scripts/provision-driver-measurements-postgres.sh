@@ -5,6 +5,7 @@ set +x
 umask 077
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 schema="$script_dir/../deploy/driver-measurements/schema.sql"
+guard_verification="$script_dir/../deploy/driver-measurements/guarded-runtime-verification.sql"
 host=haproxy.home.cz
 port=5000
 database=sim_driver_measurements
@@ -30,8 +31,27 @@ if [[ -z ${PGPASSWORD:-} ]]; then
   export PGPASSWORD
 fi
 admin() { psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$PGUSER" -d postgres "$@"; }
+driver_admin() { psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$PGUSER" -d "$database" "$@"; }
 [[ $(admin -Atc 'SELECT rolsuper FROM pg_roles WHERE rolname=current_user') == t ]] || { printf 'Administrator required; no changes made.\n' >&2; exit 1; }
 count=$(admin -Atc "SELECT (SELECT count(*) FROM pg_roles WHERE rolname IN ('$owner','$runtime'))+(SELECT count(*) FROM pg_database WHERE datname='$database')")
+# Never restore blanket legacy DML, rotate credentials or write a credentials
+# file after the coordinated guarded transition (including a partial install).
+# This is an offline/source-supported diagnostic, not guard authority.
+guarded=false
+if [[ $count == 3 ]]; then
+  guarded=$(driver_admin -Atc "SELECT to_regnamespace('sim_driver_guard_source') IS NOT NULL")
+fi
+if [[ $guarded == t ]]; then
+  if [[ $mode != --check ]]; then
+    printf 'Guarded driver schema detected; refusing legacy provisioning/recovery. No grants or credentials changed.\n' >&2
+    exit 1
+  fi
+  [[ -f $guard_verification ]] || { printf 'Guarded verification source missing.\n' >&2; exit 1; }
+  verified=$(driver_admin -At -f "$guard_verification")
+  [[ $verified == t ]] || { printf 'Guarded runtime privilege verification failed; no changes made.\n' >&2; exit 1; }
+  printf 'Guarded runtime privilege profile verified through HAProxy. This is not restore/Root readiness or activation.\n'
+  exit 0
+fi
 if [[ $mode == --check ]]; then
   printf 'HAProxy administrator connection verified; isolated measurement objects: %s/3.\n' "$count"
   exit 0

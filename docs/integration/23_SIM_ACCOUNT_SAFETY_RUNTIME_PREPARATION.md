@@ -132,6 +132,94 @@ SIM contributor lock a admission coupling a jeho origin journal vytváří
 novou trvalou vazbu na contributor hash. Hash není anonymizace; taková vazba
 by vyžadovala oddělené privacy, retenci a unlink rozhodnutí.
 
+### Koordinovaný databázový patch driver operací
+
+`deploy/driver-measurements/003_guarded_operations.sql` zavádí konkrétní
+zdrojové owner routines pro expiraci, revokaci a erasure nad nezměněnými
+aplikačními tabulkami. Funkce vyžadují oddělené předem zřízené control/exec
+role a NOLOGIN ownera; soubor nevytváří přístupy ani se automaticky neaplikuje.
+Produkční přijetí celého skutečného vykonavatele a jeho oprávnění zůstává
+samostatným krokem, nikoli efektem této zdrojové změny.
+
+Privátní DB rozhraní v `sim_driver_guard_source` tvoří `register_origin`,
+`claim_origin`, `execute_origin`, `resolve_or_seal` a control-only
+`read_publication_context`. Nejde o veřejné RPC
+nebo o nový REST endpoint. Pevný origin přichází z Root registru; běžná
+aplikace nevybírá SQL, spojení, PID, XID ani jiný cíl. Tělo jde pouze jako
+transient JSONB. Jeho binding je SHA-256 UTF-8 PostgreSQL `jsonb::text`,
+ne `JSON.stringify`. Root-owned control musí porovnat právě tento digest
+se svým přijatým registrovaným tělem. Diagnostická funkce
+`runtime_privileges_match` neuděluje oprávnění k operaci.
+
+Kinds jsou `expire`, `revoke`, `erase`, `ack`; verze privátního těla je
+`sim-driver-guarded-db-v1`. Revoke přijímá pouze contributor hash, drží
+dosavadní contributor zámek a nesmí zkrátit existující tombstone. Erase
+váže operation/actor/request hash a dočasný manifest na původní přijetí,
+zamyká operaci a setříděné contributor keys a atomicky provede permanentní
+fence, receipt cascade a ledger. Den a contributor hash se do originu
+neukládají; nevzniká nový trvalý account/day join.
+
+Sedm dní revokace se počítá od skutečného času po získání contributor
+zámku, ne od začátku dlouho čekající transakce. Existující pozdější expiry
+se nezkracuje. Gate metadata se čtou až po contributor zámcích a jejich
+řádek zůstává share-locked až do původního COMMIT.
+
+Control-only `read_publication_context(uuid,jsonb)` přijímá pouze již
+commitnutý `erase` origin a přesné původní šestipolové tělo. Pod operation,
+contributor a state/store zámky vrací sedm scalar polí:
+`storeIncarnation`, `payloadDigest`, `erasureOperationDigest`,
+`databaseZeroVerified`, `remainingBatchCount`, `exactFenceCount`, `readbackAt`.
+Žádný manifest, účet nebo contributor identity se nevrací ani neukládá.
+Ledger digest používá PostgreSQL `to_jsonb(ledger)::text` při UTC; readback
+digest používá stejnou PG JSONB-text SHA-256 konvenci. Nejde o podpis.
+
+Nový samostatně registrovaný `ack` origin může přidat přesně typovaný
+`publicationContext` verze `cop-driver-publication-context-v1` s osmi poli
+`contractVersion`, `recordId`, `recordDigest`, `storeIncarnation`,
+`operationDigest`, `readbackDigest`, `reportProtection`, `observedAtUTC`.
+Původní `payloadDigest` se počítá bez tohoto kontextu, takže nevzniká kruhový
+hash. SQL porovná skutečný uzamčený ledger, zero, přesné fences, checkpoint,
+store a report protection s přijatým kontextem. Čas je konečný, kanonický
+UTC s milisekundami a nesmí být budoucí. Platnost skutečného záznamu a jeho
+aktuálních referencí ověřuje Root; samotný SQL čas ani digest ji nedokazuje.
+
+Samostatný `ack` kind, historické DB flags ani syntetický kontext nejsou
+skutečný publikační důkaz. Root musí před registrací ACK nezávisle ověřit
+podpis, čtyři aktuální evidence reference, původ manifestu a skutečnou
+reportovací politiku/inventář. `no_report` nelze odvodit z prázdné odpovědi.
+Bez kontextu ACK zůstává čekající a ledger nemění, ani nesníží dříve
+potvrzený stav. Platný kontext umožní databázové potvrzení až v původní ACK
+transakci; terminal dále vyžaduje skutečný COMMIT a čerstvý readback.
+`wholeAccountComplete` zůstává false. Databázová transakce je výsledek
+přesného originu, nikoli důkaz celého smazání nebo obnovy záloh.
+
+Stejná změna zužuje runtime na čtení, intake INSERT a receipt-only UPDATE.
+Přímé ledger/fence DML a destructive execute z běžného runtime nejsou
+povoleny. Provisioning při nalezeném guarded namespace odmítne legacy
+apply/recover; `--check` použije pouze pevný čtecí SQL verifier. Chybějící
+role, funkce nebo execution vazba se v aplikaci musí mapovat na 503/pending,
+nikoli na odvolaný souhlas nebo potvrzené smazání.
+
+Verifier kontroluje i účinné sloupcové granty zděděné z PUBLIC, ne pouze
+table-level ACL. Přechod odstraní původní table i column granty PUBLIC a
+runtime, pak výslovně vrátí jen potřebný intake profil. Pevný čtecí verifier
+má `search_path=pg_catalog` a nevolá těla funkcí dodaná databází.
+
+Přesné známé chyby payload/manifestu mají SQLSTATE `22023`; actor-mismatch
+a chybějící erasure operace `P0002`, neměnný request/body/origin konflikt
+`23505`. Guard/metadata/context chyby mají `P0001`, chybějící oprávnění
+`42501` a funkce `42883`. Aplikační adaptér smí mapovat jen konkrétní známé
+chyby: validace 400, nepřístupná operace 404, idempotency konflikt 409,
+ostatní unavailable 503. Obecné `23514` není odvolaný souhlas. Po nejasném
+COMMIT se nejprve zjišťuje původní origin, bez opakování efektu a bez
+předčasného 400/404/409.
+
+Nové [izolované ověření 15. 10.](../archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md)
+prošlo 18 vlastními PostgreSQL případy a samostatně pěti offline testy
+provisioningu. Ověřuje SQL mechaniku, nikoli skutečný Root podpis,
+delivery, restore, aplikační wiring nebo nasazení. Starší důkazy se
+nepřepisují ani nepřičítají. Závazný REST kontrakt zůstává nezměněný.
+
 ### Přesná místa budoucího nativního zapojení
 
 | Soubor a současný port | Konkrétní potřebná změna po přijetí autority |

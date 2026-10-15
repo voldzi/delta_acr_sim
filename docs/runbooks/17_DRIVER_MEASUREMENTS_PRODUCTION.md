@@ -23,6 +23,18 @@ Dedikovaný token a SIM HMAC generuje přímo tam; existující COP HMAC zachov�
 Nikdy nevypisovat env, `docker inspect` env nebo celou rozbalenou Compose konfiguraci.
 Secret backup je mode 600. HMAC nelze rotovat před vymazáním dat a COP fronty.
 
+Po zavedení samostatně přijatého `sim_driver_guard_source` se původní
+provisioning/recovery nesmí použít k návratu širokých DML práv. Skript při
+existenci tohoto namespace odmítá `--apply` a `--recover` ještě před změnou
+grantů nebo zápisem nových přístupů. `--check` místo toho čte pevný
+`guarded-runtime-verification.sql`: sedm SELECT, tři intake INSERT, UPDATE
+jen `receipts.receipt`, bez přímého DELETE či zápisu erasure ledgeru/fences.
+Jde pouze o diagnostiku práv, nikoli oprávnění mazat, Root readiness nebo
+ověření obnovy. Guarded migrace se tímto skriptem automaticky neaplikuje.
+Verifier má pevný katalogový search path a odmítá i zděděné PUBLIC column
+INSERT/REFERENCES na chráněných tabulkách. Izolované ověření přechodu a
+souběhu operací popisuje [záznam z 15. 10.](../archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md).
+
 ## Síť a počáteční příznaky
 
 `cop_sim_driver_measurements_internal` musí mít `Internal=true`; pouze COP API

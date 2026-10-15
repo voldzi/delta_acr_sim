@@ -1,0 +1,130 @@
+{
+  "status": "SOURCE_GUARDED_DRIVER_SQL_MECHANICS_ONLY",
+  "startedAt": "2026-10-15T05:10:09.113Z",
+  "completedAt": "2026-10-15T05:10:12.639Z",
+  "postgresVersion": "18.3",
+  "cases": [
+    {
+      "case": "exact scoped runtime roles and independent catalog verification",
+      "passed": true
+    },
+    {
+      "case": "unbound store and denied or absent guarded functions are unavailable, not consent revocation",
+      "passed": true
+    },
+    {
+      "case": "diagnostics detect table-level, PUBLIC column and CREATE TEMP privilege drift",
+      "passed": true
+    },
+    {
+      "case": "expiry effects and committed marker share the actual original transaction",
+      "passed": true
+    },
+    {
+      "case": "claim cannot be reused after rollback and durable seal rejects late execution",
+      "passed": true
+    },
+    {
+      "case": "body and origin binding reject free text, unknown keys and digest changes before effects",
+      "passed": true
+    },
+    {
+      "case": "revoke waits for real batch and contributor intake locks then removes the just-committed target only",
+      "passed": true
+    },
+    {
+      "case": "erase preserves acceptedAt and deleted counts on a genuine second origin",
+      "passed": true
+    },
+    {
+      "case": "erase rejects actor/request changes and incomplete coverage without altering the accepted ledger",
+      "passed": true
+    },
+    {
+      "case": "erase rechecks metadata after waiting for contributor locks",
+      "passed": true
+    },
+    {
+      "case": "metadata row is share-locked through the same effects and marker transaction",
+      "passed": true
+    },
+    {
+      "case": "permanent erasure fence rejects actual concurrent late intake after origin COMMIT",
+      "passed": true
+    },
+    {
+      "case": "separate ACK origin cannot complete from database flags or kind alone",
+      "passed": true
+    },
+    {
+      "case": "publication read is control-only, read-only and requires a committed exact ERASE origin",
+      "passed": true
+    },
+    {
+      "case": "synthetic typed publication context completes only in the original ACK transaction",
+      "passed": true
+    },
+    {
+      "case": "malformed publication fields and database mismatches cannot manufacture acknowledgment",
+      "passed": true
+    },
+    {
+      "case": "changed ledger, report protection or exact fences invalidates a prior publication readback",
+      "passed": true
+    },
+    {
+      "case": "origin journal and operation ledger contain no new contributor/account/day join",
+      "passed": true
+    }
+  ],
+  "passed": 18,
+  "providerCalls": 0,
+  "isolation": {
+    "newOwnedCluster": true,
+    "tcpListener": false,
+    "externalTargetsAccepted": false,
+    "dataRemoved": true
+  },
+  "sourcePins": {
+    "deploy/driver-measurements/schema.sql": "6dd60a3acf28d63575198c8526c368df19bbd543f4063d4985fb55f308da02d0",
+    "deploy/driver-measurements/002_account_erasure.sql": "f13db2106a1fe1a02d0d1a26afa8ad7d7c045172ba4419749719ed0f166e16ad",
+    "deploy/driver-measurements/003_guarded_operations.sql": "e3513a983a3b6d1bd52d46851c734dd1c3b208e2e2f6430a6f9eddd38b10d3b5",
+    "deploy/driver-measurements/guarded-runtime-verification.sql": "3ef5ad53b2e4f94d143636e7bf2e26108fd10d3d34c2a0521ca4760d95ca88a2",
+    "scripts/test-driver-expiry-real-schema.mts": "61ff2bfe5b3510fa0c8d4a2be61bc8cea83fb798695d35713b0681634f5e2b6f",
+    "scripts/fixtures/driver-retention-real-schema/expiry-source.sql": "1561825849c8990526af26eae3866ee2100072db72bed638997a2eec7a8afb7a",
+    "docs/archive/2026-10-14_DRIVER_EXPIRY_REAL_SCHEMA.json": "8dac0d99b4add01446b05e8fdc6cd752f5d754328754fc46fe5848b954841396",
+    "scripts/test-driver-guarded-operations-postgres.mts": "547c0486f7a902c6bd4b920139b50178de392f2b3f91f27f3b1d177becf80e97"
+  },
+  "initialHarnessSha256": "547c0486f7a902c6bd4b920139b50178de392f2b3f91f27f3b1d177becf80e97",
+  "harnessUnchangedDuringRun": true,
+  "sourceUnchangedDuringRun": true,
+  "priorFrozenEvidenceUnchanged": true,
+  "coverage": {
+    "realSchema": true,
+    "originalGuardAndCascades": true,
+    "independentCatalogDiagnostic": true,
+    "expirationTransactionAndSeal": true,
+    "revokeLockRace": true,
+    "erasureLockRace": true,
+    "immutableAcceptedAtAndCounts": true,
+    "pendingWithoutRootPublicationContext": true,
+    "typedPublicationReadAndAckSqlMechanics": true,
+    "stalePublicationReadbackRejected": true
+  },
+  "actual": {
+    "productionChanged": false,
+    "nativeAuthority": false,
+    "rootConnectionCustody": false,
+    "rootMetadataAccepted": false,
+    "rootSignaturesVerified": false,
+    "acceptedRootRecords": false,
+    "rootPublicationDeliveryAccepted": false,
+    "nativeTransport": false,
+    "actualWriterIntegration": false,
+    "restoreAccepted": false,
+    "deploymentAccepted": false,
+    "realAccountDeleted": false,
+    "providerCalls": false
+  },
+  "interpretation": "18 NEW owned PostgreSQL SQL cases only; synthetic private publication context is not a real signed Root record or delivery. Prior eleven expiry/COP cases are not counted."
+}

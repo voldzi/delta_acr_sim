@@ -78,6 +78,17 @@ Lokální retention lifecycle a composition mají samostatný
 [ověřovací záznam](../archive/2026-10-14_DRIVER_RETENTION_LIFECYCLE.md);
 37 cílených syntetických případů nedokazuje přijetí produkčního consumeru.
 
+Koordinovaný source patch driver operací má od 15. 10. samostatné
+[ověření 18 PostgreSQL případů](../archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md).
+Přidává fixed-origin revoke/erase a control-only readback s typovaným ACK;
+neaktivuje ale skutečného Root producenta nebo restore. Nasazení samotného
+`003_guarded_operations.sql` by před přechodem writerů odebralo potřebný
+přímý DELETE a je zakázané. Legacy provisioning po guarded přechodu
+odmítne apply/recover, takže návrat nesmí být opětovným širokým grantem.
+Při rollbacku zachovat ledger/fences, zastavit nové chráněné operace a
+zjišťovat nejasné původní origin výsledky; starý obraz s požadavkem na přímé
+DELETE není kompatibilní návrat po tomto přechodu.
+
 Správce později doložil úzkou skutečnou invocation/public-package inventuru
 Patroni v 13:44 Praha. SIM ověřil oba receipts d6a0834d… / 7bf2ff93…;
 známá gramatika a dpkg vlastnictví šesti vybraných souborů jsou doložené.

@@ -1,7 +1,7 @@
 # ADR 0039 Mazání účtu COP v SIM
 
 Stav: schválená zdrojová implementace s oddělenou produkční akceptací.
-Datum: 13. 10. 2026. Upřesnění rozsahu: 14. 10. 2026.
+Datum: 13. 10. 2026. Upřesnění rozsahu: 15. 10. 2026.
 Navazuje na ADR 0026, ADR 0030 a ADR 0038.
 
 Vlastník 14. 10. 2026 přímo v chatu SIM schválil implementaci, omezené
@@ -187,3 +187,18 @@ digests se nepřijímají jako Root schema, registered lease nebo oprávnění.
 Neaktivní B1 balíček a skutečná B2/B3 autorita se přijímají odděleně;
 žádná zdrojová mapa nesmí rozdělit same-transaction fence nebo globálně
 odvolat shared SIM/IZS identitu a přístup.
+
+Koordinovaný driver SQL patch `003_guarded_operations.sql` z 15. 10.
+rozšiřuje fixed-origin mechanismus na revoke, erase a typovaný publication
+readback/ACK. Origin neuchovává manifest ani novou account/day vazbu.
+Runtime přejde na intake INSERT, čtení a receipt-only UPDATE teprve současně
+se skutečným Root-owned executorem; samotné odebrání DELETE není nasazení.
+Provisioning nesmí guarded instalaci vrátit na blanket DML. Účinné PUBLIC
+column granty se kontrolují a odstraňují stejně jako table-level práva.
+
+SQL ACK porovnává přesný uzamčený skutečný readback, ale podpis, aktuální
+reference, původ manifestu a report inventory musí ověřit skutečná Root
+registrace. Kontext z aplikace ani pozitivní testovací fixture nestačí.
+Bez něj ACK ledger nemění. Osmnáct nových izolovaných SQL případů má
+[samostatný záznam](../archive/2026-10-15_DRIVER_GUARDED_OPERATIONS_SQL.md);
+neprokazuje nasazení, restore ani whole-account completion.
