@@ -27,6 +27,8 @@ documents instead of duplicating flat files. The decision is recorded in
 - [Runbook 20: skutečný HTTP/PG test, jeden přípravný installer, ověřené TLS, enrollment a restore pro DBv2](runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md)
 - [DBv2 disabled cutover: konkrétní instalační vstup, 23 nových kontrol, opakovaný PG/restore test a skutečný non-root preflight](archive/2026-10-15_SIM_DISABLED_CUTOVER_PREPARATION.json)
 - [Doplnění bezpečného opakování: 24/24 kontrol a aktuální piny instalačního vstupu](archive/2026-10-15_SIM_DISABLED_CUTOVER_RETRY_CHECK.json)
+- [Skutečná disabled-only SIM instalace 16.10.2026 a nezávislé čtecí ověření; whole flow zůstává pending](archive/2026-10-16_SIM_DATABASE_V2_DISABLED_PRODUCTION.json)
+- [Oprava PG klientského preflightu: neosazený pg_wrapper, bezpečné chybové kódy a skutečné izolované TLS testy](archive/2026-10-16_POSTGRES_CLIENT_PREFLIGHT_FIX.json)
 - [Společný DBv2 průchod COP HTTP → SIM HTTP → PostgreSQL; vybrané ownery dokončeny, celý účet čestně pending](archive/2026-10-15_DATABASE_ERASURE_HTTP_ACCEPTANCE.md)
 - [Skutečný report export/erase závod, ztráta PG spojení a izolovaný pg_dump/restore s produkčními factories](archive/2026-10-15_SIM_REPORT_RESTORE_ACCEPTANCE.json)
 - [Integrace 22: mazání COP/Jízdy v SIM](integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)

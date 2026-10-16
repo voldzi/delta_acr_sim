@@ -8,8 +8,11 @@ umask 077
 case ${1:---apply} in --apply|--verify|--rollback-disabled) ;; *) exit 2 ;; esac
 source_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$source_root"
-printf '%s  %s\n' 897f9d6327992a2112eb85b4ee3cd14451b6bde91a04deee80e778fe325ff201 deploy/account-safety/disabled-install.sha256 | /usr/bin/sha256sum --check --status
+printf '%s  %s\n' 00894c9d29826f3eb653313a35564279add4008c47bed75e4eb6800a76be0083 deploy/account-safety/disabled-install.sha256 | /usr/bin/sha256sum --check --status
 /usr/bin/sha256sum --check --status deploy/account-safety/disabled-install.sha256
+# Real client and verified TLS are required BEFORE asking for any password.
+unset NODE_OPTIONS NODE_PATH
+/usr/bin/node "$source_root/scripts/postgres-client-preflight.mjs"
 # Serialize the fixed maintenance, without storing any credential in /run.
 lockdir=/run/sim-erasure-maintenance
 if [[ ! -e $lockdir ]]; then /usr/bin/install -d -m 0700 -o root -g root "$lockdir"; fi

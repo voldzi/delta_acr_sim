@@ -107,6 +107,10 @@ ověřené ve zdroji COP používají oba adaptéry. Hodnoty se nepředávají
 Odlišný existující signer/issuer je blokující nesoulad, nikoli důvod k rotaci.
 Skutečný post-stop report digest se přijímá odděleně od readonly inventáře;
 žádný source-only test nemůže potvrdit skutečné produkční přijetí.
+Budoucí instalační vstup ověřuje skutečný nativní klient PG18 a veřejnou
+CA/hostname přes TLS ještě před výzvou k heslu. Samotné `command -v psql`
+neprokazuje instalovaný klient za Ubuntu wrapperem. Chyby vracejí pouze
+statický allowlist kategorií a fáze, nikoli stderr/SQL/DSN či text výjimky.
 
 Aktuální DBv2 source doplňuje konkrétní soukromý report store, skutečné
 atomické zápisy, PG shared/exclusive publication lock a filesystem interlock

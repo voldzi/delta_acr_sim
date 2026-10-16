@@ -1,7 +1,8 @@
 # DBv2: akceptace mazání COP/Jízdy
 
 Aktivní zdrojová cesta je [ADR0040](../adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md).
-Produkční aktivace není doložená. Root/native instalace není její podmínkou.
+Produkční **disabled-only SIM instalace** je doložená 16.10.2026; aktivace
+celého mazání COP není dokončená. Root/native instalace není její podmínkou.
 REST `sim-account-erasure-v1`, identity SIM/IZS a finanční retence se nemění.
 
 ## Přesné soubory a konfigurace
@@ -22,6 +23,39 @@ REST `sim-account-erasure-v1`, identity SIM/IZS a finanční retence se nemění
   `SIM_ACCOUNT_ERASURE_GUARD_STORE_ID`, `SIM_ACCOUNT_ERASURE_CONFIGURATION_FINGERPRINT`.
 
 ## Jeden koordinovaný instalační krok
+
+### Skutečný stav 16.10.2026
+
+Člověk po minimální instalaci jediného klientského balíčku
+`postgresql-client-18=18.6-0ubuntu0.26.04.1` úspěšně provedl původní
+hashově připnutý stage `ca1fd6b-v2` ze zdroje `d40fc72`. Starý stage se
+nepřepisoval. První pokus předtím selhal, protože existoval jen Ubuntu
+`pg_wrapper` bez skutečného klienta; `command -v psql` tuto závislost
+neověřil. Simulace balíčku ukázala 1 nový klient, 0 aktualizací, 0 odstranění
+a žádný PostgreSQL server. Agent nic neinstaloval ani neopakoval apply.
+
+Nové skutečné SDA/Router obrazy odpovídají přesným `ca1fd6b` image IDs
+uvedeným níže. Nezávislá čtecí kontrola ověřila oba autentizované capability
+endpointy HTTP200, bez tokenu HTTP401, `database_v2`, oba erasure flags false,
+`enabled=false/ready=false` a všechny strukturální checks true. SDA má
+`shared_generation_fence` a `publicationFenceVerified=true`; Router zachoval
+`aggregate-costs-current-month-v1`. Oba live/ready endpointy vracejí 200/ok,
+SDA routing i DEM jsou ok bez degraded sources a veřejná domovská SIM vrací
+200. Neobsahové environment digesty přesně odpovídají předinstalačním;
+actor/hash/encryption/provider konfigurace a původní intake se zachovaly.
+
+Přesný [produkční čtecí receipt](../archive/2026-10-16_SIM_DATABASE_V2_DISABLED_PRODUCTION.json)
+odděluje skutečné ověření od člověkem předaného `complete_disabled` JSON.
+Soukromý Root post-stop inventář se nekopíroval a nebyl nahrazen smyšleným
+digestem. Nebyl smazán skutečný účet ani zapnut whole flag.
+
+Oddělená zdrojová oprava pro **budoucí** balík již před skrytým promptem
+spouští konkrétní PG18 `--version` pod pevným PATH bez credential env a
+PostgreSQL SSLRequest + hostname/CA ověřené TLS bez loginu/SQL. Native
+klientská cesta je `/usr/lib/postgresql/18/bin/psql`. Nepropouští raw stderr;
+vrací jen allowlistované client/auth/TLS/DNS/refused/timeout/SQLSTATE kódy a
+statickou preflight podfázi. Neznámá chyba zůstává UNKNOWN, bez výpisu údajů.
+Tato oprava nemění již použitý stage, nasazené obrazy ani vyžaduje další apply.
 
 Konkrétní administrátorský vstup je
 `scripts/provision-sim-erasure-production.sh`. Není to runtime služba,

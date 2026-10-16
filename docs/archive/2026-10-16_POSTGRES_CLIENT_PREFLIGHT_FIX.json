@@ -1,0 +1,42 @@
+{
+  "status": "SOURCE_AND_ISOLATED_TESTS_ONLY_NOT_REDEPLOYED",
+  "productionStageUnchanged": "/home/voldzi/sim-erasure-apply-ca1fd6b-v2",
+  "productionExecutedShellSha256": "5bafdb1aee9954dceea73873dde62bc02d70f976132df98e5dd1ffba1505654a",
+  "futureSourceShellSha256": "63318371d7618c068b9c8725341fa17147f01b92db62e6ac19d17a0e91588848",
+  "futureSourceManifestSha256": "00894c9d29826f3eb653313a35564279add4008c47bed75e4eb6800a76be0083",
+  "newPreflightHelperSha256": "02db8a5bf67a0eb057086666206e9eb90c6a9b7041af23504848e37f5366a6f3",
+  "updatedProvisionerSha256": "dcba50a9d54731734867e96fbb2ca6340c3a0d2e919f23d521b203ef522aa945",
+  "confirmedFailure": "Ubuntu pg_wrapper was present without any versioned client; command-v was insufficient",
+  "causeRepair": "Human installed only postgresql-client-18=18.6-0ubuntu0.26.04.1; original approved immutable installer then succeeded",
+  "sourceChanges": [
+    "Versioned PG18 executable --version under fixed credential-free PATH/locale before hidden password prompt",
+    "Actual PostgreSQL SSLRequest and certificate/hostname-verified TLS preflight before password prompt; no login/startup packet or SQL",
+    "Explicit versioned native client path for provisioner",
+    "Bounded allowlisted client, auth, TLS, DNS, connection, timeout and SQLSTATE categories; unknown remains UNKNOWN without stderr",
+    "Distinct static read-only phase labels for server, guard DB, target owners and target schemas"
+  ],
+  "tests": {
+    "newClientFailureAndRedactionCases": 21,
+    "actualIsolatedTlsSocketCases": 5,
+    "allInstallerAndPreflightCases": {"passed": 50, "failed": 0},
+    "rerunActualIsolatedPostgresqlInstallerAndRestore": {"passed": 23, "failed": 0},
+    "regression": {"passed": 873, "optionalPostgresSkipped": 6},
+    "typecheck": "passed",
+    "build": "passed",
+    "skeleton": "passed",
+    "openapi": {"paths": 151, "schemas": 274, "passed": true},
+    "shellSyntaxAndDependencyPins": "passed",
+    "node": "24.16.0"
+  },
+  "testBoundaries": [
+    "Uninstalled pg_wrapper and version fixtures are actual private executable fixtures, not a positive readiness callback",
+    "TLS tests use a real localhost SSLRequest/TLS server with ephemeral synthetic keys; no provider or production login",
+    "Production TLS/runtime success is separately recorded in the production receipt; no additional apply was performed for diagnostics"
+  ],
+  "agentInstalledPackages": false,
+  "agentRepeatedProductionApply": false,
+  "agentChangedProductionPermissionsOrFlags": false,
+  "rawStderrCredentialsOrConnectionStringsPublished": false,
+  "realAccountDeleted": false,
+  "wholeAccountComplete": false
+}

@@ -167,7 +167,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     );
     verifyInventorySource(root);
     need(
-      sha(readFileSync(root + "/scripts/provision-sim-erasure-production.mjs")) === "6f7a27942469ce98feda3c50959b4d1bc07cc7ca3c711a8990eee0a69e0efc05",
+      sha(readFileSync(root + "/scripts/provision-sim-erasure-production.mjs")) === "dcba50a9d54731734867e96fbb2ca6340c3a0d2e919f23d521b203ef522aa945",
       "APPROVED_PROVISIONER_BYTES_REQUIRED"
     );
     ensureDirectory(directory);

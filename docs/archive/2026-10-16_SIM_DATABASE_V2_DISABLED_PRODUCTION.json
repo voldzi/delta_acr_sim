@@ -1,0 +1,93 @@
+{
+  "status": "ACTUAL_DISABLED_SIM_PRODUCTION_VERIFIED",
+  "checkedAtUTC": "2026-10-16T06:28:08Z",
+  "runtimeSourceRevision": "ca1fd6b6046745e91cca6648e1e5bd3f93fc8422",
+  "installedPreparationRevision": "d40fc7288337e63882a25be22005671500db2c20",
+  "executedStage": "/home/voldzi/sim-erasure-apply-ca1fd6b-v2",
+  "executedEntrypointSha256": "5bafdb1aee9954dceea73873dde62bc02d70f976132df98e5dd1ffba1505654a",
+  "executedStageLeftUnchanged": true,
+  "initialFailure": {
+    "reportedCode": "POSTGRES_STAGE_FAILED_PREFLIGHT_UNKNOWN",
+    "confirmedCause": "Ubuntu pg_wrapper existed but no versioned PostgreSQL client package was installed",
+    "beforeRetryOriginalContainersStillHealthy": true,
+    "sourceControlFlowBeforeFailure": "read-only check, before state save, identity apply, stop, cron retirement, grants or migrations",
+    "stateFileAbsenceNotIndependentlyClaimed": true
+  },
+  "humanPerformedRepair": {
+    "installedOnlyClientPackage": "postgresql-client-18",
+    "verifiedInstalledVersion": "18.6-0ubuntu0.26.04.1",
+    "explicitBinaryVersion": "psql (PostgreSQL) 18.6",
+    "aptSimulationBeforeInstall": {"upgraded": 0, "newlyInstalled": 1, "removed": 0, "serverPackage": false}
+  },
+  "humanRootResult": {
+    "phase": "complete_disabled",
+    "inventoryTransitionRecorded": true,
+    "routerActorPreserved": true,
+    "erasureEnabled": false,
+    "wholeAccountComplete": false,
+    "oldImageFallback": false,
+    "privatePostStopInventoryDigestNotCopied": true
+  },
+  "independentReadbacks": {
+    "driver": {
+      "containerId": "a6f5471faf24fc8a81d4518a14d100ffbda9a9a3799d816ccbea3d0a1c66aa64",
+      "imageId": "sha256:ff8e60608936d4c97cba01e8d96ad064ce3950c6e2a9a115df88dd75fb8fb23d",
+      "startedAtUTC": "2026-10-16T06:22:07.959259706Z",
+      "dockerHealthy": true,
+      "liveHttp": 200,
+      "readyHttp": 200,
+      "readyStatus": "ok",
+      "routingStatus": "ok",
+      "demStatus": "ok",
+      "degradedSources": [],
+      "capabilityHttp": 200,
+      "unauthenticatedCapabilityHttp": 401,
+      "authorityMode": "database_v2",
+      "enabled": false,
+      "ready": false,
+      "checks": {"schemaReady": true, "permissionsReady": true, "identityReviewed": true, "restoreCheckpointCurrent": true, "retentionReviewed": true, "publicationFenceVerified": true},
+      "reportProtection": "shared_generation_fence",
+      "nonErasureEnvironmentMatchesPreinstall": true,
+      "guardTlsVerifyFull": true,
+      "publicPortBindingsUnchanged": true,
+      "measurementIntakeFlagPreserved": "true"
+    },
+    "router": {
+      "containerId": "2a43938902423aa667c1527002053b93c9f1c98ba671b92d945b23b7cf2fc2c2",
+      "imageId": "sha256:d4176d79106315d8fe8df1649c7755d1bc2b5189f390fca796a4dbd23778cd2e",
+      "startedAtUTC": "2026-10-16T06:22:09.34994031Z",
+      "dockerHealthy": true,
+      "liveHttp": 200,
+      "readyHttp": 200,
+      "readyStatus": "ok",
+      "capabilityHttp": 200,
+      "unauthenticatedCapabilityHttp": 401,
+      "authorityMode": "database_v2",
+      "enabled": false,
+      "ready": false,
+      "checks": {"schemaReady": true, "permissionsReady": true, "identityReviewed": true, "restoreCheckpointCurrent": true, "retentionReviewed": true},
+      "costPolicy": "aggregate-costs-current-month-v1",
+      "nonErasureEnvironmentMatchesPreinstall": true,
+      "guardTlsVerifyFull": true,
+      "publicPortBindingsUnchanged": true
+    },
+    "coordinatedIdentity": {"simSecretsAlreadyMatch": true, "copSecretsAlreadyMatch": true, "routerActorAndNamespaceKeysMatchPreinstallDigest": true, "valuesDisplayed": false},
+    "simHttpsHomeHttp": 200
+  },
+  "separateCopReadOnlyMetadata": {
+    "transport": "unchanged_existing_unix_transaction_pool",
+    "database": "cop",
+    "runtimeRole": "cop_app",
+    "transactionReadOnly": true,
+    "storeIdentityMarkerPresent": false,
+    "erasureConfigurationPresent": false,
+    "erasureJobCount": 0,
+    "interpretation": "Explicit first COP enrollment still required; absence is not runtime auto-enrollment authority"
+  },
+  "notAccepted": ["Whole COP account deletion", "COP guard enrollment and startup composition", "Messaging whole namespace/restore owner", "Scoped Keycloak and independent restore acceptance", "Physical backup restore", "Real account deletion"],
+  "agentRepeatedProductionApply": false,
+  "agentPerformedProductionMutation": false,
+  "providerModelCalls": 0,
+  "realAccountDeletedForTest": false,
+  "wholeAccountComplete": false
+}

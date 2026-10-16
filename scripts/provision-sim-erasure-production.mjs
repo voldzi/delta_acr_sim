@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { configurationFingerprint, runtimeIdentityFingerprint } from "../deploy/account-safety/database-erasure-guard.mjs";
 import { reportInventory } from "./driver-report-inventory.mjs";
+import { classifyPostgresFailure, verifyPostgresClient } from "./postgres-client-preflight.mjs";
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const HEX = /^[a-f0-9]{64}$/;
 const need = (v, code) => {
@@ -64,6 +65,10 @@ function scram(password) {
 /** Tests call the same implementation against a separately verified owned PG
  * fixture. The production CLI never accepts alternate hosts/paths/test flags. */
 export function provision(o) {
+  // command-v can select Ubuntu pg_wrapper even with no actual client package.
+  // Use a verified concrete PG18 client, never a wrapper or inherited PATH.
+  const psql = o.synthetic ? o.psql : "/usr/lib/postgresql/18/bin/psql";
+  verifyPostgresClient(psql);
   const host = o.synthetic ? "127.0.0.1" : "haproxy.home.cz",
     port = o.synthetic ? o.port : 5000;
   const envPath = o.synthetic ? o.envPath : "/srv/sim/.env",
@@ -87,7 +92,7 @@ export function provision(o) {
   function sql(db, text, user = o.user, password = o.password) {
     try {
       return execFileSync(
-        o.psql ?? "psql",
+        psql,
         ["-X", "-w", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=sqlstate", "-h", host, "-p", String(port), "-U", user, "-d", db],
         {
           input: text,
@@ -96,6 +101,8 @@ export function provision(o) {
           env: {
             // Do not inherit libpq service/hostaddr/option overrides.
             ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("PG"))),
+            LC_ALL: "C",
+            LANG: "C",
             ...postgresTlsEnvironment(o.synthetic, rootCert),
             PGPASSWORD: password,
             PGPASSFILE: "/dev/null",
@@ -106,11 +113,12 @@ export function provision(o) {
         }
       ).trim();
     } catch (error) {
-      const code = /ERROR:\s*([A-Z0-9]{5})\b/.exec(String(error.stderr ?? ""))?.[1] ?? "UNKNOWN";
+      const code = classifyPostgresFailure(error);
       throw new Error("POSTGRES_STAGE_FAILED_" + stage.toUpperCase() + "_" + code);
     }
   }
   const json = (db, query) => JSON.parse(sql(db, `SELECT row_to_json(q) FROM (${query}) q`));
+  stage = "preflight_server_identity";
   const server = json(
     "postgres",
     "SELECT current_setting('cluster_name') AS cluster,current_setting('data_directory') AS directory,current_setting('server_version_num')::int AS version,pg_is_in_recovery() AS standby,(SELECT rolsuper FROM pg_roles WHERE rolname=current_user) AS admin"
@@ -118,6 +126,7 @@ export function provision(o) {
   need(server.admin === true && !server.standby && server.version >= 180000, "PRIMARY_POSTGRES_ADMIN_REQUIRED");
   if (o.synthetic)
     need(server.cluster === "sim_erasure_installer_test" && server.directory.startsWith("/private/tmp/sim-erasure-installer-"), "OWNED_TEST_CLUSTER_REQUIRED");
+  stage = "preflight_guard_database";
   const guard = json(
     "postgres",
     "SELECT count(*)::int AS count,min(pg_get_userbyid(datdba)) AS owner FROM pg_database WHERE datname='cop_account_safety_guard'"
@@ -128,6 +137,7 @@ export function provision(o) {
     ["sim_ai_router", "ai_router_migrator"]
   ];
   for (const [db, owner] of targets) {
+    stage = db === "sim_driver_measurements" ? "preflight_driver_owner" : "preflight_router_owner";
     const r = json("postgres", `SELECT count(*)::int AS n FROM pg_database WHERE datname=${literal(db)} AND pg_get_userbyid(datdba)=${literal(owner)}`);
     need(r.n === 1, "EXPECTED_TARGET_DATABASE_OWNER_REQUIRED");
   }
@@ -159,10 +169,12 @@ export function provision(o) {
     postgresCaSha256: caHash,
     productionChanged: false
   };
+  stage = "preflight_driver_schema";
   const driver = json(
     "sim_driver_measurements",
     "SELECT to_regnamespace('sim_driver_guard_source') IS NOT NULL AS root_guarded,to_regclass('public.driver_account_erasure_state') IS NOT NULL AS erasure,to_regclass('public.sim_erasure_dataset_binding') IS NOT NULL AS binding,(SELECT count(*)::int FROM driver_measurement_eta e LEFT JOIN driver_measurement_receipts r ON r.owner=e.owner AND r.batch_id=e.batch_id WHERE r.batch_id IS NULL OR r.contributor_hash IS DISTINCT FROM e.contributor_hash) AS eta_mismatch"
   );
+  stage = "preflight_router_schema";
   const ai = json(
     "sim_ai_router",
     "SELECT to_regclass('public.ai_router_erasure_checkpoint') IS NOT NULL AS erasure,to_regclass('public.sim_erasure_dataset_binding') IS NOT NULL AS binding"
