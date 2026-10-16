@@ -205,6 +205,48 @@ instalován Root guarded SQL s jinými právy, samotný env přepínač nestač�
 
 ## Skutečné ověření
 
+### Společná syntetická fixture COP–SIM (16. 10. 2026)
+
+`scripts/fixtures/whole-erasure-sim-fixture.py` a jeho připnutý MJS bootstrap
+slouží pouze pro společný test dvou syntetických účtů. Nejde o produkční
+instalátor ani důkaz dokončené akceptace. Použijí již sestavené neměnné
+obrazy Driver/Router a jejich skutečné HTTP factories, PostgreSQL role,
+migrace, replay a readback; nekladný stav nenahrazují testovacím callbackem.
+
+- Všechny kontejnery sdílejí výhradně přesně ověřený testovací PostgreSQL
+  namespace s `network=none`. Nemají veřejné porty, host bindy ani Docker
+  socket; root filesystem zůstává read-only, pracovní soubory jsou v tmpfs.
+  Helper nesmí měnit produkční konfiguraci nebo přidávat síťový přístup.
+- Soukromý vstup `cop-sim-whole-erasure-fixture-v1` dodá koordinátor COP.
+  Obsahuje skutečně testovacím Keycloakem vydané subjecty, původní COP
+  router aliasy, úplný denní manifest a výhradně testovací secrets.
+  Jiné identifikační namespace ani náhradní HMAC helper SIM nevytváří.
+  Každý účet vyžaduje 9–40 unikátních denních položek z helperu COP,
+  nikoli jen aktuální den. Veřejný REST limit 40 se tím nemění.
+- Přenos vstupu vyžaduje výslovné schválení konkrétního zdroje a cíle.
+  Soubor má 0600, obsah se nevypisuje a po testu musí být odstraněn
+  včetně dočasných kopií. Zamítnutí není důvodem použít jiný přenosový kanál.
+- `serve` nejprve ověří holder, identitu obrazu, zdrojové SQL piny a vstup.
+  Existující databázi/roli nenaslepo nepřebírá. Příjem měření a externí
+  modely zůstávají vypnuté; testovací mazání je povolené jen v této fixture.
+  Driver používá loopback 4311 a Router 4312 pouze uvnitř testovacího
+  namespace. Toto nejsou produkční endpointy ani nové veřejné porty.
+- `read` uloží neveřejný readback s počty odstranitelných řádků A/B,
+  fingerprintem skutečných zachovaných řádků B a samostatnou kontrolou
+  SIM namespace. Cesta k souboru není dokladem úspěchu; výsledek musí
+  zkontrolovat skutečný nadřazený COP průchod.
+- `restart-driver`/`restart-router` znovu použijí původní přijatý enrollment,
+  nikoli hodnoty převzaté z obnoveného checkpointu. `cleanup` odstraňuje
+  pouze vlastní tři servisní kontejnery; sdílený holder a databáze zachová.
+  Jejich závěrečný úklid vlastní koordinátor celého testu.
+
+Pozitivní společná akceptace vyžaduje skutečný COP controller, oba SIM
+ownery a všechny ostatní zapojené komponenty. A musí mít odstranitelný
+rozsah nulový, B a SIM/IZS musí zůstat zachované. HTTP 202, capability,
+zdravý kontejner, komponentové testy ani `wholeCopAccepted=false` nejsou
+dokladem dokončení celého účtu. Obnova s čekajícím důkazem smí prokázat
+bezpečnou karanténu; nesmí být označena za dokončené mazání.
+
 ### Konkrétní disabled-only vstup připravený 15.10.2026
 
 `scripts/install-sim-erasure-disabled.sh --apply` skládá již existující
