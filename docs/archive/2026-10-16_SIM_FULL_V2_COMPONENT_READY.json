@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "case": "cop-whole-full-20261016",
+  "profile": "full-v2",
+  "status": "components_ready_not_whole_acceptance",
+  "runtimeRevision": "ca1fd6b6046745e91cca6648e1e5bd3f93fc8422",
+  "images": {
+    "driver": "sha256:ff8e60608936d4c97cba01e8d96ad064ce3950c6e2a9a115df88dd75fb8fb23d",
+    "router": "sha256:d4176d79106315d8fe8df1649c7755d1bc2b5189f390fca796a4dbd23778cd2e"
+  },
+  "bootstrapSha256": "2c77e28e2d0ae6581c6c05ca84680fc9946b158890356bfefb908d5718da4b48",
+  "lifecycleHelperSha256": "b3dd0c9916f86e83bf70929a4310936b8d927dfc38d5d05aae4a417038ef403a",
+  "checks": {
+    "pureClosedProfilesPassed": 5,
+    "actualHttpReadbackPassed": 29,
+    "driverAuthenticatedCapability": 200,
+    "routerAuthenticatedCapability": 200,
+    "driverReady": true,
+    "routerReady": true,
+    "driverInitialRemovableRows": {"a": 3, "b": 3},
+    "routerInitialRemovableRows": {"a": 4, "b": 4},
+    "separateSimNamespacePreserved": true,
+    "unauthorizedDenied": true,
+    "unsupportedMethodPathAndOriginDenied": true,
+    "noStoreReadback": true,
+    "preservedBFingerprintStable": true,
+    "skeletonValidationPassed": true,
+    "javascriptSyntaxPassed": true
+  },
+  "intakeEnabled": false,
+  "externalProvidersEnabled": false,
+  "providerCalls": 0,
+  "erasureInvoked": false,
+  "restoreAccepted": false,
+  "wholeCopAccepted": false,
+  "productionChanged": false,
+  "oldNegativeFixtureChanged": false,
+  "limitations": [
+    "No full COP confirmation, crash-recovery or restore acceptance is claimed.",
+    "Private identities, credentials and row payloads remain in private test tmpfs only."
+  ]
+}

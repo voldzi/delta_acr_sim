@@ -18,11 +18,37 @@ import tarfile
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-OWNER = "cop-messaging-joint-d2630fa78b21"
-INPUT_CARRIER = "cop-erasure-whole-a7d2df56a653-node"
-INPUT_OWNER = "cop-erasure-whole-a7d2df56a653"
-HOLDER = "8b3f25a792bf75b58edfca4519c4671a2b1db165a8c0d22285505dc892c7b30e"
-NAMES = {part: OWNER + "-sim-" + part for part in ("control", "driver", "router")}
+PROFILES = {
+    "negative-v1": {
+        "owner": "cop-messaging-joint-d2630fa78b21",
+        "input_carrier": "cop-erasure-whole-a7d2df56a653-node",
+        "input_owner": "cop-erasure-whole-a7d2df56a653",
+        "input_path": "/tmp/cop-sim-whole-erasure-fixture-20261016.json",
+        "holder": "8b3f25a792bf75b58edfca4519c4671a2b1db165a8c0d22285505dc892c7b30e",
+    },
+    "full-v2": {
+        "owner": "cop-messaging-joint-7fb1c640a2de",
+        "input_carrier": "cop-erasure-whole-e70f147c5b2f-node",
+        "input_owner": "cop-erasure-whole-e70f147c5b2f",
+        "input_path": "/tmp/cop-sim-whole-erasure-fixture-full-20261016.json",
+        "holder": "3a2f1f879b6fd76038c2ad619f5e405fac62b1cbd0ad5e7d654515a875bb062f",
+        "input_sha256": "403dcdec41b97f9bc1bc3027e36afbf90c437fef5681371e89dcd7035e13d9a4",
+    },
+}
+
+
+def select_profile(name):
+    # Closed, reviewed fixture identities only; never an arbitrary deployment.
+    global PROFILE, OWNER, INPUT_CARRIER, INPUT_OWNER, HOLDER, NAMES
+    PROFILE = PROFILES[name]
+    OWNER = PROFILE["owner"]
+    INPUT_CARRIER = PROFILE["input_carrier"]
+    INPUT_OWNER = PROFILE["input_owner"]
+    HOLDER = PROFILE["holder"]
+    NAMES = {part: OWNER + "-sim-" + part for part in ("control", "driver", "router")}
+
+
+select_profile("negative-v1")
 IMAGES = {
     "driver": "sha256:ff8e60608936d4c97cba01e8d96ad064ce3950c6e2a9a115df88dd75fb8fb23d",
     "router": "sha256:d4176d79106315d8fe8df1649c7755d1bc2b5189f390fca796a4dbd23778cd2e",
@@ -202,12 +228,17 @@ def serve(args):
         assert inspect(NAMES[part]) is None, "Refuse existing fixture; use read/restart"
     assert re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}", args.input_container)
     assert args.input_container == INPUT_CARRIER and args.input_owner == INPUT_OWNER
-    assert re.fullmatch(r"/(?:[a-zA-Z0-9_.-]+/)*[a-zA-Z0-9_.-]+\.json", args.input_path)
+    assert args.input_path == PROFILE["input_path"]
     carrier = inspect(args.input_container)
     assert carrier and carrier["State"]["Running"]
     assert (carrier["Config"].get("Labels") or {}).get("cop.test.owner") == args.input_owner
+    if "input_sha256" in PROFILE:
+        metadata = remote(["docker", "exec", args.input_container, "stat", "-c", "%a:%u:%F", args.input_path]).stdout.decode().strip()
+        assert metadata == "600:1000:regular file"
     private = remote(["docker", "exec", args.input_container, "cat", args.input_path]).stdout
     assert 0 < len(private) <= 65536
+    if "input_sha256" in PROFILE:
+        assert hashlib.sha256(private).hexdigest() == PROFILE["input_sha256"]
     # Syntax only here; actual exact shape and supplied identity checks are in JS.
     assert json.loads(private)["contractVersion"] == "cop-sim-whole-erasure-fixture-v1"
     create("control"); install("control", private)
@@ -239,10 +270,12 @@ def serve(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["serve", "read", "ready", "verify-readback", "cleanup", "restart-driver", "restart-router"])
+    parser.add_argument("--profile", choices=sorted(PROFILES), default="negative-v1")
     parser.add_argument("--input-container")
     parser.add_argument("--input-path")
     parser.add_argument("--input-owner")
     args = parser.parse_args()
+    select_profile(args.profile)
     if args.action == "serve":
         assert args.input_container and args.input_path and args.input_owner
         serve(args)

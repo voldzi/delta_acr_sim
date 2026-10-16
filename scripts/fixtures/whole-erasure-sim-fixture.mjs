@@ -10,7 +10,9 @@ import {pathToFileURL} from "node:url";
 
 const HOME="/fixture", PRIVATE=`${HOME}/private.json`;
 const CONTRACT="cop-sim-whole-erasure-fixture-v1";
-const OWNER="cop-messaging-joint-d2630fa78b21";
+const FIXTURE_OWNERS=new Set(["cop-messaging-joint-d2630fa78b21","cop-messaging-joint-7fb1c640a2de"]);
+const OWNER=process.env.SIM_FIXTURE_OWNER;
+assert.ok(FIXTURE_OWNERS.has(OWNER),"Unreviewed fixture owner");
 const ADMIN="owned_fixture_admin";
 const GUARD_DB="cop_account_safety_guard";
 const REPORTS="/private/tmp/cop-erasure-owned-whole-sim/driver-report-files";
@@ -100,6 +102,7 @@ async function provision(input){
 /** One exact failed, empty fixture installation only. Not a partial-state
  * adopter, production reset, or general database deletion operation. */
 async function cleanupFailedOwnerTransfer(input,inspectOnly=false){
+ assert.equal(OWNER,"cop-messaging-joint-d2630fa78b21","Historical repair is not authorized for the new case");
  phase="cleanup_failed_owner_transfer_preflight";validateWholeErasureFixture(input);
  const failure=JSON.parse(await readFile(`${HOME}/failure-router.json`,"utf8"));
  if(!inspectOnly)assert.deepEqual(failure,{code:"SIM_WHOLE_FIXTURE_FAILED",phase:"cleanup_failed_owner_transfer_preflight",sqlState:null});

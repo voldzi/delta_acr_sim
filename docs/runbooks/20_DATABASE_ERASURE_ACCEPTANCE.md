@@ -217,6 +217,13 @@ migrace, replay a readback; nekladný stav nenahrazují testovacím callbackem.
   namespace s `network=none`. Nemají veřejné porty, host bindy ani Docker
   socket; root filesystem zůstává read-only, pracovní soubory jsou v tmpfs.
   Helper nesmí měnit produkční konfiguraci nebo přidávat síťový přístup.
+- `--profile negative-v1` (výchozí) zachovává původní negativní případ.
+  Nový `--profile full-v2` je oddělený pevně povolený holder
+  `cop-messaging-joint-7fb1c640a2de-pg`; nepřebírá původní operaci ani data.
+  Žádný profil nepřijímá libovolný holder nebo soukromý zdroj. Nový vstup
+  musí odpovídat předem schválenému SHA-256, UID 1000 a režimu 0600.
+  Helper jej pouze čte z již schváleného testovacího carrieru; nepřenáší
+  soubor z Macu. Historická opravná akce není pro nový profil povolena.
 - Soukromý vstup `cop-sim-whole-erasure-fixture-v1` dodá koordinátor COP.
   Obsahuje skutečně testovacím Keycloakem vydané subjecty, původní COP
   router aliasy, úplný denní manifest a výhradně testovací secrets.
@@ -238,6 +245,12 @@ migrace, replay a readback; nekladný stav nenahrazují testovacím callbackem.
 - `restart-driver`/`restart-router` znovu použijí původní přijatý enrollment,
   nikoli hodnoty převzaté z obnoveného checkpointu. `cleanup` odstraňuje
   pouze vlastní tři servisní kontejnery; sdílený holder a databáze zachová.
+
+Nový izolovaný běh `full-v2` má připravené obě SIM služby a 29 skutečných
+HTTP kontrol; přesné neměnné obrazy a rozsah důkazu obsahuje
+[`2026-10-16_SIM_FULL_V2_COMPONENT_READY.json`](../archive/2026-10-16_SIM_FULL_V2_COMPONENT_READY.json).
+Jde pouze o připravenost komponent. Společné mazání, restart a obnova ze
+zálohy tím nejsou akceptované a produkční aktivace zůstává odděleným krokem.
   Jejich závěrečný úklid vlastní koordinátor celého testu.
 
 Pozitivní společná akceptace vyžaduje skutečný COP controller, oba SIM
