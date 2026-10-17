@@ -530,3 +530,40 @@ these preparation results never authorize mutation by themselves. The production
 factory has not been executed. Twenty-four synthetic adapter checks cover plan
 composition, secret-free public output, missing/invalid plans, failure propagation,
 epoch mismatch and rejection of apply mode; they are not real provider evidence.
+
+`scripts/lib/prepare-common-remaining.py` completes the source-only RAM join:
+
+1. The sealed parent calls the Node factory and keeps `privateConfig` in its
+   private pipe/RAM. No private JSON is sent to a terminal or ordinary file.
+2. COP's actual `prepareCleanCopManifest` receives the explicit approved human
+   decision and real identity/binding/CA inputs. Preserve its exact JSON+newline
+   bytes and plan digest. Its `factsInspected=false` is not changed to true.
+3. With source descriptors already pinned and actual COMM/storage custody open,
+   call `inspect_remaining_private(plan, private_config, postgres_password,
+   native_admin_token, remote, storage)`. This runs actual metadata/native SQL
+   read-only inspectors, native-media/edge inspect helpers and S3 inventory.
+   It does not open SSH authentication, stop writers or manufacture transports.
+4. Call `finalize_private_preparation(private_config, remaining,
+   cop_safety_prepared, manifest_bytes, postgres_password)`. It checks the exact
+   manifest bytes/digest/epoch/cutoff and produces private configuration with
+   eight worker digests plus three remaining digests in the public summary.
+5. Parent reviews all eleven actual digests and separately publishes/seals the
+   exact Root PLAN and COP manifest at their required protected paths. Only then
+   may the existing held-admission `run_common_reset` execute. Source preparation
+   alone is neither authorization nor a provider/production acceptance receipt.
+
+The parent must supply a genuinely held concrete provider transport. In
+particular, the existing `ProductionStorage.open` requires reviewed container
+identity and its own authentication custody; this module does not bypass that
+requirement. Missing custody or provider failure aborts preparation. Fifteen
+synthetic Python tests cover composition and negative gates; no production
+inspector or reset was run for them.
+
+**Additional install gate:** eleven reset plans do not install Messaging's
+production guard/metadata/native full profile or its initial usage baseline.
+`clean-remaining-reset` only resets those stores. Its isolated baseline fixture
+must not be used as a production enrollment. A separately reviewed real Messaging
+installer must run under held writer custody, verify the installed profile and
+least-privilege roles, enroll the actual production binding and empty baseline,
+then verify runtime flags/readiness before activation. This remains an explicit
+missing gate; the preparation summary reports it as not included.
