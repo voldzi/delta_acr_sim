@@ -464,5 +464,31 @@ The new runner must then return three actual 200 capabilities and equal complete
 A/B readback with replay modes explicitly selected. It does not restore content
 or claim whole acceptance. Any failure retains old/new test containers and RAM
 evidence for coordinated recovery; it never resumes production or auto-grants GO.
-Nine pure negative/pin/syntax tests passed; actual cutover and composed restore
-remain unexecuted. The three API images and exact-byte test bundle are built only.
+Nine pure negative/pin/syntax tests passed. The owned accepted-A cutover and
+actual content restore/replay subsequently ran: nine A rows and four main files
+were restored and removed again; B, control jobs, financial totals and independent
+guard were preserved. See `docs/archive/2026-10-17_SIM_ACCEPTED_A_ACTUAL_REPLAY.json`.
+This is component evidence, not whole-account acceptance or production activation.
+
+### Separate fresh fixture and Root preparation
+
+The fresh `956262c6abdb` fixture uses a new epoch and independent TLS cluster;
+it does not inherit an old operation. The owner-empty launcher and one-shot
+admitted seed are deliberately fixture-specific. After common enrollment, actual
+signed synthetic users A/B each have four AI rows, four driver rows, one history
+row and four main files. A private success receipt prevents blind repeat seeding.
+No external provider is called and no production service is changed.
+
+`scripts/lib/prepare-sim-root-private.mjs` provides an in-process, RAM-only
+constructor for a future sealed Root CLI. `prepareSimRootPrivatePart(options,
+{Pool})` reads only the fixed production identity environment and CA, accepts the
+administrator password in-process, and performs read-only private-install
+inspection. It refuses existing objects rather than inventing an empty inventory.
+`mergeSimRootPrivatePart(rootConfig, part)` requires the same epoch/cutoff and an
+inspection plan; it preserves COP configuration. Returned objects contain secrets
+and must never be logged, passed in argv, committed, or written to ordinary disk.
+Existing identity/hash/token links are retained. Missing canonical identities may
+be generated only while both canonical components are disabled. This constructor
+does not reset, enroll, grant rights, activate services or authorize production use.
+Its 27 synthetic configuration checks do not constitute actual production
+inspection. Production preparation and execution remain separate approved gates.

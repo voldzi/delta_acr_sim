@@ -6,7 +6,9 @@ def old():return {'Id':m.OLD_ID,'Image':m.OLD_IMAGE,'State':{'Running':True},'Ho
 class Cutover(unittest.TestCase):
  def test_pins_match_public_source_and_built_bundle_evidence(self):
   root=pathlib.Path(__file__).parent.parent
-  for name,digest in m.PINS.items():self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(),digest)
+  for name,digest in m.PINS.items():
+   source=subprocess.check_output(['git','show',m.SOURCE_REV+':'+name],cwd=root)
+   self.assertEqual(hashlib.sha256(source).hexdigest(),digest)
   evidence=json.loads((root/'docs/archive/2026-10-17_SIM_COMPLETED_REPLAY_IMAGE_PINS.json').read_text())
   self.assertEqual(m.IMAGE,evidence['offlineTestBundle'])
  def test_exact_owned_old(self):m.valid_old(old())
