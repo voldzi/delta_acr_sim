@@ -1,0 +1,40 @@
+{
+  "contractVersion": "same-epoch-completed-content-replay-v1",
+  "scope": "source and isolated synthetic component tests only",
+  "defaultEnabled": false,
+  "actualPgDumpRestore": {
+    "checks": 43,
+    "lanes": ["ai", "driver", "sim_history"],
+    "restoredARequestOrReceiptRowsPerLane": 1,
+    "actualCompiledHistoryHttp": "503 with residuals, then 200 with remainingRecords 0",
+    "bPreserved": true,
+    "originalJobsPreserved": true,
+    "financialTotalsUnchanged": true,
+    "repeatedCleanupIdempotent": true,
+    "triggersDisabled": false
+  },
+  "mainFiles": {
+    "checks": 84,
+    "actualCompiledMainRouterRelay": true,
+    "restoredMainFiles": 4,
+    "staleReceiptRejected": true,
+    "actualMainTickRemovedFiles": true,
+    "bBytesAndOriginalJobPreserved": true,
+    "financialTotalsUnchanged": true
+  },
+  "regressions": {
+    "isolatedPgChecks": 158,
+    "productionModeInIsolatedPgChecks": 169,
+    "actualPgRestarts": 4,
+    "aiUnitTests": 66,
+    "simApiUnitTests": 35,
+    "changedServiceTypechecksAndBuilds": true,
+    "openapiPaths": 163,
+    "openapiSchemas": 282
+  },
+  "productionWrites": 0,
+  "providerCalls": 0,
+  "actualIndependentGuardRestore": false,
+  "actualWhole12Acceptance": false,
+  "runtimeImagesBuilt": false
+}

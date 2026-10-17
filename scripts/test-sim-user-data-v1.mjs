@@ -28,7 +28,9 @@ import { canonicalOwnerKey, simOwnerAlias, signSimOwner } from "../packages/sim-
 import { testUserContinuity } from "./fixtures/sim-user-continuity-test.mjs";
 import { UserLedger } from "../packages/sim-user-data/ledger.mjs";
 assert.equal(process.argv.length, 3);
-assert.equal(process.argv[2], "--run");
+assert.ok(["--run", "--run-completed-replay"].includes(process.argv[2]));
+const testCompletedReplay = process.argv[2] === "--run-completed-replay";
+const originalReplayMode = process.env.SIM_USER_DATA_COMPLETED_REPLAY_MODE;
 const exec = promisify(execFile),
   bin = "/opt/homebrew/opt/postgresql@18/bin",
   source = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -230,6 +232,12 @@ try {
   check(first.actors.a.counts.drafts === 1 && first.actors.b.counts.drafts === 1, "actual stored A/B drafts");
   check(first.actors.a.counts.publisher > 0, "actual derived publisher rows owned");
   const key = (name) => canonicalOwnerKey(u.ownerSecret, { issuer: b.issuer, subject: actors[name].subjectId });
+  const fileSnapshot = testCompletedReplay ? await main.ledger.withOwner(key("a"), async () => {
+    const directory = join(main.settings.root, b.resetEpoch, key("a"));
+    const data = {};
+    for (const name of ["sim-store.json", "publisher-queue.json", "sim-audit.jsonl", ".owner-scope.json"]) data[name] = await readFile(join(directory, name));
+    return data;
+  }) : undefined;
   const fileB = join(main.settings.root, b.resetEpoch, key("b"), "sim-store.json");
   const beforeB = createHash("sha256")
     .update(await readFile(fileB))
@@ -333,6 +341,26 @@ try {
   );
   check((await request(base, "/api/v1/scenarios", { method: "POST", headers: userHeaders("a"), body: payload })).status === 503, "late main writer fenced");
   check((await request(base, "/api/v1/scenarios", { headers: userHeaders("b") })).status === 200, "B actual normal UI remains usable");
+  if (testCompletedReplay) {
+    const originalJob = JSON.stringify((await main.pool.query("SELECT to_jsonb(j) row FROM sim_user_data.job j WHERE owner_key=$1", [key("a")])).rows);
+    await close(http); http = undefined;
+    const directory = join(main.settings.root, b.resetEpoch, key("a"));
+    await main.close(); main = undefined;
+    await mkdir(directory, { mode: 0o700 });
+    for (const [name, bytes] of Object.entries(fileSnapshot)) await writeFile(join(directory, name), bytes, { mode: 0o600, flag: "wx" });
+    check((await readdir(directory)).length === 4, "four actual nonzero restored main files");
+    process.env.SIM_USER_DATA_COMPLETED_REPLAY_MODE = "same-epoch-completed-content-replay-v1";
+    main = await startCleanWholeApp(db, input, { jwksUri: "http://127.0.0.1:" + jwks.address().port + "/certs", routerUrl: ai.api });
+    http = await serve(main.app, 4314);
+    check((await request(via, prefix + "/deletions/" + op.operationId, { headers: appDeletionHeaders(input, "a", op) })).status === 503, "restored main content cannot reuse old completion receipt");
+    await main.tick();
+    check((await request(via, prefix + "/deletions/" + op.operationId, { headers: appDeletionHeaders(input, "a", op) })).body.state === "deleted", "actual main worker removes restored content with original operation");
+    await assert.rejects(readdir(directory), { code: "ENOENT" }); checks++;
+    check(JSON.stringify((await main.pool.query("SELECT to_jsonb(j) row FROM sim_user_data.job j WHERE owner_key=$1", [key("a")])).rows) === originalJob, "main original journal unchanged");
+    check(createHash("sha256").update(await readFile(fileB)).digest("hex") === beforeB, "main replay preserves actual B bytes");
+    const replayBudget = await ai.store.usage();
+    check(replayBudget.dailyRequests === afterBudget.dailyRequests && replayBudget.dailyInputTokens === afterBudget.dailyInputTokens, "main replay does not repeat history finance rollup");
+  }
   check(ai.guard.attempts === 0, "external provider attempts zero");
   check(
     (
@@ -397,6 +425,9 @@ try {
       actualPostgres: true,
       actualMainRouterAndRelayHttp: true,
       allThreeSubcomponentsReadback: true,
+      completedMainContentReplay: testCompletedReplay,
+      restoredMainFiles: testCompletedReplay ? 4 : 0,
+      completedHistoryContentReplay: false,
       externalProviderAttempts: 0,
       productionWrites: 0,
       actualKeycloakDeletionTested: false,
@@ -421,4 +452,6 @@ try {
     await rm(root, { recursive: true, force: true });
   }
   process.umask(previousUmask);
+  if (originalReplayMode === undefined) delete process.env.SIM_USER_DATA_COMPLETED_REPLAY_MODE;
+  else process.env.SIM_USER_DATA_COMPLETED_REPLAY_MODE = originalReplayMode;
 }

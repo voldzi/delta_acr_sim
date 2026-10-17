@@ -371,7 +371,44 @@ files. Sanitized evidence is in
 
 This is not completed-restore acceptance. The snapshot excludes both independent
 guard and target control journals; no restoration or deletion was performed by
-this helper. Existing terminal jobs do not yet retry content restored after
-completion. A new runtime/SQL change and actual nonzero restored-row/repeated
-cleanup test are required before that gap can be called resolved. CF24 and the
-original reset manifests/authority fingerprints remain unchanged.
+this helper. Its original runtime does not retry terminal jobs. The separately
+tested source correction below does not modify that running fixture. CF24 and
+the original reset manifests/authority fingerprints remain unchanged.
+
+## Completed content replay source candidate
+
+ADR 0045 defines exact opt-in `same-epoch-completed-content-replay-v1`, disabled
+by default. `SIM_CLEAN_COMPLETED_REPLAY_MODE` controls AI/driver;
+`SIM_USER_DATA_COMPLETED_REPLAY_MODE` controls main;
+`SIM_USER_HISTORY_COMPLETED_REPLAY_MODE` controls SIM/IZS history. This is an
+internal worker policy, not a new user-selected account, erase endpoint or Root
+authority. Pending work remains first; terminal accounts are revisited in bounded
+round-robin order. Original accepted job/identity/epoch/state stay immutable.
+Terminal cleanup never adds anonymous finance again. Fresh deleted receipts
+require actual zero residual data; restored content gives 503 until cleanup.
+
+Actual isolated evidence:
+
+- 43 PostgreSQL/HTTP checks using real pg_dump/restore pre-data/data/post-data:
+  nonzero restored AI/driver/SIM-history payload, actual restricted-role cleanup,
+  compiled history HTTP 503 then 200/remainingRecords=0, B preservation, unchanged
+  original jobs/finance and idempotent repeated cleanup. No trigger was disabled.
+- 84 actual compiled main/Router/relay checks including four restored main files,
+  stale receipt 503, actual main.tick cleanup, unchanged B and original job.
+- Original 158 isolated-mode and 169 production-mode PostgreSQL component checks
+  continue passing, with two real PG restarts in each run; AI 66 and SIM 35 unit
+  tests passed. Builds/typechecks for the changed two services and OpenAPI passed.
+
+These component restores do not restore the independent guard and do not prove
+the live whole12 operation or Root admission. Before the running common test can
+use this correction, build/pin new immutable images, agree on a stopped-writer
+transition with COP, apply only additive
+`deploy/clean-lifecycle/009_completed_content_replay.sql` and
+`deploy/sim-user-data/006_completed_content_replay.sql` in the AI database, and
+set the exact worker modes. Do not re-enroll, refresh identity, reset an epoch,
+edit old manifests, or replace a running accepted operation. Driver/main require
+no broader SQL rights. Root's profile/catalog evidence must reflect the reviewed
+additional policies instead of silently treating the old catalog pin as current.
+
+Rollback leaves the immutable guard and jobs intact. Disable the three replay
+modes and quarantine restored content; do not roll user data back into service.

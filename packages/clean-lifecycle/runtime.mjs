@@ -1,7 +1,9 @@
 import {CleanLifecycle} from './store.mjs';
+import {completedReplayEnabled} from './completed-replay.mjs';
 export async function loadCleanRuntime({pool,lane,serviceToken,actorSecret,ownerSecret,issuer,hashResource,env=process.env}) {
  if(env.SIM_CLEAN_LIFECYCLE_ENABLED===undefined||env.SIM_CLEAN_LIFECYCLE_ENABLED==='false')return undefined;
  if(env.SIM_CLEAN_LIFECYCLE_ENABLED!=='true')throw new Error('INVALID_CLEAN_ENABLED');
+ const includeCompleted=completedReplayEnabled(env.SIM_CLEAN_COMPLETED_REPLAY_MODE);
  const expected={mode:env.SIM_CLEAN_LIFECYCLE_MODE,environmentId:env.SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID,resetEpoch:env.SIM_CLEAN_LIFECYCLE_RESET_EPOCH,lane,userDatasetId:env.SIM_CLEAN_LIFECYCLE_USER_DATASET_ID,enrollmentId:env.SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID};
  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
  const tokensNotBefore=Number(env.SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE);
@@ -16,6 +18,6 @@ export async function loadCleanRuntime({pool,lane,serviceToken,actorSecret,owner
  const options={enabled:true,expected,serviceToken,actorSecret,ownerSecret,issuer,hashResource,tokensNotBefore,service,workerReady:()=>healthy&&!stopped};
  return {options,start(){
    if(timer)return;healthy=true;
-   timer=setInterval(()=>{if(stopped||running)return;running=(async()=>{await service.runOne();await service.purgeExpiredTotals();healthy=true})().catch(()=>{healthy=false}).finally(()=>{running=undefined})},15000);timer.unref();
+   timer=setInterval(()=>{if(stopped||running)return;running=(async()=>{await service.runOne({includeCompleted});await service.purgeExpiredTotals();healthy=true})().catch(()=>{healthy=false}).finally(()=>{running=undefined})},15000);timer.unref();
  },async close(){stopped=true;if(timer)clearInterval(timer);await running;}};
 }

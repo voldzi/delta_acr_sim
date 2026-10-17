@@ -963,3 +963,12 @@ SITUATION_DATA_ENABLED_SOURCES=open_meteo,weather_forecast,aviation_weather,ctu_
 SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 ```
+
+## Source-only completed content replay
+
+`SIM_CLEAN_COMPLETED_REPLAY_MODE`, `SIM_USER_DATA_COMPLETED_REPLAY_MODE` and
+`SIM_USER_HISTORY_COMPLETED_REPLAY_MODE` default to `disabled` (absence also
+disables them). Only exact `same-epoch-completed-content-replay-v1` opts in;
+other values, including `true`, fail startup. They do not enable intake, erasure,
+enrollment or a production deployment. Reviewed additive SQL and new immutable
+images plus joint restore acceptance remain required; see ADR 0045.

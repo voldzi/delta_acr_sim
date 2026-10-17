@@ -11,7 +11,7 @@ async function verifiedConfig(c,e) {
   return cfg;
 }
 export class CleanLifecycle {
-  constructor(pool, expected) { this.pool = pool; this.expected = expected; }
+  constructor(pool, expected) { this.pool = pool; this.expected = expected; this.completedCursor = ''; }
   async tx(action) {
     const c = await this.pool.connect();
     try {
@@ -55,6 +55,7 @@ export class CleanLifecycle {
       const old = (await c.query('SELECT * FROM sim_clean.job WHERE owner_key=$1',[ownerKey])).rows[0];
       if (old) {
         if (old.operation_id !== operationId || old.requested_at.toISOString() !== requestedAt) throw new Error('IMMUTABLE_OPERATION_CONFLICT');
+        if(a.state==='deleted') await assertCleaned(c,cfg,ownerKey);
         return {state:a.state};
       }
       if(a.state !== 'active') throw new Error('CLEAN_ACCOUNT_FENCED');
@@ -64,7 +65,11 @@ export class CleanLifecycle {
     });
   }
   async status(ownerKey, operationId) {
-    return this.tx(async c => (await c.query('SELECT a.state FROM sim_clean.account a JOIN sim_clean.job j USING(owner_key) WHERE a.owner_key=$1 AND j.operation_id=$2',[ownerKey,operationId])).rows[0]??null);
+    return this.tx(async (c,cfg) => {
+      const row=(await c.query('SELECT a.state FROM sim_clean.account a JOIN sim_clean.job j USING(owner_key) WHERE a.owner_key=$1 AND j.operation_id=$2 FOR SHARE OF a',[ownerKey,operationId])).rows[0]??null;
+      if(row?.state==='deleted') await assertCleaned(c,cfg,ownerKey);
+      return row;
+    });
   }
   async capability() {
     return this.tx(async(c,cfg)=>{
@@ -88,14 +93,21 @@ export class CleanLifecycle {
       return count===(cfg.lane==='ai'?4:3);
     });
   }
-  async runOne() {
-    return this.tx(async(c,cfg) => {
+  async runOne({includeCompleted=false}={}) {
+    const result=await this.tx(async(c,cfg) => {
       // Match lock ordering used by writers and request/reserve: account first.
-      const a = (await c.query("SELECT a.* FROM sim_clean.account a JOIN sim_clean.job j USING(owner_key) WHERE a.state='deletion_pending' AND j.completed_at IS NULL AND j.next_attempt_at<=now() ORDER BY j.next_attempt_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED")).rows[0];
+      let a = (await c.query("SELECT a.* FROM sim_clean.account a JOIN sim_clean.job j USING(owner_key) WHERE a.state='deletion_pending' AND j.completed_at IS NULL AND j.next_attempt_at<=now() ORDER BY j.next_attempt_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED")).rows[0];
+      if(!a && includeCompleted) a=(await c.query("SELECT a.* FROM sim_clean.account a JOIN sim_clean.job j USING(owner_key) WHERE a.state='deleted' AND j.completed_at IS NOT NULL AND a.reset_epoch=$1 AND j.reset_epoch=a.reset_epoch ORDER BY (a.owner_key>$2) DESC,a.owner_key LIMIT 1 FOR UPDATE OF a SKIP LOCKED",[cfg.reset_epoch,this.completedCursor])).rows[0];
       if(!a) return {state:'idle'};
       if(a.reset_epoch !== cfg.reset_epoch) throw new Error('CLEAN_CONFIG_MISMATCH');
       const hashes = (await c.query('SELECT resource_hash FROM sim_clean.resource WHERE owner_key=$1',[a.owner_key])).rows.map(r=>r.resource_hash);
-      const outcome = cfg.lane === 'ai' ? await cleanAi(c,hashes) : await cleanDriver(c,hashes);
+      const replay=a.state==='deleted';
+      const outcome = cfg.lane === 'ai' ? await cleanAi(c,hashes,{replay}) : await cleanDriver(c,hashes);
+      if(replay){
+        if(!outcome)throw new Error('CLEAN_REPLAY_UNSETTLED');
+        await assertCleaned(c,cfg,a.owner_key);
+        return {state:'deleted',replayedOwner:a.owner_key};
+      }
       if(!outcome) {
         await c.query("UPDATE sim_clean.job SET attempts=attempts+1,last_code='IN_FLIGHT',next_attempt_at=now()+interval '1 second' WHERE owner_key=$1",[a.owner_key]);
         return {state:'deletion_pending'};
@@ -104,10 +116,19 @@ export class CleanLifecycle {
       await c.query('UPDATE sim_clean.job SET attempts=attempts+1,last_code=NULL,completed_at=now() WHERE owner_key=$1',[a.owner_key]);
       return {state:'deleted'};
     });
+    if(result.replayedOwner)this.completedCursor=result.replayedOwner;
+    return result.replayedOwner?{state:'deleted',completedContentReplay:true}:result;
   }
   async purgeExpiredTotals() {
     return this.tx(async c => (await c.query('DELETE FROM sim_clean.cost_daily WHERE expires_at<=now()')).rowCount);
   }
+}
+async function assertCleaned(c,cfg,owner) {
+  const hashes=(await c.query('SELECT resource_hash FROM sim_clean.resource WHERE owner_key=$1',[owner])).rows.map(r=>r.resource_hash);
+  const sql=cfg.lane==='ai'
+    ? "SELECT (SELECT count(*) FROM ai_router_request WHERE client_id='cop' AND user_hash=ANY($1::text[]))+(SELECT count(*) FROM ai_router_billing_request WHERE task_type='cop_chat' AND actor_hash=ANY($1::text[]))+(SELECT count(*) FROM ai_router_user_key WHERE user_hash=ANY($1::text[]))+(SELECT count(*) FROM ai_router_user_key_audit WHERE user_hash=ANY($1::text[])) n"
+    : "SELECT (SELECT count(*) FROM driver_measurement_receipts WHERE owner='cop' AND contributor_hash::text=ANY($1::text[]))+(SELECT count(*) FROM driver_measurement_eta WHERE owner='cop' AND contributor_hash::text=ANY($1::text[]))+(SELECT count(*) FROM driver_measurement_revocations WHERE owner='cop' AND contributor_hash::text=ANY($1::text[])) n";
+  if(Number((await c.query(sql,[hashes])).rows[0].n)!==0)throw new Error('CLEAN_READBACK_FAILED');
 }
 async function cleanDriver(c, hashes) {
   await c.query("DELETE FROM public.driver_measurement_receipts WHERE owner='cop' AND contributor_hash::text=ANY($1::text[])",[hashes]);
@@ -116,12 +137,12 @@ async function cleanDriver(c, hashes) {
   if(Number(r.n)!==0) throw new Error('CLEAN_READBACK_FAILED');
   return true;
 }
-async function cleanAi(c, hashes) {
+async function cleanAi(c, hashes, {replay=false}={}) {
   // Revoke stored key immediately, even while a pre-fence reservation settles.
   await c.query('DELETE FROM public.ai_router_user_key WHERE user_hash=ANY($1::text[])',[hashes]);
   const open=(await c.query("SELECT (SELECT count(*) FROM public.ai_router_request WHERE client_id='cop' AND user_hash=ANY($1::text[]) AND status IN ('reserved','uncertain'))+(SELECT count(*) FROM public.ai_router_billing_request WHERE task_type='cop_chat' AND actor_hash=ANY($1::text[]) AND status IN ('reserved','uncertain')) AS n",[hashes])).rows[0];
   if(Number(open.n)>0) return false;
-  for(const [lane,table,condition,cost] of [
+  if(!replay) for(const [lane,table,condition,cost] of [
     ['router','ai_router_request',"client_id='cop' AND user_hash=ANY($1::text[])",'COALESCE(charged_microusd,0)'],
     ['byok','ai_router_billing_request',"task_type='cop_chat' AND actor_hash=ANY($1::text[])",'COALESCE(estimated_microusd,0)']
   ]) await c.query(`INSERT INTO sim_clean.cost_daily(lane,usage_day,microusd,requests,input_tokens,output_tokens,expires_at)

@@ -6,5 +6,5 @@ export class UserLedger {
  request(owner:string,operation:string,at:string,oidcIat:number):Promise<any>;
  receipt(account:any,job:any):any;
  status(owner:string,operation:string):Promise<any>;
- runOne(clean:(client:any,account:any,job:any)=>Promise<any>):Promise<any>;
+ runOne(clean:(client:any,account:any,job:any)=>Promise<any>,options?:{includeCompleted?:boolean}):Promise<any>;
 }

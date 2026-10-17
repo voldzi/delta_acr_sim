@@ -8,6 +8,7 @@ import { UserLedger } from "../../../packages/sim-user-data/ledger.mjs";
 import { loadSimUserAuthority } from "../../../packages/sim-user-data/bootstrap.mjs";
 import { canonicalOwnerKey, simOwnerAlias, signSimOwner, SIM_USER_DATA_CONTRACT, SIM_USER_SCOPE } from "../../../packages/sim-user-data/claims.mjs";
 import { verifyCleanActor } from "../../../packages/clean-lifecycle/http.mjs";
+import { completedReplayEnabled } from "../../../packages/clean-lifecycle/completed-replay.mjs";
 import { AuditLogger, authenticatedCanonicalOwner, createSecurityMiddleware, createCorsOptions } from "./security.js";
 import type { ApiConfig } from "./config.js";
 import { createApp, type AppContext } from "./app.js";
@@ -143,6 +144,7 @@ export async function createOwnedSimulatorApp(config: ApiConfig, s: SimUserDataS
   });
   const ledger = new UserLedger(pool, s, "sim_user_data", continuity?.authority),
     leaves = new Map<string, { app: express.Express; context: AppContext }>();
+  const includeCompleted = completedReplayEnabled(process.env.SIM_USER_DATA_COMPLETED_REPLAY_MODE);
   const root = join(s.root, s.resetEpoch);
   await mkdir(root, { recursive: true, mode: 0o700 });
   async function directory(owner: string, required = false) {
@@ -363,7 +365,7 @@ export async function createOwnedSimulatorApp(config: ApiConfig, s: SimUserDataS
       if ((await inspect(a.owner_key)).length !== 0) throw Error("SIM_USER_DELETE_READBACK_FAILED");
       if (!(await routerCleanup(a, j))) return { app_store: "deleted", audit_and_publisher: "deleted", router_sim_history: "pending" };
       return { app_store: "deleted", audit_and_publisher: "deleted", router_sim_history: "deleted" };
-    });
+    }, { includeCompleted });
   }
   async function freshReceipt(value: any, owner: string) {
     if (value.state === "deleted") {

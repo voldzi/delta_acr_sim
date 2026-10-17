@@ -22,6 +22,8 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [ADR 0045: explicitní opakovaný úklid obnoveného obsahu, pouze zdroj a izolované testy](adr/0045_SAME_EPOCH_COMPLETED_CONTENT_REPLAY.md)
+
 - [Nová clean whole SIM kompozice: 106 skutečných lokálních PG/HTTP kontrol, nikoliv celková akceptace COP](archive/2026-10-17_SIM_CLEAN_WHOLE_COMPONENT.json)
 - [Runbook 21: konečný clean reset scope a izolované důkazy, bez produkčního spuštění](runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md)
 - [ADR 0043: atomický přechod přesně známých COP guards](adr/0043_ATOMIC_KNOWN_GUARD_RESET.md)

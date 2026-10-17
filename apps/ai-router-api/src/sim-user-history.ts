@@ -6,6 +6,7 @@ import { loadSimUserAuthority } from "../../../packages/sim-user-data/bootstrap.
 import pg from "pg";
 import { verifySimOwner, simOwnerAlias, SIM_USER_DATA_CONTRACT, SIM_USER_SCOPE } from "../../../packages/sim-user-data/claims.mjs";
 import { timingSafeEqual } from "node:crypto";
+import { completedReplayEnabled } from "../../../packages/clean-lifecycle/completed-replay.mjs";
 export interface SimHistorySettings {
   environmentId: string;
   resetEpoch: string;
@@ -48,6 +49,7 @@ export async function loadSimHistory(config: Config, store: BudgetStore, s: SimH
     identity: { hashSecret: config.userHashSecret, actorSecret: s.secret, issuer: config.accountErasureIssuer }
   });
   const ledger = new UserLedger(store.pool, s, "sim_user_history", continuity?.authority);
+  const includeCompleted = completedReplayEnabled(process.env.SIM_USER_HISTORY_COMPLETED_REPLAY_MODE);
   await ledger.tx(async () => {});
   const hashes = (owner: string) => ({ sim: store.hashUser("sim", simOwnerAlias(owner)), izs: store.hashUser("izs", simOwnerAlias(owner)) });
   const active = async (hash: string, c?: any) => {
@@ -136,7 +138,7 @@ export async function loadSimHistory(config: Config, store: BudgetStore, s: SimH
           lane: "sim_project"
         }
       ]) {
-        await c.query(
+        if (a.state !== "deleted") await c.query(
           `INSERT INTO sim_user_history.cost_daily SELECT '${spec.lane}',(created_at AT TIME ZONE 'UTC')::date,sum(${spec.cost}),count(*),sum(COALESCE(input_tokens,0)),sum(COALESCE(output_tokens,0)),(date_trunc('month',now() AT TIME ZONE 'UTC')+interval '1 month') AT TIME ZONE 'UTC' FROM ${spec.table} WHERE ${spec.condition} AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' GROUP BY 2 ON CONFLICT(lane,usage_day) DO UPDATE SET microusd=sim_user_history.cost_daily.microusd+excluded.microusd,requests=sim_user_history.cost_daily.requests+excluded.requests,input_tokens=sim_user_history.cost_daily.input_tokens+excluded.input_tokens,output_tokens=sim_user_history.cost_daily.output_tokens+excluded.output_tokens`,
           [spec.hash]
         );
@@ -152,7 +154,7 @@ export async function loadSimHistory(config: Config, store: BudgetStore, s: SimH
       );
       if (n !== 0) throw Error("SIM_HISTORY_READBACK_FAILED");
       return { app_store: "deleted", audit_and_publisher: "deleted", router_sim_history: "deleted" };
-    });
+    }, { includeCompleted });
   }
   async function receipt(v: any, owner: string) {
     let remainingRecords: null | number = null;

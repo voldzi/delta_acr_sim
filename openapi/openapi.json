@@ -466,7 +466,7 @@
         },
         "responses": {
           "200": {
-            "description": "Component already deleted; not whole-account completion",
+            "description": "Component deleted with fresh zero residual-content readback; not whole-account completion",
             "content": {
               "application/json": {
                 "schema": {
@@ -495,7 +495,7 @@
             "description": "Immutable operation conflict"
           },
           "503": {
-            "description": "Disabled, fenced, missing epoch or database unavailable"
+            "description": "Disabled, fenced, missing epoch, database unavailable or restored content remains despite terminal job"
           }
         },
         "tags": [
@@ -533,7 +533,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Authenticated owner's component state",
+            "description": "Authenticated owner's component state; deleted requires fresh zero residual-content readback",
             "content": {
               "application/json": {
                 "schema": {
@@ -552,7 +552,7 @@
             "description": "No operation for signed owner"
           },
           "503": {
-            "description": "Disabled or unavailable"
+            "description": "Disabled, unavailable or residual restored content prevents a fresh deleted receipt"
           }
         },
         "tags": [
@@ -589,7 +589,7 @@
         },
         "responses": {
           "200": {
-            "description": "Component already deleted",
+            "description": "Component deleted with fresh zero residual-content readback",
             "content": {
               "application/json": {
                 "schema": {
@@ -618,7 +618,7 @@
             "description": "Immutable operation conflict"
           },
           "503": {
-            "description": "Disabled or unavailable"
+            "description": "Disabled, unavailable or residual restored content prevents a fresh deleted receipt"
           }
         },
         "tags": [
@@ -656,7 +656,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Signed owner's driver component status",
+            "description": "Signed owner's driver component status; deleted requires fresh zero residual-content readback",
             "content": {
               "application/json": {
                 "schema": {
@@ -675,7 +675,7 @@
             "description": "No operation for signed owner"
           },
           "503": {
-            "description": "Disabled or unavailable"
+            "description": "Disabled, unavailable or residual restored content prevents a fresh deleted receipt"
           }
         },
         "tags": [

@@ -6,7 +6,7 @@ export class CleanLifecycle {
  reserve(owner:string,resources:string[]):Promise<void>;
  request(owner:string,operation:string,at:string):Promise<{state:string}>;
  status(owner:string,operation:string):Promise<{state:string}|null>;
- runOne():Promise<{state:string}>;
+ runOne(options?:{includeCompleted?:boolean}):Promise<{state:string;completedContentReplay?:boolean}>;
  purgeExpiredTotals():Promise<number>;
  capability():Promise<boolean>;
 }

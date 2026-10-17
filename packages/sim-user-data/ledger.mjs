@@ -8,6 +8,7 @@ export class UserLedger {
     this.pool = pool;
     this.expected = expected;
     this.schema = schema;
+    this.completedCursor = "";
     if (authority !== undefined && !isSimUserDataAuthority(authority)) throw Error("SIM_USER_REAL_AUTHORITY_REQUIRED");
     if (expected.mode === "production-sim-user-data-v1" && !isSimUserDataAuthority(authority)) throw Error("SIM_USER_REAL_AUTHORITY_REQUIRED");
     this.authority = authority;
@@ -114,16 +115,24 @@ export class UserLedger {
       return a && j ? this.receipt(a, j) : null;
     });
   }
-  async runOne(clean) {
-    return this.tx(async (c) => {
-      const a = (
+  async runOne(clean, { includeCompleted = false } = {}) {
+    const result = await this.tx(async (c, cfg) => {
+      let a = (
         await c.query(
           `SELECT a.* FROM ${this.schema}.account a JOIN ${this.schema}.job j USING(owner_key) WHERE a.state='deletion_pending' ORDER BY j.requested_at FOR UPDATE OF a SKIP LOCKED LIMIT 1`
         )
       ).rows[0];
+      if (!a && includeCompleted) a = (await c.query(
+        `SELECT a.* FROM ${this.schema}.account a JOIN ${this.schema}.job j USING(owner_key) WHERE a.state='deleted' AND a.reset_epoch=$1 AND j.app_store='deleted' AND j.audit_and_publisher='deleted' AND j.router_sim_history='deleted' ORDER BY (a.owner_key>$2) DESC,a.owner_key FOR UPDATE OF a SKIP LOCKED LIMIT 1`,
+        [cfg.reset_epoch, this.completedCursor]
+      )).rows[0];
       if (!a) return { state: "idle" };
       const j = (await c.query(`SELECT * FROM ${this.schema}.job WHERE owner_key=$1`, [a.owner_key])).rows[0];
       const r = await clean(c, a, j);
+      if (a.state === "deleted") {
+        if (!r || !["app_store", "audit_and_publisher", "router_sim_history"].every((k) => r[k] === "deleted")) throw Error("SIM_USER_REPLAY_UNPROVEN");
+        return { ...this.receipt(a, j), replayedOwner: a.owner_key };
+      }
       if (!r || !["app_store", "audit_and_publisher", "router_sim_history"].every((k) => r[k] === "deleted")) return this.receipt(a, j);
       await c.query(`UPDATE ${this.schema}.job SET app_store='deleted',audit_and_publisher='deleted',router_sim_history='deleted' WHERE owner_key=$1`, [
         a.owner_key
@@ -131,5 +140,11 @@ export class UserLedger {
       await c.query(`UPDATE ${this.schema}.account SET state='deleted' WHERE owner_key=$1`, [a.owner_key]);
       return this.receipt({ ...a, state: "deleted" }, { ...j, ...r });
     });
+    if (result.replayedOwner) {
+      this.completedCursor = result.replayedOwner;
+      const { replayedOwner: _owner, ...receipt } = result;
+      return receipt;
+    }
+    return result;
   }
 }

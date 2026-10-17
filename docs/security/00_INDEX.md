@@ -2,6 +2,8 @@
 
 Tento index odkazuje dokumenty v daném adresáři.
 
+- [Stejná epocha: opakovaný úklid bez změny identity, deníku či finančních součtů](../adr/0045_SAME_EPOCH_COMPLETED_CONTENT_REPLAY.md)
+
 - [Omezený clean reset: Root admission, pevné guards a zachování jiných lanes](../runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md)
 
 - [01_SECURITY_ARCHITECTURE.md](01_SECURITY_ARCHITECTURE.md)

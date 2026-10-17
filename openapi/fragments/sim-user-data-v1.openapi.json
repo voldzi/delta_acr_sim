@@ -3,7 +3,7 @@
   "info": {
     "title": "SIM canonical user data - separate source candidate",
     "version": "1.0.0",
-    "description": "New twelfth clean-v2 component. Isolated tests only until joint production acceptance. CF24 and eleven-component v1 unchanged. No public browser use. Fixed internal relay only; no new public port."
+    "description": "New twelfth clean-v2 component. Isolated tests only until joint production acceptance. CF24 and eleven-component v1 unchanged. No public browser use. Fixed internal relay only; no new public port. Completed receipts always require fresh zero content readback. Opt-in same-epoch-completed-content-replay-v1 repeats actual cleanup without resetting the original job or repeating financial rollups; it is not authorization to admit a different restore generation."
   },
   "paths": {
     "/api/v1/internal/sim-user-data/v1/capabilities": {
