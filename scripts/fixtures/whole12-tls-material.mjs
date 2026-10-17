@@ -6,12 +6,12 @@ import { lstat, realpath, mkdir, writeFile, readFile, chmod } from "node:fs/prom
 import { join } from "node:path";
 const exec = promisify(execFile);
 export async function prepareWhole12Tls(root) {
-  assert.ok(/^\/private\/tmp\/sim-user-install-pg-[A-Za-z0-9_-]+$/.test(root) || root === "/dev/shm/cop-clean-whole12-9aff26e65b74-pg");
+  assert.ok(/^\/private\/tmp\/sim-user-install-pg-[A-Za-z0-9_-]+$/.test(root) || /^\/dev\/shm\/cop-clean-whole12-[a-f0-9]{12}-pg$/.test(root));
   const s = await lstat(root);
   assert.ok(s.isDirectory() && !s.isSymbolicLink() && s.uid === process.getuid() && (s.mode & 0o777) === 0o700);
   assert.equal(await realpath(root), root);
   const dir = join(root, "tls");
-  const clientRoot = root.startsWith("/dev/shm/") ? "/private/tmp/sim-user-install-pg-9aff26e65b74" : root;
+  const clientRoot = root.startsWith("/dev/shm/") ? "/private/tmp/sim-user-install-pg-" + root.match(/whole12-([a-f0-9]{12})-pg$/)[1] : root;
   await mkdir(dir, { mode: 0o700 });
   const run = async (args) => exec("openssl", args, { cwd: dir, env: { PATH: process.env.PATH }, maxBuffer: 65536 });
   for (const name of ["ca", "wrong-ca"])

@@ -28,7 +28,8 @@ const listen = (app, port) =>
 /** Root supplies fresh own PG with Unix socket + TLS5000 and private mounts.
  * This factory checks ownership, actual server identity and all TLS outcomes.
  * No host files or DNS are edited here. Runtime source is not patched. */
-export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeRoot }) {
+export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeRoot, completedReplayMode }) {
+  assert.ok(completedReplayMode === undefined || completedReplayMode === "same-epoch-completed-content-replay-v1");
   const serviceRoot = (service) => (typeof runtimeRoot === "string" ? runtimeRoot : runtimeRoot[service]);
   assert.match(root, /^\/private\/tmp\/sim-user-install-pg-[A-Za-z0-9_-]+$/);
   assert.equal(await realpath(root), root);
@@ -72,7 +73,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     SIM_USER_HISTORY_GUARD_DATABASE_URL: uri("cop_account_safety_guard", "sim_user_history_guard_runtime"),
     SIM_USER_DATA_CONTINUITY_BINDING: JSON.stringify(install.bindings.sim_user_data),
     SIM_USER_HISTORY_CONTINUITY_BINDING: JSON.stringify(install.bindings.sim_user_history),
-    ...(acceptedReplay ? { SIM_USER_DATA_COMPLETED_REPLAY_MODE: acceptedReplay.mode, SIM_USER_HISTORY_COMPLETED_REPLAY_MODE: acceptedReplay.mode } : {})
+    ...(acceptedReplay || completedReplayMode ? { SIM_USER_DATA_COMPLETED_REPLAY_MODE: acceptedReplay?.mode ?? completedReplayMode, SIM_USER_HISTORY_COMPLETED_REPLAY_MODE: acceptedReplay?.mode ?? completedReplayMode } : {})
   });
   async function withRuntimeEnv(work) {
     const values = runtimeEnv(),
@@ -96,7 +97,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
       SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE: String(e.tokensNotBefore),
       SIM_CLEAN_LIFECYCLE_USER_DATASET_ID: e.userDatasetId,
       SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID: e.enrollmentId,
-      ...(acceptedReplay ? { SIM_CLEAN_COMPLETED_REPLAY_MODE: acceptedReplay.mode } : {})
+      ...(acceptedReplay || completedReplayMode ? { SIM_CLEAN_COMPLETED_REPLAY_MODE: acceptedReplay?.mode ?? completedReplayMode } : {})
     };
   }
   async function prepare(A, B, issuer, jwksOrigin) {
@@ -207,6 +208,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
       bindings,
       enrollments
     };
+    if (completedReplayMode) install.completedReplayMode = completedReplayMode;
     // Synthetic fixture admission ONLY, never an actual Root acceptance proof.
     const fixtureGate = {
       async withResetAdmission(context, work) {
@@ -513,6 +515,11 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     }
   }
   const api = {
+    /** PRIVATE fixture-server RAM only. Never return via HTTP or print. */
+    privateRuntimeCredentials() {
+      assert.equal(phase, "started");
+      return Object.fromEntries(["ai_router_runtime", "driver_measurements_runtime", "sim_user_data_runtime", "sim_user_data_guard_runtime", "sim_user_history_guard_runtime"].map(role => [role, passwords[role]]));
+    },
     /** Existing synthetic fixture only. No seed, reset, enrollment or role DDL.
      * Caller must have stopped the previous runner and supplied new test-only
      * role credentials privately. Original identities and bindings are retained. */
@@ -576,13 +583,14 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
       await openReadbacks();
       return api.read();
     },
-    async seed(A, B, issuer, jwksOrigin) {
+    async seed(A, B, issuer, jwksOrigin, { seedUserData = true } = {}) {
       externalGuard = forbidExternalFixtureFetch();
       await prepare(A, B, issuer, jwksOrigin);
       const tls = await tlsChecks();
       await start("ai");
       await start("driver");
       await start("main");
+      if (seedUserData) {
       await seedCleanWhole(ai);
       await seedCleanWhole(driver);
       for (const a of [A, B])
@@ -609,6 +617,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
           });
           assert.equal(r.status, 201, "ACTUAL_TLS_MAIN_SEED");
         }
+      }
       for (const [port, lane] of [
         [4321, "driver"],
         [4322, "ai"],
