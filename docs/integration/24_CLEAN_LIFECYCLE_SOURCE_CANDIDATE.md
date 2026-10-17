@@ -644,3 +644,17 @@ Eighteen preparation tests, eleven coordinator tests and seven baseline adapter
 tests pass synthetically. The new production-named schema installer still needs
 a real isolated SQL acceptance against its final published revision; these mock
 checks are not that evidence. No production SQL or runtime flags were changed.
+
+Actual new isolated SQL acceptance subsequently passed against precisely COP
+8776eb4 and Messaging0876f91; see
+`docs/archive/2026-10-17_MESSAGING_INITIAL_ACTUAL_SQL_ACCEPTANCE.json`.
+Fresh PG18.6 and native1.156/c4 ran in a network-none parent namespace with no
+published ports. Admin and the fixed bot were registered through actual HTTP.
+The actual initial inspector, schema-only installer and actual baseline commit
+passed under seven fresh host paused-writer checks, without impersonating
+production Root admission. knownOwners/unresolved were zero and one fixed service
+was admitted. The existing restricted synthetic csm_messaging role read baseline
+data; CREATE usage table, DELETE independent journal and UPDATE guard config
+were actually denied42501. Bootstrap/setup failures are explicitly recorded.
+This is not full native runtime capability/restart acceptance or production GO.
+All test credentials and database files remain solely in server tmpfs.

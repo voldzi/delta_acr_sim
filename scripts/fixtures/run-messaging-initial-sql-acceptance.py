@@ -5,10 +5,22 @@ OWNER='sim-messaging-initial-sql-20261017'
 BASE=Path('/srv/x5-production/staging/cop/cop-clean-whole12-956262c6abdb/messaging-initial-sql-v1')
 PG='sha256:b07129cc272f688c98f5b343138a0a52fa45b3d82f50d7a53ff441330624cd2e'
 NATIVE='sha256:c4ff9f063d6681b638ef87fe26b184f4dc2caa5d38f050289170ed329bddb2b5'
-def docker(*args):return subprocess.check_output(['/usr/bin/docker',*args],stderr=subprocess.PIPE,timeout=120)
+def docker(*args):
+ try:return subprocess.check_output(['/usr/bin/docker',*args],stderr=subprocess.PIPE,timeout=120)
+ except subprocess.CalledProcessError as e:
+  for line in e.output.decode(errors='replace').splitlines():
+   try:x=json.loads(line)
+   except ValueError:continue
+   if x.get('error')=='ISOLATED_INITIAL_SQL_FAILED':print(json.dumps(x),flush=True)
+  raise
 def info(cid):return json.loads(docker('inspect',cid))[0]
 def start():
- assert sys.argv[1:]==['--isolated-only'] and os.getuid()==1000
+ assert sys.argv[1:] in [['--isolated-only'],['--resume-configured-only'],['--resume-paused-install-only']] and os.getuid()==1000
+ if sys.argv[1] in ['--resume-configured-only','--resume-paused-install-only']:
+  ids={}
+  for name,image in [('pg',PG),('operator',NATIVE),('native',NATIVE)]:
+   x=info(OWNER+'-'+name);assert x['Image']==image and x['Config']['Labels']['cop.test.owner']==OWNER and x['State']['Running'];ids[name]=x['Id']
+  return continue_acceptance(ids['pg'],ids['operator'],ids['native'],False,sys.argv[1]=='--resume-paused-install-only')
  for image in [PG,NATIVE]:assert json.loads(docker('image','inspect',image))[0]['Id']==image
  assert docker('ps','-aq','--filter','label=cop.test.owner='+OWNER).strip()==b''
  for name in ['cop','messaging']:
@@ -26,18 +38,21 @@ def start():
   mounts+=['--mount','type=bind,source='+str(source)+',target='+target+',readonly']
  operator=docker(*args('operator'),*mounts,'--entrypoint','/usr/local/bin/python',NATIVE,'-c','import time;time.sleep(86400)').decode().strip()
  native=docker(*args('native'),'--entrypoint','/usr/local/bin/python',NATIVE,'-c','import time;time.sleep(86400)').decode().strip()
+ return continue_acceptance(pg,operator,native,True)
+def continue_acceptance(pg,operator,native,prepare_first,install_only=False):
  def step(mode):
-  out=docker('exec',operator,'python','/operator.py',mode).decode()
+  out=docker('exec',operator,'python','-I','/operator.py',mode).decode()
   for line in out.splitlines():
    try:x=json.loads(line)
    except ValueError:continue
    print(json.dumps(x),flush=True)
- step('--prepare')
- send=subprocess.Popen(['/usr/bin/docker','exec',operator,'tar','-C','/dev/shm/initial-sql-private/native-config','-cf','-','.'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
- r=subprocess.run(['/usr/bin/docker','exec','-i',native,'tar','-C','/data','-xf','-'],stdin=send.stdout,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30);send.stdout.close();assert send.wait()==0 and r.returncode==0
- docker('exec','-d',native,'sh','-c','exec python -m synapse.app.homeserver -c /data/homeserver.yaml > /data/native-test.log 2>&1')
- step('--register')
- docker('pause',native)
+ if prepare_first:step('--prepare')
+ if not install_only:
+  send=subprocess.Popen(['/usr/bin/docker','exec',operator,'tar','-C','/dev/shm/initial-sql-private/native-config','-cf','-','.'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+  r=subprocess.run(['/usr/bin/docker','exec','-i',native,'tar','-C','/data','-xf','-'],stdin=send.stdout,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30);send.stdout.close();assert send.wait()==0 and r.returncode==0
+  docker('exec','-d',native,'sh','-c','exec python -m synapse.app.homeserver -c /data/homeserver.yaml > /data/native-test.log 2>&1')
+  step('--register')
+  docker('pause',native)
  def custody():
   a,b=info(native),info(pg)
   assert a['Id']==native and a['Image']==NATIVE and a['State']['Running'] and a['State']['Paused']
@@ -46,7 +61,7 @@ def start():
   v={'native':{'id':native,'image':NATIVE,'paused':True,'pid':a['State']['Pid']},'pg':{'id':pg,'image':PG,'network':'none'}}
   return hashlib.sha256(json.dumps(v,sort_keys=True,separators=(',',':')).encode()).hexdigest()
  writer=custody()
- p=subprocess.Popen(['/usr/bin/docker','exec','-i',operator,'python','/operator.py','--install'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+ p=subprocess.Popen(['/usr/bin/docker','exec','-i',operator,'python','-I','/operator.py','--install'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
  p.stdin.write((json.dumps({'writerInventorySha256':writer})+'\n').encode());p.stdin.flush()
  deadline=time.monotonic()+180;proof=None
  try:

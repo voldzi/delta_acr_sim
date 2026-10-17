@@ -1,7 +1,7 @@
 """Real isolated SQL/provider acceptance; no production Root impersonation."""
 import base64,hashlib,hmac,importlib.util,json,os,secrets,subprocess,sys,time,uuid
 from pathlib import Path
-import psycopg2,yaml,urllib.request
+import psycopg2,yaml,urllib.request,urllib.parse
 D=Path('/dev/shm/initial-sql-private');COP=Path('/cop-source');MESSAGE=Path('/message-source')
 def load(path,name):
  s=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
@@ -9,8 +9,8 @@ def db(name,user='postgres'):
  return psycopg2.connect(host='127.0.0.1',port=5432,dbname=name,user=user,connect_timeout=5)
 def save(v):
  p=D/'private.json';p.write_text(json.dumps(v));p.chmod(0o600)
-def request(path,body=None):
- r=urllib.request.Request('http://127.0.0.1:8008'+path,data=None if body is None else json.dumps(body).encode(),headers={'Content-Type':'application/json'})
+def request(path,body=None,token=None,method=None):
+ r=urllib.request.Request('http://127.0.0.1:8008'+path,data=None if body is None else json.dumps(body).encode(),headers={'Content-Type':'application/json',**({'Authorization':'Bearer '+token} if token else {})},method=method)
  with urllib.request.urlopen(r,timeout=5) as x:return json.load(x)
 def prepare():
  os.umask(0o077);D.mkdir(mode=0o700)
@@ -19,8 +19,13 @@ def prepare():
  for role in ['csm_synapse','csm_messaging']:q.execute('CREATE ROLE '+role+' LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS')
  for name,owner in [('csm_synapse','csm_synapse'),('csm_messaging','csm_messaging'),('cop_account_safety_guard','postgres')]:q.execute('CREATE DATABASE '+name+' OWNER '+owner+" ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0")
  c.close()
- config=D/'native-config';config.mkdir(mode=0o700)
- subprocess.run([sys.executable,'-m','synapse.app.homeserver','--generate-config','--server-name','docker.home.cz','--config-path',str(config/'homeserver.yaml'),'--data-directory',str(config),'--report-stats','no'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
+ configure_native()
+def configure_native():
+ assert D.is_dir() and not (D/'private.json').exists()
+ for name in ['csm_synapse','csm_messaging','cop_account_safety_guard']:
+  c=db(name);q=c.cursor();q.execute("SELECT count(*) FROM pg_tables WHERE schemaname='public'");assert q.fetchone()==(0,);c.close()
+ config=D/'native-config';config.mkdir(mode=0o700,exist_ok=True)
+ subprocess.run([sys.executable,'-I','-m','synapse.app.homeserver','--generate-config','--server-name','docker.home.cz','--config-path',str(config/'homeserver.yaml'),'--data-directory',str(config),'--report-stats','no'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=True)
  y=yaml.safe_load((config/'homeserver.yaml').read_text());reg=secrets.token_urlsafe(48)
  y.update(server_name='docker.home.cz',pid_file='/data/homeserver.pid',public_baseurl='http://127.0.0.1:8008',report_stats=False,
   signing_key_path='/data/docker.home.cz.signing.key',log_config='/data/log.config',registration_shared_secret=reg,
@@ -44,15 +49,26 @@ def register():
   nonce=request('/_synapse/admin/v1/register')['nonce'];password=secrets.token_urlsafe(32)
   mac=hmac.new(v['registrationSecret'].encode(),(nonce+'\0'+username+'\0'+password+'\0'+('admin' if admin else 'notadmin')).encode(),hashlib.sha1).hexdigest()
   x=request('/_synapse/admin/v1/register',{'nonce':nonce,'username':username,'password':password,'admin':admin,'mac':mac})
-  assert x['user_id']=='@'+username+':docker.home.cz';actors[username]=x
+  assert x['user_id']=='@'+username+':docker.home.cz';actors[username]={**x,'password':password}
  v['actors']=actors;save(v)
  c=db('csm_messaging','csm_messaging');q=c.cursor();q.execute('CREATE TABLE public.csm_messaging_stores(store_name text PRIMARY KEY,payload jsonb NOT NULL)')
- bot={'csmUserId':'cop.ai.agent','matrixUserId':actors['cop_cop.ai.agent_a83479e9281a']['user_id'],'serverName':'docker.home.cz'}
+ bot={'csmUserId':'cop.ai.agent','matrixUserId':actors['cop_cop.ai.agent_a83479e9281a']['user_id'],'serverName':'docker.home.cz','password':actors['cop_cop.ai.agent_a83479e9281a']['password']}
  q.execute('INSERT INTO csm_messaging_stores VALUES(%s,%s::jsonb)',('matrix_identities',json.dumps({'version':1,'identities':{'cop.ai.agent':bot}})));c.commit();c.close()
  # Reproduce ONLY the actually inventoried legacy starting schema.
  c=db('csm_synapse');c.autocommit=True;q=c.cursor();q.execute('SET ROLE csm_synapse');q.execute("SELECT set_config('cop_private_erasure.local_server','docker.home.cz',false)")
  q.execute((MESSAGE/'deploy/synapse/001_private_metadata_fences.sql').read_text());c.close()
  print(json.dumps({'stage':'actual_http_admin_and_fixed_bot_registered','metadataContainsOnlyActualFixedBot':True}),flush=True)
+def finish_bot_mapping():
+ v=json.loads((D/'private.json').read_bytes());bot=v['actors']['cop_cop.ai.agent_a83479e9281a']
+ c=db('csm_messaging');q=c.cursor();q.execute("SELECT payload FROM csm_messaging_stores WHERE store_name='matrix_identities'");payload=q.fetchone()[0]
+ assert len(payload['identities'])==1 and 'password' not in payload['identities']['cop.ai.agent']
+ for name,schemas in [('csm_synapse',['cop_account_erasure_v2','cop_account_erasure_binding','cop_account_erasure_approved']),('csm_messaging',['messaging_erasure_v2']),('cop_account_safety_guard',['messaging_safety_v2','messaging_usage_v1'])]:
+  check=db(name);cursor=check.cursor();cursor.execute('SELECT count(*) FROM pg_namespace WHERE nspname=ANY(%s)',(schemas,));assert cursor.fetchone()==(0,);check.close()
+ password=secrets.token_urlsafe(32)
+ request('/_synapse/admin/v2/users/'+urllib.parse.quote(bot['user_id'],safe=''),{'password':password,'logout_devices':False},v['actors']['synthetic_admin']['access_token'],'PUT')
+ bot['password']=password;save(v);payload['identities']['cop.ai.agent']['password']=password
+ q.execute("UPDATE csm_messaging_stores SET payload=%s::jsonb WHERE store_name='matrix_identities'",(json.dumps(payload),));c.commit();c.close()
+ print(json.dumps({'stage':'synthetic_initial_mapping_completed_before_schema_install','sameNativeBot':True,'actualHttpPasswordSet':True}),flush=True)
 class IsolatedPausedCustody:
  def __init__(self,writer):self.writer=writer;self.checks=0
  def assert_current(self):
@@ -98,7 +114,7 @@ def install():
   if p:p.close()
   for c in cs.values():c.close()
 if __name__=='__main__':
- try:{'--prepare':prepare,'--register':register,'--install':install}[sys.argv[1]]()
+ try:{'--prepare':prepare,'--finish-config':configure_native,'--register':register,'--finish-bot-mapping':finish_bot_mapping,'--install':install}[sys.argv[1]]()
  except Exception as e:
   import traceback
   loc=[{'file':Path(x.filename).name,'line':x.lineno} for x in traceback.extract_tb(e.__traceback__)]

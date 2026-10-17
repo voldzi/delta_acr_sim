@@ -1,0 +1,40 @@
+{
+  "contractVersion": "messaging-initial-actual-sql-proof-v1",
+  "copRevision": "8776eb4e4aab9517b1c26343aff2c709f0956438",
+  "messagingRevision": "0876f91b5e4e28f20a2904b2c5b2355d5cfde56f",
+  "postgresImage": "sha256:b07129cc272f688c98f5b343138a0a52fa45b3d82f50d7a53ff441330624cd2e",
+  "nativeImage": "sha256:c4ff9f063d6681b638ef87fe26b184f4dc2caa5d38f050289170ed329bddb2b5",
+  "pgContainer": "19662dff3405e6f38d45918dd20aaa287e1b45fa9fc31006772da636e5134f48",
+  "nativeContainer": "8fc365c2cd712e2b804b07477b4a939e0b3766577dbc6cf8a9867103cbdca8e2",
+  "operatorContainer": "b4e691f1247ed8d92353b03cc34104e373a4e2954168704be8a2efbd93c36aec",
+  "networkNoneParentAndNoPublishedPorts": true,
+  "sameOriginal956Used": false,
+  "actualSynapseHttpRegistrations": {"syntheticAdmin": 1, "fixedBot": 1},
+  "initialNativeSchema": "public schema94 plus legacy cop_private_erasure only",
+  "initialMetadataOnlyActualFixedBot": true,
+  "initialGuardEmpty": true,
+  "actualInspectInitialPassed": true,
+  "actualSchemaOnlyInstallerPassed": true,
+  "actualPreparedEnrollmentCommitted": true,
+  "knownOwners": 0,
+  "unresolved": 0,
+  "fixedServiceAdmissions": 1,
+  "actualHostPausedWriterChecks": 7,
+  "existingRestrictedCsmMessagingActualBaselineReadPassed": true,
+  "forbiddenRuntimeSqlStates": {
+    "createTableInUsageSchema": "42501",
+    "deleteIndependentJournal": "42501",
+    "updateGuardConfiguration": "42501"
+  },
+  "fixturePreparationFailuresRetainedInNarrative": [
+    "operator.py initially shadowed Python stdlib before any private state or DB; only those proven-empty bootstrap containers replaced",
+    "child generate-config needed Python isolated mode; completed configuration only after checking all three DB public schemas empty",
+    "first mapping lacked password and installer refused before DDL; same synthetic bot password set through real admin HTTP and original mapping completed before installation"
+  ],
+  "privateCredentialsAndDatabaseFilesOnlyInServerTmpfs": true,
+  "nativeWriterLeftPausedForReview": true,
+  "productionRootAdmissionClaimed": false,
+  "productionDataOrAccountsTouched": false,
+  "nativeFullRuntimeCapabilityRestartAccepted": false,
+  "wholeAccountReady": false
+}
