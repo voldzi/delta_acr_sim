@@ -44,4 +44,19 @@ class Prepare(unittest.TestCase):
  def test_no_mutation_calls(self):
   text=p.read_text()
   for bad in ['.apply(','.freeze_reviewed(','.open(','.stop(','.rotate(','subprocess.run(','write_bytes(']:self.assertNotIn(bad,text)
+ def envelope(self):
+  binding={'issuer':'https://login.zeleznalady.cz/realms/cop'}
+  config={'baselineId':'synthetic-baseline','binding':binding,'sourcePins':{},'writerInventorySha256':'w','guardRuntimeRole':'csm_messaging'}
+  schema={'contractVersion':'cop-messaging-production-initial-plan-v1','configurationDigest':m.digest(config),'facts':{}}
+  schema['planDigest']=m.digest(schema)
+  return {'contractVersion':'cop-messaging-clean-install-plan-v1','configuration':config,'schemaPlan':schema,'usagePlan':{'contractVersion':'cop-messaging-usage-enrollment-plan-v1','mode':'initial','lineage':[],**config}}
+ def test_twelve_join(self):
+  x=m.attach_messaging_install_preparation(self.run_join(),self.envelope(),{'guard':{},'metadata':{},'native':{}},'synthetic-private-root')
+  self.assertEqual(x['publicSummary']['planCount'],12);self.assertEqual(len(x['publicSummary']['reviewedPlanDigests']),12);self.assertFalse(x['publicSummary']['messagingSchemaOrBaselineApplied']);self.assertNotIn('synthetic-private-root',json.dumps(x['publicSummary']))
+ def test_twelve_rejects_schema_digest_tampering(self):
+  e=self.envelope();e['schemaPlan']['facts']={'changed':True}
+  self.assertRaises(RuntimeError,m.attach_messaging_install_preparation,self.run_join(),e,{'guard':{},'metadata':{},'native':{}},'synthetic-private-root')
+ def test_twelve_rejects_config_drift(self):
+  e=self.envelope();e['configuration']['baselineId']='different'
+  self.assertRaises(RuntimeError,m.attach_messaging_install_preparation,self.run_join(),e,{'guard':{},'metadata':{},'native':{}},'synthetic-private-root')
 if __name__=='__main__':unittest.main()

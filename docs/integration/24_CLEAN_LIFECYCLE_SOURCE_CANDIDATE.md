@@ -623,3 +623,24 @@ restart and actual native/metadata/guard capabilities are subsequent explicit
 gates; no existing frozen-writer assertion may silently be relaxed to allow a
 restart. Guard connection failure is an error, never evidence of absent schema.
 No fixture baseline or real account deletion is performed by this source change.
+
+The source integration now explicitly executes
+`remaining reset → messaging_install → readback → sim_config` under the same
+held admission. The SIM coordinator loads its own enrollment adapter only from
+the separately pinned, root-owned nonwritable SIM source. The adapter loads the
+separately pinned COP schema installer and requires the schema-only export
+`install_initial_schema_and_bindings`; the earlier combined installer is refused
+to prevent double baseline enrollment. Connections are restricted to the exact
+three PostgreSQL databases over verify-full HAProxy and close on all exits.
+
+After the actual COP inspector produces `schemaPlan`, preparation calls
+`attach_messaging_install_preparation(prepared, envelope, connections,
+root_base64)`. It checks the schema plan's canonical digest and configuration
+digest, binds matching configuration/usage inputs, and adds the twelfth dedicated
+`messaging_install` digest plus RAM-only private input. The public summary reports
+preparation, never completed SQL application. Root's validator/controller must
+accept this new digest set consistently before running the coordinator.
+Eighteen preparation tests, eleven coordinator tests and seven baseline adapter
+tests pass synthetically. The new production-named schema installer still needs
+a real isolated SQL acceptance against its final published revision; these mock
+checks are not that evidence. No production SQL or runtime flags were changed.

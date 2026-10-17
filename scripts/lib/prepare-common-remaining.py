@@ -115,3 +115,33 @@ def finalize_private_preparation(private_config, remaining, cop_safety_prepared,
                 'productionFactsInspectedByCopManifestBuilder':False,
                 'messagingProfileAndBaselineInstallationIncluded':False,
                 'freezeAuthorized':False,'productionActivated':False}}
+
+def attach_messaging_install_preparation(prepared, envelope, connections, root_base64):
+    """Explicit twelfth plan; requires actual COP schema inspector output."""
+    need(set(envelope)=={'contractVersion','configuration','schemaPlan','usagePlan'}
+         and envelope['contractVersion']=='cop-messaging-clean-install-plan-v1')
+    need(envelope['schemaPlan']['contractVersion']=='cop-messaging-production-initial-plan-v1'
+         and isinstance(envelope['schemaPlan'].get('planDigest'),str)
+         and envelope['schemaPlan']['planDigest']==digest({k:v for k,v in envelope['schemaPlan'].items() if k!='planDigest'}))
+    usage=envelope['usagePlan'];configuration=envelope['configuration']
+    need(envelope['schemaPlan']['configurationDigest']==digest(configuration))
+    need(usage['contractVersion']=='cop-messaging-usage-enrollment-plan-v1'
+         and usage['mode']=='initial' and usage['lineage']==[]
+         and usage['binding']['issuer']=='https://login.zeleznalady.cz/realms/cop'
+         and configuration['baselineId']==usage['baselineId']
+         and configuration['sourcePins']==usage['sourcePins']
+         and configuration['writerInventorySha256']==usage['writerInventorySha256']
+         and configuration['guardRuntimeRole']==usage['guardRuntimeRole']
+         and all(configuration['binding'].get(k)==v for k,v in usage['binding'].items()))
+    need(set(connections)=={'guard','metadata','native'} and isinstance(root_base64,str) and root_base64)
+    public=prepared['publicSummary']
+    need(public['planCount']==11 and 'messaging_install' not in public['reviewedPlanDigests'])
+    sha=digest(envelope);config=prepared['privateConfig']
+    config={**config,'messagingInstall':{'reviewedPlan':envelope,'connections':connections,'rootBase64':root_base64},
+            'reviewedPlans':{**config['reviewedPlans'],'messaging_install':envelope},
+            'reviewedPlanDigests':{**config['reviewedPlanDigests'],'messaging_install':sha}}
+    return {**prepared,'privateConfig':config,'publicSummary':{**public,
+            'contractVersion':'cop-sim-twelve-prepared-plans-v1','planCount':12,
+            'reviewedPlanDigests':{**public['reviewedPlanDigests'],'messaging_install':sha},
+            'messagingProfileAndBaselineInstallationIncluded':True,
+            'messagingSchemaOrBaselineApplied':False,'productionActivated':False}}

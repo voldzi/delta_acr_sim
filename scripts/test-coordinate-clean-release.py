@@ -88,7 +88,7 @@ class Configuration(unittest.TestCase):
 class Orchestration(unittest.TestCase):
     def exercise(self,deny,preflight_deny=False):
         calls=[];epoch=str(uuid.uuid4());proof={'reportSha256':'a'*64}
-        plan={'resetEpoch':epoch,'tokensNotBefore':123,'sources':{'cop':{'root':str(m.COP_ROOT),'files':{}}},'candidateImages':{}}
+        plan={'resetEpoch':epoch,'tokensNotBefore':123,'sources':{'cop':{'root':str(m.COP_ROOT),'files':{}},'sim':{'root':'/synthetic/sim','files':{}}},'candidateImages':{}}
         raw=json.dumps(plan).encode()
         class Remote:
             def open(self):calls.append('remote-open')
@@ -117,7 +117,7 @@ class Orchestration(unittest.TestCase):
         remaining=types.SimpleNamespace(run_remaining_reset=lambda a,c:calls.append('remaining') or {},prepare_remaining_reset=prepare)
         cfg={'resetEpoch':epoch,'tokensNotBefore':123,'simUserInstall':{}}
         with patch.object(m.os,'getuid',return_value=0),patch.object(m.socket,'gethostname',return_value='docker'),patch.object(m,'protected',return_value=raw),\
-             patch.object(m,'load_sealed',side_effect=[controller,remaining]),patch.object(m,'read_environment',return_value=(b'',None)),\
+             patch.object(m,'load_sealed',side_effect=[controller,remaining]),patch.object(m,'load_sealed_sim',return_value=types.SimpleNamespace(run_messaging_install_phase=lambda h,a,c:calls.append('messaging_install') or {})),patch.object(m,'read_environment',return_value=(b'',None)),\
              patch.object(m,'disabled_runtime'),patch.object(m,'deploy_guard_input'),patch.object(m,'stage_sim_configuration',return_value={'enabled':False}):
             if deny:
                 with self.assertRaisesRegex(RuntimeError,'UNPROVEN'):m.run_common_reset(cfg)
@@ -134,7 +134,7 @@ class Orchestration(unittest.TestCase):
         calls=self.exercise(False)
         self.assertEqual(calls[:4],['whole12-gate','remote-open','remaining-preflight','freeze'])
         self.assertEqual(calls[4:12],list(m.COMMON_PHASES))
-        self.assertEqual(calls[12:],['remaining','readback','lease-end','remaining-preflight-close','remote-close'])
+        self.assertEqual(calls[12:],['remaining','messaging_install','readback','lease-end','remaining-preflight-close','remote-close'])
 
     def test_closure_preflight_failure_never_freezes(self):
         self.assertEqual(self.exercise(False,True),['whole12-gate','remote-open','remaining-preflight','remote-close'])

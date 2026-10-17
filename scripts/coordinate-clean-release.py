@@ -56,6 +56,19 @@ def load_sealed(cop_source, relative, name):
     spec.loader.exec_module(module)
     return module
 
+def load_sealed_sim(source, relative, name):
+    root=Path(source['root'])
+    need(root.is_absolute() and str(root).startswith('/srv/x5-production/staging/')
+         and root.resolve()==root and root.stat().st_uid==0
+         and not root.stat().st_mode&0o222
+         and relative=='scripts/lib/messaging-usage-root-phase.py'
+         and relative in source['files'], 'COMMON_SIM_SOURCE_NOT_ENROLLED')
+    path=root/relative
+    need(digest(protected(path))==source['files'][relative], 'COMMON_SIM_SOURCE_HASH')
+    spec=importlib.util.spec_from_file_location(name,path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
 def read_environment(path=SIM_ENV):
     need(path.resolve() == path and path.parent.is_dir() and not path.parent.stat().st_mode & 0o022, 'COMMON_ENV_PARENT')
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -243,6 +256,8 @@ def run_common_reset(private_config):
     remaining = load_sealed(source, 'scripts/account-safety/clean-remaining-reset.py', 'common_remaining_reset')
     need(callable(getattr(remaining, 'run_remaining_reset', None)), 'COMMON_CLOSURE_MISSING')
     need(callable(getattr(remaining, 'prepare_remaining_reset', None)), 'COMMON_CLOSURE_PREFLIGHT_MISSING')
+    messaging_install = load_sealed_sim(plan['sources']['sim'], 'scripts/lib/messaging-usage-root-phase.py', 'common_messaging_install')
+    need(callable(getattr(messaging_install, 'run_messaging_install_phase', None)), 'COMMON_MESSAGING_INSTALL_MISSING')
     # Check runtime/secret prerequisites while all current services still run.
     disabled_runtime(private_config, read_environment()[0])
     deploy_guard_input(plan)
@@ -264,6 +279,8 @@ def run_common_reset(private_config):
                 receipts[phase] = controller.run_private_worker(admission, request)
                 admission.assert_current()
             receipts['remaining'] = remaining.run_remaining_reset(admission, private_config)
+            admission.assert_current()
+            receipts['messaging_install'] = messaging_install.run_messaging_install_phase(host, admission, private_config)
             admission.assert_current()
             receipts['readback'] = controller.run_private_worker(admission, {**private_config, 'phase': 'readback'})
             receipts['sim_config'] = stage_sim_configuration(private_config, plan, admission)
