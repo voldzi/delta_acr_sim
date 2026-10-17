@@ -26,3 +26,25 @@ component readback alone cannot complete global deletion. Production reset and
 activation remain coordinated, and no rollback may restore data already erased
 without replaying the independent tombstones. Details and tests are mapped in
 [integration 25](../integration/25_SIM_USER_DATA_V1_CONTRACT.md).
+
+## Root activation boundary (source and isolated CAS verification)
+
+The stopped-writer reset admission ends before any new service is started. A
+separate, narrow Root-only SIM activation state reacquires the existing storage
+flock and revalidates the protected whole12 proof, source hashes, epoch, exact
+fenced CIDs and reset environment/overlay receipt. It never treats a started
+writer as satisfying the old reset authority. Actual SQL readback is bridged by
+private stdin and live parent custody, not positive readiness callbacks.
+
+Enable the five ownership/continuity composition flags before starting main,
+Router, situation and web; otherwise main selects the legacy shared store.
+Global COP deletion remains disabled and other feature/intake settings remain
+unchanged. Preserve each service's observed Compose chain and existing mounts
+and networks. After up, bind exact new candidate CIDs/specs and verify real
+authenticated component capabilities, not liveness alone. Failure stops only
+captured unchanged new CIDs; no old writer/data rollback is permitted.
+
+The module returns only guard-ready metadata for Root's separate shared canary
+and final COP slot. It neither enables global flags nor asserts whole-account
+completion. Production execution and the actual activation bridge/up remain
+separate gates; source/unit evidence does not satisfy them. See runbook22.
