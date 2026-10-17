@@ -1,0 +1,31 @@
+{
+  "contractVersion": "sim-activation-source-evidence-v1",
+  "scope": "source-and-isolated-cas-tests-only",
+  "runtimeRevisionUnchanged": "a337cfc1aa3dc8ef3fd49a84b6e2fb94a651ee4d",
+  "checks": {
+    "activationCasTests": 14,
+    "coordinatorTests": 10,
+    "skeletonValidation": "passed",
+    "diffWhitespace": "passed",
+    "actualComposeChainLabels": "read-only-inspected-no-values"
+  },
+  "preservedChains": {
+    "mainAndWeb": ["base", "x5", "driver-measurements"],
+    "router": ["base", "x5", "ai-router", "existing-database-v2-prepare"],
+    "situation": ["base", "x5", "driver-measurements", "existing-database-v2-prepare"]
+  },
+  "review": {
+    "copRevision": "f5b2414",
+    "configurationAndS3BoundaryTests": 13,
+    "nativeTableClassificationMissingBytePinReproduced": true,
+    "minimalCorrectionAcceptedByCop": true,
+    "correctedProfileSha256": "6c3e89ea8ebd90c2f7f89b0fb30c8fdf795199a31b8504380769f42cef6919e6"
+  },
+  "activationModuleExecutedOnProduction": false,
+  "actualComposeUpTested": false,
+  "activationSqlBridgeTestedAgainstHost": false,
+  "productionSecretsChanged": false,
+  "globalFlagsChanged": false,
+  "wholeAccountComplete": false,
+  "remainingGates": ["Root module integration and review", "isolated actual activation bridge/up test", "shared whole12 acceptance", "actual Root-approved activation"]
+}

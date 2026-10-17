@@ -265,6 +265,7 @@ def run_common_reset(private_config):
             admission.assert_current()
             return {'contractVersion': 'cop-sim-common-reset-fenced-v1', 'resetEpoch': plan['resetEpoch'],
                     'preStopReportSha256': proof['reportSha256'], 'completedPhases': list(receipts),
+                    'simConfiguration': receipts['sim_config'],
                     'servicesRestarted': False, 'runtimeFlagsEnabled': False, 'wholeAccountComplete': False}
     finally:
         remote.close()

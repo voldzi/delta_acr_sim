@@ -331,6 +331,143 @@ correction does not hot-patch the already running source0ded266 process. The
 shared test must use the correct source identity and/or independently verify
 actual SQL mode, never infer it from the old nested label.
 
+## Root activation module after whole12 acceptance (source only)
+
+This is the concrete handoff for COP's single human-run Root operator. It is
+not a standalone activation command. `scripts/activate-clean-sim.py` is a library
+without CLI. The existing common coordinator ends fenced and does not start
+services. Root must integrate the library with its actual whole12 final owner;
+source/CAS tests do not authorize production execution.
+
+1. Call `run_common_reset(private_config)` only after the real protected whole12
+   report matches all nine original candidate images. Its exact stopped-writer
+   Root admission runs the reset and final SQL/provider readbacks, then stages
+   SIM configuration with all new flags false. Keep COP's global deletion flag
+   false. Do not change Jízda intake, external-model or analytics settings.
+2. After that admission closes, acquire the existing deployment/storage lock
+   for activation and compare the same proof/source hashes, reset epoch, all
+   still-stopped original CIDs, current environment bytes and overlay digest.
+   A concurrent change refuses; do not stop/adopt a foreign new container.
+   Never call stopped-writer `assert_current()` after starting a new runtime.
+   The coordinator now returns its existing `sim_config` receipt as
+   `simConfiguration` (environmentSha256/overlaySha256), without private values.
+3. While writers remain stopped, use the existing `runSimUserInstall` readback
+   phase with the actual activation lock/stopped-state check. Verify both real
+   restricted-role independent authorities, exact production configs, all nine
+   binding fields, unused profiles, and base AI/driver enrollment. This step
+   does not use a positive readiness callback or start a model/provider call.
+4. Under the lock, CAS-update only these **composition/fence** flags to true:
+   `SIM_CLEAN_AI_ENABLED`, `SIM_CLEAN_DRIVER_ENABLED`, `SIM_USER_DATA_ENABLED`,
+   `SIM_USER_HISTORY_ENABLED`, `SIM_USER_DATA_RELAY_ENABLED`. Keep legacy
+   AI_ROUTER_ACCOUNT_ERASURE_ENABLED/DRIVER_ACCOUNT_ERASURE_ENABLED false and
+   COP's global user-deletion flag false. They are not the same switches.
+   Starting main with SIM_USER_DATA_ENABLED=false selects its legacy global
+   store (`apps/simulator-api/src/index.ts:8`), not the canonical-owner runtime.
+   Likewise Router history cannot start without the clean composition.
+5. `state.up_services()` preserves each service's actual recorded Compose chain,
+   appends the pinned new overlay and runs only `up -d --no-build --no-deps
+   --pull never <one-service>`, ordered Router/situation/main/web.
+   Read-only inspection found real chains differ: main/web use base+x5+driver;
+   Router uses base+x5+ai-router+the existing database-v2 prepare overlay;
+   situation uses base+x5+driver+that prepare overlay. Do not collapse them to
+   one guessed two-file command. The sole external legacy overlay allowed is
+   `/home/voldzi/sim-erasure-apply-ca1fd6b-v2/deploy/account-safety/database-v2.prepare.compose.yml`;
+   its real bytes are captured/CAS-checked and it must not be cleaned up while
+   referenced. Unknown external paths, extra environment files or project
+   changes refuse before activation.
+   Verify actual resulting CIDs/images against the four exact candidate
+   identities, unchanged networks/mounts, read-only CA mount and healthy state.
+   No other SIM provider, Valhalla, daemon or project is restarted.
+6. Use private stdin, not tokens in argv/logs, to check ordinary readiness AND
+   actual authenticated guards: main `:4000/health/ready`;
+   `:4000/api/v1/internal/sim-user-data/v1/capabilities` (dedicated COP token);
+   Router `:4050/api/v1/ai-router/internal/user-lifecycle/v1/capabilities`
+   (COP Router token); Router
+   `:4050/api/v1/ai-router/internal/sim-user-history/v1/capabilities` (SIM token);
+   situation `:4020/api/v1/internal/user-lifecycle/v1/capabilities` (driver COP
+   token); and situation's fixed relay main-capabilities path (dedicated token).
+   Require ready=true, matching contract/epoch/scope and fresh no-store answers;
+   missing tokens must return401. Router `/health/ready` alone only tests target
+   SELECT1/usage and is not independent guard evidence. Check public private
+   paths remain404, and unauthenticated operator data remains denied.
+7. COP's actual Root canary orchestrates the synthetic shared twelve-owner
+   A-delete/B-preserve and required recovery/readbacks. Keep end-user global
+   deletion off during private component acceptance; no mock Root, skipped
+   owner, direct OpenAI fallback or live Jízda/ETA integration. The ordinary COP
+   public deletion endpoint cannot itself be used with its global switch false;
+   do not claim it was tested. Its final check belongs after the explicit next
+   transition, or to an already reviewed private Root canary path. A missing
+   actual canary path is a blocker, not grounds for an auth/guard bypass.
+8. Only after that canary and all remaining COP/native/provider gates pass may
+   the real Root activation owner enable the explicitly approved global COP
+   flags, recreate only the affected COP runtime through its normal pinned
+   profile and verify one final synthetic public workflow. Publish a receipt
+   containing actual source/image/CID identities, epochs, readiness, observed
+   test results and enabled flags. Failure keeps global deletion off; stop the
+   newly admitted affected services under activation custody if required. Never
+   restart old writers against the new schemas or restore erased snapshots.
+
+The reset and activation phases must be explicit within the one human command;
+the existing reset authority cannot be weakened to permit started/new writers.
+Returning a fenced reset receipt is not activation success.
+
+Concrete library calls for Root's sealed final driver:
+
+```python
+reset_receipt = coordinator.run_common_reset(private_config)
+with activation.begin_sim_activation(reset_receipt, private_config) as state:
+    state.offline_guard_readback()
+    state.stage_composition()
+    state.up_services()
+    state.verify_capabilities()
+    sim_receipt = state.receipt()
+# Root's real shared canary/final COP activation follows under its own custody.
+```
+
+The module requires Root/Docker host, a real storage flock, protected actual
+whole12 proof and self/source hash enrollment. It checks all still-fenced other
+local Root writers and CAS-binds exact new service IDs/images/config/mounts and
+networks after up. SQL readback uses the actual installer in readback-only mode
+with private stdin and a live parent activation-custody RPC; unexpected reset
+admission refuses. No production secret mount, new listener or positive SQL
+callback is introduced. Partial/timeout up inventories exact candidate IDs;
+failure cleanup stops only those captured IDs whose spec still matches and
+continues cleaning other owned IDs even if one was replaced. It never stops a
+foreign replacement, reverts composition to a legacy path or restores data.
+Global COP flags remain byte-for-byte unchanged. The metadata receipt is
+`sim-composition-activation-v1`, stage `guard-ready-awaiting-cop-canary`, not GO.
+
+Fourteen isolated CAS/orchestration tests plus ten coordinator tests pass.
+Production activation, actual Compose up and the module's host SQL bridge have
+not been executed; the earlier TLS namespace evidence is separate component
+evidence, not an activation test.
+
+## COP remaining-provider source review
+
+Reviewed exact COP commitf5b2414 (remaining wrapper, S3, native/metadata, media,
+Edge, finite STORAGE_PROGRAM and media closure migration). One concrete profile
+integrity defect was reproduced: moving server_keys_json from configuration to
+data preserves the173-table count and declared digests, and `profile()` accepts
+it without hashing the complete JSON. The remaining wrapper did not require
+that JSON in its source hash map. COP accepted the minimal correction: require
+the profile in the sealed map and pin its raw SHA
+`6c3e89ea8ebd90c2f7f89b0fb30c8fdf795199a31b8504380769f42cef6919e6`.
+Its corrected source must be pinned/reviewed before activation; this review does
+not claim a fix was applied to production.
+Five configuration and eight S3 boundary tests were rerun from an immutable
+archive of that commit:13 passed, source/unit evidence only. Actual production
+S3 rotation, the combined Root wrapper and whole12 completion were not rerun.
+
+Verified in source: live admission before native/metadata SQL commits and
+media unlink/Edge atomic replacement; exact single bucket with unversioned,
+bounded complete inventory; provider stop, same-image restart, old credential
+denial and no old-key fallback; credential payloads through private RAM/pipes;
+fresh guard/target dataset binding plus immutable runtime-SELECT-only media
+closure witness; partial failure does not automatically restart app writers.
+Other actionable integration gaps are the activation ordering, actual guard
+readiness and missing reset-to-activation configuration receipt listed above,
+not an invented extra erasure framework.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an
