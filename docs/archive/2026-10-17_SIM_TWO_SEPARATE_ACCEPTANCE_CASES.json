@@ -1,0 +1,38 @@
+{
+  "contractVersion": "sim-two-separate-isolated-evidence-v1",
+  "verifiedDate": "2026-10-17",
+  "runtimeRevision": "be34050f78843f3bdb8228f710d83558a75d474f",
+  "sameImmutableImageVerifiedByActualDockerInspect": "sha256:923194d92acd6dd176c80bc8a151eb953883f80d3555b87bb45aba9da64833fa",
+  "oldRecovery": {
+    "namespace": "9aff26e65b74",
+    "operationId": "b6fe7a68-d7a2-49e0-a9da-6dd7bcb01a4e",
+    "actualRestoredRows": {"ai": 4, "driver": 4, "history": 1},
+    "actualRestoredMainFiles": 4,
+    "finalActualAllAAbsent": true,
+    "allOtherTargetRowsControlFinanceAndBPreserved": true,
+    "independentGuardPreserved": true,
+    "finalReadOnlyVerifierRerunPassed": true,
+    "historyInitial503Observed": false,
+    "detailedEvidence": "2026-10-17_SIM_ACCEPTED_A_ACTUAL_REPLAY.json"
+  },
+  "freshDeletion": {
+    "namespace": "956262c6abdb",
+    "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+    "originalOperationInAllFourActualJobs": true,
+    "actualDeletionHttp": {"main": 200, "history": 200, "ai": 200, "driver": 200},
+    "remainingA": {"mainFiles": 0, "history": 0, "ai": 0, "driver": 0},
+    "bPreservedAgainstAdmittedSeedReceipt": true,
+    "restorePerformed": false,
+    "preDeleteSimContentSnapshotAvailable": false,
+    "fullFinancialAndGuardEqualityCheckedByFreshProbe": false
+  },
+  "runtimeDeltaBetweenCases": {
+    "applicationOrPackageCodeChanged": false,
+    "databaseMigrationFilesChanged": false,
+    "changesOutsideImmutableRuntime": ["fixture TLS material", "owner-empty preparation and admitted seed", "fixture resume and restore helpers", "read-only verifier", "Root private preparation and catalog inspection", "documentation and tests"],
+    "notProven": ["fresh956 SIM restore under its own identities and TLS", "whole COP account acceptance", "production deployment or activation"]
+  },
+  "historicalOperationOrSnapshotReusedInFreshCase": false,
+  "productionTouched": false,
+  "wholeAccountComplete": false
+}

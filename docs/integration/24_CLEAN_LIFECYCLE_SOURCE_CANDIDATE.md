@@ -492,3 +492,12 @@ be generated only while both canonical components are disabled. This constructor
 does not reset, enroll, grant rights, activate services or authorize production use.
 Its 27 synthetic configuration checks do not constitute actual production
 inspection. Production preparation and execution remain separate approved gates.
+
+Two separate actual cases are recorded in
+`docs/archive/2026-10-17_SIM_TWO_SEPARATE_ACCEPTANCE_CASES.json`: historical
+9aff recovery and fresh956 first deletion. Actual Docker inspection confirms
+the same immutable runtime bundle in both. No application/package code or SQL
+migration changed between the pinned runtime and these probes. Fixture TLS,
+preparation and verification differ; fresh956 has no original SIM content
+snapshot, so recovery under its identities/TLS is explicitly not proven. The
+historical recovery must not be relabeled as a fresh956 restore or whole COP GO.
