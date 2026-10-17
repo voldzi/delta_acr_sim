@@ -6,10 +6,12 @@ export class CleanLifecycle {
     const c = await this.pool.connect();
     try {
       await c.query('BEGIN');
+      await c.query("SET LOCAL statement_timeout='5000ms'; SET LOCAL lock_timeout='1500ms'");
       const cfg = (await c.query('SELECT * FROM sim_clean.config WHERE singleton')).rows[0];
       const e = this.expected;
       if (!cfg || cfg.contract !== 'cop-sim-user-lifecycle-v1' || cfg.mode !== 'isolated-clean-lifecycle-v1'
-          || cfg.reset_epoch !== e.resetEpoch || cfg.environment_id !== e.environmentId || cfg.lane !== e.lane) throw new Error('CLEAN_CONFIG_MISMATCH');
+          || cfg.reset_epoch !== e.resetEpoch || cfg.environment_id !== e.environmentId || cfg.lane !== e.lane
+          ||(e.tokensNotBefore!==undefined&&Number(cfg.tokens_not_before)!==e.tokensNotBefore)) throw new Error('CLEAN_CONFIG_MISMATCH');
       const result = await action(c, cfg);
       await c.query('COMMIT'); return result;
     } catch (error) { await c.query('ROLLBACK').catch(() => {}); throw error; }
@@ -29,6 +31,14 @@ export class CleanLifecycle {
         if (r.owner_key !== ownerKey) throw new Error('OWNER_BINDING_CONFLICT');
       }
     });
+  }
+  async assertIntake(c, resourceHash) {
+    const cfg=(await c.query('SELECT * FROM sim_clean.config WHERE singleton')).rows[0];
+    if(!cfg||cfg.contract!=='cop-sim-user-lifecycle-v1'||cfg.mode!=='isolated-clean-lifecycle-v1'||cfg.environment_id!==this.expected.environmentId||cfg.reset_epoch!==this.expected.resetEpoch||cfg.lane!==this.expected.lane||(this.expected.tokensNotBefore!==undefined&&Number(cfg.tokens_not_before)!==this.expected.tokensNotBefore))throw new Error('CLEAN_CONFIG_MISMATCH');
+    if(resourceHash!==undefined){
+      const a=(await c.query('SELECT a.state,a.reset_epoch FROM sim_clean.resource r JOIN sim_clean.account a USING(owner_key) WHERE r.kind=$1 AND r.resource_hash=$2 FOR SHARE OF a',[cfg.lane==='ai'?'ai_hash':'driver_contributor',resourceHash])).rows[0];
+      if(!a||a.state!=='active'||a.reset_epoch!==cfg.reset_epoch)throw new Error('CLEAN_ACCOUNT_FENCED');
+    }
   }
   async request(ownerKey, operationId, requestedAt) {
     return this.tx(async(c,cfg) => {
@@ -53,6 +63,8 @@ export class CleanLifecycle {
   }
   async capability() {
     return this.tx(async(c,cfg)=>{
+      const role=(await c.query("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls OR rolreplication AS elevated FROM pg_roles WHERE rolname=current_user")).rows[0];
+      if(!role||role.elevated===true||(await c.query("SELECT has_schema_privilege(current_user,'public','CREATE') AS ddl")).rows[0].ddl===true)return false;
       await c.query('SELECT owner_key FROM sim_clean.account LIMIT 0');
       await c.query('SELECT operation_id FROM sim_clean.job LIMIT 0');
       const writes=cfg.lane==='ai'?['ai_router_request','ai_router_user_key','ai_router_user_key_audit','ai_router_billing_request']:['driver_measurement_receipts','driver_measurement_intervals','driver_measurement_eta','driver_measurement_revocations'];
@@ -64,6 +76,7 @@ export class CleanLifecycle {
         const rights=(await c.query("SELECT has_table_privilege(current_user,$1,'SELECT') AND has_table_privilege(current_user,$1,'INSERT') AND has_table_privilege(current_user,$1,'UPDATE') AS ok",['sim_clean.'+table])).rows[0];
         if(rights.ok!==true)return false;
       }
+      if((await c.query("SELECT has_table_privilege(current_user,'sim_clean.cost_daily','DELETE') AS ok")).rows[0].ok!==true)return false;
       if(cfg.lane==='ai') { await c.query('SELECT sum(charged_microusd) FROM sim_clean.router_usage');await c.query('SELECT sum(estimated_microusd) FROM sim_clean.billing_usage'); }
       const count=Number((await c.query("SELECT count(*) AS n FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace n ON n.oid=p.pronamespace WHERE t.tgname='clean_user_fence' AND n.nspname='sim_clean' AND p.proname='fence' AND t.tgenabled='O'")).rows[0].n);
       return count===(cfg.lane==='ai'?4:3);

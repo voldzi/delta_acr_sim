@@ -11,6 +11,7 @@ import {fileURLToPath} from 'node:url';
 import {CleanLifecycle,installFence} from '../packages/clean-lifecycle/store.mjs';
 import {exerciseHttp} from './test-clean-lifecycle-http.mjs';
 import {loadCleanRuntime} from '../packages/clean-lifecycle/runtime.mjs';
+import {exerciseBootstrap} from './test-clean-bootstrap.mjs';
 if(process.argv.length!==3 || process.argv[2]!=='--run') throw new Error('Only --run; no remote targets');
 const source=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const {Pool}=createRequire(join(source,'apps/ai-router-api/package.json'))('pg');
@@ -32,9 +33,10 @@ try{
  const admin=pool('postgres');
  const who=(await admin.query("SELECT current_setting('data_directory') AS d,current_setting('listen_addresses') AS l,inet_server_addr() AS a")).rows[0];
  assert.equal(who.d,join(root,'db'));assert.equal(who.l,'');assert.equal(who.a,null);
- await admin.query('CREATE ROLE ai_router_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION');
+ await admin.query('CREATE ROLE ai_router_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION; CREATE ROLE driver_measurements_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION');
  for(const lane of ['ai','driver']){
-   const database=`fixture_${lane}`;await pool('postgres').query(`CREATE DATABASE ${database}`);
+   const runtimeRole=lane==='ai'?'ai_router_runtime':'driver_measurements_runtime';
+   const database=lane==='ai'?'sim_ai_router':'sim_driver_measurements';await pool('postgres').query(`CREATE DATABASE ${database}`);
    const owner=pool(database);
    for(const path of lane==='ai'?['deploy/ai-router/001_schema.sql','deploy/ai-router/002_separate_billing.sql']:['deploy/driver-measurements/schema.sql']) await owner.query(await readFile(join(source,path),'utf8'));
    await owner.query(await readFile(join(source,'deploy/clean-lifecycle/001_clean_lifecycle.sql'),'utf8'));
@@ -43,16 +45,8 @@ try{
    await installFence(owner,lane);
    if(lane==='ai')await owner.query(await readFile(join(source,'deploy/clean-lifecycle/002_ai_budget_views.sql'),'utf8'));
    await owner.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
-   await owner.query('GRANT USAGE ON SCHEMA sim_clean TO ai_router_runtime');
-   await owner.query('GRANT SELECT ON sim_clean.config TO ai_router_runtime');
-   await owner.query('GRANT SELECT,INSERT,UPDATE ON sim_clean.account,sim_clean.resource,sim_clean.job,sim_clean.cost_daily TO ai_router_runtime');
-   await owner.query('GRANT DELETE ON sim_clean.cost_daily TO ai_router_runtime');
-   await owner.query('GRANT EXECUTE ON FUNCTION sim_clean.fence() TO ai_router_runtime');
-   if(lane==='ai')await owner.query('GRANT SELECT ON sim_clean.router_usage,sim_clean.billing_usage TO ai_router_runtime');
-   const tables=lane==='ai'?['ai_router_request','ai_router_user_key','ai_router_user_key_audit','ai_router_billing_request']:['driver_measurement_receipts','driver_measurement_intervals','driver_measurement_eta','driver_measurement_revocations'];
-   for(const table of tables) await owner.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON public.${table} TO ai_router_runtime`);
-   if(lane==='ai')await owner.query('GRANT USAGE ON SEQUENCE ai_router_user_key_audit_id_seq TO ai_router_runtime');
-   let runtime=pool(database,'ai_router_runtime'), service=new CleanLifecycle(runtime,expected);
+   await owner.query(await readFile(join(source,lane==='ai'?'deploy/clean-lifecycle/003_ai_runtime_grants.sql':'deploy/clean-lifecycle/004_driver_runtime_grants.sql'),'utf8'));
+   let runtime=pool(database,runtimeRole), service=new CleanLifecycle(runtime,expected);
    await assert.rejects(runtime.query('CREATE TABLE public.forbidden(i int)'));checks++;
    await assert.rejects(runtime.query('UPDATE sim_clean.config SET reset_epoch=$1',[randomUUID()]));checks++;
    const a=hash(1),b=hash(2),ha=hash(11),hb=hash(12);
@@ -102,8 +96,8 @@ try{
    // Close all clients and restart the ACTUAL owned PostgreSQL server.
    for(const p of pools)if(!p.ended&&!p.ending)await p.end();
    await stop();
-   await assert.rejects(new CleanLifecycle(pool(database,'ai_router_runtime'),expected).runOne());checks++;
-   await start();runtime=pool(database,'ai_router_runtime');service=new CleanLifecycle(runtime,expected);
+   await assert.rejects(new CleanLifecycle(pool(database,runtimeRole),expected).runOne());checks++;
+   await start();runtime=pool(database,runtimeRole);service=new CleanLifecycle(runtime,expected);
    if(lane==='ai')await new Promise(r=>setTimeout(r,1100));
    const faultOwner=pool(database);
    await faultOwner.query("CREATE FUNCTION sim_clean.fixture_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'SYNTHETIC_FAILURE'; END IF; RETURN NEW; END $$; CREATE TRIGGER fixture_fault BEFORE UPDATE ON sim_clean.job FOR EACH ROW EXECUTE FUNCTION sim_clean.fixture_fault()");
@@ -151,6 +145,8 @@ try{
    check(loaded.options.workerReady()===false,'unscheduled worker not ready');loaded.start();
    check(loaded.options.workerReady()===true,'worker scheduled with actual DB verified');await loaded.close();
    check(loaded.options.workerReady()===false,'worker closed without leaked timer');
+   const params=new URLSearchParams({host:join(root,'s'),port:'5432',user:runtimeRole});
+   checks+=await exerciseBootstrap({lane,url:'postgresql:///'+database+'?'+params.toString(),expected,root,runtime});
    await own.query('DELETE FROM sim_clean.config');
    await assert.rejects(service.reserve(hash(90),[hash(91)]),/CLEAN_CONFIG_MISMATCH/);checks++;
    // Fresh admin connection after the per-lane restart.

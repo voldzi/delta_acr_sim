@@ -1,4 +1,5 @@
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
+import type {CleanLifecycle} from "../../../packages/clean-lifecycle/store.mjs";
 import { createHmac } from "node:crypto";
 import { DriverMeasurementError, type DriverBatch, type DriverInterval, type DriverReceipt, type DriverStore } from "./driver-measurements.js";
 import {PostgresDriverAccountErasureStore,type DriverErasureStorageOptions} from "./driver-account-erasure-store.js";
@@ -8,26 +9,42 @@ import {DriverGuardedOperationRunner} from "./driver-guarded-execution.js";
 import type {DriverGuardedOperationContext} from "./driver-guarded-execution-port.js";
 import type {DriverPublicationLease} from "./driver-publication.js";
 
-export type DriverMeasurementStorageOptions=DriverErasureStorageOptions&{retentionConsumer?:DriverRetentionConsumer;retentionScheduler?:DriverRetentionScheduler};
+export type DriverMeasurementStorageOptions=DriverErasureStorageOptions&{retentionConsumer?:DriverRetentionConsumer;retentionScheduler?:DriverRetentionScheduler;cleanLifecycle?:{mode:'isolated-clean-lifecycle-v1';service:CleanLifecycle}};
 
 /** Dedicated database only; no DDL or raw position persistence in the runtime. */
 export class PostgresDriverMeasurementStore implements DriverStore {
   private pool: Pool;
   private retention:DriverRetentionLifecycle;
   private closing?:Promise<void>;
-  private erasures:PostgresDriverAccountErasureStore;
+  private erasures?:PostgresDriverAccountErasureStore;
+  private cleanLifecycle?:DriverMeasurementStorageOptions['cleanLifecycle'];
   private guarded?:DriverGuardedOperationRunner;
   private databaseSafety?:import("../../../deploy/account-safety/database-erasure-guard.mjs").DatabaseErasureGuard;
   constructor(url: string, private hashSecret: string, options:DriverMeasurementStorageOptions={}) {
     if (hashSecret.length < 32) throw new Error("Invalid driver storage secret");
+    if(options.cleanLifecycle&&(options.cleanLifecycle.mode!=='isolated-clean-lifecycle-v1'||options.guarded!==undefined||options.databaseSafety!==undefined||options.enabled===true||options.retentionConsumer!==undefined))throw new Error('CLEAN_DRIVER_COMPOSITION_CONFLICT');
+    this.cleanLifecycle=options.cleanLifecycle;
     this.pool=new Pool({connectionString:url,max:4,connectionTimeoutMillis:1500,statement_timeout:5000,idleTimeoutMillis:10000});
     this.pool.on("error",()=>{ /* No connection string/error payload is logged. */ });
     this.databaseSafety=options.databaseSafety;
     // Presence opts in even when unbound: never fall back to application DML.
     if(options.guarded!==undefined)this.guarded=new DriverGuardedOperationRunner(options.guarded?.execution);
-    this.erasures=new PostgresDriverAccountErasureStore(this.pool,hashSecret,options);
+    if(!this.cleanLifecycle)this.erasures=new PostgresDriverAccountErasureStore(this.pool,hashSecret,options);
+    const clean=this.cleanLifecycle;
+    const consumer:DriverRetentionConsumer|undefined=clean?{owner:'sim_driver_measurements',execute:async work=>{
+      await clean.service.tx(async()=>{});
+      await work(Object.freeze({owner:'sim_driver_measurements',cutoff:new Date().toISOString()}));
+    }}:options.retentionConsumer;
     this.retention=new DriverRetentionLifecycle({initialize:()=>this.initializeRetentionStorage(),cleanup:context=>this.cleanup(context),
-      consumer:options.retentionConsumer,scheduler:options.retentionScheduler});
+      consumer,scheduler:options.retentionScheduler});
+  }
+  private legacyErasure():PostgresDriverAccountErasureStore {
+    if(!this.erasures)throw new DriverMeasurementError(503,'CLEAN_LEGACY_ERASURE_DISABLED');
+    return this.erasures;
+  }
+  private async assertIntake(c:PoolClient,owner:string,contributor?:string):Promise<void> {
+    if(this.cleanLifecycle){if(owner!=='cop')throw new DriverMeasurementError(403,'CLEAN_OWNER_INVALID');await this.cleanLifecycle.service.assertIntake(c,contributor);return;}
+    await this.legacyErasure().assertIntake(c,owner,contributor);
   }
   private key(owner:string,kind:string,value:string):string {
     return createHmac("sha256",this.hashSecret).update(`${owner}:${kind}:${value}`).digest("hex");
@@ -39,18 +56,19 @@ export class PostgresDriverMeasurementStore implements DriverStore {
   async lookup(owner:string,batchId:string,hash:string):Promise<DriverReceipt|undefined> {
     const c=await this.pool.connect(),storedId=this.id(owner,"batch",batchId);
     try {
-      await c.query("BEGIN");await c.query("SET LOCAL lock_timeout='1500ms'");await this.erasures.assertIntake(c,owner);
+      await c.query("BEGIN");await c.query("SET LOCAL lock_timeout='1500ms'");await this.assertIntake(c,owner);
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:batch:${storedId}`]);
       let r=await c.query("SELECT request_hash,receipt,contributor_hash FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,storedId]);
       if(r.rowCount){const contributor=r.rows[0].contributor_hash;
         await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:${contributor}`]);
-        await this.erasures.assertIntake(c,owner,contributor);
+        await this.assertIntake(c,owner,contributor);
         r=await c.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2 AND expires_at>now()",[owner,storedId]);
         if(r.rowCount&&r.rows[0].request_hash!==hash)throw new DriverMeasurementError(409,"DRIVER_IDEMPOTENCY_CONFLICT");}
       await c.query("COMMIT");return r.rowCount?{...r.rows[0].receipt,batchId}:undefined;
     }catch(error){await c.query("ROLLBACK").catch(()=>undefined);throw error;}finally{c.release();}
   }
   private async initializeRetentionStorage():Promise<void> {
+    if(this.cleanLifecycle)await this.cleanLifecycle.service.tx(async()=>{});
     const result=await this.pool.query(`SELECT current_database() AS database_name,
       to_regclass('public.driver_measurement_receipts') IS NOT NULL AS receipts,
       to_regclass('public.driver_measurement_revocations') IS NOT NULL AS revocations`);
@@ -73,6 +91,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     try {
       await client.query("BEGIN");
       await client.query("SET LOCAL lock_timeout='1500ms'");
+      if(this.cleanLifecycle)await this.cleanLifecycle.service.assertIntake(client);
       await client.query("DELETE FROM public.driver_measurement_receipts WHERE expires_at<=$1::timestamptz",[context.cutoff]);
       await client.query("DELETE FROM public.driver_measurement_revocations WHERE expires_at<=$1::timestamptz",[context.cutoff]);
       await client.query("COMMIT");
@@ -92,7 +111,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       await client.query("SET LOCAL lock_timeout='1500ms'");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:batch:${batch.batchId}`]);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:${contributor}`]);
-      await this.erasures.assertIntake(client,owner,contributor);
+      await this.assertIntake(client,owner,contributor);
       const revoked=await client.query("SELECT 1 FROM driver_measurement_revocations WHERE owner=$1 AND contributor_hash=$2 AND expires_at>now()",[owner,contributor]);
       if (revoked.rowCount) throw new DriverMeasurementError(403,"DRIVER_CONSENT_REVOKED");
       const old=await client.query("SELECT request_hash,receipt FROM driver_measurement_receipts WHERE owner=$1 AND batch_id=$2",[owner,batch.batchId]);
@@ -121,6 +140,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     finally {client.release();}
   }
   private async assertPublication(publication?:DriverPublicationLease):Promise<void> {
+    if(this.cleanLifecycle)await this.cleanLifecycle.service.tx(async()=>{});
     if(!this.guarded)return;
     // Only an already held production Root publication port may supply this
     // callback. A short-lived read admission is not a publication/drain lease.
@@ -189,6 +209,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     const c=await this.pool.connect();
     try {
       await c.query("BEGIN"); await c.query("SET LOCAL lock_timeout='1500ms'");
+      if(this.cleanLifecycle)await this.assertIntake(c,owner,contributor);
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[`${owner}:${contributor}`]);
       await c.query("INSERT INTO driver_measurement_revocations(owner,contributor_hash,expires_at) VALUES($1,$2,now()+interval '7 days') ON CONFLICT(owner,contributor_hash) DO UPDATE SET expires_at=EXCLUDED.expires_at",[owner,contributor]);
       const r=await c.query("DELETE FROM driver_measurement_receipts WHERE owner=$1 AND contributor_hash=$2",[owner,contributor]);
@@ -201,7 +222,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
       finally{
         try{
           if(this.guarded){
-            const settled=await Promise.allSettled([this.guarded.close(),this.erasures.closeGuarded()]);
+            const settled=await Promise.allSettled([this.guarded.close(),this.legacyErasure().closeGuarded()]);
             for(const result of settled)if(result.status==="rejected")throw result.reason;
           }
         }
@@ -210,9 +231,9 @@ export class PostgresDriverMeasurementStore implements DriverStore {
     })();
     return this.closing;
   }
-  accountErasure(input:DriverErasureInput,context?:DriverGuardedOperationContext){return this.erasures.erase(input,context);}
-  accountErasureStatus(id:string,actorHash:string){return this.erasures.status(id,actorHash);}
-  acknowledgeAccountErasure(input:DriverErasureInput,context?:DriverGuardedOperationContext){return this.erasures.acknowledge(input,context);}
-  accountErasureCapability(){return this.erasures.capability();}
-  accountErasurePreflight(input:DriverErasureInput){return this.erasures.preflight(input);}
+  accountErasure(input:DriverErasureInput,context?:DriverGuardedOperationContext){return this.legacyErasure().erase(input,context);}
+  accountErasureStatus(id:string,actorHash:string){return this.legacyErasure().status(id,actorHash);}
+  acknowledgeAccountErasure(input:DriverErasureInput,context?:DriverGuardedOperationContext){return this.legacyErasure().acknowledge(input,context);}
+  accountErasureCapability(){return this.legacyErasure().capability();}
+  accountErasurePreflight(input:DriverErasureInput){return this.legacyErasure().preflight(input);}
 }

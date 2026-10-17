@@ -17,7 +17,8 @@ CREATE TABLE sim_clean.config (
  contract text NOT NULL CHECK(contract='cop-sim-user-lifecycle-v1'),
  mode text NOT NULL CHECK(mode='isolated-clean-lifecycle-v1'),
  environment_id uuid NOT NULL, reset_epoch uuid NOT NULL,
- lane text NOT NULL CHECK(lane IN ('ai','driver'))
+ lane text NOT NULL CHECK(lane IN ('ai','driver')),
+ tokens_not_before bigint NOT NULL DEFAULT 0 CHECK(tokens_not_before>=0)
 );
 -- Enrollment is an explicit owner action. No default epoch or auto-recovery.
 CREATE TABLE sim_clean.account (
@@ -104,4 +105,5 @@ BEGIN
 END $$;
 REVOKE ALL ON ALL TABLES IN SCHEMA sim_clean FROM PUBLIC;
 REVOKE ALL ON FUNCTION sim_clean.fence() FROM PUBLIC;
+REVOKE ALL ON FUNCTION sim_clean.immutable_lifecycle() FROM PUBLIC;
 COMMIT;

@@ -41,8 +41,10 @@ measurement revocations for bound contributors. Readback precedes completion.
 Anonymous current-month totals are retained separately per accounting lane until
 the next UTC month boundary, only after reservations have settled. They contain
 no owner key. `purgeExpiredTotals()` removes expired totals transactionally.
-Root must integrate these totals into the corresponding budget queries before
-production; this source-only adapter does not switch the billing implementation.
+The verified clean bootstrap explicitly selects `sim_clean.router_usage` in
+BudgetStore and `sim_clean.billing_usage` in PgSeparateBilling. The old views and
+selection remain unchanged when clean mode is absent. Both live rows and anonymous
+totals remain in financial/count/token reporting; deleted identities do not remain.
 
 ## Actual isolated evidence
 
@@ -51,7 +53,7 @@ production; this source-only adapter does not switch the billing implementation.
 no external target, password or URL. Uses the actual base AI/driver schemas and a
 restricted non-superuser runtime role, not mocked DB calls. No provider is called.
 
-Observed 118 checks passed, two actual PostgreSQL restarts: A/B isolation, true
+Observed 148 checks passed, two actual PostgreSQL restarts: A/B isolation, true
 concurrent writer/fence ordering, cascade cleanup/readback, refusal of late writes,
 same-operation replay, immutable owner/epoch/operation, no resurrection, pending
 AI reservation/key removal/settlement, actual DB outage, deliberate completion
@@ -101,14 +103,36 @@ and GET `/deletions/:operationId`. No public port is added. The composite OpenAP
 driver path includes its usual `/situation-data` gateway prefix; do not expose it
 publicly. A component receipt never asserts whole-account completion.
 
-Both createApp factories import the new registration and accept an explicit
-optional dependency. Existing index/startup does NOT instantiate it. When supplied,
-normal COP AI writes and driver batch writes reserve verified owner/resource
-bindings before persistent side effects. Existing authentication, validation and
-historical guards still run; no old guard is bypassed. Root must construct the
-dependency with the exact own DB pool, hash derivation and explicit expected
-environment/epoch. `tick()` provides bounded single-job processing and expired
-total purge; Root must schedule retries and close resources on shutdown.
+Both actual index files call their dedicated clean bootstrap before serving
+requests. Default `SIM_CLEAN_LIFECYCLE_ENABLED=false` leaves the entire legacy
+composition unchanged. Explicit true requires mode, environment UUID, reset epoch
+and token cutoff matching actual DB config; the migration refuses a populated
+user-data baseline. Configuration is verified before AI policy initialization.
+No production mode is accepted in this source/isolated approval.
+
+`SIM_CLEAN_LIFECYCLE_MODE=isolated-clean-lifecycle-v1`,
+`SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID`, `SIM_CLEAN_LIFECYCLE_RESET_EPOCH` and
+`SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE` are the only added non-secret settings.
+Existing COP service/signing credentials, hash derivations and pinned issuers are
+passed by the owning app; no secret is copied or printed. The cutoff is also a
+DB config field; a mismatch refuses startup/requests. Zero is only a synthetic
+fixture cutoff, not a production reset recommendation.
+
+AI startup uses its existing BudgetStore pool and enables both clean accounting
+selectors. Driver startup creates its own restricted driver-lane control pool
+and explicitly selects the new clean storage composition. It does not instantiate
+the historical erasure owner in that mode. Combining clean mode with legacy
+erasure enabled, guarded operation port, database safety port or legacy retention
+consumer is rejected. The legacy composition is not modified or replayed.
+
+Normal COP AI writes and driver batches reserve signed owner/resource bindings
+before persistence. Actual driver lookup/commit, revoke, retention and publication
+reads verify the new DB config/epoch; intake locks the registered active owner in
+the transaction and DB triggers reject late writes. Retention remains seven days.
+The source initializes a bounded single-flight worker every 15 seconds; no timer
+starts at constructor time. Shutdown stops scheduling, awaits in-flight work and
+closes owned pools. Worker SQL has 5-second statement/1.5-second lock limits.
+No new listening port or public route is created by the bootstrap.
 
 Headers are deliberately separate from the legacy AI actor: `x-cop-clean-actor`
 and `x-cop-clean-actor-signature`. Encode compact JSON UTF-8 as unpadded base64url;
@@ -132,8 +156,11 @@ GET `/capabilities` requires only the service token, never a user actor. It chec
 current DB config/epoch, actual trigger count and enabled state, read access and
 AI budget views plus supplied worker readiness. It returns a strict typed
 readiness receipt; a disabled/stopped/unavailable component is 503 with ready=false.
-The driver capability does not validate legacy driver-store composition; that
-is a separate integration gate, not inferred from this new schema's readiness.
+The actual clean driver bootstrap is tested with the actual app factory and
+ordinary batch handler, not a substitute writer. The test accepts A/B batches in
+shadow_only, fences A, deletes A with real DB readback and preserves B. The AI
+test uses the actual factory and a loopback-only synthetic local model, encrypted
+test keys and real BudgetStore accounting; external provider attempts are zero.
 
 Signed `resourceId` is the existing opaque sub on AI, or COP-attested daily
 contributor pseudonym on driver. It must match the actual write body; the AI BYOK
@@ -156,8 +183,8 @@ Root owns the finite combined reset plan, writer stop, identity/roles cleanup an
 deployment approval. No live reset SQL is supplied by this candidate. Do not use
 it on existing stores or remove old guard state to obtain GO. Fresh namespace must
 be enrolled explicitly; restoration of an old epoch must remain quarantined.
-Production wiring must cover completion receipts for both stores, background
-failure/backoff, report-cache invalidation, restore proof, actual budgets,
+Production acceptance must cover completion receipts for both stores,
+report-cache invalidation, independent same-epoch restore/replay proof,
 and bounded handling of shared scenario/routes not currently linked to accounts.
 The binding OpenAPI includes these explicitly source-only isolated routes.
 

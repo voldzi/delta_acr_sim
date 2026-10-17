@@ -1,19 +1,22 @@
 import { initializeObservability } from "@csm-sim/observability";
 import { loadConfig } from "./config.js";
+import {loadCleanDriverComposition} from './clean-bootstrap.js';
 
 const observability = await initializeObservability({ serviceName: "csm-sim-situation-data-api" });
 const { createApp } = await import("./app.js");
 const config = await loadConfig();
+const clean=await loadCleanDriverComposition();
 const { loadProductionDriverOwnerComposition } = await import("./driver-owner-composition.js");
 const safetyMode=process.env.SIM_ACCOUNT_ERASURE_AUTHORITY_MODE??"root_native_v1";
 if(!["root_native_v1","database_v2"].includes(safetyMode))throw new Error("Invalid SIM account-erasure authority mode");
-const databaseBinding=safetyMode==="database_v2"?await (await import("./database-erasure.js")).loadDatabaseDriverOwnerComposition():undefined;
-const ownerBinding = databaseBinding??await loadProductionDriverOwnerComposition();
+const databaseBinding=!clean&&safetyMode==="database_v2"?await (await import("./database-erasure.js")).loadDatabaseDriverOwnerComposition():undefined;
+const ownerBinding = clean?{driverMeasurements:clean.driverMeasurements,cleanLifecycle:clean.options}:databaseBinding??await loadProductionDriverOwnerComposition();
 const { app, context } = await createApp(config, ownerBinding);
+clean?.start();
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
-    void context.driverMeasurements.close().finally(()=>databaseBinding?.close()).finally(() => observability.shutdown()).finally(() => process.exit(0));
+    void (clean?clean.close():context.driverMeasurements.close()).finally(()=>databaseBinding?.close()).finally(() => observability.shutdown()).finally(() => process.exit(0));
   });
 }
 
