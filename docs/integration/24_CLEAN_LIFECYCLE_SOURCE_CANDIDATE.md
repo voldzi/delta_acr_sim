@@ -870,3 +870,17 @@ COMM close is still attempted when storage close raises. Targeted SIM suites
 (20 bootstrap,15 orchestration,3 parent,6 chain,6 Message,18 activation) pass.
 This is source/synthetic evidence, not successful production activation.
 Application images and the original acceptance report remain unchanged.
+
+The first supervised v4 run completed the public bootstrap but stopped at
+`RELEASE_PLAN_PARENT`, before the PG prompt/reset, because its fixed private
+control directory did not exist. Both peer removals, control shutdowns and key
+wipe were confirmed. A launcher-only resume prepares that exact new Root0700
+directory through held no-follow ancestry fds, without changing its UID1000
+runtime parent or siblings. Unknown/nonempty control directories are refused.
+The existing active runtime pointer is separately read as UID1000/GID1000 mode600
+with fd/path CAS, exact seven-field schema and actual container/image binding;
+Root-owned plan/proof readers remain strict. The original v4 manifest and sealed
+Root0555 bootstrap stay unchanged, so no new manifest is adopted over them.
+Six isolated prerequisite tests pass. Limited live read-only catalogue checks
+found the existing AI/driver roles and databases, and no new sim_user_data
+database or four sim_user_* installation roles. This is preflight evidence only.

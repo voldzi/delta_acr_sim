@@ -92,7 +92,7 @@ class Release(unittest.TestCase):
    def close(self):
     calls.append('storage-close')
     if close_failure:raise RuntimeError('SYNTHETIC_STORAGE_CLOSE_FAILED')
-  local={k:{'id':'a'*64,'image':'sha256:'+'b'*64} for k in ['csm-sim-api','csm-sim-ai-router-api','csm-sim-situation-data-api']}
+  local={k:{'id':'a'*64,'image':'sha256:'+'b'*64} for k in ['cop-cop-api-1','csm-sim-api','csm-sim-ai-router-api','csm-sim-situation-data-api']}
   def gate(images):
    calls.append('gate')
    if deny:raise RuntimeError('SYNTHETIC_GATE_DENIED')
@@ -111,7 +111,7 @@ class Release(unittest.TestCase):
   bootstrap={'sources':{k:{'root':'/synthetic/'+k,'files':{}} for k in ['cop','sim','messaging']},'dependencyImage':'synthetic-dependency'}
   manifest={'candidateImages':{},'storageProvider':{}}
   fake_stat=types.SimpleNamespace(st_mode=0o100600,st_nlink=1,st_dev=1,st_ino=2,st_uid=0,st_gid=0)
-  with patch.object(m,'load',side_effect=lambda path,name:modules[name]),patch.object(m,'node_prepare',side_effect=node),patch.object(m,'root_read',return_value=b'{}'),patch.object(pathlib.Path,'lstat',return_value=fake_stat),patch.object(pathlib.Path,'exists',return_value=False),patch.object(m,'publish_new',side_effect=lambda path,raw:published.append(raw)):
+  with patch.object(m,'load',side_effect=lambda path,name:modules[name]),patch.object(m,'node_prepare',side_effect=node),patch.object(m,'read_current_runtime_binding',return_value={}),patch.object(m,'root_read',return_value=b'{}'),patch.object(pathlib.Path,'lstat',return_value=fake_stat),patch.object(pathlib.Path,'exists',return_value=False),patch.object(m,'publish_new',side_effect=lambda path,raw:published.append(raw)):
    if deny or close_failure:
     with self.assertRaisesRegex(RuntimeError,'SYNTHETIC_GATE_DENIED'if deny else'SYNTHETIC_STORAGE_CLOSE_FAILED'):m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
    else:

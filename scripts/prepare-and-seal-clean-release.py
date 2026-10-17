@@ -9,6 +9,7 @@ from pathlib import Path
 HERE=Path(__file__).resolve().parent
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 BASE=Path('/srv/cop/runtime/clean-reset')
+RUNTIME_BINDING=Path('/srv/cop/runtime/api/active.json')
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 BOOTSTRAP_SHA='63db9fa0dd6c828ca7d384605539374525bd3e82bef94ea76a9db7937fe68678'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
@@ -39,6 +40,65 @@ def root_read(path,max_size=1048576):
   s=os.fstat(fd);need(stat.S_ISREG(s.st_mode) and s.st_uid==0 and s.st_nlink==1 and not s.st_mode&0o022 and s.st_size<=max_size,'RELEASE_ROOT_FILE_CUSTODY')
   b=os.read(fd,max_size+1);t=os.fstat(fd);need(len(b)==s.st_size and (s.st_ino,s.st_mtime_ns,s.st_ctime_ns)==(t.st_ino,t.st_mtime_ns,t.st_ctime_ns),'RELEASE_ROOT_FILE_CHANGED');return b
  finally:os.close(fd)
+def directory_identity(s):return (s.st_dev,s.st_ino,s.st_uid,s.st_gid,stat.S_IMODE(s.st_mode))
+def open_control_parent():
+ need(os.geteuid()==0 and socket.gethostname().split('.')[0]=='docker','RELEASE_CONTROL_ROOT_CONTEXT')
+ flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW;fds=[];chain=[]
+ try:
+  fd=os.open('/',flags);fds.append(fd);s=os.fstat(fd)
+  need(stat.S_ISDIR(s.st_mode)and s.st_uid==0 and not s.st_mode&0o022,'RELEASE_CONTROL_ANCESTRY')
+  chain.append((Path('/'),directory_identity(s)));path=Path('/')
+  for part in ['srv','cop','runtime']:
+   fd=os.open(part,flags,dir_fd=fds[-1]);fds.append(fd);s=os.fstat(fd);path/=part
+   need(stat.S_ISDIR(s.st_mode),'RELEASE_CONTROL_ANCESTRY')
+   if part=='srv':need(s.st_uid==0 and not s.st_mode&0o022,'RELEASE_CONTROL_ANCESTRY')
+   else:need((s.st_uid,s.st_gid,stat.S_IMODE(s.st_mode))==(1000,1000,0o755 if part=='cop'else 0o700),'RELEASE_CONTROL_PARENT_CUSTODY')
+   chain.append((path,directory_identity(s)))
+  return fds.pop(),chain
+ finally:
+  for fd in reversed(fds):os.close(fd)
+def check_control_parent(chain):
+ for path,expected in chain:
+  s=path.lstat();need(stat.S_ISDIR(s.st_mode)and directory_identity(s)==expected,'RELEASE_CONTROL_PARENT_CAS')
+def ensure_control_directory():
+ need(BASE==Path('/srv/cop/runtime/clean-reset'),'RELEASE_CONTROL_FIXED_SCOPE')
+ parent,chain=open_control_parent();child=None
+ def inventory():
+  out={}
+  for name in sorted(os.listdir(parent)):
+   if name==BASE.name:continue
+   s=os.stat(name,dir_fd=parent,follow_symlinks=False)
+   out[name]=(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+  return out
+ try:
+  check_control_parent(chain);before=inventory();created=BASE.name not in os.listdir(parent)
+  if created:os.mkdir(BASE.name,0o700,dir_fd=parent)
+  child=os.open(BASE.name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+  s=os.fstat(child)
+  need(stat.S_ISDIR(s.st_mode)and s.st_uid==0 and stat.S_IMODE(s.st_mode)==0o700 and not os.listdir(child),'RELEASE_CONTROL_DIRECTORY_CUSTODY')
+  if created:os.fchown(child,0,0);os.fchmod(child,0o700);os.fsync(child);os.fsync(parent)
+  after=os.fstat(child);path=os.stat(BASE.name,dir_fd=parent,follow_symlinks=False)
+  need(directory_identity(after)==directory_identity(path)and(after.st_uid,after.st_gid,stat.S_IMODE(after.st_mode))==(0,0,0o700),'RELEASE_CONTROL_DIRECTORY_CAS')
+  check_control_parent(chain);need(inventory()==before,'RELEASE_CONTROL_SIBLINGS_CHANGED')
+  return {'controlDirectoryPrepared':True,'created':created,'existingRuntimeUnchanged':True}
+ finally:
+  if child is not None:os.close(child)
+  os.close(parent)
+def read_current_runtime_binding(expected):
+ path=RUNTIME_BINDING;need(path.resolve()==path,'RELEASE_RUNTIME_POINTER_PATH')
+ parent=path.parent.lstat();need(stat.S_ISDIR(parent.st_mode)and(parent.st_uid,parent.st_gid,stat.S_IMODE(parent.st_mode))==(1000,1000,0o700),'RELEASE_RUNTIME_POINTER_PARENT')
+ fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+ try:
+  s=os.fstat(fd);need(stat.S_ISREG(s.st_mode)and(s.st_uid,s.st_gid,stat.S_IMODE(s.st_mode))==(1000,1000,0o600)and s.st_nlink==1 and s.st_size<=65536,'RELEASE_RUNTIME_POINTER_CUSTODY')
+  raw=os.read(fd,65537);t=os.fstat(fd);p=path.lstat()
+  need(len(raw)==s.st_size and(s.st_dev,s.st_ino,s.st_mtime_ns,s.st_ctime_ns)==(t.st_dev,t.st_ino,t.st_mtime_ns,t.st_ctime_ns)==(p.st_dev,p.st_ino,p.st_mtime_ns,p.st_ctime_ns),'RELEASE_RUNTIME_POINTER_CAS')
+ finally:os.close(fd)
+ value=json.loads(raw)
+ need(isinstance(value,dict)and set(value)=={'contractVersion','generation','releaseId','profileId','profileGeneration','imageId','containerId'}and value['contractVersion']=='cop-api-runtime-active-v1','RELEASE_RUNTIME_POINTER_SCHEMA')
+ need(isinstance(value['generation'],str)and re.fullmatch('[a-f0-9]{32}',value['generation'])and isinstance(value['releaseId'],str)and re.fullmatch('release-[a-f0-9]{32}',value['releaseId']),'RELEASE_RUNTIME_POINTER_SCHEMA')
+ need(isinstance(value['profileId'],str)and str(uuid.UUID(value['profileId']))==value['profileId']and value['profileGeneration']==value['profileId'],'RELEASE_RUNTIME_POINTER_SCHEMA')
+ need(value['containerId']==expected['id']and value['imageId']==expected['image']and re.fullmatch('[a-f0-9]{64}',value['containerId'])and re.fullmatch('sha256:[a-f0-9]{64}',value['imageId']),'RELEASE_RUNTIME_POINTER_ACTUAL_MISMATCH')
+ return value
 def pinned_public_module(path,digest,name):
  # Public setup files may belong to UID1000. Exact bytes, not ownership, pin
  # executable authority. Never import the path again after checking its hash.
@@ -177,7 +237,7 @@ def prepare_and_seal_clean_release(bootstrap,public_manifest,postgres_password,d
    'remoteWriters':{k:{'id':v['id'],'image':v['image']} for k,v in distant.items()},
    'producerInventorySha256':producer_sha,
    'operationLockMetadata':{'device':lock.st_dev,'inode':lock.st_ino,'uid':lock.st_uid,'gid':lock.st_gid,'mode':stat.S_IMODE(lock.st_mode)},
-   'runtimeBinding':json.loads(root_read(Path('/srv/cop/runtime/api/active.json'))),
+   'runtimeBinding':read_current_runtime_binding(local['cop-cop-api-1']),
    'operatorRuntime':{'root':str(TARGET),'imageId':bootstrap['dependencyImage'],'nodeSha256':'c8726a01ce4ac245ea9e5cb483992a90e628e5847d98f9a9f3be048d09a50d75','loaderSha256':'38d022ce7425ff105ccfb53598f606e6e5f5f0a34bfbc793d65e6f34c9d72806'},
    'candidateImages':public_manifest['candidateImages']}
   host._acceptance_module().verified_pre_stop_acceptance(plan['candidateImages'])
@@ -213,6 +273,7 @@ def main():
  else:bootstrap_module.check_transports()
  bootstrap=verify_bootstrap(a.manifest_sha256)
  cop=Path(bootstrap['sources']['cop']['root']);host=load(cop/'scripts/account-safety/clean-reset-root.py','release_early_root_gate')
+ ensure_control_directory()
  publish_acceptance_report(bootstrap_module,host,manifest)
  # Blocks before asking PG password when exact whole-provider GO is missing.
  host._acceptance_module().verified_pre_stop_acceptance(manifest['candidateImages'])
