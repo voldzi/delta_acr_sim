@@ -1,0 +1,34 @@
+{
+  "contractVersion": "sim-user-private-install-source-evidence-v1",
+  "date": "2026-10-17",
+  "runtimeRevision": "a337cfc1aa3dc8ef3fd49a84b6e2fb94a651ee4d",
+  "tests": {
+    "actualOwnedPostgresInstaller": 21,
+    "actualScramRuntimeLogin": true,
+    "actualRootAdmission": false,
+    "productionDatabaseWrites": 0,
+    "buildGuardPureTests": 8,
+    "pythonSyntax": "pass"
+  },
+  "serverPreparation": {
+    "humanExecutedRoot": true,
+    "failedCommand": "docker buildx inspect sim-x5 --format '{{json .}}'",
+    "cause": "installed Buildx inspect does not implement --format",
+    "recovery": "supported ls JSON checker; no repeat Root preparation",
+    "actualBuilder": "sim-x5",
+    "actualBuilderImage": "sha256:27933730df224df80c41f4e5a9b33fa78831a79fd31903df3bb7deb49363422f",
+    "restartPolicy": "no",
+    "cacheDeviceHost": 2065,
+    "cacheDeviceContainer": 2065,
+    "applicationImagesUnchanged": true,
+    "actualBuildStatus": "separately recorded after completion"
+  },
+  "buildHelperSha256": "4cc561fafdf6ebc7f5e95212fa5c8215f2cd789f2aa21ae42c0e09e09ff12e53",
+  "accountDeletionActivated": false,
+  "wholeAccountAcceptance": false,
+  "limitations": [
+    "Root source protocol and host writer controls are owned by COP and require combined actual acceptance",
+    "No secret value is included in this evidence or returned by installer",
+    "Private runtime environment map is in-process host-writer input only, never RPC stdout"
+  ]
+}

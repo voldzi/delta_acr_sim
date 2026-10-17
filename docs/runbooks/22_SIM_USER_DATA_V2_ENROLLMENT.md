@@ -102,6 +102,74 @@ new DB/guard enrollment and common twelve-component whole acceptance**, not
 another grant of general SIM access. None of these calls has been executed on
 production by the source preparation task.
 
+## Concrete private installer and build staging
+
+`scripts/lib/sim-user-data-private-install.mjs` exports
+`runSimUserInstall(config,{Pool,rootGate,assertWritersStopped})`. The Root Node24
+host bundle injects its actual pg Pool and live gate; no container privilege,
+host filesystem bind, environment credential or additional listener is needed.
+
+RAM-only config is `contractVersion: sim-user-private-install-v1`,
+`profile: production`, `phase: inspect|apply|readback`, the fixed manifest,
+resetEpoch/tokensNotBefore, connections `{admin,ai,guard}` (postgres,
+sim_ai_router, cop_account_safety_guard), credentials for the four named new
+roles, identities for both components, and their nine-field bindings.
+Production connections require postgres via haproxy.home.cz:5000 with a verified
+CA. `inspect` returns only counts/digests. Root seals its `planDigest` as
+`reviewedPlanDigests.sim_user_install`; `apply` additionally requires that exact
+reviewedPlan. Its outer gate context is exactly phase sim_user_install,
+planDigest, resetEpoch, tokensNotBefore. A single continuous Root lease encloses
+role/DB creation, schema install, finite SIM history reset and both target/guard
+enrollments; nested operations borrow it, never begin a second RPC lease.
+
+`readback` is called inside Root's already-held global readback lease with its
+live assertCurrent supplied as assertWritersStopped. It issues no nested begin.
+Readback requires empty old COP account/job/resource and request/key/audit lanes,
+the exact new AI/app catalogs, both actual restricted-role SQL authorities and
+the common epoch/cutoff. Failure leaves writers stopped. It does not complete
+global identity deletion or authorize reopening.
+
+Passwords are RAM input, set with SCRAM-SHA-256 under statement/parameter logging
+suppression on the same admin connection. No credential is returned. The
+PRIVATE in-process `privateSimRuntimeConfiguration(config,simRouterServiceToken)`
+returns only input for Root's secret-file writer (never RPC stdout or a log).
+Add config.serviceToken for the new dedicated COP adapter. All intake flags are
+false; migration credentials are excluded. The descriptor includes the exact
+read-only existing CA mount. Only the actual Root activation phase may change
+the flags after common acceptance.
+
+`node scripts/test-sim-user-private-install.mjs --run`: 21 actual owned PG18.3
+checks, including a SCRAM-authenticated runtime connection, denied DDL, one outer
+lease, fresh readback, preserved anonymous finance and absence of passwords from
+the actual PostgreSQL log. This is not actual Root/production acceptance.
+
+Build preparation is fixed to the already accepted runtime source a337cfc and
+does not change that application's code. `scripts/prepare-sim-clean-build.py
+--prepare` runs once as Root; `--build-only` then runs as voldzi. It creates only
+the dedicated sim-x5 builder, state bind volume, public read-only checkout and
+logs under `/srv/x5-production/cache/csm-sim/build/`. It checks UUID/device and
+headroom, existing pinned BuildKit, volume binding, restart=no, exact source bytes
+and unchanged running service CIDs/images. No prune, daemon/network change,
+application restart, .env update or database mutation. The existing Docker image
+store remains unchanged in location; loading candidate images still writes there.
+Current public web authentication parameters are preserved exactly (hybrid,
+the COP realm, csm-sim-web, public/token login disabled). Eight pure guard tests
+and Python syntax passed. The operator completed Root preparation; its final
+check exposed unsupported `buildx inspect --format` in the installed CLI.
+The fixed checker uses supported `buildx ls --format '{{json .}}'`, requires
+identical duplicate formatter rows, and confirms the actual container cache
+device equals X5. Preparation must not be repeated: the fixed `--build-only`
+continues without Root. All four candidate images were subsequently built and
+probed without changing any running service. Exact immutable identities and
+actual cache-device/web-image checks are recorded in
+`deploy/sim-user-data/candidate-images-a337cfc.json`; this is a staging receipt,
+not production activation or whole-account acceptance.
+
+The installer/public build helper revision is frozen separately from runtime
+revision a337cfc. Root must pin both, never label an older image with the newer
+installer revision. Candidate image identities and actual cache-device proof
+must be recorded before activation.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an

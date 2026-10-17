@@ -1,0 +1,33 @@
+{
+  "contractVersion": "sim-clean-candidate-images-v1",
+  "runtimeSourceRevision": "a337cfc1aa3dc8ef3fd49a84b6e2fb94a651ee4d",
+  "manifestSha256": "9f71d113ba47a7880fca6a7df76f7fefbca401c1791acb57f86969c1fdaed76e",
+  "images": {
+    "sim-api": "sha256:3715142fd72e3991a22b6208b387da425182b95753737867e42d6fb502a5ce4a",
+    "ai-router-api": "sha256:971638e9517f29dd94a4f19dad062831ba35f9ea2018807b4041906f1d47c1b5",
+    "situation-data-api": "sha256:adcc0e06476531d7270e406606bd10e46bf4c1cae350835db4099b68263a6025",
+    "sim-web": "sha256:fea1f5c2d508392a509486fb9b4881a5524936a32967748c52583640bad878f7"
+  },
+  "build": {
+    "builder": "sim-x5",
+    "cacheHostDevice": 2065,
+    "cacheContainerDevice": 2065,
+    "x5Uuid": "2f93f595-b61b-4eea-9054-7afa9b275b5b",
+    "scriptSha256": "4cc561fafdf6ebc7f5e95212fa5c8215f2cd789f2aa21ae42c0e09e09ff12e53",
+    "sourceRootReadOnly": true
+  },
+  "probes": {
+    "node24": 3,
+    "authoritySourceMatches": 2,
+    "actualRelayImport": true,
+    "candidateNginxSyntax": true,
+    "candidateNginxPrivate404": 4,
+    "existingWebPublicAuthenticationPreserved": true
+  },
+  "applicationContainersChanged": false,
+  "productionDatabaseChanged": false,
+  "productionSecretsChanged": false,
+  "serverBuildStateChanged": true,
+  "prune": false,
+  "wholeAccountAcceptance": false
+}
