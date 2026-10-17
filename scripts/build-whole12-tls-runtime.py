@@ -41,6 +41,8 @@ def extract_app(cid,destination):
             source=destination/link[4:]
             assert source.is_file() and source.resolve().is_relative_to(destination)
             shutil.copyfile(source,target)
+        for folder,dirs,_ in os.walk(destination,followlinks=False):
+            Path(folder).chmod(0o755)
     finally:
         if process.poll() is None:process.kill();process.wait()
 HASH_JS=r'''const f=require('fs'),c=require('crypto'),p=require('path');let out={};function scan(root,k){if(!f.existsSync(root))return;for(const n of f.readdirSync(root).sort()){let a=p.join(root,n),b=p.join(k,n),s=f.lstatSync(a);if(s.isDirectory())scan(a,b);else if(s.isFile())out[b]=c.createHash('sha256').update(f.readFileSync(a)).digest('hex');}}for(const n of ['apps','packages','deploy','openapi','docs/api/schemas'])scan(process.argv[1]+'/'+n,n);console.log(JSON.stringify(out));'''
