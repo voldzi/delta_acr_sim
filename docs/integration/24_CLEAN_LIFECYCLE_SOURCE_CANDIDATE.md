@@ -501,3 +501,32 @@ migration changed between the pinned runtime and these probes. Fixture TLS,
 preparation and verification differ; fresh956 has no original SIM content
 snapshot, so recovery under its identities/TLS is explicitly not proven. The
 historical recovery must not be relabeled as a fresh956 restore or whole COP GO.
+
+### Concrete pre-freeze common Root factory (source only)
+
+`scripts/lib/prepare-common-root-private.mjs` exports
+`prepareCommonRootPrivateConfig({postgresPassword,resetEpoch,tokensNotBefore,
+environmentId,guardStoreId})`. The sealed parent Root Node24 process calls it
+before freeze and before publishing the final PLAN. The COP source is fixed to
+`/srv/x5-production/staging/cop/clean-operator-2e61857/app`; the caller verifies
+enrolled source hashes before import, and the factory additionally requires
+root-owned nonwritable canonical source paths. It reads the Keycloak worker
+identity only from the protected `/srv/cop/.env`; provisioning is not performed.
+
+The returned object has **private** `privateConfig` (RAM/parent private pipe only)
+and a safe `publicSummary` containing seven plan digests, not secrets or rows.
+The six actual inspectors cover COP SQL, AI SQL, driver SQL, reset files, SIM app
+files and Keycloak. SIM private-install inspection supplies the seventh plan.
+AI/driver use exact SET ROLE and read-only sessions; Keycloak performs its actual
+inventory via the existing inspector. All pools close on failure. There is no
+apply/stop/freeze dispatcher, public endpoint, automatic CLI or secret file output.
+
+COP must still add its actual `cop_safety_install` and Python `messaging`, `media`,
+`edge` plans. `completeForFreeze` remains false: no placeholder is supplied. Parent
+must not print the private return value or raw errors, must preserve credentials
+only in RAM, and must review all actual digests before sealing the final PLAN.
+Existing apply modules revalidate drift under the actual held Root admission;
+these preparation results never authorize mutation by themselves. The production
+factory has not been executed. Twenty-four synthetic adapter checks cover plan
+composition, secret-free public output, missing/invalid plans, failure propagation,
+epoch mismatch and rejection of apply mode; they are not real provider evidence.
