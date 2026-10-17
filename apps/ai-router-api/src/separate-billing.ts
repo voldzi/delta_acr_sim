@@ -28,6 +28,7 @@ export interface SeparateBilling {
 }
 
 export class PgSeparateBilling implements SeparateBilling {
+  cleanLifecycleEnabled=false;
   private readonly encryptionKey: Buffer;
   constructor(private readonly pool: pg.Pool, encodedKey: string, private readonly accountErasure?: AccountErasureGate) {
     this.encryptionKey = Buffer.from(encodedKey, "base64");
@@ -167,7 +168,7 @@ export class PgSeparateBilling implements SeparateBilling {
         COALESCE(SUM(record_count),0) AS month_count,
         COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_input,
         COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_output
-       FROM ai_router_billing_usage WHERE created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+       FROM ${this.cleanLifecycleEnabled ? 'sim_clean.billing_usage' : 'ai_router_billing_usage'} WHERE created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
        GROUP BY billing_source`
     );
     const empty = () => ({ dailyMicrousd: 0, monthlyMicrousd: 0, dailyRequests: 0, monthlyRequests: 0, dailyInputTokens: 0, dailyOutputTokens: 0 });

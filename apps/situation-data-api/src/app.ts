@@ -1,4 +1,5 @@
 import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
+import {registerCleanLifecycle} from "../../../packages/clean-lifecycle/http.mjs";
 import cors, { type CorsOptions } from "cors";
 import express, { type Express, type Request, type Response, type RequestHandler } from "express";
 import { SituationAggregationService } from "./aggregation.js";
@@ -61,7 +62,7 @@ export interface SituationDataAppContext {
   driverMeasurements: DriverRetentionControl;
 }
 
-export async function createApp(config: SituationDataConfig, dependencies?: { driverMeasurements?: DriverMeasurementDependencies; driverScopeMiddleware?: RequestHandler }): Promise<{ app: Express; context: SituationDataAppContext }> {
+export async function createApp(config: SituationDataConfig, dependencies?: { driverMeasurements?: DriverMeasurementDependencies; driverScopeMiddleware?: RequestHandler; cleanLifecycle?:import("../../../packages/clean-lifecycle/http.mjs").CleanLifecycleOptions }): Promise<{ app: Express; context: SituationDataAppContext }> {
   const sources = createSituationDataSources(config);
   const sharedCache = await createSharedResponseCacheStore(config);
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
@@ -99,9 +100,10 @@ export async function createApp(config: SituationDataConfig, dependencies?: { dr
 
   const traceRequest=createHttpRequestTracingMiddleware("csm-sim-situation-data-api");
   // This privacy-sensitive route exports no caller headers, IP or query string.
-  app.use((req,res,next)=>req.path.startsWith("/api/v1/internal/driver-measurements/") ? next() : traceRequest(req,res,next));
+  app.use((req,res,next)=>(req.path.startsWith("/api/v1/internal/driver-measurements/")||req.path.startsWith("/api/v1/internal/user-lifecycle/")) ? next() : traceRequest(req,res,next));
   app.use(cors(createCorsOptions(config.corsOrigins)));
   app.use(express.json({ limit: "1mb" }));
+  if(dependencies?.cleanLifecycle) registerCleanLifecycle(app,dependencies.cleanLifecycle);
   // Scope only carries the two exact typed mutations in memory. The fixed
   // production module excludes batch/GPS bodies and does not replace handler
   // authentication, validation, Root admission or generation/maintenance leases.

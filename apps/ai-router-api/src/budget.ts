@@ -23,6 +23,7 @@ export class BudgetError extends Error {
 }
 
 export class BudgetStore {
+  cleanLifecycleEnabled=false;
   readonly pool: pg.Pool;
   accountErasure?: AccountErasureGate;
   constructor(
@@ -150,7 +151,7 @@ export class BudgetStore {
           COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_total,
           COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS month_total,
           COALESCE(SUM(record_count) FILTER (WHERE user_hash = $1 AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS user_count
-        FROM ai_router_budget_usage
+        FROM ${this.cleanLifecycleEnabled ? 'sim_clean.router_usage' : 'ai_router_budget_usage'}
         WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
       `,
         [userHash]
@@ -195,7 +196,7 @@ export class BudgetStore {
         COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_output,
         COALESCE(SUM(input_tokens), 0) AS month_input,
         COALESCE(SUM(output_tokens), 0) AS month_output
-      FROM ai_router_budget_usage WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      FROM ${this.cleanLifecycleEnabled ? 'sim_clean.router_usage' : 'ai_router_budget_usage'} WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
     `);
     const row = result.rows[0]!;
     return {

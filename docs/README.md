@@ -105,6 +105,10 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Machine-Readable API Contract
 
+Source-only clean lifecycle proposal and isolated DB evidence:
+[`integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md`](integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md),
+[`adr/0041_ISOLATED_CLEAN_LIFECYCLE.md`](adr/0041_ISOLATED_CLEAN_LIFECYCLE.md).
+
 The binding API contract is:
 
 ```text

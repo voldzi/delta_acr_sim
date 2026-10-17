@@ -73,6 +73,334 @@
     }
   ],
   "paths": {
+    "/api/v1/ai-router/internal/user-lifecycle/v1/deletions": {
+      "post": {
+        "operationId": "cleanLifecycle_requestCleanRouterDeletion",
+        "summary": "Source-only isolated durable component deletion; not production enabled",
+        "security": [
+          {
+            "CleanService": [
+
+            ],
+            "CleanActor": [
+
+            ],
+            "CleanSignature": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanLifecycleDeletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Component already deleted; not whole-account completion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable component fence/job committed; deletion remains pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service token or distinct signed actor invalid"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, fenced, missing epoch or database unavailable"
+          }
+        },
+        "tags": [
+          "Isolated Clean Lifecycle: Isolated Clean Lifecycle"
+        ]
+      }
+    },
+    "/api/v1/ai-router/internal/user-lifecycle/v1/deletions/{operationId}": {
+      "get": {
+        "operationId": "cleanLifecycle_getCleanRouterDeletion",
+        "summary": "Read signed owner router component deletion status",
+        "security": [
+          {
+            "CleanService": [
+
+            ],
+            "CleanActor": [
+
+            ],
+            "CleanSignature": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticated owner's component state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Operation mismatch"
+          },
+          "401": {
+            "description": "Invalid service/actor"
+          },
+          "404": {
+            "description": "No operation for signed owner"
+          },
+          "503": {
+            "description": "Disabled or unavailable"
+          }
+        },
+        "tags": [
+          "Isolated Clean Lifecycle: Isolated Clean Lifecycle"
+        ]
+      }
+    },
+    "/situation-data/api/v1/internal/user-lifecycle/v1/deletions": {
+      "post": {
+        "operationId": "cleanLifecycle_requestCleanDriverDeletion",
+        "summary": "Source-only driver component; same strict contract, separate database",
+        "security": [
+          {
+            "CleanService": [
+
+            ],
+            "CleanActor": [
+
+            ],
+            "CleanSignature": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanLifecycleDeletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Component already deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable pending fence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid strict envelope"
+          },
+          "401": {
+            "description": "Invalid service/actor"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled or unavailable"
+          }
+        },
+        "tags": [
+          "Isolated Clean Lifecycle: Isolated Clean Lifecycle"
+        ]
+      }
+    },
+    "/situation-data/api/v1/internal/user-lifecycle/v1/deletions/{operationId}": {
+      "get": {
+        "operationId": "cleanLifecycle_getCleanDriverDeletion",
+        "summary": "Read signed owner driver component deletion status",
+        "security": [
+          {
+            "CleanService": [
+
+            ],
+            "CleanActor": [
+
+            ],
+            "CleanSignature": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed owner's driver component status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Operation mismatch"
+          },
+          "401": {
+            "description": "Invalid service/actor"
+          },
+          "404": {
+            "description": "No operation for signed owner"
+          },
+          "503": {
+            "description": "Disabled or unavailable"
+          }
+        },
+        "tags": [
+          "Isolated Clean Lifecycle: Isolated Clean Lifecycle"
+        ]
+      }
+    },
+    "/api/v1/ai-router/internal/user-lifecycle/v1/capabilities": {
+      "get": {
+        "operationId": "cleanLifecycle_getCleanRouterCapability",
+        "summary": "Read-only isolated readiness using service authentication without actor",
+        "security": [
+          {
+            "CleanService": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DB epoch, trigger/read access and configured worker verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleCapability"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Service authentication failed"
+          },
+          "503": {
+            "description": "Disabled, stopped worker, mismatched epoch, missing DB access or views",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleCapability"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Isolated Clean Lifecycle: Isolated Clean Lifecycle"
+        ]
+      }
+    },
+    "/situation-data/api/v1/internal/user-lifecycle/v1/capabilities": {
+      "get": {
+        "operationId": "cleanLifecycle_getCleanDriverCapability",
+        "summary": "Read-only isolated readiness using service authentication without actor",
+        "security": [
+          {
+            "CleanService": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DB epoch, trigger/read access and configured worker verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleCapability"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Service authentication failed"
+          },
+          "503": {
+            "description": "Disabled, stopped worker, mismatched epoch, missing DB access or views",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanLifecycleCapability"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Isolated Clean Lifecycle: Isolated Clean Lifecycle"
+        ]
+      }
+    },
     "/api/v1/scenarios": {
       "get": {
         "tags": [
@@ -8180,6 +8508,117 @@
               }
             },
             "additionalProperties": true
+          }
+        }
+      },
+      "CleanLifecycleDeletionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "scope",
+          "resetEpoch",
+          "operationId",
+          "requestedAt"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-lifecycle-v1"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CleanLifecycleReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "scope",
+          "resetEpoch",
+          "operationId",
+          "state",
+          "component",
+          "wholeAccountComplete"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-lifecycle-v1"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "enum": [
+              "deletion_pending",
+              "deleted"
+            ]
+          },
+          "component": {
+            "enum": [
+              "ai",
+              "driver"
+            ]
+          },
+          "wholeAccountComplete": {
+            "const": false
+          }
+        }
+      },
+      "CleanLifecycleCapability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "scope",
+          "resetEpoch",
+          "component",
+          "ready",
+          "wholeAccountComplete"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-lifecycle-v1"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "component": {
+            "enum": [
+              "ai",
+              "driver"
+            ]
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "wholeAccountComplete": {
+            "const": false
           }
         }
       },
@@ -24966,6 +25405,21 @@
       }
     },
     "securitySchemes": {
+      "CleanService": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "CleanActor": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-cop-clean-actor",
+        "description": "Distinct audience sim-clean-lifecycle-v1; exact claims and signing procedure in integration contract 24. Not the legacy actor assertion."
+      },
+      "CleanSignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-cop-clean-actor-signature"
+      },
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer"

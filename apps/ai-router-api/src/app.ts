@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import {registerCleanLifecycle,type CleanLifecycleOptions} from "../../../packages/clean-lifecycle/http.mjs";
 import express, { type Request, type Response } from "express";
 import { BudgetError, BudgetStore, type RouterPolicy } from "./budget.js";
 import { copModelPrompt, validCopContext } from "./cop-context.js";
@@ -147,7 +148,7 @@ async function callLocal(config: Config, prompt: string, maxOutputTokens: number
   throw new Error("local_model_unavailable");
 }
 
-export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling, erasure?: AccountErasureStore) {
+export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling, erasure?: AccountErasureStore, cleanLifecycle?:CleanLifecycleOptions) {
   if (erasure) store.accountErasure = erasure;
   const app = express();
   app.disable("x-powered-by");
@@ -156,6 +157,7 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     res.setHeader("Cache-Control", "no-store");next();
   });
   app.use(express.json({ limit: "32kb" }));
+  if(cleanLifecycle) registerCleanLifecycle(app,cleanLifecycle);
   app.get("/health/live", (_req, res) => res.json({ status: "ok" }));
   app.get("/health/ready", async (_req, res) => {
     try {

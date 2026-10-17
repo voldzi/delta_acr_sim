@@ -6,6 +6,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY packages/observability ./packages/observability
 COPY apps/situation-data-api ./apps/situation-data-api
+COPY packages/clean-lifecycle ./packages/clean-lifecycle
 COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/database-erasure-guard.d.mts deploy/account-safety/driver-report-files.mjs ./deploy/account-safety/
 COPY openapi/fragments/road-trip-v1.schemas.json ./openapi/fragments/road-trip-v1.schemas.json
 COPY openapi/fragments/known-road-closures.schema.json ./openapi/fragments/known-road-closures.schema.json
@@ -21,6 +22,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=build /app/packages/observability ./packages/observability
 COPY --from=build /app/apps/situation-data-api ./apps/situation-data-api
+COPY --from=build /app/packages/clean-lifecycle ./packages/clean-lifecycle
 COPY --from=build /app/deploy/account-safety ./deploy/account-safety
 COPY --from=build /app/openapi ./openapi
 RUN find /app -name node_modules -type d -prune -exec rm -rf {} +

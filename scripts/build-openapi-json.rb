@@ -11,6 +11,13 @@ OUTPUT = File.join(ROOT, "openapi", "openapi.json")
 
 SPECS = [
   {
+    key: "cleanLifecycle",
+    prefix: "CleanLifecycle",
+    tag_prefix: "Isolated Clean Lifecycle",
+    file: "openapi/fragments/clean-lifecycle-v1.openapi.json",
+    path_prefix: ""
+  },
+  {
     key: "simulator",
     prefix: "Simulator",
     tag_prefix: "Simulator",
