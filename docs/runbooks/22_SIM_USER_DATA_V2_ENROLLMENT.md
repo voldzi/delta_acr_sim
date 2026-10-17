@@ -210,6 +210,51 @@ local orchestration behavior only, not the actual whole-twelve-owner recovery
 test or production completion. The runtime images remain revision a337cfc;
 coordinator/installer source is versioned separately.
 
+## Actual whole12 SIM companion (isolated only)
+
+`scripts/fixtures/clean-whole12-sim-companion.mjs` exports
+`createWhole12SimCompanion(db)`, where `db` must come from the existing owned
+PostgreSQL factory, not an arbitrary connection URL. `seed(A,B,issuer,jwksOrigin)`
+provisions the fresh restricted runtime roles and starts actual compiled main,
+Router and driver HTTP handlers. It creates scenarios/drafts through actual
+OIDC-authenticated requests, and driver/Router records through existing actual
+fixture handlers. The model and road matcher remain explicitly synthetic;
+external-provider access is forbidden. No production runtime code changed.
+
+Each actor is `{subjectId,routerUserId,contributorIdDay,oidcIat,jwt}`. Root must
+supply real isolated Keycloak `cop-web` JWTs with `SIM_ADMIN` and original iat;
+the companion never mints JWTs. Fixed logical issuer:
+`https://cop-erasure-keycloak.invalid/realms/cop`; JWKS is restricted to
+`http://127.0.0.1:<isolated-kc-port>/realms/cop/protocol/openid-connect/certs`.
+The shared network namespace has no published ports. Main/Router/driver use
+4314/4312/4311; authenticated aggregate readbacks use 4324/4322/4321. The new
+4324 endpoint requires the private base COP service token, accepts only GET
+`/readback`, rejects Origin and returns 503 when a required service is stopped.
+
+The returned seed configuration is **private RAM**, not a report. Root may
+transport it only through owned mode-0600 private files/tmpfs; never Docker
+environment, argv, logs or Git. `readPrivateCompanionInput` checks regular-file,
+single-link, ownership, size and mode before reading. `read()` returns SQL/file
+counts and fingerprints, including SIM Router history; no row payloads or
+secrets leave it. `outage('main'|'ai'|'driver')` actually closes that service;
+`recover(lane)` restarts it against the same stored data. `close()` stops all
+companion listeners and pools, but does not stop the owned database.
+
+Important evidence boundary: current compiled `createOwnedSimulatorApp` and
+`loadSimHistory` expose no test injection for their production continuity
+factory. Their isolated mode does not attach production independent authority;
+production mode requires the unchanged fixed HAProxy/TLS transport. Companion
+readbacks therefore explicitly state `productionContinuityAttached:false` and
+`wholeAccountComplete:false`. Separate actual SQL authority tests do not turn
+this into production-authority HTTP end-to-end evidence. Root must keep this
+limitation visible and must not fabricate whole12 acceptance from it.
+
+`node scripts/test-whole12-sim-companion.mjs --run` uses actual owned PG18.3,
+actual compiled handlers and a synthetic RSA/JWKS issuer, not actual Keycloak.
+It tests private input custody, issuer refusal, two account seeds, authenticated
+readback, actual outage/503/restart and preserved B history. Real Keycloak and
+the remaining whole12 providers are the separate shared acceptance step.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an
