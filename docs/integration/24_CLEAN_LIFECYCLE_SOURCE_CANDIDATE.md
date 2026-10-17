@@ -66,18 +66,18 @@ NOT COP/Keycloak/Messaging whole-service acceptance or deployment evidence.
 
 Only aggregate counts were read in READ ONLY transactions; no identities/values.
 
-| Store | Count | Proposed reset classification |
-| --- | ---: | --- |
-| ai_router_request | 23: 20 COP, 3 other | COP user history; other lane excluded from per-account COP cleanup |
-| ai_router_user_key / user_key_audit / billing_request | 0 / 0 / 0 | user data |
-| ai_router_account_erasure / erased_cost_daily | 0 / 0 | old protocol state; do not enroll as new operations |
-| ai_router_policy / policy_audit | 1 / 6 | PRESERVE configuration |
-| driver receipts / intervals / ETA | 0 / 0 / 0 | user measurement data |
-| driver_measurement_revocations | 6 | user measurement tombstones; reset only with epoch/writer gate |
-| driver_account_erasure_state / operations / revocations | 1 / 0 / 0 | old protocol state; no new-scope migration by inference |
-| sim-store scenarios / drafts | 11 / 4 | shared test scenario artifacts, no account ownership in existing JSON |
-| publisher queue items | 0 | shared synthetic publisher state |
-| geo-routing precomputed | 912 files, 8,485,677 bytes | generated routes; no reliable per-user link in existing store |
+| Store                                                   |                      Count | Proposed reset classification                                         |
+| ------------------------------------------------------- | -------------------------: | --------------------------------------------------------------------- |
+| ai_router_request                                       |        23: 20 COP, 3 other | COP user history; other lane excluded from per-account COP cleanup    |
+| ai_router_user_key / user_key_audit / billing_request   |                  0 / 0 / 0 | user data                                                             |
+| ai_router_account_erasure / erased_cost_daily           |                      0 / 0 | old protocol state; do not enroll as new operations                   |
+| ai_router_policy / policy_audit                         |                      1 / 6 | PRESERVE configuration                                                |
+| driver receipts / intervals / ETA                       |                  0 / 0 / 0 | user measurement data                                                 |
+| driver_measurement_revocations                          |                          6 | user measurement tombstones; reset only with epoch/writer gate        |
+| driver_account_erasure_state / operations / revocations |                  1 / 0 / 0 | old protocol state; no new-scope migration by inference               |
+| sim-store scenarios / drafts                            |                     11 / 4 | shared test scenario artifacts, no account ownership in existing JSON |
+| publisher queue items                                   |                          0 | shared synthetic publisher state                                      |
+| geo-routing precomputed                                 | 912 files, 8,485,677 bytes | generated routes; no reliable per-user link in existing store         |
 
 Read-only paths: `/srv/x5-production/data/csm-sim/sim-data` (sim-store.json,
 publisher-queue.json, sim-audit.jsonl exists); situation path
@@ -225,10 +225,118 @@ these routes over loopback using the real isolated DB, not mocked persistence.
 
 ## Deployment gates
 
+### New whole-composition fixture, not CF24
+
+`scripts/fixtures/clean-whole-sim-v1.mjs` is a NEW public source composition
+with contract `cop-sim-clean-whole-fixture-v1`. It does not rename, import or
+modify the historical `whole-erasure-sim-fixture.*` or their receipts.
+It uses actual compiled AI/driver bootstraps and app factories, fresh restricted
+runtime/migration roles, actual ordinary handlers, clean worker timers and
+PostgreSQL. Only the model and road matcher are synthetic loopback fixtures.
+Driver data remains `shadow_only`. No external OpenAI request is enabled.
+
+The fixed issuer is `https://cop-erasure-keycloak.invalid/realms/cop`, belonging
+to a NEW isolated Root-owned Keycloak namespace. Root must supply the two actual
+synthetic subjects and stable opaque IDs; this composition does not create,
+delete, inspect or recreate Keycloak identities and cannot prove global identity
+erasure. It never seeds an A-linked `sim` identity/key and does not reuse the
+old preserve-SIM-identity assertion as evidence for shared identity deletion.
+
+Root calls `makeCleanWholeInput({actors,tokensNotBefore,environmentId,resetEpoch})`
+on the fixture server. `actors` has exactly `a` and `b`, each with
+`subjectId` (canonical UUID), `routerUserId` (`cop_` plus 43 base64url characters),
+`contributorIdDay` (32–128 opaque characters) and original verified `oidcIat`.
+Each original iat must be strictly after `tokensNotBefore`; the fixture never
+substitutes its current time for the original authentication iat. Other
+synthetic credentials are generated in process memory. No real API key is used.
+Do not transfer a private input from the Mac or between old fixtures. The common
+Root controller owns any necessary private server-side IPC and tmpfs custody.
+
+The input has exact top-level keys `contractVersion`, `fixtureOwner`, `issuer`,
+`environmentId`, `resetEpoch`, `tokensNotBefore`, `actors`, `environment`.
+`fixtureOwner` is exactly `cop-sim-clean-whole-20261017`. `environment` has exactly
+`copServiceToken`, `driverHashSecret`, `driverActorSecret`, `routerHashSecret`,
+`routerActorSecret`, `routerEncryptionKey` (base64 32 bytes), `routerSimToken`,
+`routerAdminToken`. All are distinct, synthetic, private and at least 32 chars.
+Root must bind these same values to its real server-side adapters; do not patch
+or override an adapter to bypass the normal clean actor headers or auth.
+
+Server CLI requires `NODE_ENV=test` and
+`SIM_CLEAN_WHOLE_FIXTURE_OWNER=cop-sim-clean-whole-20261017`, a UID-owned 0700
+`/fixture-clean` and single-link 0600 `/fixture-clean/private.json`. Root
+generates that file on the server's private tmpfs, not via a local private-file
+courier. Copy only public source and the ten `SQL_PINS` files to `/fixture-clean`.
+Use immutable reviewed SIM images containing compiled bootstrap/app and
+`packages/clean-lifecycle`; the outer Root controller verifies image/source
+identity, container ownership, network namespace and lack of public ports and
+production mounts. This component is not that host/controller evidence.
+
+The ONLY server DB tuple is loopback `127.0.0.1:5432`, administrator
+`owned_fixture_admin`, `cluster_name=cop_clean_whole_fixture_v1`,
+`data_directory=/var/lib/postgresql/cop-clean-whole-v1`. The provisioner refuses
+existing SIM DBs/roles and any unpinned SQL before creating anything. It creates
+only `sim_ai_router`/`sim_driver_measurements` and the four corresponding
+migrator/runtime roles, no shared guard or Keycloak schema. Runtime has no DDL,
+role privileges or table ownership; actual capability and negative DDL checks
+are required. Source migrations are the fresh base schemas, clean001–006 and
+the driver's exact ETA contributor-binding migration008. Historical guards or
+operations are not removed to pass this fixture.
+
+Public entrypoint (never run against production):
+
+```text
+node /fixture-clean/scripts/fixtures/clean-whole-sim-v1.mjs provision
+node /fixture-clean/scripts/fixtures/clean-whole-sim-v1.mjs serve driver
+node /fixture-clean/scripts/fixtures/clean-whole-sim-v1.mjs serve ai
+```
+
+`serve` starts the actual factory, seeds only the two synthetic users through
+actual driver batch/local AI generate handlers and signals `listening-and-seeded`
+after success. Fake encrypted keys and billing are seeded with the actual
+SeparateBilling methods, not the external key-validation endpoint. Automatic
+deletion uses the unchanged 15-second clean worker interval, with no extra
+tick/complete HTTP endpoint. Exported `startCleanWholeComponent` also returns
+`close()` for an in-process common controller. Failures are generic and do not
+print private input or bodies. Partial setup is not auto-adopted or reset;
+discard that owned test environment and make a new one.
+
+| Component | Actual API (loopback only)                                                      | Readback (loopback only) |
+| --------- | ------------------------------------------------------------------------------- | ------------------------ |
+| Driver    | `4311`, `/api/v1/internal/user-lifecycle/v1/{capabilities,deletions}`           | `4321/readback`          |
+| AI        | `4312`, `/api/v1/ai-router/internal/user-lifecycle/v1/{capabilities,deletions}` | `4322/readback`          |
+
+Readback is exact GET `/readback` with the synthetic service bearer token;
+missing/incorrect token is 401, any other path, query, method or Origin is 404,
+and an unavailable/busy reader is 503. Replies are `Cache-Control: no-store`.
+Contract is `cop-clean-whole-readback-v1`, with exact reset epoch, shared scope,
+mode `isolated-clean-lifecycle-v1`, component and one `owners` entry:
+`sim_measurements` or `ai_router`. Its `removableA`, `removableB`, `stateA`,
+`stateB`, typed `countsA`/`countsB` and `preservedBFingerprint` come from real
+runtime-role SQL readback. No request-supplied identity, SQL or target selects
+the readback. Expected fresh totals are AI 4/4 (key, key audit, request, billing)
+and driver 4/4 (receipt, two intervals, ETA); after A deletion, A is zero/deleted
+and B remains four/active with the same byte-derived row fingerprint.
+Only counts/digests/states leave the process; no subjects, pseudonyms, raw GPS,
+keys, encrypted blobs or request content. `wholeAccountComplete`,
+`wholeCopAccepted` and `productionChanged` are always false.
+
+`node scripts/test-clean-whole-sim-v1.mjs --run` creates its own local 0700 Unix
+PG fixture, not a server deployment. The socket and data directory must belong
+to that exact generated path. It validates the actual two simultaneous
+bootstraps, ordinary writes, auth/iat/scope rejection, strict readback, automatic
+workers, A removal/B preservation and absence of raw positions/external calls.
+This cannot replace the Root whole test of actual Keycloak deletion, immutable
+original principal, native/Messaging erasure, independent journal/replay,
+restore quarantine or the shared controller's real writer custody.
+
 Root owns the finite combined reset plan, writer stop, identity/roles cleanup and
-deployment approval. No live reset SQL is supplied by this candidate. Do not use
-it on existing stores or remove old guard state to obtain GO. Fresh namespace must
-be enrolled explicitly; restoration of an old epoch must remain quarantined.
+deployment approval. This fixture does not execute a live reset and must never
+adopt existing stores or remove guards to obtain GO. Separately reviewed reset
+operator source and its exact known-guard transition are described in
+[runbook 21](../runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md); neither this fixture
+nor its successful component test constitutes permission to execute that step.
+Fresh namespace must be enrolled explicitly; restoration of an old epoch must
+remain quarantined.
 Production acceptance must cover completion receipts for both stores,
 report-cache invalidation, independent same-epoch restore/replay proof,
 and bounded handling of shared scenario/routes not currently linked to accounts.

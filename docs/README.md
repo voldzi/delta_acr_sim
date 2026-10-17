@@ -22,6 +22,7 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [Nová clean whole SIM kompozice: 106 skutečných lokálních PG/HTTP kontrol, nikoliv celková akceptace COP](archive/2026-10-17_SIM_CLEAN_WHOLE_COMPONENT.json)
 - [Runbook 21: konečný clean reset scope a izolované důkazy, bez produkčního spuštění](runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md)
 - [ADR 0043: atomický přechod přesně známých COP guards](adr/0043_ATOMIC_KNOWN_GUARD_RESET.md)
 - [ADR 0039: hranice mazání COP/Jízdy při zachování SIM](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md)

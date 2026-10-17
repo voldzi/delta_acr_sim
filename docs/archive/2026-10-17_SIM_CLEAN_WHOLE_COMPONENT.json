@@ -1,0 +1,59 @@
+{
+  "contractVersion": "cop-sim-clean-whole-fixture-v1",
+  "readbackContract": "cop-clean-whole-readback-v1",
+  "observedDate": "2026-10-17",
+  "stage": "new_source_and_owned_postgres_http_component_only",
+  "sourceSha256": {
+    "scripts/fixtures/clean-whole-sim-v1.mjs": "e6e05c602edadcf29930f7a3c9a3005efdf4c636356904bc1ef30bd97b3e92b7",
+    "scripts/test-clean-whole-sim-v1.mjs": "3b36189d5f5056f16a7cff8633f01ecb5660f205b5839a8adb0d0b2e4cfcc0f5"
+  },
+  "component": {
+    "node": "24.21.0",
+    "pnpm": "10.33.0",
+    "postgres": "18.3",
+    "command": "node scripts/test-clean-whole-sim-v1.mjs --run",
+    "checksPassed": 106,
+    "checksFailed": 0,
+    "actualCompiledBootstraps": 2,
+    "actualAutomaticWorkers": 2,
+    "restrictedRuntimeRoles": 2,
+    "actualPostgres": true,
+    "databaseTransport": "new owned local UNIX socket, no TCP listener",
+    "httpTransport": "ephemeral loopback-only ports, actual application handlers and authenticated readback",
+    "mode": "isolated-clean-lifecycle-v1",
+    "scope": "cop_sim_shared_identity_v1",
+    "issuer": "https://cop-erasure-keycloak.invalid/realms/cop",
+    "seed": "AI actual local-generate handler and actual SeparateBilling methods; driver actual batch handler and synthetic matcher",
+    "driverMode": "shadow_only",
+    "initialRemovableCounts": { "ai": { "a": 4, "b": 4 }, "driver": { "a": 4, "b": 4 } },
+    "afterAutomaticDeletion": { "a": "deleted, zero linked rows in both lanes", "b": "active, all original row fingerprints unchanged" },
+    "originalOidcIatAndEpochChecked": true,
+    "readbackOnlyCountsStatesDigests": true,
+    "privateFixtureTransferred": false,
+    "sourceRowsCopied": false,
+    "externalProviderAttempts": 0,
+    "rawGpsPersisted": false,
+    "productionWrites": 0,
+    "oldCf24FixturesChanged": false,
+    "ownedClusterRemoved": true
+  },
+  "repositoryChecks": {
+    "typecheck": "passed",
+    "tests": { "passed": 873, "skipped": 6 },
+    "build": "passed",
+    "skeleton": "passed",
+    "openapi": { "status": "passed", "paths": 157, "schemas": 277 },
+    "chromaReindex": "unavailable: retrieval restricted to projects selected in app"
+  },
+  "acceptanceBoundary": {
+    "actualDockerImagesBuiltHere": false,
+    "serverFixtureStartedHere": false,
+    "realRootWriterCustodyTested": false,
+    "keycloakIdentityDeletionTested": false,
+    "messagingOrNativeProviderAccepted": false,
+    "independentJournalRestoreReplayAccepted": false,
+    "wholeAccountComplete": false,
+    "wholeCopAccepted": false,
+    "productionChanged": false
+  }
+}
