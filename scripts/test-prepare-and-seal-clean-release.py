@@ -4,6 +4,23 @@ from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'prepare-and-seal-clean-release.py'
 s=importlib.util.spec_from_file_location('release',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Release(unittest.TestCase):
+ def test_original_error_survives_cleanup_error_without_secret_text(self):
+  def action():raise RuntimeError('ROOT_TEMP_COMM_KEY_PAIR')
+  with patch.object(m,'cleanup_temporary_transport',side_effect=RuntimeError('RELEASE_TEMP_AUTHORIZATION_REMOVE_FAILED')),patch('builtins.print')as output:
+   with self.assertRaisesRegex(RuntimeError,'ROOT_TEMP_COMM_KEY_PAIR'):m.run_with_transport_cleanup(action)
+   lines=[json.loads(c.args[0])for c in output.call_args_list]
+  self.assertEqual(lines[0]['code'],'ROOT_TEMP_COMM_KEY_PAIR');self.assertEqual(lines[1]['code'],'RELEASE_TEMP_AUTHORIZATION_REMOVE_FAILED')
+  self.assertNotIn('synthetic-secret',m.safe_failure_code(RuntimeError('synthetic-secret')))
+ def test_cleanup_remote_command_preserves_exact_host_and_quoted_program(self):
+  import shlex
+  captured=[];program='synthetic program with spaces and "quotes"'
+  def cleanup(host):
+   t=host.CommunicationResetTransport();t.open();t.run(['/usr/bin/python3','-I','-c',program,'remove'],input=b'{}');t.close()
+   return {'temporaryPrivateIdentityRemoved':True,'exactAuthorizationAbsent':True}
+  bootstrap=types.SimpleNamespace(temporary_comm_identity=lambda:'/run/cop-clean-reset-comm/id_ed25519',transport_args=lambda host:['/usr/bin/ssh','-i','/run/cop-clean-reset-comm/id_ed25519','voldzi@comm.home.cz','/usr/bin/sudo','-n','/usr/bin/id','-u'])
+  with patch.object(m.os.path,'lexists',return_value=True),patch.object(m,'verified_bootstrap_code',return_value=bootstrap),patch.object(m,'pinned_public_module',side_effect=[types.SimpleNamespace(cleanup_temporary_comm_key=cleanup),types.SimpleNamespace(REMOTE_PROGRAM=program)]),patch.object(m.subprocess,'run',side_effect=lambda args,**kw:(captured.append((args,kw)),types.SimpleNamespace(returncode=0,stdout=b'{}'))[1]),patch('builtins.print'):
+   m.cleanup_temporary_transport()
+  args,kw=captured[0];self.assertEqual(args[-2],'voldzi@comm.home.cz');self.assertEqual(shlex.split(args[-1]),['/usr/bin/sudo','-n','/usr/bin/python3','-I','-c',program,'remove']);self.assertEqual(kw['input'],b'{}')
  def test_acceptance_published_only_after_sha_and_strict_gate(self):
   raw=b'{"contractVersion":"cop-sim-whole-clean-acceptance-v3"}'
   manifest={'acceptanceReport':{'path':'/srv/x5-production/staging/cop/reviewed/report.json','sha256':hashlib.sha256(raw).hexdigest()},'candidateImages':{}}

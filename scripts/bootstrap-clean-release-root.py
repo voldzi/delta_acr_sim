@@ -23,6 +23,10 @@ def context():
  need(command(['/usr/bin/findmnt','-n','-o','UUID','--mountpoint','/srv/x5-production']).decode().strip()==UUID,'ROOT_BOOTSTRAP_X5_UUID')
  need(Path('/srv/x5-production').resolve()==Path('/srv/x5-production') and Path('/srv/x5-production').stat().st_dev!=Path('/').stat().st_dev,'ROOT_BOOTSTRAP_X5_DEVICE')
  need(shutil.disk_usage('/srv/x5-production').free>=3*1024**3,'ROOT_BOOTSTRAP_HEADROOM')
+def validate_derived_public(derived,expected,marker):
+ public=expected.split();actual=derived.split()
+ need(len(public)==3 and public[0]=='ssh-ed25519'and public[2]==marker,'ROOT_TEMP_COMM_PUBLIC_FORMAT')
+ need(len(actual)in[2,3]and actual[:2]==public[:2]and(len(actual)==2 or actual[2]==marker),'ROOT_TEMP_COMM_KEY_PAIR')
 def temporary_comm_identity():
  """Fixed, human-approved ephemeral identity; no caller-selected SSH path."""
  if not TEMP_COMM.exists():return None
@@ -46,7 +50,7 @@ def temporary_comm_identity():
  need(m['authorizedLine']==expected and sha(expected.encode())==m['authorizedLineSha256'],'ROOT_TEMP_COMM_AUTHORIZATION')
  need(set(p.name for p in TEMP_COMM.iterdir())<={'id_ed25519','id_ed25519.pub','temporary-identity.json','master.sock'},'ROOT_TEMP_COMM_FILES')
  public=command(['/usr/bin/ssh-keygen','-y','-f',str(TEMP_COMM/'id_ed25519')]).decode().strip()
- need(public==' '.join(m['publicKey'].split()[:2]) and m['publicKey'].split()[-1]==m['marker'],'ROOT_TEMP_COMM_KEY_PAIR')
+ validate_derived_public(public,m['publicKey'],m['marker'])
  return str(TEMP_COMM/'id_ed25519')
 def transport_args(host):
  need(host in ['comm.home.cz','storage.home.cz'],'ROOT_TRANSPORT_HOST_SCOPE')

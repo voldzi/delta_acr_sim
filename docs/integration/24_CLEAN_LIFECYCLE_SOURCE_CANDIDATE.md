@@ -823,3 +823,18 @@ enabled COP receipts against the exact epoch, candidate image, full source
 revision, active CID, guard, preserved health/demo and no-old-fallback fields.
 Six isolated chain tests pass; this is source integration evidence only, not a
 Root execution receipt. The bootstrap bytes pin was advanced with the COP pin.
+
+The first supervised v2 attempt stopped before a password prompt. A reproduced
+bootstrap defect rejected the three-field `ssh-keygen -y` output (matching key
+plus its exact comment) by comparing it to a two-field string. The narrow fix
+accepts two matching key fields with no comment or the exact expected third
+comment only; altered keys, altered comments and extra fields still fail. A real
+disposable local OpenSSH key regression passes; no server key is created by the
+test. Identity metadata, private-key SHA, public fingerprint/authorization and
+expiry validation remain intact. Cleanup `base[:-4]` command construction was
+separately tested and correctly retains the SSH host and quotes the exact remove
+program. The outer wrapper now reports only sanitized phase/cleanup codes and
+preserves the original failure if cleanup also fails, without logging private
+exception text. Existing v2 artifacts remain immutable; the correction requires
+a new public SIM archive/manifest/CLI/bootstrap set, not an application image,
+report timestamp, database reset or repeated deployment during diagnosis.

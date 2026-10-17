@@ -1,9 +1,23 @@
 """Local synthetic archive tests only; never invokes Root/Docker/SSH."""
-import importlib.util,io,pathlib,tarfile,tempfile,unittest
+import importlib.util,io,pathlib,subprocess,tarfile,tempfile,unittest
 from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'bootstrap-clean-release-root.py'
 s=importlib.util.spec_from_file_location('bootstrap',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Bootstrap(unittest.TestCase):
+ def test_derived_key_accepts_only_optional_exact_comment(self):
+  expected='ssh-ed25519 SYNTHETIC cop-clean-release-test'
+  for actual in ['ssh-ed25519 SYNTHETIC',expected]:m.validate_derived_public(actual,expected,'cop-clean-release-test')
+  for actual in ['ssh-ed25519 OTHER','ssh-rsa SYNTHETIC','ssh-ed25519 SYNTHETIC wrong','ssh-ed25519 SYNTHETIC cop-clean-release-test extra']:
+   with self.assertRaisesRegex(RuntimeError,'KEY_PAIR'):m.validate_derived_public(actual,expected,'cop-clean-release-test')
+ def test_real_openssh_public_derivation_with_comment(self):
+  # A new disposable synthetic key, not a server identity or existing secret.
+  with tempfile.TemporaryDirectory(dir='/private/tmp',prefix='sim-synthetic-ssh-regression-')as d:
+   key=pathlib.Path(d)/'synthetic';marker='cop-clean-release-00000000-0000-4000-8000-000000000000'
+   subprocess.run(['/usr/bin/ssh-keygen','-q','-t','ed25519','-N','','-C',marker,'-f',str(key)],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True)
+   actual=subprocess.check_output(['/usr/bin/ssh-keygen','-y','-f',str(key)],stdin=subprocess.DEVNULL,stderr=subprocess.PIPE).decode().strip()
+   expected=key.with_suffix('.pub').read_text().strip()
+   self.assertEqual(len(actual.split()),3);self.assertEqual(actual.split()[2],marker)
+   m.validate_derived_public(actual,expected,marker)
  def archive(self,root,name,kind='file',target=''):
   a=root/'input.tar'
   with tarfile.open(a,'w') as t:

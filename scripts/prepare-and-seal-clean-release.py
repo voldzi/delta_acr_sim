@@ -4,13 +4,13 @@ No stored administrator password, automatic GO, key provisioning/network or mode
 An explicitly approved fixed RAM-only transport is cleaned in the outer finally.
 Run only from docker Root. Private config never leaves this process/child pipes.
 """
-import argparse,getpass,hashlib,importlib.util,json,os,shlex,socket,stat,subprocess,sys,time,uuid,types
+import argparse,getpass,hashlib,importlib.util,json,os,re,shlex,socket,stat,subprocess,sys,time,uuid,types
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 BASE=Path('/srv/cop/runtime/clean-reset')
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
-BOOTSTRAP_SHA='571f1f608b46b38c80bf241746523c0981884874a0a7b974417a9583061db2e3'
+BOOTSTRAP_SHA='bb7fa9e6ee25476e0a836ef812d7dc1045917df6d3b1f1925154908a0bdfc285'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
 TEMP_KEY_SHA='87ea81867ac8bdb3605b7b186c550710b7b9ac268da7667b1b6ce60b22dd852a'
 TEMP_AUTHORIZE=Path('/home/voldzi/temporary-comm-authorize.py')
@@ -65,12 +65,24 @@ def cleanup_temporary_transport():
  result=helper.cleanup_temporary_comm_key(types.SimpleNamespace(CommunicationResetTransport=CleanupOnlyTransport))
  need(result=={'temporaryPrivateIdentityRemoved':True,'exactAuthorizationAbsent':True},'RELEASE_TEMP_CLEANUP_NOT_VERIFIED')
  print(json.dumps({'temporaryTransportCleanup':result}))
+def safe_failure_code(error):
+ # Never print arbitrary exception text, filenames, stderr or private payloads.
+ if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and re.fullmatch(r'(?:ROOT|RELEASE|CLEAN|SIM|MESSAGING)_[A-Z0-9_]{1,90}',error.args[0]):return error.args[0]
+ if isinstance(error,OSError):return 'OS_ERROR_'+str(error.errno if isinstance(error.errno,int)else 'UNKNOWN')
+ return 'UNCLASSIFIED_'+type(error).__name__
 def run_with_transport_cleanup(action):
- try:return action()
- finally:
-  try:cleanup_temporary_transport()
-  except BaseException:
-   print(json.dumps({'error':'RELEASE_TEMPORARY_TRANSPORT_CLEANUP_FAILED','cleanupVerified':False}));raise
+ original=None;result=None
+ try:result=action()
+ except BaseException as error:
+  original=error
+  print(json.dumps({'error':'ROOT_RELEASE_PHASE_FAILED','code':safe_failure_code(error)}),flush=True)
+ try:cleanup_temporary_transport()
+ except BaseException as error:
+  print(json.dumps({'error':'RELEASE_TEMPORARY_TRANSPORT_CLEANUP_FAILED','cleanupVerified':False,'code':safe_failure_code(error)}),flush=True)
+  if original is not None:raise original from None
+  raise
+ if original is not None:raise original from None
+ return result
 def verify_bootstrap(expected_sha):
  r=json.loads(root_read(TARGET/'bootstrap-public.json',16*1024*1024))
  need(r['manifestSha256']==expected_sha and r['dependencyImage']=='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df' and r['copApiImage']=='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86','RELEASE_BOOTSTRAP_BINDING')
