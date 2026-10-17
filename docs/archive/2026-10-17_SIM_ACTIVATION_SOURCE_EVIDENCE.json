@@ -3,7 +3,10 @@
   "scope": "source-and-isolated-cas-tests-only",
   "runtimeRevisionUnchanged": "a337cfc1aa3dc8ef3fd49a84b6e2fb94a651ee4d",
   "checks": {
-    "activationCasTests": 14,
+    "activationCasTests": 17,
+    "featureKeyOmissionRefused": true,
+    "custodyLossAfterFirstUpPreventsNextUp": true,
+    "eachAttemptedNewCidBoundBeforeNextUp": true,
     "coordinatorTests": 10,
     "skeletonValidation": "passed",
     "diffWhitespace": "passed",

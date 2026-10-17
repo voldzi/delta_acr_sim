@@ -152,15 +152,16 @@ class SimActivation:
         for service,(_,key)in SERVICES.items():
             c=effective[service];need(c['image']==self.plan['candidateImages'][key],'SIM_ACTIVATION_IMAGE_CHANGED')
             before=env(self.before[service]);values=c.get('environment',{})
-            for k in FEATURES&before.keys()&values.keys():need(str(values[k])==before[k],'SIM_ACTIVATION_FEATURE_CHANGED')
-        failure=None
-        try:
-            for service in ['ai-router-api','situation-data-api','sim-api','sim-web']:
+            for k in FEATURES&before.keys():need(k in values and str(values[k])==before[k],'SIM_ACTIVATION_FEATURE_CHANGED')
+        for service in ['ai-router-api','situation-data-api','sim-api','sim-web']:
+            # Bind each completed transition before authorizing the next one.
+            # A failed/timed-out command may still have created its own CID.
+            self.assert_current();failed=False
+            try:
                 p=subprocess.run(self.compose_args(service)+['up','-d','--no-build','--no-deps','--pull','never',service],capture_output=True,timeout=180,env={'PATH':'/usr/bin:/bin','LANG':'C','DOCKER_HOST':'unix:///var/run/docker.sock'})
-                if p.returncode!=0:failure='SIM_ACTIVATION_UP_FAILED';break
-        except (subprocess.TimeoutExpired,OSError):failure='SIM_ACTIVATION_UP_FAILED'
-        claim_errors=[]
-        for service,(name,key)in SERVICES.items():
+                failed=p.returncode!=0
+            except (subprocess.TimeoutExpired,OSError):failed=True
+            name,key=SERVICES[service]
             try:
                 c=inspect(name);need(c['Id']!=self.before[service]['Id'] and c['Image']==self.plan['candidateImages'][key] and c['Config']['Labels'].get('com.docker.compose.project')=='sim' and c['Config']['Labels'].get('com.docker.compose.service')==service,'SIM_ACTIVATION_NEW_CID_CHANGED')
                 # Claim only this exact candidate identity. Never adopt an old or
@@ -171,8 +172,10 @@ class SimActivation:
                 if service in {'sim-api','ai-router-api'}:
                     need(new.get(ca,{}).get('Source')=='/etc/vcode-cop-pgbouncer/postgres-ca.crt' and new[ca]['RW'] is False,'SIM_ACTIVATION_CA_MOUNT');new.pop(ca);old.pop(ca,None)
                 need(old==new,'SIM_ACTIVATION_MOUNTS_CHANGED')
-            except (RuntimeError,KeyError,subprocess.SubprocessError):claim_errors.append(service)
-        need(not claim_errors and failure is None,'SIM_ACTIVATION_UP_FAILED');self.started=True;self.assert_current()
+            except (RuntimeError,KeyError,subprocess.SubprocessError):raise RuntimeError('SIM_ACTIVATION_UP_FAILED') from None
+            need(not failed,'SIM_ACTIVATION_UP_FAILED')
+            self.assert_current()
+        self.started=True;self.assert_current()
     def verify_capabilities(self):
         self.assert_current();need(self.started,'SIM_ACTIVATION_NOT_STARTED')
         values=common.selected_values(self.env_raw,{'SIM_USER_DATA_COP_TOKEN','AI_ROUTER_COP_TOKEN','AI_ROUTER_SIM_TOKEN','DRIVER_MEASUREMENTS_COP_TOKEN'})

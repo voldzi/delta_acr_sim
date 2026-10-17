@@ -53,7 +53,7 @@ class Boundaries(unittest.TestCase):
         def lookup(name):return next(c for s,c in current.items()if name==m.SERVICES[s][0])
         with patch.object(m,'run',return_value=json.dumps({'services':effective}).encode()),patch.object(m,'inspect',side_effect=lookup),patch.object(m.subprocess,'run',return_value=types.SimpleNamespace(returncode=1))as up:
             with self.assertRaisesRegex(RuntimeError,'UP_FAILED'):v.up_services()
-            self.assertEqual(set(v.new),set(list(m.SERVICES)[:2]));self.assertIn('--no-deps',up.call_args.args[0]);self.assertIn('--no-build',up.call_args.args[0])
+            self.assertEqual(set(v.new),{'ai-router-api'});self.assertEqual(up.call_count,1);self.assertIn('--no-deps',up.call_args.args[0]);self.assertIn('--no-build',up.call_args.args[0])
     def test_feature_change_blocks_before_up(self):
         v=value();effective={s:{'image':container(s,True)['Image'],'environment':{'DRIVER_MEASUREMENTS_ENABLED':'false'}}for s in m.SERVICES}
         with patch.object(m,'run',return_value=json.dumps({'services':effective}).encode()),patch.object(m.subprocess,'run')as up:
@@ -65,7 +65,32 @@ class Boundaries(unittest.TestCase):
         def lookup(name):return next(c for s,c in current.items()if name==m.SERVICES[s][0])
         with patch.object(m,'run',return_value=json.dumps({'services':effective}).encode()),patch.object(m,'inspect',side_effect=lookup),patch.object(m.subprocess,'run',side_effect=m.subprocess.TimeoutExpired('synthetic',1)):
             with self.assertRaisesRegex(RuntimeError,'UP_FAILED'):v.up_services()
-            self.assertEqual(set(v.new),set(m.SERVICES))
+            self.assertEqual(set(v.new),{'ai-router-api'})
+    def test_omitted_existing_feature_blocks_before_any_up(self):
+        v=value();effective={s:{'image':container(s,True)['Image'],'environment':{}}for s in m.SERVICES}
+        with patch.object(m,'run',return_value=json.dumps({'services':effective}).encode()),patch.object(m.subprocess,'run')as up:
+            with self.assertRaisesRegex(RuntimeError,'FEATURE_CHANGED'):v.up_services()
+            up.assert_not_called()
+    def test_cas_loss_after_first_up_prevents_remaining_up_and_keeps_owned_cid(self):
+        v=value();changed=[False];calls=[]
+        effective={s:{'image':container(s,True)['Image'],'environment':{'DRIVER_MEASUREMENTS_ENABLED':'true'}}for s in m.SERVICES}
+        def custody():
+            if changed[0]:raise RuntimeError('SYNTHETIC_CAS_LOST')
+        def start(*args,**kwargs):calls.append(args[0]);changed[0]=True;return types.SimpleNamespace(returncode=0)
+        v.assert_current=custody
+        with patch.object(m,'run',return_value=json.dumps({'services':effective}).encode()),patch.object(m,'inspect',return_value=container('ai-router-api',True)),patch.object(m.subprocess,'run',side_effect=start):
+            with self.assertRaisesRegex(RuntimeError,'CAS_LOST'):v.up_services()
+            self.assertEqual(len(calls),1);self.assertEqual(set(v.new),{'ai-router-api'})
+    def test_every_next_up_observes_previously_claimed_cids(self):
+        v=value();called=[];checked=[]
+        effective={s:{'image':container(s,True)['Image'],'environment':{'DRIVER_MEASUREMENTS_ENABLED':'true'}}for s in m.SERVICES}
+        def custody():checked.append(set(v.new));self.assertEqual(set(v.new),set(called))
+        def start(args,**kwargs):
+            self.assertEqual(checked[-1],set(called));called.append(args[-1]);return types.SimpleNamespace(returncode=0)
+        def lookup(name):return next(container(s,True)for s,(n,_)in m.SERVICES.items()if n==name)
+        v.assert_current=custody
+        with patch.object(m,'run',return_value=json.dumps({'services':effective}).encode()),patch.object(m,'inspect',side_effect=lookup),patch.object(m.subprocess,'run',side_effect=start):v.up_services()
+        self.assertEqual(called,['ai-router-api','situation-data-api','sim-api','sim-web']);self.assertEqual(set(v.new),set(m.SERVICES))
     def test_cleanup_does_not_stop_replaced_cid_and_continues_own(self):
         v=value();v.new={s:container(s,True)for s in list(m.SERVICES)[:2]};changed=copy.deepcopy(next(iter(v.new.values())));changed['Image']='foreign';owned=list(v.new.values())[1]
         with patch.object(m,'inspect',side_effect=[changed,owned]),patch.object(m,'run')as stop:

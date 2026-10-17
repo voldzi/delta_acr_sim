@@ -446,7 +446,15 @@ foreign replacement, reverts composition to a legacy path or restores data.
 Global COP flags remain byte-for-byte unchanged. The metadata receipt is
 `sim-composition-activation-v1`, stage `guard-ready-awaiting-cop-canary`, not GO.
 
-Fourteen isolated CAS/orchestration tests plus ten coordinator tests pass.
+Seventeen isolated CAS/orchestration tests plus ten coordinator tests pass.
+The two reproduced gaps are corrected: an existing feature key may not disappear
+from the effective configuration, and custody is checked before each individual
+up with immediate binding of only that attempted service's actual new CID before
+the next transition. A failed/timed-out attempt does not claim unrelated,
+unattempted services for cleanup. Regression tests cover omission, custody loss
+after the first up (no subsequent up), and the complete per-step CID sequence.
+Late Docker-daemon completion after a timed-out inventory and process-crash
+resume remain unverified; this change does not claim to solve those other gates.
 Production activation, actual Compose up and the module's host SQL bridge have
 not been executed; the earlier TLS namespace evidence is separate component
 evidence, not an activation test.
