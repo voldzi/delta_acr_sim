@@ -2,6 +2,8 @@
 
 Tento index odkazuje dokumenty v daném adresáři.
 
+- [Omezený clean reset: Root admission, pevné guards a zachování jiných lanes](../runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md)
+
 - [01_SECURITY_ARCHITECTURE.md](01_SECURITY_ARCHITECTURE.md)
 - [02_ROLES_AND_PERMISSIONS.md](02_ROLES_AND_PERMISSIONS.md)
 - [03_API_AUTHENTICATION.md](03_API_AUTHENTICATION.md)

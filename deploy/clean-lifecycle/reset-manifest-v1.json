@@ -1,0 +1,94 @@
+{
+  "version": "sim-clean-reset-manifest-v1",
+  "baseSourceRevision": "6238345b8e50a67441043b2e732e1516254f5f27",
+  "pins": {
+    "001_clean_lifecycle.sql": "2f104fa2f6cf59f4849f25beddcdee67e9bced03a7958cbe9d1ebd0ef1d9d535",
+    "002_ai_budget_views.sql": "e8db2223232e2857e8136bec9344d3db850c154343a0e62078fbc464e2ab7a2f",
+    "007_replace_known_ai_guards.sql": "a4b679a926d6bf8802b63d689b59ada6df45b763bdee3b851816a98e03d48196",
+    "005_ai_writer_fences.sql": "10dde0444aa079d6889665edf042f468816b965ebd3848a6a1d5abd2efba35f1",
+    "003_ai_runtime_grants.sql": "c61a6717402d00aebe6e2e9d8ee39b476d88d7ba999e9278be67337eeefd936a",
+    "008_replace_known_driver_guard.sql": "4a3a0689a877cdf5771a7980dc27e1d5cf3865ffc5bddbe8c08f5a6be60d2b85",
+    "006_driver_writer_fences.sql": "e01525c7968921fbbc51f6643e394051f7464ce7ad072815d60bb77613c7b54b",
+    "004_driver_runtime_grants.sql": "1f06d4a24bbbb465e839c671e02d7ae9c4a5556df3d2b8d797afe7c6d33b5b23"
+  },
+  "ai": {
+    "oldDigest": "1a6fa3e8a462391c736d0b60e3e3153556161b26063b947a36d70b1739041d9c",
+    "newDigest": "cbee61496d70a3b5e378bdd96080b0231b19803fb67c7e25ecbcf0374122a79f",
+    "oldTables": {
+      "ai_router_account_erasure": "f745d8bd37d862f077954befa1507f996f658e49892fc96b1a0735b4a9aefbd8",
+      "ai_router_billing_request": "a9bbd874b38ee58b079ee54e6bb3c0a737f1e9a47b37bfed33177b9a016db52d",
+      "ai_router_erased_cost_daily": "06b05848d86d33e24d2de0f85d9b0da1fe26a9d025fd8f4cc1d0b441e739f0ff",
+      "ai_router_erasure_checkpoint": "de4eac00197fdc5151ba6156f02b03d2caeae11ce9f75f31cd62305e9b738eb9",
+      "ai_router_policy": "d9b107b9f33d871ad7979f03336b226aea848f39697cec597aa5395243533fa8",
+      "ai_router_policy_audit": "bf30e67866eeb00ed682840570a2c37f148ec1a5a1d2b65223e5b967c0fb8ab7",
+      "ai_router_request": "dcdd83744ebe252c15708848fa752a1523485302904c3d2da6ddba2fc4f566a0",
+      "ai_router_user_key": "2323a3a2c5c5a524eb3c371efc08dcdd42156eef884caab358383db355c696bd",
+      "ai_router_user_key_audit": "b66ec45b293953b8ebd1283adc41c53241e83e3cd69bcbfe7df2525f37a2d2af"
+    },
+    "oldFunctions": [
+      "public.ai_router_erasure_operation_immutable:fa8cbea3ac713f7310afaf6e6e2672c2c8670cef3f6b7949dac1e61054d90ced",
+      "public.ai_router_cop_erasure_fence:d752d037ff8126a0f77ef49beb4280f3b2d10bd9255e9b03582dea14cdb1c984"
+    ],
+    "newTables": {
+      "account": "0086b6478a5f13e62c9ff462f5b1a2adbc26d69a32300d616f740165fe48b1c2",
+      "ai_router_account_erasure": "f745d8bd37d862f077954befa1507f996f658e49892fc96b1a0735b4a9aefbd8",
+      "ai_router_billing_request": "20da8703ac1ff9d687c902a91b23726ec677b7fefca8ceec0742f42d94efae17",
+      "ai_router_erased_cost_daily": "06b05848d86d33e24d2de0f85d9b0da1fe26a9d025fd8f4cc1d0b441e739f0ff",
+      "ai_router_erasure_checkpoint": "de4eac00197fdc5151ba6156f02b03d2caeae11ce9f75f31cd62305e9b738eb9",
+      "ai_router_policy": "d9b107b9f33d871ad7979f03336b226aea848f39697cec597aa5395243533fa8",
+      "ai_router_policy_audit": "bf30e67866eeb00ed682840570a2c37f148ec1a5a1d2b65223e5b967c0fb8ab7",
+      "ai_router_request": "3f5176b8bc860bd34cc9691d736e6044f2f31721d5c36b4efb3bc3bf51c52357",
+      "ai_router_user_key": "7cde641402d171583e2c39d01b946da6900c0533f41ba78d7afca6da6800dbcf",
+      "ai_router_user_key_audit": "d65bcaffe817213cc9746fc7cb2c0e003edb274f90113693b6f6bf889c18b5ab",
+      "config": "18b2e9cbff30835bed404d60ab7acd82a847de83924b7122a9cf5d093cee6a8e",
+      "cost_daily": "866237f0d06c55b36036a86609a08783fdfce23eede6f0b48e5328cb2b43124e",
+      "job": "2b8657b7ded5be06d2d6ba77cef7a408a8624bdf556546829774a0d76b004a95",
+      "production_enrollment": "9187654111897c861d2099aa1577e686470900226f092ed3d249f1f8b7623e89",
+      "resource": "fb0a64976de2079ea1e7e444f9c5ddae4e3277e88764423ba27e5276f37d9bf2"
+    },
+    "newFunctions": [
+      "sim_clean.immutable_lifecycle:047ab1fab216ff081e65898dbb3c59fe0fd8d6c673c78a20a603beafad129c04",
+      "public.ai_router_erasure_operation_immutable:fa8cbea3ac713f7310afaf6e6e2672c2c8670cef3f6b7949dac1e61054d90ced",
+      "sim_clean.fence:4b28ece9d07e953e1de96e3351b879a4c7d132d55253a800634b2b8d8880f66c",
+      "sim_clean.check_config:c7f7df340d094c9c025ab1c53298c514eac6c729c9f8e4b8ca08af43d72c58fc",
+      "sim_clean.immutable_production_enrollment:f12586102c75e17ef63ed2759c1332319627ce9e01aa5c10ae5233285fa9e600"
+    ]
+  },
+  "driver": {
+    "oldDigest": "5b4e0fadf019e8d4818dd761f240ba5b011da4847fde002088c76b06cfe358b2",
+    "newDigest": "b9b44b8e258f335d222812269190aac762faff90a473e08dfce0f43f72b970c1",
+    "oldTables": {
+      "driver_account_erasure_operations": "6530e48f45bdc8636255705b1fbe2b34b5277b67f40f2f88df3dc90c1a039c21",
+      "driver_account_erasure_revocations": "132bf588144bb14dd6da45c66ae7d13313ef4e595bf067c597d503a97734de8c",
+      "driver_account_erasure_state": "f74478520478734d761d1ae7aa74a88ba357953db64a003a5feb919c0ba88159",
+      "driver_measurement_eta": "0c1bda7d80e56b31676801f9e7c4d0c313925b79d57c79f19ce21d608316027e",
+      "driver_measurement_intervals": "058db6bd7c0ecc2f883a1f12dcc00064c51eb1647fde54e3dfb93d4fa761373f",
+      "driver_measurement_receipts": "5ac582dd85c29ce4fc0ae36fd7e0d3f0872e21015bb78ec4da6dfa6bf8b40fcf",
+      "driver_measurement_revocations": "caa554e08be5423164a631310ade7ca2b6899297d367ab631ca648e9c9370b0b"
+    },
+    "oldFunctions": [
+      "public.driver_account_erasure_receipt_guard:c188607a230316de5aac08e1f4142bd3db57f93e900c8561a2a3fb2c0265737b"
+    ],
+    "newTables": {
+      "account": "a5d40b99f52f633afb5b61233d30e250152bddc71f2b53d7f7672aeb45bcbfff",
+      "config": "58ef465d43a3d47fb3d4e7240285347682d9027bc19de20b900203b696d162a2",
+      "cost_daily": "65d2920c8964a79b737cad956fd33e6d519b7998dea91b12889f4b8414c29478",
+      "driver_account_erasure_operations": "6530e48f45bdc8636255705b1fbe2b34b5277b67f40f2f88df3dc90c1a039c21",
+      "driver_account_erasure_revocations": "132bf588144bb14dd6da45c66ae7d13313ef4e595bf067c597d503a97734de8c",
+      "driver_account_erasure_state": "f74478520478734d761d1ae7aa74a88ba357953db64a003a5feb919c0ba88159",
+      "driver_measurement_eta": "48263e4c9e99e4d24516761d7550d1c112bf45a2779285e44e478b549adabe27",
+      "driver_measurement_intervals": "058db6bd7c0ecc2f883a1f12dcc00064c51eb1647fde54e3dfb93d4fa761373f",
+      "driver_measurement_receipts": "ec8e84b7b36d2fc7da35036b0926be460ff097adc123c758568d33019bc8f340",
+      "driver_measurement_revocations": "21bf2f1e2e6fe36e509a4e1b092774e53ab2b5cbf1772aec13816471cca76d32",
+      "job": "4c1e361dc21e6040141316cf59bed22054f563d318aa9afa96d8564634a65c6e",
+      "production_enrollment": "65afb390a69d29f3f98dea3e866d0271a14539746ce5000a396f8956d84b1f9f",
+      "resource": "093d49792b03bdb9aac5121d91805a4ecba8ea606d9a7e0a14852283f9372bde"
+    },
+    "newFunctions": [
+      "sim_clean.immutable_lifecycle:047ab1fab216ff081e65898dbb3c59fe0fd8d6c673c78a20a603beafad129c04",
+      "sim_clean.check_config:c7f7df340d094c9c025ab1c53298c514eac6c729c9f8e4b8ca08af43d72c58fc",
+      "sim_clean.fence:4b28ece9d07e953e1de96e3351b879a4c7d132d55253a800634b2b8d8880f66c",
+      "sim_clean.immutable_production_enrollment:f12586102c75e17ef63ed2759c1332319627ce9e01aa5c10ae5233285fa9e600"
+    ]
+  }
+}

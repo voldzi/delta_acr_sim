@@ -2,6 +2,8 @@
 
 Tento index odkazuje dokumenty v daném adresáři.
 
+- [21_CLEAN_COP_SIM_RESET_OPERATOR.md](21_CLEAN_COP_SIM_RESET_OPERATOR.md) — konečný reset scope, izolované testy, bez produkčního spuštění.
+
 - [20_DATABASE_ERASURE_ACCEPTANCE.md](20_DATABASE_ERASURE_ACCEPTANCE.md) — aktuální DBv2 cesta mazání COP/Jízdy.
 
 - [01_LOCAL_DEVELOPMENT.md](01_LOCAL_DEVELOPMENT.md)

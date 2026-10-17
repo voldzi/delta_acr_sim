@@ -22,6 +22,8 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [Runbook 21: konečný clean reset scope a izolované důkazy, bez produkčního spuštění](runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md)
+- [ADR 0043: atomický přechod přesně známých COP guards](adr/0043_ATOMIC_KNOWN_GUARD_RESET.md)
 - [ADR 0039: hranice mazání COP/Jízdy při zachování SIM](adr/0039_COP_ACCOUNT_ERASURE_BOUNDARIES.md)
 - [ADR 0040: aktuální DB-backed cesta bez dalšího Root/native protokolu](adr/0040_DATABASE_BACKED_ACCOUNT_ERASURE.md)
 - [Runbook 20: skutečný HTTP/PG test, jeden přípravný installer, ověřené TLS, enrollment a restore pro DBv2](runbooks/20_DATABASE_ERASURE_ACCEPTANCE.md)
