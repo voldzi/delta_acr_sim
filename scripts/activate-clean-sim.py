@@ -42,7 +42,7 @@ def chain_from(containers):
     return chains
 def receipt_config(receipt,plan):
     need(receipt.get('contractVersion')=='cop-sim-common-reset-fenced-v1' and receipt.get('resetEpoch')==plan['resetEpoch'] and receipt.get('servicesRestarted') is False and receipt.get('runtimeFlagsEnabled') is False and receipt.get('wholeAccountComplete') is False,'SIM_ACTIVATION_RESET_RECEIPT')
-    need(set(receipt.get('completedPhases',[]))==set(common.COMMON_PHASES)|{'remaining','readback','sim_config'},'SIM_ACTIVATION_RESET_INCOMPLETE')
+    need(receipt.get('completedPhases')==list(common.COMMON_PHASES)+['remaining','messaging_install','readback','sim_config'],'SIM_ACTIVATION_RESET_INCOMPLETE')
     cfg=receipt.get('simConfiguration',{})
     need(cfg.get('contractVersion')=='sim-clean-runtime-config-staged-v1' and cfg.get('intakeEnabled') is False and cfg.get('baseCleanEnabled') is False and cfg.get('servicesStarted') is False,'SIM_ACTIVATION_RESET_CONFIG')
     return cfg

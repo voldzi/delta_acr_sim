@@ -1,0 +1,135 @@
+{
+  "contractVersion": "sim-router-completed-operation-outage-v3",
+  "caseType": "already_completed_operation",
+  "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+  "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+  "routerImage": "sha256:3fcc09192e451c9a45f839271055e93f7b5250b6e05c6e122223e964ee0247a6",
+  "testBundleImage": "sha256:5cff9d1ecdc864e9a20d8e247aec447cc15a1d2eba212a2520d7d4ab1b3dbff0",
+  "phases": {
+    "before": {
+      "httpStatus": 200,
+      "httpState": "deleted",
+      "loginAllowed": true,
+      "databaseBindings": {
+        "ai": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "driver": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "main": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "history": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        }
+      }
+    },
+    "during": {
+      "httpStatus": 503,
+      "loginAllowed": false,
+      "databaseBindings": {
+        "ai": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "driver": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "main": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "history": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        }
+      }
+    },
+    "after": {
+      "httpStatus": 200,
+      "httpState": "deleted",
+      "loginAllowed": true,
+      "databaseBindings": {
+        "ai": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "driver": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "main": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        },
+        "history": {
+          "operationId": "b1c21024-0c2f-4a3d-afad-911f95d73c1b",
+          "resetEpoch": "a7f98504-9c29-4942-8fb3-7236ab819a07",
+          "accountState": "deleted"
+        }
+      }
+    }
+  },
+  "preservation": {
+    "userB": {
+      "before": "3940511bad9a0af31ae6944a10edcb2100b88021ca5497aa2027072a9e751c81",
+      "after": "3940511bad9a0af31ae6944a10edcb2100b88021ca5497aa2027072a9e751c81"
+    },
+    "jobsAndBindings": {
+      "before": "be3f79afb2c383e11dfb8e38ffae920d61f5023f476105119b76e332c21e1723",
+      "after": "be3f79afb2c383e11dfb8e38ffae920d61f5023f476105119b76e332c21e1723"
+    },
+    "finance": {
+      "before": "9100019b622a55fc788797a737a72b9e425e3ddcc2842ea86c35dd490ee27b2a",
+      "after": "9100019b622a55fc788797a737a72b9e425e3ddcc2842ea86c35dd490ee27b2a"
+    },
+    "independentGuard": {
+      "before": "cad151281c923388a70bb1aa42f1b8dac0911635b0bff9f17165ae92fda25e1b",
+      "after": "cad151281c923388a70bb1aa42f1b8dac0911635b0bff9f17165ae92fda25e1b"
+    }
+  },
+  "finalReadbacks": {
+    "main": {
+      "httpStatus": 200,
+      "state": "deleted",
+      "remaining": 0
+    },
+    "ai": {
+      "httpStatus": 200,
+      "state": "deleted",
+      "remaining": 0
+    },
+    "driver": {
+      "httpStatus": 200,
+      "state": "deleted",
+      "remaining": 0
+    },
+    "history": {
+      "httpStatus": 200,
+      "state": "deleted",
+      "remaining": 0
+    }
+  },
+  "loginRestored": true,
+  "externalProviderAttempts": 0,
+  "reseeded": false,
+  "productionTouched": false,
+  "pendingDeletionOutageClaimed": false
+}

@@ -9,7 +9,7 @@ import {canonicalOwnerKey,signSimOwner} from '/app/packages/sim-user-data/claims
 import {validateCompletedRouterOutageV3} from '/private/tmp/sim-user-install-pg-956262c6abdb/completed-router-outage-v3.mjs';
 assert.deepEqual(process.argv.slice(2),['--completed-only-v3']);
 const ROOT='/private/tmp/sim-user-install-pg-956262c6abdb',D='/dev/shm/cop-clean-whole';
-const expected={operationId:'b1c21024-0c2f-4a3d-afad-911f95d73c1b',resetEpoch:'a7f98504-9c29-4942-8fb3-7236ab819a07',routerImage:'sha256:b6c5698553ca85e006e5af9c14532552ed794890661faa3306ca1c88309f9d73',testBundleImage:'sha256:739582dea16349b4d42b9c4c4b2250b6de616eaeb803b15a3013b0cc7d0a2118'};
+const expected={operationId:'b1c21024-0c2f-4a3d-afad-911f95d73c1b',resetEpoch:'a7f98504-9c29-4942-8fb3-7236ab819a07',routerImage:'sha256:3fcc09192e451c9a45f839271055e93f7b5250b6e05c6e122223e964ee0247a6',testBundleImage:'sha256:5cff9d1ecdc864e9a20d8e247aec447cc15a1d2eba212a2520d7d4ab1b3dbff0'};
 const cfg=JSON.parse(await fs.readFile(D+'/sim-private.json'));assert.equal(cfg.input.base.resetEpoch,expected.resetEpoch);
 const{Pool}=createRequire('/runtime/router/apps/ai-router-api/package.json')('pg'),pools=[];
 const pool=db=>{const p=new Pool({host:ROOT+'/s',port:5000,user:'fixture_admin',database:db,max:1,connectionTimeoutMillis:3000});p.on('error',()=>{});pools.push(p);return p};

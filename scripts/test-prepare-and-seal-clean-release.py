@@ -4,6 +4,21 @@ from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'prepare-and-seal-clean-release.py'
 s=importlib.util.spec_from_file_location('release',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Release(unittest.TestCase):
+ def test_outer_cleanup_after_success(self):
+  calls=[]
+  with patch.object(m,'cleanup_temporary_transport',side_effect=lambda:calls.append('cleanup')):
+   self.assertEqual(m.run_with_transport_cleanup(lambda:(calls.append('action'),'ok')[1]),'ok')
+  self.assertEqual(calls,['action','cleanup'])
+ def test_outer_cleanup_after_failure(self):
+  calls=[]
+  def fail():calls.append('failure');raise RuntimeError('TEST_ORIGINAL_FAILURE')
+  with patch.object(m,'cleanup_temporary_transport',side_effect=lambda:calls.append('cleanup')):
+   with self.assertRaisesRegex(RuntimeError,'ORIGINAL_FAILURE'):m.run_with_transport_cleanup(fail)
+  self.assertEqual(calls,['failure','cleanup'])
+ def test_cleanup_failure_never_success(self):
+  with patch.object(m,'cleanup_temporary_transport',side_effect=RuntimeError('TEST_CLEANUP_FAILED')),patch('builtins.print') as output:
+   with self.assertRaisesRegex(RuntimeError,'CLEANUP_FAILED'):m.run_with_transport_cleanup(lambda:None)
+   self.assertIn('RELEASE_TEMPORARY_TRANSPORT_CLEANUP_FAILED',output.call_args.args[0])
  def test_bootstrap_bytes_pin(self):
   raw=(p.parent/'bootstrap-clean-release-root.py').read_bytes()
   self.assertEqual(hashlib.sha256(raw).hexdigest(),m.BOOTSTRAP_SHA)

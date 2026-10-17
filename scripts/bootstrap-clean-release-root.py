@@ -3,14 +3,15 @@
 Exact manifest SHA is supplied explicitly by the human-reviewed release command.
 No downloaded code is imported before archive SHA and immutable image checks.
 """
-import argparse,hashlib,json,os,posixpath,shutil,socket,stat,subprocess,tarfile,tempfile
+import argparse,datetime,hashlib,json,os,posixpath,re,shutil,socket,stat,subprocess,tarfile,tempfile
 from pathlib import Path
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 DEPS='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df'
 APP='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86'
-REVISIONS={'cop':'e5c9f3460cfc412b71178ec856d47678520262fc','messaging':'0876f91b5e4e28f20a2904b2c5b2355d5cfde56f'}
+REVISIONS={'cop':'71e591d4ddf6639c67f1cfcaf9ed76424b0bffb9','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
 UUID='2f93f595-b61b-4eea-9054-7afa9b275b5b'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
+TEMP_COMM=Path('/run/cop-clean-reset-comm')
 def need(v,c):
  if not v:raise RuntimeError(c)
 def sha(b):return hashlib.sha256(b).hexdigest()
@@ -22,10 +23,38 @@ def context():
  need(command(['/usr/bin/findmnt','-n','-o','UUID','--mountpoint','/srv/x5-production']).decode().strip()==UUID,'ROOT_BOOTSTRAP_X5_UUID')
  need(Path('/srv/x5-production').resolve()==Path('/srv/x5-production') and Path('/srv/x5-production').stat().st_dev!=Path('/').stat().st_dev,'ROOT_BOOTSTRAP_X5_DEVICE')
  need(shutil.disk_usage('/srv/x5-production').free>=3*1024**3,'ROOT_BOOTSTRAP_HEADROOM')
+def temporary_comm_identity():
+ """Fixed, human-approved ephemeral identity; no caller-selected SSH path."""
+ if not TEMP_COMM.exists():return None
+ d=TEMP_COMM.lstat()
+ need(stat.S_ISDIR(d.st_mode) and not TEMP_COMM.is_symlink() and d.st_uid==0 and stat.S_IMODE(d.st_mode)==0o700,'ROOT_TEMP_COMM_DIRECTORY')
+ need(command(['/usr/bin/findmnt','-n','-o','FSTYPE','-T',str(TEMP_COMM)]).strip()==b'tmpfs','ROOT_TEMP_COMM_NOT_RAM')
+ def read(name,mode):
+  fd=os.open(TEMP_COMM/name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+  try:
+   s=os.fstat(fd);need(stat.S_ISREG(s.st_mode) and s.st_uid==0 and s.st_nlink==1 and stat.S_IMODE(s.st_mode)==mode and s.st_size<16384,'ROOT_TEMP_COMM_FILE')
+   raw=os.read(fd,16384);t=os.fstat(fd)
+   need(len(raw)==s.st_size and (s.st_ino,s.st_mtime_ns,s.st_ctime_ns)==(t.st_ino,t.st_mtime_ns,t.st_ctime_ns),'ROOT_TEMP_COMM_CHANGED');return raw
+  finally:os.close(fd)
+ m=json.loads(read('temporary-identity.json',0o600))
+ need(set(m)=={'contractVersion','marker','publicKey','authorizedLine','authorizedLineSha256','fingerprint','expiresAt','privateSha256'} and m['contractVersion']=='cop-temporary-comm-identity-v1','ROOT_TEMP_COMM_METADATA')
+ need(re.fullmatch(r'cop-clean-release-[0-9a-f-]{36}',m['marker']) is not None,'ROOT_TEMP_COMM_MARKER')
+ need(sha(read('id_ed25519',0o600))==m['privateSha256'] and read('id_ed25519.pub',0o644).decode().strip()==m['publicKey'],'ROOT_TEMP_COMM_KEY_HASH')
+ expires=datetime.datetime.fromisoformat(m['expiresAt']);now=datetime.datetime.now(datetime.timezone.utc)
+ need(expires.tzinfo is not None and now<expires<=now+datetime.timedelta(hours=2),'ROOT_TEMP_COMM_EXPIRED')
+ expected='restrict,from="192.168.10.116",expiry-time="'+expires.astimezone(datetime.timezone.utc).strftime('%Y%m%d%H%M%SZ')+'" '+m['publicKey']
+ need(m['authorizedLine']==expected and sha(expected.encode())==m['authorizedLineSha256'],'ROOT_TEMP_COMM_AUTHORIZATION')
+ need(set(p.name for p in TEMP_COMM.iterdir())<={'id_ed25519','id_ed25519.pub','temporary-identity.json','master.sock'},'ROOT_TEMP_COMM_FILES')
+ public=command(['/usr/bin/ssh-keygen','-y','-f',str(TEMP_COMM/'id_ed25519')]).decode().strip()
+ need(public==' '.join(m['publicKey'].split()[:2]) and m['publicKey'].split()[-1]==m['marker'],'ROOT_TEMP_COMM_KEY_PAIR')
+ return str(TEMP_COMM/'id_ed25519')
 def transport_args(host):
  need(host in ['comm.home.cz','storage.home.cz'],'ROOT_TRANSPORT_HOST_SCOPE')
  common=['/usr/bin/ssh','-F','/dev/null','-o','KbdInteractiveAuthentication=no','-o','IdentityAgent=none','-o','ForwardAgent=no','-o','ForwardX11=no','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no','-o','UserKnownHostsFile=/home/voldzi/.ssh/known_hosts','-o','GlobalKnownHostsFile=/dev/null','-o','ConnectTimeout=8']
  auth=['-o','BatchMode=yes','-o','PasswordAuthentication=no','-o','PubkeyAuthentication=yes','-o','PreferredAuthentications=publickey'] if host=='comm.home.cz' else ['-o','BatchMode=no','-o','PubkeyAuthentication=no','-o','PreferredAuthentications=password','-o','NumberOfPasswordPrompts=1']
+ if host=='comm.home.cz':
+  identity=temporary_comm_identity()
+  if identity:auth+=['-o','IdentitiesOnly=yes','-i',identity]
  return common+auth+['voldzi@'+host,'/usr/bin/sudo','-n','/usr/bin/id','-u']
 def check_transports():
  """Before PG prompt/freeze: existing COMM key, existing storage TTY password."""

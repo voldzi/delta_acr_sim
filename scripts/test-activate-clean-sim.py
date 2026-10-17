@@ -16,6 +16,13 @@ def value():
     v.before={s:container(s) for s in m.SERVICES};v.plan={'resetEpoch':'synthetic','candidateImages':{key:container(s,True)['Image']for s,(_,key)in m.SERVICES.items()}}
     v.assert_current=lambda:None;v.compose_args=lambda service:['/usr/bin/docker','compose'];return v
 class Boundaries(unittest.TestCase):
+    def test_twelve_phase_receipt_requires_message_install_and_exact_order(self):
+        phases=list(m.common.COMMON_PHASES)+['remaining','messaging_install','readback','sim_config']
+        cfg={'contractVersion':'sim-clean-runtime-config-staged-v1','intakeEnabled':False,'baseCleanEnabled':False,'servicesStarted':False}
+        r={'contractVersion':'cop-sim-common-reset-fenced-v1','resetEpoch':'synthetic','servicesRestarted':False,'runtimeFlagsEnabled':False,'wholeAccountComplete':False,'completedPhases':phases,'simConfiguration':cfg}
+        self.assertEqual(m.receipt_config(r,{'resetEpoch':'synthetic'}),cfg)
+        for bad in [phases[:-1], [p for p in phases if p!='messaging_install'], phases+['readback'],list(reversed(phases))]:
+            with self.assertRaisesRegex(RuntimeError,'RESET_INCOMPLETE'):m.receipt_config({**r,'completedPhases':bad},{'resetEpoch':'synthetic'})
     def test_preserve_full_actual_compose_chain(self):
         files=m.chain_from({s:container(s)for s in m.SERVICES})
         self.assertEqual(files['sim-api'],[Path('/srv/sim/docker-compose.yml'),Path('/srv/sim/docker-compose.x5.yml'),m.common.OVERLAY])

@@ -1,15 +1,20 @@
 #!/usr/bin/python3 -I
 """Root-only interactive preparation and explicit disabled reset.
-No stored administrator password, automatic GO, new key/network or model calls.
+No stored administrator password, automatic GO, key provisioning/network or model calls.
+An explicitly approved fixed RAM-only transport is cleaned in the outer finally.
 Run only from docker Root. Private config never leaves this process/child pipes.
 """
-import argparse,getpass,hashlib,importlib.util,json,os,socket,stat,subprocess,sys,time,uuid,types
+import argparse,getpass,hashlib,importlib.util,json,os,shlex,socket,stat,subprocess,sys,time,uuid,types
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 BASE=Path('/srv/cop/runtime/clean-reset')
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
-BOOTSTRAP_SHA='b37052e2f71edfdd6e3d390682d124bdf54cf1b332109b678a8808dc247a7e2c'
+BOOTSTRAP_SHA='afd008cd1ac273f2572094b3a6124064b164d8e22dae02dfa440460ca71a782f'
+TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
+TEMP_KEY_SHA='87ea81867ac8bdb3605b7b186c550710b7b9ac268da7667b1b6ce60b22dd852a'
+TEMP_AUTHORIZE=Path('/home/voldzi/temporary-comm-authorize.py')
+TEMP_AUTHORIZE_SHA='70a0f585254c7f3e0cce91c4c5e8a4d90d761c4db4c401473641002bbba5562a'
 def need(v,c):
  if not v:raise RuntimeError(c)
 def sha(b):return hashlib.sha256(b).hexdigest()
@@ -32,6 +37,40 @@ def root_read(path,max_size=1048576):
   s=os.fstat(fd);need(stat.S_ISREG(s.st_mode) and s.st_uid==0 and s.st_nlink==1 and not s.st_mode&0o022 and s.st_size<=max_size,'RELEASE_ROOT_FILE_CUSTODY')
   b=os.read(fd,max_size+1);t=os.fstat(fd);need(len(b)==s.st_size and (s.st_ino,s.st_mtime_ns,s.st_ctime_ns)==(t.st_ino,t.st_mtime_ns,t.st_ctime_ns),'RELEASE_ROOT_FILE_CHANGED');return b
  finally:os.close(fd)
+def pinned_public_module(path,digest,name):
+ # Public setup files may belong to UID1000. Exact bytes, not ownership, pin
+ # executable authority. Never import the path again after checking its hash.
+ fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+ try:
+  s=os.fstat(fd);need(stat.S_ISREG(s.st_mode) and s.st_nlink==1 and s.st_size<1048576,'RELEASE_TEMP_HELPER_SCOPE')
+  raw=os.read(fd,1048576);need(len(raw)==s.st_size and sha(raw)==digest,'RELEASE_TEMP_HELPER_SHA')
+ finally:os.close(fd)
+ m=types.ModuleType(name);m.__file__=str(path);exec(compile(raw,str(path),'exec'),m.__dict__);return m
+def cleanup_temporary_transport():
+ # Runs even when bootstrap/preflight/confirmation fails. Inner phase close()
+ # calls have already unwound; this is the sole lifetime owner of the RAM key.
+ if not os.path.lexists('/run/cop-clean-reset-comm/temporary-identity.json'):return
+ bootstrap=verified_bootstrap_code()
+ helper=pinned_public_module(TEMP_KEY_HELPER,TEMP_KEY_SHA,'release_temp_key')
+ authorize=pinned_public_module(TEMP_AUTHORIZE,TEMP_AUTHORIZE_SHA,'release_temp_authorize')
+ class CleanupOnlyTransport:
+  def open(self):need(bootstrap.temporary_comm_identity() is not None,'RELEASE_TEMP_IDENTITY_MISSING')
+  def run(self,args,*,input=None,timeout=45):
+   need(args==['/usr/bin/python3','-I','-c',authorize.REMOTE_PROGRAM,'remove'],'RELEASE_TEMP_CLEANUP_COMMAND_SCOPE')
+   base=bootstrap.transport_args('comm.home.cz')
+   need(base[-5:]==['voldzi@comm.home.cz','/usr/bin/sudo','-n','/usr/bin/id','-u'],'RELEASE_TEMP_TRANSPORT_SCOPE')
+   r=subprocess.run(base[:-4]+[shlex.join(['/usr/bin/sudo','-n',*args])],input=input,capture_output=True,env=ENV,timeout=timeout)
+   need(r.returncode==0,'RELEASE_TEMP_AUTHORIZATION_REMOVE_FAILED');return r.stdout
+  def close(self):pass
+ result=helper.cleanup_temporary_comm_key(types.SimpleNamespace(CommunicationResetTransport=CleanupOnlyTransport))
+ need(result=={'temporaryPrivateIdentityRemoved':True,'exactAuthorizationAbsent':True},'RELEASE_TEMP_CLEANUP_NOT_VERIFIED')
+ print(json.dumps({'temporaryTransportCleanup':result}))
+def run_with_transport_cleanup(action):
+ try:return action()
+ finally:
+  try:cleanup_temporary_transport()
+  except BaseException:
+   print(json.dumps({'error':'RELEASE_TEMPORARY_TRANSPORT_CLEANUP_FAILED','cleanupVerified':False}));raise
 def verify_bootstrap(expected_sha):
  r=json.loads(root_read(TARGET/'bootstrap-public.json',16*1024*1024))
  need(r['manifestSha256']==expected_sha and r['dependencyImage']=='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df' and r['copApiImage']=='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86','RELEASE_BOOTSTRAP_BINDING')
@@ -150,6 +189,6 @@ def main():
   print(json.dumps({'disabledRuntimeRestartPending':True,'productionActivated':False}))
  # No private config serialization, secret file, automatic restart or activation.
 if __name__=='__main__':
- try:main()
+ try:run_with_transport_cleanup(main)
  except BaseException:
   print(json.dumps({'error':'ROOT_RELEASE_STOPPED_FAIL_CLOSED','productionActivated':False}));raise SystemExit(1)

@@ -757,3 +757,30 @@ as well as the idle-pool listener. Query failures remain rejected and transactio
 must still roll back. All69 Router synthetic tests and typecheck pass; new immutable
 candidate and actual same-operation preservation/recovery acceptance are required.
 Earlier739 outage evidence is retained and is not relabeled as this new case.
+
+The new official Router image is
+`sha256:3fcc09192e451c9a45f839271055e93f7b5250b6e05c6e122223e964ee0247a6`;
+isolated bundle `sha256:5cff9d1ecdc864e9a20d8e247aec447cc15a1d2eba212a2520d7d4ab1b3dbff0`
+retains byte-identical main/driver and situation trees. The actual v3 completed
+operation test passed 200/deleted → 503 during runtime-role NOLOGIN and session
+termination → 200/deleted after LOGIN restoration. All four signed final GETs
+returned deleted with zero residue; SQL operation/epoch bindings and hashes of
+B, jobs, finances and independent guard were unchanged. No reseed or external
+provider call occurred. Exact public evidence:
+`docs/archive/2026-10-17_ROUTER_COMPLETED_OUTAGE_V3_ACTUAL.json`.
+This proves completed-operation recovery, not a pending-deletion outage or a new
+fresh SIM restore. Production is unchanged.
+
+Root activation now requires the exact ordered twelve-phase reset receipt,
+including `messaging_install`; missing, duplicate or reordered phases are refused.
+The explicitly approved temporary COMM transport is fixed to Root tmpfs
+`/run/cop-clean-reset-comm`, checked before bootstrap for custody, key hashes,
+key-pair match, IP-bound restricted authorization and a maximum two-hour expiry.
+No caller-supplied key path or agent forwarding is accepted. The outer release
+finally invokes SHA-pinned cleanup even on preflight/confirmation failure, after
+inner transports close. Cleanup can execute only the exact authorization-remove
+program. Success requires both private identity removal and confirmed absence of
+the exact new authorization line; unavailable/expired authorization cleanup is an
+explicit failure, not successful deployment. Key creation remains a separately
+approved operator step. Source/synthetic checks do not prove actual Root cleanup
+or authorize production activation.

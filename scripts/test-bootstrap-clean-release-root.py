@@ -42,4 +42,12 @@ class Bootstrap(unittest.TestCase):
   a=m.transport_args('comm.home.cz');self.assertIn('BatchMode=yes',a);self.assertIn('PasswordAuthentication=no',a);self.assertIn('PreferredAuthentications=publickey',a);self.assertNotIn('PreferredAuthentications=password',a)
  def test_storage_existing_tty_password_not_new_key(self):
   a=m.transport_args('storage.home.cz');self.assertIn('BatchMode=no',a);self.assertIn('PubkeyAuthentication=no',a);self.assertIn('PreferredAuthentications=password',a);self.assertIn('NumberOfPasswordPrompts=1',a)
+ def test_fixed_temporary_comm_key_only(self):
+  with patch.object(m,'temporary_comm_identity',return_value='/run/cop-clean-reset-comm/id_ed25519'):
+   a=m.transport_args('comm.home.cz');self.assertIn('IdentitiesOnly=yes',a);self.assertEqual(a[a.index('-i')+1],'/run/cop-clean-reset-comm/id_ed25519')
+ def test_bad_temporary_identity_never_falls_back(self):
+  with patch.object(m,'temporary_comm_identity',side_effect=RuntimeError('TEST_EXPIRED')):
+   with self.assertRaisesRegex(RuntimeError,'EXPIRED'):m.transport_args('comm.home.cz')
+ def test_storage_does_not_consult_temporary_identity(self):
+  with patch.object(m,'temporary_comm_identity',side_effect=AssertionError('NO_COMM_KEY')):m.transport_args('storage.home.cz')
 if __name__=='__main__':unittest.main()
