@@ -1,0 +1,21 @@
+{
+  "contractVersion": "sim-common-coordinator-source-evidence-v1",
+  "scope": "source-and-isolated-tests-only",
+  "runtimeRevision": "a337cfc1aa3dc8ef3fd49a84b6e2fb94a651ee4d",
+  "checks": {
+    "isolatedOrchestrationAndOwnedFiles": {"passed": 9},
+    "buildGuardUnitTests": {"passed": 8},
+    "deploymentShellSyntax": "passed",
+    "skeletonValidation": "passed",
+    "typecheck": "passed",
+    "openapiValidation": {"passed": true, "paths": 163, "schemas": 282},
+    "diffWhitespace": "passed"
+  },
+  "actualWholeTwelveOwnerAcceptance": "pending-not-proven-by-unit-tests",
+  "productionCoordinatorInvoked": false,
+  "productionSecretsChanged": false,
+  "productionDatabaseChanged": false,
+  "productionServicesRestarted": false,
+  "cf24Changed": false,
+  "automaticActivation": false
+}

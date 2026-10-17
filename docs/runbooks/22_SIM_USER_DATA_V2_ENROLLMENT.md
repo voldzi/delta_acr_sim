@@ -170,6 +170,46 @@ revision a337cfc. Root must pin both, never label an older image with the newer
 installer revision. Candidate image identities and actual cache-device proof
 must be recorded before activation.
 
+## Common coordinator (source only; activation remains gated)
+
+`scripts/coordinate-clean-release.py` exports `run_common_reset(private_config)`;
+it has no command-line entry point or automatic start. The coordinator imports
+the hash-enrolled COP controller and its actual Root authority from the sealed
+operator bundle. Before remote authentication or stopping any writer it requires
+the real `cop-sim-whole-clean-acceptance-v2` report for all twelve owners and all
+nine exact candidate images. Unit-test mocks are not an acceptance report.
+
+Inside one held Root admission it runs the concrete identity, COP, AI, driver,
+file, SIM application-file, SIM user install and COP safety-install phases. It
+then requires COP's separately implemented `run_remaining_reset(admission,
+private_config)` and a fresh provider readback. Missing closure, stale plan,
+changed proof or lost admission refuses; there is no automatic service restart.
+
+Only after those checks may it stage the four pinned SIM images and read-only
+PostgreSQL CA mount in `/srv/sim/docker-compose.clean-user-data.json`, plus the
+fixed clean-lifecycle keys in `/srv/sim/.env`. Existing provider, OpenAI and
+service identity values are preserved. AI and driver have separate enrolled
+dataset identifiers through `SIM_CLEAN_AI_*` and `SIM_CLEAN_DRIVER_*` aliases;
+their service environments map these to `SIM_CLEAN_LIFECYCLE_*`. Both base-clean
+flags, the new user/history/relay flags and legacy erasure flags remain false.
+The helper returns metadata only; secrets remain in memory or the mode-0600
+server environment file. No production invocation is part of this source work.
+
+The legacy deployment helper refuses the new overlay or enrolled user-data
+mode rather than rewriting its environment file. Its replacement is limited to
+the sealed source and explicitly inventoried previous hashes. File replacement
+preserves ownership, checks original bytes, uses atomic rename and fsync, and
+checks the held admission before and after the write. Partial failure leaves
+writers fenced; it does not authorize reopening.
+
+`python3 scripts/test-coordinate-clean-release.py`: nine isolated tests cover
+separate lane IDs, false flags, unchanged existing keys, changed hash refusal,
+duplicate identity refusal, LIVE-mode refusal, owned-file custody/CAS, admission
+loss and actual-gate call ordering before remote auth or freeze. These prove
+local orchestration behavior only, not the actual whole-twelve-owner recovery
+test or production completion. The runtime images remain revision a337cfc;
+coordinator/installer source is versioned separately.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an

@@ -3,6 +3,12 @@ set -euo pipefail
 
 cd /srv/sim
 
+# Coordinated clean lifecycle must never fall back to this full .env rewrite.
+if [ -f docker-compose.clean-user-data.json ] || { [ -f .env ] && grep -Eq '^SIM_USER_DATA_MODE=.*production-sim-user-data-v1' .env; }; then
+  printf 'Clean lifecycle is enrolled. Refusing legacy environment rewrite; use coordinated runbook 22.\n' >&2
+  exit 1
+fi
+
 # SIM_DATABASE_V2_DEPLOY_GUARD: this legacy script rewrites .env and would lose
 # the independent continuity enrollment. Use the coordinated pinned-image path.
 if [ -f .env ] && grep -Eq '^SIM_ACCOUNT_ERASURE_AUTHORITY_MODE="?database_v2"?$' .env; then
