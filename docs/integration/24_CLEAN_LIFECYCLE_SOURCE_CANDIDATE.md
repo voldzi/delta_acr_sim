@@ -658,3 +658,31 @@ data; CREATE usage table, DELETE independent journal and UPDATE guard config
 were actually denied42501. Bootstrap/setup failures are explicitly recorded.
 This is not full native runtime capability/restart acceptance or production GO.
 All test credentials and database files remain solely in server tmpfs.
+
+### Root bootstrap command, not the complete release command
+
+`sudo /usr/bin/python3 -I scripts/bootstrap-clean-release-root.py
+--check-existing-transports` is a concrete read-only command that checks existing
+Root public-key SSH and sudo custody for COMM and storage before any PostgreSQL
+password request. It creates no key or agent forwarding and never falls back to
+password authentication. It has not been run on production.
+
+The same command with `--bootstrap-public-manifest PATH --manifest-sha256 SHA`
+verifies the explicitly reviewed public manifest and all three archive SHA pins
+before importing any artifact code. COP8776eb4 and Messaging0876f91 are fixed;
+the final SIM revision/hash are explicit manifest inputs. It re-exports pinned
+dependency image2e and actual COP candidate286 into a fresh Root-owned directory,
+verifies Node/loader pins and unchanged actual candidate dist after the public
+operator source overlay, then seals files readonly. An occupied target is refused,
+not adopted: the existing UID1000 runtime must be handled by a separately reviewed
+quarantine/migration step. The bootstrap does not itself remove that directory.
+Eight synthetic archive/negative tests pass; no actual Root bootstrap is claimed.
+
+This is deliberately **not** a completed `prepare_and_seal_clean_release` or
+production apply CLI. It prepares zero plans and never requests a database
+password, freezes writers or activates services. The final single-process join
+still needs the concrete existing-secret Messaging collector, actual12 inspectors,
+reviewed PLAN/COP manifest publication and the owner-provided disabled-runtime
+restart/capability/activation stages. Additionally the current COP acceptance gate
+requires Router outage during `deleting`; the proven completed-operation outage
+must not be relabeled to satisfy it. Pending-provider failures also block GO.
