@@ -38,4 +38,8 @@ class Bootstrap(unittest.TestCase):
  def test_no_password_reset_apply_or_activation(self):
   t=p.read_text()
   for bad in ['getpass(','.freeze_reviewed(','.run_common_reset(','.activate(','.chmod(0o777)']:self.assertNotIn(bad,t)
+ def test_comm_existing_public_key_only(self):
+  a=m.transport_args('comm.home.cz');self.assertIn('BatchMode=yes',a);self.assertIn('PasswordAuthentication=no',a);self.assertIn('PreferredAuthentications=publickey',a);self.assertNotIn('PreferredAuthentications=password',a)
+ def test_storage_existing_tty_password_not_new_key(self):
+  a=m.transport_args('storage.home.cz');self.assertIn('BatchMode=no',a);self.assertIn('PubkeyAuthentication=no',a);self.assertIn('PreferredAuthentications=password',a);self.assertIn('NumberOfPasswordPrompts=1',a)
 if __name__=='__main__':unittest.main()

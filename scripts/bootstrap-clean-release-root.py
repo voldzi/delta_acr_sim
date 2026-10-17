@@ -8,7 +8,7 @@ from pathlib import Path
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 DEPS='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df'
 APP='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86'
-REVISIONS={'cop':'8776eb4e4aab9517b1c26343aff2c709f0956438','messaging':'0876f91b5e4e28f20a2904b2c5b2355d5cfde56f'}
+REVISIONS={'cop':'e5c9f3460cfc412b71178ec856d47678520262fc','messaging':'0876f91b5e4e28f20a2904b2c5b2355d5cfde56f'}
 UUID='2f93f595-b61b-4eea-9054-7afa9b275b5b'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 def need(v,c):
@@ -22,10 +22,19 @@ def context():
  need(command(['/usr/bin/findmnt','-n','-o','UUID','--mountpoint','/srv/x5-production']).decode().strip()==UUID,'ROOT_BOOTSTRAP_X5_UUID')
  need(Path('/srv/x5-production').resolve()==Path('/srv/x5-production') and Path('/srv/x5-production').stat().st_dev!=Path('/').stat().st_dev,'ROOT_BOOTSTRAP_X5_DEVICE')
  need(shutil.disk_usage('/srv/x5-production').free>=3*1024**3,'ROOT_BOOTSTRAP_HEADROOM')
+def transport_args(host):
+ need(host in ['comm.home.cz','storage.home.cz'],'ROOT_TRANSPORT_HOST_SCOPE')
+ common=['/usr/bin/ssh','-F','/dev/null','-o','KbdInteractiveAuthentication=no','-o','IdentityAgent=none','-o','ForwardAgent=no','-o','ForwardX11=no','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no','-o','UserKnownHostsFile=/home/voldzi/.ssh/known_hosts','-o','GlobalKnownHostsFile=/dev/null','-o','ConnectTimeout=8']
+ auth=['-o','BatchMode=yes','-o','PasswordAuthentication=no','-o','PubkeyAuthentication=yes','-o','PreferredAuthentications=publickey'] if host=='comm.home.cz' else ['-o','BatchMode=no','-o','PubkeyAuthentication=no','-o','PreferredAuthentications=password','-o','NumberOfPasswordPrompts=1']
+ return common+auth+['voldzi@'+host,'/usr/bin/sudo','-n','/usr/bin/id','-u']
 def check_transports():
- """Before any PG password or writer freeze. No key copy/provision/agent."""
+ """Before PG prompt/freeze: existing COMM key, existing storage TTY password."""
  for host in ['comm.home.cz','storage.home.cz']:
-  p=subprocess.run(['/usr/bin/ssh','-F','/dev/null','-o','BatchMode=yes','-o','PasswordAuthentication=no','-o','KbdInteractiveAuthentication=no','-o','IdentityAgent=none','-o','ForwardAgent=no','-o','ForwardX11=no','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no','-o','UserKnownHostsFile=/home/voldzi/.ssh/known_hosts','-o','GlobalKnownHostsFile=/dev/null','-o','ConnectTimeout=8','voldzi@'+host,'/usr/bin/sudo','-n','/usr/bin/id','-u'],stdin=subprocess.DEVNULL,capture_output=True,env=ENV,timeout=20)
+  args=transport_args(host)
+  if host=='storage.home.cz':
+   with open('/dev/tty','r+b',buffering=0) as tty:
+    p=subprocess.run(args,stdin=tty,stdout=subprocess.PIPE,stderr=tty,env=ENV,timeout=120)
+  else:p=subprocess.run(args,stdin=subprocess.DEVNULL,capture_output=True,env=ENV,timeout=20)
   need(p.returncode==0 and p.stdout==b'0\n','ROOT_EXISTING_TRANSPORT_UNAVAILABLE_'+host.split('.')[0].upper())
 def public_bytes(path,maximum):
  fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)

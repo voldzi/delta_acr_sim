@@ -663,9 +663,11 @@ All test credentials and database files remain solely in server tmpfs.
 
 `sudo /usr/bin/python3 -I scripts/bootstrap-clean-release-root.py
 --check-existing-transports` is a concrete read-only command that checks existing
-Root public-key SSH and sudo custody for COMM and storage before any PostgreSQL
-password request. It creates no key or agent forwarding and never falls back to
-password authentication. It has not been run on production.
+Root public-key SSH for COMM and the existing storage TTY-password/sudo custody
+before any PostgreSQL password request. It creates no key or forwarding.
+COMM never falls back to password; storage intentionally uses its existing
+password route, directly in the terminal and without storage. It has not been
+run on production.
 
 The same command with `--bootstrap-public-manifest PATH --manifest-sha256 SHA`
 verifies the explicitly reviewed public manifest and all three archive SHA pins
@@ -716,3 +718,34 @@ new root. COP Root validator must pin the same root before the release can run.
 Dependency image2e, actual app image286 and Node/loader content pins do not change.
 The old user-owned tree is neither adopted nor deleted. Earlier path examples
 describe the prior source candidate, not the new bootstrap target.
+
+### Concrete interactive preparation and disabled-reset command
+
+`scripts/prepare-and-seal-clean-release.py` now implements
+`prepare_and_seal_clean_release` and its Root-only CLI. Run through
+`sudo /usr/bin/python3 -I` with `--public-manifest PATH --manifest-sha256 SHA`.
+It verifies the adjacent bootstrap helper's fixed bytes before executing them,
+checks existing Root transports before any password request, bootstraps or verifies
+the Root-owned sources/runtime, and requires the real exact whole-provider gate
+before PostgreSQL getpass. Scope confirmation is explicit and interactive.
+
+The preparation performs the actual Node seven inspectors/COP manifest builder,
+actual Messaging collector/schema inspector and remaining three provider inspectors
+through concrete transports. It binds actual current writer images for file reset,
+joins twelve reviewed plans, validates the Root plan, and exclusively publishes
+only new public600 PLAN/manifest files. Existing plans require review instead of
+silent overwrite. The full private config and administrator password stay in RAM.
+
+Optional `--apply-disabled-reset` additionally requires the explicit
+`APPLY_DISABLED_RESET` confirmation and invokes the real common executor using
+that same in-memory config. No secret is written for a later process to resume.
+Four synthetic orchestration tests cover order, gate denial and non-publication
+of private input. The command has **not** performed production inspection/reset.
+
+This closes the previously missing preparation/disabled-reset entrypoint source,
+not activation. It reports `disabledRuntimeRestartPending=true`; the owner-provided
+Messaging disabled restart/capability stage and later joint activation are still
+separate. The public artifact manifest cannot be finalized until COP's new fixed
+Root validator path and final provider candidates are published and the actual
+whole gate passes. In particular, no pending-deletion result is fabricated from
+the completed-operation Router test.

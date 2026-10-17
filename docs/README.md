@@ -120,6 +120,9 @@ Source-only clean lifecycle proposal and isolated DB evidence:
 [`adr/0041_ISOLATED_CLEAN_LIFECYCLE.md`](adr/0041_ISOLATED_CLEAN_LIFECYCLE.md).
 Explicit production-mode source gate:
 [`adr/0042_ROOT_ENROLLED_CLEAN_PRODUCTION_MODE.md`](adr/0042_ROOT_ENROLLED_CLEAN_PRODUCTION_MODE.md).
+Root-private release preparation candidate:
+[ADR 0046](adr/0046_ROOT_PRIVATE_RELEASE_PREPARATION.md), with the concrete
+interactive command described in integration24. Production execution is not proven.
 
 The binding API contract is:
 
