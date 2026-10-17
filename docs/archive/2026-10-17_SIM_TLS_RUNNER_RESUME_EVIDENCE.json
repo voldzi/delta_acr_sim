@@ -1,0 +1,33 @@
+{
+  "scope": "owned synthetic whole12 fixture only",
+  "productionTouched": false,
+  "wholeAccountComplete": false,
+  "originalDriverCapability": { "status": 503, "workerReady": false, "sqlReadbackStatus": 200 },
+  "cause": "driver composition.start() omitted by test fixture, not by production service",
+  "snapshot": {
+    "snapshotId": "9130368c-ee6c-461e-878e-2bcd5b677b94",
+    "sha256": "7655aa9d17385db7bab15236e281dc463d54bbca636c2a441eff3993f0c5f087",
+    "bytes": 19661,
+    "capturedRowsPerActor": { "sim_measurements": 4, "ai_router": 4, "sim_user_data": 1 },
+    "mainFilesPerActor": 4,
+    "controlOrGuardJournalsIncluded": false,
+    "restoresPerformed": 0,
+    "deletionsPerformed": 0
+  },
+  "resumed": {
+    "containerId": "6251368d5d6052bf2beacaf002136061211133439692dd170535003408e2ef31",
+    "image": "sha256:08570327596756178436c34865a16aafb5f2ce561a05d292891441e15d015015",
+    "fixtureSourceSha256": "7363c1eee35db17a3733891d99023d5e360c8c0b4908bc3e09e35601b89c09d0",
+    "resetEpoch": "7f970a87-f36b-4e7f-8226-8c9107c8d3e4",
+    "capabilities": { "main": 200, "ai": 200, "driver": 200 },
+    "readbackSha256": "a82182fdfd61c5e02d9f9bb8db9de6a1f36767fcc9d88f34c37d2656410d4474",
+    "allActorContentsStatesCountsAndFingerprintsPreserved": true,
+    "reseeded": false,
+    "reenrolled": false,
+    "originalIdentityAndOperationDataPreserved": true,
+    "runtimeTestPasswordsRotated": 5,
+    "passwordsStayedInServerRam": true,
+    "legacyComponentMetadataTranslated": ["ai.contractVersion", "ai.mode", "driver.contractVersion", "driver.mode"]
+  },
+  "notProven": ["completed content restore and repeated erasure", "Root whole-account acceptance", "production activation"]
+}

@@ -345,3 +345,33 @@ The binding OpenAPI includes these explicitly source-only isolated routes.
 Rollback in this scope: stop the isolated fixture; no live state was modified.
 Do not rollback a future deletion by restoring user data. Keep tombstone/epoch
 authority separate from rollback images and test old-epoch refusal before rollout.
+
+## Fixed TLS fixture resume (2026-10-17, not production)
+
+The original whole12 TLS fixture omitted `composition.start()` for the driver.
+Actual capability was 503/workerReady=false while the SQL-only readback was 200.
+The fixture now starts the real composition before listening. Production service
+bootstrap was not the cause and its image was not patched.
+
+`resume-whole12-tls-production-sim.mjs --resume-owned-fixture` is restricted to
+one exact existing synthetic cluster/epoch. It reopens actual compiled factories
+and authority against existing enrollment/bindings. It never seeds, resets,
+reenrolls, changes an identity or imports CF24 operations. After the original
+runner stopped, only five named test runtime passwords were rotated. Private
+configuration, credentials and the pre-delete snapshot remained in server tmpfs.
+No production credentials, HBA, roles or endpoints changed.
+
+Actual main/AI/driver capabilities returned 200; all A/B data counts, states,
+row/file fingerprints and eight main files were preserved. Original component
+readback labels from source 0ded266 were explicitly translated in exactly four
+metadata fields only; this does not relabel historical evidence or ignore data
+differences. The first comparison failures are retained in private test status
+files. Sanitized evidence is in
+`docs/archive/2026-10-17_SIM_TLS_RUNNER_RESUME_EVIDENCE.json`.
+
+This is not completed-restore acceptance. The snapshot excludes both independent
+guard and target control journals; no restoration or deletion was performed by
+this helper. Existing terminal jobs do not yet retry content restored after
+completion. A new runtime/SQL change and actual nonzero restored-row/repeated
+cleanup test are required before that gap can be called resolved. CF24 and the
+original reset manifests/authority fingerprints remain unchanged.

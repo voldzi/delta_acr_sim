@@ -449,6 +449,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
         for (const k of Object.keys(process.env)) if (!(k in prior)) delete process.env[k];
         Object.assign(process.env, prior);
       }
+      composition.start();
       driverServer = await listen(result.app, 4311);
       driver = {
         component: "driver",
@@ -492,7 +493,72 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     } else throw Error("UNKNOWN_TLS_COMPONENT");
   }
   let externalGuard;
+  async function openReadbacks() {
+    assert.equal(readbackServers.length, 0);
+    for (const [port, lane] of [[4321, "driver"], [4322, "ai"], [4324, "all"]]) {
+      const handler = async (q, r) => {
+        r.setHeader("cache-control", "no-store");
+        r.setHeader("content-type", "application/json");
+        const deny = (status, error) => { r.writeHead(status); r.end(JSON.stringify({ error })); };
+        if (q.method !== "GET" || q.url !== "/readback" || q.headers.origin) return deny(404, "NOT_FOUND");
+        const got = Buffer.from(q.headers.authorization ?? ""), want = Buffer.from("Bearer " + input.base.environment.copServiceToken);
+        if (got.length !== want.length || !timingSafeEqual(got, want)) return deny(401, "UNAUTHORIZED");
+        try { const result = await api.read(); r.end(JSON.stringify(lane === "all" ? result : result[lane])); }
+        catch { return deny(503, "TLS_FIXTURE_READBACK_UNAVAILABLE"); }
+      };
+      readbackServers.push(await listen(handler, port));
+    }
+  }
   const api = {
+    /** Existing synthetic fixture only. No seed, reset, enrollment or role DDL.
+     * Caller must have stopped the previous runner and supplied new test-only
+     * role credentials privately. Original identities and bindings are retained. */
+    async resumeExisting(configuration, credentials, jwksOrigin) {
+      assert.equal(phase, "fresh");
+      assert.equal(root, "/private/tmp/sim-user-install-pg-9aff26e65b74");
+      assert.equal(configuration.input.contractVersion, "cop-sim-clean-whole-fixture-v2");
+      assert.equal(configuration.input.base.issuer, "https://cop-erasure-keycloak.invalid/realms/cop");
+      assert.equal(configuration.input.base.resetEpoch, "7f970a87-f36b-4e7f-8226-8c9107c8d3e4");
+      assert.equal(jwksOrigin, "http://127.0.0.1:8080/realms/cop/protocol/openid-connect/certs");
+      const roles = ["ai_router_runtime", "driver_measurements_runtime", "sim_user_data_runtime", "sim_user_data_guard_runtime", "sim_user_history_guard_runtime"];
+      assert.deepEqual(Object.keys(credentials).sort(), roles.slice().sort());
+      for (const role of roles) assert.match(credentials[role], /^[A-Za-z0-9_-]{43}$/);
+      input = configuration.input;
+      jwks = jwksOrigin;
+      Object.assign(passwords, credentials);
+      const enrollments = {};
+      for (const lane of ["ai", "driver"]) {
+        const c = pool(conn(lane === "ai" ? "sim_ai_router" : "sim_driver_measurements"));
+        const cfg = (await c.query("SELECT * FROM sim_clean.config WHERE singleton")).rows[0];
+        const e = (await c.query("SELECT * FROM sim_clean.production_enrollment WHERE singleton")).rows[0];
+        assert.equal(cfg.mode, "production-clean-lifecycle-v1");
+        assert.equal(cfg.environment_id, input.base.environmentId);
+        assert.equal(cfg.reset_epoch, input.base.resetEpoch);
+        assert.equal(Number(cfg.tokens_not_before), input.base.tokensNotBefore);
+        assert.equal(e.environment_id, cfg.environment_id);
+        assert.equal(e.reset_epoch, cfg.reset_epoch);
+        assert.equal(Number((await c.query("SELECT count(*) n FROM sim_clean.job")).rows[0].n), 0);
+        assert.equal(Number((await c.query("SELECT count(*) n FROM sim_clean.account WHERE state<>'active'")).rows[0].n), 0);
+        enrollments[lane] = { environmentId: e.environment_id, resetEpoch: e.reset_epoch, tokensNotBefore: Number(cfg.tokens_not_before), userDatasetId: e.user_dataset_id, enrollmentId: e.enrollment_id };
+      }
+      for (const [component, database] of [["sim_user_data", "sim_user_data"], ["sim_user_history", "sim_ai_router"]]) {
+        const c = pool(conn(database)), row = (await c.query(`SELECT * FROM ${component}.continuity WHERE singleton`)).rows[0];
+        const binding = configuration.bindings[component];
+        for (const [key, value] of Object.entries(binding)) assert.equal(String(row[key]), String(value));
+        assert.equal(Number((await c.query(`SELECT count(*) n FROM ${component}.job`)).rows[0].n), 0);
+        assert.equal(Number((await c.query(`SELECT count(*) n FROM ${component}.account WHERE state<>'active'`)).rows[0].n), 0);
+      }
+      install = { bindings: configuration.bindings, enrollments };
+      guardAdmin = pool(conn("cop_account_safety_guard"));
+      externalGuard = forbidExternalFixtureFetch();
+      phase = "prepared";
+      await tlsChecks();
+      await start("ai");
+      await start("driver");
+      await start("main");
+      await openReadbacks();
+      return api.read();
+    },
     async seed(A, B, issuer, jwksOrigin) {
       externalGuard = forbidExternalFixtureFetch();
       await prepare(A, B, issuer, jwksOrigin);
