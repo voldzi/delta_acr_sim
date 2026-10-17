@@ -433,3 +433,36 @@ tests and 26 actual isolated PG/SCRAM installer checks passed, including rejecti
 of an unreviewed extra DELETE policy. Root source sealing must include the new
 helper, profile and SQL bytes before execution. These tests do not grant real
 Root admission or authorize a live install.
+
+### Prepared owned-fixture cutover, not executed
+
+`scripts/fixtures/cutover-whole12-completed-replay.py` is restricted to exact
+synthetic TLSv3 container `6251368d...`, namespace, loopback cluster, epoch and
+already-accepted operation `b6fe7a68-d7a2-49e0-a9da-6dd7bcb01a4e`. It is not a
+production installer and exposes no server endpoint. Root must agree on the
+stopped-writer window before invoking `--apply-agreed-owned-cutover`; no timer,
+application startup or this source change invokes it. `--inspect` changes nothing
+and does not claim actual SQL/job verification.
+
+It requires exact source checkout 175c731a3fbe78ce23e7303ff5df13eceaaf7f45 under
+the fixed owned X5 staging path, validates every tracked blob and two critical
+fixture-file SHA pins, and uses only the new compiled test bundle listed in
+`docs/archive/2026-10-17_SIM_COMPLETED_REPLAY_IMAGE_PINS.json`. It copies the
+existing private input, original snapshot and existing runtime credentials only
+between private server-RAM files. No identity, credential or epoch is rotated.
+
+Before stop it requires actual SIM A zero and unchanged original B fingerprints.
+After exact old-process termination it checks all six listeners closed and all
+five previous runtime roles without PG sessions. Fixture SQL verifies the exact
+owned cluster, four original terminal jobs, ready independent guard bindings and
+the original full catalog. In one locked transaction it adds only the five
+reviewed DELETE policies from the two pinned SQL files, compares all affected
+target data/job/resource/finance hashes, and verifies the separate new full
+catalog. It does not reenroll, modify guard state or edit immutable jobs.
+
+The new runner must then return three actual 200 capabilities and equal complete
+A/B readback with replay modes explicitly selected. It does not restore content
+or claim whole acceptance. Any failure retains old/new test containers and RAM
+evidence for coordinated recovery; it never resumes production or auto-grants GO.
+Nine pure negative/pin/syntax tests passed; actual cutover and composed restore
+remain unexecuted. The three API images and exact-byte test bundle are built only.
