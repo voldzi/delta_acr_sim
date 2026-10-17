@@ -261,6 +261,54 @@ It tests private input custody, issuer refusal, two account seeds, authenticated
 readback, actual outage/503/restart and preserved B history. Real Keycloak and
 the remaining whole12 providers are the separate shared acceptance step.
 
+## New TLS production-bootstrap fixture (actual namespace run pending)
+
+`scripts/fixtures/whole12-tls-production-sim.mjs` adds a separate factory,
+`createTlsProductionSimFixture({root,sourceRoot,runtimeRoot})`. It does not alter
+the old isolated fixtures or application code. `runtimeRoot` may be a map keyed
+by simulator-api, ai-router-api and situation-data-api, preserving each exact
+candidate's relative imports and dependencies. The production-mode main/history
+factories receive actual restricted PostgreSQL connections and independently
+enrolled SQL authorities, not injected positive callbacks. The installer uses
+its existing owned Unix-fixture profile to enroll fresh production-mode tables;
+its synthetic admission is explicitly **not actual Root admission**.
+
+The caller must create a new network-none namespace, no published ports, and a
+fresh owned PG cluster `sim_whole12_tls_fixture_v1`, port5000, ssl=on, loopback
+only, fixture_admin over the owned Unix socket. Test CA mounts read-only at
+`/etc/csm-sim/postgresql-ca.pem`; private container hosts maps haproxy.home.cz
+to127.0.0.1. The server certificate has that DNS SAN. The production bootstrap,
+fixed URI and verify-full rules remain unchanged. Actual tests must confirm
+pg_stat_ssl, restricted role, denied DDL, wrong CA and wrong SAN rejection.
+This is test-server verification, **not production HAProxy certificate proof**.
+
+`prepareWhole12Tls(root)` generates fresh test material using openssl. It accepts
+owned `/private/tmp/sim-user-install-pg-*` or only the explicit server tmpfs
+`/dev/shm/cop-clean-whole12-9aff26e65b74-pg`, bound inside the test containers as
+`/private/tmp/sim-user-install-pg-9aff26e65b74`. It never edits host DNS, copies a
+production CA/key or changes firewall/VPN. Six local actual certificate tests
+pass; these do not prove PostgreSQL/bootstrap acceptance.
+
+The factory `seed(A,B,issuer,jwksOrigin)` receives actual KC subjectId/oidcIat/jwt.
+It generates private roots first, then derives router IDs using the exact COP
+`cop-router-chat-v1` HMAC and daily contributor IDs using
+`cop-driver-contributor-v1`. COP must use returned private
+input.base.environment.routerHashSecret and driverHashSecret as the matching
+derivation roots. Return values remain private RAM/tmpfs only. `read()` checks
+both actual authority-backed ledgers and returns counts/fingerprints. Readback
+ports4321/4322/4324 require the private COP bearer. `outage/recover` supports
+main/ai/driver and guard; guard outage disables only the two synthetic guard
+roles and terminates their test sessions. `quarantine` changes only the fresh
+test checkpoint. Whole-account and Root acceptance stay explicitly false.
+
+`scripts/build-whole12-tls-runtime.py` prepares a distinct offline TEST bundle
+using only the three pinned a337 candidates, X5 and sim-x5. It exports the exact
+main root filesystem and copies separate Router/situation roots, avoiding
+dependency merges or package downloads. The scratch-based test image is not
+claimed to be an original candidate image. Actual compiled/resource byte hashes
+must match all three originals; production service identities must not change.
+Its build and the complete PostgreSQL/KC run remain separate acceptance gates.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an
