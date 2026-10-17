@@ -33,6 +33,12 @@ export class BudgetStore {
     private readonly limits: BudgetLimits
   ) {
     this.pool = new Pool({ connectionString: url, max: 8, connectionTimeoutMillis: 3000 });
+    // pg emits idle-client disconnects on the pool, outside request promises.
+    // Keep the process alive; subsequent queries still reject/fail closed.
+    // Never log the error object: it can contain connection or query details.
+    this.pool.on("error", () => {
+      console.error(JSON.stringify({ event: "ai_router_database_idle_connection_error" }));
+    });
   }
 
   async init(): Promise<void> {

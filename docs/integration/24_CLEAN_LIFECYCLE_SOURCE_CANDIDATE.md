@@ -567,3 +567,22 @@ installer must run under held writer custody, verify the installed profile and
 least-privilege roles, enroll the actual production binding and empty baseline,
 then verify runtime flags/readiness before activation. This remains an explicit
 missing gate; the preparation summary reports it as not included.
+
+### Fresh956 completed-operation outage finding
+
+The original immutable bundle's Router outage probe did **not** obtain HTTP503.
+After baseline200, the exact isolated `ai_router_runtime` NOLOGIN and termination
+of only its `sim_ai_router` sessions caused an unhandled idle PostgreSQL pool
+error and ended the composed Node process. LOGIN was restored in finally. The
+same runtime was resumed with the original RAM credentials/epoch/operation;
+actual four signed deletion GETs returned200/deleted with A0 and B unchanged.
+No seed, password rotation or production change occurred. OOM counters were zero;
+the earlier unrelated disappearance of the original runner lacks exit evidence
+and is not conclusively attributed to this error.
+
+`BudgetStore` now handles idle pool errors without logging raw error/query/URI
+content. Requests still reject database failures; there is no success or external
+fallback. Two targeted synthetic tests and Router typecheck pass. A new compiled
+immutable test image and actual repeat503/recovery200 remain required: this source
+fix is not acceptance evidence for the old bundle. The operation was already
+completed, so this is not a retroactive pending-deletion outage test.
