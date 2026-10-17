@@ -72,7 +72,7 @@ class Configuration(unittest.TestCase):
             self.assertEqual(p.read_bytes(),b'old');self.assertEqual(list(Path(root).iterdir()),[p])
 
 class Orchestration(unittest.TestCase):
-    def exercise(self,deny):
+    def exercise(self,deny,preflight_deny=False):
         calls=[];epoch=str(uuid.uuid4());proof={'reportSha256':'a'*64}
         plan={'resetEpoch':epoch,'tokensNotBefore':123,'sources':{'cop':{'root':str(m.COP_ROOT),'files':{}}},'candidateImages':{}}
         raw=json.dumps(plan).encode()
@@ -94,13 +94,21 @@ class Orchestration(unittest.TestCase):
         host=types.SimpleNamespace(validate_plan=lambda p:p,_acceptance_module=lambda:types.SimpleNamespace(verified_pre_stop_acceptance=gate),
              CommunicationResetTransport=Remote,DriverReportProducerCustody=lambda:object(),RootResetAdmission=Root,protected=lambda p:raw)
         controller=types.SimpleNamespace(host=host,run_private_worker=lambda a,c:calls.append(c['phase']) or {'phase':c['phase']})
-        remaining=types.SimpleNamespace(run_remaining_reset=lambda a,c:calls.append('remaining') or {})
+        @contextlib.contextmanager
+        def prepare(plan,config,remote):
+            calls.append('remaining-preflight')
+            if preflight_deny:raise RuntimeError('CLOSURE_PREFLIGHT_DENIED')
+            try:yield
+            finally:calls.append('remaining-preflight-close')
+        remaining=types.SimpleNamespace(run_remaining_reset=lambda a,c:calls.append('remaining') or {},prepare_remaining_reset=prepare)
         cfg={'resetEpoch':epoch,'tokensNotBefore':123,'simUserInstall':{}}
         with patch.object(m.os,'getuid',return_value=0),patch.object(m.socket,'gethostname',return_value='docker'),patch.object(m,'protected',return_value=raw),\
              patch.object(m,'load_sealed',side_effect=[controller,remaining]),patch.object(m,'read_environment',return_value=(b'',None)),\
              patch.object(m,'disabled_runtime'),patch.object(m,'deploy_guard_input'),patch.object(m,'stage_sim_configuration',return_value={'enabled':False}):
             if deny:
                 with self.assertRaisesRegex(RuntimeError,'UNPROVEN'):m.run_common_reset(cfg)
+            elif preflight_deny:
+                with self.assertRaisesRegex(RuntimeError,'PREFLIGHT_DENIED'):m.run_common_reset(cfg)
             else:
                 result=m.run_common_reset(cfg);self.assertFalse(result['servicesRestarted']);self.assertFalse(result['wholeAccountComplete'])
         return calls
@@ -110,8 +118,11 @@ class Orchestration(unittest.TestCase):
 
     def test_finite_sequence_and_no_automatic_start(self):
         calls=self.exercise(False)
-        self.assertEqual(calls[:3],['whole12-gate','remote-open','freeze'])
-        self.assertEqual(calls[3:11],list(m.COMMON_PHASES))
-        self.assertEqual(calls[11:],['remaining','readback','lease-end','remote-close'])
+        self.assertEqual(calls[:4],['whole12-gate','remote-open','remaining-preflight','freeze'])
+        self.assertEqual(calls[4:12],list(m.COMMON_PHASES))
+        self.assertEqual(calls[12:],['remaining','readback','lease-end','remaining-preflight-close','remote-close'])
+
+    def test_closure_preflight_failure_never_freezes(self):
+        self.assertEqual(self.exercise(False,True),['whole12-gate','remote-open','remaining-preflight','remote-close'])
 
 if __name__=='__main__':unittest.main()

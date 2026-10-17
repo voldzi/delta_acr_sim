@@ -179,6 +179,12 @@ operator bundle. Before remote authentication or stopping any writer it requires
 the real `cop-sim-whole-clean-acceptance-v2` report for all twelve owners and all
 nine exact candidate images. Unit-test mocks are not an acceptance report.
 
+After remote authentication, but before writer freeze, it enters COP's concrete
+`prepare_remaining_reset(plan,private_config,remote)` context. The inventory,
+SQL and storage transport preflight must succeed while services still run; its
+custody remains held until the reset admission exits. Missing or failed preflight
+cannot stop writers. Ten isolated coordinator tests cover this ordering.
+
 Inside one held Root admission it runs the concrete identity, COP, AI, driver,
 file, SIM application-file, SIM user install and COP safety-install phases. It
 then requires COP's separately implemented `run_remaining_reset(admission,
@@ -202,7 +208,7 @@ preserves ownership, checks original bytes, uses atomic rename and fsync, and
 checks the held admission before and after the write. Partial failure leaves
 writers fenced; it does not authorize reopening.
 
-`python3 scripts/test-coordinate-clean-release.py`: nine isolated tests cover
+`python3 scripts/test-coordinate-clean-release.py`: ten isolated tests cover
 separate lane IDs, false flags, unchanged existing keys, changed hash refusal,
 duplicate identity refusal, LIVE-mode refusal, owned-file custody/CAS, admission
 loss and actual-gate call ordering before remote auth or freeze. These prove

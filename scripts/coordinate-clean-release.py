@@ -237,6 +237,7 @@ def run_common_reset(private_config):
     proof = host._acceptance_module().verified_pre_stop_acceptance(plan['candidateImages'])
     remaining = load_sealed(source, 'scripts/account-safety/clean-remaining-reset.py', 'common_remaining_reset')
     need(callable(getattr(remaining, 'run_remaining_reset', None)), 'COMMON_CLOSURE_MISSING')
+    need(callable(getattr(remaining, 'prepare_remaining_reset', None)), 'COMMON_CLOSURE_PREFLIGHT_MISSING')
     # Check runtime/secret prerequisites while all current services still run.
     disabled_runtime(private_config, read_environment()[0])
     deploy_guard_input(plan)
@@ -245,7 +246,9 @@ def run_common_reset(private_config):
     receipts = {}
     try:
         remote.open()
-        with host.RootResetAdmission.freeze_reviewed(remote, producers) as admission:
+        # Enter the actual closure inventory/transport preflight BEFORE acquiring
+        # the writer freeze; keep its custody until the held lease is released.
+        with remaining.prepare_remaining_reset(plan, private_config, remote), host.RootResetAdmission.freeze_reviewed(remote, producers) as admission:
             need(admission.pre_stop_acceptance == proof, 'COMMON_WHOLE_PROOF_CHANGED')
             need(host.protected(PLAN) == raw, 'COMMON_PLAN_CHANGED')
             for phase in COMMON_PHASES:
