@@ -27,10 +27,14 @@ export async function verifiedCompletedReplayProfile(mode) {
   }
   return { profile, texts };
 }
-export async function inspectCompletedReplayProfile(client, verified) {
+export async function verifyCompletedReplayCatalog(client, verified) {
   need(verified?.profile);
   const actual = await userDataCatalog(client, "sim_user_history");
   need(actual.baseCatalogDigest === verified.profile.aiPostCatalogDigest && actual.digest === verified.profile.aiUserDataCatalogDigest, "SIM_COMPLETED_REPLAY_UNKNOWN_CATALOG");
+  return actual;
+}
+export async function inspectCompletedReplayProfile(client, verified) {
+  const actual = await verifyCompletedReplayCatalog(client, verified);
   const n = Number((await client.query("SELECT(SELECT count(*) FROM sim_clean.account)+(SELECT count(*) FROM sim_clean.job)+(SELECT count(*) FROM sim_user_history.account)+(SELECT count(*) FROM sim_user_history.job) n")).rows[0].n);
   need(n === 0, "SIM_COMPLETED_REPLAY_INSTALL_NOT_UNUSED");
   return { state: "known-new-unused", ...actual, completedReplayProfileSha256: COMPLETED_REPLAY_PROFILE_SHA };

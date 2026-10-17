@@ -1,0 +1,26 @@
+{
+  "revision": "be34050f78843f3bdb8228f710d83558a75d474f",
+  "scope": "build only, no service replacement",
+  "images": {
+    "sim_api": "sha256:4076069b3f8c935c0cd07ea2bf95d92703270b72197ff2b74a27d1aee8c6bdf0",
+    "ai_router": "sha256:62c99040605426d35731c1d7184dda3c5931347cb90019ee2557de44cd3d77b7",
+    "situation_data": "sha256:3c07a98618867f6bfe3712f6156c8100808d9f9d08f7f8a63e9e5f64b6719d94"
+  },
+  "offlineTestBundle": "sha256:923194d92acd6dd176c80bc8a151eb953883f80d3555b87bb45aba9da64833fa",
+  "exactRuntimeTreeDigests": {
+    "main": "7bc70919512e06dc286a146bf30c63cf45dda62d72ec3faee6aa78ab3622163b",
+    "router": "71095cabca95f9e6b90164ce2a68422eda8293e2f17f85986a6b0ae131e383c9",
+    "situation": "fcd67f8f4cf88942602b739d3964031eaf2aff17e7a84bb8e3dc9ae2951c3a91"
+  },
+  "fullImageToBundleRuntimeBytesEqual": true,
+  "nodeMajor": 24,
+  "mainAndRouterAuthoritySha256": "a0b3fd882baff5ee24401af035ff99134b8ea1f5cc362c88c909cb9bd67ad3d2",
+  "defaultReplayOffVerified": true,
+  "situationProbe": "Own replay module, relay and Node verified; SIM user-data authority intentionally not included in this service image",
+  "cacheLocation": "existing sim-x5 builder on verified X5",
+  "buildHeadroomGuard": true,
+  "productionServicesReplaced": false,
+  "acceptedWhole12OperationModified": false,
+  "actualComposedRestore": false,
+  "wholeAccountAccepted": false
+}

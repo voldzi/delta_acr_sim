@@ -15,6 +15,7 @@ import { canonicalOwnerKey, simOwnerAlias } from "../../packages/sim-user-data/c
 import { makeCleanWholeInput, seedCleanWhole, readCleanWhole, forbidExternalFixtureFetch, FIXTURE_ISSUER } from "./clean-whole-sim-v1.mjs";
 import { makeCleanWholeAppInput } from "./clean-whole-sim-user-data-v2.mjs";
 import { validateCompanionActors } from "./clean-whole12-sim-companion.mjs";
+import { verifiedCompletedReplayProfile, verifyCompletedReplayCatalog } from "../lib/completed-replay-install.mjs";
 const secret = () => randomBytes(32).toString("base64url");
 const closeServer = (s) => (s ? new Promise((r, j) => s.close((e) => (e ? j(e) : r()))) : Promise.resolve());
 const listen = (app, port) =>
@@ -54,7 +55,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     )
   ).rows[0];
   assert.deepEqual(identity, { u: "fixture_admin", d: join(root, "db"), c: "sim_whole12_tls_fixture_v1", ssl: "on", l: "127.0.0.1", p: "5000", a: null });
-  let input, install, ai, driver, main, model, mainServer, aiServer, driverServer, guardAdmin;
+  let input, install, ai, driver, main, model, mainServer, aiServer, driverServer, guardAdmin, acceptedReplay;
   let jwks,
     phase = "fresh",
     preparedPlan,
@@ -70,7 +71,8 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     SIM_USER_DATA_GUARD_DATABASE_URL: uri("cop_account_safety_guard", "sim_user_data_guard_runtime"),
     SIM_USER_HISTORY_GUARD_DATABASE_URL: uri("cop_account_safety_guard", "sim_user_history_guard_runtime"),
     SIM_USER_DATA_CONTINUITY_BINDING: JSON.stringify(install.bindings.sim_user_data),
-    SIM_USER_HISTORY_CONTINUITY_BINDING: JSON.stringify(install.bindings.sim_user_history)
+    SIM_USER_HISTORY_CONTINUITY_BINDING: JSON.stringify(install.bindings.sim_user_history),
+    ...(acceptedReplay ? { SIM_USER_DATA_COMPLETED_REPLAY_MODE: acceptedReplay.mode, SIM_USER_HISTORY_COMPLETED_REPLAY_MODE: acceptedReplay.mode } : {})
   });
   async function withRuntimeEnv(work) {
     const values = runtimeEnv(),
@@ -93,7 +95,8 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
       SIM_CLEAN_LIFECYCLE_RESET_EPOCH: e.resetEpoch,
       SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE: String(e.tokensNotBefore),
       SIM_CLEAN_LIFECYCLE_USER_DATASET_ID: e.userDatasetId,
-      SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID: e.enrollmentId
+      SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID: e.enrollmentId,
+      ...(acceptedReplay ? { SIM_CLEAN_COMPLETED_REPLAY_MODE: acceptedReplay.mode } : {})
     };
   }
   async function prepare(A, B, issuer, jwksOrigin) {
@@ -513,13 +516,28 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     /** Existing synthetic fixture only. No seed, reset, enrollment or role DDL.
      * Caller must have stopped the previous runner and supplied new test-only
      * role credentials privately. Original identities and bindings are retained. */
-    async resumeExisting(configuration, credentials, jwksOrigin) {
+    async resumeExisting(configuration, credentials, jwksOrigin, replay) {
       assert.equal(phase, "fresh");
       assert.equal(root, "/private/tmp/sim-user-install-pg-9aff26e65b74");
       assert.equal(configuration.input.contractVersion, "cop-sim-clean-whole-fixture-v2");
       assert.equal(configuration.input.base.issuer, "https://cop-erasure-keycloak.invalid/realms/cop");
       assert.equal(configuration.input.base.resetEpoch, "7f970a87-f36b-4e7f-8226-8c9107c8d3e4");
       assert.equal(jwksOrigin, "http://127.0.0.1:8080/realms/cop/protocol/openid-connect/certs");
+      if (replay !== undefined) {
+        assert.deepEqual(replay, { mode: "same-epoch-completed-content-replay-v1", acceptedOperationId: "b6fe7a68-d7a2-49e0-a9da-6dd7bcb01a4e" });
+        acceptedReplay = replay;
+      }
+      async function verifyJobs(c, schema) {
+        const jobs = (await c.query(`SELECT operation_id FROM ${schema}.job ORDER BY operation_id`)).rows;
+        if (!acceptedReplay) {
+          assert.equal(jobs.length, 0);
+          assert.equal(Number((await c.query(`SELECT count(*) n FROM ${schema}.account WHERE state<>'active'`)).rows[0].n), 0);
+        } else {
+          assert.deepEqual(jobs, [{ operation_id: acceptedReplay.acceptedOperationId }]);
+          assert.equal(Number((await c.query(`SELECT count(*) n FROM ${schema}.account WHERE state='deleted'`)).rows[0].n), 1);
+          assert.equal(Number((await c.query(`SELECT count(*) n FROM ${schema}.account WHERE state='deletion_pending'`)).rows[0].n), 0);
+        }
+      }
       const roles = ["ai_router_runtime", "driver_measurements_runtime", "sim_user_data_runtime", "sim_user_data_guard_runtime", "sim_user_history_guard_runtime"];
       assert.deepEqual(Object.keys(credentials).sort(), roles.slice().sort());
       for (const role of roles) assert.match(credentials[role], /^[A-Za-z0-9_-]{43}$/);
@@ -537,18 +555,17 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
         assert.equal(Number(cfg.tokens_not_before), input.base.tokensNotBefore);
         assert.equal(e.environment_id, cfg.environment_id);
         assert.equal(e.reset_epoch, cfg.reset_epoch);
-        assert.equal(Number((await c.query("SELECT count(*) n FROM sim_clean.job")).rows[0].n), 0);
-        assert.equal(Number((await c.query("SELECT count(*) n FROM sim_clean.account WHERE state<>'active'")).rows[0].n), 0);
+        await verifyJobs(c, "sim_clean");
         enrollments[lane] = { environmentId: e.environment_id, resetEpoch: e.reset_epoch, tokensNotBefore: Number(cfg.tokens_not_before), userDatasetId: e.user_dataset_id, enrollmentId: e.enrollment_id };
       }
       for (const [component, database] of [["sim_user_data", "sim_user_data"], ["sim_user_history", "sim_ai_router"]]) {
         const c = pool(conn(database)), row = (await c.query(`SELECT * FROM ${component}.continuity WHERE singleton`)).rows[0];
         const binding = configuration.bindings[component];
         for (const [key, value] of Object.entries(binding)) assert.equal(String(row[key]), String(value));
-        assert.equal(Number((await c.query(`SELECT count(*) n FROM ${component}.job`)).rows[0].n), 0);
-        assert.equal(Number((await c.query(`SELECT count(*) n FROM ${component}.account WHERE state<>'active'`)).rows[0].n), 0);
+        await verifyJobs(c, component);
       }
       install = { bindings: configuration.bindings, enrollments };
+      if (acceptedReplay) await verifyCompletedReplayCatalog(pool(conn("sim_ai_router")), await verifiedCompletedReplayProfile(acceptedReplay.mode));
       guardAdmin = pool(conn("cop_account_safety_guard"));
       externalGuard = forbidExternalFixtureFetch();
       phase = "prepared";
