@@ -2,7 +2,7 @@
 -- Fixed existing AI runtime role; no DDL, role, network or secret privileges.
 BEGIN;
 GRANT USAGE ON SCHEMA sim_clean TO ai_router_runtime;
-GRANT SELECT ON sim_clean.config,sim_clean.router_usage,sim_clean.billing_usage TO ai_router_runtime;
+GRANT SELECT ON sim_clean.config,sim_clean.production_enrollment,sim_clean.router_usage,sim_clean.billing_usage TO ai_router_runtime;
 GRANT SELECT,INSERT,UPDATE ON sim_clean.account,sim_clean.resource,sim_clean.job,sim_clean.cost_daily TO ai_router_runtime;
 GRANT DELETE ON sim_clean.cost_daily TO ai_router_runtime;
 GRANT EXECUTE ON FUNCTION sim_clean.fence() TO ai_router_runtime;

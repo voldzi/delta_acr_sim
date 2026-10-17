@@ -27,7 +27,7 @@ export function registerCleanLifecycle(app,options) {
    res.locals.cleanCorrelationId=randomUUID();res.set('Cache-Control','no-store');
    const token=/^Bearer (.+)$/.exec(req.header('authorization')??'')?.[1]??'';
    if(options.serviceToken.length<32||!equal(token,options.serviceToken)){fail(res,401,'CLEAN_UNAUTHORIZED');return null}
-   if(!options.enabled||options.expected.mode!=='isolated-clean-lifecycle-v1'||options.ownerSecret.length<32){fail(res,503,'CLEAN_NOT_ENABLED');return null}
+   if(!options.enabled||!['isolated-clean-lifecycle-v1','production-clean-lifecycle-v1'].includes(options.expected.mode)||options.ownerSecret.length<32){fail(res,503,'CLEAN_NOT_ENABLED');return null}
    const a=verifyCleanActor(req,options);if(!a){fail(res,401,'CLEAN_ACTOR_INVALID');return null}return a;
  };
  const receipt=(state,a)=>({contractVersion:'cop-sim-user-lifecycle-v1',scope:'cop_sim_shared_identity_v1',resetEpoch:a.resetEpoch,operationId:a.operationId,state,component:options.expected.lane,wholeAccountComplete:false});

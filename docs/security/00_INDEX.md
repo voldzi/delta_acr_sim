@@ -10,3 +10,5 @@ Tento index odkazuje dokumenty v daném adresáři.
 - [06_SYNTHETIC_DATA_SAFETY.md](06_SYNTHETIC_DATA_SAFETY.md)
 - [07_THREAT_MODEL.md](07_THREAT_MODEL.md)
 - [Hranice mazání COP/Jízdy a zachování SIM](../integration/22_COP_ACCOUNT_ERASURE_CONTRACT.md)
+- [Nový clean lifecycle a sdílená identita — pouze zdroj a izolované ověření](../integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md)
+- [Samostatný Root-enrolled produkční režim — dosud neaktivovaný](../adr/0042_ROOT_ENROLLED_CLEAN_PRODUCTION_MODE.md)

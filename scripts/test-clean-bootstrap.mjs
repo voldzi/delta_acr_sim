@@ -10,7 +10,7 @@ const listen=app=>new Promise(resolve=>{const server=app.listen(0,'127.0.0.1',()
 const close=server=>new Promise((resolve,reject)=>server.close(e=>e?reject(e):resolve()));
 
 export async function exerciseBootstrap({lane,url,expected,root,runtime}){
- const env={SIM_CLEAN_LIFECYCLE_ENABLED:'true',SIM_CLEAN_LIFECYCLE_MODE:'isolated-clean-lifecycle-v1',SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID:expected.environmentId,SIM_CLEAN_LIFECYCLE_RESET_EPOCH:expected.resetEpoch,SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE:'0'};
+ const env={SIM_CLEAN_LIFECYCLE_ENABLED:'true',SIM_CLEAN_LIFECYCLE_MODE:expected.mode??'isolated-clean-lifecycle-v1',SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID:expected.environmentId,SIM_CLEAN_LIFECYCLE_RESET_EPOCH:expected.resetEpoch,SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE:String(expected.tokensNotBefore??0),SIM_CLEAN_LIFECYCLE_USER_DATASET_ID:expected.userDatasetId,SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID:expected.enrollmentId};
  const serviceToken='synthetic-service-token-'.repeat(3),actorSecret='synthetic-actor-signing-'.repeat(3),hashSecret='synthetic-hash-secret-'.repeat(3),issuer='https://identity.invalid/isolated';
  const at=new Date().toISOString(),now=Math.floor(Date.now()/1000);
  const actor=letter=>({iss:'cop',aud:'sim-clean-lifecycle-v1',sub:'cop_'+letter.repeat(43),oidcIssuer:issuer,oidcSubject:randomUUID(),resetEpoch:expected.resetEpoch,operationId:randomUUID(),requestedAt:at,iat:now,exp:now+60,jti:randomUUID(),resourceId:lane==='ai'?'cop_'+letter.repeat(43):'synthetic-contributor-'+letter.repeat(32),oidcIat:now});

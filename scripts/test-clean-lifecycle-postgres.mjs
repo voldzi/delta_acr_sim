@@ -8,11 +8,13 @@ import {createRequire} from 'node:module';
 import {randomUUID} from 'node:crypto';
 import {join,dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {CleanLifecycle,installFence} from '../packages/clean-lifecycle/store.mjs';
+import {CleanLifecycle} from '../packages/clean-lifecycle/store.mjs';
 import {exerciseHttp} from './test-clean-lifecycle-http.mjs';
 import {loadCleanRuntime} from '../packages/clean-lifecycle/runtime.mjs';
 import {exerciseBootstrap} from './test-clean-bootstrap.mjs';
-if(process.argv.length!==3 || process.argv[2]!=='--run') throw new Error('Only --run; no remote targets');
+if(process.argv.length!==3 || !['--run','--run-production-mode'].includes(process.argv[2])) throw new Error('Only fixed owned local fixture modes; no remote targets');
+const productionMode=process.argv[2]==='--run-production-mode';
+const fixtureMode=productionMode?'production-clean-lifecycle-v1':'isolated-clean-lifecycle-v1';
 const source=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const {Pool}=createRequire(join(source,'apps/ai-router-api/package.json'))('pg');
 const exec=promisify(execFile), bin='/opt/homebrew/opt/postgresql@18/bin';
@@ -39,14 +41,31 @@ try{
    const database=lane==='ai'?'sim_ai_router':'sim_driver_measurements';await pool('postgres').query(`CREATE DATABASE ${database}`);
    const owner=pool(database);
    for(const path of lane==='ai'?['deploy/ai-router/001_schema.sql','deploy/ai-router/002_separate_billing.sql']:['deploy/driver-measurements/schema.sql']) await owner.query(await readFile(join(source,path),'utf8'));
+   if(lane==='ai'){
+     await owner.query("INSERT INTO ai_router_request(id,client_id,user_hash,task_type,model,routing_reason,difficulty,status,reserved_microusd,charged_microusd) VALUES($1,'sim',$2,'sim_scenario','preserved-fixture','fixture','simple','success',0,0)",[randomUUID(),hash(700)]);
+     await owner.query("INSERT INTO ai_router_billing_request(id,billing_source,payer_hash,actor_hash,credential_fingerprint,task_type,model,status,reserved_microusd,estimated_microusd) VALUES($1,'sim_project',$2,$3,'preserved-fixture','sim_izs_summary','fixture','success',0,0)",[randomUUID(),hash(701),hash(702)]);
+   }
    await owner.query(await readFile(join(source,'deploy/clean-lifecycle/001_clean_lifecycle.sql'),'utf8'));
-   const expected={lane,environmentId:randomUUID(),resetEpoch:randomUUID()};
-   await owner.query("INSERT INTO sim_clean.config VALUES(true,'cop-sim-user-lifecycle-v1','isolated-clean-lifecycle-v1',$1,$2,$3)",[expected.environmentId,expected.resetEpoch,lane]);
-   await installFence(owner,lane);
+   const expected={lane,mode:fixtureMode,environmentId:randomUUID(),resetEpoch:randomUUID(),tokensNotBefore:productionMode?Math.floor(Date.now()/1000)-120:0,userDatasetId:productionMode?randomUUID():undefined,enrollmentId:productionMode?randomUUID():undefined};
+   if(productionMode){
+     await assert.rejects(owner.query("INSERT INTO sim_clean.config VALUES(true,'cop-sim-user-lifecycle-v1','production-clean-lifecycle-v1',$1,$2,$3,$4)",[expected.environmentId,expected.resetEpoch,lane,expected.tokensNotBefore]),/CLEAN_PRODUCTION_ENROLLMENT_REQUIRED/);checks++;
+     const enroll=()=>owner.query('SELECT sim_clean.enroll_production($1,$2,$3,$4,$5,$6)',[expected.environmentId,expected.resetEpoch,expected.userDatasetId,expected.enrollmentId,expected.tokensNotBefore,lane]);
+     if(lane==='ai'){
+       const bad=randomUUID();await owner.query("INSERT INTO ai_router_request(id,client_id,user_hash,task_type,model,routing_reason,difficulty,status,reserved_microusd) VALUES($1,'cop',$2,'cop_chat','fixture','fixture','simple','success',0)",[bad,hash(799)]);
+       await assert.rejects(enroll(),/CLEAN_BASELINE_NOT_EMPTY/);checks++;await owner.query('DELETE FROM ai_router_request WHERE id=$1',[bad]);
+     }
+     await enroll();
+     await assert.rejects(enroll(),/CLEAN_ENROLLMENT_NOT_FRESH/);checks++;
+     await assert.rejects(owner.query('UPDATE sim_clean.production_enrollment SET user_dataset_id=$1',[randomUUID()]),/IMMUTABLE_PRODUCTION_ENROLLMENT/);checks++;
+   }else await owner.query("INSERT INTO sim_clean.config VALUES(true,'cop-sim-user-lifecycle-v1','isolated-clean-lifecycle-v1',$1,$2,$3,0)",[expected.environmentId,expected.resetEpoch,lane]);
+   await assert.rejects(owner.query("UPDATE sim_clean.config SET mode=$1",[productionMode?'isolated-clean-lifecycle-v1':'production-clean-lifecycle-v1']),/IMMUTABLE_CLEAN_CONFIGURATION/);checks++;
+   await owner.query(await readFile(join(source,lane==='ai'?'deploy/clean-lifecycle/005_ai_writer_fences.sql':'deploy/clean-lifecycle/006_driver_writer_fences.sql'),'utf8'));
    if(lane==='ai')await owner.query(await readFile(join(source,'deploy/clean-lifecycle/002_ai_budget_views.sql'),'utf8'));
    await owner.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
    await owner.query(await readFile(join(source,lane==='ai'?'deploy/clean-lifecycle/003_ai_runtime_grants.sql':'deploy/clean-lifecycle/004_driver_runtime_grants.sql'),'utf8'));
    let runtime=pool(database,runtimeRole), service=new CleanLifecycle(runtime,expected);
+   await assert.rejects(new CleanLifecycle(runtime,{...expected,mode:productionMode?'isolated-clean-lifecycle-v1':'production-clean-lifecycle-v1'}).runOne(),/CLEAN_CONFIG_MISMATCH/);checks++;
+   await assert.rejects(runtime.query('SELECT sim_clean.enroll_production($1,$2,$3,$4,$5,$6)',[expected.environmentId,expected.resetEpoch,randomUUID(),randomUUID(),1,lane]));checks++;
    await assert.rejects(runtime.query('CREATE TABLE public.forbidden(i int)'));checks++;
    await assert.rejects(runtime.query('UPDATE sim_clean.config SET reset_epoch=$1',[randomUUID()]));checks++;
    const a=hash(1),b=hash(2),ha=hash(11),hb=hash(12);
@@ -85,6 +104,8 @@ try{
    await assert.rejects(service.request(a,randomUUID(),at),/IMMUTABLE_OPERATION_CONFLICT/);checks++;
    let reservation;
    if(lane==='ai'){
+     check(Number((await owner.query("SELECT count(*) AS n FROM ai_router_request WHERE client_id='sim' AND model='preserved-fixture'")).rows[0].n)===1,'other request lane preserved');
+     check(Number((await owner.query("SELECT count(*) AS n FROM ai_router_billing_request WHERE task_type='sim_izs_summary' AND credential_fingerprint='preserved-fixture'")).rows[0].n)===1,'other billing lane preserved');
      // Simulate an already accepted reservation, as an owner-only test setup.
      reservation=randomUUID();await owner.query('ALTER TABLE ai_router_request DISABLE TRIGGER clean_user_fence');
      try{await owner.query("INSERT INTO ai_router_request(id,client_id,user_hash,task_type,model,routing_reason,difficulty,status,reserved_microusd) VALUES($1,'cop',$2,'cop_chat','fixture','fixture','simple','reserved',10)",[reservation,ha]);}
@@ -118,6 +139,8 @@ try{
    check(Number(count)===0,'actual userdata absent');
    if(lane==='ai'){
      check(Number((await own.query('SELECT sum(microusd) AS n FROM sim_clean.cost_daily')).rows[0].n)===21,'cost totals preserved exactly once');
+     check(Number((await own.query("SELECT count(*) AS n FROM ai_router_request WHERE client_id='sim' AND model='preserved-fixture'")).rows[0].n)===1,'other request history remains after COP deletion');
+     check(Number((await own.query("SELECT count(*) AS n FROM ai_router_billing_request WHERE task_type='sim_izs_summary' AND credential_fingerprint='preserved-fixture'")).rows[0].n)===1,'other billing history remains after COP deletion');
      check(Number((await own.query('SELECT count(*) AS n FROM ai_router_policy')).rows[0].n)===1,'policy preserved');
      check((await own.query("SELECT bool_and(expires_at=(date_trunc('month',now() AT TIME ZONE 'UTC')+interval '1 month') AT TIME ZONE 'UTC') AS ok FROM sim_clean.cost_daily")).rows[0].ok,'retention ends at next UTC month boundary');
      await own.query("INSERT INTO sim_clean.cost_daily VALUES('expired',current_date-40,5,1,0,0,now()-interval '1 second')");
@@ -141,7 +164,12 @@ try{
    await assert.rejects(service.reserve(racing,[hash(779)]));checks++;
    const loaderInput={pool:runtime,lane,serviceToken:'synthetic-service-'.repeat(4),actorSecret:'synthetic-signing-'.repeat(4),ownerSecret:'synthetic-owner-'.repeat(4),issuer:'https://identity.invalid/isolated',hashResource:x=>x};
    check(await loadCleanRuntime({...loaderInput,env:{}})===undefined,'runtime is disabled by default');
-   const loaded=await loadCleanRuntime({...loaderInput,env:{SIM_CLEAN_LIFECYCLE_ENABLED:'true',SIM_CLEAN_LIFECYCLE_MODE:'isolated-clean-lifecycle-v1',SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID:expected.environmentId,SIM_CLEAN_LIFECYCLE_RESET_EPOCH:expected.resetEpoch,SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE:'0'}});
+   const runtimeEnv={SIM_CLEAN_LIFECYCLE_ENABLED:'true',SIM_CLEAN_LIFECYCLE_MODE:fixtureMode,SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID:expected.environmentId,SIM_CLEAN_LIFECYCLE_RESET_EPOCH:expected.resetEpoch,SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE:String(expected.tokensNotBefore),SIM_CLEAN_LIFECYCLE_USER_DATASET_ID:expected.userDatasetId,SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID:expected.enrollmentId};
+   if(productionMode){
+     await assert.rejects(loadCleanRuntime({...loaderInput,env:{...runtimeEnv,SIM_CLEAN_LIFECYCLE_USER_DATASET_ID:randomUUID()}}),/CLEAN_PRODUCTION_ENROLLMENT_MISMATCH/);checks++;
+     await assert.rejects(loadCleanRuntime({...loaderInput,env:{...runtimeEnv,SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE:'0'}}),/INVALID_PRODUCTION_CLEAN_CONFIGURATION/);checks++;
+   }
+   const loaded=await loadCleanRuntime({...loaderInput,env:runtimeEnv});
    check(loaded.options.workerReady()===false,'unscheduled worker not ready');loaded.start();
    check(loaded.options.workerReady()===true,'worker scheduled with actual DB verified');await loaded.close();
    check(loaded.options.workerReady()===false,'worker closed without leaked timer');
@@ -152,7 +180,7 @@ try{
    // Fresh admin connection after the per-lane restart.
    if(lane==='ai'){await own.end();}
  }
- passed=true;console.log(JSON.stringify({contract:'cop-sim-user-lifecycle-v1',mode:'isolated-clean-lifecycle-v1',postgres:'18.3',transport:'unix-only',checks,actualDatabaseRestarts:2,providerCalls:0,productionWrites:0}));
+ passed=true;console.log(JSON.stringify({contract:'cop-sim-user-lifecycle-v1',mode:fixtureMode,testEnvironment:'owned-local-synthetic',postgres:'18.3',transport:'unix-only',checks,actualDatabaseRestarts:2,providerCalls:0,productionWrites:0}));
 }finally{
  for(const p of pools)if(!p.ended&&!p.ending)await p.end().catch(()=>{});
  if(started)await stop();if(passed){owned();await rm(root,{recursive:true});}

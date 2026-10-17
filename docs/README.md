@@ -108,6 +108,8 @@ documents instead of duplicating flat files. The decision is recorded in
 Source-only clean lifecycle proposal and isolated DB evidence:
 [`integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md`](integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md),
 [`adr/0041_ISOLATED_CLEAN_LIFECYCLE.md`](adr/0041_ISOLATED_CLEAN_LIFECYCLE.md).
+Explicit production-mode source gate:
+[`adr/0042_ROOT_ENROLLED_CLEAN_PRODUCTION_MODE.md`](adr/0042_ROOT_ENROLLED_CLEAN_PRODUCTION_MODE.md).
 
 The binding API contract is:
 

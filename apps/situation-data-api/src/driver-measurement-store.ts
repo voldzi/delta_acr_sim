@@ -9,7 +9,7 @@ import {DriverGuardedOperationRunner} from "./driver-guarded-execution.js";
 import type {DriverGuardedOperationContext} from "./driver-guarded-execution-port.js";
 import type {DriverPublicationLease} from "./driver-publication.js";
 
-export type DriverMeasurementStorageOptions=DriverErasureStorageOptions&{retentionConsumer?:DriverRetentionConsumer;retentionScheduler?:DriverRetentionScheduler;cleanLifecycle?:{mode:'isolated-clean-lifecycle-v1';service:CleanLifecycle}};
+export type DriverMeasurementStorageOptions=DriverErasureStorageOptions&{retentionConsumer?:DriverRetentionConsumer;retentionScheduler?:DriverRetentionScheduler;cleanLifecycle?:{mode:'isolated-clean-lifecycle-v1'|'production-clean-lifecycle-v1';service:CleanLifecycle}};
 
 /** Dedicated database only; no DDL or raw position persistence in the runtime. */
 export class PostgresDriverMeasurementStore implements DriverStore {
@@ -22,7 +22,7 @@ export class PostgresDriverMeasurementStore implements DriverStore {
   private databaseSafety?:import("../../../deploy/account-safety/database-erasure-guard.mjs").DatabaseErasureGuard;
   constructor(url: string, private hashSecret: string, options:DriverMeasurementStorageOptions={}) {
     if (hashSecret.length < 32) throw new Error("Invalid driver storage secret");
-    if(options.cleanLifecycle&&(options.cleanLifecycle.mode!=='isolated-clean-lifecycle-v1'||options.guarded!==undefined||options.databaseSafety!==undefined||options.enabled===true||options.retentionConsumer!==undefined))throw new Error('CLEAN_DRIVER_COMPOSITION_CONFLICT');
+    if(options.cleanLifecycle&&(!['isolated-clean-lifecycle-v1','production-clean-lifecycle-v1'].includes(options.cleanLifecycle.mode)||options.guarded!==undefined||options.databaseSafety!==undefined||options.enabled===true||options.retentionConsumer!==undefined))throw new Error('CLEAN_DRIVER_COMPOSITION_CONFLICT');
     this.cleanLifecycle=options.cleanLifecycle;
     this.pool=new Pool({connectionString:url,max:4,connectionTimeoutMillis:1500,statement_timeout:5000,idleTimeoutMillis:10000});
     this.pool.on("error",()=>{ /* No connection string/error payload is logged. */ });

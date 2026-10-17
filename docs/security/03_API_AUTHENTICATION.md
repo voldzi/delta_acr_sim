@@ -75,3 +75,14 @@ inventory a konkrétní consent intent; bez toho zůstane mutace nedostupná.
 Samotné odvolání není globální account-deletion fence a nemaže sdílený
 Keycloak účet ani přístup SIM. Před koordinovaným cutoverem legacy cesta
 zůstává zachována. Hlavičky a claim se neukládají ani nelogují.
+## New clean lifecycle source candidate
+
+The separate `cop-sim-user-lifecycle-v1` candidate uses only authenticated COP
+S2S calls plus the distinct signed actor audience and exact claims documented in
+[contract 24](../integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md). Neither the
+browser body nor a bearer token alone selects a user. Production mode additionally
+requires a matching owner-enrolled empty COP dataset witness; runtime roles cannot
+enroll, modify config, own tables or perform DDL. No new service token is created
+or transferred by this source change. Existing CF24/legacy authentication and its
+immutable artifacts are not repurposed. Root's independent restore quarantine and
+replay acceptance remains a separate mandatory release gate.

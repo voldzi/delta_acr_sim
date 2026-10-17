@@ -1,14 +1,14 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Isolated clean lifecycle candidate",
+    "title": "Explicit-mode clean lifecycle candidate",
     "version": "1.0.0"
   },
   "paths": {
     "/api/v1/ai-router/internal/user-lifecycle/v1/deletions": {
       "post": {
         "operationId": "requestCleanRouterDeletion",
-        "summary": "Source-only isolated durable component deletion; not production enabled",
+        "summary": "Source-only mode-bound durable component deletion; not production enabled",
         "security": [
           {
             "CleanService": [],
@@ -218,7 +218,7 @@
     "/api/v1/ai-router/internal/user-lifecycle/v1/capabilities": {
       "get": {
         "operationId": "getCleanRouterCapability",
-        "summary": "Read-only isolated readiness using service authentication without actor",
+        "summary": "Read-only mode-bound readiness using service authentication without actor",
         "security": [
           {
             "CleanService": []
@@ -254,7 +254,7 @@
     "/situation-data/api/v1/internal/user-lifecycle/v1/capabilities": {
       "get": {
         "operationId": "getCleanDriverCapability",
-        "summary": "Read-only isolated readiness using service authentication without actor",
+        "summary": "Read-only mode-bound readiness using service authentication without actor",
         "security": [
           {
             "CleanService": []

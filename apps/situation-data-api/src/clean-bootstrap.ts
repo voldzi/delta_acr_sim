@@ -17,7 +17,7 @@ export async function loadCleanDriverComposition(settings=driverSettings(),env:N
    ownerSecret:settings.driverAccountErasureActorSecret,issuer:settings.driverAccountErasureIssuer,
    hashResource:id=>createHmac('sha256',settings.hashSecret!).update(`cop:${id}`).digest('hex'),env});
   if(!runtime)throw new Error('INVALID_CLEAN_DRIVER_CONFIGURATION');
-  store=new PostgresDriverMeasurementStore(settings.databaseUrl,settings.hashSecret,{cleanLifecycle:{mode:'isolated-clean-lifecycle-v1',service:runtime.options.service as CleanLifecycle}});
+  store=new PostgresDriverMeasurementStore(settings.databaseUrl,settings.hashSecret,{cleanLifecycle:{mode:runtime.options.expected.mode,service:runtime.options.service as CleanLifecycle}});
   await store.init();await store.startRetention();
   return {...runtime,driverMeasurements:{store},async close(){try{await runtime.close();}finally{try{await store!.close();}finally{await pool.end();}}}};
  }catch(error){await store?.close().catch(()=>{});await pool.end();throw error;}

@@ -1,9 +1,9 @@
 # 24 — Clean lifecycle source candidate
 
-Status: source + isolated PostgreSQL/HTTP only. No production activation,
-permissions, secrets, reset or activation. Does not extend CF24/native-v1 or
-reuse an old operation. Contract `cop-sim-user-lifecycle-v1`, sole accepted mode
-`isolated-clean-lifecycle-v1`.
+Status: source + owned synthetic PostgreSQL/HTTP tests only. No live production
+permissions, secrets, reset or activation. Does not extend CF24/native-v1 or reuse
+an old operation. Contract `cop-sim-user-lifecycle-v1`; two exact, non-interchangeable
+server modes: `isolated-clean-lifecycle-v1` and `production-clean-lifecycle-v1`.
 
 ## Concrete component
 
@@ -53,7 +53,8 @@ totals remain in financial/count/token reporting; deleted identities do not rema
 no external target, password or URL. Uses the actual base AI/driver schemas and a
 restricted non-superuser runtime role, not mocked DB calls. No provider is called.
 
-Observed 148 checks passed, two actual PostgreSQL restarts: A/B isolation, true
+Owned isolated (158 checks) and production-mode (169 checks) test runs both cover two actual PostgreSQL
+restarts: A/B isolation, true
 concurrent writer/fence ordering, cascade cleanup/readback, refusal of late writes,
 same-operation replay, immutable owner/epoch/operation, no resurrection, pending
 AI reservation/key removal/settlement, actual DB outage, deliberate completion
@@ -108,15 +109,60 @@ requests. Default `SIM_CLEAN_LIFECYCLE_ENABLED=false` leaves the entire legacy
 composition unchanged. Explicit true requires mode, environment UUID, reset epoch
 and token cutoff matching actual DB config; the migration refuses a populated
 user-data baseline. Configuration is verified before AI policy initialization.
-No production mode is accepted in this source/isolated approval.
+The production mode exists in source after independent readback of the human's
+explicit COP reset approval, but has not been activated on a production host.
 
-`SIM_CLEAN_LIFECYCLE_MODE=isolated-clean-lifecycle-v1`,
+`SIM_CLEAN_LIFECYCLE_MODE` (one of the two exact modes),
 `SIM_CLEAN_LIFECYCLE_ENVIRONMENT_ID`, `SIM_CLEAN_LIFECYCLE_RESET_EPOCH` and
-`SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE` are the only added non-secret settings.
+`SIM_CLEAN_LIFECYCLE_TOKENS_NOT_BEFORE` are the common non-secret settings.
 Existing COP service/signing credentials, hash derivations and pinned issuers are
 passed by the owning app; no secret is copied or printed. The cutoff is also a
 DB config field; a mismatch refuses startup/requests. Zero is only a synthetic
 fixture cutoff, not a production reset recommendation.
+
+### Production enrollment, never an isolated-mode promotion
+
+`SIM_CLEAN_LIFECYCLE_USER_DATASET_ID` and
+`SIM_CLEAN_LIFECYCLE_PRODUCTION_ENROLLMENT_ID` are additional mandatory UUIDs in
+production mode. Cutoff must be nonzero and not in the future. Source loader and
+each DB admission verify an exact immutable `production_enrollment` witness with
+matching environment, reset epoch, dataset, enrollment ID, cutoff and the fixed
+`root-clean-empty-baseline-v1` attestation. Isolated config cannot be updated to
+production (nor production to isolated). A missing witness never creates one.
+
+Only the migration owner may call
+`sim_clean.enroll_production(environmentUUID,epochUUID,userDatasetUUID,enrollmentUUID,cutoffSeconds,lane)`.
+The security-invoker function has no PUBLIC/runtime EXECUTE grant. It locks the
+finite owned tables, refuses existing lifecycle config/resources/jobs, verifies
+empty COP user scope, and atomically records the witness and production config.
+It does not delete anything. Requests with `client_id<>'cop'` and billing with
+`task_type<>'cop_chat'` are preserved and do not fail COP-scope emptiness; policies
+and other provider/other-application data are never part of the check or cleanup.
+Global COP BYOK keys/audits and driver tables must be empty before enrollment.
+
+Runtime may only SELECT the witness. Mutation of it is blocked by an immutable
+trigger; config updates are also blocked. Source grants remain fixed to the
+existing, non-superuser AI/driver runtime roles, with no DDL or enrollment right.
+The new config does not adopt an old CF24 operation, policy, identity receipt or
+history. Root still must execute its approved finite reset and preserve plan;
+this source contains no live reset command.
+
+Root's later owner-only installation sequence, after its separately approved
+finite reset/preserve plan and stopped writers: existing base AI 001/002 or driver
+schema, clean 001, clean 002 views on AI only, fixed writer fences 005 (AI) / 006
+(driver), restricted grants 003 / 004, then explicit production enrollment.
+Do not apply any of these over CF24 control tables or remove historical triggers
+to force admission. The migration role, not the runtime URL, performs DDL. No
+function or startup path runs migrations automatically. Before release, Root must
+verify both service capabilities and its independent restore/replay acceptance.
+
+Run `node scripts/test-clean-lifecycle-postgres.mjs --run` and separately
+`--run-production-mode` after building both services. BOTH commands create a new
+owned, Unix-only local cluster and synthetic accounts; the latter does not target
+a production DB. They test the same actual bootstraps and ordinary business routes,
+plus missing/wrong enrollment, zero cutoff, mode mismatch, failed enrollment with
+COP data, immutable metadata, limited roles, and preservation of other-lane history.
+See ADR 0042 for the authority and restore boundary.
 
 AI startup uses its existing BudgetStore pool and enables both clean accounting
 selectors. Driver startup creates its own restricted driver-lane control pool

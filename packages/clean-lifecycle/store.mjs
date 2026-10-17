@@ -1,5 +1,15 @@
-// Source candidate, no production imports. The caller must authenticate COP and
+// The caller must authenticate COP and
 // derive ownerKey/resource hashes server-side. Never accept them from a browser.
+async function verifiedConfig(c,e) {
+  const cfg=(await c.query('SELECT * FROM sim_clean.config WHERE singleton')).rows[0];
+  const mode=e.mode??'isolated-clean-lifecycle-v1';
+  if(!['isolated-clean-lifecycle-v1','production-clean-lifecycle-v1'].includes(mode)||!cfg||cfg.contract!=='cop-sim-user-lifecycle-v1'||cfg.mode!==mode||cfg.reset_epoch!==e.resetEpoch||cfg.environment_id!==e.environmentId||cfg.lane!==e.lane||(e.tokensNotBefore!==undefined&&Number(cfg.tokens_not_before)!==e.tokensNotBefore))throw new Error('CLEAN_CONFIG_MISMATCH');
+  if(mode==='production-clean-lifecycle-v1'){
+    const p=(await c.query('SELECT * FROM sim_clean.production_enrollment WHERE singleton')).rows[0];
+    if(!p||!e.userDatasetId||!e.enrollmentId||p.user_dataset_id!==e.userDatasetId||p.enrollment_id!==e.enrollmentId||p.environment_id!==e.environmentId||p.reset_epoch!==e.resetEpoch||Number(p.tokens_not_before)!==Number(cfg.tokens_not_before)||Number(cfg.tokens_not_before)<=0||p.attestation!=='root-clean-empty-baseline-v1'||p.baseline_checked_at.getTime()<Number(cfg.tokens_not_before)*1000||p.baseline_checked_at.getTime()>Date.now()+5000)throw new Error('CLEAN_PRODUCTION_ENROLLMENT_MISMATCH');
+  }
+  return cfg;
+}
 export class CleanLifecycle {
   constructor(pool, expected) { this.pool = pool; this.expected = expected; }
   async tx(action) {
@@ -7,11 +17,7 @@ export class CleanLifecycle {
     try {
       await c.query('BEGIN');
       await c.query("SET LOCAL statement_timeout='5000ms'; SET LOCAL lock_timeout='1500ms'");
-      const cfg = (await c.query('SELECT * FROM sim_clean.config WHERE singleton')).rows[0];
-      const e = this.expected;
-      if (!cfg || cfg.contract !== 'cop-sim-user-lifecycle-v1' || cfg.mode !== 'isolated-clean-lifecycle-v1'
-          || cfg.reset_epoch !== e.resetEpoch || cfg.environment_id !== e.environmentId || cfg.lane !== e.lane
-          ||(e.tokensNotBefore!==undefined&&Number(cfg.tokens_not_before)!==e.tokensNotBefore)) throw new Error('CLEAN_CONFIG_MISMATCH');
+      const cfg = await verifiedConfig(c,this.expected);
       const result = await action(c, cfg);
       await c.query('COMMIT'); return result;
     } catch (error) { await c.query('ROLLBACK').catch(() => {}); throw error; }
@@ -33,8 +39,7 @@ export class CleanLifecycle {
     });
   }
   async assertIntake(c, resourceHash) {
-    const cfg=(await c.query('SELECT * FROM sim_clean.config WHERE singleton')).rows[0];
-    if(!cfg||cfg.contract!=='cop-sim-user-lifecycle-v1'||cfg.mode!=='isolated-clean-lifecycle-v1'||cfg.environment_id!==this.expected.environmentId||cfg.reset_epoch!==this.expected.resetEpoch||cfg.lane!==this.expected.lane||(this.expected.tokensNotBefore!==undefined&&Number(cfg.tokens_not_before)!==this.expected.tokensNotBefore))throw new Error('CLEAN_CONFIG_MISMATCH');
+    const cfg=await verifiedConfig(c,this.expected);
     if(resourceHash!==undefined){
       const a=(await c.query('SELECT a.state,a.reset_epoch FROM sim_clean.resource r JOIN sim_clean.account a USING(owner_key) WHERE r.kind=$1 AND r.resource_hash=$2 FOR SHARE OF a',[cfg.lane==='ai'?'ai_hash':'driver_contributor',resourceHash])).rows[0];
       if(!a||a.state!=='active'||a.reset_epoch!==cfg.reset_epoch)throw new Error('CLEAN_ACCOUNT_FENCED');
@@ -65,6 +70,7 @@ export class CleanLifecycle {
     return this.tx(async(c,cfg)=>{
       const role=(await c.query("SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls OR rolreplication AS elevated FROM pg_roles WHERE rolname=current_user")).rows[0];
       if(!role||role.elevated===true||(await c.query("SELECT has_schema_privilege(current_user,'public','CREATE') AS ddl")).rows[0].ddl===true)return false;
+      if((await c.query("SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','sim_clean') AND c.relowner=(SELECT oid FROM pg_roles WHERE rolname=current_user) AND c.relkind IN ('r','p','v','m','S')) AS owns")).rows[0].owns===true)return false;
       await c.query('SELECT owner_key FROM sim_clean.account LIMIT 0');
       await c.query('SELECT operation_id FROM sim_clean.job LIMIT 0');
       const writes=cfg.lane==='ai'?['ai_router_request','ai_router_user_key','ai_router_user_key_audit','ai_router_billing_request']:['driver_measurement_receipts','driver_measurement_intervals','driver_measurement_eta','driver_measurement_revocations'];

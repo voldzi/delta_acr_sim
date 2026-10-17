@@ -654,3 +654,14 @@ dotčené COP vstupy a opravit dopředu. Obnova vyžaduje aktuální externí
 fence a kontrolu skutečného cílového datasetu; TTL historického proofu
 nepovoluje návrat. Při nejistém provider nákladu zachovat pending a
 konzervativní finanční rezervaci, nikoli vymazat účetní strop.
+## Separate clean lifecycle candidate — not live activation
+
+Do not promote a CF24/isolated operation or remove an existing guard to enable the
+new mode. [ADR 0042](../adr/0042_ROOT_ENROLLED_CLEAN_PRODUCTION_MODE.md) and
+[contract 24](../integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md) define the new
+Root-owned empty COP dataset enrollment, fixed owner-only migrations, mode/epoch/
+cutoff matching, restricted runtime roles and source/owned-test evidence.
+Non-COP history, policies, secrets and provider data are preserved. These source
+files neither reset nor activate production; Root must perform the separately
+approved finite reset and independent same-epoch restore/replay acceptance before
+release. Rollback must not restore deleted user data or fall back across modes.

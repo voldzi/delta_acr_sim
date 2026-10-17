@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {registerCleanLifecycle} from '../packages/clean-lifecycle/http.mjs';
 const express=createRequire(new URL('../apps/ai-router-api/package.json',import.meta.url))('express');
 export async function exerciseHttp(service,runtime,lane,expected) {
- const options={enabled:true,tokensNotBefore:0,workerReady:()=>true,serviceToken:'fixture-service-'.repeat(4),actorSecret:'fixture-signing-'.repeat(4),ownerSecret:'fixture-owner-'.repeat(4),issuer:'https://identity.invalid/isolated',expected:{...expected,mode:'isolated-clean-lifecycle-v1'},service,hashResource:r=>createHash('sha256').update('synthetic:'+r).digest('hex')};
+ const options={enabled:true,tokensNotBefore:expected.tokensNotBefore??0,workerReady:()=>true,serviceToken:'fixture-service-'.repeat(4),actorSecret:'fixture-signing-'.repeat(4),ownerSecret:'fixture-owner-'.repeat(4),issuer:'https://identity.invalid/isolated',expected:{...expected,mode:expected.mode??'isolated-clean-lifecycle-v1'},service,hashResource:r=>createHash('sha256').update('synthetic:'+r).digest('hex')};
  const app=express();app.use(express.json({limit:'32kb'}));const worker=registerCleanLifecycle(app,options);
  const path=lane==='ai'?'/api/v1/ai-router/generate':'/api/v1/internal/driver-measurements/v1/batches';
  const prefix=lane==='ai'?'/api/v1/ai-router/internal/user-lifecycle/v1':'/api/v1/internal/user-lifecycle/v1';

@@ -1,7 +1,7 @@
 import type {Express} from 'express';
 export interface CleanLifecycleOptions {
  enabled:boolean; serviceToken:string; actorSecret:string; ownerSecret:string; issuer:string;tokensNotBefore:number;workerReady?:()=>boolean;
- expected:{mode:'isolated-clean-lifecycle-v1';lane:'ai'|'driver';environmentId:string;resetEpoch:string};
+ expected:{mode:'isolated-clean-lifecycle-v1'|'production-clean-lifecycle-v1';lane:'ai'|'driver';environmentId:string;resetEpoch:string;userDatasetId?:string;enrollmentId?:string};
  hashResource:(resourceId:string)=>string;
  service:{reserve:(ownerKey:string,hashes:string[])=>Promise<unknown>;request:(ownerKey:string,operationId:string,requestedAt:string)=>Promise<{state:string}>;status:(ownerKey:string,operationId:string)=>Promise<{state:string}|null>;runOne:()=>Promise<unknown>;purgeExpiredTotals:()=>Promise<unknown>;capability:()=>Promise<boolean>};
 }
