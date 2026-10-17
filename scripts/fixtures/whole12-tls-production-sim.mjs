@@ -525,13 +525,17 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
      * role credentials privately. Original identities and bindings are retained. */
     async resumeExisting(configuration, credentials, jwksOrigin, replay) {
       assert.equal(phase, "fresh");
-      assert.equal(root, "/private/tmp/sim-user-install-pg-9aff26e65b74");
+      const resumeCases={
+        '/private/tmp/sim-user-install-pg-9aff26e65b74':{epoch:'7f970a87-f36b-4e7f-8226-8c9107c8d3e4',operation:'b6fe7a68-d7a2-49e0-a9da-6dd7bcb01a4e'},
+        '/private/tmp/sim-user-install-pg-956262c6abdb':{epoch:'a7f98504-9c29-4942-8fb3-7236ab819a07',operation:'b1c21024-0c2f-4a3d-afad-911f95d73c1b'}
+      };
+      const resumeCase=resumeCases[root];assert.ok(resumeCase,'EXACT_OWNED_RESUME_CASE_REQUIRED');
       assert.equal(configuration.input.contractVersion, "cop-sim-clean-whole-fixture-v2");
       assert.equal(configuration.input.base.issuer, "https://cop-erasure-keycloak.invalid/realms/cop");
-      assert.equal(configuration.input.base.resetEpoch, "7f970a87-f36b-4e7f-8226-8c9107c8d3e4");
+      assert.equal(configuration.input.base.resetEpoch, resumeCase.epoch);
       assert.equal(jwksOrigin, "http://127.0.0.1:8080/realms/cop/protocol/openid-connect/certs");
       if (replay !== undefined) {
-        assert.deepEqual(replay, { mode: "same-epoch-completed-content-replay-v1", acceptedOperationId: "b6fe7a68-d7a2-49e0-a9da-6dd7bcb01a4e" });
+        assert.deepEqual(replay, { mode: "same-epoch-completed-content-replay-v1", acceptedOperationId: resumeCase.operation });
         acceptedReplay = replay;
       }
       async function verifyJobs(c, schema) {
