@@ -815,7 +815,7 @@ Five synthetic sequencing tests cover ordering and failures, not production
 acceptance. The COP bridge must exist in the pinned archive and produce real
 protected Store proofs; absent/incomplete owner bridge blocks before reset.
 
-The pinned COP bridge is now revision
+The v3 pinned COP bridge was revision
 `d754cc27caa8d5d4ccd64724b460f1da231da736` and Messaging source remains
 `969a75164a0dd2cf34dac4f426be40702dfc8311`. All five actual source adapter
 interfaces load together. The chain validates both prepared-disabled and final
@@ -838,3 +838,35 @@ preserves the original failure if cleanup also fails, without logging private
 exception text. Existing v2 artifacts remain immutable; the correction requires
 a new public SIM archive/manifest/CLI/bootstrap set, not an application image,
 report timestamp, database reset or repeated deployment during diagnosis.
+
+### Explicit v4 two-peer temporary access
+
+The later supervised v3 preflight failed with
+`ROOT_EXISTING_TRANSPORT_UNAVAILABLE_STORAGE`, before any bootstrap/reset.
+The owner confirmed that storage password login is locked, while its existing
+key-based administration and sudo work. The human separately approved a new
+two-hour Root-RAM identity authorization for exactly COMM and storage, from
+192.168.10.116 with restrict/no forwarding/no PTY; no password unlock or SSH
+configuration change is included.
+
+COP source `f4f0474ec5c5697010b9bdfddb58fac3f1786610` supplies the separate
+`cop-release-peer-identity-v1` helper, pinned SHA
+`446508abf4eb990cb0b0b61d22fd703fd5eee2c152db1a41f922b76e041ad0b8`.
+The fixed private key remains `/run/cop-clean-reset-comm/id_ed25519`, with a
+separate Root0600 peer receipt under `/run/cop-clean-reset-peers` authorizing
+both hosts and the exact identity. Bootstrap validates the SHA-pinned helper
+before enabling public-key-only preflights. ProductionStorage validates the
+same helper against its sealed source digest and binds the fixed host, identity,
+fingerprint, line SHA and expiry across its lifetime. Missing or changed peer
+authority fails closed; its absence preserves the legacy password-only branch.
+
+Inner close keeps shared key authority, and never unlinks a socket if `-O exit`
+failed or `-O check` still finds a live master. The outer helper independently
+removes both exact authorization lines, confirms both control masters closed,
+and wipes private authority. A success receipt requires both peer booleans,
+both control booleans, `controlSessionsClosed`, private wipe and exact line
+absence. Cleanup uses its independent helper pin even if bootstrap fails;
+COMM close is still attempted when storage close raises. Targeted SIM suites
+(20 bootstrap,15 orchestration,3 parent,6 chain,6 Message,18 activation) pass.
+This is source/synthetic evidence, not successful production activation.
+Application images and the original acceptance report remain unchanged.

@@ -65,3 +65,24 @@ inventory/CAS. It uses fchown/fchmod on that single fd, never a recursive path
 operation. Unknown custody, symlink, occupied target or drift refuses. Actual
 Root execution remains operator-supervised and the temporary key lifetime ends
 in the outer finally.
+
+## Separate approved storage peer authorization
+
+The human explicitly approved the same narrowly bounded Root-RAM identity for
+both fixed COMM and storage peers after the existing storage password was found
+locked. No password unlock, sshd, sudo, network or persistent key change is
+introduced. The original COMM-only contract is not broadened: a separate
+`cop-release-peer-identity-v1` Root receipt authorizes exactly these two hosts,
+purpose `cop-sim-clean-release`, the same fingerprint/line SHA and two-hour
+expiry. Bootstrap and storage transport use only the fixed identity path after
+validating that receipt. Its presence enables an explicit public-key-only branch;
+absent receipt retains legacy behavior, invalid receipt never triggers fallback.
+
+Inner transport close preserves the shared private identity. A control socket
+must not be unlinked after unsuccessful `ssh -O exit` or a still-active `-O check`.
+Outer cleanup independently attempts exact authorization removal on both hosts,
+then verifies both fixed control sessions closed and wipes private authority.
+Both peer removals, both control closures and private wipe must be confirmed for
+success; partial failure remains explicit even when the private key was wiped.
+The new helper is loaded from a fixed public path by exact SHA independently of
+bootstrap success, so a bootstrap error cannot skip the cleanup attempt.

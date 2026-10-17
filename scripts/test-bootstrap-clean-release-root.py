@@ -4,6 +4,30 @@ from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'bootstrap-clean-release-root.py'
 s=importlib.util.spec_from_file_location('bootstrap',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Bootstrap(unittest.TestCase):
+ def test_public_peer_helper_executes_only_verified_bytes(self):
+  with tempfile.TemporaryDirectory(dir='/private/tmp')as d:
+   p=pathlib.Path(d)/'helper.py';raw=b'value = "synthetic"\nif __name__ == "__main__": raise RuntimeError("NO_PREPARE")\n';p.write_bytes(raw)
+   with patch.object(m,'PEER_HELPER',p),patch.object(m,'PEER_HELPER_SHA',__import__('hashlib').sha256(raw).hexdigest()):
+    self.assertEqual(m.verified_release_peer_helper().value,'synthetic')
+    p.write_bytes(raw+b'# changed\n')
+    with self.assertRaisesRegex(RuntimeError,'HELPER_SHA'):m.verified_release_peer_helper()
+ def test_peer_branch_is_explicit_fixed_host_and_key_only(self):
+  def peer(host):return {'identityFile':'/run/cop-clean-reset-comm/id_ed25519','host':host}
+  with patch.object(m,'release_peer_identity',side_effect=peer),patch.object(m,'temporary_comm_identity',side_effect=AssertionError('NO_LEGACY_FALLBACK')):
+   for host in ['comm.home.cz','storage.home.cz']:
+    a=m.transport_args(host);self.assertIn('BatchMode=yes',a);self.assertIn('PasswordAuthentication=no',a);self.assertIn('PreferredAuthentications=publickey',a);self.assertIn('IdentitiesOnly=yes',a);self.assertNotIn('PreferredAuthentications=password',a)
+ def test_invalid_peer_never_falls_back_to_password(self):
+  with patch.object(m,'release_peer_identity',side_effect=RuntimeError('ROOT_RELEASE_PEER_IDENTITY_UNPROVEN')):
+   with self.assertRaisesRegex(RuntimeError,'PEER_IDENTITY'):m.transport_args('storage.home.cz')
+ def test_peer_preflight_never_opens_tty(self):
+  with patch.object(m,'release_peer_identity',side_effect=lambda host:{'host':host,'identityFile':'/run/cop-clean-reset-comm/id_ed25519'}),patch('builtins.open',side_effect=AssertionError('NO_PASSWORD_TTY')),patch.object(m.subprocess,'run',return_value=__import__('types').SimpleNamespace(returncode=0,stdout=b'0\n'))as run:
+   m.check_transports();self.assertEqual(run.call_count,2)
+ def test_peer_receipt_wrong_scope_key_or_host_refused(self):
+  good={'host':'storage.home.cz','identityFile':'/run/cop-clean-reset-comm/id_ed25519','fingerprint':'SHA256:synthetic','authorizedLineSha256':'a'*64,'expiresAt':'synthetic'}
+  for update in [{'host':'other.home.cz'},{'identityFile':'/tmp/arbitrary-key'},{'authorizedLineSha256':'bad'},{'extra':'not-permitted'}]:
+   v={**good,**update}
+   with patch.object(m.os.path,'lexists',return_value=True),patch.object(m,'verified_release_peer_helper',return_value=__import__('types').SimpleNamespace(identity_for_peer=lambda *a,**kw:v)):
+    with self.assertRaisesRegex(RuntimeError,'IDENTITY_SCOPE'):m.release_peer_identity('storage.home.cz')
  def test_derived_key_accepts_only_optional_exact_comment(self):
   expected='ssh-ed25519 SYNTHETIC cop-clean-release-test'
   for actual in ['ssh-ed25519 SYNTHETIC',expected]:m.validate_derived_public(actual,expected,'cop-clean-release-test')

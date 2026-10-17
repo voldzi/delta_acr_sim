@@ -3,15 +3,18 @@
 Exact manifest SHA is supplied explicitly by the human-reviewed release command.
 No downloaded code is imported before archive SHA and immutable image checks.
 """
-import argparse,datetime,hashlib,json,os,posixpath,re,shutil,socket,stat,subprocess,tarfile,tempfile
+import argparse,datetime,hashlib,json,os,posixpath,re,shutil,socket,stat,subprocess,tarfile,tempfile,types
 from pathlib import Path
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 DEPS='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df'
 APP='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86'
-REVISIONS={'cop':'d754cc27caa8d5d4ccd64724b460f1da231da736','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
+REVISIONS={'cop':'f4f0474ec5c5697010b9bdfddb58fac3f1786610','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
 UUID='2f93f595-b61b-4eea-9054-7afa9b275b5b'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 TEMP_COMM=Path('/run/cop-clean-reset-comm')
+PEER_DIRECTORY=Path('/run/cop-clean-reset-peers')
+PEER_HELPER=Path('/home/voldzi/temporary-release-key.py')
+PEER_HELPER_SHA='446508abf4eb990cb0b0b61d22fd703fd5eee2c152db1a41f922b76e041ad0b8'
 def need(v,c):
  if not v:raise RuntimeError(c)
 def sha(b):return hashlib.sha256(b).hexdigest()
@@ -27,6 +30,21 @@ def validate_derived_public(derived,expected,marker):
  public=expected.split();actual=derived.split()
  need(len(public)==3 and public[0]=='ssh-ed25519'and public[2]==marker,'ROOT_TEMP_COMM_PUBLIC_FORMAT')
  need(len(actual)in[2,3]and actual[:2]==public[:2]and(len(actual)==2 or actual[2]==marker),'ROOT_TEMP_COMM_KEY_PAIR')
+def verified_release_peer_helper():
+ fd=os.open(PEER_HELPER,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+ try:
+  s=os.fstat(fd);need(stat.S_ISREG(s.st_mode)and s.st_nlink==1 and s.st_size<65536,'ROOT_PEER_HELPER_SCOPE')
+  raw=os.read(fd,65536);t=os.fstat(fd)
+  need(len(raw)==s.st_size and(s.st_ino,s.st_mtime_ns,s.st_ctime_ns)==(t.st_ino,t.st_mtime_ns,t.st_ctime_ns)and sha(raw)==PEER_HELPER_SHA,'ROOT_PEER_HELPER_SHA')
+ finally:os.close(fd)
+ m=types.ModuleType('verified_release_peer_key');m.__file__=str(PEER_HELPER)
+ exec(compile(raw,str(PEER_HELPER),'exec'),m.__dict__);return m
+def release_peer_identity(host):
+ need(host in ['comm.home.cz','storage.home.cz'],'ROOT_PEER_HOST_SCOPE')
+ if not os.path.lexists(PEER_DIRECTORY):return None
+ value=verified_release_peer_helper().identity_for_peer(host,check_expiry=True)
+ need(isinstance(value,dict)and set(value)=={'identityFile','fingerprint','authorizedLineSha256','expiresAt','host'}and value['host']==host and value['identityFile']=='/run/cop-clean-reset-comm/id_ed25519'and re.fullmatch('[a-f0-9]{64}',value['authorizedLineSha256']),'ROOT_PEER_IDENTITY_SCOPE')
+ return value
 def temporary_comm_identity():
  """Fixed, human-approved ephemeral identity; no caller-selected SSH path."""
  if not TEMP_COMM.exists():return None
@@ -55,8 +73,10 @@ def temporary_comm_identity():
 def transport_args(host):
  need(host in ['comm.home.cz','storage.home.cz'],'ROOT_TRANSPORT_HOST_SCOPE')
  common=['/usr/bin/ssh','-F','/dev/null','-o','KbdInteractiveAuthentication=no','-o','IdentityAgent=none','-o','ForwardAgent=no','-o','ForwardX11=no','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no','-o','UserKnownHostsFile=/home/voldzi/.ssh/known_hosts','-o','GlobalKnownHostsFile=/dev/null','-o','ConnectTimeout=8']
- auth=['-o','BatchMode=yes','-o','PasswordAuthentication=no','-o','PubkeyAuthentication=yes','-o','PreferredAuthentications=publickey'] if host=='comm.home.cz' else ['-o','BatchMode=no','-o','PubkeyAuthentication=no','-o','PreferredAuthentications=password','-o','NumberOfPasswordPrompts=1']
- if host=='comm.home.cz':
+ peer=release_peer_identity(host)
+ auth=['-o','BatchMode=yes','-o','PasswordAuthentication=no','-o','PubkeyAuthentication=yes','-o','PreferredAuthentications=publickey'] if peer or host=='comm.home.cz' else ['-o','BatchMode=no','-o','PubkeyAuthentication=no','-o','PreferredAuthentications=password','-o','NumberOfPasswordPrompts=1']
+ if peer:auth+=['-o','IdentitiesOnly=yes','-i',peer['identityFile']]
+ elif host=='comm.home.cz':
   identity=temporary_comm_identity()
   if identity:auth+=['-o','IdentitiesOnly=yes','-i',identity]
  return common+auth+['voldzi@'+host,'/usr/bin/sudo','-n','/usr/bin/id','-u']
@@ -64,7 +84,7 @@ def check_transports():
  """Before PG prompt/freeze: existing COMM key, existing storage TTY password."""
  for host in ['comm.home.cz','storage.home.cz']:
   args=transport_args(host)
-  if host=='storage.home.cz':
+  if host=='storage.home.cz'and 'PreferredAuthentications=password'in args:
    with open('/dev/tty','r+b',buffering=0) as tty:
     p=subprocess.run(args,stdin=tty,stdout=subprocess.PIPE,stderr=tty,env=ENV,timeout=120)
   else:p=subprocess.run(args,stdin=subprocess.DEVNULL,capture_output=True,env=ENV,timeout=20)

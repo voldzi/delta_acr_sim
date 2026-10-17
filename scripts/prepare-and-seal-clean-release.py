@@ -10,11 +10,13 @@ HERE=Path(__file__).resolve().parent
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 BASE=Path('/srv/cop/runtime/clean-reset')
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
-BOOTSTRAP_SHA='bb7fa9e6ee25476e0a836ef812d7dc1045917df6d3b1f1925154908a0bdfc285'
+BOOTSTRAP_SHA='63db9fa0dd6c828ca7d384605539374525bd3e82bef94ea76a9db7937fe68678'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
 TEMP_KEY_SHA='87ea81867ac8bdb3605b7b186c550710b7b9ac268da7667b1b6ce60b22dd852a'
 TEMP_AUTHORIZE=Path('/home/voldzi/temporary-comm-authorize.py')
 TEMP_AUTHORIZE_SHA='70a0f585254c7f3e0cce91c4c5e8a4d90d761c4db4c401473641002bbba5562a'
+TEMP_PEER_HELPER=Path('/home/voldzi/temporary-release-key.py')
+TEMP_PEER_HELPER_SHA='446508abf4eb990cb0b0b61d22fd703fd5eee2c152db1a41f922b76e041ad0b8'
 def need(v,c):
  if not v:raise RuntimeError(c)
 def sha(b):return hashlib.sha256(b).hexdigest()
@@ -49,6 +51,12 @@ def pinned_public_module(path,digest,name):
 def cleanup_temporary_transport():
  # Runs even when bootstrap/preflight/confirmation fails. Inner phase close()
  # calls have already unwound; this is the sole lifetime owner of the RAM key.
+ if os.path.lexists('/run/cop-clean-reset-peers'):
+  helper=pinned_public_module(TEMP_PEER_HELPER,TEMP_PEER_HELPER_SHA,'release_peer_key_cleanup')
+  result=helper.cleanup_release_identity()
+  print(json.dumps({'temporaryPeerTransportCleanup':result}),flush=True)
+  need(isinstance(result,dict)and set(result)=={'peers','controlPeers','controlSessionsClosed','temporaryPrivateIdentityRemoved','exactAuthorizationsAbsent'}and all(isinstance(result[k],dict)and set(result[k])=={'comm.home.cz','storage.home.cz'}and all(v is True for v in result[k].values())for k in ['peers','controlPeers'])and result['temporaryPrivateIdentityRemoved']is True and result['exactAuthorizationsAbsent']is True and result['controlSessionsClosed']is True,'RELEASE_PEER_CLEANUP_NOT_VERIFIED')
+  return
  if not os.path.lexists('/run/cop-clean-reset-comm/temporary-identity.json'):return
  bootstrap=verified_bootstrap_code()
  helper=pinned_public_module(TEMP_KEY_HELPER,TEMP_KEY_SHA,'release_temp_key')
@@ -67,7 +75,7 @@ def cleanup_temporary_transport():
  print(json.dumps({'temporaryTransportCleanup':result}))
 def safe_failure_code(error):
  # Never print arbitrary exception text, filenames, stderr or private payloads.
- if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and re.fullmatch(r'(?:ROOT|RELEASE|CLEAN|SIM|MESSAGING)_[A-Z0-9_]{1,90}',error.args[0]):return error.args[0]
+ if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and re.fullmatch(r'(?:ROOT|RELEASE|RESET|CLEAN|SIM|MESSAGING)_[A-Z0-9_]{1,90}',error.args[0]):return error.args[0]
  if isinstance(error,OSError):return 'OS_ERROR_'+str(error.errno if isinstance(error.errno,int)else 'UNKNOWN')
  return 'UNCLASSIFIED_'+type(error).__name__
 def run_with_transport_cleanup(action):
@@ -191,8 +199,9 @@ def prepare_and_seal_clean_release(bootstrap,public_manifest,postgres_password,d
   publish_new(BASE/'plan.json',(json.dumps(plan,separators=(',',':'))+'\n').encode())
   return {'privateConfig':joined['privateConfig'],'publicSummary':joined['publicSummary'],'plan':plan}
  finally:
-  if storage:storage.close()
-  remote.close()
+  try:
+   if storage:storage.close()
+  finally:remote.close()
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--public-manifest',required=True);p.add_argument('--manifest-sha256',required=True)
  modes=p.add_mutually_exclusive_group();modes.add_argument('--apply-disabled-reset',action='store_true');modes.add_argument('--complete-release',action='store_true');a=p.parse_args()

@@ -4,6 +4,21 @@ from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'prepare-and-seal-clean-release.py'
 s=importlib.util.spec_from_file_location('release',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Release(unittest.TestCase):
+ def test_peer_cleanup_requires_confirmed_control_shutdown(self):
+  result={'peers':{'comm.home.cz':True,'storage.home.cz':True},'controlPeers':{'comm.home.cz':True,'storage.home.cz':False},'controlSessionsClosed':False,'temporaryPrivateIdentityRemoved':True,'exactAuthorizationsAbsent':True}
+  with patch.object(m.os.path,'lexists',return_value=True),patch.object(m,'pinned_public_module',return_value=types.SimpleNamespace(cleanup_release_identity=lambda:result)),patch('builtins.print'):
+   with self.assertRaisesRegex(RuntimeError,'PEER_CLEANUP_NOT_VERIFIED'):m.cleanup_temporary_transport()
+ def test_shared_peer_helper_pin_matches_bootstrap(self):
+  self.assertEqual(m.TEMP_PEER_HELPER_SHA,m.verified_bootstrap_code().PEER_HELPER_SHA)
+ def test_peer_cleanup_independent_of_failed_bootstrap_and_no_legacy_fallback(self):
+  for failed in [None,'comm.home.cz','storage.home.cz']:
+   result={'peers':{host:host!=failed for host in ['comm.home.cz','storage.home.cz']},'controlPeers':{host:True for host in ['comm.home.cz','storage.home.cz']},'controlSessionsClosed':True,'temporaryPrivateIdentityRemoved':True,'exactAuthorizationsAbsent':failed is None}
+   helper=types.SimpleNamespace(cleanup_release_identity=lambda:result)
+   with patch.object(m.os.path,'lexists',return_value=True),patch.object(m,'pinned_public_module',return_value=helper)as load,patch.object(m,'verified_bootstrap_code',side_effect=AssertionError('NO_BOOTSTRAP_DEPENDENCY')),patch('builtins.print'):
+    if failed:
+     with self.assertRaisesRegex(RuntimeError,'PEER_CLEANUP_NOT_VERIFIED'):m.cleanup_temporary_transport()
+    else:m.cleanup_temporary_transport()
+    load.assert_called_once_with(m.TEMP_PEER_HELPER,m.TEMP_PEER_HELPER_SHA,'release_peer_key_cleanup')
  def test_original_error_survives_cleanup_error_without_secret_text(self):
   def action():raise RuntimeError('ROOT_TEMP_COMM_KEY_PAIR')
   with patch.object(m,'cleanup_temporary_transport',side_effect=RuntimeError('RELEASE_TEMP_AUTHORIZATION_REMOVE_FAILED')),patch('builtins.print')as output:
@@ -18,7 +33,7 @@ class Release(unittest.TestCase):
    t=host.CommunicationResetTransport();t.open();t.run(['/usr/bin/python3','-I','-c',program,'remove'],input=b'{}');t.close()
    return {'temporaryPrivateIdentityRemoved':True,'exactAuthorizationAbsent':True}
   bootstrap=types.SimpleNamespace(temporary_comm_identity=lambda:'/run/cop-clean-reset-comm/id_ed25519',transport_args=lambda host:['/usr/bin/ssh','-i','/run/cop-clean-reset-comm/id_ed25519','voldzi@comm.home.cz','/usr/bin/sudo','-n','/usr/bin/id','-u'])
-  with patch.object(m.os.path,'lexists',return_value=True),patch.object(m,'verified_bootstrap_code',return_value=bootstrap),patch.object(m,'pinned_public_module',side_effect=[types.SimpleNamespace(cleanup_temporary_comm_key=cleanup),types.SimpleNamespace(REMOTE_PROGRAM=program)]),patch.object(m.subprocess,'run',side_effect=lambda args,**kw:(captured.append((args,kw)),types.SimpleNamespace(returncode=0,stdout=b'{}'))[1]),patch('builtins.print'):
+  with patch.object(m.os.path,'lexists',side_effect=lambda path:str(path)!='/run/cop-clean-reset-peers'),patch.object(m,'verified_bootstrap_code',return_value=bootstrap),patch.object(m,'pinned_public_module',side_effect=[types.SimpleNamespace(cleanup_temporary_comm_key=cleanup),types.SimpleNamespace(REMOTE_PROGRAM=program)]),patch.object(m.subprocess,'run',side_effect=lambda args,**kw:(captured.append((args,kw)),types.SimpleNamespace(returncode=0,stdout=b'{}'))[1]),patch('builtins.print'):
    m.cleanup_temporary_transport()
   args,kw=captured[0];self.assertEqual(args[-2],'voldzi@comm.home.cz');self.assertEqual(shlex.split(args[-1]),['/usr/bin/sudo','-n','/usr/bin/python3','-I','-c',program,'remove']);self.assertEqual(kw['input'],b'{}')
  def test_acceptance_published_only_after_sha_and_strict_gate(self):
@@ -65,7 +80,7 @@ class Release(unittest.TestCase):
   self.assertIn("activation.capture_before_freeze(modules,prepared['plan'])",text)
   self.assertIn("'productionActivated':False",text)
   self.assertNotIn('pickle',text)
- def exercise(self,deny=False):
+ def exercise(self,deny=False,close_failure=False):
   calls=[];published=[];secret='synthetic-private-password-never-publish'
   class Remote:
    def open(self):calls.append('comm-open')
@@ -74,7 +89,9 @@ class Release(unittest.TestCase):
   class Storage:
    def __init__(self,p):pass
    def open(self,p):calls.append('storage-open')
-   def close(self):calls.append('storage-close')
+   def close(self):
+    calls.append('storage-close')
+    if close_failure:raise RuntimeError('SYNTHETIC_STORAGE_CLOSE_FAILED')
   local={k:{'id':'a'*64,'image':'sha256:'+'b'*64} for k in ['csm-sim-api','csm-sim-ai-router-api','csm-sim-situation-data-api']}
   def gate(images):
    calls.append('gate')
@@ -95,8 +112,8 @@ class Release(unittest.TestCase):
   manifest={'candidateImages':{},'storageProvider':{}}
   fake_stat=types.SimpleNamespace(st_mode=0o100600,st_nlink=1,st_dev=1,st_ino=2,st_uid=0,st_gid=0)
   with patch.object(m,'load',side_effect=lambda path,name:modules[name]),patch.object(m,'node_prepare',side_effect=node),patch.object(m,'root_read',return_value=b'{}'),patch.object(pathlib.Path,'lstat',return_value=fake_stat),patch.object(pathlib.Path,'exists',return_value=False),patch.object(m,'publish_new',side_effect=lambda path,raw:published.append(raw)):
-   if deny:
-    with self.assertRaisesRegex(RuntimeError,'SYNTHETIC_GATE_DENIED'):m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
+   if deny or close_failure:
+    with self.assertRaisesRegex(RuntimeError,'SYNTHETIC_GATE_DENIED'if deny else'SYNTHETIC_STORAGE_CLOSE_FAILED'):m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
    else:
     r=m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
     self.assertEqual(len(r['plan']['reviewedPlanDigests']),12)
@@ -109,4 +126,6 @@ class Release(unittest.TestCase):
   self.assertEqual(len(p),2)
  def test_gate_failure_no_inspection_or_publication(self):
   calls,p=self.exercise(True);self.assertEqual(calls,['comm-open','gate','comm-close']);self.assertEqual(p,[])
+ def test_storage_close_failure_still_closes_comm(self):
+  calls,_=self.exercise(close_failure=True);self.assertEqual(calls[-2:],['storage-close','comm-close'])
 if __name__=='__main__':unittest.main()
