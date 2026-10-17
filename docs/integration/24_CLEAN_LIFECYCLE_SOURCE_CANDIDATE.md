@@ -686,3 +686,33 @@ reviewed PLAN/COP manifest publication and the owner-provided disabled-runtime
 restart/capability/activation stages. Additionally the current COP acceptance gate
 requires Router outage during `deleting`; the proven completed-operation outage
 must not be relabeled to satisfy it. Pending-provider failures also block GO.
+
+### Existing Messaging secrets collector and new trusted source root
+
+`scripts/lib/collect-messaging-initial-private.py` provides the concrete
+`collect_messaging_initial_private(remote, postgres_password, root_plan)`.
+It is source-only tested and must only be called from the Root process on docker
+over its already-open concrete COMM transport. Do not call it through a Mac tool
+or print its return/exception details. Remote inspection verifies both exact
+container IDs/images before and after, extracts only the eight approved keys,
+and compares selected values across the read. Native runtime connections provide
+actual database/backend/cluster witnesses; fixed verify-full administrator
+connections on docker must resolve to the same backends. Guard access is tested
+as administrator, never inferred from a failed application-role connection.
+
+Strict32-byte base64, existing issuer/client scope, actual server name, HTTPS
+origin and owner-key derivation are checked. A blank old issuer is explicitly
+preparation for a new disabled branch, not permission to accept a foreign issuer.
+Unreviewed optional client scope fails closed. Sealed source pins and actual
+schema inspection build the initial configuration/envelope; no SQL or secrets are
+written and all administrator connections close. Twelve synthetic tests passed;
+the collector has not been executed against production secrets.
+
+To avoid adopting the existing UID1000 operator tree, the new coordinated fixed
+Root-owned root is
+`/srv/x5-production/staging/cop/clean-operator-shared-v3` (COP source `/app`).
+SIM preparation, coordinator, bootstrap and collector constants now agree on this
+new root. COP Root validator must pin the same root before the release can run.
+Dependency image2e, actual app image286 and Node/loader content pins do not change.
+The old user-owned tree is neither adopted nor deleted. Earlier path examples
+describe the prior source candidate, not the new bootstrap target.

@@ -17,7 +17,7 @@ check(x.privateConfig.simUserInstall===part.simUserInstall);
 check(!JSON.stringify(x.publicSummary).includes(secret));
 check(x.publicSummary.completeForFreeze===false&&x.publicSummary.mutationPerformed===false);
 check(x.publicSummary.missingPlans.join(',')==='cop_safety_install,messaging,media,edge');
-check(COMMON_COP_SOURCE==='/srv/x5-production/staging/cop/clean-operator-2e61857/app');
+check(COMMON_COP_SOURCE==='/srv/x5-production/staging/cop/clean-operator-shared-v3/app');
 for(const changed of [{phase:'apply'},{resetEpoch:randomUUID()},{reviewedPlans:{}},{reviewedPlanDigests:{}},{contractVersion:'wrong'}]){await assert.rejects(assembleInspectedCommonConfig({...root,...changed},part,inspectors));checks++;}
 await assert.rejects(assembleInspectedCommonConfig(root,part,{...inspectors,ai:async()=>({planDigest:'placeholder'})}));checks++;
 await assert.rejects(assembleInspectedCommonConfig(root,part,{...inspectors,keycloak:async()=>({planDigest:d})}));checks++;

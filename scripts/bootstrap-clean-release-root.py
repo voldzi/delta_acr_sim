@@ -5,7 +5,7 @@ No downloaded code is imported before archive SHA and immutable image checks.
 """
 import argparse,hashlib,json,os,posixpath,shutil,socket,stat,subprocess,tarfile,tempfile
 from pathlib import Path
-TARGET=Path('/srv/x5-production/staging/cop/clean-operator-2e61857')
+TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 DEPS='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df'
 APP='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86'
 REVISIONS={'cop':'8776eb4e4aab9517b1c26343aff2c709f0956438','messaging':'0876f91b5e4e28f20a2904b2c5b2355d5cfde56f'}

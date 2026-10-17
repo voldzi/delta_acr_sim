@@ -15,7 +15,7 @@ import uuid
 from urllib.parse import quote
 
 PLAN = Path('/srv/cop/runtime/clean-reset/plan.json')
-COP_ROOT = Path('/srv/x5-production/staging/cop/clean-operator-2e61857/app')
+COP_ROOT = Path('/srv/x5-production/staging/cop/clean-operator-shared-v3/app')
 SIM_ENV = Path('/srv/sim/.env')
 OVERLAY = Path('/srv/sim/docker-compose.clean-user-data.json')
 DEPLOY_GUARD = Path('/srv/sim/scripts/deploy-docker-home.sh')

@@ -9,7 +9,7 @@ import {prepareSimRootPrivatePart,mergeSimRootPrivatePart} from './prepare-sim-r
 import * as ops from './clean-reset-ops.mjs';
 import {inspectResetFiles} from './clean-reset-files.mjs';
 import {inspectSimAppReset} from './sim-user-data-reset-files.mjs';
-export const COMMON_COP_SOURCE='/srv/x5-production/staging/cop/clean-operator-2e61857/app';
+export const COMMON_COP_SOURCE='/srv/x5-production/staging/cop/clean-operator-shared-v3/app';
 const need=x=>{if(!x)throw Error('COMMON_ROOT_PREPARATION_REJECTED')};
 const names=['cop','ai','driver','files','sim_app_files','keycloak','sim_user_install'];
 /** Testable orchestration; adapters are inspectors, never runtime admissions. */

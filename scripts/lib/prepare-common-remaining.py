@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import socket
 
-COP_ROOT = '/srv/x5-production/staging/cop/clean-operator-2e61857/app'
+COP_ROOT = '/srv/x5-production/staging/cop/clean-operator-shared-v3/app'
 
 def need(value):
     if not value:
