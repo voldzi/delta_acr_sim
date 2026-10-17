@@ -31,5 +31,6 @@ for folder,dirs,files in os.walk(BASE,followlinks=False):
         else:assert p.is_dir()
 receipt={'contract':'whole12-own-failed-public-build-cleanup-v1','path':str(BASE),'fileCount':len(inventory),'bytes':sum(x.get('bytes',0) for x in inventory),'inventorySha256':hashlib.sha256(json.dumps(inventory,sort_keys=True).encode()).hexdigest(),'productionTouched':False}
 with (BASE.parent/'sim-runtime-build-failure-inventory.json').open('x')as f:json.dump(receipt,f,indent=2)
+for folder,_,_ in os.walk(BASE,followlinks=False):Path(folder).chmod(0o700)
 shutil.rmtree(BASE)
 print(json.dumps(receipt))
