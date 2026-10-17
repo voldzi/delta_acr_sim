@@ -601,11 +601,17 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
           fingerprint: createHash("sha256").update(JSON.stringify(rows)).digest("hex")
         };
       }
+      const componentRead = async (instance) => {
+        const value = await readCleanWhole(instance);
+        const mode = (await instance.runtime.query("SELECT mode FROM sim_clean.config WHERE singleton")).rows[0]?.mode;
+        assert.equal(mode, "production-clean-lifecycle-v1");
+        return { ...value, contractVersion: "cop-clean-whole-tls-component-readback-v1", mode };
+      };
       return {
         appOwners: app,
         simHistory: history,
-        ai: await readCleanWhole(ai),
-        driver: await readCleanWhole(driver),
+        ai: await componentRead(ai),
+        driver: await componentRead(driver),
         sameCompiledProductionBootstrap: true,
         actualRootAdmission: false,
         productionHaProxyVerified: false,

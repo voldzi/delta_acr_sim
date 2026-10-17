@@ -261,7 +261,7 @@ It tests private input custody, issuer refusal, two account seeds, authenticated
 readback, actual outage/503/restart and preserved B history. Real Keycloak and
 the remaining whole12 providers are the separate shared acceptance step.
 
-## New TLS production-bootstrap fixture (actual namespace run pending)
+## New TLS production-bootstrap fixture
 
 `scripts/fixtures/whole12-tls-production-sim.mjs` adds a separate factory,
 `createTlsProductionSimFixture({root,sourceRoot,runtimeRoot})`. It does not alter
@@ -308,6 +308,28 @@ dependency merges or package downloads. The scratch-based test image is not
 claimed to be an original candidate image. Actual compiled/resource byte hashes
 must match all three originals; production service identities must not change.
 Its build and the complete PostgreSQL/KC run remain separate acceptance gates.
+
+Actual namespace component run subsequently passed with source0ded266, PG18.6,
+Node24.22 and test bundle08570327 (full identities in archived TLS evidence).
+The unchanged production-mode main/history bootstrap used actual independent
+SQL authorities over verify-full TLS. Both real isolated KC actors wrote through
+main middleware. Wrong CA/SAN and runtime DDL were rejected. Readback returned
+401 without bearer and404 with Origin; checkpoint quarantine and terminated
+guard sessions/NOLOGIN returned503, then fresh admission recovered200. Both
+actors' stored fingerprints remained unchanged; no account was deleted.
+Private test values were absent from Docker metadata. The client is UID1000,
+read-only root, no capabilities/new privileges or published ports, and shares
+only the isolated network-none namespace. Actual Root admission and production
+HAProxy verification are explicitly NOT claimed. COP owns the next coordinated
+A-delete/B-preserve and full recovery acceptance; the synthetic fixture remains
+available for that test and must not be mistaken for a production deployment.
+
+The old component readback helper hardcodes its historical isolated mode label.
+The new TLS wrapper now emits `cop-clean-whole-tls-component-readback-v1` and
+reads the actual SQL mode, leaving the old contract unchanged. This source
+correction does not hot-patch the already running source0ded266 process. The
+shared test must use the correct source identity and/or independently verify
+actual SQL mode, never infer it from the old nested label.
 
 ## Rollback
 
