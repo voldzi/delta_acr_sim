@@ -586,3 +586,16 @@ fallback. Two targeted synthetic tests and Router typecheck pass. A new compiled
 immutable test image and actual repeat503/recovery200 remain required: this source
 fix is not acceptance evidence for the old bundle. The operation was already
 completed, so this is not a retroactive pending-deletion outage test.
+
+The subsequent actual build and repeat are recorded in
+`docs/archive/2026-10-17_SIM_FRESH956_CORRECTED_ROUTER_OUTAGE.json`.
+Official Router image b6c56985 and immutable test bundle739582de were built.
+Full file/symlink hashes prove unchanged main/driver and situation trees against
+the old bundle, and exact new Router tree equality to the official image. The
+same accepted fresh956 operation then actually returned200,503,200 while only
+its two exact Router database sessions were terminated and LOGIN was restored in
+finally. Node survived; all four signed deletion readbacks returned200/deleted,
+A remained absent and B matched the private pre-deletion receipt. All68 Router
+synthetic tests passed. This closes the completed-operation outage finding for
+the new image only; it does not prove pending-deletion behavior, fresh956 content
+restore, whole COP acceptance or production activation.
