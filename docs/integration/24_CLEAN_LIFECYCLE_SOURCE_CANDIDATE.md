@@ -814,3 +814,12 @@ Message candidate and writes four flags false; it never restarts an old image.
 Five synthetic sequencing tests cover ordering and failures, not production
 acceptance. The COP bridge must exist in the pinned archive and produce real
 protected Store proofs; absent/incomplete owner bridge blocks before reset.
+
+The pinned COP bridge is now revision
+`d754cc27caa8d5d4ccd64724b460f1da231da736` and Messaging source remains
+`969a75164a0dd2cf34dac4f426be40702dfc8311`. All five actual source adapter
+interfaces load together. The chain validates both prepared-disabled and final
+enabled COP receipts against the exact epoch, candidate image, full source
+revision, active CID, guard, preserved health/demo and no-old-fallback fields.
+Six isolated chain tests pass; this is source integration evidence only, not a
+Root execution receipt. The bootstrap bytes pin was advanced with the COP pin.
