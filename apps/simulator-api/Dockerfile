@@ -6,6 +6,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY docs ./docs
 COPY packages ./packages
+COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/driver-report-files.mjs ./deploy/account-safety/
 COPY apps/simulator-api ./apps/simulator-api
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/simulator-api... build
@@ -18,6 +19,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=build /app/docs ./docs
 COPY --from=build /app/packages ./packages
+COPY --from=build /app/deploy/account-safety ./deploy/account-safety
 COPY --from=build /app/apps/simulator-api ./apps/simulator-api
 RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --prod --frozen-lockfile

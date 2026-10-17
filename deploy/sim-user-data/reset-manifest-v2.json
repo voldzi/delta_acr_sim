@@ -1,0 +1,18 @@
+{
+  "contractVersion": "sim-user-data-reset-profile-v2",
+  "baseManifestSha": "de4548fad17c1bc978d91951f59ec5bd8648b2711f5d168f517efe332aedd09d",
+  "aiBaseCatalogDigest": "cbee61496d70a3b5e378bdd96080b0231b19803fb67c7e25ecbcf0374122a79f",
+  "aiPostCatalogDigest": "8e34ca9a924983a49123eb56fde01ef6cbcc0517e88e4d77f4e3688012a1ee08",
+  "aiUserDataCatalogDigest": "cdbf37b4c1d9e3fbd9f53e3993ed93af7b4bc29749ea33176faedd860faefe4e",
+  "pins": {
+    "001_app_schema.sql": "00068002b6ca5224c35887b7a07c29b8068f59a2a224d13432ae2caf14f31eb8",
+    "002_ai_history.sql": "1a58c505112434edebc1bf4a20bf9b888eadb848498ae56defffe12e1e342e32",
+    "003_independent_checkpoint.sql": "359d49dd0a9a1718a9294c669a1b41ed0a170d44e3b6a873a65c5075ceba118a",
+    "004_app_continuity.sql": "545297dba102024802ee85d2c739d0197e5cafaa3383c76a1e627daca74653b5",
+    "005_history_continuity.sql": "d535a9ff9f6dec6a4597f48769f623c57a0dfc45f9b7058c685d6852dce49437"
+  },
+  "authoritySourceSha256": "a0b3fd882baff5ee24401af035ff99134b8ea1f5cc362c88c909cb9bd67ad3d2",
+  "compiledBy": "owned PostgreSQL 18.3, fresh legacy schema then exact v1 transition",
+  "productionWrites": 0,
+  "appUserDataCatalogDigest": "f6792c04b0965c9855819ac36a7be929f48fc88b2150b83caeb2a3c26f3baffe"
+}

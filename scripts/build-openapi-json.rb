@@ -11,6 +11,13 @@ OUTPUT = File.join(ROOT, "openapi", "openapi.json")
 
 SPECS = [
   {
+    key: "simUserData",
+    prefix: "SimUserData",
+    tag_prefix: "SIM User Data Candidate",
+    file: "openapi/fragments/sim-user-data-v1.openapi.json",
+    path_prefix: ""
+  },
+  {
     key: "cleanLifecycle",
     prefix: "CleanLifecycle",
     tag_prefix: "Isolated Clean Lifecycle",

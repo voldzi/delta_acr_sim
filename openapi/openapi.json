@@ -73,6 +73,370 @@
     }
   ],
   "paths": {
+    "/api/v1/internal/sim-user-data/v1/capabilities": {
+      "get": {
+        "operationId": "simUserData_getSimUserDataCapabilities",
+        "summary": "Require actual main and Router component readiness",
+        "security": [
+          {
+            "Service": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh combined readback, never whole-account acceptance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataCapabilities"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service or actor authentication failed"
+          },
+          "404": {
+            "description": "No owner-bound operation / browser, query or unknown path"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, DB/guard/Router/readback unavailable"
+          }
+        },
+        "tags": [
+          "SIM User Data Candidate: SIM User Data Candidate"
+        ]
+      }
+    },
+    "/api/v1/internal/sim-user-data/v1/deletions": {
+      "post": {
+        "operationId": "simUserData_requestSimUserDataDeletion",
+        "summary": "Fence canonical owner and remove three mandatory subcomponents",
+        "security": [
+          {
+            "Service": [
+
+            ],
+            "Actor": [
+
+            ],
+            "Signature": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimUserDataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fresh combined readback, never whole-account acceptance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable fence; still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service or actor authentication failed"
+          },
+          "404": {
+            "description": "No owner-bound operation / browser, query or unknown path"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, DB/guard/Router/readback unavailable"
+          }
+        },
+        "tags": [
+          "SIM User Data Candidate: SIM User Data Candidate"
+        ]
+      }
+    },
+    "/api/v1/internal/sim-user-data/v1/deletions/{operationId}": {
+      "get": {
+        "operationId": "simUserData_getSimUserDataDeletion",
+        "summary": "Fresh owner-bound component completion; 202 remains pending",
+        "security": [
+          {
+            "Service": [
+
+            ],
+            "Actor": [
+
+            ],
+            "Signature": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh combined readback, never whole-account acceptance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable fence; still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service or actor authentication failed"
+          },
+          "404": {
+            "description": "No owner-bound operation / browser, query or unknown path"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, DB/guard/Router/readback unavailable"
+          }
+        },
+        "tags": [
+          "SIM User Data Candidate: SIM User Data Candidate"
+        ]
+      }
+    },
+    "/api/v1/ai-router/internal/sim-user-history/v1/capabilities": {
+      "get": {
+        "operationId": "simUserData_getSimHistoryCapabilities",
+        "summary": "Internal SIM Router history only; never asserts main filesystem deletion",
+        "security": [
+          {
+            "HistoryService": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh combined readback, never whole-account acceptance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataHistoryCapabilities"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service or actor authentication failed"
+          },
+          "404": {
+            "description": "No owner-bound operation / browser, query or unknown path"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, DB/guard/Router/readback unavailable"
+          }
+        },
+        "tags": [
+          "SIM User Data Candidate: SIM User Data Candidate"
+        ]
+      }
+    },
+    "/api/v1/ai-router/internal/sim-user-history/v1/deletions": {
+      "post": {
+        "operationId": "simUserData_requestSimHistoryDeletion",
+        "summary": "Internal SIM Router history only; never asserts main filesystem deletion",
+        "security": [
+          {
+            "HistoryService": [
+
+            ],
+            "HistoryActor": [
+
+            ],
+            "HistorySignature": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimUserDataRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fresh combined readback, never whole-account acceptance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataHistoryReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable fence; still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataHistoryReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service or actor authentication failed"
+          },
+          "404": {
+            "description": "No owner-bound operation / browser, query or unknown path"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, DB/guard/Router/readback unavailable"
+          }
+        },
+        "tags": [
+          "SIM User Data Candidate: SIM User Data Candidate"
+        ]
+      }
+    },
+    "/api/v1/ai-router/internal/sim-user-history/v1/deletions/{operationId}": {
+      "get": {
+        "operationId": "simUserData_getSimHistoryDeletion",
+        "summary": "Internal SIM Router history only; never asserts main filesystem deletion",
+        "security": [
+          {
+            "HistoryService": [
+
+            ],
+            "HistoryActor": [
+
+            ],
+            "HistorySignature": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh combined readback, never whole-account acceptance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataHistoryReceipt"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable fence; still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimUserDataHistoryReceipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict contract rejected"
+          },
+          "401": {
+            "description": "Service or actor authentication failed"
+          },
+          "404": {
+            "description": "No owner-bound operation / browser, query or unknown path"
+          },
+          "409": {
+            "description": "Immutable operation conflict"
+          },
+          "503": {
+            "description": "Disabled, DB/guard/Router/readback unavailable"
+          }
+        },
+        "tags": [
+          "SIM User Data Candidate: SIM User Data Candidate"
+        ]
+      }
+    },
     "/api/v1/ai-router/internal/user-lifecycle/v1/deletions": {
       "post": {
         "operationId": "cleanLifecycle_requestCleanRouterDeletion",
@@ -8508,6 +8872,224 @@
               }
             },
             "additionalProperties": true
+          }
+        }
+      },
+      "SimUserDataRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "scope",
+          "resetEpoch",
+          "operationId",
+          "requestedAt"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-data-v1"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SimUserDataReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "component",
+          "scope",
+          "resetEpoch",
+          "operationId",
+          "state",
+          "subcomponents",
+          "wholeAccountComplete"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-data-v1"
+          },
+          "component": {
+            "const": "sim_user_data"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "enum": [
+              "deletion_pending",
+              "deleted"
+            ]
+          },
+          "subcomponents": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "app_store",
+              "audit_and_publisher",
+              "router_sim_history"
+            ],
+            "properties": {
+              "app_store": {
+                "enum": [
+                  "pending",
+                  "deleted"
+                ]
+              },
+              "audit_and_publisher": {
+                "enum": [
+                  "pending",
+                  "deleted"
+                ]
+              },
+              "router_sim_history": {
+                "enum": [
+                  "pending",
+                  "deleted"
+                ]
+              }
+            }
+          },
+          "wholeAccountComplete": {
+            "const": false
+          }
+        }
+      },
+      "SimUserDataCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "component",
+          "scope",
+          "resetEpoch",
+          "ready",
+          "wholeAccountComplete"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-data-v1"
+          },
+          "component": {
+            "const": "sim_user_data"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "wholeAccountComplete": {
+            "const": false
+          }
+        }
+      },
+      "SimUserDataHistoryCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "component",
+          "scope",
+          "resetEpoch",
+          "ready",
+          "wholeAccountComplete"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-data-v1"
+          },
+          "component": {
+            "const": "sim_router_history"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "wholeAccountComplete": {
+            "const": false
+          }
+        }
+      },
+      "SimUserDataHistoryReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contractVersion",
+          "component",
+          "scope",
+          "resetEpoch",
+          "operationId",
+          "state",
+          "wholeAccountComplete",
+          "remainingRecords"
+        ],
+        "properties": {
+          "contractVersion": {
+            "const": "cop-sim-user-data-v1"
+          },
+          "component": {
+            "const": "sim_router_history"
+          },
+          "scope": {
+            "const": "cop_sim_shared_identity_v1"
+          },
+          "resetEpoch": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "enum": [
+              "deletion_pending",
+              "deleted"
+            ]
+          },
+          "wholeAccountComplete": {
+            "const": false
+          },
+          "remainingRecords": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "null while pending; exact fresh SQL zero only after deletion"
           }
         }
       },
@@ -25405,6 +25987,40 @@
       }
     },
     "securitySchemes": {
+      "Service": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Dedicated COP service token; not an end-user or existing legacy token"
+      },
+      "Actor": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-cop-clean-actor",
+        "description": "Canonical base64url signed exact 13-claim COP actor: iss,aud,sub,oidcIssuer,oidcSubject,resetEpoch,operationId,requestedAt,iat,exp,jti,resourceId,oidcIat. aud=sim-clean-lifecycle-v1. Stable verified issuer + UUID subject, original OIDC iat after epoch cutoff; no display identity."
+      },
+      "Signature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-cop-clean-actor-signature",
+        "description": "HMAC-SHA256 of x-cop-clean-actor with new dedicated actor secret. Must match exact operation/time/epoch and canonical original OIDC identity."
+      },
+      "HistoryService": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Existing authenticated SIM service token, distinct from new COP-to-main token"
+      },
+      "HistoryActor": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-sim-user-actor",
+        "description": "Exact canonical base64url claims iss=sim-app,aud=sim-user-history-v1,ownerKey,resetEpoch,oidcIat,iat,exp,jti plus operationId/requestedAt for deletion. Derived only by verified main canonical OIDC path."
+      },
+      "HistorySignature": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-sim-user-actor-signature",
+        "description": "HMAC-SHA256 of x-sim-user-actor under the distinct main-to-Router actor secret; maximum 60s lifetime."
+      },
       "CleanService": {
         "type": "http",
         "scheme": "bearer"

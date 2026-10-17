@@ -11,6 +11,7 @@ interface AuthenticatedPrincipal {
   authMode?: "public" | "token" | "oidc" | "dev";
   email?: string;
   roles: SimRole[];
+  canonicalOwner?: { issuer: string; subject: string; oidcIat: number };
 }
 
 interface JwtHeader {
@@ -78,7 +79,10 @@ type AuthenticatedRequest = Request & {
 export class AuditLogger {
   private readonly path: string;
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    private readonly options?: { privateFiles?: boolean; guard?: (work: () => Promise<void>) => Promise<void> }
+  ) {
     this.path = join(dataDir, "sim-audit.jsonl");
   }
 
@@ -96,9 +100,11 @@ export class AuditLogger {
       ...entry
     };
     try {
-      await appendFile(this.path, `${JSON.stringify(event)}\n`, "utf8");
+      const write = () => appendFile(this.path, `${JSON.stringify(event)}\n`, { encoding: "utf8", ...(this.options?.privateFiles ? { mode: 0o600 } : {}) });
+      if (this.options?.guard) await this.options.guard(write);
+      else await write();
     } catch (error) {
-      console.error("Failed to append SIM audit event", error);
+      console.error("Failed to append SIM audit event");
     }
   }
 }
@@ -375,6 +381,11 @@ async function authenticateOidcToken(token: string, config: ApiConfig): Promise<
   return {
     actor,
     authMode: "oidc",
+    ...(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(subjectId) &&
+    Number.isSafeInteger(decoded.payload.iat) &&
+    Number(decoded.payload.iat) > 0
+      ? { canonicalOwner: { issuer, subject: subjectId, oidcIat: Number(decoded.payload.iat) } }
+      : {}),
     ...(decoded.payload.email?.trim() ? { email: decoded.payload.email.trim() } : {}),
     roles
   };
@@ -518,6 +529,13 @@ function getPrincipal(req: Request): AuthenticatedPrincipal | undefined {
 
 export function authenticatedActor(req: Request): string | undefined {
   return getPrincipal(req)?.actor;
+}
+
+/** Only populated after actual signature/issuer/client/role verification above.
+ * No request JSON/header or mutable display actor supplies this provenance. */
+export function authenticatedCanonicalOwner(req: Request): Readonly<{ issuer: string; subject: string; oidcIat: number }> | undefined {
+  const p = getPrincipal(req);
+  return p?.authMode === "oidc" && p.canonicalOwner ? Object.freeze({ ...p.canonicalOwner }) : undefined;
 }
 
 function scenarioIdFromPath(req: Request): string | undefined {

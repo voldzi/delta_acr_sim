@@ -29,7 +29,8 @@ export class RuntimeRunner {
   constructor(
     private readonly config: ApiConfig,
     private readonly store: JsonStore,
-    private readonly publisher: PublisherClient
+    private readonly publisher: PublisherClient,
+    private readonly backgroundGuard?: (work: () => Promise<void>) => Promise<void>
   ) {}
 
   async recover(): Promise<void> {
@@ -170,7 +171,8 @@ export class RuntimeRunner {
       return;
     }
     this.timer = setInterval(() => {
-      void this.runScheduledTick(scenarioId);
+      const tick = () => this.runScheduledTick(scenarioId);
+      void (this.backgroundGuard ? this.backgroundGuard(tick) : tick()).catch(() => this.clearTimer());
     }, this.tickIntervalSeconds * 1000);
     this.timer.unref?.();
   }

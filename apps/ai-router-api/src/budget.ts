@@ -23,9 +23,10 @@ export class BudgetError extends Error {
 }
 
 export class BudgetStore {
-  cleanLifecycleEnabled=false;
+  cleanLifecycleEnabled = false;
   readonly pool: pg.Pool;
   accountErasure?: AccountErasureGate;
+  simUserData?: AccountErasureGate;
   constructor(
     url: string,
     private readonly userHashSecret: string,
@@ -131,6 +132,7 @@ export class BudgetStore {
     try {
       await client.query("BEGIN");
       if (clientId === "cop") await this.accountErasure?.assertActive(userHash, client);
+      if (clientId === "sim") await this.simUserData?.assertActive(userHash, client);
       await client.query("SELECT set_config('sim.router_erasure_code_version','1',true)");
       await client.query("SELECT pg_advisory_xact_lock(634019, 1)");
       const policyResult = await client.query<{
@@ -151,7 +153,7 @@ export class BudgetStore {
           COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_total,
           COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS month_total,
           COALESCE(SUM(record_count) FILTER (WHERE user_hash = $1 AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS user_count
-        FROM ${this.cleanLifecycleEnabled ? 'sim_clean.router_usage' : 'ai_router_budget_usage'}
+        FROM ${this.cleanLifecycleEnabled ? "sim_clean.router_usage" : "ai_router_budget_usage"}
         WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
       `,
         [userHash]
@@ -185,8 +187,27 @@ export class BudgetStore {
     if (result.rowCount !== 1) throw new Error("audit_update_missing");
   }
 
-  async usage(): Promise<{ dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number; monthlyInputTokens: number; monthlyOutputTokens: number; limits: BudgetLimits }> {
-    const result = await this.pool.query<{ day_total: string; month_total: string; day_count: string; month_count: string; day_input: string; day_output: string; month_input: string; month_output: string }>(`
+  async usage(): Promise<{
+    dailyMicrousd: number;
+    monthlyMicrousd: number;
+    dailyRequests: number;
+    monthlyRequests: number;
+    dailyInputTokens: number;
+    dailyOutputTokens: number;
+    monthlyInputTokens: number;
+    monthlyOutputTokens: number;
+    limits: BudgetLimits;
+  }> {
+    const result = await this.pool.query<{
+      day_total: string;
+      month_total: string;
+      day_count: string;
+      month_count: string;
+      day_input: string;
+      day_output: string;
+      month_input: string;
+      month_output: string;
+    }>(`
       SELECT
         COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_total,
         COALESCE(SUM(COALESCE(charged_microusd, reserved_microusd)), 0) AS month_total,
@@ -196,7 +217,7 @@ export class BudgetStore {
         COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'), 0) AS day_output,
         COALESCE(SUM(input_tokens), 0) AS month_input,
         COALESCE(SUM(output_tokens), 0) AS month_output
-      FROM ${this.cleanLifecycleEnabled ? 'sim_clean.router_usage' : 'ai_router_budget_usage'} WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      FROM ${this.cleanLifecycleEnabled ? "sim_clean.router_usage" : "ai_router_budget_usage"} WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
     `);
     const row = result.rows[0]!;
     return {

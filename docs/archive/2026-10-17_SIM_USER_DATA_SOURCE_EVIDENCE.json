@@ -1,0 +1,42 @@
+{
+  "contractVersion": "cop-sim-user-data-source-evidence-v1",
+  "date": "2026-10-17",
+  "branch": "codex/sim-clean-lifecycle-v1",
+  "scope": "new twelfth clean-v2 adapter; CF24 and eleven-component v1 retained",
+  "tests": {
+    "actualCanonicalOidcMainRouterRelayAndContinuity": 77,
+    "actualPostgresTransitionTargetAndGuardEnrollment": 15,
+    "finiteSyntheticFileReset": 9,
+    "actualIsolatedNginx404": 4,
+    "legacyWholeV1Compatibility": 106,
+    "repositoryRegressionPassed": 873,
+    "repositoryRegressionSkipped": 6,
+    "typecheck": "pass",
+    "build": "pass",
+    "skeleton": "pass",
+    "openapi": "163 paths, 282 schemas"
+  },
+  "manifestSha256": "9f71d113ba47a7880fca6a7df76f7fefbca401c1791acb57f86969c1fdaed76e",
+  "authoritySourceSha256": "a0b3fd882baff5ee24401af035ff99134b8ea1f5cc362c88c909cb9bd67ad3d2",
+  "externalProviderAttempts": 0,
+  "productionWrites": 0,
+  "realRootAdmission": false,
+  "actualKeycloakDeletion": false,
+  "actualBackupRestore": false,
+  "restoreTestScope": "target projection removal and witness generation/quarantine mismatches in owned PG; actual app process composition restart",
+  "wholeAccountAcceptance": false,
+  "rootCrossServiceComponentEvidence": {
+    "reportedChecks": 14,
+    "finalPinnedRevisionRerun": "pending"
+  },
+  "gates": [
+    "Root stopped-writer reset and new DB/guard enrollment",
+    "actual common twelve-component Root/COP acceptance including real identity/restore/in-flight model work",
+    "compatible immutable SIM images and readonly CA/secret configuration",
+    "public activation remains off"
+  ],
+  "limitations": [
+    "Root uid0 to uid1000 full file-reset fixture not run locally; code explicitly fchown/fchmod preserves verified original uid/gid/mode",
+    "Chroma reindex refused because worktree not selected in app"
+  ]
+}

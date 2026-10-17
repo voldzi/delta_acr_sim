@@ -4,11 +4,14 @@ import { loadConfig } from "./config.js";
 const observability = await initializeObservability({ serviceName: "csm-sim-api" });
 const { createApp } = await import("./app.js");
 const config = await loadConfig();
-const { app } = await createApp(config);
+const { simUserDataSettings, createOwnedSimulatorApp } = await import("./user-data.js");
+const userSettings = simUserDataSettings();
+const owned = userSettings ? await createOwnedSimulatorApp(config, userSettings) : undefined;
+const { app } = owned ?? (await createApp(config));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
-    void observability.shutdown().finally(() => process.exit(0));
+    void (owned?.close() ?? Promise.resolve()).finally(() => observability.shutdown()).finally(() => process.exit(0));
   });
 }
 

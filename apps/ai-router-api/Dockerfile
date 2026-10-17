@@ -5,6 +5,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc ./
 COPY apps/ai-router-api ./apps/ai-router-api
 COPY packages/clean-lifecycle ./packages/clean-lifecycle
+COPY packages/sim-user-data ./packages/sim-user-data
 COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/database-erasure-guard.d.mts deploy/account-safety/driver-report-files.mjs ./deploy/account-safety/
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/ai-router-api build
@@ -17,6 +18,7 @@ RUN corepack enable && corepack install -g /tmp/corepack-pnpm-10.33.0.tgz && rm 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml /app/.npmrc ./
 COPY --from=build /app/apps/ai-router-api ./apps/ai-router-api
 COPY --from=build /app/packages/clean-lifecycle ./packages/clean-lifecycle
+COPY --from=build /app/packages/sim-user-data ./packages/sim-user-data
 COPY --from=build /app/deploy/account-safety ./deploy/account-safety
 RUN find /app -name node_modules -type d -prune -exec rm -rf {} +
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --prod --frozen-lockfile

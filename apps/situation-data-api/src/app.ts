@@ -1,7 +1,8 @@
 import { createHttpRequestTracingMiddleware } from "@csm-sim/observability";
-import {registerCleanLifecycle} from "../../../packages/clean-lifecycle/http.mjs";
+import { registerCleanLifecycle } from "../../../packages/clean-lifecycle/http.mjs";
 import cors, { type CorsOptions } from "cors";
 import express, { type Express, type Request, type Response, type RequestHandler } from "express";
+import { registerSimUserDataRelay } from "./sim-user-data-relay.js";
 import { SituationAggregationService } from "./aggregation.js";
 import { buildSituationMapCatalog } from "./catalog.js";
 import { ChmiWeatherStationDetailService } from "./chmi-weather-station-detail.js";
@@ -10,7 +11,7 @@ import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { registerGeoRoutingRoutes } from "./geo-routing.js";
 import { registerDriverMeasurementRoutes, type DriverMeasurementDependencies } from "./driver-measurements.js";
-import {createProductionDriverRetentionLifecycle,type DriverRetentionControl} from "./driver-retention-lifecycle.js";
+import { createProductionDriverRetentionLifecycle, type DriverRetentionControl } from "./driver-retention-lifecycle.js";
 import { problem } from "./http.js";
 import { LAYERS } from "./layers.js";
 import { MobileCoverageSource } from "./mobile-coverage-source.js";
@@ -62,7 +63,14 @@ export interface SituationDataAppContext {
   driverMeasurements: DriverRetentionControl;
 }
 
-export async function createApp(config: SituationDataConfig, dependencies?: { driverMeasurements?: DriverMeasurementDependencies; driverScopeMiddleware?: RequestHandler; cleanLifecycle?:import("../../../packages/clean-lifecycle/http.mjs").CleanLifecycleOptions }): Promise<{ app: Express; context: SituationDataAppContext }> {
+export async function createApp(
+  config: SituationDataConfig,
+  dependencies?: {
+    driverMeasurements?: DriverMeasurementDependencies;
+    driverScopeMiddleware?: RequestHandler;
+    cleanLifecycle?: import("../../../packages/clean-lifecycle/http.mjs").CleanLifecycleOptions;
+  }
+): Promise<{ app: Express; context: SituationDataAppContext }> {
   const sources = createSituationDataSources(config);
   const sharedCache = await createSharedResponseCacheStore(config);
   const aggregation = new SituationAggregationService(config, sources, sharedCache);
@@ -98,12 +106,17 @@ export async function createApp(config: SituationDataConfig, dependencies?: { dr
   };
   const app = express();
 
-  const traceRequest=createHttpRequestTracingMiddleware("csm-sim-situation-data-api");
+  const traceRequest = createHttpRequestTracingMiddleware("csm-sim-situation-data-api");
   // This privacy-sensitive route exports no caller headers, IP or query string.
-  app.use((req,res,next)=>(req.path.startsWith("/api/v1/internal/driver-measurements/")||req.path.startsWith("/api/v1/internal/user-lifecycle/")) ? next() : traceRequest(req,res,next));
+  app.use((req, res, next) =>
+    req.path.startsWith("/api/v1/internal/driver-measurements/") || req.path.startsWith("/api/v1/internal/user-lifecycle/")
+      ? next()
+      : traceRequest(req, res, next)
+  );
   app.use(cors(createCorsOptions(config.corsOrigins)));
+  registerSimUserDataRelay(app);
   app.use(express.json({ limit: "1mb" }));
-  if(dependencies?.cleanLifecycle) registerCleanLifecycle(app,dependencies.cleanLifecycle);
+  if (dependencies?.cleanLifecycle) registerCleanLifecycle(app, dependencies.cleanLifecycle);
   // Scope only carries the two exact typed mutations in memory. The fixed
   // production module excludes batch/GPS bodies and does not replace handler
   // authentication, validation, Root admission or generation/maintenance leases.
@@ -119,7 +132,7 @@ export async function createApp(config: SituationDataConfig, dependencies?: { dr
   context.driverMeasurements = registerDriverMeasurementRoutes(app, config, undefined, dependencies?.driverMeasurements);
   // A missing accepted Root maintenance consumer blocks before init/SQL. The
   // other APIs remain independent; a guarded deployment has no legacy fallback.
-  await context.driverMeasurements.start().catch(()=>undefined);
+  await context.driverMeasurements.start().catch(() => undefined);
   registerSearchDataRoutes(app, context);
   registerFeatureRoutes(app, context);
 
@@ -358,7 +371,11 @@ function registerMetadataRoutes(app: Express, context: SituationDataAppContext):
       serviceId: "situation-data-api",
       generatedAt: new Date().toISOString(),
       status:
-        sourceHealth.some((source) => source.sourceId !== "aprs_is" && source.status === "degraded") || dem.status === "degraded" || routingBackend.status === "degraded" ? "degraded" : "ok",
+        sourceHealth.some((source) => source.sourceId !== "aprs_is" && source.status === "degraded") ||
+        dem.status === "degraded" ||
+        routingBackend.status === "degraded"
+          ? "degraded"
+          : "ok",
       cache: cacheTelemetry(cache, context.config.cacheMaxEntries),
       sharedCache: {
         enabled: cache.sharedEnabled,

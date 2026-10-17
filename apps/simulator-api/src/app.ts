@@ -25,8 +25,15 @@ export interface AppContext {
   audit: AuditLogger;
 }
 
-export async function createApp(config: ApiConfig): Promise<{ app: Express; context: AppContext }> {
-  const store = new JsonStore(join(config.dataDir, "sim-store.json"));
+export async function createApp(
+  config: ApiConfig,
+  owned?: {
+    guard: (work: () => Promise<void>) => Promise<void>;
+    signAi: (req: import("express").Request) => Record<string, string>;
+    userId: (req: import("express").Request) => string;
+  }
+): Promise<{ app: Express; context: AppContext }> {
+  const store = new JsonStore(join(config.dataDir, "sim-store.json"), !!owned);
   await store.load();
 
   const publisher = new PublisherClient(
@@ -38,14 +45,15 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
       adapterVersion: config.adapterVersion,
       maxRetries: 5
     },
-    join(config.dataDir, "publisher-queue.json")
+    join(config.dataDir, "publisher-queue.json"),
+    !!owned
   );
   await publisher.load();
 
   const validators = createValidators(config.schemaDir);
-  const runtimeRunner = new RuntimeRunner(config, store, publisher);
+  const runtimeRunner = new RuntimeRunner(config, store, publisher, owned?.guard);
   await runtimeRunner.recover();
-  const audit = new AuditLogger(config.dataDir);
+  const audit = new AuditLogger(config.dataDir, owned ? { privateFiles: true, guard: owned.guard } : undefined);
   const context: AppContext = { config, store, publisher, runtimeRunner, validators, audit };
   const app = express();
   app.locals.runtimeRunner = runtimeRunner;
@@ -59,7 +67,7 @@ export async function createApp(config: ApiConfig): Promise<{ app: Express; cont
   registerRuntimeRoutes(app, context);
   registerFaultRoutes(app, context);
   registerPublisherRoutes(app, context);
-  registerAiRoutes(app, context);
+  registerAiRoutes(app, context, owned);
   registerOperationsRoutes(app, context);
   registerHealthRoutes(app, context);
   registerMockCopRoutes(app, context);
@@ -299,15 +307,25 @@ function registerPublisherRoutes(app: Express, context: AppContext): void {
   });
 }
 
-function registerAiRoutes(app: Express, context: AppContext): void {
-  async function generateSynthetic(prompt: string, actor: string, maxOutputTokens: number): Promise<Response> {
+function registerAiRoutes(
+  app: Express,
+  context: AppContext,
+  owned?: { signAi: (req: import("express").Request) => Record<string, string>; userId: (req: import("express").Request) => string }
+): void {
+  async function generateSynthetic(prompt: string, actor: string, maxOutputTokens: number, req: import("express").Request): Promise<Response> {
     if (!context.config.aiRouterBaseUrl || !context.config.aiRouterSimToken) throw new Error("router_not_configured");
     return fetch(new URL("/api/v1/ai-router/generate", context.config.aiRouterBaseUrl), {
       method: "POST",
-      headers: { authorization: `Bearer ${context.config.aiRouterSimToken}`, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${context.config.aiRouterSimToken}`, "content-type": "application/json", ...owned?.signAi(req) },
       body: JSON.stringify({
-        taskType: "sim_scenario", dataClass: "synthetic", preference: "auto", prompt,
-        userId: actor, allowExternal: true, allowPaidEscalation: false, maxOutputTokens
+        taskType: "sim_scenario",
+        dataClass: "synthetic",
+        preference: "auto",
+        prompt,
+        userId: owned ? owned.userId(req) : actor,
+        allowExternal: true,
+        allowPaidEscalation: false,
+        maxOutputTokens
       }),
       signal: AbortSignal.timeout(30_000)
     });
@@ -329,8 +347,12 @@ function registerAiRoutes(app: Express, context: AppContext): void {
         routerRequest("/api/v1/ai-router/billing-usage")
       ]);
       if (!models.ok || !policy.ok || !usage.ok) return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is unavailable.");
-      res.json({ models: await models.json(), policy: await policy.json(), usage: await usage.json(),
-        separateBilling: separateUsage.ok ? await separateUsage.json() : { status: "not_enabled" } });
+      res.json({
+        models: await models.json(),
+        policy: await policy.json(),
+        usage: await usage.json(),
+        separateBilling: separateUsage.ok ? await separateUsage.json() : { status: "not_enabled" }
+      });
     } catch {
       return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router is not configured or unavailable.");
     }
@@ -342,23 +364,39 @@ function registerAiRoutes(app: Express, context: AppContext): void {
     const actor = authenticatedActor(req);
     if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
     const body = req.body as Record<string, unknown> | undefined;
-    if (!body || body.approvedExternalProcessing !== true ||
-        !["synthetic", "public_aggregate"].includes(String(body.dataClass)) ||
-        typeof body.prompt !== "string" || body.prompt.length > 2000 || !body.context) {
+    if (
+      !body ||
+      body.approvedExternalProcessing !== true ||
+      !["synthetic", "public_aggregate"].includes(String(body.dataClass)) ||
+      typeof body.prompt !== "string" ||
+      body.prompt.length > 2000 ||
+      !body.context
+    ) {
       return problem(req, res, 400, "VALIDATION_ERROR", "Reviewed, bounded IZS input and external-processing approval are required.");
     }
     const { approvedExternalProcessing: _approval, ...requestBody } = body;
-    const actorId = createHmac("sha256", context.config.aiRouterIzsToken).update("izs-actor\0").update(actor).digest("base64url");
+    const actorId = owned ? owned.userId(req) : createHmac("sha256", context.config.aiRouterIzsToken).update("izs-actor\0").update(actor).digest("base64url");
     try {
       const response = await fetch(new URL("/api/v1/ai-router/sim/izs-summary", context.config.aiRouterBaseUrl), {
         method: "POST",
-        headers: { authorization: `Bearer ${context.config.aiRouterIzsToken}`, "content-type": "application/json", "x-sim-actor": actorId },
+        headers: {
+          authorization: `Bearer ${context.config.aiRouterIzsToken}`,
+          "content-type": "application/json",
+          "x-sim-actor": actorId,
+          ...owned?.signAi(req)
+        },
         body: JSON.stringify(requestBody),
         signal: AbortSignal.timeout(30_000)
       });
-      const result = await response.json() as Record<string, unknown>;
-      if (!response.ok) return problem(req, res, response.status === 429 ? 429 : response.status === 400 ? 400 : 503,
-        "AI_ROUTER_REJECTED", `IZS analysis was rejected: ${typeof result.error === "string" ? result.error : "router_unavailable"}.`);
+      const result = (await response.json()) as Record<string, unknown>;
+      if (!response.ok)
+        return problem(
+          req,
+          res,
+          response.status === 429 ? 429 : response.status === 400 ? 400 : 503,
+          "AI_ROUTER_REJECTED",
+          `IZS analysis was rejected: ${typeof result.error === "string" ? result.error : "router_unavailable"}.`
+        );
       if (typeof result.output !== "string" || result.requiresHumanReview !== true) {
         return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router returned an invalid response.");
       }
@@ -388,7 +426,7 @@ function registerAiRoutes(app: Express, context: AppContext): void {
     const actor = authenticatedActor(req);
     if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
     try {
-      const response = await generateSynthetic(prompt.trim(), actor, 320);
+      const response = await generateSynthetic(prompt.trim(), actor, 320, req);
       if (!response.ok) {
         return problem(req, res, response.status === 429 ? 429 : 503, "AI_ROUTER_UNAVAILABLE", "AI Router rejected the request or is unavailable.");
       }
@@ -403,18 +441,23 @@ function registerAiRoutes(app: Express, context: AppContext): void {
   });
   app.post("/api/v1/ai/router-scenario-drafts", async (req, res) => {
     const prompt = req.body?.prompt;
-    if (typeof prompt !== "string" || prompt.trim().length < 1 || prompt.length > 2000 || req.body?.syntheticOnly !== true ||
-        !classifyPrompt(prompt).allowed) {
+    if (typeof prompt !== "string" || prompt.trim().length < 1 || prompt.length > 2000 || req.body?.syntheticOnly !== true || !classifyPrompt(prompt).allowed) {
       return problem(req, res, 400, "VALIDATION_ERROR", "A bounded civil synthetic-only prompt is required.");
     }
     const actor = authenticatedActor(req);
     if (!actor) return problem(req, res, 401, "UNAUTHORIZED", "Authentication required.");
     try {
       const modelPrompt = `Vytvoř pouze fiktivní civilní cvičení pro situační mapu. Odpověz výhradně jedním JSON objektem bez Markdownu, přesně s klíči name, description, durationSeconds, objectCount. Jméno 4–80 znaků, popis 10–500 znaků, trvání 60–900 sekund, počet syntetických hlášení 1–20. Nepoužívej skutečné osoby, aktuální události ani operační pokyny. Zadání: ${prompt.trim()}`;
-      const response = await generateSynthetic(modelPrompt, actor, 450);
-      if (!response.ok) return problem(req, res, response.status === 429 ? 429 : 503, "AI_ROUTER_UNAVAILABLE", "AI Router rejected the request or is unavailable.");
+      const response = await generateSynthetic(modelPrompt, actor, 450, req);
+      if (!response.ok)
+        return problem(req, res, response.status === 429 ? 429 : 503, "AI_ROUTER_UNAVAILABLE", "AI Router rejected the request or is unavailable.");
       const result = (await response.json()) as { requestId?: unknown; model?: unknown; output?: unknown; requiresHumanReview?: unknown };
-      if (typeof result.requestId !== "string" || typeof result.model !== "string" || typeof result.output !== "string" || result.requiresHumanReview !== true) {
+      if (
+        typeof result.requestId !== "string" ||
+        typeof result.model !== "string" ||
+        typeof result.output !== "string" ||
+        result.requiresHumanReview !== true
+      ) {
         return problem(req, res, 503, "AI_ROUTER_UNAVAILABLE", "AI Router returned an invalid response.");
       }
       const draft = createRouterScenarioDraft(prompt.trim(), result as { requestId: string; model: string; output: string; requiresHumanReview: true });

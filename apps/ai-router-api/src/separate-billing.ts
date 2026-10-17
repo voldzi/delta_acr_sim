@@ -11,10 +11,15 @@ export interface BillingLimits {
   dailyRequests: number;
 }
 
-export interface StoredUserKey { apiKey: string; fingerprint: string; }
+export interface StoredUserKey {
+  apiKey: string;
+  fingerprint: string;
+}
 
 export class SeparateBillingError extends Error {
-  constructor(public readonly code: string) { super(code); }
+  constructor(public readonly code: string) {
+    super(code);
+  }
 }
 
 export interface SeparateBilling {
@@ -22,15 +27,34 @@ export interface SeparateBilling {
   putKey(userHash: string, apiKey: string): Promise<{ configured: true; fingerprint: string }>;
   removeKey(userHash: string): Promise<void>;
   getKey(userHash: string): Promise<StoredUserKey | null>;
-  reserve(source: BillingSource, payerHash: string, actorHash: string, credentialFingerprint: string, providerProjectId: string | null, taskType: string, model: string, microusd: number, limits: BillingLimits): Promise<string>;
+  reserve(
+    source: BillingSource,
+    payerHash: string,
+    actorHash: string,
+    credentialFingerprint: string,
+    providerProjectId: string | null,
+    taskType: string,
+    model: string,
+    microusd: number,
+    limits: BillingLimits
+  ): Promise<string>;
   finish(id: string, status: BillingStatus, inputTokens?: number, outputTokens?: number, estimatedMicrousd?: number, errorCode?: string): Promise<void>;
-  usage(): Promise<Record<BillingSource, { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number }>>;
+  usage(): Promise<
+    Record<
+      BillingSource,
+      { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number }
+    >
+  >;
 }
 
 export class PgSeparateBilling implements SeparateBilling {
-  cleanLifecycleEnabled=false;
+  cleanLifecycleEnabled = false;
   private readonly encryptionKey: Buffer;
-  constructor(private readonly pool: pg.Pool, encodedKey: string, private readonly accountErasure?: AccountErasureGate) {
+  constructor(
+    private readonly pool: pg.Pool,
+    encodedKey: string,
+    private readonly accountErasure?: AccountErasureGate
+  ) {
     this.encryptionKey = Buffer.from(encodedKey, "base64");
     if (this.encryptionKey.length !== 32) throw new Error("credential_encryption_key_invalid");
   }
@@ -46,7 +70,10 @@ export class PgSeparateBilling implements SeparateBilling {
 
   async keyStatus(userHash: string): Promise<{ configured: boolean; fingerprint?: string; updatedAt?: string }> {
     await this.accountErasure?.assertActive(userHash);
-    const result = await this.pool.query<{ fingerprint: string; updated_at: Date }>("SELECT fingerprint, updated_at FROM ai_router_user_key WHERE user_hash=$1", [userHash]);
+    const result = await this.pool.query<{ fingerprint: string; updated_at: Date }>(
+      "SELECT fingerprint, updated_at FROM ai_router_user_key WHERE user_hash=$1",
+      [userHash]
+    );
     const row = result.rows[0];
     return row ? { configured: true, fingerprint: row.fingerprint, updatedAt: row.updated_at.toISOString() } : { configured: false };
   }
@@ -70,7 +97,11 @@ export class PgSeparateBilling implements SeparateBilling {
          fingerprint=EXCLUDED.fingerprint, key_version=ai_router_user_key.key_version+1, updated_at=now()`,
         [userHash, encrypted, nonce, tag, fingerprint]
       );
-      await client.query("INSERT INTO ai_router_user_key_audit (user_hash,action,fingerprint) VALUES ($1,$2,$3)", [userHash, old.rowCount ? "replaced" : "created", fingerprint]);
+      await client.query("INSERT INTO ai_router_user_key_audit (user_hash,action,fingerprint) VALUES ($1,$2,$3)", [
+        userHash,
+        old.rowCount ? "replaced" : "created",
+        fingerprint
+      ]);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -87,7 +118,11 @@ export class PgSeparateBilling implements SeparateBilling {
       await client.query("BEGIN");
       await this.accountErasure?.assertActive(userHash, client);
       const removed = await client.query<{ fingerprint: string }>("DELETE FROM ai_router_user_key WHERE user_hash=$1 RETURNING fingerprint", [userHash]);
-      if (removed.rows[0]) await client.query("INSERT INTO ai_router_user_key_audit (user_hash,action,fingerprint) VALUES ($1,'removed',$2)", [userHash, removed.rows[0].fingerprint]);
+      if (removed.rows[0])
+        await client.query("INSERT INTO ai_router_user_key_audit (user_hash,action,fingerprint) VALUES ($1,'removed',$2)", [
+          userHash,
+          removed.rows[0].fingerprint
+        ]);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -99,7 +134,10 @@ export class PgSeparateBilling implements SeparateBilling {
 
   async getKey(userHash: string): Promise<StoredUserKey | null> {
     await this.accountErasure?.assertActive(userHash);
-    const result = await this.pool.query<{ ciphertext: Buffer; nonce: Buffer; auth_tag: Buffer; fingerprint: string }>("SELECT ciphertext,nonce,auth_tag,fingerprint FROM ai_router_user_key WHERE user_hash=$1", [userHash]);
+    const result = await this.pool.query<{ ciphertext: Buffer; nonce: Buffer; auth_tag: Buffer; fingerprint: string }>(
+      "SELECT ciphertext,nonce,auth_tag,fingerprint FROM ai_router_user_key WHERE user_hash=$1",
+      [userHash]
+    );
     const row = result.rows[0];
     if (!row) return null;
     const decipher = createDecipheriv("aes-256-gcm", this.encryptionKey, row.nonce);
@@ -108,7 +146,17 @@ export class PgSeparateBilling implements SeparateBilling {
     return { apiKey: Buffer.concat([decipher.update(row.ciphertext), decipher.final()]).toString("utf8"), fingerprint: row.fingerprint };
   }
 
-  async reserve(source: BillingSource, payerHash: string, actorHash: string, credentialFingerprint: string, providerProjectId: string | null, taskType: string, model: string, microusd: number, limits: BillingLimits): Promise<string> {
+  async reserve(
+    source: BillingSource,
+    payerHash: string,
+    actorHash: string,
+    credentialFingerprint: string,
+    providerProjectId: string | null,
+    taskType: string,
+    model: string,
+    microusd: number,
+    limits: BillingLimits
+  ): Promise<string> {
     if (!Number.isSafeInteger(microusd) || microusd < 0) throw new Error("invalid_reservation");
     const client = await this.pool.connect();
     const id = randomUUID();
@@ -125,8 +173,8 @@ export class PgSeparateBilling implements SeparateBilling {
         `SELECT
           COALESCE(SUM(COALESCE(estimated_microusd,reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_total,
           COALESCE(SUM(COALESCE(estimated_microusd,reserved_microusd)),0) AS month_total,
-          COUNT(*) FILTER (WHERE actor_hash=$3 AND created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS day_count
-         FROM ai_router_billing_request
+          ${this.cleanLifecycleEnabled ? "COALESCE(SUM(record_count)" : "COUNT(*)"} FILTER (WHERE actor_hash=$3 AND created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')${this.cleanLifecycleEnabled ? ",0)" : ""} AS day_count
+         FROM ${this.cleanLifecycleEnabled ? "sim_clean.billing_usage" : "ai_router_billing_request"}
          WHERE billing_source=$1 AND payer_hash=$2 AND created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
         [source, payerHash, actorHash]
       );
@@ -154,13 +202,26 @@ export class PgSeparateBilling implements SeparateBilling {
     const result = await this.pool.query(
       `UPDATE ai_router_billing_request SET status=$2,input_tokens=$3,output_tokens=$4,
        estimated_microusd=$5,error_code=$6,completed_at=now() WHERE id=$1 AND status='reserved'`,
-      [id, status, inputTokens ?? null, outputTokens ?? null, status === "success" ? estimatedMicrousd ?? null : null, errorCode ?? null]
+      [id, status, inputTokens ?? null, outputTokens ?? null, status === "success" ? (estimatedMicrousd ?? null) : null, errorCode ?? null]
     );
     if (result.rowCount !== 1) throw new Error("billing_audit_update_missing");
   }
 
-  async usage(): Promise<Record<BillingSource, { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number }>> {
-    const result = await this.pool.query<{ billing_source: BillingSource; day_total: string; month_total: string; day_count: string; month_count: string; day_input: string; day_output: string }>(
+  async usage(): Promise<
+    Record<
+      BillingSource,
+      { dailyMicrousd: number; monthlyMicrousd: number; dailyRequests: number; monthlyRequests: number; dailyInputTokens: number; dailyOutputTokens: number }
+    >
+  > {
+    const result = await this.pool.query<{
+      billing_source: BillingSource;
+      day_total: string;
+      month_total: string;
+      day_count: string;
+      month_count: string;
+      day_input: string;
+      day_output: string;
+    }>(
       `SELECT billing_source,
         COALESCE(SUM(COALESCE(estimated_microusd,reserved_microusd)) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_total,
         COALESCE(SUM(COALESCE(estimated_microusd,reserved_microusd)),0) AS month_total,
@@ -168,16 +229,20 @@ export class PgSeparateBilling implements SeparateBilling {
         COALESCE(SUM(record_count),0) AS month_count,
         COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_input,
         COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS day_output
-       FROM ${this.cleanLifecycleEnabled ? 'sim_clean.billing_usage' : 'ai_router_billing_usage'} WHERE created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+       FROM ${this.cleanLifecycleEnabled ? "sim_clean.billing_usage" : "ai_router_billing_usage"} WHERE created_at >= date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
        GROUP BY billing_source`
     );
     const empty = () => ({ dailyMicrousd: 0, monthlyMicrousd: 0, dailyRequests: 0, monthlyRequests: 0, dailyInputTokens: 0, dailyOutputTokens: 0 });
     const usage = { user_openai_key: empty(), sim_project: empty() };
-    for (const row of result.rows) usage[row.billing_source] = {
-      dailyMicrousd: Number(row.day_total), monthlyMicrousd: Number(row.month_total),
-      dailyRequests: Number(row.day_count), monthlyRequests: Number(row.month_count),
-      dailyInputTokens: Number(row.day_input), dailyOutputTokens: Number(row.day_output)
-    };
+    for (const row of result.rows)
+      usage[row.billing_source] = {
+        dailyMicrousd: Number(row.day_total),
+        monthlyMicrousd: Number(row.month_total),
+        dailyRequests: Number(row.day_count),
+        monthlyRequests: Number(row.month_count),
+        dailyInputTokens: Number(row.day_input),
+        dailyOutputTokens: Number(row.day_output)
+      };
     return usage;
   }
 }

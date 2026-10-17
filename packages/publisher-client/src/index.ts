@@ -56,7 +56,8 @@ export class PublisherClient {
 
   constructor(
     private readonly config: PublisherConfig,
-    private readonly storePath: string
+    private readonly storePath: string,
+    private readonly privateFiles = false
   ) {}
 
   async load(): Promise<void> {
@@ -66,7 +67,8 @@ export class PublisherClient {
       this.recoverInterruptedSends();
       this.pruneRetainedItems();
       await this.persist();
-    } catch {
+    } catch (error) {
+      if (this.privateFiles) throw error;
       this.data = { items: [], publishingEnabled: true };
       await this.persist();
     }
@@ -293,7 +295,7 @@ export class PublisherClient {
         this.pruneRetainedItems();
         await mkdir(dirname(this.storePath), { recursive: true });
         const tempPath = `${this.storePath}.${randomUUID()}.tmp`;
-        await writeFile(tempPath, JSON.stringify(this.data), "utf8");
+        await writeFile(tempPath, JSON.stringify(this.data), { encoding: "utf8", ...(this.privateFiles ? { mode: 0o600 } : {}) });
         await rename(tempPath, this.storePath);
       });
     this.persistChain = nextPersist;

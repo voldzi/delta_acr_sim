@@ -6,3 +6,4 @@ export interface CleanLifecycleOptions {
  service:{reserve:(ownerKey:string,hashes:string[])=>Promise<unknown>;request:(ownerKey:string,operationId:string,requestedAt:string)=>Promise<{state:string}>;status:(ownerKey:string,operationId:string)=>Promise<{state:string}|null>;runOne:()=>Promise<unknown>;purgeExpiredTotals:()=>Promise<unknown>;capability:()=>Promise<boolean>};
 }
 export function registerCleanLifecycle(app:Express,options:CleanLifecycleOptions):{tick:()=>Promise<void>};
+export function verifyCleanActor(req:any,options:any,now?:number):any;

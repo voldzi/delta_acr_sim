@@ -10,8 +10,11 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCOPES, catalog, dataSnapshot, transitionOwnedFixture, stoppedWriters, inspectPlan, applyReset } from "./lib/clean-reset-ops.mjs";
 import { exerciseBootstrap } from "./test-clean-bootstrap.mjs";
+import { userDataCatalog, inspectUserDataProfile } from "./lib/sim-user-data-profile.mjs";
+import { transitionSimHistory, enrollSimUserTarget, enrollSimGuardCheckpoint, verifiedUserMigrations } from "./lib/sim-user-data-enroll.mjs";
 const arg = process.argv[2];
-if (process.argv.length !== 3 || !["--compile-profiles", "--run"].includes(arg)) throw new Error("Only owned local fixture modes accepted");
+if (process.argv.length !== 3 || !["--compile-profiles", "--compile-user-data-profile", "--test-user-data-profile", "--run"].includes(arg))
+  throw new Error("Only owned local fixture modes accepted");
 const source = resolve(dirname(fileURLToPath(import.meta.url)), ".."),
   bin = "/opt/homebrew/opt/postgresql@18/bin";
 const { Pool } = createRequire(join(source, "apps/ai-router-api/package.json"))("pg"),
@@ -44,6 +47,8 @@ const check = (x, m) => {
   h = (n) => n.toString(16).padStart(64, "0");
 const profiles = { version: "sim-clean-reset-manifest-v1", baseSourceRevision: "6238345b8e50a67441043b2e732e1516254f5f27", pins: {}, ai: {}, driver: {} };
 const persisted = {};
+let userDataProfile;
+const userBindings = {};
 const migrationNames = [...new Set([...SCOPES.ai.migrations, ...SCOPES.driver.migrations])];
 for (const name of migrationNames) profiles.pins[name] = sha(await readFile(join(source, "deploy/clean-lifecycle", name), "utf8"));
 const migrations = async (lane) =>
@@ -132,7 +137,7 @@ try {
       }
       const enrollment = safeEnv();
       const before = await dataSnapshot(c, lane);
-      if (arg === "--compile-profiles") {
+      if (arg !== "--run") {
         await c.query("BEGIN");
         await c.query(`LOCK TABLE ${s.tables.map((t) => "public." + t).join(",")} IN ACCESS EXCLUSIVE MODE`);
         await transitionOwnedFixture(c, lane, enrollment, await migrations(lane));
@@ -140,6 +145,81 @@ try {
         profiles[lane].newCatalog = (await catalog(c, lane)).value;
         check(JSON.stringify((await dataSnapshot(c, lane)).preserve) === JSON.stringify(before.preserve), "compiler preserve");
         await c.query("COMMIT");
+        if (["--compile-user-data-profile", "--test-user-data-profile"].includes(arg) && lane === "ai") {
+          const base = (await catalog(c, "ai")).digest;
+          const beforeCost = (await c.query("SELECT count(*)::integer n,sum(charged_microusd)::text cost FROM public.ai_router_request WHERE client_id='sim'"))
+            .rows[0];
+          const pins = {};
+          for (const file of [
+            "001_app_schema.sql",
+            "002_ai_history.sql",
+            "003_independent_checkpoint.sql",
+            "004_app_continuity.sql",
+            "005_history_continuity.sql"
+          ])
+            pins[file] = sha(await readFile(join(source, "deploy/sim-user-data", file), "utf8"));
+          await c.query("SET search_path=public,pg_catalog");
+          if (arg === "--test-user-data-profile") {
+            const frozen = JSON.parse(await readFile(join(source, "deploy/sim-user-data/reset-manifest-v2.json"), "utf8"));
+            await verifiedUserMigrations(frozen);
+            const options = { client: c, manifest: frozen, reviewedCatalogDigest: base, rootGate: gate, assertWritersStopped: async () => {} };
+            await assert.rejects(
+              () => transitionSimHistory({ ...options, rootGate: { withResetAdmission: async () => ({ fake: true }) } }),
+              /DID_NOT_COMPLETE_WORK/
+            );
+            check(true, "missing real callback cannot transition");
+            check((await transitionSimHistory(options)).state === "known-new-unused", "actual bounded twelve-component transition body");
+            const binding = {
+              guard_store_id: randomUUID(),
+              target_store_id: randomUUID(),
+              incarnation_id: randomUUID(),
+              environment_id: enrollment.environmentId,
+              reset_epoch: enrollment.resetEpoch,
+              checkpoint_id: randomUUID(),
+              restore_generation: "1",
+              source_sha256: frozen.authoritySourceSha256,
+              identity_sha256: sha("synthetic history identity only")
+            };
+            const options2 = {
+              client: c,
+              component: "sim_user_history",
+              manifest: frozen,
+              rootGate: gate,
+              binding,
+              tokensNotBefore: enrollment.tokensNotBefore,
+              assertWritersStopped: async () => {}
+            };
+            check((await enrollSimUserTarget(options2)).state === "enrolled-not-activated", "actual isolated production-mode enrollment source body");
+            userBindings.sim_user_history = binding;
+            await assert.rejects(() => enrollSimUserTarget(options2));
+            check(true, "existing epoch cannot be overwritten or silently reused");
+          } else {
+            await c.query(await readFile(join(source, "deploy/sim-user-data/002_ai_history.sql"), "utf8"));
+            await c.query(await readFile(join(source, "deploy/sim-user-data/005_history_continuity.sql"), "utf8"));
+          }
+          const actual = await userDataCatalog(c, "sim_user_history");
+          const finance = (await c.query("SELECT sum(requests)::integer n,sum(microusd)::text cost FROM sim_user_history.cost_daily WHERE lane='router'"))
+            .rows[0];
+          check(JSON.stringify(beforeCost) === JSON.stringify(finance), "twelve-component finite SIM reset preserves anonymous finance");
+          userDataProfile = {
+            contractVersion: "sim-user-data-reset-profile-v2",
+            baseManifestSha: "de4548fad17c1bc978d91951f59ec5bd8648b2711f5d168f517efe332aedd09d",
+            aiBaseCatalogDigest: base,
+            aiPostCatalogDigest: actual.baseCatalogDigest,
+            aiUserDataCatalogDigest: actual.digest,
+            pins,
+            authoritySourceSha256: sha(await readFile(join(source, "packages/sim-user-data/authority.mjs"))),
+            compiledBy: "owned PostgreSQL 18.3, fresh legacy schema then exact v1 transition",
+            productionWrites: 0
+          };
+          check((await inspectUserDataProfile(c, userDataProfile)).state === "known-new-unused", "exact twelve-component profile accepted");
+          await c.query(
+            "CREATE FUNCTION sim_user_history.unreviewed() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW;END$$;CREATE TRIGGER unreviewed BEFORE INSERT ON public.ai_router_request FOR EACH ROW EXECUTE FUNCTION sim_user_history.unreviewed()"
+          );
+          await assert.rejects(() => inspectUserDataProfile(c, userDataProfile), /UNKNOWN_CATALOG/);
+          check(true, "unknown extra trigger refused, never ignored");
+          await c.query("DROP TRIGGER unreviewed ON public.ai_router_request;DROP FUNCTION sim_user_history.unreviewed()");
+        }
       } else {
         const frozen = JSON.parse(await readFile(join(source, "deploy/clean-lifecycle/reset-manifest-v1.json"), "utf8"));
         assert.equal(profiles[lane].oldDigest, frozen[lane].oldDigest, "old manifest must derive from independently pinned source");
@@ -305,6 +385,87 @@ try {
       c.release();
     }
   }
+  if (["--compile-user-data-profile", "--test-user-data-profile"].includes(arg)) {
+    await admin.query(
+      "CREATE ROLE sim_user_data_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;CREATE ROLE sim_user_data_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+    );
+    await admin.query("CREATE DATABASE sim_user_data OWNER sim_user_data_migrator");
+    const p = pool("sim_user_data", "sim_user_data_migrator"),
+      c = await p.connect();
+    try {
+      await c.query(
+        "REVOKE ALL ON DATABASE sim_user_data FROM PUBLIC;GRANT CONNECT ON DATABASE sim_user_data TO sim_user_data_runtime;REVOKE ALL ON SCHEMA public FROM PUBLIC"
+      );
+      for (const name of ["001_app_schema.sql", "004_app_continuity.sql"]) await c.query(await readFile(join(source, "deploy/sim-user-data", name), "utf8"));
+      userDataProfile.appUserDataCatalogDigest = (await userDataCatalog(c, "sim_user_data")).digest;
+      if (arg === "--test-user-data-profile") {
+        const frozen = JSON.parse(await readFile(join(source, "deploy/sim-user-data/reset-manifest-v2.json"), "utf8"));
+        check(frozen.appUserDataCatalogDigest === userDataProfile.appUserDataCatalogDigest, "exact new application catalog independently compiled");
+        const e = safeEnv(),
+          binding = {
+            guard_store_id: randomUUID(),
+            target_store_id: randomUUID(),
+            incarnation_id: randomUUID(),
+            environment_id: e.environmentId,
+            reset_epoch: e.resetEpoch,
+            checkpoint_id: randomUUID(),
+            restore_generation: "1",
+            source_sha256: frozen.authoritySourceSha256,
+            identity_sha256: sha("synthetic app identity only")
+          };
+        const result = await enrollSimUserTarget({
+          client: c,
+          component: "sim_user_data",
+          manifest: frozen,
+          rootGate: gate,
+          binding,
+          tokensNotBefore: e.tokensNotBefore,
+          assertWritersStopped: async () => {}
+        });
+        check(result.state === "enrolled-not-activated", "actual dedicated app enrollment source body");
+        userBindings.sim_user_data = binding;
+      }
+    } finally {
+      c.release();
+    }
+  }
+  if (arg === "--test-user-data-profile") {
+    await admin.query("CREATE DATABASE cop_account_safety_guard");
+    await admin.query(
+      "CREATE ROLE sim_user_data_guard_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;CREATE ROLE sim_user_history_guard_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+    );
+    const guard = pool("cop_account_safety_guard", "fixture_admin"),
+      g = await guard.connect();
+    try {
+      await g.query(await readFile(join(source, "deploy/sim-user-data/003_independent_checkpoint.sql"), "utf8"));
+      const manifest = JSON.parse(await readFile(join(source, "deploy/sim-user-data/reset-manifest-v2.json"), "utf8"));
+      for (const component of ["sim_user_data", "sim_user_history"]) {
+        const target = pool(
+            component === "sim_user_data" ? "sim_user_data" : "sim_ai_router",
+            component === "sim_user_data" ? "sim_user_data_migrator" : "ai_router_migrator"
+          ),
+          c = await target.connect();
+        try {
+          const options = {
+            guardClient: g,
+            targetClient: c,
+            component,
+            binding: userBindings[component],
+            rootGate: gate,
+            manifest,
+            assertWritersStopped: async () => {}
+          };
+          check((await enrollSimGuardCheckpoint(options)).state === "ready-not-activated", "actual concrete guard enrollment with real target schema/readback");
+          await assert.rejects(() => enrollSimGuardCheckpoint({ ...options, binding: { ...userBindings[component], incarnation_id: randomUUID() } }));
+          check(true, "guard enrollment cannot replace an existing incarnation");
+        } finally {
+          c.release();
+        }
+      }
+    } finally {
+      g.release();
+    }
+  }
   if (arg === "--run") {
     for (const p of pools) if (!p.ended && !p.ending) await p.end();
     owned();
@@ -329,7 +490,12 @@ try {
     }
   }
   passed = true;
-  if (arg === "--compile-profiles") {
+  if (arg === "--compile-user-data-profile") console.log(JSON.stringify(userDataProfile));
+  else if (arg === "--test-user-data-profile")
+    console.log(
+      JSON.stringify({ contractVersion: "sim-user-data-reset-profile-v2", checks, actualPostgres: true, realRootAdmission: false, productionWrites: 0 })
+    );
+  else if (arg === "--compile-profiles") {
     for (const lane of ["ai", "driver"]) {
       for (const kind of ["old", "new"]) {
         const cat = profiles[lane][kind + "Catalog"];

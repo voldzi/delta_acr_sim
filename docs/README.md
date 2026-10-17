@@ -108,6 +108,11 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Machine-Readable API Contract
 
+New twelfth clean-v2 component: [integration 25](integration/25_SIM_USER_DATA_V1_CONTRACT.md),
+[ADR 0044](adr/0044_CANONICAL_SIM_USER_DATA.md),
+[enrollment runbook 22](runbooks/22_SIM_USER_DATA_V2_ENROLLMENT.md).
+Source/isolated evidence does not activate production or supersede CF24/v1.
+
 Source-only clean lifecycle proposal and isolated DB evidence:
 [`integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md`](integration/24_CLEAN_LIFECYCLE_SOURCE_CANDIDATE.md),
 [`adr/0041_ISOLATED_CLEAN_LIFECYCLE.md`](adr/0041_ISOLATED_CLEAN_LIFECYCLE.md).

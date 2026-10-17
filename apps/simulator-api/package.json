@@ -20,11 +20,13 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "cors": "^2.8.6",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "pg": "8.23.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/pg": "8.23.1",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.2.2",
     "tsx": "^4.23.13",

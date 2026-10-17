@@ -294,7 +294,7 @@ export function forbidExternalFixtureFetch() {
 }
 
 /** Actual application factories/bootstrap, not a replacement lifecycle API. */
-export async function startCleanWholeComponent(db, input, component, { ephemeralPorts = false } = {}) {
+export async function startCleanWholeComponent(db, input, component, { ephemeralPorts = false, simHistorySettings, syntheticModelResponse } = {}) {
   assert.ok(databases.has(db));
   validateCleanWholeInput(input);
   const s = lane(component);
@@ -309,7 +309,7 @@ export async function startCleanWholeComponent(db, input, component, { ephemeral
   };
   const limits = { dailyMicrousd: 1000000, monthlyMicrousd: 10000000, perUserDailyRequests: 100 };
   const guard = forbidExternalFixtureFetch();
-  let composition, app, store, separate, context, model, server, bridge;
+  let composition, app, store, separate, context, model, server, bridge, history;
   const runtime = db.pool(s.db, s.runtime),
     e = input.environment;
   try {
@@ -317,7 +317,7 @@ export async function startCleanWholeComponent(db, input, component, { ephemeral
       const express = createRequire(join(db.runtimeRoot, "apps/ai-router-api/package.json"))("express");
       const m = express();
       m.use(express.json());
-      m.post("/api/generate", (_q, r) => r.json({ response: "Synthetic local whole fixture", prompt_eval_count: 7, eval_count: 3 }));
+      m.post("/api/generate", (_q, r) => r.json({ response: syntheticModelResponse ?? "Synthetic local whole fixture", prompt_eval_count: 7, eval_count: 3 }));
       model = await listen(createServer(m), 0);
       const { BudgetStore } = await load("budget"),
         { PgSeparateBilling } = await load("separate-billing"),
@@ -347,10 +347,14 @@ export async function startCleanWholeComponent(db, input, component, { ephemeral
       };
       composition = await loadCleanRouterComposition(config, store, env);
       await store.init();
-      separate = new PgSeparateBilling(store.pool, e.routerEncryptionKey, composition.gate);
+      if (simHistorySettings) {
+        const { loadSimHistory } = await load("sim-user-history");
+        history = await loadSimHistory(config, store, simHistorySettings);
+      }
+      separate = new PgSeparateBilling(store.pool, e.routerEncryptionKey, history?.combinedGate ?? composition.gate);
       separate.cleanLifecycleEnabled = true;
       await separate.checkSchema();
-      app = createApp(config, store, separate, undefined, composition.options);
+      app = createApp(config, store, separate, undefined, composition.options, history);
     } else {
       const { loadCleanDriverComposition } = await load("clean-bootstrap"),
         { loadConfig } = await load("config"),
@@ -414,12 +418,14 @@ export async function startCleanWholeComponent(db, input, component, { ephemeral
       composition,
       store,
       separate,
+      history,
       guard,
       api: "http://127.0.0.1:" + server.address().port,
       async close() {
         if (bridge) await close(bridge);
         if (server) await close(server);
         if (model) await close(model);
+        await history?.close();
         await composition?.close();
         await store?.close();
         if (context?.aggregation?.close) await context.aggregation.close();
@@ -434,6 +440,7 @@ export async function startCleanWholeComponent(db, input, component, { ephemeral
     if (server) await close(server);
     if (bridge) await close(bridge);
     if (model) await close(model);
+    await history?.close();
     await composition?.close();
     await store?.close();
     if (context?.aggregation?.close) await context.aggregation.close();

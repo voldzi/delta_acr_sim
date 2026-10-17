@@ -30,13 +30,17 @@ const initialData: AppData = {
 export class JsonStore {
   data: AppData = structuredClone(initialData);
 
-  constructor(private readonly storePath: string) {}
+  constructor(
+    private readonly storePath: string,
+    private readonly privateFiles = false
+  ) {}
 
   async load(): Promise<void> {
     try {
       const raw = await readFile(this.storePath, "utf8");
       this.data = { ...structuredClone(initialData), ...(JSON.parse(raw) as Partial<AppData>) };
-    } catch {
+    } catch (error) {
+      if (this.privateFiles) throw error;
       this.data = structuredClone(initialData);
       await this.save();
     }
@@ -44,6 +48,6 @@ export class JsonStore {
 
   async save(): Promise<void> {
     await mkdir(dirname(this.storePath), { recursive: true });
-    await writeFile(this.storePath, JSON.stringify(this.data, null, 2), "utf8");
+    await writeFile(this.storePath, JSON.stringify(this.data, null, 2), { encoding: "utf8", ...(this.privateFiles ? { mode: 0o600 } : {}) });
   }
 }

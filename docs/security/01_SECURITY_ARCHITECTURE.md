@@ -41,6 +41,14 @@ break-glass/server-side provozní nástroj a nesmí být nabízeny ve veřejném
 
 ## Provider boundary
 
+New, default-disabled canonical SIM user-data source candidate:
+[integration 25](../integration/25_SIM_USER_DATA_V1_CONTRACT.md). Actual verified
+issuer/UUID subject selects an epoch-scoped owner, never mutable display names.
+The twelfth clean-v2 adapter requires three fresh component readbacks and an
+independent SQL incarnation/restore checkpoint. Public proxy denies its internal
+main/relay/Router paths with 404. No old CF24 authority/operation is adopted and
+no production activation follows merely from source or isolated test success.
+
 SIM dál běží jako server-to-server provider pro COP backend. Provider katalogy,
 bbox query, detailní source endpointy, readiness, observability a partner/TAK
 endpointy zůstávají interní/VPN-only. COP frontend a mobilní klienti mají volat

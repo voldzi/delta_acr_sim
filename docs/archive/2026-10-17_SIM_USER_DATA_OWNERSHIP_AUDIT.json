@@ -1,0 +1,117 @@
+{
+  "contractVersion": "sim-user-data-ownership-audit-v1",
+  "observedDate": "2026-10-17",
+  "mode": "source_and_live_read_only",
+  "productionWrites": 0,
+  "rawContentOrIdentifiersOutput": false,
+  "sourceRevision": "f4533a8270e20ee2a4bf5096771bbdadf456ae08",
+  "population": "SIM main store and audit; AI Router request/billing/key metadata; source-defined provider versus user-created boundaries",
+  "live": {
+    "main": {
+      "scenarios": { "records": 11, "recordsWithFreeTextFields": 11, "recordsWithNamedOwnerFields": 0 },
+      "drafts": { "records": 4, "recordsWithFreeTextFields": 4, "recordsWithNamedOwnerFields": 0, "providers": { "mock": 3, "openai": 1 } },
+      "publisherQueueRecords": 0,
+      "unexpectedStoreTopLevelKeys": 0,
+      "otherDataDirectoryEntriesOutsideKnownStoreQueueAuditAndOperationalChecks": 0,
+      "audit": {
+        "bytesAtRead": 66940690,
+        "sampleLimit": 5000,
+        "recordsScanned": 5000,
+        "recordsWithActor": 5000,
+        "knownAnonymousOrPublicActors": 4926,
+        "otherNonemptyActors": 74,
+        "totalRecordCountKnown": false,
+        "fullAuditScanned": false,
+        "note": "Bounded initial sample proves actor-bearing audit exists; counts must not be extrapolated to the whole file."
+      }
+    },
+    "aiRouter": {
+      "requests": [
+        { "client": "cop", "task": "cop_chat", "records": 20, "withUserHash": 20, "distinctUserHashes": 7 },
+        { "client": "sim", "task": "sim_scenario", "records": 3, "withUserHash": 3, "distinctUserHashes": 2 }
+      ],
+      "billingRecords": 0,
+      "storedKeys": 0,
+      "keyAuditRecords": 0,
+      "sqlTransaction": "BEGIN READ ONLY; fixed aggregate counts; ROLLBACK"
+    }
+  },
+  "typedOwnershipInventory": [
+    {
+      "component": "main_scenarios",
+      "storage": "sim-store.json / scenarios",
+      "source": ["apps/simulator-api/src/app.ts registerScenarioRoutes", "packages/contracts/src/index.ts Scenario"],
+      "content": "User-editable names/descriptions and arbitrary metadata/block/fault parameters, even when marked synthetic.",
+      "owner": "No canonical owner stored by the current contract or writer.",
+      "classification": "user_creatable_unattributed_content",
+      "currentCleanOwnerCoversIt": false
+    },
+    {
+      "component": "main_ai_drafts",
+      "storage": "sim-store.json / drafts",
+      "source": ["apps/simulator-api/src/app.ts registerAiRoutes", "packages/ai-assistant/src/index.ts createRouterScenarioDraft/createMockScenarioDraft"],
+      "content": "Scenario patch derived from a user prompt/model output, audit/review metadata, explanation and optional free-text rejection reason. Original prompt/output are not stored as chat history by the main writer.",
+      "owner": "No canonical owner stored; mock/synthetic/provider labels do not prove official-template provenance.",
+      "classification": "user_generated_or_derived_unattributed_content",
+      "currentCleanOwnerCoversIt": false
+    },
+    {
+      "component": "main_publisher_queue",
+      "storage": "publisher-queue.json / items",
+      "source": ["packages/publisher-client/src/index.ts PublisherQueueItem", "apps/simulator-api/src/app.ts registerPublisherRoutes"],
+      "content": "May persist complete generated/submitted event payloads and response/error metadata; currently empty.",
+      "owner": "No canonical human owner in the current queue item contract.",
+      "classification": "potential_user_derived_content_currently_empty",
+      "currentCleanOwnerCoversIt": false
+    },
+    {
+      "component": "main_audit",
+      "storage": "sim-audit.jsonl",
+      "source": ["apps/simulator-api/src/security.ts AuditLogger.record/authenticateOidc"],
+      "content": "Actor/action/resource/path/time metadata. OIDC actor prefers username/email/name over subject and is not a stable canonical ownership binding.",
+      "owner": "Potentially identifying mutable display actor; no verified canonical issuer+subject provenance stored.",
+      "classification": "user_linked_audit_without_canonical_owner",
+      "currentCleanOwnerCoversIt": false
+    },
+    {
+      "component": "ai_router_sim_lane",
+      "storage": "sim_ai_router / ai_router_request WHERE client_id='sim'",
+      "source": ["apps/simulator-api/src/app.ts generateSynthetic", "apps/ai-router-api/src/budget.ts BudgetStore.reserve/hashUser"],
+      "content": "Request/model/status/token/cost metadata keyed by HMAC of the authenticated SIM actor. No prompt or generated text column in this table.",
+      "owner": "SIM actor is supplied server-side, but currently mutable username/email/name-or-sub, not canonical issuer+UUID subject.",
+      "classification": "potentially_user_linked_sim_history_not_proven_nonuser",
+      "currentCleanOwnerCoversIt": false
+    },
+    {
+      "component": "ai_router_cop_and_driver",
+      "source": ["packages/clean-lifecycle/http.mjs", "packages/clean-lifecycle/store.mjs"],
+      "owner": "New source path derives owner from signed exact issuer+UUID subject and binds typed resources.",
+      "classification": "covered_clean_component_scope_not_all_sim_userdata",
+      "currentCleanOwnerCoversIt": true
+    },
+    {
+      "component": "geo_precomputed_other_service_actors",
+      "source": ["apps/situation-data-api/src/geo-routing.ts authenticate/idempotentCompute"],
+      "content": "Route geometry and metadata keyed by a backend-service actor, not canonical human subject.",
+      "owner": "Service-token ownership only. Other service actors cannot be reclassified as public/provider data or a particular human by inference.",
+      "classification": "separate_service_owned_scope_requires_explicit_boundary",
+      "currentCleanOwnerCoversIt": false,
+      "preservePendingScopeDecision": true
+    },
+    {
+      "component": "official_provider_data_and_configuration",
+      "source": ["apps/situation-data-api/src/sources.ts", "apps/safety-data-api/src", "apps/flight-data-api/src"],
+      "classification": "provider_reference_cache_or_server_configuration_not_canonical_sim_account_content",
+      "preserve": true,
+      "note": "Do not remove provider data, official source templates, runtime configuration or secrets as a substitute for owner cleanup. No claim that arbitrary user-created synthetic scenarios are official templates."
+    }
+  ],
+  "conclusion": {
+    "allSimUserDataErasureProven": false,
+    "currentCopDriverComponentProofRemainsValidWithinItsScope": true,
+    "globalIdentityDeletionWouldNotProveMainSimContentErased": true,
+    "deleteOrReclassifyOtherRowsWithoutNewFinitePlan": false,
+    "severity": "high",
+    "remediation": "Explicit finite one-time test-data reset plus new verified canonical main-app ownership, durable intake/delete fencing, typed cleanup of app content/audit/derived publisher data and SIM AI history with preserved anonymous budget totals; then actual shared acceptance."
+  }
+}

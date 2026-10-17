@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import {registerCleanLifecycle,type CleanLifecycleOptions} from "../../../packages/clean-lifecycle/http.mjs";
+import { registerCleanLifecycle, type CleanLifecycleOptions } from "../../../packages/clean-lifecycle/http.mjs";
 import express, { type Request, type Response } from "express";
 import { BudgetError, BudgetStore, type RouterPolicy } from "./budget.js";
 import { copModelPrompt, validCopContext } from "./cop-context.js";
@@ -41,7 +41,17 @@ export function caller(req: Request, config: Config): "cop" | "sim" | "admin" | 
 export function validBody(value: unknown): value is GenerateBody {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  const allowedKeys = new Set(["taskType", "dataClass", "preference", "prompt", "userId", "allowExternal", "allowPaidEscalation", "maxOutputTokens", "copContext"]);
+  const allowedKeys = new Set([
+    "taskType",
+    "dataClass",
+    "preference",
+    "prompt",
+    "userId",
+    "allowExternal",
+    "allowPaidEscalation",
+    "maxOutputTokens",
+    "copContext"
+  ]);
   if (Object.keys(v).some((key) => !allowedKeys.has(key))) return false;
   return (
     ["cop_chat", "source_health", "sim_scenario"].includes(v.taskType as string) &&
@@ -53,7 +63,8 @@ export function validBody(value: unknown): value is GenerateBody {
     typeof v.userId === "string" &&
     v.userId.length > 0 &&
     v.userId.length <= 200 &&
-    (v.taskType !== "cop_chat" || (/^[A-Za-z0-9_-]{8,128}$/u.test(v.userId) && v.prompt.length <= 1200 && validCopContext(v.copContext, v.dataClass as DataClass))) &&
+    (v.taskType !== "cop_chat" ||
+      (/^[A-Za-z0-9_-]{8,128}$/u.test(v.userId) && v.prompt.length <= 1200 && validCopContext(v.copContext, v.dataClass as DataClass))) &&
     (v.taskType === "cop_chat" || v.copContext === undefined) &&
     [undefined, true, false].includes(v.allowExternal as boolean | undefined) &&
     [undefined, true, false].includes(v.allowPaidEscalation as boolean | undefined) &&
@@ -73,20 +84,24 @@ class OpenAiOutcomeUnknownError extends Error {}
 
 async function callOpenAI(config: Config, model: string, prompt: string, maxOutputTokens: number): Promise<ModelResult> {
   let response: Awaited<ReturnType<typeof fetch>>;
-  try { response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { authorization: `Bearer ${config.openaiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model,
-      store: false,
-      reasoning: { effort: model === config.economyModel ? "none" : "low" },
-      instructions:
-        "You are an assistive civil situation-map analyst. Do not make operational decisions. Explain uncertainty and data age. Do not provide targeting or tactical combat guidance.",
-      input: prompt,
-      max_output_tokens: maxOutputTokens
-    }),
-    signal: AbortSignal.timeout(25_000)
-  }); } catch { throw new OpenAiOutcomeUnknownError("provider_outcome_unknown"); }
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { authorization: `Bearer ${config.openaiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        store: false,
+        reasoning: { effort: model === config.economyModel ? "none" : "low" },
+        instructions:
+          "You are an assistive civil situation-map analyst. Do not make operational decisions. Explain uncertainty and data age. Do not provide targeting or tactical combat guidance.",
+        input: prompt,
+        max_output_tokens: maxOutputTokens
+      }),
+      signal: AbortSignal.timeout(25_000)
+    });
+  } catch {
+    throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
+  }
   if (response.status === 429) throw new OpenAiRateLimitedError("provider_rate_limited");
   if (!response.ok) {
     if (response.status >= 500) throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
@@ -96,7 +111,11 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
     output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
     usage?: { input_tokens?: number; output_tokens?: number };
   };
-  try { data = await response.json() as typeof data; } catch { throw new OpenAiOutcomeUnknownError("provider_outcome_unknown"); }
+  try {
+    data = (await response.json()) as typeof data;
+  } catch {
+    throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
+  }
   const text =
     data.output
       ?.flatMap((item) => item.content ?? [])
@@ -104,7 +123,8 @@ async function callOpenAI(config: Config, model: string, prompt: string, maxOutp
       .map((item) => item.text ?? "")
       .join("\n")
       .trim() ?? "";
-  if (!text || !Number.isInteger(data.usage?.input_tokens) || !Number.isInteger(data.usage?.output_tokens)) throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
+  if (!text || !Number.isInteger(data.usage?.input_tokens) || !Number.isInteger(data.usage?.output_tokens))
+    throw new OpenAiOutcomeUnknownError("provider_outcome_unknown");
   return { text, inputTokens: data.usage!.input_tokens!, outputTokens: data.usage!.output_tokens! };
 }
 
@@ -148,16 +168,26 @@ async function callLocal(config: Config, prompt: string, maxOutputTokens: number
   throw new Error("local_model_unavailable");
 }
 
-export function createApp(config: Config, store: BudgetStore, separate?: SeparateBilling, erasure?: AccountErasureStore, cleanLifecycle?:CleanLifecycleOptions) {
+export function createApp(
+  config: Config,
+  store: BudgetStore,
+  separate?: SeparateBilling,
+  erasure?: AccountErasureStore,
+  cleanLifecycle?: CleanLifecycleOptions,
+  simHistory?: { register: (app: express.Express) => void }
+) {
   if (erasure) store.accountErasure = erasure;
   const app = express();
   app.disable("x-powered-by");
   app.use("/api/v1/ai-router/cop/users/me/erasure-operations", (_req, res, next) => {
-    res.locals.erasureCorrelationId=randomUUID();res.setHeader("X-Correlation-ID",res.locals.erasureCorrelationId);
-    res.setHeader("Cache-Control", "no-store");next();
+    res.locals.erasureCorrelationId = randomUUID();
+    res.setHeader("X-Correlation-ID", res.locals.erasureCorrelationId);
+    res.setHeader("Cache-Control", "no-store");
+    next();
   });
   app.use(express.json({ limit: "32kb" }));
-  if(cleanLifecycle) registerCleanLifecycle(app,cleanLifecycle);
+  simHistory?.register(app);
+  if (cleanLifecycle) registerCleanLifecycle(app, cleanLifecycle);
   app.get("/health/live", (_req, res) => res.json({ status: "ok" }));
   app.get("/health/ready", async (_req, res) => {
     try {
@@ -171,14 +201,17 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
   app.use("/api/v1/ai-router", (req, res, next) => {
     const identity = caller(req, config);
     if (!identity) {
-      res.status(401).json({ error: "unauthorized", ...(res.locals.erasureCorrelationId ? {correlationId:res.locals.erasureCorrelationId} : {}) });
+      res.status(401).json({ error: "unauthorized", ...(res.locals.erasureCorrelationId ? { correlationId: res.locals.erasureCorrelationId } : {}) });
       return;
     }
     res.locals.caller = identity;
     next();
   });
   app.get("/api/v1/ai-router/models", async (_req, res) => {
-    if (res.locals.caller === "izs") { res.status(403).json({ error: "forbidden" }); return; }
+    if (res.locals.caller === "izs") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
     try {
       const activePolicy = await store.policy();
       res.json({
@@ -204,7 +237,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     }
   });
   app.get("/api/v1/ai-router/policy", async (_req, res) => {
-    if (res.locals.caller === "izs") { res.status(403).json({ error: "forbidden" }); return; }
+    if (res.locals.caller === "izs") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
     try {
       res.json(await store.policy());
     } catch {
@@ -245,7 +281,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     }
   });
   app.get("/api/v1/ai-router/usage", async (_req, res) => {
-    if (res.locals.caller === "izs") { res.status(403).json({ error: "forbidden" }); return; }
+    if (res.locals.caller === "izs") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
     try {
       res.json(await store.usage());
     } catch {
@@ -261,13 +300,24 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     }
     const body = req.body;
     const identity = res.locals.caller as string;
-    if (identity === "admin" || identity === "izs" || (identity === "cop" && body.taskType === "sim_scenario") || (identity === "sim" && body.taskType !== "sim_scenario")) {
+    if (
+      identity === "admin" ||
+      identity === "izs" ||
+      (identity === "cop" && body.taskType === "sim_scenario") ||
+      (identity === "sim" && body.taskType !== "sim_scenario")
+    ) {
       res.status(403).json({ error: "task_not_allowed" });
       return;
     }
     if (identity === "cop" && store.accountErasure) {
-      try { await store.accountErasure.assertActive(store.hashUser("cop", body.userId)); }
-      catch (error) { res.status(error instanceof AccountErasureError ? 410 : 503).json({ error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" }); return; }
+      try {
+        await store.accountErasure.assertActive(store.hashUser("cop", body.userId));
+      } catch (error) {
+        res
+          .status(error instanceof AccountErasureError ? 410 : 503)
+          .json({ error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" });
+        return;
+      }
     }
     if (!taskAllowsDataClass(body.taskType, body.dataClass)) {
       res.status(400).json({ error: "data_class_not_allowed" });
@@ -317,7 +367,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
         },
         {
           localAvailable: Boolean(localCandidates(config).length && config.localModel),
-          externalAvailable: config.externalEnabled && activePolicy.externalAllowed && Boolean(config.openaiKey) &&
+          externalAvailable:
+            config.externalEnabled &&
+            activePolicy.externalAllowed &&
+            Boolean(config.openaiKey) &&
             (body.dataClass !== "internal_minimized" || config.economyModel === "gpt-6-luna"),
           advancedAvailable: config.externalEnabled && config.advancedEnabled && activePolicy.advancedAllowed && Boolean(config.openaiKey),
           externalEnabled: config.externalEnabled && activePolicy.externalAllowed
@@ -325,7 +378,9 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
       );
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
-      res.status(503).json({ error: ["local_model_unavailable", "external_model_unavailable", "no_model_available"].includes(code) ? code : "policy_unavailable" });
+      res
+        .status(503)
+        .json({ error: ["local_model_unavailable", "external_model_unavailable", "no_model_available"].includes(code) ? code : "policy_unavailable" });
       return;
     }
     const maxOutputTokens = body.maxOutputTokens ?? 512;
@@ -341,7 +396,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     try {
       id = await store.reserve(identity, body.userId, body.taskType, model, decision.reason, decision.difficulty, decision.tier, reservedMicrousd);
     } catch (error) {
-      if (error instanceof AccountErasureError) { res.status(410).json({ error: error.code }); return; }
+      if (error instanceof AccountErasureError) {
+        res.status(410).json({ error: error.code });
+        return;
+      }
       if (error instanceof BudgetError) {
         res.status(429).json({ error: error.code });
         return;
@@ -352,7 +410,8 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     let result: ModelResult;
     try {
       if (identity === "cop") await store.accountErasure?.assertActive(store.hashUser("cop", body.userId));
-      result = decision.tier === "local_fast" ? await callLocal(config, modelPrompt, maxOutputTokens) : await callOpenAI(config, model, modelPrompt, maxOutputTokens);
+      result =
+        decision.tier === "local_fast" ? await callLocal(config, modelPrompt, maxOutputTokens) : await callOpenAI(config, model, modelPrompt, maxOutputTokens);
     } catch (error) {
       try {
         await store.finish(id, error instanceof OpenAiOutcomeUnknownError ? "uncertain" : "failed");
@@ -360,7 +419,10 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
         res.status(503).json({ requestId: id, error: "budget_store_unavailable" });
         return;
       }
-      if (error instanceof AccountErasureError) { res.status(410).json({ requestId: id, error: error.code }); return; }
+      if (error instanceof AccountErasureError) {
+        res.status(410).json({ requestId: id, error: error.code });
+        return;
+      }
       const rateLimited = error instanceof OpenAiRateLimitedError;
       res.status(rateLimited ? 429 : 503).json({ requestId: id, error: rateLimited ? "provider_rate_limited" : "model_unavailable" });
       return;
@@ -373,8 +435,15 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
       return;
     }
     if (identity === "cop" && store.accountErasure) {
-      try { await store.accountErasure.assertActive(store.hashUser("cop", body.userId)); }
-      catch (error) { result.text = ""; res.status(error instanceof AccountErasureError ? 410 : 503).json({ requestId: id, error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" }); return; }
+      try {
+        await store.accountErasure.assertActive(store.hashUser("cop", body.userId));
+      } catch (error) {
+        result.text = "";
+        res
+          .status(error instanceof AccountErasureError ? 410 : 503)
+          .json({ requestId: id, error: error instanceof AccountErasureError ? error.code : "account_erasure_store_unavailable" });
+        return;
+      }
     }
     res.json({
       requestId: id,
@@ -388,7 +457,12 @@ export function createApp(config: Config, store: BudgetStore, separate?: Separat
     });
   });
   app.use((error: unknown, _req: Request, res: Response, _next: unknown) => {
-    res.status(400).json({ error: error instanceof SyntaxError ? "invalid_json" : "invalid_request", ...(res.locals.erasureCorrelationId ? {correlationId:res.locals.erasureCorrelationId} : {}) });
+    res
+      .status(400)
+      .json({
+        error: error instanceof SyntaxError ? "invalid_json" : "invalid_request",
+        ...(res.locals.erasureCorrelationId ? { correlationId: res.locals.erasureCorrelationId } : {})
+      });
   });
   return app;
 }
