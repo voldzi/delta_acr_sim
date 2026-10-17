@@ -116,6 +116,23 @@ def publish_new(path,raw):
  d=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
  try:os.fsync(d)
  finally:os.close(d)
+def publish_acceptance_report(bootstrap_module,host,manifest):
+ artifact=manifest.get('acceptanceReport')
+ need(isinstance(artifact,dict) and set(artifact)=={'path','sha256'},'RELEASE_ACCEPTANCE_ARTIFACT')
+ path=Path(artifact['path']);staging=Path('/srv/x5-production/staging/cop')
+ need(path.is_absolute() and path.resolve()==path and staging in path.parents,'RELEASE_ACCEPTANCE_PATH')
+ raw=bootstrap_module.public_bytes(path,1048576)
+ need(sha(raw)==artifact['sha256'],'RELEASE_ACCEPTANCE_SHA')
+ report=json.loads(raw)
+ need(report.get('contractVersion')=='cop-sim-whole-clean-acceptance-v3','RELEASE_ACCEPTANCE_V3_REQUIRED')
+ host._acceptance_module().validate_clean_whole_report_v3(report,manifest['candidateImages'],time.time())
+ # Never adopt a caller-selected target or silently replace another Root proof.
+ target=BASE/'whole12-acceptance.json'
+ need(host._acceptance_module().REPORT==target,'RELEASE_ACCEPTANCE_TARGET')
+ if os.path.lexists(target):
+  need(root_read(target)==raw,'RELEASE_ACCEPTANCE_EXISTING_CONFLICT')
+ else:publish_new(target,raw)
+ return {'acceptanceReportSha256':sha(raw),'rootAcceptancePublished':True}
 def prepare_and_seal_clean_release(bootstrap,public_manifest,postgres_password,decision):
  """Actual twelve inspectors and protected publication, private return in RAM."""
  sources=bootstrap['sources'];cop=Path(sources['cop']['root']);sim=Path(sources['sim']['root'])
@@ -165,7 +182,8 @@ def prepare_and_seal_clean_release(bootstrap,public_manifest,postgres_password,d
   if storage:storage.close()
   remote.close()
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--public-manifest',required=True);p.add_argument('--manifest-sha256',required=True);p.add_argument('--apply-disabled-reset',action='store_true');a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--public-manifest',required=True);p.add_argument('--manifest-sha256',required=True)
+ modes=p.add_mutually_exclusive_group();modes.add_argument('--apply-disabled-reset',action='store_true');modes.add_argument('--complete-release',action='store_true');a=p.parse_args()
  need(os.getuid()==0 and socket.gethostname().split('.')[0]=='docker' and sys.flags.isolated,'RELEASE_ROOT_CONTEXT')
  bootstrap_module=verified_bootstrap_code()
  bootstrap_module.context()
@@ -174,6 +192,7 @@ def main():
  else:bootstrap_module.check_transports()
  bootstrap=verify_bootstrap(a.manifest_sha256)
  cop=Path(bootstrap['sources']['cop']['root']);host=load(cop/'scripts/account-safety/clean-reset-root.py','release_early_root_gate')
+ publish_acceptance_report(bootstrap_module,host,manifest)
  # Blocks before asking PG password when exact whole-provider GO is missing.
  host._acceptance_module().verified_pre_stop_acceptance(manifest['candidateImages'])
  need(sys.stdin.isatty() and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
@@ -182,12 +201,20 @@ def main():
  decision={k:True for k in ['allLegacyUsersTestOnly','currentKeycloakOnly','sharedIdentityRemovalApproved']}
  prepared=prepare_and_seal_clean_release(bootstrap,manifest,password,decision)
  print(json.dumps(prepared['publicSummary']))
- if a.apply_disabled_reset:
-  need(input('Type APPLY_DISABLED_RESET to execute exactly these sealed plans: ')=='APPLY_DISABLED_RESET','RELEASE_APPLY_NOT_CONFIRMED')
+ if a.apply_disabled_reset or a.complete_release:
+  confirmation='COMPLETE_CLEAN_RELEASE'if a.complete_release else 'APPLY_DISABLED_RESET'
+  need(input('Type '+confirmation+' to execute exactly these sealed plans: ')==confirmation,'RELEASE_APPLY_NOT_CONFIRMED')
+  activation=None;modules=None
+  if a.complete_release:
+   activation=load(Path(bootstrap['sources']['sim']['root'])/'scripts/complete-clean-release.py','sealed_complete_release')
+   modules=activation.activation_modules(bootstrap)
+   activation.capture_before_freeze(modules,prepared['plan'])
   common=load(Path(bootstrap['sources']['sim']['root'])/'scripts/coordinate-clean-release.py','sealed_actual_common_reset')
   receipt=common.run_common_reset(prepared['privateConfig']);print(json.dumps(receipt))
-  print(json.dumps({'disabledRuntimeRestartPending':True,'productionActivated':False}))
- # No private config serialization, secret file, automatic restart or activation.
+  if a.complete_release:print(json.dumps(activation.complete_release(modules,receipt,prepared['privateConfig'])))
+  else:print(json.dumps({'disabledRuntimeRestartPending':True,'productionActivated':False}))
+ # No private config serialization or secret file. Activation is a separate,
+ # explicit interactive mode with concrete protected adapters and real probes.
 if __name__=='__main__':
  try:run_with_transport_cleanup(main)
  except BaseException:

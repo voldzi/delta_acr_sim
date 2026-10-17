@@ -4,6 +4,25 @@ from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'prepare-and-seal-clean-release.py'
 s=importlib.util.spec_from_file_location('release',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 class Release(unittest.TestCase):
+ def test_acceptance_published_only_after_sha_and_strict_gate(self):
+  raw=b'{"contractVersion":"cop-sim-whole-clean-acceptance-v3"}'
+  manifest={'acceptanceReport':{'path':'/srv/x5-production/staging/cop/reviewed/report.json','sha256':hashlib.sha256(raw).hexdigest()},'candidateImages':{}}
+  calls=[];gate=types.SimpleNamespace(REPORT=m.BASE/'whole12-acceptance.json',validate_clean_whole_report_v3=lambda *a:calls.append('validate'))
+  host=types.SimpleNamespace(_acceptance_module=lambda:gate);boot=types.SimpleNamespace(public_bytes=lambda *a:raw)
+  with patch.object(pathlib.Path,'resolve',lambda p:p),patch.object(m.os.path,'lexists',return_value=False),patch.object(m,'publish_new',side_effect=lambda *a:calls.append('publish')):
+   m.publish_acceptance_report(boot,host,manifest)
+  self.assertEqual(calls,['validate','publish'])
+  bad={**manifest,'acceptanceReport':{**manifest['acceptanceReport'],'sha256':'0'*64}}
+  with patch.object(pathlib.Path,'resolve',lambda p:p),patch.object(m,'publish_new')as publish:
+   with self.assertRaisesRegex(RuntimeError,'ACCEPTANCE_SHA'):m.publish_acceptance_report(boot,host,bad)
+   publish.assert_not_called()
+ def test_acceptance_existing_conflict_not_overwritten(self):
+  raw=b'{"contractVersion":"cop-sim-whole-clean-acceptance-v3"}'
+  manifest={'acceptanceReport':{'path':'/srv/x5-production/staging/cop/reviewed/report.json','sha256':hashlib.sha256(raw).hexdigest()},'candidateImages':{}}
+  gate=types.SimpleNamespace(REPORT=m.BASE/'whole12-acceptance.json',validate_clean_whole_report_v3=lambda *a:None)
+  with patch.object(pathlib.Path,'resolve',lambda p:p),patch.object(m.os.path,'lexists',return_value=True),patch.object(m,'root_read',return_value=b'other'),patch.object(m,'publish_new')as publish:
+   with self.assertRaisesRegex(RuntimeError,'EXISTING_CONFLICT'):m.publish_acceptance_report(types.SimpleNamespace(public_bytes=lambda *a:raw),types.SimpleNamespace(_acceptance_module=lambda:gate),manifest)
+   publish.assert_not_called()
  def test_outer_cleanup_after_success(self):
   calls=[]
   with patch.object(m,'cleanup_temporary_transport',side_effect=lambda:calls.append('cleanup')):
@@ -25,7 +44,8 @@ class Release(unittest.TestCase):
   self.assertTrue(callable(m.verified_bootstrap_code().bootstrap_clean_release))
  def test_no_cli_automatic_activation(self):
   text=p.read_text()
-  self.assertIn("if a.apply_disabled_reset:",text)
+  self.assertIn("if a.apply_disabled_reset or a.complete_release:",text)
+  self.assertIn("activation.capture_before_freeze(modules,prepared['plan'])",text)
   self.assertIn("'productionActivated':False",text)
   self.assertNotIn('pickle',text)
  def exercise(self,deny=False):

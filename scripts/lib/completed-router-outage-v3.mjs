@@ -1,4 +1,5 @@
 /** Separate completed-operation contract. Never rewrite/relax a v2 pending case. */
+import {createHash} from 'node:crypto';
 const need=x=>{if(!x)throw Error('COMPLETED_ROUTER_OUTAGE_V3_UNPROVEN')};
 const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(x);
 const hex=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
@@ -25,4 +26,21 @@ export function validateCompletedRouterOutageV3(e,expected){
  for(const x of Object.values(e.finalReadbacks))need(x.httpStatus===200&&x.state==='deleted'&&x.remaining===0);
  need(e.pendingDeletionOutageClaimed===false);
  return {contractVersion:e.contractVersion,caseType:e.caseType,operationId:e.operationId,resetEpoch:e.resetEpoch,sequence:[200,503,200],finalAllZero:true,pendingDeletionOutageProven:false};
+}
+/** Lossless evidence projection: digest actual SQL witnesses from each phase,
+ * never invent a COP SQL row, transplant another test's digest or rerun a job. */
+export function toCopCompletedRouterOutageV3(e,expected){
+ validateCompletedRouterOutageV3(e,expected);
+ const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+ const databaseBindingReadbacks=Object.fromEntries(['before','during','after'].map(phase=>{
+  const witness=e.phases[phase].databaseBindings;
+  const ordered=Object.fromEntries(['ai','driver','main','history'].map(k=>[k,witness[k]]));
+  return [phase,{operationId:e.operationId,resetEpoch:e.resetEpoch,operationState:'deleted',terminalBindingDigest:digest(ordered)}];
+ }));
+ need(new Set(Object.values(databaseBindingReadbacks).map(x=>x.terminalBindingDigest)).size===1);
+ return {phase:'completed_operation_replay',dependencyHttpSequence:['before','during','after'].map(k=>e.phases[k].httpStatus),
+  operationStatus:e.phases.before.httpState,operationCompletedBeforeOutage:e.phases.before.httpState==='deleted',databaseBindingReadbacks,
+  finalReadback:{operationId:e.operationId,resetEpoch:e.resetEpoch,status:'completed',userARemaining:Object.values(e.finalReadbacks).reduce((n,x)=>n+x.remaining,0),readbackDigest:digest(e.finalReadbacks)},
+  evidenceContract:e.contractVersion,evidenceSha256:digest(e),databaseWitnessSource:'actual_sim_four_database_sql_phase_readbacks',
+  pendingDeletionOutageProven:false,productionTouched:false};
 }

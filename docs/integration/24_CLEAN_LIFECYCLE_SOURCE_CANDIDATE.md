@@ -784,3 +784,33 @@ the exact new authorization line; unavailable/expired authorization cleanup is a
 explicit failure, not successful deployment. Key creation remains a separately
 approved operator step. Source/synthetic checks do not prove actual Root cleanup
 or authorize production activation.
+
+The public manifest may now pin `acceptanceReport: {path, sha256}` under the
+fixed X5 staging/cop tree. Before the PG prompt, Root checks its exact bytes,
+explicit v3 semantics, candidate-image bindings and freshness, then publishes
+only `/srv/cop/runtime/clean-reset/whole12-acceptance.json` with exclusive creation.
+An existing different proof is a conflict, never overwritten. This source step
+does not manufacture report evidence or bypass the subsequent protected gate.
+
+`scripts/lib/enable-clean-messaging.py` implements the separate final Message
+transition after its disabled-runtime receipt. It checks exact CIDs/images,
+changes only four erasure flags, preserves effective Compose configuration,
+non-erasure environment, mounts, networks and ports, and starts only the API
+with no build/pull/dependencies. Native CID is preserved. Actual
+`AccountErasureAcceptance.verify()` and healthy state must pass; failure stops
+only the exact newly created candidate and returns known flags to false, never
+starts the previous image. Six isolated boundary tests cover this source;
+actual Root execution and full COP guarded-slot integration remain pending.
+
+The explicit `--complete-release` mode now loads all concrete sealed activation
+adapters before freezing writers and captures COP pre-stop health/attestation
+through its owner-provided bridge. After the real twelve-phase reset it calls
+disabled Messaging start, SIM restricted-SQL readback, five-flag staging,
+candidate start and authenticated capability checks, then Message four-flag
+acceptance, protected COP prepare/activate and final COP enable. Ordinary
+`--apply-disabled-reset` still stops at disabled state. No automatic activation
+occurs in preparation-only mode. Late failure pauses only the exact enabled
+Message candidate and writes four flags false; it never restarts an old image.
+Five synthetic sequencing tests cover ordering and failures, not production
+acceptance. The COP bridge must exist in the pinned archive and produce real
+protected Store proofs; absent/incomplete owner bridge blocks before reset.
