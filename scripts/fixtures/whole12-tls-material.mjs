@@ -25,13 +25,25 @@ export async function prepareWhole12Tls(root) {
       "2",
       "-subj",
       "/CN=SIM whole12 isolated " + name,
+      "-addext",
+      "basicConstraints=critical,CA:TRUE,pathlen:0",
+      "-addext",
+      "keyUsage=critical,keyCertSign,cRLSign",
+      "-addext",
+      "subjectKeyIdentifier=hash",
+      "-addext",
+      "authorityKeyIdentifier=keyid:always",
       "-keyout",
       name + ".key",
       "-out",
       name + ".pem"
     ]);
   await run(["req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=haproxy.home.cz", "-keyout", "server.key", "-out", "server.csr"]);
-  await writeFile(join(dir, "server.ext"), "subjectAltName=DNS:haproxy.home.cz\nextendedKeyUsage=serverAuth\n", { mode: 0o600 });
+  await writeFile(
+    join(dir, "server.ext"),
+    "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nsubjectAltName=DNS:haproxy.home.cz\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n",
+    { mode: 0o600 }
+  );
   await run([
     "x509",
     "-req",

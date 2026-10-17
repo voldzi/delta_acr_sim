@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import tls from "node:tls";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { prepareWhole12Tls } from "./fixtures/whole12-tls-material.mjs";
 assert.deepEqual(process.argv.slice(2), ["--run"]);
 const umask = process.umask(0o077),
@@ -26,11 +28,29 @@ try {
   assert.equal(await handshake(x.ca, "haproxy.home.cz"), true);
   await assert.rejects(() => handshake(x.wrongCa, "haproxy.home.cz"));
   await assert.rejects(() => handshake(x.ca, "wrong.invalid"), { code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+  const strict = `import socket,ssl,sys
+c=ssl.create_default_context(cafile=sys.argv[1])
+c.verify_flags |= ssl.VERIFY_X509_STRICT
+with socket.create_connection(('127.0.0.1',int(sys.argv[2])),timeout=5) as s:
+ with c.wrap_socket(s,server_hostname=sys.argv[3]) as secured:
+  assert secured.version() in ('TLSv1.2','TLSv1.3')
+`;
+  const python = promisify(execFile);
+  await python("python3", ["-c", strict, join(root, "tls/ca.pem"), String(server.address().port), "haproxy.home.cz"]);
+  await assert.rejects(() => python("python3", ["-c", strict, join(root, "tls/wrong-ca.pem"), String(server.address().port), "haproxy.home.cz"]));
+  await assert.rejects(() => python("python3", ["-c", strict, join(root, "tls/ca.pem"), String(server.address().port), "wrong.invalid"]));
   assert.equal(x.postgres.port, 5000);
   assert.equal(x.clientReadOnlyMounts[1].target, "/etc/csm-sim/postgresql-ca.pem");
   await assert.rejects(() => prepareWhole12Tls(root), { code: "EEXIST" });
   console.log(
-    JSON.stringify({ checks: 6, actualSyntheticTlsHandshakes: true, actualPostgresBootstrap: false, productionWrites: 0, wholeAccountComplete: false })
+    JSON.stringify({
+      checks: 9,
+      actualSyntheticTlsHandshakes: true,
+      actualPythonStrictTls: true,
+      actualPostgresBootstrap: false,
+      productionWrites: 0,
+      wholeAccountComplete: false
+    })
   );
   passed = true;
 } finally {

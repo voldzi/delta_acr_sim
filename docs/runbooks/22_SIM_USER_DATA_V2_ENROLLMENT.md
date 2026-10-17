@@ -331,6 +331,15 @@ correction does not hot-patch the already running source0ded266 process. The
 shared test must use the correct source identity and/or independently verify
 actual SQL mode, never infer it from the old nested label.
 
+Generation-only certificate follow-up: future fresh test CAs explicitly contain
+critical CA basicConstraints and keyCertSign/cRLSign usage plus SKID/AKID; leaves
+contain critical CA:false, digitalSignature/keyEncipherment, DNS SAN, serverAuth
+and SKID/AKID. Nine local tests now include actual Python VERIFY_X509_STRICT
+success and wrong-CA/wrong-name refusal as well as Node handshakes. No existing
+test root is regenerated (existing tls directory still refuses EEXIST), and the
+running namespace's d56ffc test CA and archived evidence remain unchanged. This
+does not change production TLS or claim a new PostgreSQL acceptance run.
+
 ## Root activation module after whole12 acceptance (source only)
 
 This is the concrete handoff for COP's single human-run Root operator. It is
