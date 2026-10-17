@@ -749,3 +749,11 @@ separate. The public artifact manifest cannot be finalized until COP's new fixed
 Root validator path and final provider candidates are published and the actual
 whole gate passes. In particular, no pending-deletion result is fabricated from
 the completed-operation Router test.
+
+The later strong v3 audit found a second disconnect edge in the composed
+fixture: a checked-out pg Client can emit an error without pg-pool's idle handler.
+Router now installs a static sanitized client error listener at pool connect
+as well as the idle-pool listener. Query failures remain rejected and transactions
+must still roll back. All69 Router synthetic tests and typecheck pass; new immutable
+candidate and actual same-operation preservation/recovery acceptance are required.
+Earlier739 outage evidence is retained and is not relabeled as this new case.

@@ -15,7 +15,7 @@ const{Pool}=createRequire('/runtime/router/apps/ai-router-api/package.json')('pg
 const pool=db=>{const p=new Pool({host:ROOT+'/s',port:5000,user:'fixture_admin',database:db,max:1,connectionTimeoutMillis:3000});p.on('error',()=>{});pools.push(p);return p};
 const ai=pool('sim_ai_router'),driver=pool('sim_driver_measurements'),main=pool('sim_user_data'),guard=pool('cop_account_safety_guard');
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
-async function table(p,name){assert.match(name,/^[a-z_]+\.[a-z_]+$/);return(await p.query(`SELECT COALESCE(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text),'[]'::jsonb) rows FROM ${name} x`)).rows[0].rows}
+async function table(p,name){assert.match(name,/^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/);return(await p.query(`SELECT COALESCE(jsonb_agg(to_jsonb(x) ORDER BY to_jsonb(x)::text),'[]'::jsonb) rows FROM ${name} x`)).rows[0].rows}
 async function binding(){
  const out={};for(const[n,p,s]of[['ai',ai,'sim_clean'],['driver',driver,'sim_clean'],['main',main,'sim_user_data'],['history',ai,'sim_user_history']]){
   const r=(await p.query(`SELECT j.operation_id,a.reset_epoch,a.state FROM ${s}.job j JOIN ${s}.account a USING(owner_key)`)).rows;
@@ -28,8 +28,11 @@ async function read(){
 }
 async function preserved(){
  const r=await read(),jobs={};
- for(const[n,p,s]of[['ai',ai,'sim_clean'],['driver',driver,'sim_clean'],['main',main,'sim_user_data'],['history',ai,'sim_user_history']])for(const t of ['account','job','resource'])jobs[n+'.'+t]=await table(p,s+'.'+t);
- const finance={ai:await table(ai,'sim_clean.cost_daily'),driver:await table(driver,'sim_clean.cost_daily')};
+ for(const[n,p,s]of[['ai',ai,'sim_clean'],['driver',driver,'sim_clean'],['main',main,'sim_user_data'],['history',ai,'sim_user_history']]){
+  const names=(await p.query('SELECT tablename FROM pg_tables WHERE schemaname=$1 ORDER BY tablename',[s])).rows.map(x=>x.tablename);assert.ok(names.includes('account')&&names.includes('job'));
+  for(const t of names)jobs[n+'.'+t]=await table(p,s+'.'+t);
+ }
+ const finance={};for(const[n,p]of[['ai',ai],['driver',driver]]){const exists=(await p.query("SELECT to_regclass('sim_clean.cost_daily') IS NOT NULL present")).rows[0].present;finance[n]=exists?await table(p,'sim_clean.cost_daily'):null;}
  const tables=(await ai.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND (tablename LIKE 'ai_router_%' OR tablename LIKE 'sim_ai_%') ORDER BY tablename")).rows;
  for(const t of tables)finance[t.tablename]=await table(ai,'public.'+t.tablename);
  const g={};for(const t of (await guard.query("SELECT tablename FROM pg_tables WHERE schemaname='sim_erasure_guard_v2' ORDER BY tablename")).rows)g[t.tablename]=await table(guard,'sim_erasure_guard_v2.'+t.tablename);

@@ -39,6 +39,14 @@ export class BudgetStore {
     this.pool.on("error", () => {
       console.error(JSON.stringify({ event: "ai_router_database_idle_connection_error" }));
     });
+    // A checked-out client no longer has pg-pool's idle error listener.
+    // Continuity leases may hold it between queries; a socket loss must not
+    // terminate the process. pg still rejects outstanding/subsequent queries.
+    this.pool.on("connect", (client) => {
+      client.on("error", () => {
+        console.error(JSON.stringify({ event: "ai_router_database_client_connection_error" }));
+      });
+    });
   }
 
   async init(): Promise<void> {
