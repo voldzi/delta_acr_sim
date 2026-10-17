@@ -28,7 +28,7 @@ const listen = (app, port) =>
  * This factory checks ownership, actual server identity and all TLS outcomes.
  * No host files or DNS are edited here. Runtime source is not patched. */
 export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeRoot }) {
-  const serviceRoot=service=>typeof runtimeRoot==='string'?runtimeRoot:runtimeRoot[service];
+  const serviceRoot = (service) => (typeof runtimeRoot === "string" ? runtimeRoot : runtimeRoot[service]);
   assert.match(root, /^\/private\/tmp\/sim-user-install-pg-[A-Za-z0-9_-]+$/);
   assert.equal(await realpath(root), root);
   const st = await lstat(root);
@@ -38,7 +38,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
   const ca = await readFile(join(root, "tls/ca.pem"), "utf8"),
     wrongCa = await readFile(join(root, "tls/wrong-ca.pem"), "utf8");
   assert.equal(await readFile("/etc/csm-sim/postgresql-ca.pem", "utf8"), ca, "FIXTURE_CA_MOUNT_MISMATCH");
-  const { Pool } = createRequire(join(serviceRoot('ai-router-api'), "apps/ai-router-api/package.json"))("pg");
+  const { Pool } = createRequire(join(serviceRoot("ai-router-api"), "apps/ai-router-api/package.json"))("pg");
   const conn = (database) => ({ host: join(root, "s"), port: 5000, database, user: "fixture_admin" });
   const pools = [];
   const pool = (cfg) => {
@@ -100,7 +100,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
     assert.equal(phase, "fresh");
     validateCompanionActors(A, B, issuer, jwksOrigin);
     const initial = (a) => ({ subjectId: a.subjectId, oidcIat: a.oidcIat, routerUserId: "cop_" + secret(), contributorIdDay: secret() });
-    input = makeCleanWholeAppInput(makeCleanWholeInput({ actors: { a: initial(A), b: initial(B) } }));
+    input = makeCleanWholeAppInput(makeCleanWholeInput({ actors: { a: initial(A), b: initial(B) }, tokensNotBefore: Math.min(A.oidcIat, B.oidcIat) - 1 }));
     const day = new Date().toISOString().slice(0, 10),
       derivationEnv = input.base.environment;
     for (const a of Object.values(input.base.actors)) {
@@ -291,7 +291,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
       e = b.environment;
     if (lane === "ai") {
       assert.ok(!ai);
-      const express = createRequire(join(serviceRoot('ai-router-api'), "apps/ai-router-api/package.json"))("express");
+      const express = createRequire(join(serviceRoot("ai-router-api"), "apps/ai-router-api/package.json"))("express");
       const m = express();
       m.use(express.json());
       m.post("/api/generate", (_q, r) =>
@@ -377,7 +377,7 @@ export async function createTlsProductionSimFixture({ root, sourceRoot, runtimeR
       const config = {
         port: 4314,
         dataDir,
-        schemaDir: join(serviceRoot('simulator-api'), "docs/api/schemas"),
+        schemaDir: join(serviceRoot("simulator-api"), "docs/api/schemas"),
         publisherMode: "DRY_RUN",
         sourceSystemId: "sim-tls-fixture",
         adapterVersion: "synthetic-tls",
