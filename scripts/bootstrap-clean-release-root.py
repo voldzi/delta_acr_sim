@@ -115,6 +115,31 @@ def freeze(root):
    p=Path(folder)/name
    if not p.is_symlink():p.chmod(0o555)
  root.chmod(0o555)
+def prepare_staging_parent():
+ """Explicitly approved nonrecursive transition of one held directory only."""
+ parent=TARGET.parent
+ need(parent==Path('/srv/x5-production/staging/cop') and parent.resolve()==parent,'ROOT_STAGING_PARENT_PATH')
+ need(command(['/usr/bin/findmnt','-n','-o','UUID','--mountpoint','/srv/x5-production']).decode().strip()==UUID,'ROOT_STAGING_PARENT_UUID')
+ fd=os.open(parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+ def inventory():
+  result={}
+  for name in sorted(os.listdir(fd)):
+   s=os.stat(name,dir_fd=fd,follow_symlinks=False)
+   result[name]=(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+  return result
+ try:
+  s=os.fstat(fd);need(s.st_dev==Path('/srv/x5-production').stat().st_dev and s.st_dev!=Path('/').stat().st_dev,'ROOT_STAGING_PARENT_DEVICE')
+  need(stat.S_ISDIR(s.st_mode) and (s.st_uid,s.st_gid,stat.S_IMODE(s.st_mode))in[(1000,1000,0o700),(0,0,0o755)],'ROOT_STAGING_PARENT_CUSTODY')
+  before=inventory();need(TARGET.name not in before,'ROOT_STAGING_TRUSTED_TARGET_OCCUPIED')
+  current=parent.lstat();need((current.st_dev,current.st_ino,current.st_mode,current.st_uid,current.st_gid,current.st_ctime_ns)==(s.st_dev,s.st_ino,s.st_mode,s.st_uid,s.st_gid,s.st_ctime_ns),'ROOT_STAGING_PARENT_CAS')
+  need(inventory()==before,'ROOT_STAGING_CHILD_INVENTORY_CHANGED')
+  if s.st_uid==1000:os.fchown(fd,0,0);os.fchmod(fd,0o755);os.fsync(fd)
+  after=os.fstat(fd);current=parent.lstat()
+  need((after.st_dev,after.st_ino)==(current.st_dev,current.st_ino)==(s.st_dev,s.st_ino)and(after.st_uid,after.st_gid,stat.S_IMODE(after.st_mode))==(0,0,0o755),'ROOT_STAGING_PARENT_POST_CAS')
+  need(inventory()==before,'ROOT_STAGING_CHILD_INVENTORY_CHANGED')
+  need(command(['/usr/bin/findmnt','-n','-o','UUID','--mountpoint','/srv/x5-production']).decode().strip()==UUID,'ROOT_STAGING_PARENT_UUID_CHANGED')
+  return {'rootParentPrepared':True,'childrenUnchanged':True,'recursiveOwnershipChange':False}
+ finally:os.close(fd)
 def bootstrap_clean_release(manifest_path,expected_sha):
  """Re-export immutable images, never adopt an existing UID1000 runtime."""
  context();check_transports()
@@ -129,6 +154,7 @@ def bootstrap_clean_release(manifest_path,expected_sha):
   b=public_bytes(Path(manifest_path).parent/item['file'],512*1024**2)
   need(sha(b)==item['sha256'],'ROOT_RELEASE_ARCHIVE_SHA');verified[lane]=b
  need(not TARGET.exists() and not TARGET.is_symlink(),'ROOT_TRUSTED_RUNTIME_TARGET_OCCUPIED_DO_NOT_ADOPT')
+ prepare_staging_parent()
  need(TARGET.parent.resolve()==TARGET.parent and TARGET.parent.stat().st_uid==0 and not TARGET.parent.stat().st_mode&0o022,'ROOT_BOOTSTRAP_PARENT')
  stage=Path(tempfile.mkdtemp(prefix='.clean-root-new-',dir=TARGET.parent));containers=[]
  try:

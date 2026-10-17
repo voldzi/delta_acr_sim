@@ -48,3 +48,20 @@ leave disabled state and retained fences/journals intact. Do not restart writers
 automatically after partial reset or invent positive provider receipts. Failed
 Root-owned public staging is retained for review. No real account is deleted for
 acceptance testing.
+
+## Explicit final activation and staging custody
+
+The later explicit `--complete-release` mode adds the concrete guarded activation
+chain documented in integration24; preparation-only and disabled-reset modes
+retain their earlier boundaries. No execution is inferred from source tests.
+
+The human separately approved changing only the directory
+`/srv/x5-production/staging/cop` from UID/GID1000 mode0700 to Root:Root0755,
+nonrecursively. This permits local listing of staging names; child permissions
+and contents remain unchanged. Bootstrap performs this only after transport and
+public archive verification, with exact X5 UUID/device, canonical no-symlink
+path, held O_DIRECTORY/O_NOFOLLOW fd, absent trusted target and unchanged child
+inventory/CAS. It uses fchown/fchmod on that single fd, never a recursive path
+operation. Unknown custody, symlink, occupied target or drift refuses. Actual
+Root execution remains operator-supervised and the temporary key lifetime ends
+in the outer finally.
