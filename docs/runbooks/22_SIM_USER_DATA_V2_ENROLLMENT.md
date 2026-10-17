@@ -340,6 +340,66 @@ test root is regenerated (existing tls directory still refuses EEXIST), and the
 running namespace's d56ffc test CA and archived evidence remain unchanged. This
 does not change production TLS or claim a new PostgreSQL acceptance run.
 
+## Read-only whole12 SIM harness adapter (public source only)
+
+`scripts/fixtures/whole12-sim-readback-adapter.mjs` exports
+`createWhole12SimReadbackAdapter(privateFile)`. Run it only in Root's planned
+isolated harness network namespace, where existing loopback ports4321/4322/4324
+are reachable. The default private file is
+`/dev/shm/cop-clean-whole/sim-private.json`; custody requires owned, single-link
+mode0600 in private tmpfs/temporary storage. No secrets in argv, Docker env,
+logs or Git. The adapter creates no endpoint, process, namespace or service.
+
+```javascript
+const adapter = await createWhole12SimReadbackAdapter(privateFile);
+const seed = await adapter.seed();       // GET-only baseline capture, no writes
+// Root's actual shared harness performs its separately authorized A deletion.
+const current = await adapter.readback();
+const checked = await adapter.check(seed);
+```
+
+`seed()` does NOT seed applications. It requires actual already-seeded active
+A/B content for sim_measurements, ai_router and sim_user_data, all four main
+files and used SIM Router history. Root records that exact returned baseline
+before deletion; do not fabricate/relabel it. `readback()` uses only GET on the
+three fixed authenticated `/readback` endpoints, with timeout, no redirects,
+no-store and128KiB limit. It checks shared epoch, separate and combined results,
+nonnegative counts and fingerprints, and refuses inconsistent snapshots so the
+harness can retry rather than accepting partial/mixed deletion state.
+
+Output owners contain actual source countsA/countsB, removableA/removableB,
+stateA/stateB and preservedBFingerprint. sim_user_data reports main app-file
+count separately from SIM history request/billing counts and combines the two
+actual B fingerprints. App/audit are one observed file scope here, not invented
+independent row counts. A completion requires zero content and deleted states
+for both main and history, as well as the other two owners. B preservation
+requires unchanged counts/state/fingerprint for all three. Network/provider
+errors are errors, not zero counts. Old baseline contracts and `simPreserved`
+are rejected; historical nested component labels are explicitly identified,
+never relabeled as a new user-data completion.
+
+`check(seed)` returns pending/completed/failed for these three component scopes,
+always wholeAccountComplete:false and Root/wire identity proof:false. Root still
+owns the full twelve-provider proof, operation identity, canary and acceptance.
+The adapter binds private issuer/subjects, identity fingerprints, source/epoch
+and opaque Router ID derivation without returning raw identities or secrets;
+changes to the private file during use refuse.
+
+Source identity audit: main verifies the COP service actor's configured issuer,
+UUID subject and epoch, derives canonicalOwnerKey from issuer+subject, then
+forwards that same persisted owner key plus source epoch, original oidcIat and
+operation to Router history through signSimOwner. Raw issuer/sub are deliberately
+not sent to history; the HMAC owner key represents the same identity. The fixed
+situation relay forwards the original four auth/content headers and body, not a
+new principal. The running TLS fixture uses direct main4314 and does not enable
+that situation relay, so no on-wire relay A-delete proof is claimed. No A delete
+or token refresh was performed for this source audit or adapter work.
+
+`node scripts/test-whole12-sim-readback-adapter.mjs --run` uses local synthetic
+HTTP servers, not the running namespace:16 checks cover baseline capture,
+three-owner completion boundaries, B mutation, missing/expired-style source503,
+no-store/size/epoch/mixed snapshots, old simPreserved and private-file changes.
+
 ## Root activation module after whole12 acceptance (source only)
 
 This is the concrete handoff for COP's single human-run Root operator. It is
