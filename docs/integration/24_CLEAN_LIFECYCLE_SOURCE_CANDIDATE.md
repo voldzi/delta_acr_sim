@@ -599,3 +599,27 @@ A remained absent and B matched the private pre-deletion receipt. All68 Router
 synthetic tests passed. This closes the completed-operation outage finding for
 the new image only; it does not prove pending-deletion behavior, fresh956 content
 restore, whole COP acceptance or production activation.
+
+### Messaging baseline Root phase adapter (not a schema installer)
+
+`scripts/lib/messaging-usage-root-phase.py` implements the actual
+`PreparedEnrollment` commit under the same concrete `RootResetAdmission`.
+`run_messaging_usage_phase(root_module, admission, reviewed_install, connections,
+root_base64)` accepts existing administrator connections in guard, metadata,
+native order and the existing private owner-key material in RAM. It verifies the
+sealed Messaging module pin, a separate `messaging_install` reviewed digest,
+production issuer, initial empty lineage and the Root writer-inventory digest.
+The real constructor reads actual installed catalogs/bindings and inventories;
+its prepared nonce is bound to the exact private commit packet. Fresh actual
+Root custody checks surround prepare/commit; initial knownOwners/unresolved must
+both be zero. The component's `writerClosureVerified=false` remains unchanged;
+host verification is reported separately. Seven synthetic adapter tests pass.
+
+This source adapter does not execute SQL migrations, create roles or install
+bindings. COP must add a separate reviewed install manifest and register a
+twelfth digest/phase in its Root validator/controller before it can be called.
+The schema/binding installer must precede it under held custody. Runtime-disabled
+restart and actual native/metadata/guard capabilities are subsequent explicit
+gates; no existing frozen-writer assertion may silently be relaxed to allow a
+restart. Guard connection failure is an error, never evidence of absent schema.
+No fixture baseline or real account deletion is performed by this source change.
