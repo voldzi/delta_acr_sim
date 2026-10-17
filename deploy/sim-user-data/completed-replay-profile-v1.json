@@ -1,0 +1,12 @@
+{
+  "contractVersion": "sim-completed-content-replay-profile-v1",
+  "mode": "same-epoch-completed-content-replay-v1",
+  "pins": {
+    "deploy/clean-lifecycle/009_completed_content_replay.sql": "39b4c81d4ada8bb5d1638e459cf7500e930df7164f0e71b364fc92cd5ba46e2f",
+    "deploy/sim-user-data/006_completed_content_replay.sql": "24c553ef0594c27e44087162cbebdf633dfab0d0e3e501a7ab7f6c722e674f9a"
+  },
+  "aiPostCatalogDigest": "4c96c9f45c423c58d5ff128d7cb2726cc27f916266f8be6725d2e6c61cc94955",
+  "aiUserDataCatalogDigest": "6213d4c37b7d89cfef4be5d4d9ab946907c1f6986cf0c8fee5b303f3111db509",
+  "baseManifestSha256": "9f71d113ba47a7880fca6a7df76f7fefbca401c1791acb57f86969c1fdaed76e",
+  "productionWrites": 0
+}

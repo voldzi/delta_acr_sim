@@ -13,6 +13,8 @@ import {
 import { userDataCatalog, inspectUserDataProfile } from "./sim-user-data-profile.mjs";
 import { runtimeIdentityFingerprint } from "../../packages/sim-user-data/bootstrap.mjs";
 import { createSimUserDataAuthority } from "../../packages/sim-user-data/authority.mjs";
+import { completedReplayEnabled } from "../../packages/clean-lifecycle/completed-replay.mjs";
+import { verifiedCompletedReplayProfile, installCompletedReplay, inspectCompletedReplayProfile, COMPLETED_REPLAY_PROFILE_SHA } from "./completed-replay-install.mjs";
 const roles = ["sim_user_data_migrator", "sim_user_data_runtime", "sim_user_data_guard_runtime", "sim_user_history_guard_runtime"];
 const fields = [
   "guard_store_id",
@@ -55,6 +57,7 @@ export function privateSimRuntimeConfiguration(config, simRouterServiceToken) {
     "@haproxy.home.cz:5000/" +
     database +
     "?sslmode=verify-full&sslrootcert=%2Fetc%2Fcsm-sim%2Fpostgresql-ca.pem";
+  const replayMode = completedReplayEnabled(config.completedReplayMode) ? config.completedReplayMode : "disabled";
   const common = {
     SIM_USER_DATA_ENVIRONMENT_ID: config.bindings.sim_user_data.environment_id,
     SIM_USER_DATA_RESET_EPOCH: config.resetEpoch,
@@ -66,6 +69,7 @@ export function privateSimRuntimeConfiguration(config, simRouterServiceToken) {
       "sim-api": {
         ...common,
         SIM_USER_DATA_ENABLED: "false",
+        SIM_USER_DATA_COMPLETED_REPLAY_MODE: replayMode,
         SIM_USER_DATA_MODE: "production-sim-user-data-v1",
         SIM_USER_DATA_DATABASE_URL: uri("sim_user_data", "sim_user_data_runtime", config.credentials.sim_user_data_runtime),
         SIM_USER_DATA_ROOT: "/data/sim-user-data-v1",
@@ -79,6 +83,8 @@ export function privateSimRuntimeConfiguration(config, simRouterServiceToken) {
       "ai-router-api": {
         ...common,
         SIM_USER_HISTORY_ENABLED: "false",
+        SIM_USER_HISTORY_COMPLETED_REPLAY_MODE: replayMode,
+        SIM_CLEAN_COMPLETED_REPLAY_MODE: replayMode,
         SIM_USER_HISTORY_MODE: "production-sim-user-data-v1",
         SIM_USER_HISTORY_GUARD_DATABASE_URL: uri(
           "cop_account_safety_guard",
@@ -87,7 +93,7 @@ export function privateSimRuntimeConfiguration(config, simRouterServiceToken) {
         ),
         SIM_USER_HISTORY_CONTINUITY_BINDING: JSON.stringify(config.bindings.sim_user_history)
       },
-      "situation-data-api": { SIM_USER_DATA_RELAY_ENABLED: "false" }
+      "situation-data-api": { SIM_USER_DATA_RELAY_ENABLED: "false", SIM_CLEAN_COMPLETED_REPLAY_MODE: replayMode }
     },
     readonlyCaMount: {
       source: "/etc/vcode-cop-pgbouncer/postgres-ca.crt",
@@ -138,6 +144,7 @@ export async function runSimUserInstall(config, { Pool, rootGate, assertWritersS
   );
   const texts = await verifiedUserMigrations(config.manifest),
     pools = [];
+  const replay = await verifiedCompletedReplayProfile(config.completedReplayMode);
   function pool(connection) {
     need(connection && !["connectionString", "options", "passfile"].some((k) => Object.hasOwn(connection, k)));
     if (!isolated)
@@ -192,13 +199,14 @@ export async function runSimUserInstall(config, { Pool, rootGate, assertWritersS
       credentialDigests: Object.fromEntries(roles.map((r) => [r, sha(config.credentials[r])])),
       facts: f
     };
+    if (replay) value.completedReplayProfileSha256 = COMPLETED_REPLAY_PROFILE_SHA;
     return { ...value, planDigest: sha(value), wholeAccountComplete: false };
   }
-  async function readback() {
+  async function readback(withReplay = !!replay) {
     const app = pool({ ...config.connections.admin, database: "sim_user_data" });
     const appCat = await client(app, "sim_user_data_migrator", (c) => userDataCatalog(c, "sim_user_data"));
     need(appCat.digest === config.manifest.appUserDataCatalogDigest, "SIM_USER_INSTALL_APP_PROFILE");
-    const history = await client(ai, "ai_router_migrator", (c) => inspectUserDataProfile(c, config.manifest));
+    const history = await client(ai, "ai_router_migrator", (c) => withReplay ? inspectCompletedReplayProfile(c, replay) : inspectUserDataProfile(c, config.manifest));
     need(history.state === "known-new-unused", "SIM_USER_INSTALL_HISTORY_NOT_EMPTY");
     const copRemaining = Number(
       (
@@ -215,6 +223,7 @@ export async function runSimUserInstall(config, { Pool, rootGate, assertWritersS
       components: {},
       wholeAccountComplete: false
     };
+    if (withReplay) result.completedReplayProfileSha256 = COMPLETED_REPLAY_PROFILE_SHA;
     for (const component of ["sim_user_data", "sim_user_history"]) {
       const database = component === "sim_user_data" ? "sim_user_data" : "sim_ai_router",
         runtime = component === "sim_user_data" ? "sim_user_data_runtime" : "ai_router_runtime";
@@ -359,7 +368,11 @@ export async function runSimUserInstall(config, { Pool, rootGate, assertWritersS
           );
         });
       }
-      const result = await readback();
+      let result = await readback(false);
+      if (replay) {
+        await client(ai, "ai_router_migrator", (c) => installCompletedReplay({ client: c, mode: config.completedReplayMode, baseManifest: config.manifest, rootGate: borrowed, assertWritersStopped, resetEpoch: config.resetEpoch }));
+        result = await readback(true);
+      }
       await assertWritersStopped();
       await admission.assertCurrent();
       assertOpen();

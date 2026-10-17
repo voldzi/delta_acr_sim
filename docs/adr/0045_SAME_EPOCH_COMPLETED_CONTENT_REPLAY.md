@@ -45,6 +45,11 @@ Deployment requires new immutable runtime image pins, reviewed additive SQL,
 explicit worker-mode configuration and a coordinated stopped-writer restore test.
 Do not mutate the running whole12 A operation or its private identity to install
 this candidate. Old manifests and authority source hashes are left untouched.
+The additive profile has its own immutable SHA and full post-install catalog
+digests. Fresh private-install uses the existing Root admission and plan, never
+a nested RPC or a new authority. Its readback phase is read-only. Disabled runtime
+staging passes the three explicit mode values to actual Compose services while
+leaving all enable switches off; absence preserves default-off behavior.
 Rollback: disable this worker mode, retain fences/journals and quarantine residual
 restored content. Do not restore deleted user data or claim the old image can
 complete replay; residuals must continue returning 503.

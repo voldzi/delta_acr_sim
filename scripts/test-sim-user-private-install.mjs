@@ -4,14 +4,16 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, chmod, readFile, writeFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { catalog } from "./lib/clean-reset-ops.mjs";
+import { userDataCatalog } from "./lib/sim-user-data-profile.mjs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runSimUserInstall, privateSimRuntimeConfiguration } from "./lib/sim-user-data-private-install.mjs";
 import { runtimeIdentityFingerprint } from "../packages/sim-user-data/bootstrap.mjs";
 import { transitionOwnedFixture, sourceMigrations, readResetManifest } from "./lib/clean-reset-ops.mjs";
 assert.equal(process.argv.length, 3);
-assert.equal(process.argv[2], "--run");
+assert.ok(["--run", "--run-completed-replay", "--compile-completed-profile"].includes(process.argv[2]));
 const source = resolve(dirname(fileURLToPath(import.meta.url)), ".."),
   bin = "/opt/homebrew/opt/postgresql@18/bin",
   exec = promisify(execFile);
@@ -118,6 +120,7 @@ try {
     identities,
     bindings
   };
+  if (process.argv[2] === "--run-completed-replay") config.completedReplayMode = "same-epoch-completed-content-replay-v1";
   let begins = 0,
     stops = 0,
     expectedPlan;
@@ -136,6 +139,11 @@ try {
   };
   const plan = await runSimUserInstall(config, { Pool, rootGate, assertWritersStopped });
   const staged = privateSimRuntimeConfiguration(config, secret());
+  if (config.completedReplayMode) {
+    check(staged.environment["sim-api"].SIM_USER_DATA_COMPLETED_REPLAY_MODE === config.completedReplayMode, "main actual staging mode");
+    check(staged.environment["ai-router-api"].SIM_USER_HISTORY_COMPLETED_REPLAY_MODE === config.completedReplayMode, "history actual staging mode");
+    check(staged.environment["ai-router-api"].SIM_CLEAN_COMPLETED_REPLAY_MODE === config.completedReplayMode && staged.environment["situation-data-api"].SIM_CLEAN_COMPLETED_REPLAY_MODE === config.completedReplayMode, "base lane staging modes");
+  }
   check(
     staged.environment["sim-api"].SIM_USER_DATA_ENABLED === "false" &&
       staged.environment["ai-router-api"].SIM_USER_HISTORY_ENABLED === "false" &&
@@ -165,6 +173,7 @@ try {
     "both real limited-role authorities ready"
   );
   check(result.wholeAccountComplete === false, "installer not whole-account acceptance");
+  if (config.completedReplayMode) check(result.completedReplayProfileSha256 === "51d197e30097efc07798a692de1939d46aee3a203ab446d1e67ff901cc2e7352", "actual bounded apply verifies separate full new catalog profile");
   check(!Object.values(credentials).some((x) => JSON.stringify(result).includes(x)), "no credential in result");
   check(Number((await ai.query("SELECT count(*) n FROM public.ai_router_request WHERE client_id='sim'")).rows[0].n) === 0, "legacy SIM rows removed");
   check(Number((await ai.query("SELECT sum(microusd) n FROM sim_user_history.cost_daily")).rows[0].n) === 7, "anonymous financial sum preserved");
@@ -178,21 +187,45 @@ try {
   }
   const fresh = await runSimUserInstall({ ...config, phase: "readback", reviewedPlan: plan }, { Pool, rootGate, assertWritersStopped });
   check(fresh.components.sim_user_history.unused, "separate fresh full readback");
+  if (config.completedReplayMode) {
+    const c = await ai.connect();
+    try {
+      await c.query("SET ROLE ai_router_migrator");
+      await c.query("CREATE POLICY unreviewed_completed_policy ON public.ai_router_request FOR DELETE TO ai_router_runtime USING(true)");
+      await assert.rejects(() => runSimUserInstall({ ...config, phase: "readback", reviewedPlan: plan }, { Pool, rootGate, assertWritersStopped }), /UNKNOWN_CATALOG/); checks++;
+      await c.query("DROP POLICY unreviewed_completed_policy ON public.ai_router_request");
+    } finally { c.release(); }
+  }
   await assert.rejects(() => runSimUserInstall({ ...config, phase: "apply", reviewedPlan: plan }, { Pool, rootGate, assertWritersStopped }));
   check(true, "second apply cannot replace new epoch/objects");
   const log = await readFile(join(root, "pg.log"), "utf8");
   check(!Object.values(credentials).some((x) => log.includes(x)), "actual PostgreSQL log contains no generated password");
+  if (process.argv[2] === "--compile-completed-profile") {
+    const migrationPaths = ["deploy/clean-lifecycle/009_completed_content_replay.sql", "deploy/sim-user-data/006_completed_content_replay.sql"];
+    const pins = {}, c = await ai.connect();
+    try {
+      await c.query("SET ROLE ai_router_migrator");
+      for (const path of migrationPaths) {
+        const bytes = await readFile(join(source, path));
+        pins[path] = createHash("sha256").update(bytes).digest("hex");
+        await c.query(bytes.toString("utf8"));
+      }
+      console.log(JSON.stringify({ contractVersion: "sim-completed-content-replay-profile-v1", mode: "same-epoch-completed-content-replay-v1", pins, aiPostCatalogDigest: (await catalog(c, "ai")).digest, aiUserDataCatalogDigest: (await userDataCatalog(c, "sim_user_history")).digest, baseManifestSha256: "9f71d113ba47a7880fca6a7df76f7fefbca401c1791acb57f86969c1fdaed76e", productionWrites: 0 }));
+    } finally { c.release(); }
+  } else {
   console.log(
     JSON.stringify({
       contractVersion: "sim-user-private-install-v1",
       checks,
       actualPostgres: true,
       actualScramLogin: true,
+      completedReplayMode: config.completedReplayMode ?? "disabled",
       realRootAdmission: false,
       productionWrites: 0,
       wholeAccountComplete: false
     })
   );
+  }
   passed = true;
 } finally {
   await ai?.end();

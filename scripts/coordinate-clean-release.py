@@ -113,11 +113,16 @@ def disabled_runtime(config, current):
            'SIM_USER_HISTORY_GUARD_DATABASE_URL': uri('cop_account_safety_guard', 'sim_user_history_guard_runtime'),
            'SIM_USER_DATA_CONTINUITY_BINDING': json.dumps(s['bindings']['sim_user_data'], separators=(',', ':')),
            'SIM_USER_HISTORY_CONTINUITY_BINDING': json.dumps(s['bindings']['sim_user_history'], separators=(',', ':'))}
+    replay = s.get('completedReplayMode', 'disabled')
+    need(replay in {'disabled', 'same-epoch-completed-content-replay-v1'}, 'COMMON_COMPLETED_REPLAY_MODE')
+    env.update({key: replay for key in ['SIM_CLEAN_COMPLETED_REPLAY_MODE', 'SIM_USER_DATA_COMPLETED_REPLAY_MODE', 'SIM_USER_HISTORY_COMPLETED_REPLAY_MODE']})
     service = {'sim-api': {k: k for k in env if k.startswith('SIM_USER_DATA_') or k == 'SIM_AI_ROUTER_SIM_TOKEN'},
                'ai-router-api': {k: k for k in env if k.startswith('SIM_USER_HISTORY_') or k in {
                    'SIM_USER_DATA_ENVIRONMENT_ID', 'SIM_USER_DATA_RESET_EPOCH', 'SIM_USER_DATA_TOKENS_NOT_BEFORE', 'SIM_USER_DATA_ROUTER_ACTOR_SECRET'}},
                'situation-data-api': {'SIM_USER_DATA_RELAY_ENABLED': 'SIM_USER_DATA_RELAY_ENABLED'}, 'sim-web': {}}
     service['sim-api'].pop('SIM_USER_DATA_RELAY_ENABLED')
+    service['ai-router-api']['SIM_CLEAN_COMPLETED_REPLAY_MODE'] = 'SIM_CLEAN_COMPLETED_REPLAY_MODE'
+    service['situation-data-api']['SIM_CLEAN_COMPLETED_REPLAY_MODE'] = 'SIM_CLEAN_COMPLETED_REPLAY_MODE'
     for lane, target in [('ai', 'ai-router-api'), ('driver', 'situation-data-api')]:
         e = config['enrollments'][lane]
         need(e['resetEpoch'] == s['resetEpoch'] and e['tokensNotBefore'] == s['tokensNotBefore'], 'COMMON_BASE_CLEAN_EPOCH')

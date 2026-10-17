@@ -26,6 +26,20 @@ def inputs():
     return config,raw
 
 class Configuration(unittest.TestCase):
+    def test_completed_replay_default_off_and_exact_opt_in(self):
+        config,raw=inputs();env,services=m.disabled_runtime(config,raw)
+        keys=['SIM_CLEAN_COMPLETED_REPLAY_MODE','SIM_USER_DATA_COMPLETED_REPLAY_MODE','SIM_USER_HISTORY_COMPLETED_REPLAY_MODE']
+        self.assertTrue(all(env[k]=='disabled' for k in keys))
+        config['simUserInstall']['completedReplayMode']='same-epoch-completed-content-replay-v1'
+        env,services=m.disabled_runtime(config,raw)
+        self.assertTrue(all(env[k]=='same-epoch-completed-content-replay-v1' for k in keys))
+        self.assertIn('SIM_USER_DATA_COMPLETED_REPLAY_MODE',services['sim-api'])
+        self.assertIn('SIM_USER_HISTORY_COMPLETED_REPLAY_MODE',services['ai-router-api'])
+        self.assertIn('SIM_CLEAN_COMPLETED_REPLAY_MODE',services['ai-router-api'])
+        self.assertIn('SIM_CLEAN_COMPLETED_REPLAY_MODE',services['situation-data-api'])
+        self.assertEqual(env['SIM_USER_DATA_ENABLED'],'false')
+        config['simUserInstall']['completedReplayMode']='true'
+        with self.assertRaisesRegex(RuntimeError,'COMPLETED_REPLAY_MODE'):m.disabled_runtime(config,raw)
     def test_separate_lane_ids_and_false_flags(self):
         config,raw=inputs();env,services=m.disabled_runtime(config,raw)
         self.assertNotEqual(env['SIM_CLEAN_AI_USER_DATASET_ID'],env['SIM_CLEAN_DRIVER_USER_DATASET_ID'])

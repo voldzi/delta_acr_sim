@@ -412,3 +412,24 @@ additional policies instead of silently treating the old catalog pin as current.
 
 Rollback leaves the immutable guard and jobs intact. Disable the three replay
 modes and quarantine restored content; do not roll user data back into service.
+
+The bounded installer and disabled staging now implement this path, not just
+the tests. Set only the new fresh-install private field
+`simUserInstall.completedReplayMode` to the exact replay mode. Absence selects
+disabled. The existing plan then includes the separate profile SHA
+`51d197e30097efc07798a692de1939d46aee3a203ab446d1e67ff901cc2e7352`.
+Under its already-held Root admission, private-install verifies the original
+catalog, installs the two SHA-pinned additive SQL files in one transaction, and
+verifies the new complete AI/history catalog against
+`deploy/sim-user-data/completed-replay-profile-v1.json`. Original manifests are
+not rewritten or treated as matching the new catalog. The readback phase remains
+read-only, and a used account/job namespace is refused by this fresh installer.
+It cannot be used to mutate the accepted running whole12 A operation.
+
+`disabled_runtime`/`stage_sim_configuration` and private runtime output explicitly
+map all three replay modes into their actual services while leaving intake,
+legacy erasure and global activation flags disabled. Eleven pure configuration
+tests and 26 actual isolated PG/SCRAM installer checks passed, including rejection
+of an unreviewed extra DELETE policy. Root source sealing must include the new
+helper, profile and SQL bytes before execution. These tests do not grant real
+Root admission or authorize a live install.
