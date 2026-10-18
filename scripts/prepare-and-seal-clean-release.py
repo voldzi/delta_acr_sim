@@ -29,6 +29,8 @@ TRANSITION_COP_ARCHIVE='cop-d089c91-public.tar'
 TRANSITION_COP_ARCHIVE_SHA='00d360515b64ae6ab46be82bb1329bc28c93b53fe84e68529e7e8e1401de1170'
 TRANSITION_ACCEPTANCE_MEMBER='scripts/account-safety/clean-release-acceptance.py'
 TRANSITION_ACCEPTANCE_SHA='d9a7bb767742a7e93e139a1ae8ad81d65d30f8722323eb1c0c98477014517ca4'
+COP_RUNTIME_SOURCE_SHA='ef033dbeb103ba630f4613f90922198b71be72b93ad878ae707de5342364f6c9'
+COMMON_FAILURE_CODES=frozenset(['COMMON_BASE_CLEAN_EPOCH','COMMON_CA_MISSING','COMMON_CLOSURE_MISSING','COMMON_CLOSURE_PREFLIGHT_MISSING','COMMON_COMPLETED_REPLAY_MODE','COMMON_CONFIG_EPOCH','COMMON_DEPLOY_GUARD_CHANGED','COMMON_DEPLOY_GUARD_CONFIGURATION','COMMON_DEPLOY_GUARD_CUSTODY','COMMON_DEPLOY_GUARD_PRESERVATION','COMMON_DEPLOY_GUARD_SOURCE','COMMON_DEPLOY_GUARD_UNKNOWN','COMMON_ENV_CHANGED','COMMON_ENV_CUSTODY','COMMON_ENV_DUPLICATE','COMMON_ENV_PARENT','COMMON_ENV_VALUE','COMMON_EXISTING_IDENTITY_MISSING','COMMON_ISSUER_CHANGED','COMMON_MESSAGING_INSTALL_MISSING','COMMON_NEW_SECRET_FORMAT','COMMON_OUTPUT_CHANGED','COMMON_OUTPUT_EXISTS','COMMON_OUTPUT_PATH','COMMON_OUTPUT_READBACK','COMMON_PLAN_CHANGED','COMMON_ROOT_REQUIRED','COMMON_ROUTER_HASH_CHANGED','COMMON_SIM_RUNTIME_MODE','COMMON_SIM_SOURCE_HASH','COMMON_SIM_SOURCE_NOT_ENROLLED','COMMON_SOURCE_CHANGED','COMMON_SOURCE_CUSTODY','COMMON_SOURCE_HASH','COMMON_SOURCE_NOT_ENROLLED','COMMON_SOURCE_PATH','COMMON_WHOLE_PROOF_CHANGED'])
 RETIREMENT_PROBE_SHA='7940e142da215f3d28c413dd59344da2210220972d923d247c69e69709947a5b'
 KEYCLOAK_PREPARATION_SHA='48db373f5d8cff560ae9365dd8f4ea569677342dc31ca2cc917e463394d5e045'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
@@ -263,8 +265,31 @@ def safe_failure_code(error):
  if isinstance(error,NameError) and isinstance(error.name,str) and re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}',error.name):return 'UNDEFINED_NAME_'+error.name
  # Never print arbitrary exception text, filenames, stderr or private payloads.
  if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and re.fullmatch(r'(?:ROOT|RELEASE|RESET|CLEAN|SIM|MESSAGING|RETIREMENT)_[A-Z0-9_]{1,90}',error.args[0]):return error.args[0]
+ if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and error.args[0]in COMMON_FAILURE_CODES:return error.args[0]
+ # The pinned COP runtime defines its own RuntimeError class. Recognize that
+ # exact loaded class through its require frame, not a class-name/prefix match.
+ # Only literals from the exact verified public source may reach the output.
+ try:
+  path=TARGET/'app/scripts/cop-api-runtime.py'
+  frame=error.__traceback__
+  while frame is not None:
+   f=frame.tb_frame
+   if(f.f_code.co_name=='require'and f.f_code.co_filename==str(path)
+      and f.f_globals.get('__file__')==str(path)and type(error)is f.f_globals.get('RuntimeError')):
+    raw=root_read(path);need(sha(raw)==COP_RUNTIME_SOURCE_SHA,'RELEASE_RUNTIME_DIAGNOSTIC_SOURCE')
+    ast=__import__('ast');tree=ast.parse(raw)
+    codes={n.args[-1].value for n in ast.walk(tree)if isinstance(n,ast.Call)and isinstance(n.func,ast.Name)and n.func.id=='require'and len(n.args)>=2 and isinstance(n.args[-1],ast.Constant)and isinstance(n.args[-1].value,str)}
+    if len(error.args)==1 and isinstance(error.args[0],str)and error.args[0]in codes and re.fullmatch('[a-z][a-z0-9_]{1,100}',error.args[0]):return 'COP_RUNTIME_'+error.args[0].upper()
+   frame=frame.tb_next
+ except Exception:pass
  if isinstance(error,OSError):return 'OS_ERROR_'+str(error.errno if isinstance(error.errno,int)else 'UNKNOWN')
  return 'UNCLASSIFIED_'+type(error).__name__
+def execution_phase(stage,action):
+ need(stage in {'activation_module_load','activation_adapter_load','pre_stop_health_capture','common_module_load','common_reset','production_activation'},'RELEASE_EXECUTION_STAGE')
+ try:return action()
+ except Exception as error:
+  print(json.dumps({'releaseExecutionFailure':{'stage':stage,'code':safe_failure_code(error)}}),flush=True)
+  raise
 def actual_retirement_preflight():
  """Execute the unchanged pinned read-only probe and require clear producers.
  Capturing its fixed public JSON avoids altering the already-reviewed probe.
@@ -561,12 +586,12 @@ def main():
   need(input('Type '+confirmation+' to execute exactly these sealed plans: ')==confirmation,'RELEASE_APPLY_NOT_CONFIRMED')
   activation=None;modules=None
   if a.complete_release:
-   activation=load(Path(bootstrap['sources']['sim']['root'])/'scripts/complete-clean-release.py','sealed_complete_release')
-   modules=activation.activation_modules(bootstrap)
-   activation.capture_before_freeze(modules,prepared['plan'])
-  common=load(Path(bootstrap['sources']['sim']['root'])/'scripts/coordinate-clean-release.py','sealed_actual_common_reset')
-  receipt=common.run_common_reset(prepared['privateConfig']);print(json.dumps(receipt))
-  if a.complete_release:print(json.dumps(activation.complete_release(modules,receipt,prepared['privateConfig'])))
+   activation=execution_phase('activation_module_load',lambda:load(Path(bootstrap['sources']['sim']['root'])/'scripts/complete-clean-release.py','sealed_complete_release'))
+   modules=execution_phase('activation_adapter_load',lambda:activation.activation_modules(bootstrap))
+   execution_phase('pre_stop_health_capture',lambda:activation.capture_before_freeze(modules,prepared['plan']))
+  common=execution_phase('common_module_load',lambda:load(Path(bootstrap['sources']['sim']['root'])/'scripts/coordinate-clean-release.py','sealed_actual_common_reset'))
+  receipt=execution_phase('common_reset',lambda:common.run_common_reset(prepared['privateConfig']));print(json.dumps(receipt))
+  if a.complete_release:print(json.dumps(execution_phase('production_activation',lambda:activation.complete_release(modules,receipt,prepared['privateConfig']))))
   else:print(json.dumps({'disabledRuntimeRestartPending':True,'productionActivated':False}))
  # No private config serialization or secret file. Activation is a separate,
  # explicit interactive mode with concrete protected adapters and real probes.

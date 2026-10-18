@@ -49,6 +49,19 @@ sim-audit.jsonl}`. Review counts+digest, then reset under actual Root admission
    the queue and these old attempt timestamps, preserving only
    `publishingEnabled`; the candidate still requires the exact empty two-field
    legacy baseline. No input normalization is performed before admission.
+
+   The actual current deploy script is not rewritten for the finite preservation
+   profile SHA `822af06be95f9beca59a5ba485c9a165f741a78adcdec48416f179791dab4757`.
+   That exact UID/GID 1000, mode `0700`, single-link file has a reviewed fixed
+   DBv2 guard before any pull or environment rewrite. It is admitted only while
+   the single raw authority-mode line matches that guard's `database_v2` pattern.
+   The same line must survive environment rendering unchanged. File bytes and
+   complete identity metadata must still match after configuration staging.
+   No new prefix, chmod or older deploy body is installed for this profile;
+   current municipal/media settings and safety-image preservation are untouched.
+   Unknown hashes, modes, altered guard prefixes and conflicting mode lines
+   remain errors. The previously admitted legacy profiles retain their original
+   guarded replacement path.
 8. Production bootstrap is bundled `createSimUserDataAuthority` — not an external
    callback module. The image/source SHA must equal `authoritySourceSha256` in
    manifest and both immutable witnesses. Parameters are exact `guardPool`,

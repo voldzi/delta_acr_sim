@@ -21,6 +21,14 @@ OVERLAY = Path('/srv/sim/docker-compose.clean-user-data.json')
 DEPLOY_GUARD = Path('/srv/sim/scripts/deploy-docker-home.sh')
 OLD_DEPLOY_HASHES = {'86f75085dc89cf67626472b2b5c92efcd2b039ce3c1e273b44cc49ee7df3ce80',
                     'a5972c9ab17652912e7107fb937651c4da31393e17fb0d6ee971acdb467e7d5c'}
+PRESERVED_DEPLOY_SHA = '822af06be95f9beca59a5ba485c9a165f741a78adcdec48416f179791dab4757'
+PRESERVED_DEPLOY_PREFIX = rb"""#!/usr/bin/env bash
+# SIM_DATABASE_V2_DEPLOY_GUARD
+if [ -f /srv/sim/.env ] && grep -Eq '^SIM_ACCOUNT_ERASURE_AUTHORITY_MODE="?database_v2"?$' /srv/sim/.env; then
+  printf 'DBv2 is enrolled; legacy environment rewrite is disabled. Use the coordinated release.\n' >&2
+  exit 1
+fi
+"""
 COMMON_PHASES = ('identity', 'cop', 'ai', 'driver', 'files', 'sim_app_files', 'sim_user_install', 'cop_safety_install')
 MODE = 'production-clean-lifecycle-v1'
 
@@ -212,13 +220,31 @@ def stage_sim_configuration(config, plan, admission):
     ca = Path('/etc/vcode-cop-pgbouncer/postgres-ca.crt')
     need(ca.is_file() and not ca.is_symlink() and b'BEGIN CERTIFICATE' in ca.read_bytes(), 'COMMON_CA_MISSING')
     source_guard, old_guard, guard_info = deploy_guard_input(plan)
-    replace_file(DEPLOY_GUARD, source_guard, guard_info.st_uid, guard_info.st_gid, stat.S_IMODE(guard_info.st_mode), admission, old_guard)
+    preserved_guard = digest(old_guard) == PRESERVED_DEPLOY_SHA
+    if preserved_guard:
+        # This exact current script already refuses before git pull or any
+        # environment rewrite. Preserve its newer body and every metadata bit.
+        preserved_deploy_environment(before)
+    else:
+        replace_file(DEPLOY_GUARD, source_guard, guard_info.st_uid, guard_info.st_gid, stat.S_IMODE(guard_info.st_mode), admission, old_guard)
     after = render_environment(before, values)
+    if preserved_guard:
+        need(preserved_deploy_environment(after) == preserved_deploy_environment(before), 'COMMON_DEPLOY_GUARD_CONFIGURATION')
     replace_file(SIM_ENV, after, info.st_uid, info.st_gid, 0o600, admission, before)
     raw = json.dumps(overlay, sort_keys=True, indent=2).encode() + b'\n'
     replace_file(OVERLAY, raw, 0, 0, 0o644, admission)
+    if preserved_guard:
+        _, current_guard, current_info = deploy_guard_input(plan)
+        identity = lambda s: (s.st_dev,s.st_ino,s.st_uid,s.st_gid,s.st_mode,s.st_nlink,s.st_size,s.st_mtime_ns,s.st_ctime_ns)
+        need(current_guard == old_guard and identity(current_info) == identity(guard_info), 'COMMON_DEPLOY_GUARD_PRESERVATION')
     return {'contractVersion': 'sim-clean-runtime-config-staged-v1', 'environmentSha256': digest(after),
             'overlaySha256': digest(raw), 'intakeEnabled': False, 'baseCleanEnabled': False, 'servicesStarted': False}
+
+def preserved_deploy_environment(raw):
+    lines = [line for line in raw.split(b'\n') if line.startswith(b'SIM_ACCOUNT_ERASURE_AUTHORITY_MODE=')]
+    need(len(lines) == 1 and re.fullmatch(rb'SIM_ACCOUNT_ERASURE_AUTHORITY_MODE=(?:database_v2|"database_v2")',lines[0]) is not None,
+         'COMMON_DEPLOY_GUARD_CONFIGURATION')
+    return lines[0]
 
 def deploy_guard_input(plan):
     source = plan['sources']['sim']
@@ -230,9 +256,18 @@ def deploy_guard_input(plan):
     try:
         s = os.fstat(fd)
         need(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid in {0,1000}
-             and stat.S_IMODE(s.st_mode) in {0o755,0o555} and s.st_size <= 1048576, 'COMMON_DEPLOY_GUARD_CUSTODY')
+             and stat.S_IMODE(s.st_mode) in {0o700,0o755,0o555} and s.st_size <= 1048576, 'COMMON_DEPLOY_GUARD_CUSTODY')
         old = os.read(fd,1048577)
-        need(digest(old) in OLD_DEPLOY_HASHES | {digest(raw)}, 'COMMON_DEPLOY_GUARD_UNKNOWN')
+        after = os.fstat(fd)
+        need(len(old) == s.st_size and (s.st_ino,s.st_mtime_ns,s.st_ctime_ns) ==
+             (after.st_ino,after.st_mtime_ns,after.st_ctime_ns), 'COMMON_DEPLOY_GUARD_CHANGED')
+        if digest(old) == PRESERVED_DEPLOY_SHA:
+            need((s.st_uid,s.st_gid,stat.S_IMODE(s.st_mode)) == (1000,1000,0o700)
+                 and old.startswith(PRESERVED_DEPLOY_PREFIX), 'COMMON_DEPLOY_GUARD_CUSTODY')
+            preserved_deploy_environment(read_environment()[0])
+        else:
+            need(stat.S_IMODE(s.st_mode) in {0o755,0o555}, 'COMMON_DEPLOY_GUARD_CUSTODY')
+            need(digest(old) in OLD_DEPLOY_HASHES | {digest(raw)}, 'COMMON_DEPLOY_GUARD_UNKNOWN')
         return raw, old, s
     finally:
         os.close(fd)

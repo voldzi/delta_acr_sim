@@ -374,3 +374,18 @@ baseline and independent temporary-key expiry remain unchanged. Finishing
 after the exception deadline is not allowed, even if installation began earlier.
 No additional test suite was run by instruction; the operator will verify the
 application after deployment. Source checks do not assert production activation.
+
+### Privacy-safe execution diagnostics
+
+The external source distinguishes activation-module loading, adapter loading,
+pre-stop capture, common-module loading, common reset and final activation.
+Only those fixed stage labels and closed public error identifiers are logged;
+private configuration, exception text, SQL and stack traces are not emitted.
+The `COMMON_*` identifiers are explicitly enumerated, not accepted as arbitrary
+exception text. COP's separately defined runtime exception is recognized only
+by its exact loaded class/`require` frame and pinned public source bytes, and
+only a literal error identifier from that source is returned.
+
+An execution failure after plan publication must not trigger another prepare,
+reset or overwrite. Published plans and any completed pre-stop evidence remain
+protected until a separately proven prepared-only recovery is available.
