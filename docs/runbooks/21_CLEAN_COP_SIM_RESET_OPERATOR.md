@@ -288,3 +288,33 @@ Nejde o akceptaci skutečné Root autority ani celého COP–SIM. Před aktivac�
 musí společný řadič ověřit skutečný freeze, nezávislý journal/restore/replay,
 schválené obrazy, obě DB i soubory, běžné HTTP flows a ochranu proti návratu
 smazaných dat. Výstup SIM nikdy netvrdí `wholeAccountComplete=true`.
+
+
+## Exact publisher compatibility transition from sealed V6
+
+The production publisher queue legitimately contains optional `lastSuccessAt`
+and `lastFailureAt` fields. A read-only projection confirmed the exact four-key
+shape and canonical UTC timestamps. The former finite-reset scanner accepted
+only the two-key empty baseline and therefore could not inspect this valid
+production file. Source `08d81c3` accepts only the two documented optional times
+and removes them along with the cleared test queue. Unknown fields remain an
+error. The shared scanner is used by both inspection and reset; the original
+raw-byte plan digest, compare-and-swap and writer-admission controls remain.
+
+The external `--preserve-public-v6` transition changes exactly the COP and SIM
+source archives: COP `6c01ef7` pins that specific SIM revision in its retired
+producer custody inspector, SIM `08d81c3` supplies the publisher compatibility
+scanner. App images, messaging source, storage provider and the previously
+accepted whole-provider proof are unchanged. Root must find only that proof in
+the control directory and verify the old V6 sources before creating temporary
+peer access; it preserves the exact old immutable bundle with no replacement.
+It never adopts a reset plan or refreshes the age of the acceptance proof.
+
+If Node preparation fails, diagnostic output contains only fixed stages,
+component labels, standard SQLSTATE codes from an explicit list and literal
+known guard identifiers. Error messages, stack traces, SQL and private inputs
+are never emitted. No additional test suite was run by operator instruction.
+The ordinary runtime connection verified both COP empty-only tables are empty
+and that new SIM roles and database are absent; it cannot connect to the guard
+database. Those guard relations and administrator authentication remain for the
+actual Root read-only preparation, and are not claimed as verified.
