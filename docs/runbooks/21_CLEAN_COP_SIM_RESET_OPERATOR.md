@@ -389,3 +389,29 @@ only a literal error identifier from that source is returned.
 An execution failure after plan publication must not trigger another prepare,
 reset or overwrite. Published plans and any completed pre-stop evidence remain
 protected until a separately proven prepared-only recovery is available.
+
+### Exact v11 prepared-only recovery
+
+The reviewed external `--recover-prepared-v11` mode is bound to the existing
+v11 manifest `208e495b…22eb2`, its epoch hash and twelve exact plan digests.
+It cannot be combined with other public-bundle transitions and requires the
+interactive complete-release mode and the approved temporary peer transport.
+Before creating another key it verifies the sealed old v11 bundle, the exact
+six-file control inventory and the unchanged whole-provider proof. After peer
+authorization the operator must type `PRESERVE_UNAPPLIED_V11_AND_REBUILD`.
+
+Only the hash-pinned COP `preserve-prepared-v11.py` module may then preserve
+that unused preparation. Its Root-owned no-replace archive retains all original
+bytes and metadata; its live writer start-time, producer, identity and read-only
+database checks must pass. The new control directory contains only the original
+proof. The old no-prior-plan guard is unchanged; no credentials or operation are
+adopted. A failed check stops without another preparation.
+
+The same pinned module provisions only `/srv/x5-production/staging/cop/work`
+as `1000:1000/0700` on the expected X5 UUID, preserving the Root `0755` parent.
+The external launcher then preserves the exact old v11 public source bundle,
+seals COP `d4fdca8` and SIM `e5b8128` and proceeds to the ordinary fresh
+preparation and final confirmation. Application images, original proof and
+its approved absolute expiry remain unchanged. PostgreSQL administrator
+credentials are still requested only into terminal/process RAM. This source
+procedure is not a receipt of completed recovery, reset or production activation.
