@@ -427,3 +427,49 @@ Fixed failure stages distinguish custody, fingerprint, module, connection and
 read-only query errors without emitting stderr or private connection values.
 Source syntax and diff checks do not establish the actual CA mode or completed
 production recovery; the installation still validates live evidence itself.
+
+### Exact SIM deployment-shell enrollment
+
+The bootstrap inventory enrolls the single SIM path
+`scripts/deploy-docker-home.sh` in addition to the established source suffixes.
+No other shell script or source lane gains an exception. A missing entry fails
+bootstrap and subsequent verification. Previously sealed V4/V5/V6/V9/V11/V13
+manifests keep their exact historical inventory only when their fixed manifest
+SHA matches; this permits read-only verification and preservation, not reuse of
+their prepared plans. New manifests must include the deployment-shell entry and
+its bytes are checked by the ordinary source-hash loop and coordinator gate.
+COP plan validation and admission iterate enrolled entries without a suffix
+filter, so the exact additional entry remains protected throughout execution.
+
+Static SIM activation review after the V13 stop covered source admission,
+disabled environment rendering, reset phase ordering, messaging-install source
+binding, SIM offline guard readback, Compose chains, feature preservation,
+candidate identity/mount/network checks, five authenticated capability probes,
+and the final messaging/COP receipt handoff. The shell omission is the confirmed
+source defect; this reading found no further definite SIM source mismatch.
+It does not prove live catalog rights, filesystem absence, current Compose
+equivalence, service readiness, provider availability or deadline validity.
+These remain mandatory operational gates, not assumed successes. In particular,
+an existing clean overlay refuses overwrite, changed feature/mount/network
+configuration refuses activation, and report expiry remains an absolute stop.
+No new installation command or prepared-plan recovery is authorized by this
+static review alone; preserve the V13 prepared operation without adoption.
+
+### Separate finite V13 preparation recovery
+
+`--recover-prepared-v13` is a separate mutually exclusive mode. It loads only
+the exact COP `7b2a8c6` archive's pinned `preserve-prepared-v13.py` module and
+verifies the old V13 manifest `9fd458db…6b08e`, original six control files,
+epoch hash `8405e8e7…49472` and twelve reviewed digests. It cannot call the V11
+preservation operation or adopt its archive. The operator confirmation is
+`PRESERVE_UNAPPLIED_V13_AND_REBUILD`; original V11 scope remains separate.
+
+The single path is: old V13 verification and proof expiry check; temporary peer
+authorization; actual finite V13 preservation under its lock and unchanged
+writer/producer/identity/database gates; private work-directory verification;
+no-replace preservation of the V13 public bundle; new COP `7b2a8c6` and unchanged
+SIM `e5b8128` bootstrap with exact shell enrollment; fresh twelve-plan
+preparation; explicit complete-release confirmation; fresh pre-stop capture;
+common reset; guarded activation and real capability/health readback. Every
+failed gate stops. This source change neither executes that path nor provides
+an installation receipt or authorization to bypass a failed operational check.

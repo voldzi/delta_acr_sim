@@ -8,7 +8,7 @@ from pathlib import Path
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 DEPS='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df'
 APP='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86'
-REVISIONS={'cop':'ca3dc8bca6aa8c6b2257d7c929859d5461f5dafb','sim':'e5b8128c4087f078117815fe12e2e110096f15dc','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
+REVISIONS={'cop':'7b2a8c617cdb107d212f9bceadc55ed4b9e18a43','sim':'e5b8128c4087f078117815fe12e2e110096f15dc','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
 UUID='2f93f595-b61b-4eea-9054-7afa9b275b5b'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 TEMP_COMM=Path('/run/cop-clean-reset-comm')
@@ -202,7 +202,8 @@ def bootstrap_clean_release(manifest_path,expected_sha):
     need(not (dest/'apps/cop-api/dist').exists(),'ROOT_SOURCE_MUST_NOT_OVERWRITE_DIST')
     shutil.copytree(dest,stage/'app',dirs_exist_ok=True);shutil.rmtree(dest);dest=stage/'app'
    sources[lane]={'revision':m['archives'][lane]['revision'],'root':str(TARGET/('app' if lane=='cop' else lane)),
-     'files':{k:v for k,v in tree(dest).items() if 'node_modules' not in Path(k).parts and Path(k).suffix in {'.py','.mjs','.json','.sql','.js','.ts'}}}
+     'files':{k:v for k,v in tree(dest).items() if 'node_modules' not in Path(k).parts and (Path(k).suffix in {'.py','.mjs','.json','.sql','.js','.ts'} or (lane=='sim' and k=='scripts/deploy-docker-home.sh'))}}
+   if lane=='sim':need('scripts/deploy-docker-home.sh' in sources[lane]['files'],'ROOT_SIM_DEPLOY_SOURCE_MISSING')
   need(tree(stage/'app/apps/cop-api/dist')==original_dist,'ROOT_ACTUAL_CANDIDATE_DIST_CHANGED')
   need(sha((stage/'runtime/usr/local/bin/node').read_bytes())=='c8726a01ce4ac245ea9e5cb483992a90e628e5847d98f9a9f3be048d09a50d75','ROOT_NODE_PIN')
   need(sha((stage/'runtime/lib/ld-musl-x86_64.so.1').read_bytes())=='38d022ce7425ff105ccfb53598f606e6e5f5f0a34bfbc793d65e6f34c9d72806','ROOT_LOADER_PIN')
