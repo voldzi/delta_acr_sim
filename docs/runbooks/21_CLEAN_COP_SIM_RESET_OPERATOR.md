@@ -7,6 +7,30 @@ a [ADR 0043](../adr/0043_ATOMIC_KNOWN_GUARD_RESET.md).
 
 ## Vstup a autorita
 
+### Diagnostika již odstraněného reportovacího cronu
+
+Původní disabled-only instalátor podle runbooku 20 odstranil přesný legacy
+cron `c46a03…`; novější `DriverReportProducerCustody` jej však dosud vyžaduje.
+Absence samotného řádku není důkazem absence jiných producentů. Nevytvářet
+komentářový marker, neobnovovat starou úlohu a neměnit očekávaný otisk naslepo.
+
+`scripts/inspect-retired-report-profile.py` je samostatná Root **čtecí** kontrola:
+ověří veřejný launcher V5, skutečný zapečetěný strom SIM `15d8a75` / COP `4ed81c5`,
+Root-only `post-stop-inventory.json`, `inventory-transition.json` a otisk
+`runtime-plan.json` v `.sim-erasure-cutover`. Nepřistupuje k `.env`, stavovému
+souboru s identitami, SQL ani autorizačním klíčům. Znovu spustí původní
+`reportInventory()` z ověřeného SIM zdroje: vybrané systémové/user cron a
+systemd soubory, procesy a chráněné reporty. Vypíše pouze předem vyjmenované
+otisky, počty a booleany; nevrací obsah cronu, jména reportů či tajemství.
+Příkaz musí nést neutrální název souboru, nikoli tělo sondy s klíčovými slovy
+producenta v argumentech rodičovského procesu. Zkontroluje také skutečným Root
+čtením, že control složka obsahuje jen původní důkaz `66b6…`, žádný plán.
+
+Čtecí sonda se sama nespouští. Její výsledek je podkladem pro další rozhodnutí,
+nikoli přijetím nového producer profilu nebo produkční akceptací. Při chybě
+končí bez změny cronu, služeb, databází, klíčů a bez uložení nového enrollmentu.
+`scripts/test-retired-report-profile.py` ověřuje šest syntetických scénářů.
+
 ### Opravený veřejný operační balík V5 (18. 10. 2026)
 
 Zdrojový COP `4ed81c5a5ea0772a8d83636473925f07fe92b389` opravuje
