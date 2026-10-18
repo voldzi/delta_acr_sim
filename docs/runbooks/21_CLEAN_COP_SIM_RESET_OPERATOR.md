@@ -318,3 +318,24 @@ The ordinary runtime connection verified both COP empty-only tables are empty
 and that new SIM roles and database are absent; it cannot connect to the guard
 database. Those guard relations and administrator authentication remain for the
 actual Root read-only preparation, and are not claimed as verified.
+
+
+## Exact COP Keycloak inventory transition from sealed V9
+
+A server-side, read-only check using the configured worker returned HTTP 200
+for all requests, 12 clients, three independently verified service accounts and
+one closed page of 11 ordinary users. None of the service IDs appeared in the
+ordinary list. The old reset incorrectly required those lists to overlap.
+COP `f3a701a` merges the authoritative inventories, binds each service to its
+client UUID/public client ID/creation time, and excludes services from human
+mutations. Duplicates, conflicting overlaps and unknown service markers remain
+errors. No administrator may edit realm users or clients during reset; separate
+provider GET/write operations are not an atomic CAS.
+
+The external `--preserve-public-v9` transition preserves the exact previous
+immutable V9 bundle and changes only the COP source archive. SIM `08d81c3`,
+messaging, all nine candidate images, storage provider and acceptance proof
+remain unchanged. Root verifies V9 custody and absence of a pending operation
+before temporary access; it builds a fresh plan rather than adopting one.
+The existing fixture source now models ordinary users without service accounts;
+no test suite was executed under the operator's cancellation.

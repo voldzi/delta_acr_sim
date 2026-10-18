@@ -21,10 +21,13 @@ V5_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v5-4ed81c5')
 V6_MANIFEST=V4_MANIFEST.parent/'resume-3/public-manifest-v6.json'
 V6_MANIFEST_SHA='e3752ed80d7c001049beb0ac95bbeaa2bcdd754ceb5c940eadeea8447c6b62e1'
 V6_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v6-3ec5366-sim15d8a75')
+V9_MANIFEST=V4_MANIFEST.parent/'resume-6/public-manifest-v9.json'
+V9_MANIFEST_SHA='d842c5556b41ed227ab39654d73ca9be382846c0dcd6fa1d768cdf8ca002531a'
+V9_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v9-6c01ef7-sim08d81c3')
 RETIREMENT_PROBE_SHA='7940e142da215f3d28c413dd59344da2210220972d923d247c69e69709947a5b'
 KEYCLOAK_PREPARATION_SHA='48db373f5d8cff560ae9365dd8f4ea569677342dc31ca2cc917e463394d5e045'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
-BOOTSTRAP_SHA='4a38305f0ffc09dd9e3c9de9dff95261fde54f081351466cde5222541a5a06d3'
+BOOTSTRAP_SHA='779719088a1b7a21819bd0d3cf9fcf2125f80054ba3643cc1a8e9d379d501b29'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
 TEMP_KEY_SHA='87ea81867ac8bdb3605b7b186c550710b7b9ac268da7667b1b6ce60b22dd852a'
 TEMP_AUTHORIZE=Path('/home/voldzi/temporary-comm-authorize.py')
@@ -113,22 +116,26 @@ def rename_public_bundle_noreplace(parent,source,destination):
  else:raise RuntimeError('RELEASE_TRANSITION_PLATFORM')
  fn.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint]
  if fn(parent,os.fsencode(source),parent,os.fsencode(destination),flag):raise OSError(ctypes.get_errno(),'RELEASE_TRANSITION_RENAME_FAILED')
-def preserve_public_v4(bootstrap_module,new_manifest,manifest_path,*,from_v5=False,from_v6=False):
+def preserve_public_v4(bootstrap_module,new_manifest,manifest_path,*,from_v5=False,from_v6=False,from_v9=False):
  """Preserve exact public V4, never adopt or remove a prior operation.
  Root must directly inventory BASE; a prior error/EACCES proves no absence.
  Failure preserves evidence for manual review, with no automatic rollback.
  """
  bootstrap_module.context()
- need(not(from_v5 and from_v6),'RELEASE_TRANSITION_MODE')
- old_manifest=V6_MANIFEST if from_v6 else V5_MANIFEST if from_v5 else V4_MANIFEST
- old_sha=V6_MANIFEST_SHA if from_v6 else V5_MANIFEST_SHA if from_v5 else V4_MANIFEST_SHA
- destination=V6_ARCHIVE if from_v6 else V5_ARCHIVE if from_v5 else V4_ARCHIVE
- fixed_name='clean-operator-shared-v3-preserved-v6-3ec5366-sim15d8a75'if from_v6 else'clean-operator-shared-v3-preserved-v5-4ed81c5'if from_v5 else'clean-operator-shared-v3-preserved-v4-f4f0474'
+ need(sum([from_v5,from_v6,from_v9])<=1,'RELEASE_TRANSITION_MODE')
+ old_manifest=V9_MANIFEST if from_v9 else V6_MANIFEST if from_v6 else V5_MANIFEST if from_v5 else V4_MANIFEST
+ old_sha=V9_MANIFEST_SHA if from_v9 else V6_MANIFEST_SHA if from_v6 else V5_MANIFEST_SHA if from_v5 else V4_MANIFEST_SHA
+ destination=V9_ARCHIVE if from_v9 else V6_ARCHIVE if from_v6 else V5_ARCHIVE if from_v5 else V4_ARCHIVE
+ fixed_name='clean-operator-shared-v3-preserved-v9-6c01ef7-sim08d81c3'if from_v9 else'clean-operator-shared-v3-preserved-v6-3ec5366-sim15d8a75'if from_v6 else'clean-operator-shared-v3-preserved-v5-4ed81c5'if from_v5 else'clean-operator-shared-v3-preserved-v4-f4f0474'
  need(TARGET==Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')and destination==TARGET.with_name(fixed_name),'RELEASE_TRANSITION_FIXED_PATHS')
  raw=bootstrap_module.public_bytes(old_manifest,1048576)
  need(sha(raw)==old_sha,'RELEASE_TRANSITION_OLD_MANIFEST_SHA');old=json.loads(raw)
  candidate=json.loads(json.dumps(new_manifest))
- if from_v6:
+ if from_v9:
+  need(old['archives']['cop']['revision']=='6c01ef77cee511397e83f44aaa8ede8d13aeaa06'and old['archives']['sim']['revision']=='08d81c335b362146c81e269c0c1e412b3e9d1ba9','RELEASE_TRANSITION_OLD_REVISIONS')
+  need(candidate['archives']['cop']['revision']==bootstrap_module.REVISIONS['cop']=='f3a701adf15734952fa7142b820a7f205c50f6e8'and candidate['archives']['sim']==old['archives']['sim'],'RELEASE_TRANSITION_NEW_REVISIONS')
+  candidate['archives']['cop']=old['archives']['cop']
+ elif from_v6:
   need(old['archives']['cop']['revision']=='3ec5366e4de676cf68fddae50c0df625df39c284'and old['archives']['sim']['revision']=='15d8a75f1a260f1946e35774e727a2636decc841','RELEASE_TRANSITION_OLD_REVISIONS')
   need(candidate['archives']['cop']['revision']==bootstrap_module.REVISIONS['cop']=='6c01ef77cee511397e83f44aaa8ede8d13aeaa06'and candidate['archives']['sim']['revision']==bootstrap_module.REVISIONS['sim']=='08d81c335b362146c81e269c0c1e412b3e9d1ba9','RELEASE_TRANSITION_NEW_REVISIONS')
   for lane in ['cop','sim']:candidate['archives'][lane]=old['archives'][lane]
@@ -166,7 +173,7 @@ def preserve_public_v4(bootstrap_module,new_manifest,manifest_path,*,from_v5=Fal
   saved=os.stat(destination.name,dir_fd=fd,follow_symlinks=False)
   need(directory_identity(saved)==directory_identity(before)and TARGET.name not in os.listdir(fd),'RELEASE_TRANSITION_RENAME_UNPROVEN')
  finally:os.close(fd)
- return {'publicV6Preserved'if from_v6 else'publicV5Preserved'if from_v5 else'publicV4Preserved':True,'priorOperationAdopted':False,'productionActivated':False}
+ return {'publicV9Preserved'if from_v9 else'publicV6Preserved'if from_v6 else'publicV5Preserved'if from_v5 else'publicV4Preserved':True,'priorOperationAdopted':False,'productionActivated':False}
 def read_current_runtime_binding(expected):
  path=RUNTIME_BINDING;need(path.resolve()==path,'RELEASE_RUNTIME_POINTER_PATH')
  parent=path.parent.lstat();need(stat.S_ISDIR(parent.st_mode)and(parent.st_uid,parent.st_gid,stat.S_IMODE(parent.st_mode))==(1000,1000,0o700),'RELEASE_RUNTIME_POINTER_PARENT')
@@ -457,6 +464,7 @@ def main():
  transitions=p.add_mutually_exclusive_group()
  transitions.add_argument('--preserve-public-v4',action='store_true',help='Explicit one-time V4 transition; never repeat after V4 preservation')
  transitions.add_argument('--preserve-public-v5',action='store_true',help='Preserve exact existing V5 public bundle; never adopt a reset plan')
+ transitions.add_argument('--preserve-public-v9',action='store_true',help='Preserve exact V9 and change only the reviewed COP service-account inventory source')
  transitions.add_argument('--preserve-public-v6',action='store_true',help='Preserve exact V6 and bind the reviewed publisher/COP custody source updates only')
  transitions.add_argument('--resume-public-v6',action='store_true',help='Use only the already sealed exact V6 public bundle, without rename or bootstrap')
  modes=p.add_mutually_exclusive_group();modes.add_argument('--apply-disabled-reset',action='store_true');modes.add_argument('--complete-release',action='store_true');a=p.parse_args()
@@ -465,40 +473,40 @@ def main():
  bootstrap_module=verified_bootstrap_code()
  bootstrap_module.context()
  raw=bootstrap_module.public_bytes(a.public_manifest,1048576);need(sha(raw)==a.manifest_sha256,'RELEASE_PUBLIC_MANIFEST_SHA');manifest=json.loads(raw)
- if a.resume_public_v6 or a.preserve_public_v6:
+ if a.resume_public_v6 or a.preserve_public_v6 or a.preserve_public_v9:
   if a.resume_public_v6:need(a.manifest_sha256==V6_MANIFEST_SHA and Path(a.public_manifest)==V6_MANIFEST,'RELEASE_RESUME_V6_MANIFEST_SCOPE')
-  verify_bootstrap(V6_MANIFEST_SHA)
+  verify_bootstrap(V9_MANIFEST_SHA if a.preserve_public_v9 else V6_MANIFEST_SHA)
   ensure_control_directory(V4_REPORT_SHA,require_existing=True)
  if a.prepare_peer_access:
-  need(a.preserve_public_v5 or a.preserve_public_v6 or a.resume_public_v6,'RELEASE_PEER_PREPARATION_SCOPE')
-  verify_bootstrap(V6_MANIFEST_SHA if a.resume_public_v6 or a.preserve_public_v6 else V5_MANIFEST_SHA)
+  need(a.preserve_public_v5 or a.preserve_public_v6 or a.preserve_public_v9 or a.resume_public_v6,'RELEASE_PEER_PREPARATION_SCOPE')
+  verify_bootstrap(V9_MANIFEST_SHA if a.preserve_public_v9 else V6_MANIFEST_SHA if a.resume_public_v6 or a.preserve_public_v6 else V5_MANIFEST_SHA)
   prepare_peer_access_interactive()
- if a.preserve_public_v4 or a.preserve_public_v5 or a.preserve_public_v6:
+ if a.preserve_public_v4 or a.preserve_public_v5 or a.preserve_public_v6 or a.preserve_public_v9:
   need(sys.stdin.isatty() and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
   bootstrap_module.check_transports()
   if a.preserve_public_v5:
    # Actual operational evidence inside this one command, before changing the
    # public bundle. No separate diagnostic round, acceptance claim or key setup.
    actual_retirement_preflight()
-  if a.preserve_public_v6:
-   prior=verify_bootstrap(V6_MANIFEST_SHA);old_host=load(Path(prior['sources']['cop']['root'])/'scripts/account-safety/clean-reset-root.py','release_publisher_transition_retirement')
+  if a.preserve_public_v6 or a.preserve_public_v9:
+   prior=verify_bootstrap(V9_MANIFEST_SHA if a.preserve_public_v9 else V6_MANIFEST_SHA);old_host=load(Path(prior['sources']['cop']['root'])/'scripts/account-safety/clean-reset-root.py','release_publisher_transition_retirement')
    _,_,producer=old_host.DriverReportProducerCustody()._inventory()
    need(producer.get('profile')=='known-retired-v1'and producer.get('paused')is True and producer.get('activeProducerCount')==0,'RELEASE_PUBLISHER_TRANSITION_PRODUCERS_UNPROVEN')
    print(json.dumps({'actualRetiredProducerPreflight':producer}),flush=True)
-  confirmation='PRESERVE_PUBLIC_V6_AND_REBUILD'if a.preserve_public_v6 else'PRESERVE_PUBLIC_V5_AND_REBUILD'if a.preserve_public_v5 else'PRESERVE_PUBLIC_V4_AND_REBUILD'
+  confirmation='PRESERVE_PUBLIC_V9_AND_REBUILD'if a.preserve_public_v9 else'PRESERVE_PUBLIC_V6_AND_REBUILD'if a.preserve_public_v6 else'PRESERVE_PUBLIC_V5_AND_REBUILD'if a.preserve_public_v5 else'PRESERVE_PUBLIC_V4_AND_REBUILD'
   need(input('Type '+confirmation+' to preserve only the verified public operator bundle: ')==confirmation,'RELEASE_TRANSITION_NOT_CONFIRMED')
-  print(json.dumps(preserve_public_v4(bootstrap_module,manifest,a.public_manifest,from_v5=a.preserve_public_v5,from_v6=a.preserve_public_v6)),flush=True)
+  print(json.dumps(preserve_public_v4(bootstrap_module,manifest,a.public_manifest,from_v5=a.preserve_public_v5,from_v6=a.preserve_public_v6,from_v9=a.preserve_public_v9)),flush=True)
  if a.resume_public_v6:bootstrap_module.check_transports()
  elif not TARGET.exists():bootstrap_module.bootstrap_clean_release(a.public_manifest,a.manifest_sha256)
  else:bootstrap_module.check_transports()
  bootstrap=verify_bootstrap(a.manifest_sha256)
  cop=Path(bootstrap['sources']['cop']['root']);host=load(cop/'scripts/account-safety/clean-reset-root.py','release_early_root_gate')
- transitioning=a.preserve_public_v4 or a.preserve_public_v5 or a.preserve_public_v6 or a.resume_public_v6
+ transitioning=a.preserve_public_v4 or a.preserve_public_v5 or a.preserve_public_v6 or a.preserve_public_v9 or a.resume_public_v6
  ensure_control_directory(V4_REPORT_SHA if transitioning else None,require_existing=transitioning)
  publish_acceptance_report(bootstrap_module,host,manifest)
  # Blocks before asking PG password when exact whole-provider GO is missing.
  host._acceptance_module().verified_pre_stop_acceptance(manifest['candidateImages'])
- if a.resume_public_v6 or a.preserve_public_v6:
+ if a.resume_public_v6 or a.preserve_public_v6 or a.preserve_public_v9:
   _,_,producer=host.DriverReportProducerCustody()._inventory()
   need(producer.get('profile')=='known-retired-v1'and producer.get('paused')is True and producer.get('activeProducerCount')==0,'RELEASE_RESUME_RETIRED_PROFILE_UNPROVEN')
   print(json.dumps({'actualRetiredProducerPreflight':producer}),flush=True)
