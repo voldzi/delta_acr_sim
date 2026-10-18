@@ -40,6 +40,15 @@ sim-audit.jsonl}`. Review counts+digest, then reset under actual Root admission
    and exact stopped main image. Preserve aiConfig and publishingEnabled,
    operational-checks, provider caches and all other paths. No old content is
    moved into an owner namespace. A missing/unknown shape or ownership blocks.
+   The actual `PublisherStoreData` shape has required `items` (array) and
+   `publishingEnabled` (boolean), plus only optional `lastSuccessAt` and
+   `lastFailureAt` canonical UTC timestamps (`YYYY-MM-DDTHH:mm:ss.SSSZ`). Both
+   inspection and application use the same strict scanner; unknown keys or
+   invalid timestamps fail closed. The original bytes, including timestamps,
+   remain covered by the reviewed digest and stopped-writer CAS. Reset clears
+   the queue and these old attempt timestamps, preserving only
+   `publishingEnabled`; the candidate still requires the exact empty two-field
+   legacy baseline. No input normalization is performed before admission.
 8. Production bootstrap is bundled `createSimUserDataAuthority` — not an external
    callback module. The image/source SHA must equal `authoritySourceSha256` in
    manifest and both immutable witnesses. Parameters are exact `guardPool`,

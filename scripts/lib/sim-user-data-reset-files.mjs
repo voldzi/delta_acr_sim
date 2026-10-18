@@ -25,6 +25,10 @@ const sha = (x) => createHash("sha256").update(x).digest("hex");
 const need = (v) => {
   if (!v) throw Error("SIM_APP_RESET_UNPROVEN");
 };
+const publisherKeys = new Set(["items", "publishingEnabled", "lastSuccessAt", "lastFailureAt"]);
+const canonicalTimestamp = (v) =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v) &&
+  Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v;
 function scan(syntheticRoot) {
   const root = syntheticRoot ?? BASE;
   if (syntheticRoot)
@@ -73,8 +77,21 @@ function scan(syntheticRoot) {
           2
         );
       } else {
-        need(Object.keys(x).sort().join(",") === "items,publishingEnabled" && Array.isArray(x.items) && typeof x.publishingEnabled === "boolean");
+        // PublisherStoreData also persists the two optional publish-attempt
+        // timestamps. Accept only that exact application shape, not arbitrary
+        // metadata. The raw-file digest/CAS still includes every input byte.
+        need(
+          x !== null && typeof x === "object" && !Array.isArray(x) &&
+            Object.keys(x).every((key) => publisherKeys.has(key)) &&
+            Object.hasOwn(x, "items") && Object.hasOwn(x, "publishingEnabled") &&
+            Array.isArray(x.items) && typeof x.publishingEnabled === "boolean"
+        );
+        for (const key of ["lastSuccessAt", "lastFailureAt"])
+          if (Object.hasOwn(x, key)) need(canonicalTimestamp(x[key]));
         publisher = x.items.length;
+        // These timestamps describe the discarded test queue, not preserved
+        // configuration. The candidate's legacy admission requires this exact
+        // empty two-field baseline; do not claim old attempts in the new epoch.
         replacement = JSON.stringify({ items: [], publishingEnabled: x.publishingEnabled });
       }
     }

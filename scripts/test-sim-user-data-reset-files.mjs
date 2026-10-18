@@ -22,8 +22,23 @@ try {
       aiConfig: config
     })
   );
-  writeFileSync(join(root, "publisher-queue.json"), JSON.stringify({ items: [{ synthetic: true }], publishingEnabled: false }));
+  const queue = {
+    items: [{ synthetic: true }], publishingEnabled: false,
+    lastSuccessAt: "2026-10-18T08:00:00.000Z", lastFailureAt: "2026-10-18T08:01:00.000Z"
+  };
+  const queuePath = join(root, "publisher-queue.json");
   writeFileSync(join(root, "sim-audit.jsonl"), "synthetic-only\n");
+  for (const invalid of [
+    { ...queue, unknown: "not permitted" },
+    { ...queue, lastSuccessAt: null },
+    { ...queue, lastFailureAt: "2026-02-30T08:00:00.000Z" },
+    { ...queue, lastSuccessAt: "2026-10-18T08:00:00Z" }
+  ]) {
+    writeFileSync(queuePath, JSON.stringify(invalid));
+    assert.throws(() => inspectSimAppReset({ syntheticRoot: root }));
+    check(true);
+  }
+  writeFileSync(queuePath, JSON.stringify(queue));
   mkdirSync(join(root, "operational-checks"));
   writeFileSync(join(root, "operational-checks", "preserve"), "official configuration");
   const plan = inspectSimAppReset({ syntheticRoot: root }),
@@ -39,6 +54,7 @@ try {
   check(Object.values(r.remaining).every((n) => n === 0));
   check(JSON.stringify(JSON.parse(readFileSync(join(root, "sim-store.json"))).aiConfig) === JSON.stringify(config));
   check(JSON.parse(readFileSync(join(root, "publisher-queue.json"))).publishingEnabled === false);
+  check(Object.keys(JSON.parse(readFileSync(queuePath))).sort().join(",") === "items,publishingEnabled");
   check(readFileSync(join(root, "operational-checks", "preserve"), "utf8") === "official configuration");
   unlinkSync(join(root, "sim-audit.jsonl"));
   symlinkSync(join(root, "operational-checks", "preserve"), join(root, "sim-audit.jsonl"));
