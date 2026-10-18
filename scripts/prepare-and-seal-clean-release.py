@@ -21,7 +21,7 @@ V5_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v5-4ed81c5')
 V6_MANIFEST=V4_MANIFEST.parent/'resume-3/public-manifest-v6.json'
 V6_MANIFEST_SHA='e3752ed80d7c001049beb0ac95bbeaa2bcdd754ceb5c940eadeea8447c6b62e1'
 RETIREMENT_PROBE_SHA='7940e142da215f3d28c413dd59344da2210220972d923d247c69e69709947a5b'
-KEYCLOAK_PREPARATION_SHA='8650fab53fb9c9a05814a25a43b12c8473f1f350924ecccc7b77b57cb3316763'
+KEYCLOAK_PREPARATION_SHA='48db373f5d8cff560ae9365dd8f4ea569677342dc31ca2cc917e463394d5e045'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 BOOTSTRAP_SHA='7ce4915e14646d675940e6f03d9a38bced23922f9ff66bbac9c45e9c81fdc43c'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
@@ -245,8 +245,8 @@ def prepare_peer_access_interactive():
  need(result.get('phase')=='temporary_release_peer_identity_prepared'and result.get('privateKeyPrintedOrTransferred')is False and result.get('applicationChanged')is False,'RELEASE_PEER_PREPARATION_UNPROVEN')
  print(json.dumps(result),flush=True)
  need(input('Send this public JSON to COP; after COP confirms both authorizations type TRANSPORT_READY: ')=='TRANSPORT_READY','RELEASE_PEER_CONTINUATION_NOT_CONFIRMED')
-def prepare_missing_keycloak_worker():
- """Existing approved provider setup, only when both fixed fields are absent.
+def prepare_missing_keycloak_worker(*,reconcile=False):
+ """Approved provider setup for absent fields or explicit same-secret resume.
  No caller-selected path, credential export, secret rotation or TTY pipe.
  """
  path=Path('/srv/cop/.env');need(path.resolve()==path,'RELEASE_COP_ENV_PATH')
@@ -269,8 +269,11 @@ def prepare_missing_keycloak_worker():
   need(set(values)=={'COP_KEYCLOAK_ERASURE_CLIENT_ID','COP_KEYCLOAK_ERASURE_CLIENT_SECRET'}and values['COP_KEYCLOAK_ERASURE_CLIENT_ID']=='cop-account-erasure-worker'and re.fullmatch('[A-Za-z0-9_-]{43,128}',values['COP_KEYCLOAK_ERASURE_CLIENT_SECRET']),'RELEASE_KEYCLOAK_PARTIAL_CONFIG_REQUIRES_REVIEW')
   # Existing configuration is not provider readiness; the mandatory following
   # Keycloak inspection still verifies actual authentication and permissions.
-  return
+  if not reconcile:return
+ else:need(not reconcile,'RELEASE_KEYCLOAK_RECONCILIATION_REQUIRES_EXISTING_CONFIG')
  need(sys.stdin.isatty()and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
+ if reconcile:
+  need(input('Type RECONCILE_EXISTING_KEYCLOAK_WORKER to complete only the approved client using its existing stored secret, without rotation: ')=='RECONCILE_EXISTING_KEYCLOAK_WORKER','RELEASE_KEYCLOAK_RECONCILIATION_NOT_CONFIRMED')
  helper=HERE/'install-clean-erasure-client.mjs'
  fd=os.open(helper,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
  try:
@@ -428,11 +431,13 @@ def main():
  sys.dont_write_bytecode=True
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--public-manifest',required=True);p.add_argument('--manifest-sha256',required=True)
  p.add_argument('--prepare-peer-access',action='store_true',help='Prepare the existing approved one-release RAM identity and pause for COP public authorization')
+ p.add_argument('--reconcile-keycloak-worker',action='store_true',help='Explicitly complete the approved worker using its existing stored secret; no rotation')
  transitions=p.add_mutually_exclusive_group()
  transitions.add_argument('--preserve-public-v4',action='store_true',help='Explicit one-time V4 transition; never repeat after V4 preservation')
  transitions.add_argument('--preserve-public-v5',action='store_true',help='Preserve exact existing V5 public bundle; never adopt a reset plan')
  transitions.add_argument('--resume-public-v6',action='store_true',help='Use only the already sealed exact V6 public bundle, without rename or bootstrap')
  modes=p.add_mutually_exclusive_group();modes.add_argument('--apply-disabled-reset',action='store_true');modes.add_argument('--complete-release',action='store_true');a=p.parse_args()
+ need(not a.reconcile_keycloak_worker or a.resume_public_v6,'RELEASE_KEYCLOAK_RECONCILIATION_SCOPE')
  need(os.getuid()==0 and socket.gethostname().split('.')[0]=='docker' and sys.flags.isolated,'RELEASE_ROOT_CONTEXT')
  bootstrap_module=verified_bootstrap_code()
  bootstrap_module.context()
@@ -469,7 +474,7 @@ def main():
   _,_,producer=host.DriverReportProducerCustody()._inventory()
   need(producer.get('profile')=='known-retired-v1'and producer.get('paused')is True and producer.get('activeProducerCount')==0,'RELEASE_RESUME_RETIRED_PROFILE_UNPROVEN')
   print(json.dumps({'actualRetiredProducerPreflight':producer}),flush=True)
-  prepare_missing_keycloak_worker()
+  prepare_missing_keycloak_worker(reconcile=a.reconcile_keycloak_worker)
  need(sys.stdin.isatty() and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
  need(input('Type ALL_TEST_ACCOUNTS_SHARED_IDENTITY_RESET to confirm the reviewed destructive scope: ')=='ALL_TEST_ACCOUNTS_SHARED_IDENTITY_RESET','RELEASE_SCOPE_NOT_CONFIRMED')
  password=getpass.getpass('PostgreSQL administrator password (RAM only): ')

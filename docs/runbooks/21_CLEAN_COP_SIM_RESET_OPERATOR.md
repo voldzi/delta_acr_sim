@@ -7,6 +7,36 @@ a [ADR 0043](../adr/0043_ATOMIC_KNOWN_GUARD_RESET.md).
 
 ## Vstup a autorita
 
+### V8: dokončení částečně připraveného pracovníka bez rotace
+
+Po běhu V7 jsou obě pole uložena, klient i čtyři přiřazené role existují,
+ale dedikovaný client scope dosud neměl role. Čtecí kontrola COP to spojila
+se zdrojovou chybou transportu: Keycloak po POST role-mapping vrací úspěšné
+HTTP 204 bez těla, původní `boundedJson()` však vždy vyžadoval reader.
+Nešlo o neúspěšné přihlášení administrátora. Není dovoleno pokládat pouhou
+přítomnost obou polí za dokončené zřízení.
+
+Nový veřejný helper s SHA-256
+`48db373f5d8cff560ae9365dd8f4ea569677342dc31ca2cc917e463394d5e045`
+akceptuje pouze status 204 s přesně nulovým tělem; pro ostatní odpovědi
+ponechává omezený JSON decoder a všechny provider/role/scope kontroly.
+Nevzniká obecná výjimka pro chybějící tělo HTTP 200.
+
+Přepínač `--reconcile-keycloak-worker` je dovolen jen s
+`--resume-public-v6`. Vyžaduje již existující obě jednoznačná pole, přesné
+ID a platný tvar uloženého secretu a samostatné potvrzení
+`RECONCILE_EXISTING_KEYCLOAK_WORKER`. Znovu provede původní schválený helper
+se stejným uloženým secretem, který se porovná s poskytovatelem ještě před
+změnami mapování. Doplní pouze chybějící schválená mapování. Neznámý klient,
+cizí účel, odlišný secret, nadbytečné role/scope nebo částečná konfigurace
+zůstávají chybou; nic se automaticky nemaže ani nerotuje. Bez explicitního
+přepínače se tato rekonsiliace automaticky neprovádí.
+
+Zůstává tentýž Root V6 balík, jeho manifest a všechny obrazy. Nepoužívat
+žádný `--preserve-*` přepínač. Další testovací sady se nespouštěly; nejde
+o tvrzení úspěšného zřízení nebo nasazení. Runtime provider/readback a
+databázové kontroly se nadále musí skutečně dokončit před aktivací.
+
 ### V7: chybějící příprava Keycloak před databázovou částí
 
 Čtecí diagnostika po V6 doložila chybějící obě pole
