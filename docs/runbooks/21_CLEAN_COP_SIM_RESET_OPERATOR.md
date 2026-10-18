@@ -410,8 +410,20 @@ adopted. A failed check stops without another preparation.
 The same pinned module provisions only `/srv/x5-production/staging/cop/work`
 as `1000:1000/0700` on the expected X5 UUID, preserving the Root `0755` parent.
 The external launcher then preserves the exact old v11 public source bundle,
-seals COP `d4fdca8` and SIM `e5b8128` and proceeds to the ordinary fresh
+seals COP `ca3dc8b` and SIM `e5b8128` and proceeds to the ordinary fresh
 preparation and final confirmation. Application images, original proof and
 its approved absolute expiry remain unchanged. PostgreSQL administrator
 credentials are still requested only into terminal/process RAM. This source
 procedure is not a receipt of completed recovery, reset or production activation.
+
+The v13 packet changes only the pinned COP source archive and recovery module
+after the read-only probe stopped at CA verification. Recovery now follows the
+existing Root-owned, single-link CA contract (safe modes `0400`, `0440`, `0444`,
+`0600`, `0640`, `0644`, at most 65536 bytes, stable read). Both the protected
+profile fingerprint and actual bytes must match the fixed approved CA SHA-256
+`7a3f9d9373cd63361148230e6c2804c6fb76dc204e18d5039aad7c7838d7a14a`.
+No certificate, permission, TLS verification or connection route is changed.
+Fixed failure stages distinguish custody, fingerprint, module, connection and
+read-only query errors without emitting stderr or private connection values.
+Source syntax and diff checks do not establish the actual CA mode or completed
+production recovery; the installation still validates live evidence itself.
