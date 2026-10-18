@@ -339,3 +339,38 @@ remain unchanged. Root verifies V9 custody and absence of a pending operation
 before temporary access; it builds a fresh plan rather than adopting one.
 The existing fixture source now models ordinary users without service accounts;
 no test suite was executed under the operator's cancellation.
+
+## Explicit finite report-age exception for this one release
+
+On 2026-10-18 the operator explicitly approved using the original report bytes
+with SHA-256 `66b6fb13c8a52c3d06f6aecafe3c9b101e5376cda3049988843e9d4961e0e38a`
+and the same nine candidate image IDs until **2026-10-19 15:22:00 UTC**
+(17:22 CEST). The original `checkedAt=2026-10-17T15:22:13Z` is unchanged. This
+is not a new acceptance result, a generic 48-hour mode or permission to skip
+other provider, database, writer, source, identity or activation checks.
+
+COP `d089c91` owns `validate_clean_whole_report_bytes(raw, images, actualNow)`.
+It hashes the original bytes itself, requires the exact approved v3 report,
+stamp, image set and absolute deadline, and continues all structural checks.
+Ordinary dictionary validators retain their 24-hour policy. No environment
+variable, caller-supplied approval boolean or fabricated clock enables it.
+
+The first preserve gate still runs before replacing the old immutable bundle.
+For this explicit V9 transition only, the external launcher verifies the exact
+new COP tar hash, selects one fixed regular acceptance-module member, verifies
+its source hash and compiles those bytes in RAM. It passes the actual protected
+Root report bytes and real clock to the new bytes validator; it does not edit
+or monkeypatch the old bundle. The same check runs before temporary peer-key
+preparation. Publication and all later Root/reset/activation gates use the new
+sealed bytes validator, including repeated checks during activation.
+
+Only the COP source archive changes. SIM `08d81c3`, messaging, candidate images,
+storage provider and original report bytes remain unchanged. The exact old V9
+bundle is preserved without replacement; Root must start with only that proof
+in the control directory, publish a new plan exclusively and retain its lock.
+No previous operation or plan is adopted. These existing Root custody gates
+limit the approved path to this one release operation. The one-hour health
+baseline and independent temporary-key expiry remain unchanged. Finishing
+after the exception deadline is not allowed, even if installation began earlier.
+No additional test suite was run by instruction; the operator will verify the
+application after deployment. Source checks do not assert production activation.

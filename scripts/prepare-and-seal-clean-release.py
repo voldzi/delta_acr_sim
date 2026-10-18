@@ -4,7 +4,7 @@ No stored administrator password, automatic GO, key provisioning/network or mode
 An explicitly approved fixed RAM-only transport is cleaned in the outer finally.
 Run only from docker Root. Private config never leaves this process/child pipes.
 """
-import argparse,contextlib,ctypes,getpass,hashlib,importlib.util,io,json,os,re,shlex,socket,stat,subprocess,sys,time,uuid,types
+import argparse,contextlib,ctypes,getpass,hashlib,importlib.util,io,json,os,re,shlex,socket,stat,subprocess,sys,tarfile,time,uuid,types
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
@@ -24,10 +24,15 @@ V6_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v6-3ec5366-sim15
 V9_MANIFEST=V4_MANIFEST.parent/'resume-6/public-manifest-v9.json'
 V9_MANIFEST_SHA='d842c5556b41ed227ab39654d73ca9be382846c0dcd6fa1d768cdf8ca002531a'
 V9_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v9-6c01ef7-sim08d81c3')
+TRANSITION_COP_REVISION='d089c9129c3798a7fbfe3d77e2bc4a052c770f16'
+TRANSITION_COP_ARCHIVE='cop-d089c91-public.tar'
+TRANSITION_COP_ARCHIVE_SHA='00d360515b64ae6ab46be82bb1329bc28c93b53fe84e68529e7e8e1401de1170'
+TRANSITION_ACCEPTANCE_MEMBER='scripts/account-safety/clean-release-acceptance.py'
+TRANSITION_ACCEPTANCE_SHA='d9a7bb767742a7e93e139a1ae8ad81d65d30f8722323eb1c0c98477014517ca4'
 RETIREMENT_PROBE_SHA='7940e142da215f3d28c413dd59344da2210220972d923d247c69e69709947a5b'
 KEYCLOAK_PREPARATION_SHA='48db373f5d8cff560ae9365dd8f4ea569677342dc31ca2cc917e463394d5e045'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
-BOOTSTRAP_SHA='779719088a1b7a21819bd0d3cf9fcf2125f80054ba3643cc1a8e9d379d501b29'
+BOOTSTRAP_SHA='7b4b0dd2b4c9b86ee2f2a12a33e20bebecb64bde34206c451a8540b42d22588a'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
 TEMP_KEY_SHA='87ea81867ac8bdb3605b7b186c550710b7b9ac268da7667b1b6ce60b22dd852a'
 TEMP_AUTHORIZE=Path('/home/voldzi/temporary-comm-authorize.py')
@@ -37,6 +42,32 @@ TEMP_PEER_HELPER_SHA='446508abf4eb990cb0b0b61d22fd703fd5eee2c152db1a41f922b76e04
 def need(v,c):
  if not v:raise RuntimeError(c)
 def sha(b):return hashlib.sha256(b).hexdigest()
+def validate_transition_acceptance(bootstrap_module,manifest,manifest_path,raw):
+ """Explicitly reviewed new validator, before replacing the old public bundle.
+ Never monkeypatch the old module, change report bytes/time or extract code to
+ disk. The exact new COP archive and fixed regular member are verified first.
+ """
+ need(os.getuid()==0 and socket.gethostname().split('.')[0]=='docker' and sys.flags.isolated,'RELEASE_TRANSITION_ACCEPTANCE_CONTEXT')
+ cop=manifest['archives']['cop']
+ need(cop['revision']==bootstrap_module.REVISIONS['cop']==TRANSITION_COP_REVISION and cop['file']==TRANSITION_COP_ARCHIVE and cop['sha256']==TRANSITION_COP_ARCHIVE_SHA,'RELEASE_TRANSITION_ACCEPTANCE_SOURCE')
+ need(isinstance(raw,bytes)and sha(raw)==manifest['acceptanceReport']['sha256']==V4_REPORT_SHA,'RELEASE_TRANSITION_ACCEPTANCE_REPORT')
+ path=Path(manifest_path).parent/TRANSITION_COP_ARCHIVE
+ archive=bootstrap_module.public_bytes(path,512*1024**2)
+ need(sha(archive)==TRANSITION_COP_ARCHIVE_SHA,'RELEASE_TRANSITION_ACCEPTANCE_ARCHIVE_SHA')
+ with tarfile.open(fileobj=io.BytesIO(archive),mode='r:')as bundle:
+  members=bundle.getmembers();need(len(members)<=100000,'RELEASE_TRANSITION_ACCEPTANCE_ARCHIVE_LIMIT')
+  matches=[m for m in members if m.name==TRANSITION_ACCEPTANCE_MEMBER]
+  need(len(matches)==1 and matches[0].isfile()and 0<matches[0].size<=1048576,'RELEASE_TRANSITION_ACCEPTANCE_MEMBER')
+  stream=bundle.extractfile(matches[0]);need(stream is not None,'RELEASE_TRANSITION_ACCEPTANCE_MEMBER')
+  with stream:source=stream.read(1048577)
+  need(len(source)==matches[0].size and sha(source)==TRANSITION_ACCEPTANCE_SHA,'RELEASE_TRANSITION_ACCEPTANCE_SOURCE_SHA')
+ module=types.ModuleType('verified_transition_acceptance')
+ module.__file__=str(path)+'!/'+TRANSITION_ACCEPTANCE_MEMBER
+ exec(compile(source,module.__file__,'exec'),module.__dict__)
+ need(module.REPORT==BASE/'whole12-acceptance.json'and callable(getattr(module,'validate_clean_whole_report_bytes',None)),'RELEASE_TRANSITION_ACCEPTANCE_INTERFACE')
+ value=module.validate_clean_whole_report_bytes(raw,manifest['candidateImages'],time.time())
+ need(value.get('reportSha256')==V4_REPORT_SHA,'RELEASE_TRANSITION_ACCEPTANCE_BINDING')
+ return value
 def load(path,name):
  s=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 def verified_bootstrap_code():
@@ -133,7 +164,7 @@ def preserve_public_v4(bootstrap_module,new_manifest,manifest_path,*,from_v5=Fal
  candidate=json.loads(json.dumps(new_manifest))
  if from_v9:
   need(old['archives']['cop']['revision']=='6c01ef77cee511397e83f44aaa8ede8d13aeaa06'and old['archives']['sim']['revision']=='08d81c335b362146c81e269c0c1e412b3e9d1ba9','RELEASE_TRANSITION_OLD_REVISIONS')
-  need(candidate['archives']['cop']['revision']==bootstrap_module.REVISIONS['cop']=='f3a701adf15734952fa7142b820a7f205c50f6e8'and candidate['archives']['sim']==old['archives']['sim'],'RELEASE_TRANSITION_NEW_REVISIONS')
+  need(candidate['archives']['cop']['revision']==bootstrap_module.REVISIONS['cop']==TRANSITION_COP_REVISION and candidate['archives']['sim']==old['archives']['sim'],'RELEASE_TRANSITION_NEW_REVISIONS')
   candidate['archives']['cop']=old['archives']['cop']
  elif from_v6:
   need(old['archives']['cop']['revision']=='3ec5366e4de676cf68fddae50c0df625df39c284'and old['archives']['sim']['revision']=='15d8a75f1a260f1946e35774e727a2636decc841','RELEASE_TRANSITION_OLD_REVISIONS')
@@ -150,9 +181,14 @@ def preserve_public_v4(bootstrap_module,new_manifest,manifest_path,*,from_v5=Fal
  need(previous.get('plansPrepared')==0 and previous.get('resetExecuted')is False and previous.get('productionActivated')is False,'RELEASE_TRANSITION_OLD_RECEIPT')
  need({k:v['revision']for k,v in previous['sources'].items()}=={k:v['revision']for k,v in old['archives'].items()},'RELEASE_TRANSITION_OLD_SOURCE_REVISION')
  ensure_control_directory(V4_REPORT_SHA,require_existing=True)
- old_host=load(Path(previous['sources']['cop']['root'])/'scripts/account-safety/clean-reset-root.py','transition_old_public_gate')
- # The unchanged acceptance must still be current BEFORE preserving the bundle.
- old_host._acceptance_module().validate_clean_whole_report_v3(json.loads(root_read(BASE/'whole12-acceptance.json')),new_manifest['candidateImages'],time.time())
+ proof_raw=root_read(BASE/'whole12-acceptance.json')
+ if from_v9:
+  # The old immutable validator has no authority to recognize the explicitly
+  # approved finite age exception. Use only the new exact pinned source here.
+  validate_transition_acceptance(bootstrap_module,new_manifest,manifest_path,proof_raw)
+ else:
+  old_host=load(Path(previous['sources']['cop']['root'])/'scripts/account-safety/clean-reset-root.py','transition_old_public_gate')
+  old_host._acceptance_module().validate_clean_whole_report_v3(json.loads(proof_raw),new_manifest['candidateImages'],time.time())
  for item in new_manifest['archives'].values():
   need(Path(item['file']).name==item['file'],'RELEASE_TRANSITION_ARCHIVE_NAME')
   archive=bootstrap_module.public_bytes(Path(manifest_path).parent/item['file'],512*1024**2)
@@ -397,7 +433,7 @@ def publish_acceptance_report(bootstrap_module,host,manifest):
  need(sha(raw)==artifact['sha256'],'RELEASE_ACCEPTANCE_SHA')
  report=json.loads(raw)
  need(report.get('contractVersion')=='cop-sim-whole-clean-acceptance-v3','RELEASE_ACCEPTANCE_V3_REQUIRED')
- host._acceptance_module().validate_clean_whole_report_v3(report,manifest['candidateImages'],time.time())
+ host._acceptance_module().validate_clean_whole_report_bytes(raw,manifest['candidateImages'],time.time())
  # Never adopt a caller-selected target or silently replace another Root proof.
  target=BASE/'whole12-acceptance.json'
  need(host._acceptance_module().REPORT==target,'RELEASE_ACCEPTANCE_TARGET')
@@ -477,6 +513,9 @@ def main():
   if a.resume_public_v6:need(a.manifest_sha256==V6_MANIFEST_SHA and Path(a.public_manifest)==V6_MANIFEST,'RELEASE_RESUME_V6_MANIFEST_SCOPE')
   verify_bootstrap(V9_MANIFEST_SHA if a.preserve_public_v9 else V6_MANIFEST_SHA)
   ensure_control_directory(V4_REPORT_SHA,require_existing=True)
+  if a.preserve_public_v9:
+   # Refuse an expired/unbound exception before creating another RAM identity.
+   validate_transition_acceptance(bootstrap_module,manifest,a.public_manifest,root_read(BASE/'whole12-acceptance.json'))
  if a.prepare_peer_access:
   need(a.preserve_public_v5 or a.preserve_public_v6 or a.preserve_public_v9 or a.resume_public_v6,'RELEASE_PEER_PREPARATION_SCOPE')
   verify_bootstrap(V9_MANIFEST_SHA if a.preserve_public_v9 else V6_MANIFEST_SHA if a.resume_public_v6 or a.preserve_public_v6 else V5_MANIFEST_SHA)
