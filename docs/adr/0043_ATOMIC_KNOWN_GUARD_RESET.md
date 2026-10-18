@@ -31,3 +31,23 @@ vlastní transakci; reprodukovatelné cache ani testovací uživatelská data se
 neobnovují. Syntetické testy nenahrazují skutečnou Root a whole-service akceptaci.
 
 Přesný rozsah a postup: [runbook 21](../runbooks/21_CLEAN_COP_SIM_RESET_OPERATOR.md).
+
+## Doplnění 18. 10. 2026 — doložený zrušený producent
+
+Uživatel schválil nápravu kontroly, která stále vyžadovala cron již odstraněný
+dřívějším schváleným disabled-only přechodem. Prázdný crontab ani vložený
+komentářový marker nenahrazují autoritu. Rozlišují se původní přesně známý
+legacy producent a explicitní profil `known-retired-v1`, doložený skutečnými
+Root-only záznamy ca1/c46/12e a současnou kontrolou vybraných schedulerů,
+procesů a chráněné reportovací složky. Vazba záznamů a schedulerů se ověřuje
+průběžně po dobu admission, ne pouze jednorázově před resetem. Neznámý stav
+se odmítá. Změna reportovacích souborů provedená vlastní drženou Root operací
+se nesmí zaměnit za návrat externího producenta.
+
+Nutné provozní důkazy se získají uvnitř jediného připraveného instalačního
+příkazu před změnou; nevzniká další povinné samostatné testovací kolo. Na přání
+uživatele se nové testovací sady nespouštějí, což není tvrzení o jejich úspěchu.
+Zachovají se předchozí veřejné balíky V4 i V5, kandidátní aplikační obrazy,
+akceptační report a všechna původní omezení. Produkční dokončení lze tvrdit
+teprve podle skutečných výsledků operace; uživatelskou funkčnost ověří uživatel
+v produkci.

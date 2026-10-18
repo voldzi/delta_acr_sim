@@ -7,6 +7,52 @@ a [ADR 0043](../adr/0043_ATOMIC_KNOWN_GUARD_RESET.md).
 
 ## Vstup a autorita
 
+### Jediný produkční příkaz po zrušení dalších testovacích kol
+
+Připnutá oprava COP je `3ec5366e4de676cf68fddae50c0df625df39c284`.
+Připravovaný veřejný balík V6 je v původním uživatelském stagingu `resume-3`;
+nemění již zapečetěný V5 ani jeho manifest. Jeden příkaz používá
+`--prepare-peer-access --preserve-public-v5 --complete-release`.
+Před vytvořením dočasného přístupu ověří skutečný starý V5 balík `3ef1…`.
+Existující/nekonzistentní dočasná autorita se nepřebírá. Přes již schválený
+připnutý helper vytvoří klíč pouze do Root RAM a vypíše veřejný JSON.
+Operátor jej předá COP a nechá tentýž příkaz čekat. COP instaluje veřejné
+omezené oprávnění na oba servery; po potvrzení operátor zadá
+`TRANSPORT_READY`. Následně se skutečně ověří SSH/sudo na obou serverech.
+Tento text není důkaz přístupu. Heslo PostgreSQL se zadává pouze skrytě do
+Root terminálu později; žádné tajemství se nevypisuje ani nepředává v chatu.
+Dokončení, chyba i přerušení procházejí stávajícím úklidem obou autorizací,
+control spojení a privátního klíče. Neověřený úklid musí být hlášen jako chyba.
+
+Uživatel 18. 10. schválil opravu custody zrušeného cronu a požádal o přípravu
+nasazení bez dalších testovacích kol. Nový launcher nepředkládá samostatnou
+diagnostickou sondu jako další krok: zavolá nezměněnou připnutou čtecí sondu
+uvnitř `--preserve-public-v5`, před změnou veřejného balíku. Vynutí platnou
+Root retirement vazbu, skutečné čtení control složky jen se známým důkazem,
+nulový počet aktivních producentů i scheduler matches a nepřítomný lock.
+Sonda je provozní preflight, ne nová syntetická akceptace. Její report se
+nepřeznačuje za dokončené mazání.
+
+Zachovává se přesný existující V5 manifest `3ef1c647…` / COP `4ed81c5` jako
+`clean-operator-shared-v3-preserved-v5-4ed81c5`; dříve zachovaný V4 se nemění.
+Přechod stále dovolí jen změnu veřejného COP archivu, nikoli výměnu obrazů,
+SIM `15d8a75`, Messaging `969a751` či prodloužení platnosti reportu `66b6…`.
+Existující plán/enrollment/epocha/neznámý obsah nebo nepřístupná inventura
+zastaví postup. `--preserve-public-v4` se po jeho provedení neopakuje.
+
+Po přechodu nový COP profil `known-retired-v1` průběžně kontroluje drženou
+vazbu skutečných Root receiptů a schedulerů. Stará legacy větev zůstává
+oddělená. Žádné vytvoření markeru nebo vrácení staré úlohy jen kvůli guardu.
+Výpadek nebo změna vazby znamená zastavení; nelze zapnout writery jednotlivě
+proti částečně změněnému schématu. Přístup na COMM/storage je samostatný
+nezbytný autentizační předpoklad, nikoli test; launcher neobchází SSH/sudo.
+
+Příprava příkazu není produkční nasazení. Nové testovací sady nebyly na přání
+uživatele spuštěny. Před zveřejněním se provede pouze kontrola syntaxe,
+statické návaznosti, rozsahu změny a otisků artefaktů. Skutečné provozní
+kontroly zůstávají povinné uvnitř příkazu; uživatel následně ověří funkčnost
+v produkci. Platnost původního akceptačního důkazu se nesmí uměle obnovit.
+
 ### Diagnostika již odstraněného reportovacího cronu
 
 Původní disabled-only instalátor podle runbooku 20 odstranil přesný legacy
