@@ -4,14 +4,19 @@ No stored administrator password, automatic GO, key provisioning/network or mode
 An explicitly approved fixed RAM-only transport is cleaned in the outer finally.
 Run only from docker Root. Private config never leaves this process/child pipes.
 """
-import argparse,getpass,hashlib,importlib.util,json,os,re,shlex,socket,stat,subprocess,sys,time,uuid,types
+import argparse,ctypes,getpass,hashlib,importlib.util,json,os,re,shlex,socket,stat,subprocess,sys,time,uuid,types
 from pathlib import Path
 HERE=Path(__file__).resolve().parent
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 BASE=Path('/srv/cop/runtime/clean-reset')
 RUNTIME_BINDING=Path('/srv/cop/runtime/api/active.json')
+V4_MANIFEST=Path('/srv/x5-production/staging/cop/clean-release-public-20261017-v4/public-manifest-v4.json')
+V4_MANIFEST_SHA='4f163f1a49ded1b9d805848ca913ac1f474b6500fc36ce48f992e3ae0280f6be'
+V4_REPORT_SHA='66b6fb13c8a52c3d06f6aecafe3c9b101e5376cda3049988843e9d4961e0e38a'
+V4_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v4-f4f0474')
+FIXED_COP_REVISION='4ed81c5a5ea0772a8d83636473925f07fe92b389'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
-BOOTSTRAP_SHA='63db9fa0dd6c828ca7d384605539374525bd3e82bef94ea76a9db7937fe68678'
+BOOTSTRAP_SHA='d301260a078575253c8d78545167de035114aebd290913d83aa139d2b3f437e5'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
 TEMP_KEY_SHA='87ea81867ac8bdb3605b7b186c550710b7b9ac268da7667b1b6ce60b22dd852a'
 TEMP_AUTHORIZE=Path('/home/voldzi/temporary-comm-authorize.py')
@@ -60,7 +65,7 @@ def open_control_parent():
 def check_control_parent(chain):
  for path,expected in chain:
   s=path.lstat();need(stat.S_ISDIR(s.st_mode)and directory_identity(s)==expected,'RELEASE_CONTROL_PARENT_CAS')
-def ensure_control_directory():
+def ensure_control_directory(accepted_report_sha=None,require_existing=False):
  need(BASE==Path('/srv/cop/runtime/clean-reset'),'RELEASE_CONTROL_FIXED_SCOPE')
  parent,chain=open_control_parent();child=None
  def inventory():
@@ -72,10 +77,18 @@ def ensure_control_directory():
   return out
  try:
   check_control_parent(chain);before=inventory();created=BASE.name not in os.listdir(parent)
+  need(not require_existing or not created,'RELEASE_CONTROL_EXISTING_REQUIRED')
   if created:os.mkdir(BASE.name,0o700,dir_fd=parent)
   child=os.open(BASE.name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
   s=os.fstat(child)
-  need(stat.S_ISDIR(s.st_mode)and s.st_uid==0 and stat.S_IMODE(s.st_mode)==0o700 and not os.listdir(child),'RELEASE_CONTROL_DIRECTORY_CUSTODY')
+  need(stat.S_ISDIR(s.st_mode)and(s.st_uid,s.st_gid,stat.S_IMODE(s.st_mode))==(0,0,0o700),'RELEASE_CONTROL_DIRECTORY_CUSTODY')
+  names=set(os.listdir(child))
+  need(not names or(accepted_report_sha==V4_REPORT_SHA and names=={'whole12-acceptance.json'}),'RELEASE_CONTROL_DIRECTORY_CUSTODY')
+  if names:
+   report=BASE/'whole12-acceptance.json';r=report.lstat()
+   need((r.st_uid,r.st_gid,stat.S_IMODE(r.st_mode),r.st_nlink)==(0,0,0o600,1),'RELEASE_CONTROL_REPORT_CUSTODY')
+   need(sha(root_read(report))==accepted_report_sha,'RELEASE_CONTROL_REPORT_SHA')
+  need(not require_existing or names=={'whole12-acceptance.json'},'RELEASE_CONTROL_REPORT_REQUIRED')
   if created:os.fchown(child,0,0);os.fchmod(child,0o700);os.fsync(child);os.fsync(parent)
   after=os.fstat(child);path=os.stat(BASE.name,dir_fd=parent,follow_symlinks=False)
   need(directory_identity(after)==directory_identity(path)and(after.st_uid,after.st_gid,stat.S_IMODE(after.st_mode))==(0,0,0o700),'RELEASE_CONTROL_DIRECTORY_CAS')
@@ -84,6 +97,56 @@ def ensure_control_directory():
  finally:
   if child is not None:os.close(child)
   os.close(parent)
+def rename_public_bundle_noreplace(parent,source,destination):
+ """Atomic no-replace rename only; no copy, deletion or overwrite fallback."""
+ libc=ctypes.CDLL(None,use_errno=True)
+ if sys.platform=='linux':fn=libc.renameat2;flag=1
+ elif sys.platform=='darwin':fn=libc.renameatx_np;flag=4
+ else:raise RuntimeError('RELEASE_TRANSITION_PLATFORM')
+ fn.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint]
+ if fn(parent,os.fsencode(source),parent,os.fsencode(destination),flag):raise OSError(ctypes.get_errno(),'RELEASE_TRANSITION_RENAME_FAILED')
+def preserve_public_v4(bootstrap_module,new_manifest,manifest_path):
+ """Preserve exact public V4, never adopt or remove a prior operation.
+ Root must directly inventory BASE; a prior error/EACCES proves no absence.
+ Failure preserves evidence for manual review, with no automatic rollback.
+ """
+ bootstrap_module.context()
+ need(TARGET==Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')and V4_ARCHIVE==TARGET.with_name('clean-operator-shared-v3-preserved-v4-f4f0474'),'RELEASE_TRANSITION_FIXED_PATHS')
+ raw=bootstrap_module.public_bytes(V4_MANIFEST,1048576)
+ need(sha(raw)==V4_MANIFEST_SHA,'RELEASE_TRANSITION_OLD_MANIFEST_SHA');old=json.loads(raw)
+ candidate=json.loads(json.dumps(new_manifest))
+ need(candidate['archives']['cop']['revision']==FIXED_COP_REVISION,'RELEASE_TRANSITION_NEW_COP_REVISION')
+ need(old['archives']['cop']['revision']=='f4f0474ec5c5697010b9bdfddb58fac3f1786610','RELEASE_TRANSITION_OLD_COP_REVISION')
+ candidate['archives']['cop']=old['archives']['cop']
+ need(candidate==old and new_manifest['acceptanceReport']['sha256']==V4_REPORT_SHA,'RELEASE_TRANSITION_SCOPE_CHANGED')
+ previous=verify_bootstrap(V4_MANIFEST_SHA)
+ need(previous.get('plansPrepared')==0 and previous.get('resetExecuted')is False and previous.get('productionActivated')is False,'RELEASE_TRANSITION_OLD_RECEIPT')
+ need({k:v['revision']for k,v in previous['sources'].items()}=={k:v['revision']for k,v in old['archives'].items()},'RELEASE_TRANSITION_OLD_SOURCE_REVISION')
+ ensure_control_directory(V4_REPORT_SHA,require_existing=True)
+ old_host=load(Path(previous['sources']['cop']['root'])/'scripts/account-safety/clean-reset-root.py','transition_old_public_gate')
+ # The unchanged acceptance must still be current BEFORE preserving the bundle.
+ old_host._acceptance_module().validate_clean_whole_report_v3(json.loads(root_read(BASE/'whole12-acceptance.json')),new_manifest['candidateImages'],time.time())
+ for item in new_manifest['archives'].values():
+  need(Path(item['file']).name==item['file'],'RELEASE_TRANSITION_ARCHIVE_NAME')
+  archive=bootstrap_module.public_bytes(Path(manifest_path).parent/item['file'],512*1024**2)
+  need(sha(archive)==item['sha256'],'RELEASE_TRANSITION_ARCHIVE_SHA')
+ parent=TARGET.parent
+ need(parent.resolve()==parent,'RELEASE_TRANSITION_PARENT_PATH')
+ fd=os.open(parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+ try:
+  p=os.fstat(fd);need((p.st_uid,p.st_gid,stat.S_IMODE(p.st_mode))==(0,0,0o755),'RELEASE_TRANSITION_PARENT_CUSTODY')
+  before=os.stat(TARGET.name,dir_fd=fd,follow_symlinks=False)
+  need(stat.S_ISDIR(before.st_mode)and(before.st_uid,before.st_gid,stat.S_IMODE(before.st_mode))==(0,0,0o555),'RELEASE_TRANSITION_SOURCE_CUSTODY')
+  need(V4_ARCHIVE.name not in os.listdir(fd),'RELEASE_TRANSITION_ARCHIVE_EXISTS')
+  ensure_control_directory(V4_REPORT_SHA,require_existing=True)
+  now=os.stat(TARGET.name,dir_fd=fd,follow_symlinks=False)
+  need((before.st_dev,before.st_ino,before.st_mtime_ns,before.st_ctime_ns)==(now.st_dev,now.st_ino,now.st_mtime_ns,now.st_ctime_ns),'RELEASE_TRANSITION_SOURCE_CHANGED')
+  need(directory_identity(parent.lstat())==directory_identity(p),'RELEASE_TRANSITION_PARENT_CHANGED')
+  rename_public_bundle_noreplace(fd,TARGET.name,V4_ARCHIVE.name);os.fsync(fd)
+  saved=os.stat(V4_ARCHIVE.name,dir_fd=fd,follow_symlinks=False)
+  need(directory_identity(saved)==directory_identity(before)and TARGET.name not in os.listdir(fd),'RELEASE_TRANSITION_RENAME_UNPROVEN')
+ finally:os.close(fd)
+ return {'publicV4Preserved':True,'priorOperationAdopted':False,'productionActivated':False}
 def read_current_runtime_binding(expected):
  path=RUNTIME_BINDING;need(path.resolve()==path,'RELEASE_RUNTIME_POINTER_PATH')
  parent=path.parent.lstat();need(stat.S_ISDIR(parent.st_mode)and(parent.st_uid,parent.st_gid,stat.S_IMODE(parent.st_mode))==(1000,1000,0o700),'RELEASE_RUNTIME_POINTER_PARENT')
@@ -134,6 +197,7 @@ def cleanup_temporary_transport():
  need(result=={'temporaryPrivateIdentityRemoved':True,'exactAuthorizationAbsent':True},'RELEASE_TEMP_CLEANUP_NOT_VERIFIED')
  print(json.dumps({'temporaryTransportCleanup':result}))
 def safe_failure_code(error):
+ if isinstance(error,NameError) and isinstance(error.name,str) and re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}',error.name):return 'UNDEFINED_NAME_'+error.name
  # Never print arbitrary exception text, filenames, stderr or private payloads.
  if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and re.fullmatch(r'(?:ROOT|RELEASE|RESET|CLEAN|SIM|MESSAGING)_[A-Z0-9_]{1,90}',error.args[0]):return error.args[0]
  if isinstance(error,OSError):return 'OS_ERROR_'+str(error.errno if isinstance(error.errno,int)else 'UNKNOWN')
@@ -156,8 +220,10 @@ def verify_bootstrap(expected_sha):
  need(r['manifestSha256']==expected_sha and r['dependencyImage']=='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df' and r['copApiImage']=='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86','RELEASE_BOOTSTRAP_BINDING')
  for source in r['sources'].values():
   root=Path(source['root']);need(root.resolve()==root and root.stat().st_uid==0 and not root.stat().st_mode&0o222,'RELEASE_SOURCE_CUSTODY')
+  actual={str(p.relative_to(root))for p in root.rglob('*')if p.is_file()and 'node_modules'not in p.relative_to(root).parts and p.suffix in {'.py','.mjs','.json','.sql','.js','.ts'}}
+  need(actual==set(source['files']),'RELEASE_SOURCE_INVENTORY')
   for name,d in source['files'].items():
-   need(not Path(name).is_absolute() and '..' not in Path(name).parts and sha(root_read(root/name,16*1024*1024))==d,'RELEASE_SOURCE_SHA')
+   need(not Path(name).is_absolute() and '..' not in Path(name).parts and (root/name).resolve()==root/name and sha(root_read(root/name,16*1024*1024))==d,'RELEASE_SOURCE_SHA')
  for leaf,d in [('usr/local/bin/node','c8726a01ce4ac245ea9e5cb483992a90e628e5847d98f9a9f3be048d09a50d75'),('lib/ld-musl-x86_64.so.1','38d022ce7425ff105ccfb53598f606e6e5f5f0a34bfbc793d65e6f34c9d72806')]:
   need(sha(root_read(TARGET/'runtime'/leaf,200*1024*1024))==d,'RELEASE_RUNTIME_SHA')
  return r
@@ -263,17 +329,26 @@ def prepare_and_seal_clean_release(bootstrap,public_manifest,postgres_password,d
    if storage:storage.close()
   finally:remote.close()
 def main():
+ # Root can write even beneath mode 0555: imports must not add bytecode to
+ # either the preserved bundle or the freshly sealed public operator tree.
+ sys.dont_write_bytecode=True
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--public-manifest',required=True);p.add_argument('--manifest-sha256',required=True)
+ p.add_argument('--preserve-public-v4',action='store_true',help='Explicit one-time public bundle version transition; never adopts a reset plan')
  modes=p.add_mutually_exclusive_group();modes.add_argument('--apply-disabled-reset',action='store_true');modes.add_argument('--complete-release',action='store_true');a=p.parse_args()
  need(os.getuid()==0 and socket.gethostname().split('.')[0]=='docker' and sys.flags.isolated,'RELEASE_ROOT_CONTEXT')
  bootstrap_module=verified_bootstrap_code()
  bootstrap_module.context()
  raw=bootstrap_module.public_bytes(a.public_manifest,1048576);need(sha(raw)==a.manifest_sha256,'RELEASE_PUBLIC_MANIFEST_SHA');manifest=json.loads(raw)
+ if a.preserve_public_v4:
+  need(sys.stdin.isatty() and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
+  bootstrap_module.check_transports()
+  need(input('Type PRESERVE_PUBLIC_V4_AND_REBUILD to preserve only the verified public operator bundle: ')=='PRESERVE_PUBLIC_V4_AND_REBUILD','RELEASE_TRANSITION_NOT_CONFIRMED')
+  print(json.dumps(preserve_public_v4(bootstrap_module,manifest,a.public_manifest)),flush=True)
  if not TARGET.exists():bootstrap_module.bootstrap_clean_release(a.public_manifest,a.manifest_sha256)
  else:bootstrap_module.check_transports()
  bootstrap=verify_bootstrap(a.manifest_sha256)
  cop=Path(bootstrap['sources']['cop']['root']);host=load(cop/'scripts/account-safety/clean-reset-root.py','release_early_root_gate')
- ensure_control_directory()
+ ensure_control_directory(V4_REPORT_SHA if a.preserve_public_v4 else None,require_existing=a.preserve_public_v4)
  publish_acceptance_report(bootstrap_module,host,manifest)
  # Blocks before asking PG password when exact whole-provider GO is missing.
  host._acceptance_module().verified_pre_stop_acceptance(manifest['candidateImages'])

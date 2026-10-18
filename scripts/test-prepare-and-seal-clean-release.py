@@ -1,5 +1,5 @@
 """Synthetic Root orchestration only, no real credentials/SSH/PG/publication."""
-import hashlib,importlib.util,json,pathlib,types,unittest
+import hashlib,importlib.util,json,pathlib,sys,types,unittest
 from unittest.mock import patch
 p=pathlib.Path(__file__).parent/'prepare-and-seal-clean-release.py'
 s=importlib.util.spec_from_file_location('release',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
@@ -80,7 +80,7 @@ class Release(unittest.TestCase):
   self.assertIn("activation.capture_before_freeze(modules,prepared['plan'])",text)
   self.assertIn("'productionActivated':False",text)
   self.assertNotIn('pickle',text)
- def exercise(self,deny=False,close_failure=False):
+ def exercise(self,deny=False,close_failure=False,via_main=False):
   calls=[];published=[];secret='synthetic-private-password-never-publish'
   class Remote:
    def open(self):calls.append('comm-open')
@@ -107,7 +107,9 @@ class Release(unittest.TestCase):
   def inspect(*a):calls.append('remaining3');return {}
   def finalize(private,*a):return {'privateConfig':private,'publicSummary':{}}
   def attach(joined,*a):calls.append('join12');return {**joined,'publicSummary':{'reviewedPlanDigests':{str(i):'a'*64 for i in range(12)}}}
-  modules={'sealed_release_controller':types.SimpleNamespace(host=host),'sealed_release_collector':types.SimpleNamespace(collect_messaging_initial_private=collect),'sealed_release_remaining':types.SimpleNamespace(inspect_remaining_private=inspect,finalize_private_preparation=finalize,attach_messaging_install_preparation=attach),'sealed_release_s3':types.SimpleNamespace(ProductionStorage=Storage)}
+  modules={'release_early_root_gate':host,'sealed_release_controller':types.SimpleNamespace(host=host),'sealed_release_collector':types.SimpleNamespace(collect_messaging_initial_private=collect),'sealed_release_remaining':types.SimpleNamespace(inspect_remaining_private=inspect,finalize_private_preparation=finalize,attach_messaging_install_preparation=attach),'sealed_release_s3':types.SimpleNamespace(ProductionStorage=Storage)}
+  modules['sealed_complete_release']=types.SimpleNamespace(activation_modules=lambda b:(calls.append('activation-modules'),{})[1],capture_before_freeze=lambda *a:calls.append('capture-before-freeze'),complete_release=lambda *a:(calls.append('activate'),{'synthetic':True})[1])
+  modules['sealed_actual_common_reset']=types.SimpleNamespace(run_common_reset=lambda private:(calls.append('reset'),{'synthetic':True})[1])
   bootstrap={'sources':{k:{'root':'/synthetic/'+k,'files':{}} for k in ['cop','sim','messaging']},'dependencyImage':'synthetic-dependency'}
   manifest={'candidateImages':{},'storageProvider':{}}
   fake_stat=types.SimpleNamespace(st_mode=0o100600,st_nlink=1,st_dev=1,st_ino=2,st_uid=0,st_gid=0)
@@ -115,15 +117,31 @@ class Release(unittest.TestCase):
    if deny or close_failure:
     with self.assertRaisesRegex(RuntimeError,'SYNTHETIC_GATE_DENIED'if deny else'SYNTHETIC_STORAGE_CLOSE_FAILED'):m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
    else:
-    r=m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
-    self.assertEqual(len(r['plan']['reviewedPlanDigests']),12)
-    self.assertIn('expectedImages',r['privateConfig'])
+    if via_main:
+     raw=json.dumps(manifest).encode();boot=types.SimpleNamespace(context=lambda:None,public_bytes=lambda *a:raw,bootstrap_clean_release=lambda *a:calls.append('bootstrap'))
+     flags=types.SimpleNamespace(**{**{name:getattr(sys.flags,name)for name in dir(sys.flags)if not name.startswith('_')},'isolated':True})
+     with patch.object(m,'verified_bootstrap_code',return_value=boot),patch.object(m,'verify_bootstrap',return_value=bootstrap),patch.object(m,'ensure_control_directory',side_effect=lambda *a,**k:calls.append('control')),patch.object(m,'publish_acceptance_report',side_effect=lambda *a:calls.append('report')),patch.object(m.os,'getuid',return_value=0),patch.object(m.socket,'gethostname',return_value='docker'),patch.object(m.sys,'flags',flags),patch.object(m.sys,'argv',['launcher','--public-manifest','/synthetic/manifest.json','--manifest-sha256',m.sha(raw),'--complete-release']),patch.object(m.sys.stdin,'isatty',return_value=True),patch.object(m.sys.stdout,'isatty',return_value=True),patch('builtins.input',side_effect=['ALL_TEST_ACCOUNTS_SHARED_IDENTITY_RESET','COMPLETE_CLEAN_RELEASE']),patch.object(m.getpass,'getpass',return_value=secret),patch.object(m,'cleanup_temporary_transport',side_effect=lambda:calls.append('cleanup')),patch('builtins.print')as output:
+      m.run_with_transport_cleanup(m.main)
+      self.assertNotIn(secret,str(output.call_args_list))
+    else:
+     r=m.prepare_and_seal_clean_release(bootstrap,manifest,secret,{})
+     self.assertEqual(len(r['plan']['reviewedPlanDigests']),12)
+     self.assertIn('expectedImages',r['privateConfig'])
   self.assertNotIn(secret,b''.join(published).decode())
   return calls,published
  def test_actual_plan_flow_not_private_publication(self):
   calls,p=self.exercise()
   self.assertEqual(calls,['comm-open','gate','node7','message-inspect','storage-open','remaining3','join12','validate12','storage-close','comm-close'])
   self.assertEqual(len(p),2)
+ def test_whole_launcher_after_password_through_fake_adapters_and_cleanup(self):
+  calls,published=self.exercise(via_main=True)
+  self.assertEqual(calls,['bootstrap','control','report','gate','comm-open','gate','node7','message-inspect','storage-open','remaining3','join12','validate12','storage-close','comm-close','activation-modules','capture-before-freeze','reset','activate','cleanup'])
+  self.assertEqual(len(published),2)
+ def test_name_error_reports_identifier_not_secret_exception_text(self):
+  e=NameError('synthetic-private-password-never-publish',name='sha')
+  self.assertEqual(m.safe_failure_code(e),'UNDEFINED_NAME_sha')
+  self.assertNotIn('synthetic-private',m.safe_failure_code(e))
+  self.assertEqual(m.safe_failure_code(NameError('secret',name='not an identifier')),'UNCLASSIFIED_NameError')
  def test_gate_failure_no_inspection_or_publication(self):
   calls,p=self.exercise(True);self.assertEqual(calls,['comm-open','gate','comm-close']);self.assertEqual(p,[])
  def test_storage_close_failure_still_closes_comm(self):

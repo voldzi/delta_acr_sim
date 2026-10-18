@@ -7,6 +7,47 @@ a [ADR 0043](../adr/0043_ATOMIC_KNOWN_GUARD_RESET.md).
 
 ## Vstup a autorita
 
+### Opravený veřejný operační balík V5 (18. 10. 2026)
+
+Zdrojový COP `4ed81c5a5ea0772a8d83636473925f07fe92b389` opravuje
+nedefinované `sha` v původní cestě dočasné identity přímým `hashlib.sha256`.
+Nejde o nový aplikační obraz ani nový akceptační důkaz. Obrazy, SIM archiv
+`15d8a75`, Messaging archiv `969a751` a původní report s SHA-256
+`66b6fb13c8a52c3d06f6aecafe3c9b101e5376cda3049988843e9d4961e0e38a`
+zůstávají stejné. Čas reportu se neobnovuje; po vypršení je nutné nové skutečné
+ověření, nikoli úprava `checkedAt`.
+
+Přepínač `--preserve-public-v4` vyžaduje Root terminál a samostatné potvrzení
+`PRESERVE_PUBLIC_V4_AND_REBUILD`. Před změnou ověří původní manifest `4f163f…`,
+neměnný strom a soupis zdrojů, původní verze, X5 UUID a alespoň 3 GiB místa,
+platnost původní akceptace a všechny nové archivy. Nový manifest smí měnit
+výhradně COP archiv. Správce musí přímo přečíst Root složku
+`/srv/cop/runtime/clean-reset`: dovolena je pouze původní `whole12-acceptance.json`
+s přesným otiskem, Root:Root, 0600, jeden hardlink. Chyba přístupu, plán,
+enrollment, epocha nebo jakýkoli jiný obsah znamenají stop před přejmenováním.
+
+Pouze původní veřejný balík `clean-operator-shared-v3` se atomicky a bez možnosti
+přepsání cíle zachová jako `clean-operator-shared-v3-preserved-v4-f4f0474`.
+Jeho obsah se neupravuje ani nemaže. Následuje nová sestava z ověřených veřejných
+archivů; importy nesmějí zapisovat bytecode do chráněných stromů. Existující
+archiv, konflikt, změna souboru nebo částečná chyba vyžadují ruční kontrolu;
+žádná automatická adopce, obnova ani odstranění rozpracovaného stavu.
+Soubory databází, aplikací a secrets tento přechod nemění.
+
+Příkaz pouze připravíme a zveřejníme; sám se nespouští. Případné následné
+`--complete-release` stále vyžaduje původní interaktivní potvrzení rozsahu,
+heslo PostgreSQL jen v RAM a závěrečné potvrzení před změnou dat.
+Změna veřejného balíku není důkazem nasazení či dokončeného mazání.
+
+Regrese: `test-public-v4-transition.py` (včetně skutečného atomického rename
+na syntetických složkách), `test-release-control-prerequisites.py`,
+`test-prepare-and-seal-clean-release.py` (celý `main` po hesle přes náhradní
+externí adaptéry až po zachycení stavu, reset, aktivaci a úklid),
+`test-bootstrap-clean-release-root.py`, `test-complete-clean-release.py` a
+`test-coordinate-clean-release.py`. Tyto testy neprovádějí produkční nasazení.
+Chyby vypisují pouze pevný kód nebo identifikátor chybějícího Python jména,
+nikoli text výjimky, hesla či obsah podkladů.
+
 `node scripts/plan-clean-sim-reset.mjs --plan` pouze vypíše konečný rozsah.
 Nemá `--apply`, nečte přístupové údaje a nepřipojuje se k serveru. Moduly
 `scripts/lib/clean-reset-*.mjs` nejsou endpoint ani součást runtime obrazu.

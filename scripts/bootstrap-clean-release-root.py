@@ -8,7 +8,7 @@ from pathlib import Path
 TARGET=Path('/srv/x5-production/staging/cop/clean-operator-shared-v3')
 DEPS='sha256:2e61857d00f7fe0326a7b50a8f96f0cb4563d4d9028645dc08efe51b84e800df'
 APP='sha256:28648cded21fbd52602a197693d0b0dc9eb213cd2bd84d6227b7da34c0cbab86'
-REVISIONS={'cop':'f4f0474ec5c5697010b9bdfddb58fac3f1786610','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
+REVISIONS={'cop':'4ed81c5a5ea0772a8d83636473925f07fe92b389','messaging':'969a75164a0dd2cf34dac4f426be40702dfc8311'}
 UUID='2f93f595-b61b-4eea-9054-7afa9b275b5b'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 TEMP_COMM=Path('/run/cop-clean-reset-comm')

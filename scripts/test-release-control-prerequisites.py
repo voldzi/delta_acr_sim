@@ -14,19 +14,21 @@ class Control(unittest.TestCase):
  def test_parent_path_cas_drift_refused(self):
   with patch.object(pathlib.Path,'lstat',return_value=meta(1000,1000,0o40700,99)):
    with self.assertRaisesRegex(RuntimeError,'PARENT_CAS'):m.check_control_parent([(pathlib.Path('/srv/cop/runtime'),m.directory_identity(meta(1000,1000,0o40700,13)))])
- def exercise(self,problem=None,existing=False):
+ def exercise(self,problem=None,existing=False,report=False):
   names=['api']+(['clean-reset']if existing else[]);calls=[];child=meta(uid=1000 if problem=='owner'else 0);child.st_mode=0o120777 if problem=='symlink'else 0o40700
-  def listing(fd):return (['unknown']if problem=='nonempty'else[])if fd==43 else list(names)
+  def listing(fd):return (['unknown']if problem=='nonempty'else ['whole12-acceptance.json']if report else[])if fd==43 else list(names)
   def mk(name,mode,**kw):self.assertEqual((name,mode,kw),('clean-reset',0o700,{'dir_fd':42}));calls.append('mkdir');names.append(name)
   def opened(name,flags,**kw):self.assertTrue(flags&os.O_NOFOLLOW);self.assertEqual(kw,{'dir_fd':42});return 43
   def st(name,**kw):return child if name=='clean-reset'else meta(1000,1000,0o40700,7)
-  with patch.object(m,'open_control_parent',return_value=(42,[])),patch.object(m,'check_control_parent'),patch.object(m.os,'listdir',side_effect=listing),patch.object(m.os,'mkdir',side_effect=mk),patch.object(m.os,'open',side_effect=opened),patch.object(m.os,'fstat',return_value=child),patch.object(m.os,'stat',side_effect=st),patch.object(m.os,'fchown',side_effect=lambda fd,u,g:(self.assertEqual((fd,u,g),(43,0,0)),calls.append('chown'))),patch.object(m.os,'fchmod',side_effect=lambda fd,v:(self.assertEqual((fd,v),(43,0o700)),calls.append('chmod'))),patch.object(m.os,'fsync'),patch.object(m.os,'close'):
+  proof=meta(mode=0o100600);proof.st_nlink=1
+  with patch.object(m,'open_control_parent',return_value=(42,[])),patch.object(m,'check_control_parent'),patch.object(m.os,'listdir',side_effect=listing),patch.object(m.os,'mkdir',side_effect=mk),patch.object(m.os,'open',side_effect=opened),patch.object(m.os,'fstat',return_value=child),patch.object(m.os,'stat',side_effect=st),patch.object(m.os,'fchown',side_effect=lambda fd,u,g:(self.assertEqual((fd,u,g),(43,0,0)),calls.append('chown'))),patch.object(m.os,'fchmod',side_effect=lambda fd,v:(self.assertEqual((fd,v),(43,0o700)),calls.append('chmod'))),patch.object(m.os,'fsync'),patch.object(m.os,'close'),patch.object(pathlib.Path,'lstat',return_value=proof),patch.object(m,'root_read',return_value=b'synthetic-public-proof'),patch.object(m,'V4_REPORT_SHA',m.sha(b'synthetic-public-proof')):
    if problem:
     with self.assertRaisesRegex(RuntimeError,'DIRECTORY_CUSTODY'):m.ensure_control_directory()
-   else:self.assertEqual(m.ensure_control_directory()['created'],not existing)
+   else:self.assertEqual(m.ensure_control_directory(m.V4_REPORT_SHA if report else None,require_existing=report)['created'],not existing)
   return calls
  def test_missing_base_created_only_child_fd_mutated(self):self.assertEqual(self.exercise(),['mkdir','chown','chmod'])
  def test_existing_empty_root_is_noop(self):self.assertEqual(self.exercise(existing=True),[])
+ def test_exact_existing_public_report_is_preserved_without_mutation(self):self.assertEqual(self.exercise(existing=True,report=True),[])
  def test_unknown_existing_owner_symlink_or_content_not_adopted(self):
   for problem in ['owner','symlink','nonempty']:self.assertEqual(self.exercise(problem,existing=True),[])
 class RuntimePointer(unittest.TestCase):
