@@ -7,6 +7,47 @@ a [ADR 0043](../adr/0043_ATOMIC_KNOWN_GUARD_RESET.md).
 
 ## Vstup a autorita
 
+### V7: chybějící příprava Keycloak před databázovou částí
+
+Čtecí diagnostika po V6 doložila chybějící obě pole
+`COP_KEYCLOAK_ERASURE_CLIENT_ID` / `COP_KEYCLOAK_ERASURE_CLIENT_SECRET`.
+`--complete-release` je dosud pouze předpokládal; sám je nezřizoval.
+Moduly i canonical host parser se skutečně načetly správně; k povinnému
+PostgreSQL plánu se tento běh nedostal. Neslibovat úspěch dalších kontrol.
+
+Externí launcher V7 používá pouze `--resume-public-v6` s původním manifestem
+`e3752ed8…` / zapečetěným COP `3ec5366` a přesným Root control důkazem.
+V6 balík se nepřejmenovává ani nepřepisuje a nevzniká nový bootstrap či obraz.
+Před PG promptem provede již schválenou přípravu dedikovaného pracovníka,
+pouze pokud chybí obě pole. Částečná/odlišná konfigurace znamená stop.
+Přítomná pole sama nedokazují připravenost poskytovatele; následující povinná
+Keycloak inventura skutečně ověřuje autentizaci a dostupná oprávnění.
+
+Samostatný veřejný helper COP `15a590b`, `install-clean-erasure-client.mjs`,
+má SHA-256 `8650fab53fb9c9a05814a25a43b12c8473f1f350924ecccc7b77b57cb3316763`.
+Root launcher ověří jeho skutečné bajty a spustí tento buffer, nikoli znovu
+otevřenou veřejnou cestu. Pouze úvodní hashbang se vynechá stejně jako při
+parsování souboru Node. Zůstává původní schválený worker, přímé čtyři role
+a přesně kontrolovaná efektivní sada šesti rolí, nikoli realm-admin.
+Přihlašovací údaje administrátora a token zůstávají v RAM serveru, heslo
+se zadává skrytě do zděděného TTY. Nic z toho nejde na Mac, do argumentů,
+Gitu či výstupů. Helper načítá ověřené původní provision/parser moduly ze
+zapečetěného COP `3ec5366`, používá canonical parser dvou již schválených
+duplicit a atomicky zachová ostatní bajty i metadata `.env`; mění jen tři
+vyjmenovaná pracovní pole a scoped-authority ponechá false. Nerestartuje služby.
+
+Při chybě po uložení worker secretu se nesmí předpokládat úspěšné vytvoření
+klienta ani slepě opakovat reset. Je nutná výslovná rekonsiliace stejného
+klienta a uloženého secretu, nikoli jeho automatická rotace.
+Nová bezpečná diagnostika přípravy uvádí pouze pevnou etapu
+`module_import`, `cop_env`, `common_inspection` nebo `cop_manifest`; nevrací
+text výjimky ani soukromý vstup. Nadlimitní výstup má samostatný pevný kód.
+
+Nové testovací sady se nespouštějí. PG admin přístup a aktuální počty nových
+rolí/databází/guard tabulek nejsou odvozené ze zdroje: ověří je skutečná
+read-only příprava s heslem v RAM. Neúspěšné síťové spojení není PASS.
+Příkaz mířící na V7 lze předat až po skutečném uploadu a ověření jeho hashů.
+
 ### Jediný produkční příkaz po zrušení dalších testovacích kol
 
 Připnutá oprava COP je `3ec5366e4de676cf68fddae50c0df625df39c284`.

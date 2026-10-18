@@ -18,7 +18,10 @@ FIXED_COP_REVISION='4ed81c5a5ea0772a8d83636473925f07fe92b389'
 V5_MANIFEST=V4_MANIFEST.parent/'resume-2/public-manifest-v5.json'
 V5_MANIFEST_SHA='3ef1c647ca905e59b30e0215d7560091d360203f7702c015a747a05e557ad8ad'
 V5_ARCHIVE=TARGET.with_name('clean-operator-shared-v3-preserved-v5-4ed81c5')
+V6_MANIFEST=V4_MANIFEST.parent/'resume-3/public-manifest-v6.json'
+V6_MANIFEST_SHA='e3752ed80d7c001049beb0ac95bbeaa2bcdd754ceb5c940eadeea8447c6b62e1'
 RETIREMENT_PROBE_SHA='7940e142da215f3d28c413dd59344da2210220972d923d247c69e69709947a5b'
+KEYCLOAK_PREPARATION_SHA='8650fab53fb9c9a05814a25a43b12c8473f1f350924ecccc7b77b57cb3316763'
 ENV={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C'}
 BOOTSTRAP_SHA='7ce4915e14646d675940e6f03d9a38bced23922f9ff66bbac9c45e9c81fdc43c'
 TEMP_KEY_HELPER=Path('/home/voldzi/cop-clean-release-temporary-comm-key.py')
@@ -242,6 +245,46 @@ def prepare_peer_access_interactive():
  need(result.get('phase')=='temporary_release_peer_identity_prepared'and result.get('privateKeyPrintedOrTransferred')is False and result.get('applicationChanged')is False,'RELEASE_PEER_PREPARATION_UNPROVEN')
  print(json.dumps(result),flush=True)
  need(input('Send this public JSON to COP; after COP confirms both authorizations type TRANSPORT_READY: ')=='TRANSPORT_READY','RELEASE_PEER_CONTINUATION_NOT_CONFIRMED')
+def prepare_missing_keycloak_worker():
+ """Existing approved provider setup, only when both fixed fields are absent.
+ No caller-selected path, credential export, secret rotation or TTY pipe.
+ """
+ path=Path('/srv/cop/.env');need(path.resolve()==path,'RELEASE_COP_ENV_PATH')
+ fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+ try:
+  s=os.fstat(fd);need(stat.S_ISREG(s.st_mode)and s.st_uid in[0,1000]and stat.S_IMODE(s.st_mode)==0o600 and s.st_nlink==1 and s.st_size<=1048576,'RELEASE_COP_ENV_CUSTODY')
+  raw=os.read(fd,1048577);t=os.fstat(fd);p=path.lstat()
+  identity=lambda v:(v.st_dev,v.st_ino,v.st_size,v.st_mtime_ns,v.st_ctime_ns)
+  need(len(raw)==s.st_size and identity(s)==identity(t)==identity(p),'RELEASE_COP_ENV_CHANGED')
+ finally:os.close(fd)
+ values={}
+ for line in raw.decode().splitlines():
+  key,sep,value=line.partition('=')
+  if sep and key in['COP_KEYCLOAK_ERASURE_CLIENT_ID','COP_KEYCLOAK_ERASURE_CLIENT_SECRET']:
+   need(key not in values,'RELEASE_KEYCLOAK_DUPLICATE_FIELD')
+   value=value.strip()
+   if len(value)>1 and value[0]==value[-1]and value[0]in['"',"'"]:value=value[1:-1]
+   values[key]=value
+ if values:
+  need(set(values)=={'COP_KEYCLOAK_ERASURE_CLIENT_ID','COP_KEYCLOAK_ERASURE_CLIENT_SECRET'}and values['COP_KEYCLOAK_ERASURE_CLIENT_ID']=='cop-account-erasure-worker'and re.fullmatch('[A-Za-z0-9_-]{43,128}',values['COP_KEYCLOAK_ERASURE_CLIENT_SECRET']),'RELEASE_KEYCLOAK_PARTIAL_CONFIG_REQUIRES_REVIEW')
+  # Existing configuration is not provider readiness; the mandatory following
+  # Keycloak inspection still verifies actual authentication and permissions.
+  return
+ need(sys.stdin.isatty()and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
+ helper=HERE/'install-clean-erasure-client.mjs'
+ fd=os.open(helper,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+ try:
+  s=os.fstat(fd);need(stat.S_ISREG(s.st_mode)and s.st_nlink==1 and s.st_size<1048576,'RELEASE_KEYCLOAK_HELPER_CUSTODY')
+  source=os.read(fd,1048576);t=os.fstat(fd)
+  need(len(source)==s.st_size and identity(s)==identity(t)and sha(source)==KEYCLOAK_PREPARATION_SHA,'RELEASE_KEYCLOAK_HELPER_SHA')
+ finally:os.close(fd)
+ need(source.startswith(b'#!/usr/bin/env node\n'),'RELEASE_KEYCLOAK_HELPER_HASHBANG')
+ # Node file parsing ignores the initial hashbang. Preserve all other verified
+ # bytes and execute the verified buffer, never re-open its mutable public path.
+ program="process.argv=[process.execPath,'cop-clean-keycloak-preparation','--apply'];\n"+source.split(b'\n',1)[1].decode()
+ args=[str(TARGET/'runtime/lib/ld-musl-x86_64.so.1'),'--library-path',str(TARGET/'runtime/lib')+':'+str(TARGET/'runtime/usr/lib'),str(TARGET/'runtime/usr/local/bin/node'),'--input-type=module','-e',program]
+ result=subprocess.run(args,env=ENV,timeout=900)
+ need(result.returncode==0,'RELEASE_KEYCLOAK_PREPARATION_FAILED')
 def run_with_transport_cleanup(action):
  original=None;result=None
  try:result=action()
@@ -271,27 +314,38 @@ NODE=r"""
 import fs from 'node:fs';
 const p=JSON.parse(fs.readFileSync(0,'utf8'));
 const root='/srv/x5-production/staging/cop/clean-operator-shared-v3';
+let stage='module_import';
 try{
  const {prepareCommonRootPrivateConfig}=await import(root+'/sim/scripts/lib/prepare-common-root-private.mjs');
  const {prepareCleanCopManifest}=await import(root+'/app/scripts/account-safety/prepare-clean-cop-manifest.mjs');
  const {parseOperatorHostEnvironment}=await import(root+'/app/scripts/account-safety/operator-profile-environment.mjs');
+ stage='cop_env';
  const f=fs.openSync('/srv/cop/.env',fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
  let environment;
  try{const s=fs.fstatSync(f);if(!s.isFile()||s.nlink!==1||![0,1000].includes(s.uid)||(s.mode&0o777)!==0o600||s.size>1048576)throw Error('COP_ENV_CUSTODY');
  const b=fs.readFileSync(f);const a=fs.fstatSync(f);if(b.length!==s.size||a.ino!==s.ino||a.mtimeMs!==s.mtimeMs||a.ctimeMs!==s.ctimeMs)throw Error('COP_ENV_DRIFT');
  const e=parseOperatorHostEnvironment(b.toString());environment=Object.fromEntries(['COP_OIDC_ISSUER','COP_AI_CHAT_ROUTER_USER_ID_SECRET','COP_SIM_ERASURE_ACTOR_SECRET','COP_ACCOUNT_ERASURE_SECRET'].filter(k=>e[k]).map(k=>[k,e[k]]));}finally{fs.closeSync(f)}
+ stage='common_inspection';
  const seven=await prepareCommonRootPrivateConfig(p.options);
+ stage='cop_manifest';
  const cop=prepareCleanCopManifest({...p.copManifest,environment});
  const bytes=Buffer.from(JSON.stringify(cop.manifest)+'\n');
  process.stdout.write(JSON.stringify({privateConfig:seven.privateConfig,copSafetyPrepared:cop,copManifestBase64:bytes.toString('base64')}));
-}catch{process.stderr.write('ROOT_PRIVATE_PREPARATION_FAILED\n');process.exitCode=1}
+}catch{process.stderr.write(JSON.stringify({code:'ROOT_PRIVATE_PREPARATION_FAILED',stage})+'\n');process.exitCode=1}
 """
 def node_prepare(options,decision):
  import base64
  payload={'options':options,'copManifest':{'resetEpoch':options['resetEpoch'],'tokensNotBefore':options['tokensNotBefore'],'applicationStoreId':str(uuid.uuid4()),'incarnationId':str(uuid.uuid4()),'guardStoreId':options['guardStoreId'],'initialDigest':'0'*64,'postgresCaSha256':sha(Path('/etc/vcode-cop-pgbouncer/postgres-ca.crt').read_bytes()),'decision':decision}}
  args=[str(TARGET/'runtime/lib/ld-musl-x86_64.so.1'),'--library-path',str(TARGET/'runtime/lib')+':'+str(TARGET/'runtime/usr/lib'),str(TARGET/'runtime/usr/local/bin/node'),'--input-type=module','-e',NODE]
  r=subprocess.run(args,input=json.dumps(payload).encode(),capture_output=True,env=ENV,timeout=180)
- need(r.returncode==0 and len(r.stdout)<=1048576,'RELEASE_NODE_PREPARATION_FAILED')
+ if r.returncode!=0:
+  stage='unknown'
+  try:
+   failure=json.loads(r.stderr)
+   if isinstance(failure,dict)and set(failure)=={'code','stage'}and failure['code']=='ROOT_PRIVATE_PREPARATION_FAILED'and failure['stage']in['module_import','cop_env','common_inspection','cop_manifest']:stage=failure['stage']
+  except(ValueError,UnicodeError):pass
+  raise RuntimeError('RELEASE_NODE_PREPARATION_FAILED_'+stage.upper())
+ need(len(r.stdout)<=1048576,'RELEASE_NODE_PREPARATION_OUTPUT_LIMIT')
  value=json.loads(r.stdout);value['copManifestBytes']=base64.b64decode(value.pop('copManifestBase64'),validate=True);return value
 def publish_new(path,raw):
  need(path.parent.is_dir() and path.parent.stat().st_uid==0 and not path.parent.stat().st_mode&0o022,'RELEASE_PLAN_PARENT')
@@ -377,14 +431,19 @@ def main():
  transitions=p.add_mutually_exclusive_group()
  transitions.add_argument('--preserve-public-v4',action='store_true',help='Explicit one-time V4 transition; never repeat after V4 preservation')
  transitions.add_argument('--preserve-public-v5',action='store_true',help='Preserve exact existing V5 public bundle; never adopt a reset plan')
+ transitions.add_argument('--resume-public-v6',action='store_true',help='Use only the already sealed exact V6 public bundle, without rename or bootstrap')
  modes=p.add_mutually_exclusive_group();modes.add_argument('--apply-disabled-reset',action='store_true');modes.add_argument('--complete-release',action='store_true');a=p.parse_args()
  need(os.getuid()==0 and socket.gethostname().split('.')[0]=='docker' and sys.flags.isolated,'RELEASE_ROOT_CONTEXT')
  bootstrap_module=verified_bootstrap_code()
  bootstrap_module.context()
  raw=bootstrap_module.public_bytes(a.public_manifest,1048576);need(sha(raw)==a.manifest_sha256,'RELEASE_PUBLIC_MANIFEST_SHA');manifest=json.loads(raw)
+ if a.resume_public_v6:
+  need(a.manifest_sha256==V6_MANIFEST_SHA and Path(a.public_manifest)==V6_MANIFEST,'RELEASE_RESUME_V6_MANIFEST_SCOPE')
+  verify_bootstrap(V6_MANIFEST_SHA)
+  ensure_control_directory(V4_REPORT_SHA,require_existing=True)
  if a.prepare_peer_access:
-  need(a.preserve_public_v5,'RELEASE_PEER_PREPARATION_SCOPE')
-  verify_bootstrap(V5_MANIFEST_SHA)
+  need(a.preserve_public_v5 or a.resume_public_v6,'RELEASE_PEER_PREPARATION_SCOPE')
+  verify_bootstrap(V6_MANIFEST_SHA if a.resume_public_v6 else V5_MANIFEST_SHA)
   prepare_peer_access_interactive()
  if a.preserve_public_v4 or a.preserve_public_v5:
   need(sys.stdin.isatty() and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
@@ -396,15 +455,21 @@ def main():
   confirmation='PRESERVE_PUBLIC_V5_AND_REBUILD'if a.preserve_public_v5 else'PRESERVE_PUBLIC_V4_AND_REBUILD'
   need(input('Type '+confirmation+' to preserve only the verified public operator bundle: ')==confirmation,'RELEASE_TRANSITION_NOT_CONFIRMED')
   print(json.dumps(preserve_public_v4(bootstrap_module,manifest,a.public_manifest,from_v5=a.preserve_public_v5)),flush=True)
- if not TARGET.exists():bootstrap_module.bootstrap_clean_release(a.public_manifest,a.manifest_sha256)
+ if a.resume_public_v6:bootstrap_module.check_transports()
+ elif not TARGET.exists():bootstrap_module.bootstrap_clean_release(a.public_manifest,a.manifest_sha256)
  else:bootstrap_module.check_transports()
  bootstrap=verify_bootstrap(a.manifest_sha256)
  cop=Path(bootstrap['sources']['cop']['root']);host=load(cop/'scripts/account-safety/clean-reset-root.py','release_early_root_gate')
- transitioning=a.preserve_public_v4 or a.preserve_public_v5
+ transitioning=a.preserve_public_v4 or a.preserve_public_v5 or a.resume_public_v6
  ensure_control_directory(V4_REPORT_SHA if transitioning else None,require_existing=transitioning)
  publish_acceptance_report(bootstrap_module,host,manifest)
  # Blocks before asking PG password when exact whole-provider GO is missing.
  host._acceptance_module().verified_pre_stop_acceptance(manifest['candidateImages'])
+ if a.resume_public_v6:
+  _,_,producer=host.DriverReportProducerCustody()._inventory()
+  need(producer.get('profile')=='known-retired-v1'and producer.get('paused')is True and producer.get('activeProducerCount')==0,'RELEASE_RESUME_RETIRED_PROFILE_UNPROVEN')
+  print(json.dumps({'actualRetiredProducerPreflight':producer}),flush=True)
+  prepare_missing_keycloak_worker()
  need(sys.stdin.isatty() and sys.stdout.isatty(),'RELEASE_INTERACTIVE_OPERATOR_REQUIRED')
  need(input('Type ALL_TEST_ACCOUNTS_SHARED_IDENTITY_RESET to confirm the reviewed destructive scope: ')=='ALL_TEST_ACCOUNTS_SHARED_IDENTITY_RESET','RELEASE_SCOPE_NOT_CONFIRMED')
  password=getpass.getpass('PostgreSQL administrator password (RAM only): ')

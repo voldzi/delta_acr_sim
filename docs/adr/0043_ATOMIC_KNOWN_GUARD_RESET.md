@@ -51,3 +51,11 @@ Zachovají se předchozí veřejné balíky V4 i V5, kandidátní aplikační ob
 akceptační report a všechna původní omezení. Produkční dokončení lze tvrdit
 teprve podle skutečných výsledků operace; uživatelskou funkčnost ověří uživatel
 v produkci.
+
+Chybějící již schválený Keycloak worker je samostatná nutná příprava před
+databázovou inventurou, ne implicitní rozšíření oprávnění během resetu.
+Externí připnutý operační helper smí použít ověřené původní provision/parser
+moduly a zachovat existující zapečetěný runtime; nesmí monkeypatchovat jeho
+obsah, vyrábět náhradní `.env` pro obcházení parseru ani exportovat credential
+na Mac. Neznámý/částečný stav zůstává odmítnutý. Provedení přípravy identity
+nepředstavuje produkční přijetí mazání či důkaz úspěchu databázových kontrol.
