@@ -591,6 +591,23 @@ and all source/hash checks unchanged. Canonical serialization remains mandatory
 for digests and receipts; this exception applies only to the offline stdin
 transport. This source correction is not evidence of production activation.
 
+### Existing Compose image interpolation
+
+Compose resolves required variables in every original file before merging the
+clean overlay. Activation therefore supplies `SIM_ERASURE_ROUTER_IMAGE` from
+the reviewed Router candidate and `SIM_ERASURE_DRIVER_IMAGE` plus
+`DRIVER_MEASUREMENTS_IMAGE` from the reviewed situation-data candidate to both
+Compose configuration and startup subprocesses. These are exact immutable
+image digests from the sealed plan, not environment-selected overrides. No
+`.env` or original Compose file is changed for this compatibility step; no
+image pull, build, alternate version, or relaxed final-image check is allowed.
+This source correction alone is not production activation evidence.
+
+The read-only Compose `config` invocation includes all profiles so the optional
+`ai-router` service is present for validation. This does not start services.
+Startup still names exactly one reviewed service at a time with `--no-deps`;
+the all-profiles option is not added to startup commands.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an

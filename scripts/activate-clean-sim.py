@@ -15,8 +15,15 @@ FEATURES={'DRIVER_MEASUREMENTS_ENABLED','DRIVER_MEASUREMENTS_REVOCATION_ENABLED'
 need=common.need
 def sha(raw):return hashlib.sha256(raw).hexdigest()
 def canonical(value):return json.dumps(value,sort_keys=True,separators=(',',':')).encode()
-def run(args,timeout=45):
-    r=subprocess.run(args,capture_output=True,timeout=timeout,env={'PATH':'/usr/bin:/bin','LANG':'C','DOCKER_HOST':'unix:///var/run/docker.sock'})
+def compose_environment(images):
+    need(set(images)=={'SIM_ERASURE_ROUTER_IMAGE','SIM_ERASURE_DRIVER_IMAGE','DRIVER_MEASUREMENTS_IMAGE'} and all(isinstance(v,str) and len(v)==71 and v.startswith('sha256:') and all(c in '0123456789abcdef' for c in v[7:]) for v in images.values()),'SIM_ACTIVATION_COMPOSE_IMAGE_PINS')
+    return {'PATH':'/usr/bin:/bin','LANG':'C','DOCKER_HOST':'unix:///var/run/docker.sock',**images}
+def run(args,timeout=45,*,compose_images=None):
+    environment={'PATH':'/usr/bin:/bin','LANG':'C','DOCKER_HOST':'unix:///var/run/docker.sock'}
+    if compose_images is not None:
+        need(args[:2]==['/usr/bin/docker','compose'] and args[-3:]==['config','--format','json'],'SIM_ACTIVATION_COMPOSE_IMAGE_CONTEXT')
+        environment=compose_environment(compose_images)
+    r=subprocess.run(args,capture_output=True,timeout=timeout,env=environment)
     need(r.returncode==0,'SIM_ACTIVATION_COMMAND_FAILED');return r.stdout
 def inspect(name):return json.loads(run(['/usr/bin/docker','inspect',name]))[0]
 def spec(c):return {k:c[k] for k in ['Id','Image','Config','HostConfig','Mounts','NetworkSettings']}
@@ -148,9 +155,12 @@ class SimActivation:
         args=['/usr/bin/docker','compose','--project-directory',str(ROOT),'--env-file',str(common.SIM_ENV)]
         for p in self.files[service]:args+=['-f',str(p)]
         return args
+    def compose_image_pins(self):
+        images=self.plan['candidateImages']
+        return {'SIM_ERASURE_ROUTER_IMAGE':images['ai_router'],'SIM_ERASURE_DRIVER_IMAGE':images['situation_data'],'DRIVER_MEASUREMENTS_IMAGE':images['situation_data']}
     def up_services(self):
         self.assert_current();need(getattr(self,'staged',False) and not self.new,'SIM_ACTIVATION_NOT_STAGED')
-        effective={service:json.loads(run(self.compose_args(service)+['config','--format','json']))['services'][service]for service in SERVICES}
+        effective={service:json.loads(run(self.compose_args(service)+['--profile','*','config','--format','json'],compose_images=self.compose_image_pins()))['services'][service]for service in SERVICES}
         for service,(_,key)in SERVICES.items():
             c=effective[service];need(c['image']==self.plan['candidateImages'][key],'SIM_ACTIVATION_IMAGE_CHANGED')
             before=env(self.before[service]);values=c.get('environment',{})
@@ -160,7 +170,7 @@ class SimActivation:
             # A failed/timed-out command may still have created its own CID.
             self.assert_current();failed=False
             try:
-                p=subprocess.run(self.compose_args(service)+['up','-d','--no-build','--no-deps','--pull','never',service],capture_output=True,timeout=180,env={'PATH':'/usr/bin:/bin','LANG':'C','DOCKER_HOST':'unix:///var/run/docker.sock'})
+                p=subprocess.run(self.compose_args(service)+['up','-d','--no-build','--no-deps','--pull','never',service],capture_output=True,timeout=180,env=compose_environment(self.compose_image_pins()))
                 failed=p.returncode!=0
             except (subprocess.TimeoutExpired,OSError):failed=True
             name,key=SERVICES[service]
