@@ -31,6 +31,8 @@ fi
 """
 COMMON_PHASES = ('identity', 'cop', 'ai', 'driver', 'files', 'sim_app_files', 'sim_user_install', 'cop_safety_install')
 MODE = 'production-clean-lifecycle-v1'
+WORKER_PLAN_KEYS = ('cop', 'ai', 'driver', 'files', 'keycloak', 'sim_app_files',
+                    'sim_user_install', 'cop_safety_install', 'messaging_install')
 
 def need(value, code):
     if not value:
@@ -272,6 +274,23 @@ def deploy_guard_input(plan):
     finally:
         os.close(fd)
 
+def worker_boundary_config(private_config, plan):
+    """Translate only the verified host source into the controller's marker.
+    The controller still validates every binding and replaces the marker with
+    the sealed source before launching its worker. Never mutate the input.
+    """
+    need(isinstance(private_config, dict)
+         and private_config.get('contractVersion') == 'cop-sim-clean-reset-worker-v1'
+         and private_config.get('phase') == 'inspect'
+         and private_config.get('simSource') == plan['sources']['sim']['root']
+         and private_config.get('resetEpoch') == plan['resetEpoch']
+         and private_config.get('tokensNotBefore') == plan['tokensNotBefore']
+         and private_config.get('reviewedPlanDigests') ==
+             {key: plan['reviewedPlanDigests'][key] for key in WORKER_PLAN_KEYS},
+         'COMMON_WORKER_CONFIG_BINDING')
+    return {**private_config, 'simSource': '/reviewed/sim'}
+
+
 def run_common_reset(private_config):
     need(os.getuid() == 0 and socket.gethostname().split('.')[0] == 'docker', 'COMMON_ROOT_REQUIRED')
     raw = protected(PLAN, modes=(0o600,))
@@ -285,6 +304,7 @@ def run_common_reset(private_config):
     host = controller.host
     plan = host.validate_plan(plan)
     need(private_config['resetEpoch'] == plan['resetEpoch'] and private_config['tokensNotBefore'] == plan['tokensNotBefore'], 'COMMON_CONFIG_EPOCH')
+    worker_config = worker_boundary_config(private_config, plan)
     # This is the actual COP factory reading the protected whole12 report, not a
     # caller-supplied success bit. freeze_reviewed repeats it and holds its CAS.
     proof = host._acceptance_module().verified_pre_stop_acceptance(plan['candidateImages'])
@@ -308,7 +328,7 @@ def run_common_reset(private_config):
             need(host.protected(PLAN) == raw, 'COMMON_PLAN_CHANGED')
             for phase in COMMON_PHASES:
                 admission.assert_current()
-                request = {**private_config, 'phase': phase}
+                request = {**worker_config, 'phase': phase}
                 if phase == 'sim_user_install':
                     request['simUserInstall'] = {**request['simUserInstall'], 'phase': 'apply'}
                 receipts[phase] = controller.run_private_worker(admission, request)
@@ -317,7 +337,7 @@ def run_common_reset(private_config):
             admission.assert_current()
             receipts['messaging_install'] = messaging_install.run_messaging_install_phase(host, admission, private_config)
             admission.assert_current()
-            receipts['readback'] = controller.run_private_worker(admission, {**private_config, 'phase': 'readback'})
+            receipts['readback'] = controller.run_private_worker(admission, {**worker_config, 'phase': 'readback'})
             receipts['sim_config'] = stage_sim_configuration(private_config, plan, admission)
             admission.assert_current()
             return {'contractVersion': 'cop-sim-common-reset-fenced-v1', 'resetEpoch': plan['resetEpoch'],

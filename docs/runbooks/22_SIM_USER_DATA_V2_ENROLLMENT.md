@@ -62,6 +62,20 @@ sim-audit.jsonl}`. Review counts+digest, then reset under actual Root admission
    Unknown hashes, modes, altered guard prefixes and conflicting mode lines
    remain errors. The previously admitted legacy profiles retain their original
    guarded replacement path.
+   The common coordinator validates the prepared worker contract, `inspect`
+   phase, exact sealed SIM source root, reset epoch, cutoff and all nine
+   controller plan digests **before freezing any writer**. It then makes a
+   worker-only copy with the controller's logical `/reviewed/sim` marker.
+   COP's unchanged controller revalidates these bindings and substitutes the
+   same sealed source root before starting Node. The original private context,
+   twelve-plan public descriptor and source hashes are not rewritten; remaining
+   reset and configuration steps keep the original host context. All eight
+   worker phases and final worker readback use this same boundary adapter.
+   The adapter rejects already-normalized or foreign incoming paths rather
+   than accepting arbitrary aliases. Future releases pinning this coordinator
+   must remove the one-release external adapter, or the duplicate adaptation
+   will deliberately fail before freeze. This source-only correction does not
+   modify a running release, enable runtime flags or justify replaying a phase.
 8. Production bootstrap is bundled `createSimUserDataAuthority` — not an external
    callback module. The image/source SHA must equal `authoritySourceSha256` in
    manifest and both immutable witnesses. Parameters are exact `guardPool`,

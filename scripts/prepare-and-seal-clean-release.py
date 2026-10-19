@@ -40,6 +40,7 @@ TRANSITION_RECOVERY_SHA='cb177fea17f6966a4ecc4e460f432faa330d74a0841ea25f5cf671a
 TRANSITION_RECOVERY_V13_MEMBER='scripts/account-safety/preserve-prepared-v13.py'
 TRANSITION_RECOVERY_V13_SHA='ebeac53ef5435d8ef599d3d73184e10a6cb82411a4a5776f912b2bb7be4badaf'
 COP_RUNTIME_SOURCE_SHA='ef033dbeb103ba630f4613f90922198b71be72b93ad878ae707de5342364f6c9'
+COMMON_WORKER_FAILURE_CODES = frozenset({'COMMON_WORKER_CONFIG_BINDING'})
 COMMON_FAILURE_CODES=frozenset(['COMMON_BASE_CLEAN_EPOCH','COMMON_CA_MISSING','COMMON_CLOSURE_MISSING','COMMON_CLOSURE_PREFLIGHT_MISSING','COMMON_COMPLETED_REPLAY_MODE','COMMON_CONFIG_EPOCH','COMMON_DEPLOY_GUARD_CHANGED','COMMON_DEPLOY_GUARD_CONFIGURATION','COMMON_DEPLOY_GUARD_CUSTODY','COMMON_DEPLOY_GUARD_PRESERVATION','COMMON_DEPLOY_GUARD_SOURCE','COMMON_DEPLOY_GUARD_UNKNOWN','COMMON_ENV_CHANGED','COMMON_ENV_CUSTODY','COMMON_ENV_DUPLICATE','COMMON_ENV_PARENT','COMMON_ENV_VALUE','COMMON_EXISTING_IDENTITY_MISSING','COMMON_ISSUER_CHANGED','COMMON_MESSAGING_INSTALL_MISSING','COMMON_NEW_SECRET_FORMAT','COMMON_OUTPUT_CHANGED','COMMON_OUTPUT_EXISTS','COMMON_OUTPUT_PATH','COMMON_OUTPUT_READBACK','COMMON_PLAN_CHANGED','COMMON_ROOT_REQUIRED','COMMON_ROUTER_HASH_CHANGED','COMMON_SIM_RUNTIME_MODE','COMMON_SIM_SOURCE_HASH','COMMON_SIM_SOURCE_NOT_ENROLLED','COMMON_SOURCE_CHANGED','COMMON_SOURCE_CUSTODY','COMMON_SOURCE_HASH','COMMON_SOURCE_NOT_ENROLLED','COMMON_SOURCE_PATH','COMMON_WHOLE_PROOF_CHANGED'])
 RETIREMENT_PROBE_SHA='7940e142da215f3d28c413dd59344da2210220972d923d247c69e69709947a5b'
 KEYCLOAK_PREPARATION_SHA='48db373f5d8cff560ae9365dd8f4ea569677342dc31ca2cc917e463394d5e045'
@@ -288,7 +289,7 @@ def safe_failure_code(error):
  if isinstance(error,NameError) and isinstance(error.name,str) and re.fullmatch('[A-Za-z_][A-Za-z0-9_]{0,63}',error.name):return 'UNDEFINED_NAME_'+error.name
  # Never print arbitrary exception text, filenames, stderr or private payloads.
  if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and re.fullmatch(r'(?:ROOT|RELEASE|RESET|CLEAN|SIM|MESSAGING|RETIREMENT)_[A-Z0-9_]{1,90}',error.args[0]):return error.args[0]
- if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and error.args[0]in COMMON_FAILURE_CODES:return error.args[0]
+ if isinstance(error,RuntimeError)and len(error.args)==1 and isinstance(error.args[0],str)and error.args[0]in COMMON_FAILURE_CODES | COMMON_WORKER_FAILURE_CODES:return error.args[0]
  # The pinned COP runtime defines its own RuntimeError class. Recognize that
  # exact loaded class through its require frame, not a class-name/prefix match.
  # Only literals from the exact verified public source may reach the output.
