@@ -581,6 +581,16 @@ Other actionable integration gaps are the activation ordering, actual guard
 readiness and missing reset-to-activation configuration receipt listed above,
 not an invented extra erasure framework.
 
+### Offline activation manifest transport
+
+The offline SQL readback sends its private input over stdin without sorting JSON
+object keys. The pinned migration verifier also compares the frozen manifest's
+serialized key order; recursively sorting the transport envelope can reject an
+otherwise unchanged manifest before any SQL readback. Keep the frozen manifest
+and all source/hash checks unchanged. Canonical serialization remains mandatory
+for digests and receipts; this exception applies only to the offline stdin
+transport. This source correction is not evidence of production activation.
+
 ## Rollback
 
 Before activation: keep flags false and old running image unchanged. After an

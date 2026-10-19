@@ -116,7 +116,9 @@ class SimActivation:
         p=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env={'PATH':'/usr/bin:/bin','LANG':'C'})
         payload={'pgPackage':str(Path(self.plan['sources']['cop']['root'])/'apps/cop-api/package.json'),'module':str(Path(self.plan['sources']['sim']['root'])/'scripts/lib/sim-user-data-private-install.mjs'),'config':self.private['simUserInstall']}
         try:
-            p.stdin.write(canonical(payload)+b'\n');p.stdin.flush();deadline=time.monotonic()+120
+            # The pinned migration verifier compares the frozen manifest's JSON
+            # key order too. Preserve input order here; canonical() is for hashes.
+            p.stdin.write(json.dumps(payload,separators=(',',':')).encode()+b'\n');p.stdin.flush();deadline=time.monotonic()+120
             while True:
                 need(time.monotonic()<deadline,'SIM_ACTIVATION_SQL_TIMEOUT');ready,_,_=select.select([p.stdout],[],[],5)
                 self.assert_current()
