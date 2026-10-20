@@ -1,6 +1,8 @@
 """Isolated tests: no Docker, network, production files or credentials."""
 import importlib.util
 import copy
+import tempfile
+import json
 from pathlib import Path
 import subprocess
 import unittest
@@ -11,6 +13,32 @@ installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
 
 class InstallerTests(unittest.TestCase):
+    def test_startup_diagnostics_excludes_raw_logs_and_probe_output(self):
+        state = {"Image": installer.NEW, "RestartCount": 1, "State": {"Status": "restarting", "ExitCode": 1,
+                 "Health": {"Status": "unhealthy", "Log": [{"ExitCode": 1, "Output": "synthetic-secret ECONNREFUSED"}]}}}
+        with patch.object(subprocess, "run", side_effect=[subprocess.CompletedProcess([], 0, json.dumps([state]), ""), subprocess.CompletedProcess([], 0, "Error: CLEAN_DATABASE_NOT_READY synthetic-secret", "")]):
+            result = installer.safe_startup_diagnostics("fixture")
+        self.assertNotIn("synthetic-secret", json.dumps(result))
+        self.assertEqual(result["startupErrorCodes"], ["CLEAN_DATABASE_NOT_READY"])
+        self.assertEqual(result["probes"][0]["errorCodes"], ["ECONNREFUSED"])
+
+    def test_repeat_never_overwrites_rollback_or_retries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            receipt = root / "failure.json"
+            receipt.write_text(json.dumps({"phase": "runtime-security-parity", "differentFields": ["Config.Env", "synthetic-secret"]}))
+            original = receipt.read_bytes()
+            with self.assertRaises(RuntimeError) as error:
+                installer.reject_previous_attempt(root)
+            self.assertIn("runtime-security-parity", str(error.exception))
+            self.assertNotIn("synthetic-secret", str(error.exception))
+            self.assertEqual(receipt.read_bytes(), original)
+
+    def test_incomplete_attempt_requires_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "without a failure receipt"):
+                installer.reject_previous_attempt(Path(directory))
+
     def runtime(self):
         return {"Config": {"Env": ["A=1", "B=2"], "Cmd": ["node", "app.js"]}, "HostConfig": {"SecurityOpt": ["a", "b"]}, "Mounts": [{"Destination": "/cache", "RW": False}]}
 

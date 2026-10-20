@@ -50,6 +50,19 @@ in a private failure receipt, compares environment mappings independent of order
 security settings. Command argument order and all configuration values remain
 strictly compared. A rollback image check is mandatory after rejection.
 
+The actual v3 receipt reported `candidate-health` only. It does not establish
+whether startup crashed, a health probe failed, the image changed or the deadline
+expired. The removed container's logs were not retained; do not invent a cause
+or extend the readiness deadline on this evidence. The prepared diagnostic
+installer uses a separate `root-diagnostic-v4` directory and captures process
+state, OOM/exit status, probe exit codes, allowlisted startup error categories
+and the listening marker **before** rollback removes the candidate. It prints
+that safe receipt after rollback; it never persists raw logs or probe output.
+Repeated invocation stops without overwriting an earlier attempt. A diagnostic
+start is not proof of deployment acceptance and must not be reported as a
+confirmed fix. Keep the old deployment active until the controlled diagnostic
+step is approved and its evidence evaluated.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.
