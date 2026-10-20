@@ -33,6 +33,16 @@ Metrics: `situation_data_routing_engine_started_total`, `_active`, `_queued`,
 prove a cache hit. Verify counter deltas with controlled synthetic concurrent
 routes; do not run an unbounded load test on public providers or production.
 
+The reviewed image-only installer must use all five production Compose files.
+Required intermediate `SIM_ERASURE_DRIVER_IMAGE` / `SIM_ERASURE_ROUTER_IMAGE`
+interpolation is populated from the hash-verified immutable deployment pins,
+not shell overrides; the Router running image must match its pin. Compose
+environment parity is checked before any mutation. Captured command errors
+are not echoed because interpolation output can contain secrets. The initial
+2026-10-20 attempt stopped at interpolation before any configuration change;
+keep that installer and upload the corrected installer as a separate `v2` file.
+Run `python3 deploy/test-routing-performance-installer.py` for isolated checks.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.

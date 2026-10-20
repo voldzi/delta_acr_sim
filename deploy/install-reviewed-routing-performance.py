@@ -14,9 +14,28 @@ PIN = Path("/srv/sim/docker-compose.clean-user-data.json")
 STAGE = Path("/srv/sim/.routing-performance-20261020")
 FILES = ["/srv/sim/docker-compose.yml", "/srv/sim/docker-compose.x5.yml", "/srv/sim/docker-compose.driver-measurements.yml", "/home/voldzi/sim-erasure-apply-ca1fd6b-v2/deploy/account-safety/database-v2.prepare.compose.yml", str(PIN)]
 DC = ["docker", "compose", "--project-name", "sim"] + [arg for path in FILES for arg in ("-f", path)]
+COMPOSE_ENV = None
+
+def reviewed_compose_environment(pin):
+    """Satisfy required intermediate interpolation from authoritative pins only."""
+    env = os.environ.copy()
+    for variable, service in (("SIM_ERASURE_DRIVER_IMAGE", "situation-data-api"),
+                              ("SIM_ERASURE_ROUTER_IMAGE", "ai-router-api")):
+        value = pin["services"][service]["image"]
+        if not isinstance(value, str) or not value.startswith("sha256:") or len(value) != 71:
+            raise RuntimeError("Expected an immutable reviewed image pin.")
+        if any(c not in "0123456789abcdef" for c in value[7:]):
+            raise RuntimeError("Invalid reviewed image digest.")
+        env[variable] = value
+    return env
 
 def run(args):
-    return subprocess.check_output(args, cwd="/srv/sim", stderr=subprocess.PIPE, text=True)
+    try:
+        return subprocess.check_output(args, cwd="/srv/sim", stderr=subprocess.PIPE,
+                                       text=True, env=COMPOSE_ENV if args[:2] == ["docker", "compose"] else None)
+    except subprocess.CalledProcessError as error:
+        # Compose output may contain interpolated secrets. Never print it.
+        raise RuntimeError("Deployment command failed (exit %d); captured output withheld to protect secrets." % error.returncode) from None
 
 def inspect_image(name):
     return run(["docker", "inspect", "-f", "{{.Image}}", name]).strip()
@@ -34,11 +53,15 @@ def replace_pin(data):
         if temporary.exists(): temporary.unlink()
 
 def main():
+    global COMPOSE_ENV
     if os.geteuid() != 0: raise RuntimeError("Run this reviewed installer as root.")
     if run(["findmnt", "-n", "-o", "UUID", "--mountpoint", "/srv/x5-production"]).strip() != "2f93f595-b61b-4eea-9054-7afa9b275b5b": raise RuntimeError("Wrong X5 mount.")
     if PIN.is_symlink() or not PIN.is_file() or PIN.stat().st_uid != 0: raise RuntimeError("Unexpected deployment pin.")
     original = PIN.read_bytes()
     if hashlib.sha256(original).hexdigest() != PIN_HASH or inspect_image("csm-sim-situation-data-api") != OLD: raise RuntimeError("Deployment changed; stop for fresh review.")
+    COMPOSE_ENV = reviewed_compose_environment(json.loads(original))
+    if inspect_image("csm-sim-ai-router-api") != COMPOSE_ENV["SIM_ERASURE_ROUTER_IMAGE"]:
+        raise RuntimeError("Router image differs from reviewed pin; no deployment performed.")
     if run(["docker", "image", "inspect", "-f", "{{.Id}}", NEW]).strip() != NEW: raise RuntimeError("Candidate image absent.")
     before = json.loads(run(DC + ["config", "--format", "json"]))
     if before["services"]["situation-data-api"]["image"] != OLD: raise RuntimeError("Unexpected Compose image.")
