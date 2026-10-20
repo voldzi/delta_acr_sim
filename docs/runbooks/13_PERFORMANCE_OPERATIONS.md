@@ -42,6 +42,13 @@ are not echoed because interpolation output can contain secrets. The initial
 2026-10-20 attempt stopped at interpolation before any configuration change;
 keep that installer and upload the corrected installer as a separate `v2` file.
 Run `python3 deploy/test-routing-performance-installer.py` for isolated checks.
+The v2 attempt restored the old image; its exception handler did not retain the
+failed acceptance stage, so do not infer that the candidate passed acceptance.
+The separate v3 installer uses `root-rollback-v3`, records only phase/field names
+in a private failure receipt, compares environment mappings independent of order
+(rejecting duplicate names), and checks actual mount objects as well as host
+security settings. Command argument order and all configuration values remain
+strictly compared. A rollback image check is mandatory after rejection.
 
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map

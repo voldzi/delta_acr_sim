@@ -40,6 +40,27 @@ def run(args):
 def inspect_image(name):
     return run(["docker", "inspect", "-f", "{{.Image}}", name]).strip()
 
+def environment_map(values):
+    result = dict(value.split("=", 1) for value in values)
+    if len(result) != len(values):
+        raise RuntimeError("Duplicate environment names rejected.")
+    return result
+
+def runtime_differences(before, after):
+    differences = []
+    for field in ("Env", "Entrypoint", "Cmd", "User", "WorkingDir"):
+        a, b = before["Config"].get(field), after["Config"].get(field)
+        if field == "Env": a, b = environment_map(a), environment_map(b)
+        if a != b: differences.append("Config." + field)
+    for field in ("Binds", "NetworkMode", "PortBindings", "ReadonlyRootfs", "SecurityOpt", "CapDrop", "Mounts"):
+        a, b = before["HostConfig"].get(field), after["HostConfig"].get(field)
+        if isinstance(a, list) and isinstance(b, list):
+            a, b = sorted(json.dumps(v, sort_keys=True) for v in a), sorted(json.dumps(v, sort_keys=True) for v in b)
+        if a != b: differences.append("HostConfig." + field)
+    if sorted(json.dumps(v, sort_keys=True) for v in before["Mounts"]) != sorted(json.dumps(v, sort_keys=True) for v in after["Mounts"]):
+        differences.append("Mounts")
+    return differences
+
 def replace_pin(data):
     temporary = PIN.with_name(".routing-performance-pin.tmp")
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
@@ -70,7 +91,7 @@ def main():
     env = dict(s.split("=", 1) for s in image["Config"]["Env"])
     env.update({k: str(v) for k, v in before["services"]["situation-data-api"].get("environment", {}).items()})
     if env != dict(s.split("=", 1) for s in actual["Config"]["Env"]): raise RuntimeError("Live environment differs from Compose; no deployment performed.")
-    private = STAGE / "root-rollback"
+    private = STAGE / "root-rollback-v3"
     private.mkdir(mode=0o700, exist_ok=False)
     backup = private / PIN.name
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -78,12 +99,16 @@ def main():
     update = json.loads(original)
     update["services"]["situation-data-api"]["image"] = NEW
     replace_pin((json.dumps(update, indent=2) + "\n").encode())
+    phase = "compose-image-only-parity"
+    differences = []
     try:
         after = json.loads(run(DC + ["config", "--format", "json"]))
         expected = json.loads(json.dumps(before))
         expected["services"]["situation-data-api"]["image"] = NEW
         if after != expected: raise RuntimeError("Compose change exceeded image-only scope.")
+        phase = "compose-up"
         run(DC + ["up", "-d", "--no-deps", "--no-build", "situation-data-api"])
+        phase = "candidate-health"
         healthy = False
         for _ in range(60):
             if inspect_image("csm-sim-situation-data-api") != NEW: raise RuntimeError("Unexpected image during acceptance.")
@@ -92,14 +117,19 @@ def main():
             time.sleep(1)
         if not healthy: raise RuntimeError("Candidate did not become ready.")
         current = json.loads(run(["docker", "inspect", "csm-sim-situation-data-api"]))[0]
-        for section in ("Env", "Entrypoint", "Cmd", "User", "WorkingDir"):
-            if actual["Config"].get(section) != current["Config"].get(section): raise RuntimeError("Runtime configuration changed.")
-        for section in ("Binds", "NetworkMode", "PortBindings", "ReadonlyRootfs", "SecurityOpt", "CapDrop"):
-            if actual["HostConfig"].get(section) != current["HostConfig"].get(section): raise RuntimeError("Runtime security or mounts changed.")
+        phase = "runtime-security-parity"
+        differences = runtime_differences(actual, current)
+        if differences: raise RuntimeError("Runtime configuration differs.")
     except Exception:
+        # Safe receipt retains stage and field names only, never captured output.
+        receipt = {"phase": phase, "differentFields": differences, "candidate": NEW}
+        fd = os.open(private / "failure.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as out: json.dump(receipt, out)
         replace_pin(original)
         run(DC + ["up", "-d", "--no-deps", "--no-build", "situation-data-api"])
-        raise RuntimeError("Candidate rejected; previous pinned image/configuration restored.") from None
+        if inspect_image("csm-sim-situation-data-api") != OLD:
+            raise RuntimeError("Rollback image verification failed; operator attention required.") from None
+        raise RuntimeError("Candidate rejected at " + phase + "; fields=" + ",".join(differences) + "; previous pinned image restored.") from None
     print("Routing image installed with unchanged runtime/security configuration: " + NEW)
     result = subprocess.run(["bash", str(STAGE / "mobile-coverage/install-renewal.sh"), NEW], cwd="/srv/sim", check=False)
     if result.returncode: raise RuntimeError("Routing installed; renewal installation needs operator attention.")

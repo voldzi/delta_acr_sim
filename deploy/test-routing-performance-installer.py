@@ -1,5 +1,6 @@
 """Isolated tests: no Docker, network, production files or credentials."""
 import importlib.util
+import copy
 from pathlib import Path
 import subprocess
 import unittest
@@ -10,6 +11,27 @@ installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
 
 class InstallerTests(unittest.TestCase):
+    def runtime(self):
+        return {"Config": {"Env": ["A=1", "B=2"], "Cmd": ["node", "app.js"]}, "HostConfig": {"SecurityOpt": ["a", "b"]}, "Mounts": [{"Destination": "/cache", "RW": False}]}
+
+    def test_runtime_order_is_not_a_value_change(self):
+        before = self.runtime()
+        after = copy.deepcopy(before)
+        after["Config"]["Env"].reverse()
+        after["HostConfig"]["SecurityOpt"].reverse()
+        self.assertEqual(installer.runtime_differences(before, after), [])
+
+    def test_runtime_secret_value_and_mount_permissions_still_checked(self):
+        before = self.runtime()
+        after = copy.deepcopy(before)
+        after["Config"]["Env"][0] = "A=changed"
+        after["Mounts"][0]["RW"] = True
+        self.assertEqual(installer.runtime_differences(before, after), ["Config.Env", "Mounts"])
+
+    def test_duplicate_environment_names_rejected(self):
+        with self.assertRaises(RuntimeError):
+            installer.environment_map(["A=1", "A=2"])
+
     def pin(self):
         return {"services": {"situation-data-api": {"image": installer.OLD}, "ai-router-api": {"image": "sha256:" + "a" * 64}}}
 
