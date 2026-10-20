@@ -14,39 +14,47 @@ const TILE_RETRY_DELAY_MS = 5_000;
 async function main(): Promise<void> {
   const config = await loadConfig();
   const bbox = parseBbox(process.env.MOBILE_COVERAGE_REBUILD_BBOX) ?? DEFAULT_CZECHIA_BBOX;
-  const technologies = parseTechnologies(process.env.MOBILE_COVERAGE_REBUILD_TECHNOLOGIES) ?? ["4G"];
+  const technologies = parseTechnologies(process.env.MOBILE_COVERAGE_REBUILD_TECHNOLOGIES) ?? ["2G", "4G", "5G"];
   const tileDegrees = parseNumber(process.env.MOBILE_COVERAGE_REBUILD_TILE_DEGREES, 0.25);
   const source = new MobileCoverageSource(config);
-  const tiles = splitBbox(bbox, tileDegrees);
-  let written = 0;
+  try {
+    if (process.argv.includes("--if-due") && !(await source.readModelNeedsRenewal(technologies))) {
+      process.stdout.write(JSON.stringify({ event: "mobile_coverage_renewal_not_due", technologies }) + "\n");
+      return;
+    }
+    const tiles = splitBbox(bbox, tileDegrees);
+    let written = 0;
 
-  await source.ensureReadModelSchema();
-  for (const [index, tile] of tiles.entries()) {
-    const count = await rebuildTileWithRetry(source, tile, technologies, index, tiles.length);
-    written += count;
+    await source.ensureReadModelSchema();
+    for (const [index, tile] of tiles.entries()) {
+      const count = await rebuildTileWithRetry(source, tile, technologies, index, tiles.length);
+      written += count;
+      process.stdout.write(
+        JSON.stringify({
+          event: "mobile_coverage_tile_rebuilt",
+          index: index + 1,
+          total: tiles.length,
+          count,
+          bbox: tile,
+          technologies
+        }) + "\n"
+      );
+    }
+
     process.stdout.write(
       JSON.stringify({
-        event: "mobile_coverage_tile_rebuilt",
-        index: index + 1,
-        total: tiles.length,
-        count,
-        bbox: tile,
-        technologies
+        event: "mobile_coverage_rebuild_complete",
+        count: written,
+        tileCount: tiles.length,
+        bbox,
+        technologies,
+        modelVersion: config.mobileCoverageModelVersion,
+        readModelTable: config.mobileCoverageReadModelTable
       }) + "\n"
     );
+  } finally {
+    await source.close();
   }
-
-  process.stdout.write(
-    JSON.stringify({
-      event: "mobile_coverage_rebuild_complete",
-      count: written,
-      tileCount: tiles.length,
-      bbox,
-      technologies,
-      modelVersion: config.mobileCoverageModelVersion,
-      readModelTable: config.mobileCoverageReadModelTable
-    }) + "\n"
-  );
 }
 
 async function rebuildTileWithRetry(

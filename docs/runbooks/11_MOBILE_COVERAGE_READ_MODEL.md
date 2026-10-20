@@ -27,11 +27,24 @@ MOBILE_COVERAGE_READ_MODEL_ENABLED=true
 MOBILE_COVERAGE_READ_MODEL_TABLE=public.mobile_coverage_cells
 MOBILE_COVERAGE_READ_MODEL_MAX_AGE_SECONDS=604800
 MOBILE_COVERAGE_REBUILD_BBOX=11.8,48.5,19.2,51.2
-MOBILE_COVERAGE_REBUILD_TECHNOLOGIES=4G
+MOBILE_COVERAGE_REBUILD_TECHNOLOGIES=2G,4G,5G
 MOBILE_COVERAGE_REBUILD_TILE_DEGREES=0.25
 ```
 
 ## Rebuild
+
+The CLI now defaults to all three technologies and builds each independently
+at the exact configured resolution. Oversized tiles are rejected before any
+delete; use a smaller tile size rather than silently storing coarser cells.
+Each tile replacement is atomic, with rollback on insertion failure.
+
+For scheduled renewal install the reviewed units under `deploy/mobile-coverage/`
+as root. The timer checks daily at 04:15 Europe/Prague plus up to 30 minutes
+jitter; `Persistent=true` catches a missed check. `--if-due` skips fresh data and
+rebuilds when a technology is missing or has two days or less to expiry. The
+job is serialized and low priority, and fails closed on a missing/wrong X5 mount.
+Verify both timer installation and the first service result, not only source
+presence. This renewal does not refresh the authoritative OSM tower source.
 
 Run from `/srv/sim`:
 

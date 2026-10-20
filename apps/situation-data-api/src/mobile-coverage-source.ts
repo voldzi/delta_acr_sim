@@ -211,9 +211,7 @@ export class MobileCoverageSource implements SituationDataSource {
       maxEntries: 1
     });
     this.terrainSampler =
-      config.mobileCoverageTerrainAware && config.demEnabled && config.demPostgisConnectionString
-        ? new DemElevationSampler(config)
-        : undefined;
+      config.mobileCoverageTerrainAware && config.demEnabled && config.demPostgisConnectionString ? new DemElevationSampler(config) : undefined;
     this.descriptor = {
       sourceId: "mobile_coverage_model",
       label: "Mobile coverage estimate model",
@@ -662,17 +660,49 @@ export class MobileCoverageSource implements SituationDataSource {
     });
   }
 
+  async readModelNeedsRenewal(technologies: MobileCoverageTechnology[], now = Date.now()): Promise<boolean> {
+    await this.ensureReadModelSchemaCached();
+    const result = await this.getPool().query<{ technology: string; expires_at: Date | string }>(
+      `select technology, min(expires_at) as expires_at from ${quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable)}
+       where model_version = $1 and technology = any($2::text[]) and grid_resolution_m = $3 and operator = 'unknown'
+       group by technology`,
+      [this.config.mobileCoverageModelVersion, technologies, this.config.mobileCoverageResolutionM]
+    );
+    const expiry = new Map(result.rows.map((row) => [row.technology, new Date(row.expires_at).getTime()]));
+    return technologies.some((technology) => !Number.isFinite(expiry.get(technology)) || expiry.get(technology)! <= now + 2 * 86400_000);
+  }
+
+  async close(): Promise<void> {
+    await this.pool?.end();
+  }
+
   async replaceReadModelFeatures(
     bbox: BoundingBox,
     technologies: MobileCoverageTechnology[] = DEFAULT_TECHNOLOGIES,
     expiresAt = addSeconds(new Date().toISOString(), Math.max(this.config.mobileCoverageReadModelMaxAgeSeconds, this.config.mobileCoverageCacheTtlSeconds))
   ): Promise<number> {
     await this.ensureReadModelSchemaCached();
-    const payload = await this.buildCoverage(bbox, technologies, { applyTerrain: true });
+    // Build each technology at the configured resolution, not at maxCells/N.
+    const payload: { features: SituationFeature[] } = { features: [] };
+    for (const technology of new Set(technologies)) {
+      payload.features.push(...(await this.buildCoverage(bbox, [technology], { applyTerrain: true })).features);
+    }
+    if (
+      payload.features.some(
+        (feature) => parseCoverageGridFeatureId(String(feature.properties.featureId ?? feature.id ?? ""))?.resolutionM !== this.config.mobileCoverageResolutionM
+      )
+    ) {
+      throw new Error("Coverage rebuild tile exceeds the exact-resolution budget; use smaller rebuild tiles.");
+    }
     const table = quoteQualifiedIdentifier(this.config.mobileCoverageReadModelTable);
     let written = 0;
-    await this.getPool().query(
-      `
+    const client = await this.getPool().connect();
+    try {
+      await client.query("begin");
+      // Serialize overlapping rebuilds; readers retain the old committed rows.
+      await client.query("select pg_advisory_xact_lock(hashtext($1))", [this.config.mobileCoverageReadModelTable]);
+      await client.query(
+        `
         delete from ${table}
         where model_version = $1
           and technology = any($2::text[])
@@ -680,17 +710,17 @@ export class MobileCoverageSource implements SituationDataSource {
           and geom && st_makeenvelope($3, $4, $5, $6, 4326)
           and st_intersects(geom, st_makeenvelope($3, $4, $5, $6, 4326))
       `,
-      [this.config.mobileCoverageModelVersion, technologies, bbox.west, bbox.south, bbox.east, bbox.north]
-    );
+        [this.config.mobileCoverageModelVersion, technologies, bbox.west, bbox.south, bbox.east, bbox.north]
+      );
 
-    for (const feature of payload.features) {
-      const gridCell = parseCoverageGridFeatureId(String(feature.properties.featureId ?? feature.id ?? ""));
-      const cellBbox = polygonFeatureBbox(feature);
-      if (!cellBbox) {
-        continue;
-      }
-      await this.getPool().query(
-        `
+      for (const feature of payload.features) {
+        const gridCell = parseCoverageGridFeatureId(String(feature.properties.featureId ?? feature.id ?? ""));
+        const cellBbox = polygonFeatureBbox(feature);
+        if (!cellBbox) {
+          continue;
+        }
+        await client.query(
+          `
           insert into ${table} (
             dataset_id,
             model_version,
@@ -756,41 +786,48 @@ export class MobileCoverageSource implements SituationDataSource {
             bbox_north = excluded.bbox_north,
             geom = excluded.geom
         `,
-        [
-          "osm_postgis",
-          feature.properties.modelVersion ?? this.config.mobileCoverageModelVersion,
-          feature.properties.technology ?? "unknown",
-          feature.properties.operator ?? "unknown",
-          feature.properties.quality ?? "unknown",
-          feature.properties.estimatedSignalDbm ?? null,
-          feature.properties.confidence,
-          feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
-          feature.properties.demSource ?? this.config.demDatasetId,
-          feature.properties.generatedAt ?? feature.properties.observedAt,
-          expiresAt,
-          JSON.stringify(feature.properties.assumptions ?? {}),
-          JSON.stringify(feature.properties.metrics ?? {}),
-          JSON.stringify(feature.properties.tags ?? {}),
-          feature.properties.dataQuality ?? "modelled",
-          feature.properties.btsStatus ?? "operator_feed_unavailable",
-          feature.properties.btsStatusSource ?? "none",
-          feature.properties.operatorStatusAvailable ?? false,
-          feature.properties.sourceRevision ?? this.sourceRevision(Boolean(feature.properties.assumptions?.terrainApplied)),
-          gridCell?.resolutionM ?? feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
-          gridCell?.row ?? null,
-          gridCell?.column ?? null,
-          cellBbox.west,
-          cellBbox.south,
-          cellBbox.east,
-          cellBbox.north,
-          JSON.stringify(feature.geometry),
-          feature.properties.featureId
-        ]
-      );
-      written += 1;
-    }
+          [
+            "osm_postgis",
+            feature.properties.modelVersion ?? this.config.mobileCoverageModelVersion,
+            feature.properties.technology ?? "unknown",
+            feature.properties.operator ?? "unknown",
+            feature.properties.quality ?? "unknown",
+            feature.properties.estimatedSignalDbm ?? null,
+            feature.properties.confidence,
+            feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
+            feature.properties.demSource ?? this.config.demDatasetId,
+            feature.properties.generatedAt ?? feature.properties.observedAt,
+            expiresAt,
+            JSON.stringify(feature.properties.assumptions ?? {}),
+            JSON.stringify(feature.properties.metrics ?? {}),
+            JSON.stringify(feature.properties.tags ?? {}),
+            feature.properties.dataQuality ?? "modelled",
+            feature.properties.btsStatus ?? "operator_feed_unavailable",
+            feature.properties.btsStatusSource ?? "none",
+            feature.properties.operatorStatusAvailable ?? false,
+            feature.properties.sourceRevision ?? this.sourceRevision(Boolean(feature.properties.assumptions?.terrainApplied)),
+            gridCell?.resolutionM ?? feature.properties.resolutionM ?? this.config.mobileCoverageResolutionM,
+            gridCell?.row ?? null,
+            gridCell?.column ?? null,
+            cellBbox.west,
+            cellBbox.south,
+            cellBbox.east,
+            cellBbox.north,
+            JSON.stringify(feature.geometry),
+            feature.properties.featureId
+          ]
+        );
+        written += 1;
+      }
 
-    return written;
+      await client.query("commit");
+      return written;
+    } catch (error) {
+      await client.query("rollback").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -1120,11 +1157,7 @@ export class MobileCoverageSource implements SituationDataSource {
     };
   }
 
-  private async buildCoverage(
-    bbox: BoundingBox,
-    technologies: MobileCoverageTechnology[],
-    options: { applyTerrain: boolean }
-  ): Promise<CoveragePayload> {
+  private async buildCoverage(bbox: BoundingBox, technologies: MobileCoverageTechnology[], options: { applyTerrain: boolean }): Promise<CoveragePayload> {
     const generatedAt = new Date().toISOString();
     const maxCells = Math.max(1, Math.floor(this.config.mobileCoverageMaxCells / Math.max(1, technologies.length)));
     const maxFeatures = Math.max(1, this.config.mobileCoverageMaxCells);

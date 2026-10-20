@@ -1,4 +1,5 @@
 import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
+import { engineWork, statusWork, RoutingCapacityError, RoutingSingleFlight } from "./routing-work.js";
 import {
   parseMappedProfile,
   mappedCosting,
@@ -958,6 +959,8 @@ const BASE_SPEED_KPH_BY_HIGHWAY: Record<string, number> = {
 };
 
 export class RoutingService {
+  private readonly acceptedNativeFlights = new RoutingSingleFlight<ValhallaRouteResponse>();
+  workStats() { return { engine: engineWork.stats(), status: statusWork.stats(), acceptedNative: this.acceptedNativeFlights.stats() }; }
   private pool?: Pool;
   private readonly routeCache: ManagedResponseCache<RoutingRouteResponse>;
   private readonly isochroneCache: ManagedResponseCache<RoutingIsochroneResponse>;
@@ -1188,12 +1191,14 @@ export class RoutingService {
       this.valhallaTraffic?.activate();
       let liveSpeeds = await this.valhallaTraffic?.status();
       if (liveTrafficIsUsable(liveSpeeds) && liveSpeeds!.routingDataset !== dataset.version) liveSpeeds = undefined;
-      const native = await requestValhallaRoute(this.config, profile, request, undefined, {
+      const native = await this.acceptedNativeFlights.run(canonicalRoutingHash({
+        request, dataset, version, snapshot, trafficRevision: routingTrafficCachePolicy(liveSpeeds).revision
+      }), () => requestValhallaRoute(this.config, profile, request, undefined, {
         liveSpeeds,
         maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
         rejectUnroutableLocations: true,
         excludePolygons: snapshot.closures.map((c) => c.polygon)
-      });
+      }));
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
       if (!native.trip || trips.some((t) => !t) || (native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
         throw new Error("Incomplete or weakened engine request");
@@ -1279,6 +1284,7 @@ export class RoutingService {
       result.features = result.routes.map((route) => routeFeature(route));
       return result;
     } catch (error) {
+      if (error instanceof RoutingCapacityError) throw new RoutingError(503, "ROUTING_BUSY", error.message);
       if (error instanceof RoadTripError) throw new RoutingError(error.status, error.code, error.message);
       if (error instanceof RoutingError) throw error;
       throw new RoutingError(502, "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED", "The known-closure route could not be verified; no fallback was used.");
@@ -1438,7 +1444,7 @@ export class RoutingService {
         }
         warnings.push("Valhalla returned no route candidates; falling back to local OSM/PostGIS routing.");
       } catch (error) {
-        if (error instanceof RoutingError && error.code === "ROUTING_TRAFFIC_CHANGED") throw error;
+        if (error instanceof RoutingError && ["ROUTING_TRAFFIC_CHANGED", "ROUTING_BUSY"].includes(error.code)) throw error;
         const message = error instanceof Error ? error.message : "Valhalla routing failed.";
         if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
           warnings.push(`Valhalla routing failed: ${message}`);
@@ -1933,6 +1939,7 @@ export class RoutingService {
         warnings.push("Valhalla returned no isochrone polygons; falling back to local OSM/PostGIS routing.");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Valhalla isochrone failed.";
+        if (error instanceof RoutingError && error.code === "ROUTING_BUSY") throw error;
         if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
           warnings.push(`Valhalla isochrone failed: ${message}`);
           return directIsochroneResponse(generatedAt, profile, request, maxDistanceM, warnings, "valhalla");
@@ -2036,6 +2043,7 @@ export class RoutingService {
         warnings.push("Valhalla returned no routable access candidate; falling back to local OSM/PostGIS routing.");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Valhalla locate failed.";
+        if (error instanceof RoutingError && error.code === "ROUTING_BUSY") throw error;
         if (this.config.routingEngine === "valhalla" && !this.config.osmPostgisConnectionString) {
           warnings.push(`Valhalla locate failed: ${message}`);
           return emptyNearestAccessResponse(generatedAt, profile, request, warnings, "valhalla");
@@ -3853,7 +3861,7 @@ async function requestValhallaJson<T>(
   if (!baseUrl) {
     throw new Error("VALHALLA_BASE_URL is not configured.");
   }
-  const response = await fetch(new URL(endpoint, withTrailingSlash(baseUrl)), {
+  const perform = () => fetch(new URL(endpoint, withTrailingSlash(baseUrl)), {
     method,
     headers: {
       accept: "application/json",
@@ -3863,6 +3871,13 @@ async function requestValhallaJson<T>(
     body: payload === undefined ? undefined : JSON.stringify(payload),
     signal: AbortSignal.timeout(config.requestTimeoutMs)
   });
+  let response: Response;
+  try {
+    response = await (endpoint === "/status" ? statusWork : engineWork).run(perform);
+  } catch (error) {
+    if (error instanceof RoutingCapacityError) throw new RoutingError(503, "ROUTING_BUSY", error.message);
+    throw error;
+  }
   const body = (await response.json().catch(() => ({}))) as T & { error?: string; error_code?: number; status_message?: string };
   if (rejectUnroutableLocations && endpoint === "/route" && response.status === 400 && body?.error_code === 171) {
     // Valhalla 3.8.3 reports correlation failure without a location index. Do

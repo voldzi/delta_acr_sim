@@ -119,6 +119,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
+describe("accepted route concurrency", () => {
+  it("shares an identical in-flight engine route but validates every caller", async () => {
+    const f = await fixture();
+    let release!: (value: Response) => void;
+    let engineCalls = 0;
+    f.fetchMock.mockImplementation(async (url: string | URL) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      engineCalls++;
+      return new Promise<Response>(r => { release = r; });
+    });
+    const pending = Array.from({ length: 8 }, () => f.service.route(request()));
+    for (let i = 0; i < 40; i++) await Promise.resolve();
+    expect(engineCalls).toBe(1);
+    release(Response.json(reply()));
+    const results = await Promise.all(pending);
+    expect(results.every(r => r.routes.every(v => v.knownClosures?.state === "applied"))).toBe(true);
+    expect(f.options.loadSnapshot).toHaveBeenCalledTimes(16);
+    results[0]!.routes.length = 0;
+    expect(results[1]!.routes.length).toBeGreaterThan(0);
+  });
+});
 describe("known closure publisher", () => {
   it("retains explicit scope and chooses earliest source expiry, not last refresh as event onset", async () => {
     const s = await source();

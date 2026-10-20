@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily SIM mobile coverage renewal check
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 Europe/Prague
+RandomizedDelaySec=30m
+Persistent=true
+Unit=sim-mobile-coverage-renewal.service
+
+[Install]
+WantedBy=timers.target

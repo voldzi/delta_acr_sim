@@ -257,6 +257,7 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
     const dem = await context.demCatalog.status();
     const routingHealth = await context.routing.healthStatus();
     const valhallaTraffic = await context.valhallaTraffic.status();
+    const routingWork = context.routing.workStats();
     const sourceCacheLines = sourceCacheStats(context).flatMap((sourceCache) => [
       `situation_data_source_cache_entries{source="${sourceCache.sourceId}"} ${sourceCache.entries}`,
       `situation_data_source_cache_inflight{source="${sourceCache.sourceId}"} ${sourceCache.inflight}`,
@@ -312,6 +313,12 @@ function registerHealthRoutes(app: Express, context: SituationDataAppContext): v
       .send(
         [
           `situation_data_enabled_sources ${context.config.enabledSources.length}`,
+          `situation_data_routing_engine_started_total ${routingWork.engine.started}`,
+          `situation_data_routing_engine_active ${routingWork.engine.active}`,
+          `situation_data_routing_engine_queued ${routingWork.engine.queued}`,
+          `situation_data_routing_engine_rejected_total ${routingWork.engine.rejected}`,
+          `situation_data_routing_status_rejected_total ${routingWork.status.rejected}`,
+          `situation_data_routing_native_coalesced_total ${routingWork.acceptedNative.coalesced}`,
           `situation_data_cache_entries ${cache.entries}`,
           `situation_data_cache_inflight ${cache.inflight}`,
           `situation_data_cache_hits ${cache.hits}`,

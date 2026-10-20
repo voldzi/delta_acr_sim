@@ -15,6 +15,24 @@ external storage, not in Git.
 
 ## Primary Hot Paths
 
+### Accepted routing concurrency
+
+Closure-aware road routes remain outside legacy completed-response caching.
+Concurrent exact same native work may coalesce, but final safety validation is
+independent per caller. Different graph/engine, closure snapshot, request or
+traffic generation never shares engine results. Strict trips are not coalesced.
+Expensive engine work is limited to 4 active and 32 queued per process, with a
+5-second queue deadline; `/status` verification has a separate 4/64/2-second
+budget. Saturation returns 503 `ROUTING_BUSY`. Callers should use bounded backoff,
+not immediate retries. No caller-controlled priority or inferred app identity
+is used. Additional replicas multiply these budgets and require separate sizing.
+
+Metrics: `situation_data_routing_engine_started_total`, `_active`, `_queued`,
+`_rejected_total`, `situation_data_routing_status_rejected_total` and
+`situation_data_routing_native_coalesced_total`. A faster repeat alone does not
+prove a cache hit. Verify counter deltas with controlled synthetic concurrent
+routes; do not run an unbounded load test on public providers or production.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.

@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh reproducible SIM mobile coverage before expiry
+RequiresMountsFor=/srv/x5-production
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/mountpoint -q /srv/x5-production
+ExecStartPre=/bin/sh -c 'test "$(findmnt -n -o UUID --mountpoint /srv/x5-production)" = "2f93f595-b61b-4eea-9054-7afa9b275b5b"'
+ExecStart=/usr/bin/flock -n /run/lock/sim-mobile-coverage-renewal.lock /usr/bin/docker exec csm-sim-situation-data-api nice -n 10 node apps/situation-data-api/dist/rebuild-mobile-coverage.js --if-due
+TimeoutStartSec=6h
+Nice=10

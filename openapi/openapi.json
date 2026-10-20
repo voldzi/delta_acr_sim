@@ -4581,7 +4581,7 @@
     "/situation-data/api/v1/routing/route": {
       "post": {
         "summary": "Build a route between two WGS84 points",
-        "description": "Computes a server-side emergency route for COP using Valhalla when configured, with local OSM/PostGIS graph fallback. If no graph backend is available, SIM returns a clearly marked direct_fallback geometry.",
+        "description": "Computes a server-side route. The accepted known-closure road path has no legacy-cache or provider fallback. Concurrent identical native engine computations may be shared only within the same request, graph, closure snapshot and traffic generation; every caller retains final safety checks. Engine work is bounded to 4 active and 32 queued requests per process, with 5 seconds maximum queue wait; status verification has an independent bounded budget. Saturation returns HTTP 503 with error.code ROUTING_BUSY, never a fabricated route. Non-road legacy fallback behavior is unchanged.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4625,6 +4625,7 @@
     "/situation-data/api/v1/routing/alternatives": {
       "post": {
         "summary": "Build one to three alternative routes",
+        "description": "Uses the same bounded engine queue and accepted-route safety checks as routing/route. HTTP 503 with error.code ROUTING_BUSY means bounded capacity or queue wait was exceeded; no immediate automatic retry or fallback is required.",
         "requestBody": {
           "required": true,
           "content": {
