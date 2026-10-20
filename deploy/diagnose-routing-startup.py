@@ -64,8 +64,9 @@ def restore(original, before):
     return {"health": outcome, "differentFields": differences,
         "verified": outcome == "healthy" and not differences and support.PIN.read_bytes() == original}
 
-def diagnostic(original, before, compose, private, result_path):
-    receipt = {"diagnosticOnly": True, "candidate": support.NEW}
+def diagnostic(original, before, compose, private, result_path, *, deploy=False, acceptance=None):
+    if deploy and not callable(acceptance): raise RuntimeError("Deployment requires a real route acceptance callback.")
+    receipt = {"diagnosticOnly": not deploy, "candidate": support.NEW}
     phase = "compose-image-only-parity"
     changed = json.loads(original)
     changed["services"]["situation-data-api"]["image"] = support.NEW
@@ -84,6 +85,12 @@ def diagnostic(original, before, compose, private, result_path):
         if before["Config"].get("Healthcheck") != current["Config"].get("Healthcheck"):
             receipt["differentFields"].append("Config.Healthcheck")
         receipt["candidatePassed"] = receipt["healthOutcome"] == "healthy" and not receipt["differentFields"]
+        if deploy and receipt["candidatePassed"]:
+            phase = "real-route-acceptance"
+            receipt["routeAcceptance"] = acceptance()
+            if receipt["routeAcceptance"].get("verified") is not True:
+                raise RuntimeError("ROUTE_ACCEPTANCE_FAILED")
+            receipt["deploymentCommitted"] = True
     except BaseException as error:
         receipt["candidatePassed"] = False
         receipt["failureCategory"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "command_or_validation_failure"
@@ -98,10 +105,11 @@ def diagnostic(original, before, compose, private, result_path):
         except BaseException:
             receipt["startup"] = {"diagnosticCaptureFailed": True}
         # Receipt creation or collection MUST NOT prevent rollback.
-        try:
-            receipt["rollback"] = restore(original, before)
-        except BaseException:
-            receipt["rollback"] = {"verified": False}
+        if not receipt.get("deploymentCommitted"):
+            try:
+                receipt["rollback"] = restore(original, before)
+            except BaseException:
+                receipt["rollback"] = {"verified": False}
         try:
             write_receipt(private / "result.json", receipt, 0o600)
             # Schema contains only safe state, enum codes, image IDs and stack sites.
@@ -109,7 +117,7 @@ def diagnostic(original, before, compose, private, result_path):
         except BaseException:
             receipt["receiptWriteFailed"] = True
         print("SAFE_STARTUP_DIAGNOSTIC=" + json.dumps(receipt), flush=True)
-        if not receipt["rollback"].get("verified"):
+        if not receipt.get("deploymentCommitted") and not receipt["rollback"].get("verified"):
             raise RuntimeError("ROLLBACK_NOT_VERIFIED: operator attention required.") from None
     return receipt
 
@@ -117,7 +125,7 @@ def re_safe_failure(value):
     import re
     return bool(re.fullmatch(r"COMMAND_EXIT_[0-9]{1,3}|COMMAND_TIMEOUT|COMPOSE_PARITY_FAILED", value))
 
-def main():
+def main(*, deploy=False, acceptance=None):
     if os.geteuid() != 0: raise RuntimeError("Run this reviewed diagnostic as root.")
     support.run = run
     if run(["findmnt", "-n", "-o", "UUID", "--mountpoint", "/srv/x5-production"]).strip() != "2f93f595-b61b-4eea-9054-7afa9b275b5b":
@@ -140,7 +148,19 @@ def main():
     env.update({key: str(value) for key, value in compose["services"]["situation-data-api"].get("environment", {}).items()})
     if env != support.environment_map(before["Config"]["Env"]): raise RuntimeError("Live environment differs.")
     if compose["services"]["situation-data-api"]["image"] != support.OLD: raise RuntimeError("Compose pin differs.")
-    private, result_path = support.STAGE / "root-diagnostic-v4", support.STAGE / "diagnostic-result-v4.json"
+    if deploy:
+        proof_path = support.STAGE / "diagnostic-result-v4.json"
+        if proof_path.is_symlink() or proof_path.stat().st_uid != 0:
+            raise RuntimeError("Unexpected diagnostic proof owner/path.")
+        proof_bytes = proof_path.read_bytes()
+        if hashlib.sha256(proof_bytes).hexdigest() != "e4618e5611e5a6e984b83e9af8009b498d2e41dd2df6cc88c056ac6667f55c6b":
+            raise RuntimeError("Successful diagnostic proof changed.")
+        proof = json.loads(proof_bytes)
+        if proof.get("candidate") != support.NEW or proof.get("candidatePassed") is not True or proof.get("rollback", {}).get("verified") is not True:
+            raise RuntimeError("No successful diagnostic/rollback proof for this exact image.")
+        private, result_path = support.STAGE / "root-deployment-v5", support.STAGE / "deployment-result-v5.json"
+    else:
+        private, result_path = support.STAGE / "root-diagnostic-v4", support.STAGE / "diagnostic-result-v4.json"
     if private.exists() or result_path.exists() or result_path.is_symlink():
         raise RuntimeError("Diagnostic already attempted; no restart. Review diagnostic-result-v4.json.")
     private.mkdir(mode=0o700, exist_ok=False)
@@ -149,8 +169,12 @@ def main():
         out.write(original)
         out.flush()
         os.fsync(out.fileno())
-    diagnostic(original, before, compose, private, result_path)
-    print("Diagnostic complete; old image restored and healthy. No deployment or timer activation performed.")
+    receipt = diagnostic(original, before, compose, private, result_path, deploy=deploy, acceptance=acceptance)
+    if receipt.get("deploymentCommitted"):
+        print("Reviewed candidate committed after health, runtime and real route acceptance.")
+    else:
+        print("Diagnostic/failed deployment complete; old image restored and healthy. No timer activation performed.")
+    return receipt
 
 if __name__ == "__main__":
     if sys.argv[1:] != ["--start-once"]: raise SystemExit("Required: --start-once (diagnostic only; always rollback).")

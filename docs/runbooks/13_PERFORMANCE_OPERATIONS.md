@@ -79,6 +79,38 @@ failure. `rollback.verified=false` requires immediate operator attention, not
 another start. Tests: `python3 deploy/test-routing-startup-diagnostic.py` and
 `python3 deploy/test-routing-performance-installer.py`.
 
+### 2026-10-20 diagnostic result and final activation
+
+Approved v4 diagnostic completed: exact candidate
+`sha256:b51f7dbce0407c498d7ba1dea69b6cd481be5fd44eb54ac70a14c66d852bfe04`
+became healthy, first probe passed, no restart/OOM/startup error was observed,
+runtime parity passed, and OLD was restored healthy with exact original pin.
+Receipt SHA-256 is
+`e4618e5611e5a6e984b83e9af8009b498d2e41dd2df6cc88c056ac6667f55c6b`.
+This does **not** establish the historical cause of v3 failure; do not claim an
+application crash was diagnosed or repaired when the failure did not reproduce.
+
+After restore, ordinary routes initially returned
+`ROUTING_KNOWN_CLOSURES_REVIEW_REQUIRED`; they later passed after normal TEC quota
+and graph-check backoff, without changing reviews or forcing provider updates.
+Readiness of the process is not readiness of cold provider data. The final
+activation is `deploy/activate-reviewed-routing-performance.py --install`, staged
+with both support modules in `activation-v5/`. It requires the exact successful
+root-owned diagnostic receipt and unchanged OLD baseline before any mutation.
+It commits NEW only after healthy/runtime/healthcheck parity and real normal SIM
+routes (urban, cross-CZ, CZ–AT) with applied known closures and exact graph.
+The existing non-routable fixture must remain 422 with no fallback or increased
+tolerance. During cold-data readiness, bounded normal API calls may wait at the
+existing provider quota and graph-probe backoff; 503 is never acceptance.
+
+On failed acceptance, the original image/pin/runtime must be restored healthy.
+On success, the reviewed renewal installer enables the separate daily timer;
+its failure is reported separately rather than claiming full completion.
+The image-only activation receipt is `deployment-result-v5.json`; full completion
+still requires independent fresh speed, mobile read-model and concurrent caller
+evidence. Diagnostic CLI remains diagnostic-only and always restores OLD.
+Tests: `python3 deploy/test-routing-activation.py` plus both diagnostic test files.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.

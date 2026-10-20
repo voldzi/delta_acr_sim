@@ -43,7 +43,7 @@ class DiagnosticTests(unittest.TestCase):
                 os.umask(old)
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
 
-    def exercise(self, *, outcome="healthy", capture_error=False, write_error=False, restore_error=False):
+    def exercise(self, *, outcome="healthy", capture_error=False, write_error=False, restore_error=False, deploy=False, accept=True):
         original = json.dumps({"services": {"situation-data-api": {"image": module.support.OLD}}}).encode()
         compose = json.loads(original)
         candidate = json.loads(original)
@@ -66,7 +66,12 @@ class DiagnosticTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "ROLLBACK_NOT_VERIFIED"):
                     module.diagnostic(original, before, compose, Path("/fixture/private"), Path("/fixture/result"))
                 return
-            result = module.diagnostic(original, before, compose, Path("/fixture/private"), Path("/fixture/result"))
+            result = module.diagnostic(original, before, compose, Path("/fixture/private"), Path("/fixture/result"), deploy=deploy,
+                                       acceptance=(lambda: {"verified": accept}) if deploy else None)
+            if deploy and accept and outcome == "healthy":
+                restore.assert_not_called()
+                self.assertTrue(result["deploymentCommitted"])
+                return result
             restore.assert_called_once_with(original, before)
             self.assertEqual(order.mock_calls[0][0], "capture")
             self.assertEqual(order.mock_calls[1][0], "restore")
@@ -74,6 +79,18 @@ class DiagnosticTests(unittest.TestCase):
 
     def test_success_always_restores_original(self):
         self.assertTrue(self.exercise()["rollback"]["verified"])
+
+    def test_explicit_deployment_only_keeps_verified_candidate(self):
+        self.exercise(deploy=True)
+
+    def test_failed_real_route_acceptance_restores(self):
+        result = self.exercise(deploy=True, accept=False)
+        self.assertTrue(result["rollback"]["verified"])
+        self.assertNotIn("deploymentCommitted", result)
+
+    def test_deployment_requires_acceptance_callback_before_any_change(self):
+        with self.assertRaisesRegex(RuntimeError, "requires a real route"):
+            module.diagnostic(b"", {}, {}, Path("/fixture"), Path("/fixture/result"), deploy=True)
 
     def test_failed_health_keeps_reason_and_restores(self):
         result = self.exercise(outcome="process_restarted")
