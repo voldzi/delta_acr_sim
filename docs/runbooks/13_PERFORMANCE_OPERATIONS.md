@@ -63,6 +63,22 @@ start is not proof of deployment acceptance and must not be reported as a
 confirmed fix. Keep the old deployment active until the controlled diagnostic
 step is approved and its evidence evaluated.
 
+The approved diagnostic is now a **separate** program,
+`deploy/diagnose-routing-startup.py --start-once`, staged with its reviewed support
+module in `.routing-performance-20261020/diagnostic-v4/`. Do not rerun installers
+v1/v2/v3 or call the support module's installer entrypoint. This program always
+restores the original image even if the candidate passes, verifies old-image
+health plus runtime/healthcheck/pin parity, and never enables the renewal timer.
+It bounds Docker operations, captures safe structural stack coordinates before
+rollback, and cannot skip restoration because a diagnostic capture or write
+failed. A process lock and one-shot directory prevent concurrent/repeated starts.
+Safe result is `/srv/sim/.routing-performance-20261020/diagnostic-result-v4.json`
+(root-owned 0644, no raw logs, values, request bodies or secrets); the original
+Compose backup remains root-only. The printed receipt also survives a write
+failure. `rollback.verified=false` requires immediate operator attention, not
+another start. Tests: `python3 deploy/test-routing-startup-diagnostic.py` and
+`python3 deploy/test-routing-performance-installer.py`.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.

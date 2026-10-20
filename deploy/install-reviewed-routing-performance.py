@@ -22,19 +22,59 @@ def safe_startup_diagnostics(container):
 
     Never persist raw logs, probe output, environment values or request bodies.
     """
-    result = subprocess.run(["docker", "inspect", container], capture_output=True, text=True)
+    try:
+        result = subprocess.run(["docker", "inspect", container], capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired:
+        return {"inspectTimedOut": True}
     if result.returncode:
         return {"inspectExitCode": result.returncode}
     value = json.loads(result.stdout)[0]
     state = value["State"]
     health = state.get("Health", {})
-    logs = subprocess.run(["docker", "logs", "--tail", "100", container], capture_output=True, text=True)
-    text = logs.stdout + logs.stderr
+    log_capture = {}
+    try:
+        logs = subprocess.run(["docker", "logs", "--tail", "100", container], capture_output=True, text=True, timeout=10)
+        text = logs.stdout + logs.stderr
+        log_capture["logsExitCode"] = logs.returncode
+    except subprocess.TimeoutExpired:
+        text = ""
+        log_capture["logsTimedOut"] = True
     known_codes = ("CLEAN_DATABASE_NOT_READY", "INVALID_CLEAN_DRIVER_CONFIGURATION", "INVALID_CLEAN_CONFIGURATION",
                    "INVALID_PRODUCTION_CLEAN_CONFIGURATION", "CLEAN_LEGACY_COMPOSITION_CONFLICT",
-                   "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EACCES", "ENOENT", "ENOSPC",
+                   "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "EACCES", "ENOENT", "ENOSPC",
                    "MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND", "ERR_TLS_CERT_ALTNAME_INVALID",
-                   "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "DEPTH_ZERO_SELF_SIGNED_CERT")
+                   "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "DEPTH_ZERO_SELF_SIGNED_CERT",
+                   "ERR_INVALID_ARG_TYPE", "ERR_PACKAGE_PATH_NOT_EXPORTED", "ERR_REQUIRE_ESM",
+                   "28P01", "3D000", "42501", "53300", "57P03")
+    # Emit source coordinates only from a fixed list of repository-owned modules.
+    # Never persist exception messages, function names, arbitrary paths or frames.
+    app_modules = (
+        "aggregation", "app", "aprs-is-source", "bbox-cache", "catalog", "chmi-radar", "chmi-webcams",
+        "chmi-weather-station-detail", "clean-bootstrap", "community-context-source", "config",
+        "database-erasure", "dem-catalog", "dem-elevation-sampler", "driver-account-erasure",
+        "driver-account-erasure-store", "driver-guarded-execution", "driver-guarded-execution-port",
+        "driver-maintenance-cli", "driver-maintenance-owner", "driver-measurement-store",
+        "driver-measurements", "driver-owner-composition", "driver-publication", "driver-retention-lifecycle",
+        "driver-revocation-actor", "feature-views", "geo-routing", "http", "index",
+        "known-closure-graph-rebind", "known-road-closures", "layers", "mapped-road-profile",
+        "mobile-coverage-source", "osm-postgis-source", "radar-frames", "radio-planning",
+        "rebuild-mobile-coverage", "response-cache", "road-match", "routing-safety", "routing-service",
+        "routing-work", "search-data", "shared-cache", "sim-user-data-relay", "sources", "spatial-limit",
+        "tpeg2-source", "transit-detail", "transit-static-model", "types", "valhalla-traffic-coordinator",
+        "weather-forecast")
+    module_pattern = (r"apps/situation-data-api/dist/(?:" + "|".join(app_modules) + r")\.js|"
+                      r"packages/clean-lifecycle/(?:runtime|store|http|completed-replay)\.mjs")
+    frame_pattern = re.compile(r"^\s*at\s+(?:[^\n]*?\()?"
+                               r"(?:file://)?/app/(?P<module>" + module_pattern + r")"
+                               r":(?P<line>[1-9][0-9]{0,6}):(?P<column>[1-9][0-9]{0,5})\)?\s*$",
+                               re.MULTILINE)
+    stack_sites = []
+    for frame in frame_pattern.finditer(text):
+        site = {"module": frame.group("module"), "line": int(frame.group("line")), "column": int(frame.group("column"))}
+        if site not in stack_sites:
+            stack_sites.append(site)
+        if len(stack_sites) == 12:
+            break
     probes = []
     for entry in health.get("Log", []):
         output = entry.get("Output", "")
@@ -46,6 +86,7 @@ def safe_startup_diagnostics(container):
             "finishedAt": state.get("FinishedAt"), "health": health.get("Status"), "probes": probes,
             "startupErrorCodes": [code for code in known_codes if re.search(r"\b" + code + r"\b", text)],
             "exceptionClasses": [name for name in ("TypeError", "ReferenceError", "SyntaxError", "RangeError") if name + ":" in text],
+            "startupStackSites": stack_sites, **log_capture,
             "startupListeningObserved": "Situation Data API listening on" in text}
 
 def reviewed_compose_environment(pin):

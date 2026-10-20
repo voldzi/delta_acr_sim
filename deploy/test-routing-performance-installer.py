@@ -22,6 +22,61 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(result["startupErrorCodes"], ["CLEAN_DATABASE_NOT_READY"])
         self.assertEqual(result["probes"][0]["errorCodes"], ["ECONNREFUSED"])
 
+    def diagnostic_state(self):
+        return {"Image": installer.NEW, "RestartCount": 0, "State": {"Status": "exited", "ExitCode": 1}}
+
+    def test_diagnostic_inspect_timeout_is_bounded_and_safe(self):
+        with patch.object(subprocess, "run", side_effect=subprocess.TimeoutExpired([], 5, output="synthetic-secret")) as call:
+            result = installer.safe_startup_diagnostics("fixture")
+        self.assertEqual(result, {"inspectTimedOut": True})
+        self.assertEqual(call.call_args.kwargs["timeout"], 5)
+        self.assertNotIn("synthetic-secret", json.dumps(result))
+
+    def test_diagnostic_logs_timeout_preserves_inspect_and_never_partial_logs(self):
+        with patch.object(subprocess, "run", side_effect=[
+            subprocess.CompletedProcess([], 0, json.dumps([self.diagnostic_state()]), ""),
+            subprocess.TimeoutExpired([], 10, output="synthetic-secret")]) as call:
+            result = installer.safe_startup_diagnostics("fixture")
+        self.assertTrue(result["logsTimedOut"])
+        self.assertEqual(result["exitCode"], 1)
+        self.assertEqual(call.call_args.kwargs["timeout"], 10)
+        self.assertNotIn("synthetic-secret", json.dumps(result))
+
+    def test_diagnostic_stack_sites_allowlist_coordinates_not_messages_or_names(self):
+        raw = """TypeError: synthetic-secret credential-value
+    at synthetic-secret-function (file:///app/apps/situation-data-api/dist/app.js:140:19)
+    at /app/apps/situation-data-api/dist/index.js:14:32
+    at synthetic-secret-function (file:///app/packages/clean-lifecycle/runtime.mjs:20:6)
+    at /app/apps/situation-data-api/dist/synthetic-secret.js:2:3
+    at /app/packages/clean-lifecycle/synthetic-secret.mjs:2:3
+    at /app/apps/other/dist/app.js:2:3
+    at /private/synthetic-secret/config.js:2:3
+    at /app/apps/situation-data-api/dist/app.js:140:19?synthetic-secret
+Error code: ERR_INVALID_ARG_TYPE
+"""
+        with patch.object(subprocess, "run", side_effect=[
+            subprocess.CompletedProcess([], 0, json.dumps([self.diagnostic_state()]), ""),
+            subprocess.CompletedProcess([], 0, raw, "")]):
+            result = installer.safe_startup_diagnostics("fixture")
+        self.assertEqual(result["startupStackSites"], [
+            {"module": "apps/situation-data-api/dist/app.js", "line": 140, "column": 19},
+            {"module": "apps/situation-data-api/dist/index.js", "line": 14, "column": 32},
+            {"module": "packages/clean-lifecycle/runtime.mjs", "line": 20, "column": 6}])
+        self.assertEqual(result["exceptionClasses"], ["TypeError"])
+        self.assertEqual(result["startupErrorCodes"], ["ERR_INVALID_ARG_TYPE"])
+        serialized = json.dumps(result)
+        self.assertNotIn("synthetic-secret", serialized)
+        self.assertNotIn("credential-value", serialized)
+
+    def test_diagnostic_stack_sites_deduplicated_and_limited(self):
+        raw = "\n".join("    at /app/apps/situation-data-api/dist/app.js:%d:1" % line for line in ([1, 1] + list(range(2, 20))))
+        with patch.object(subprocess, "run", side_effect=[
+            subprocess.CompletedProcess([], 0, json.dumps([self.diagnostic_state()]), ""),
+            subprocess.CompletedProcess([], 0, raw, "")]):
+            result = installer.safe_startup_diagnostics("fixture")
+        self.assertEqual(len(result["startupStackSites"]), 12)
+        self.assertEqual([site["line"] for site in result["startupStackSites"]], list(range(1, 13)))
+
     def test_repeat_never_overwrites_rollback_or_retries(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
