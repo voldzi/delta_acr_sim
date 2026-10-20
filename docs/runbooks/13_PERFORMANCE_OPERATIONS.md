@@ -111,6 +111,49 @@ still requires independent fresh speed, mobile read-model and concurrent caller
 evidence. Diagnostic CLI remains diagnostic-only and always restores OLD.
 Tests: `python3 deploy/test-routing-activation.py` plus both diagnostic test files.
 
+### Completed production acceptance, 2026-10-20
+
+Final activation committed application revision `a4ec26a` in immutable image
+`sha256:b51f7dbce0407c498d7ba1dea69b6cd481be5fd44eb54ac70a14c66d852bfe04`.
+Deployment receipt confirms health/runtime parity and real urban, cross-CZ and
+CZ–AT routes with applied known closures, graph
+`sim-routing-2026-10-18-1792292102`; unroutable fixture remains HTTP 422
+`ROUTING_LOCATION_NOT_ROUTABLE`. Runtime stayed healthy with zero restarts.
+
+Bounded independent acceptance used four simultaneous gateway requests plus
+four from the COP API container over its existing configured SIM connection.
+These are synthetic identical car-route requests, not personal journeys or a
+physical-iPhone/full-COP-UI acceptance. Both samples passed (8/8 HTTP 200 each).
+Final sample at 14:58 UTC: 348–463 ms, one native engine execution and seven
+coalesced callers, zero work/status rejections, zero active/queued work afterward.
+Every caller retained its own closure/graph/freshness checks. This demonstrates
+concurrent shared work, not a 1,000-user capacity or varied-national-load result.
+
+At `2026-10-20T14:58:46.703745Z`, a normal route reported `current` live speeds:
+18,249 applied flow records / 159,144 applied edges, matching graph, source
+observed `14:56:10Z`, usable until `15:01:14Z`. Deployed speed selection on the
+actual current report included `current`; an expired **in-memory copy only**
+excluded it. No invalid report was injected and no live traffic state was altered.
+These are point-in-time freshness/application proofs, not mapping accuracy,
+national coverage, per-route measured speed provenance or ETA error estimates.
+
+All three mobile map queries (2G/4G/5G) returned five actual features each,
+`readModel=true`, resolution 1,000 m, no stale features or warnings. Read-only
+PostgreSQL aggregation confirmed 159,627 valid rows per technology (478,881
+total) at that resolution; earliest expiry 2026-10-27 04:18–04:46 UTC. Daily
+renewal timer is active; first run succeeded with `mobile_coverage_renewal_not_due`
+for all three technologies, avoiding an unnecessary full rebuild. Next observed
+trigger: 2026-10-21 04:38:59 Europe/Prague (04:15 plus randomized delay).
+
+Reusable bounded verifier: `scripts/accept-routing-performance-production.py
+--run` on the existing Docker host. It emits aggregates only, uses eight normal
+route requests across the two paths, three small map queries and a final normal
+route. It neither changes provider quotas nor forces updates or modifies secrets,
+reviews, network, user data or Jízda settings. Existing operational monitoring
+remains enabled; the earlier one-off coverage/speed completion heartbeat was
+already paused and was not changed. Current verification included 93 affected
+service regression tests and 37 isolated deployment/acceptance-script tests.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.
