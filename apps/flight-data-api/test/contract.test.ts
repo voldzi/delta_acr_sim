@@ -94,7 +94,7 @@ describe("Flight Data API contract", () => {
     expect(source.cacheStats?.()[0]?.coalescedHits).toBe(7);
   });
 
-  it("retries transient ADSB.lol failures before returning a live snapshot", async () => {
+  it("backs off after transient ADSB.lol failure instead of immediate retries", async () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("connection reset"))
@@ -110,15 +110,15 @@ describe("Flight Data API contract", () => {
     vi.stubGlobal("fetch", fetchMock);
     const source = createFlightDataSources({ ...config, enabledSources: ["adsb_lol"] })[0]!;
 
-    const result = await source.fetchObservations({
+    const query = {
       bbox: undefined,
       limit: 10,
-      sourceIds: ["adsb_lol"],
+      sourceIds: ["adsb_lol" as const],
       includeStale: false
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(result.observations).toHaveLength(1);
+    };
+    await expect(source.fetchObservations(query)).rejects.toThrow("connection reset");
+    await expect(source.fetchObservations(query)).rejects.toThrow("cooldown");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("exposes health and source metadata", async () => {

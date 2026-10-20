@@ -1,6 +1,7 @@
 import type { FlightDataConfig } from "./config.js";
 import type { PartnerAirTrackStore } from "./partner-air-track-store.js";
 import { ManagedResponseCache } from "./response-cache.js";
+import { ProviderRequestGate } from "./provider-request-gate.js";
 import type { ManagedResponseCacheStats } from "./response-cache.js";
 import type {
   BoundingBox,
@@ -201,6 +202,7 @@ class MockFlightDataSource implements FlightDataSource {
 }
 
 class AdsbLolSource implements FlightDataSource {
+  private readonly requestGate = new ProviderRequestGate();
   readonly descriptor: SourceDescriptor;
   private readonly payloadCache: ManagedResponseCache<AdsbLolResponse>;
 
@@ -232,7 +234,7 @@ class AdsbLolSource implements FlightDataSource {
       : { lat: this.config.defaultLat, lon: this.config.defaultLon, radiusNm: this.config.defaultRadiusNm };
     const url = `${this.config.adsbLolBaseUrl}/v2/lat/${area.lat.toFixed(4)}/lon/${area.lon.toFixed(4)}/dist/${Math.min(250, Math.max(1, Math.ceil(area.radiusNm)))}`;
     const payload = await this.payloadCache.getOrLoad(url, () =>
-      requestJsonWithRetry<AdsbLolResponse>(url, this.config.requestTimeoutMs, {
+      this.requestGate.json<AdsbLolResponse>(url, this.config.requestTimeoutMs, {
         accept: "application/json",
         "user-agent": this.config.adsbLolUserAgent
       })
@@ -554,26 +556,6 @@ async function requestJson<T>(url: string, timeoutMs: number, headers: Record<st
     throw new Error(`HTTP ${response.status} from ${new URL(url).hostname}`);
   }
   return (await response.json()) as T;
-}
-
-async function requestJsonWithRetry<T>(
-  url: string,
-  timeoutMs: number,
-  headers: Record<string, string> = {},
-  maxAttempts = 3
-): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= Math.max(1, maxAttempts); attempt += 1) {
-    try {
-      return await requestJson<T>(url, timeoutMs, headers);
-    } catch (error) {
-      lastError = error;
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, attempt * 150));
-      }
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("Flight source request failed.");
 }
 
 function mapOpenSkyState(state: unknown[], fetchedAt: string, baseTimeMs: number, priority: number): RawFlightObservation | undefined {

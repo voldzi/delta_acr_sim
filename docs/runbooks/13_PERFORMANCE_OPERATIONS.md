@@ -15,6 +15,28 @@ external storage, not in Git.
 
 ## Primary Hot Paths
 
+### ADSB.lol upstream failure protection (2026-10-20)
+
+ADSB.lol requests use a source-wide, single-concurrency circuit gate in addition
+to the existing viewport cache and request coalescing. A failed fetch is not
+immediately retried three times. Network/HTTP failures trigger exponential
+backoff starting at 5 seconds; HTTP 429 starts at 60 seconds, with exponential
+backoff capped at 15 minutes. A valid provider Retry-After (seconds or HTTP date)
+is always respected, including values longer than that cap. Different viewport
+keys cannot bypass the gate. Successful recovery resets the failure sequence.
+Existing bounded stale-cache policy is unchanged; expired positions must not be
+described as current. The gate is per source instance/process, not a distributed
+quota across replicas or unrelated applications sharing the public IP.
+
+Production diagnosis: ADSB.lol returned HTTP 429; the previous retry loop
+amplified every failed load threefold. IDS JMK's configured Brno FeatureServer
+returned HTTP 404. The officially referenced StreamServer currently requires a
+token (ArcGIS error 499); the public KORDIS web map explicitly prohibits robotic
+reuse without permission. Do not substitute its private web-map endpoint or a
+historical archive for live vehicle positions. Until an authorized live endpoint
+is available, keep the unavailable-source warning truthful. A successful weather
+data fetch must be checked independently of cumulative cache error counters.
+
 - SIM Overview first load: protected by `GET /api/v1/operations/summary`, which
   probes provider health/observability only and does not request full map
   feature preview payloads.
