@@ -13033,6 +13033,7 @@
                 "type": "integer"
               },
               "idsjmkVehiclePositions": {
+                "description": "Official IDS JMK GTFS-RT shared server cache refresh, minimum 30 seconds. Vehicle timestamps are observation times; positions or feed snapshots older than 120 seconds are stale, never live. Attribution: KORDIS JMK / IDS JMK, CC BY 4.0.",
                 "type": "integer"
               },
               "spravaZeleznicTrains": {

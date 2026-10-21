@@ -1,6 +1,7 @@
 import { unzipSync } from "fflate";
 import { AprsIsSource } from "./aprs-is-source.js";
 import gtfsRealtime from "gtfs-realtime-bindings";
+import { idsjmkFeedClient, idsjmkRefreshSeconds, IDSJMK_POSITION_MAX_AGE_MS } from "./idsjmk-feed.js";
 import type { transit_realtime } from "gtfs-realtime-bindings";
 import proj4 from "proj4";
 import { canonicalizeBboxForCache, formatBboxKey, roundPointToGrid } from "./bbox-cache.js";
@@ -207,14 +208,14 @@ const PUBLIC_TRANSIT_STATIC_LICENSE: SituationDataLicense = {
 };
 
 const IDSJMK_VEHICLE_POSITIONS_LICENSE: SituationDataLicense = {
-  name: "IDS JMK / Brno Open Data",
-  url: "https://data.gov.cz/datové-sady?klíčová-slova=polohy",
-  attribution: "KORDIS JMK / Statutární město Brno open data",
+  name: "CC BY 4.0",
+  url: "https://www.idsjmk.cz/a/kontakty.html",
+  attribution: "KORDIS JMK, a.s. / IDS JMK; otevřená data GTFS-RT; zpracování CSM SIM",
   commercialUse: "allowed_with_obligations",
   operationalUse: "allowed_with_obligations",
   notes: [
-    "Public transit vehicle positions for IDS JMK are updated roughly every 10 seconds according to NKOD metadata.",
-    "SIM caches the feed server-side; COM must not poll the upstream endpoint directly.",
+    "Official open GTFS-RT feed; source publication cadence is not a freshness guarantee for individual vehicles.",
+    "SIM shares one server-side snapshot between map and detail with a minimum 30-second request interval and bounded failure backoff; COP must not poll the provider directly.",
     "Vehicle positions are public transport context, not an emergency or security track source."
   ]
 };
@@ -1852,14 +1853,8 @@ class PublicTransitStaticSource implements SituationDataSource {
 
 class IdsjmkVehiclePositionsSource implements SituationDataSource {
   readonly descriptor: SourceDescriptor;
-  private readonly feedCache: ManagedResponseCache<IdsjmkVehicleFeed>;
 
   constructor(private readonly config: SituationDataConfig) {
-    this.feedCache = new ManagedResponseCache<IdsjmkVehicleFeed>({
-      ttlMs: Math.max(10, config.idsjmkVehiclePositionsCacheTtlSeconds) * 1000,
-      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
-      maxEntries: 1
-    });
     this.descriptor = {
       sourceId: "idsjmk_vehicle_positions",
       label: "IDS JMK vehicle positions",
@@ -1869,12 +1864,24 @@ class IdsjmkVehiclePositionsSource implements SituationDataSource {
       layers: ["traffic"],
       license: IDSJMK_VEHICLE_POSITIONS_LICENSE,
       baseUrl: config.idsjmkVehiclePositionsUrl,
-      updateCadenceSeconds: config.idsjmkVehiclePositionsCacheTtlSeconds
+      updateCadenceSeconds: idsjmkRefreshSeconds(config)
     };
   }
 
   cacheStats(): SourceCacheStats[] {
-    return [cacheStatsFor("idsjmk_vehicle_positions", this.feedCache)];
+    return [{ ...idsjmkFeedClient(this.config).stats(), sourceId: "idsjmk_vehicle_positions" }];
+  }
+
+  async healthStatus(): Promise<SourceHealthStatus> {
+    const client = idsjmkFeedClient(this.config), state = client.diagnostics(), stats = client.stats();
+    const sourceAt = parseTimestamp(state.snapshot?.LastUpdate ?? state.snapshot?.lastUpdate);
+    const old = !sourceAt || Date.now() - Date.parse(sourceAt) > IDSJMK_POSITION_MAX_AGE_MS;
+    return { sourceId: "idsjmk_vehicle_positions", status: old || state.failureBackoff ? "degraded" : "ok",
+      backend: "official-gtfs-rt-shared-cache", objectCount: state.snapshot ? normalizeIdsjmkVehicles(state.snapshot).length : 0,
+      lastImportAt: sourceAt, lastImportAgeSeconds: sourceAt ? Math.max(0, Math.round((Date.now() - Date.parse(sourceAt)) / 1000)) : undefined,
+      warnings: [...(old ? ["IDS JMK vehicle snapshot is not yet loaded or its source timestamp is stale."] : []),
+        ...(state.failureBackoff ? ["IDS JMK provider refresh failed; bounded backoff active."] : []),
+        ...(stats.lastSuccessAt ? [] : ["No successful IDS JMK snapshot has been loaded."])] };
   }
 
   async fetchFeatures(query: SituationQuery): Promise<SourceFetchResult> {
@@ -1883,16 +1890,17 @@ class IdsjmkVehiclePositionsSource implements SituationDataSource {
       return { source: this.descriptor, fetchedAt, features: [], warnings: [] };
     }
 
-    const feed = await this.feedCache.getOrLoad("idsjmk_vehicle_positions", () => fetchIdsjmkVehicleFeed(this.config));
+    const feed = await fetchIdsjmkVehicleFeed(this.config);
     const observedAt = parseTimestamp(feed.LastUpdate ?? feed.lastUpdate) ?? fetchedAt;
     const vehicles = normalizeIdsjmkVehicles(feed);
-    const refreshSeconds = Math.max(10, this.config.idsjmkVehiclePositionsCacheTtlSeconds);
+    const refreshSeconds = idsjmkRefreshSeconds(this.config);
     const features = vehicles
       .map((vehicle) => mapIdsjmkVehiclePosition(vehicle, query, observedAt, refreshSeconds))
       .filter((feature): feature is SituationFeature => Boolean(feature))
       .slice(0, query.limit);
 
-    return { source: this.descriptor, fetchedAt, features, warnings: [] };
+    return { source: this.descriptor, fetchedAt, features,
+      warnings: typeof feed._omitted === "number" && feed._omitted > 0 ? [`IDS JMK omitted ${feed._omitted} vehicle records with invalid identity, coordinates or timestamps.`] : [] };
   }
 }
 
@@ -3224,8 +3232,11 @@ function mapIdsjmkVehiclePosition(
   const operator = stringFromRecord(record, ["operator", "Operator", "agency", "Agency"]) ?? "IDS JMK";
   const routeId = stringFromRecord(record, ["routeId", "RouteId", "route_id"]);
   const featureId = `traffic:idsjmk_vehicle_positions:${stableToken(vehicleId)}`;
+  const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(observedAt)) / 1000));
+  const stale = record._gtfsRt === true && (Date.now() - Date.parse(observedAt) > IDSJMK_POSITION_MAX_AGE_MS ||
+    Date.now() - Date.parse(String(record._feedObservedAt)) > IDSJMK_POSITION_MAX_AGE_MS);
 
-  return makePointFeature({
+  const feature = makePointFeature({
     id: featureId,
     lon: position.lon,
     lat: position.lat,
@@ -3241,7 +3252,8 @@ function mapIdsjmkVehiclePosition(
     metrics: compactMetrics({
       speedMps,
       headingDeg,
-      delaySeconds
+      delaySeconds,
+      ageSeconds
     }),
     tags: compactTags({
       vehicleId,
@@ -3252,7 +3264,7 @@ function mapIdsjmkVehiclePosition(
       transportMode: mode.tag,
       sourceSystem: "idsjmk",
       positionKind: "vehicle_live",
-      livePosition: "true"
+      livePosition: String(!stale)
     }),
     transportMode: mode.tag,
     routeShortName: line,
@@ -3268,8 +3280,8 @@ function mapIdsjmkVehiclePosition(
         systemId: "idsjmk",
         sourceId: "idsjmk_vehicle_positions",
         positionKind: "vehicle_live",
-        livePosition: true,
-        motionExpected: true,
+        livePosition: !stale,
+        motionExpected: !stale,
         refreshSeconds,
         cacheTtlSeconds: refreshSeconds,
         transportMode: mode.tag,
@@ -3290,6 +3302,7 @@ function mapIdsjmkVehiclePosition(
     },
     raw: query.includeRaw ? record : undefined
   });
+  return { ...feature, properties: { ...feature.properties, stale } };
 }
 
 function mapPublicTransitStaticStop(
@@ -5818,10 +5831,7 @@ function publicTransitStaticCacheKey(config: SituationDataConfig): string {
 }
 
 export async function fetchIdsjmkVehicleFeed(config: SituationDataConfig): Promise<IdsjmkVehicleFeed> {
-  return requestJsonWithHeaders<IdsjmkVehicleFeed>(config.idsjmkVehiclePositionsUrl, config.requestTimeoutMs, {
-    accept: "application/json",
-    "user-agent": "csm-sim-situation-data/0.1"
-  });
+  return idsjmkFeedClient(config).load();
 }
 
 export async function fetchSpravaZeleznicTrainFeatures(config: SituationDataConfig): Promise<SpravaZeleznicTrainFeature[]> {
@@ -6429,6 +6439,7 @@ function idsjmkVehicleMode(record: IdsjmkVehicleRecord): { category: string; lab
     const pidMode = pidModeFromRouteType(routeType);
     return { category: pidMode.category, label: pidMode.label, tag: pidMode.tag };
   }
+  if (record._gtfsRt === true) return { category: "public_transport_vehicle", label: "vehicle", tag: "unknown" };
   const vehicleType = numberFromRecord(record, ["vtype", "VType", "vehicleTypeCode", "ltype", "LType"]);
   if (vehicleType === 1) {
     return { category: "public_transport_tram", label: "tram", tag: "tram" };

@@ -192,7 +192,6 @@ export class TransitDetailService {
   private readonly pidVehicleFeedCache: ManagedResponseCache<transit_realtime.FeedMessage>;
   private readonly pidTripUpdateFeedCache: ManagedResponseCache<transit_realtime.FeedMessage>;
   private readonly pidStaticModelCache: ManagedResponseCache<PidStaticModel>;
-  private readonly idsjmkVehicleFeedCache: ManagedResponseCache<IdsjmkVehicleFeed>;
   private readonly spravaZeleznicTrainFeedCache: ManagedResponseCache<SpravaZeleznicTrainFeature[]>;
   private readonly pidVehicleHistory = new Map<string, TransitVehicleHistoryPoint[]>();
   private readonly idsjmkVehicleHistory = new Map<string, TransitVehicleHistoryPoint[]>();
@@ -214,11 +213,6 @@ export class TransitDetailService {
     this.pidStaticModelCache = new ManagedResponseCache<PidStaticModel>({
       ttlMs: Math.max(60, config.pidGtfsStaticCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(15 * 60_000, config.staleIfErrorSeconds * 1000),
-      maxEntries: 1
-    });
-    this.idsjmkVehicleFeedCache = new ManagedResponseCache<IdsjmkVehicleFeed>({
-      ttlMs: Math.max(10, config.idsjmkVehiclePositionsCacheTtlSeconds) * 1000,
-      staleIfErrorMs: Math.max(300, config.staleIfErrorSeconds) * 1000,
       maxEntries: 1
     });
     this.spravaZeleznicTrainFeedCache = new ManagedResponseCache<SpravaZeleznicTrainFeature[]>({
@@ -289,7 +283,7 @@ export class TransitDetailService {
   }
 
   private async getIdsjmkVehicleDetail(featureId: string): Promise<TransitVehicleDetail | undefined> {
-    const feed = await this.idsjmkVehicleFeedCache.getOrLoad("idsjmk_vehicle_positions", () => fetchIdsjmkVehicleFeed(this.config));
+    const feed = await fetchIdsjmkVehicleFeed(this.config);
     const sourceObservedAt = parseTimestamp(recordValue(feed, ["LastUpdate", "lastUpdate"])) ?? new Date().toISOString();
     const record = findIdsjmkVehicleRecord(feed, featureId, sourceObservedAt);
     if (!record) {
@@ -470,6 +464,8 @@ function buildIdsjmkVehicleDetail(
   history: TransitVehicleHistoryPoint[]
 ): TransitVehicleDetail {
   const generatedAt = new Date().toISOString();
+  const gtfsStale = record._gtfsRt === true && (Date.now() - Date.parse(sourceObservedAt) > 120_000 ||
+    Date.now() - Date.parse(String(record._feedObservedAt)) > 120_000);
   const position = idsjmkVehicleLonLat(record);
   const vehicleId = idsjmkVehicleId(record, sourceObservedAt);
   const routeType = numberFromRecord(record, ["routeType", "RouteType", "route_type", "gtfsRouteType"]);
@@ -540,7 +536,7 @@ function buildIdsjmkVehicleDetail(
       routeShortName,
       destination,
       delaySeconds,
-      status: externalTransitStatus(sourceObservedAt, delaySeconds)
+      status: gtfsStale ? "stale" : externalTransitStatus(sourceObservedAt, delaySeconds)
     },
     stopTimes: [],
     delaySeconds,
@@ -558,7 +554,7 @@ function buildIdsjmkVehicleDetail(
       stopTimes: []
     },
     quality: {
-      realtimeVehicleAvailable: Boolean(position),
+      realtimeVehicleAvailable: Boolean(position) && !gtfsStale,
       staticModelAvailable: false,
       tripUpdateAvailable: delaySeconds !== undefined,
       tripScheduleAvailable: false,
@@ -1369,6 +1365,7 @@ function pidModeFromRouteType(routeTypeCode: number): string {
 }
 
 function idsjmkVehicleMode(record: IdsjmkVehicleRecord, routeType: number | undefined): { transportMode: string; label: string } {
+  if (record._gtfsRt === true && routeType === undefined) return { transportMode: "unknown", label: "vehicle" };
   if (routeType !== undefined) {
     const transportMode = pidModeFromRouteType(routeType);
     return { transportMode, label: transportMode };

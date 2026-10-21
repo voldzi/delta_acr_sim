@@ -3435,8 +3435,8 @@ describe("Situation Data API contract", () => {
               positionKind: "vehicle_live",
               livePosition: true,
               motionExpected: true,
-              refreshSeconds: 20,
-              cacheTtlSeconds: 20,
+              refreshSeconds: 30,
+              cacheTtlSeconds: 30,
               detailAvailable: true,
               detailUrl: "/situation-data/api/v1/transit/vehicles/traffic%3Aidsjmk_vehicle_positions%3A_IDSJMK-GEO-1_?source=idsjmk_vehicle_positions"
             }),

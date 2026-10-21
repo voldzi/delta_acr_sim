@@ -46,9 +46,22 @@ export class SituationAggregationService {
   }
 
   async getFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {
-    return this.cache.getOrLoad(cacheKeyForSituationQuery(query, this.config), () => this.fetchFeatures(query), {
+    const result = await this.cache.getOrLoad(cacheKeyForSituationQuery(query, this.config), () => this.fetchFeatures(query), {
       ttlMs: responseCacheTtlMs(query, this.config)
     });
+    // Re-evaluate vehicle age even when returning an aggregate/shared stale cache.
+    // Never turn a cached last-known point into a fresh position at delivery time.
+    if (!query.sourceIds.includes("idsjmk_vehicle_positions")) return result;
+    const features = result.features.map((feature) => {
+      if (feature.properties.sourceId !== "idsjmk_vehicle_positions") return feature;
+      const checked = markStale(feature, this.config.staleAfterSeconds);
+      if (!checked.properties.stale) return checked;
+      return { ...checked, properties: { ...checked.properties,
+        tags: { ...checked.properties.tags, livePosition: "false" },
+        providerProperties: { ...checked.properties.providerProperties,
+          transit: { ...(checked.properties.providerProperties?.transit as Record<string, unknown> ?? {}), livePosition: false, motionExpected: false } } } };
+    });
+    return { ...result, features, summary: { ...result.summary, staleFeatureCount: features.filter((feature) => feature.properties.stale).length } };
   }
 
   private async fetchFeatures(query: SituationQuery): Promise<SituationFeatureCollection> {

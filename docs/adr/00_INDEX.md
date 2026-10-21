@@ -1,5 +1,7 @@
 # ADR index
 
+- [0046_IDSJMK_OPEN_GTFS_RT.md](0046_IDSJMK_OPEN_GTFS_RT.md)
+
 - [0038_BOUNDED_ACCEPTED_ROUTING_WORK.md](0038_BOUNDED_ACCEPTED_ROUTING_WORK.md)
 
 Architecture Decision Records pro SIM baseline.

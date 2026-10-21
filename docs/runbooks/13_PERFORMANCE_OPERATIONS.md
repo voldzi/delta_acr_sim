@@ -15,6 +15,19 @@ external storage, not in Git.
 
 ## Primary Hot Paths
 
+### IDS JMK official GTFS-RT
+
+Map and detail requests share one in-memory producer per service process. The
+minimum fetch interval is 30 seconds, including concurrent requests; failures
+back off and honour Retry-After. The feed is limited to 8 MiB. Do not multiply
+service replicas without introducing coordinated producer ownership. No new
+disk cache is needed. Individual measurement timestamps and source timestamps
+must both be within 120 seconds for a live position; cache hits recheck age.
+Retained last-known positions must be labelled stale. Attribute KORDIS JMK /
+IDS JMK, CC BY 4.0, linking to https://www.idsjmk.cz/a/kontakty.html.
+See ADR 0046. Verify two snapshots at least 30 seconds apart, real position
+changes and per-vehicle ages; never substitute a healthcheck for this proof.
+
 ### Accepted routing concurrency
 
 Closure-aware road routes remain outside legacy completed-response caching.
