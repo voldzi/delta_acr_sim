@@ -28,6 +28,19 @@ IDS JMK, CC BY 4.0, linking to https://www.idsjmk.cz/a/kontakty.html.
 See ADR 0046. Verify two snapshots at least 30 seconds apart, real position
 changes and per-vehicle ages; never substitute a healthcheck for this proof.
 
+Production acceptance 2026-10-21: source revision `331132b`, image
+`sha256:a28bf8dc020963a723c1307980e0c408ab0e359420b4b05462a4549bdb943bfb`.
+Root installer committed the narrow change; independent inspection confirmed
+healthy with zero restarts. Twelve concurrent map requests and one vehicle
+detail returned HTTP 200; source cache hits rose 1 to 14 while refreshes stayed
+at 2 and errors at 0. Two broad map snapshots 35 seconds apart contained
+1565/1563 points; 1067 changed coordinates, 1393 advanced observation time,
+1397 were fresh and median observation age was 24 seconds. All stale points
+were marked not live. IDS JMK readiness reported `ok`, official shared-cache
+backend, source age 20 seconds and no warnings. These are point-in-time proofs,
+not a guarantee of every upstream vehicle being fresh. No raw coordinates,
+vehicle identifiers or provider payloads are retained in this receipt.
+
 ### Accepted routing concurrency
 
 Closure-aware road routes remain outside legacy completed-response caching.
