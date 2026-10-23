@@ -4581,6 +4581,13 @@
     "/situation-data/api/v1/routing/route": {
       "post": {
         "summary": "Build a route between two WGS84 points",
+        "x-restrictions-relaxation-rejection": {
+          "httpStatus": 422,
+          "code": "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED",
+          "scope": "reviewed known-closure road path only",
+          "condition": "All present engine warnings have numeric code 401 and every variant passes geometry/closure validation. No returned route is accepted. Unknown or mixed warnings remain 502. The affected location is not inferred.",
+          "fallbackAllowed": false
+        },
         "description": "Computes a server-side route. The accepted known-closure road path has no legacy-cache or provider fallback. Concurrent identical native engine computations may be shared only within the same request, graph, closure snapshot and traffic generation; every caller retains final safety checks. Engine work is bounded to 4 active and 32 queued requests per process, with 5 seconds maximum queue wait; status verification has an independent bounded budget. Saturation returns HTTP 503 with error.code ROUTING_BUSY, never a fabricated route. Non-road legacy fallback behavior is unchanged.",
         "requestBody": {
           "required": true,

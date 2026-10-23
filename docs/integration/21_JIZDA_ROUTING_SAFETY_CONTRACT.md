@@ -244,3 +244,91 @@ Valhalla edge_walk může sdílet index0. Nejde o obecné slučování blízkýc
 bodů/loopů; interior repeats stále potřebují vlastní forward index. Není-li
 celá trace geometry a edge coverage ověřitelná, attributes/tunnels zůstanou
 výslovně unavailable/unknown; known closure a navigation mají vlastní kontroly.
+# Arrival candidate, 2026-10-23 — not enabled, pending COP/SDK agreement
+
+The independently reproducible Penny address result contains trip warning 401:
+Valhalla's first pass failed and its retry relaxed restrictions. The control
+arrival has no warning. This is not evidence of a 25 m failure or lawful access.
+The candidate SIM known-closure path rejects an isolated numeric warning 401
+with 422 `ROUTING_RESTRICTIONS_RELAXATION_REQUIRED`, after all returned variants
+pass geometry and closure checks. Mixed/unknown warnings remain 502; strict
+road-trip behavior is unchanged. Neither response supplies navigable geometry.
+
+## Proposed opt-in contract (not the binding production OpenAPI)
+
+Capability `userSelectedArrival`; version `sim-user-selected-arrival-v1`; existing
+POST `/situation-data/api/v1/routing/route`. Do not advertise capability until
+all three owners agree and SIM, COP/SDK and Jizda support it. No automatic
+arrival selection in this version. Caller explicitly selects a public/map
+arrival coordinate; this is not an attestation of legal vehicle access.
+
+Proposed additional request field, strict object with no unknown keys:
+
+```json
+{"to":{"lon":17.3814008,"lat":50.1214775},
+"arrival":{"version":"sim-user-selected-arrival-v1",
+"target":{"lon":17.3810814,"lat":50.1215849},"selection":"user_selected"}}
+```
+
+`to` is the explicitly user-selected road arrival; `arrival.target` is the original POI.
+Start is `{ "lon":17.3831568,"lat":50.1209513 }`. Only plain `profileId=car`,
+1–3 alternatives, no `departureTime`, `via`, `trip`, `vehicle`, `vehicleProfile`
+or strict intent in the first version; incompatible fields return 422 without
+profile downgrade. Coordinate WGS84 finite, no unknown keys. Agreed candidate 250 m
+maximum selected-arrival-to-original-target separation is a product guardrail,
+NOT a snap tolerance or access proof. The selected arrival still has the
+unchanged <=25 m engine endpoint tolerance. Final limits require agreement.
+
+Proposed per-route `arrival` response (all objects strict, all fields required):
+
+```json
+{"version":"sim-user-selected-arrival-v1",
+"selection":"user_selected","target":{"lon":17.3810814,"lat":50.1215849},
+"requestedAccess":{"lon":17.3814008,"lat":50.1214775},
+"mappedEndpoint":{"lon":17.381415,"lat":50.121474},
+"distanceM":26.86,"remainingAccess":"unverified",
+"requestHash":"<hash-entire-response-query>","geometryHash":"<sha256>",
+"routeId":"<variant-id>","profileId":"car","closureRevision":"<revision>",
+"routingDataset":{"version":"<actual-graph>","builtAt":"<date-time>"},
+"validUntil":"<date-time>"}
+```
+
+Numbers above illustrate the prior control result, not a signed or current
+proof. SIM issues hashes and proof, never accepts them as client attestations.
+Distance is endpoint-to-original-target, not a walkable distance. Route distance,
+duration and maneuvers end at the road endpoint; no final connector or pedestrian
+ETA. Existing v1 mapped assessment/lastMile never changes its 25 m meaning.
+
+Every alternative must independently pass the existing directed engine route,
+warnings, geometry, closure and validity checks, then bind its original target,
+selected arrival, effective request and all proof fields. Mapped graph access
+is incomplete; no proof of physical barriers, parking rights or lawful entrance
+is asserted. Where sufficient map access evidence is unavailable, retain
+unverified status or reject; never invent an automatic legal arrival.
+
+The first arrival candidate bypasses completed-result and native single-flight
+caches (`cachePolicy=no_cache`). All hashes include the entire preserved query,
+including original target, arrival version/selection and selected `to`, profile,
+graph, closures and traffic generation. Feature properties carry exactly the
+same per-variant arrival object as the route.
+Use the minimum existing graph/closure/traffic validity. Changed/expired proof
+fails closed. Responses to requests without opt-in are unchanged. Older clients
+must not opt in and must reject unknown arrival versions. COP/SDK preserve the
+per-variant proof; Jizda must not declare POI arrival or terminate recording
+merely because road navigation ends.
+
+Acceptance: 401 root/trip/alternate, mixed warning, invalid geometry and closure
+precedence, Penny/control, 24/25/26/27 m around selected-arrival snap, original
+target separation and 250 m boundary, alternative and stop rejection, strict/
+vehicle/profile rejection, barriers/opposite carriageway/access uncertainty,
+expired graph/closure/traffic proof, old clients, authenticated COP-to-SIM-to-SDK
+and physical iPhone. Candidate source is not production proof.
+
+Candidate capability shape:
+`userSelectedArrival={version:'sim-user-selected-arrival-v1',availability:'requires_runtime_validation',selection:'user_selected_only',profileIds:['car'],maxRemainingDistanceM:250,maxSnapDistanceM:25,remainingAccess:'unverified',cachePolicy:'no_cache'}`.
+
+Agreement status: SIM accepts the exact COP candidate delivered on 2026-10-23,
+superseding the earlier SIM 500 m/original-to proposal. Pending final COP/SDK
+and Jizda acknowledgement and joint acceptance. This document is not production
+activation or proof of a legal entrance. Arrival implementation remains pending.
+

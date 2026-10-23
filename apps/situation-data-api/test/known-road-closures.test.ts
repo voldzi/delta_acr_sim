@@ -391,6 +391,36 @@ describe("ordinary route engine fences", () => {
     );
     await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
   });
+  it.each(["root", "trip", "alternate"])("returns typed rejection for isolated relaxation warning at %s, never an accepted route", async (location) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      const data: any = reply();
+      if (location === "root") data.warnings = [{ code: 401 }];
+      else if (location === "trip") data.trip.warnings = [{ code: 401 }];
+      else data.alternates[0].trip.warnings = [{ code: 401 }];
+      return Response.json(data);
+    });
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 422, code: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED" });
+  });
+  it("does not downgrade mixed warnings to a location-related rejection", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => String(url).endsWith("/status")
+      ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+      : Response.json({ ...reply(), warnings: [{ code: 401 }, { code: 500 }] }));
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+  });
+  it.each(["invalid_geometry", "closure_crossing"])("warning 401 cannot conceal %s", async (fault) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      const data: any = reply();
+      data.trip = trip(fault === "invalid_geometry" ? [[1, 1]] : [[14.48, 50.1], [14.52, 50.1]]);
+      data.trip.warnings = [{ code: 401 }];
+      return Response.json(data);
+    });
+    await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+  });
   it.each(["root", "trip", "alternate"])("preserves a protective %s warning even when the primary endpoint snap is invalid", async (location) => {
     const f = await fixture();
     f.fetchMock.mockImplementation(async (url) => {

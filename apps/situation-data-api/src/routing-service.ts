@@ -1200,8 +1200,12 @@ export class RoutingService {
         excludePolygons: snapshot.closures.map((c) => c.polygon)
       }));
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
-      if (!native.trip || trips.some((t) => !t) || (native.warnings?.length ?? 0) > 0 || trips.some((t) => (t?.warnings?.length ?? 0) > 0))
+      if (!native.trip || trips.some((t) => !t))
         throw new Error("Incomplete or weakened engine request");
+      const engineWarnings = [...(native.warnings ?? []), ...trips.flatMap((t) => t?.warnings ?? [])];
+      // Unknown or mixed warnings remain a protective engine failure. Never
+      // use free-form provider text to infer a target or access permission.
+      if (engineWarnings.some((w) => typeof w !== "object" || w === null || w.code !== 401)) throw new Error("Incomplete or weakened engine request");
       // Invalid geometry or a breached closure is not a client location error.
       // Verify every variant before classifying any waypoint snap.
       for (const t of trips) {
@@ -1212,6 +1216,9 @@ export class RoutingService {
           verifyKnownClosureGeometry(shape, snapshot);
         }
       }
+      if (engineWarnings.length > 0)
+        throw new RoadTripError(422, "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED",
+          "The engine could produce this route only after relaxing restrictions; the route was rejected. No affected location or lawful access is inferred.");
       for (const t of trips) {
         assertValhallaRouteWaypointSnaps(
           { trip: t },
