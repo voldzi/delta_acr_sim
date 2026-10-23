@@ -391,6 +391,40 @@ describe("ordinary route engine fences", () => {
     );
     await expect(f.service.route(request())).rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
   });
+  it("binds user-selected arrival to every variant without changing road geometry or using native coalescing", async () => {
+    const f = await fixture();
+    const raw = { ...request(), includeSteps: true, arrival: { version: "sim-user-selected-arrival-v1" as const,
+      selection: "user_selected" as const, target: { lon: 14.45, lat: 50.10024 } } };
+    const [a, b] = await Promise.all([f.service.route(raw), f.service.route(raw)]);
+    expect(f.payloads).toHaveLength(2);
+    for (const result of [a, b]) {
+      expect(result.query.arrival).toEqual(raw.arrival);
+      expect(result.routes).toHaveLength(2);
+      for (const [i, route] of result.routes.entries()) {
+        expect(route.arrival).toMatchObject({ version: raw.arrival.version, target: raw.arrival.target,
+          requestedAccess: raw.to, mappedEndpoint: raw.to, snapDistanceM: 0,
+          remainingAccess: "unverified", requestHash: canonicalRoutingHash(result.query),
+          geometryHash: canonicalRoutingHash(route.geometry), routeId: route.routeId,
+          routingDataset: dataset, engine: { provider: "valhalla", costing: "auto", fallbackUsed: false } });
+        expect(route.arrival!.distanceM).toBeGreaterThan(26);
+        expect(route.arrival!.distanceM).toBeLessThan(27);
+        expect(result.features[i]!.properties.arrival).toEqual(route.arrival);
+      }
+    }
+  });
+  it.each(["vehicle", "trip", "vehicleProfile", "via", "departureTime"])("rejects arrival combined with %s before routing", async key => {
+    const f = await fixture();
+    await expect(f.service.route({ ...request(), includeSteps: true, [key]: undefined,
+      arrival: { version: "sim-user-selected-arrival-v1", selection: "user_selected", target: request().to } }))
+      .rejects.toMatchObject({ status: 422, code: "ROUTING_ARRIVAL_UNSUPPORTED" });
+    expect(f.payloads).toHaveLength(0);
+  });
+  it.each([undefined, false])("requires includeSteps true for arrival (%s)", async includeSteps => {
+    const f = await fixture();
+    await expect(f.service.route({ ...request(), includeSteps,
+      arrival: { version: "sim-user-selected-arrival-v1", selection: "user_selected", target: request().to } }))
+      .rejects.toMatchObject({ status: 422, code: "ROUTING_ARRIVAL_UNSUPPORTED" });
+  });
   it.each(["root", "trip", "alternate"])("returns typed rejection for isolated relaxation warning at %s, never an accepted route", async (location) => {
     const f = await fixture();
     f.fetchMock.mockImplementation(async (url) => {

@@ -330,5 +330,36 @@ Candidate capability shape:
 Agreement status: SIM accepts the exact COP candidate delivered on 2026-10-23,
 superseding the earlier SIM 500 m/original-to proposal. Pending final COP/SDK
 and Jizda acknowledgement and joint acceptance. This document is not production
-activation or proof of a legal entrance. Arrival implementation remains pending.
+activation or proof of a legal entrance. Arrival is now implemented only in the
+isolated SIM candidate; joint COP/SDK/iPhone acceptance remains pending.
+
+The sole shared schema is copied unchanged from COP as
+`openapi/fragments/user-selected-arrival-v1.schemas.json`, SHA-256
+`210b06c0cd3f093d91529721b21b7ffed26e28be5d625a15a6d62a67c7f36e8c`.
+It supersedes the illustrative response above: the exact response additionally
+requires `snapDistanceM` and `engine={provider:'valhalla',version,costing:'auto',fallbackUsed:false}`.
+`includeSteps=true` is mandatory. Both request access-to-POI and actual
+endpoint-to-POI distances must be <=250 m. The shared Haversine radius is
+6371000 m; no distances are rounded. COP independently verifies to 0.01 m and
+SDK to 0.5 m. `arrival` is preserved in the entire normalized query before
+request/closure hashes are generated; metadata is identical in each route and
+its matching feature. Known closure engine and vehicleAssessment auto costing
+must match. Missing opt-in produces no metadata.
+
+Errors: malformed arrival 400 VALIDATION_ERROR; disabled/incompatible arrival
+422 ROUTING_ARRIVAL_UNSUPPORTED; either remaining distance >250 m 422
+ROUTING_ARRIVAL_TOO_DISTANT; invalid proof 502 ROUTING_ARRIVAL_INVALID. No route
+data accompanies an error. No endpoint-specific ARRIVAL_UNSUPPORTED alias.
+
+Candidate evidence 2026-10-23: exact COP two-variant fixture imported unchanged,
+SHA-256 `a4b1334ad003eb479a1bf76a9ccf8c703117a37a8bbb6688102b63427a18dc98`.
+SIM reproduces both arrival proofs byte-for-value, including canonical query and
+geometry hashes, distances, capability and feature metadata. 751 service tests
+pass, 6 skipped; typecheck/build/OpenAPI and skeleton checks pass. Coverage
+includes 24/25/26/27 m snap and POI separation, oversized remaining distance,
+missing consent/steps, disabled runtime, incompatible profile/vehicle/stop fields,
+malformed schema, expired/hash/costing proofs, all variant binding, no native
+coalescing and warning401/unknown-warning/geometry/closure precedence.
+These synthetic results do not prove a lawful real entrance or deployed
+COP-to-SIM-to-SDK/iPhone behavior. Those acceptance gates remain open.
 

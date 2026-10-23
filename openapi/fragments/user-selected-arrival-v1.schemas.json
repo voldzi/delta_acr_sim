@@ -1,0 +1,215 @@
+{
+  "components": {
+    "schemas": {
+      "RoutingUserArrivalPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          }
+        }
+      },
+      "RoutingUserArrivalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "selection",
+          "target"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-user-selected-arrival-v1"
+          },
+          "selection": {
+            "const": "user_selected"
+          },
+          "target": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          }
+        },
+        "description": "Opt-in ordinary car only: request.to is the explicitly user-selected road access; target is the original POI. includeSteps=true. No vehicle/trip/vehicleProfile/via/departureTime. Both request.to-to-POI and actual endpoint-to-POI distances <=250m. Road snap remains <=25m. This does not grant access."
+      },
+      "RoutingUserArrivalCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "availability",
+          "selection",
+          "profileIds",
+          "maxRemainingDistanceM",
+          "maxSnapDistanceM",
+          "remainingAccess",
+          "cachePolicy"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-user-selected-arrival-v1"
+          },
+          "availability": {
+            "enum": [
+              "requires_runtime_validation",
+              "disabled"
+            ]
+          },
+          "selection": {
+            "const": "user_selected_only"
+          },
+          "profileIds": {
+            "type": "array",
+            "items": {
+              "const": "car"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          },
+          "maxRemainingDistanceM": {
+            "const": 250
+          },
+          "maxSnapDistanceM": {
+            "const": 25
+          },
+          "remainingAccess": {
+            "const": "unverified"
+          },
+          "cachePolicy": {
+            "const": "no_cache"
+          }
+        }
+      },
+      "RoutingUserArrival": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "selection",
+          "target",
+          "requestedAccess",
+          "mappedEndpoint",
+          "distanceM",
+          "snapDistanceM",
+          "remainingAccess",
+          "requestHash",
+          "geometryHash",
+          "routeId",
+          "routingDataset",
+          "profileId",
+          "engine",
+          "closureRevision",
+          "validUntil"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-user-selected-arrival-v1"
+          },
+          "selection": {
+            "const": "user_selected"
+          },
+          "target": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          },
+          "requestedAccess": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          },
+          "mappedEndpoint": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          },
+          "distanceM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 250
+          },
+          "snapDistanceM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 25
+          },
+          "remainingAccess": {
+            "const": "unverified"
+          },
+          "requestHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "geometryHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "routeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "routingDataset": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "builtAt"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "builtAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "profileId": {
+            "const": "car"
+          },
+          "engine": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "version",
+              "costing",
+              "fallbackUsed"
+            ],
+            "properties": {
+              "provider": {
+                "const": "valhalla"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costing": {
+                "const": "auto"
+              },
+              "fallbackUsed": {
+                "const": false
+              }
+            }
+          },
+          "closureRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Per-variant binding to knownClosures, normalized query, full rendered geometry and actual auto costing. Distances are independently computed spherical WGS84-coordinate Haversine (R=6371000m), tolerance0.01m. The remaining straight-line distance is not a walkable/navigable path or ETA. No legal access assurance. Identical object in the corresponding route feature. No object without opt-in."
+      }
+    }
+  }
+}

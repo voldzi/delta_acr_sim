@@ -14,10 +14,14 @@ the nearby control access does not. Valhalla 3.8.3 src/exceptions.cc distinguish
 warning 401 (first pass failed, retry with relaxed restrictions) from error 401.
 It does not prove legal access or a snap-distance failure.
 
-The future opt-in arrival contract is a separate proposal in integration/21.
+The opt-in arrival contract is a separate candidate in integration/21.
 SIM accepts COP's user-selected `to` plus `arrival.target` proposal, version
 sim-user-selected-arrival-v1, 250 m unverified target separation, 25 m unchanged
-snap, plain car only and no cache. It is not implemented or activated here.
+snap, plain car only and no cache. It is implemented in the isolated candidate,
+using the byte-identical schema confirmed by COP (SHA-256 210b06c0cd3f093d91529721b21b7ffed26e28be5d625a15a6d62a67c7f36e8c),
+not activated in production. No automatic arrival selection or legal access
+assertion exists. Repeated schema generation must preserve existing routing
+safety descriptions; candidate runtime proofs remain separate from production.
 
 Deployment gate: COP/SDK typed-error acceptance, public Penny/control regression
 on the candidate, preservation of current runtime configuration and existing

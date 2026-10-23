@@ -1,0 +1,501 @@
+{
+  "fixtureKind": "synthetic_contract_not_live_route",
+  "validationNow": "2026-10-23T12:00:00Z",
+  "request": {
+    "profileId": "car",
+    "from": {
+      "lat": 50.1209513,
+      "lon": 17.3831568
+    },
+    "to": {
+      "lat": 50.1214775,
+      "lon": 17.3814008
+    },
+    "arrival": {
+      "version": "sim-user-selected-arrival-v1",
+      "selection": "user_selected",
+      "target": {
+        "lat": 50.1215849,
+        "lon": 17.3810814
+      }
+    },
+    "includeSteps": true,
+    "includeRoadAttributes": true,
+    "alternatives": 2
+  },
+  "response": {
+    "query": {
+      "profileId": "car",
+      "from": {
+        "lat": 50.1209513,
+        "lon": 17.3831568
+      },
+      "to": {
+        "lat": 50.1214775,
+        "lon": 17.3814008
+      },
+      "arrival": {
+        "version": "sim-user-selected-arrival-v1",
+        "selection": "user_selected",
+        "target": {
+          "lat": 50.1215849,
+          "lon": 17.3810814
+        }
+      },
+      "includeSteps": true,
+      "includeRoadAttributes": true,
+      "alternatives": 2,
+      "via": [],
+      "avoid": []
+    },
+    "coverage": {
+      "state": "covered",
+      "routingDataset": {
+        "version": "synthetic-contract-graph",
+        "builtAt": "2026-10-23T00:00:00Z"
+      }
+    },
+    "routes": [
+      {
+        "routeId": "synthetic-arrival-0",
+        "rank": 1,
+        "status": "ok",
+        "distanceM": 177,
+        "durationSeconds": 49,
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              17.3831568,
+              50.1209513
+            ],
+            [
+              17.382,
+              50.1211
+            ],
+            [
+              17.381415,
+              50.121474
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "index": 0,
+            "beginShapeIndex": 0,
+            "endShapeIndex": 2,
+            "distanceM": 177,
+            "durationSeconds": 49,
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  17.3831568,
+                  50.1209513
+                ],
+                [
+                  17.382,
+                  50.1211
+                ],
+                [
+                  17.381415,
+                  50.121474
+                ]
+              ]
+            },
+            "instructionLocalized": {
+              "cs": "Syntetický pokyn"
+            }
+          }
+        ],
+        "quality": {
+          "mode": "engine_route",
+          "engine": "valhalla"
+        },
+        "vehicleAssessment": {
+          "state": "not_evaluated",
+          "providerCosting": "auto",
+          "appliedFields": [],
+          "limitations": [
+            "Mapped restrictions incomplete."
+          ]
+        },
+        "knownClosures": {
+          "version": "sim-known-road-closures-v1",
+          "state": "applied",
+          "coverage": "incomplete",
+          "revision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+          "observedAt": "2026-10-23T11:59:00Z",
+          "validUntil": "2026-10-23T12:09:00Z",
+          "appliedClosureCount": 0,
+          "geometryHash": "a068654ff91ba50cc707e4980facf2fd489e3dabf7499575138bcd51145e2b80",
+          "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+          "exclusions": [],
+          "routingDataset": {
+            "version": "synthetic-contract-graph",
+            "builtAt": "2026-10-23T00:00:00Z"
+          },
+          "engine": {
+            "provider": "valhalla",
+            "version": "3.8.3",
+            "fallbackUsed": false
+          },
+          "limitations": [
+            "Synthetic contract fixture; no actual closure, entrance or legal-access verification."
+          ]
+        },
+        "arrival": {
+          "version": "sim-user-selected-arrival-v1",
+          "selection": "user_selected",
+          "target": {
+            "lat": 50.1215849,
+            "lon": 17.3810814
+          },
+          "requestedAccess": {
+            "lat": 50.1214775,
+            "lon": 17.3814008
+          },
+          "mappedEndpoint": {
+            "lat": 50.121474,
+            "lon": 17.381415
+          },
+          "distanceM": 26.790443495116186,
+          "snapDistanceM": 1.0846034126616388,
+          "remainingAccess": "unverified",
+          "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+          "geometryHash": "a068654ff91ba50cc707e4980facf2fd489e3dabf7499575138bcd51145e2b80",
+          "routeId": "synthetic-arrival-0",
+          "routingDataset": {
+            "version": "synthetic-contract-graph",
+            "builtAt": "2026-10-23T00:00:00Z"
+          },
+          "profileId": "car",
+          "engine": {
+            "provider": "valhalla",
+            "version": "3.8.3",
+            "costing": "auto",
+            "fallbackUsed": false
+          },
+          "closureRevision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+          "validUntil": "2026-10-23T12:09:00Z"
+        }
+      },
+      {
+        "routeId": "synthetic-arrival-1",
+        "rank": 2,
+        "status": "ok",
+        "distanceM": 178,
+        "durationSeconds": 50,
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              17.3831568,
+              50.1209513
+            ],
+            [
+              17.38201,
+              50.1211
+            ],
+            [
+              17.381415,
+              50.121474
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "index": 0,
+            "beginShapeIndex": 0,
+            "endShapeIndex": 2,
+            "distanceM": 178,
+            "durationSeconds": 50,
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  17.3831568,
+                  50.1209513
+                ],
+                [
+                  17.38201,
+                  50.1211
+                ],
+                [
+                  17.381415,
+                  50.121474
+                ]
+              ]
+            },
+            "instructionLocalized": {
+              "cs": "Syntetický pokyn"
+            }
+          }
+        ],
+        "quality": {
+          "mode": "engine_route",
+          "engine": "valhalla"
+        },
+        "vehicleAssessment": {
+          "state": "not_evaluated",
+          "providerCosting": "auto",
+          "appliedFields": [],
+          "limitations": [
+            "Mapped restrictions incomplete."
+          ]
+        },
+        "knownClosures": {
+          "version": "sim-known-road-closures-v1",
+          "state": "applied",
+          "coverage": "incomplete",
+          "revision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+          "observedAt": "2026-10-23T11:59:00Z",
+          "validUntil": "2026-10-23T12:09:00Z",
+          "appliedClosureCount": 0,
+          "geometryHash": "74dc8e5aa1bf3bb1c704b180c77065566cdf66175e919b1504ed168f32851a43",
+          "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+          "exclusions": [],
+          "routingDataset": {
+            "version": "synthetic-contract-graph",
+            "builtAt": "2026-10-23T00:00:00Z"
+          },
+          "engine": {
+            "provider": "valhalla",
+            "version": "3.8.3",
+            "fallbackUsed": false
+          },
+          "limitations": [
+            "Synthetic contract fixture; no actual closure, entrance or legal-access verification."
+          ]
+        },
+        "arrival": {
+          "version": "sim-user-selected-arrival-v1",
+          "selection": "user_selected",
+          "target": {
+            "lat": 50.1215849,
+            "lon": 17.3810814
+          },
+          "requestedAccess": {
+            "lat": 50.1214775,
+            "lon": 17.3814008
+          },
+          "mappedEndpoint": {
+            "lat": 50.121474,
+            "lon": 17.381415
+          },
+          "distanceM": 26.790443495116186,
+          "snapDistanceM": 1.0846034126616388,
+          "remainingAccess": "unverified",
+          "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+          "geometryHash": "74dc8e5aa1bf3bb1c704b180c77065566cdf66175e919b1504ed168f32851a43",
+          "routeId": "synthetic-arrival-1",
+          "routingDataset": {
+            "version": "synthetic-contract-graph",
+            "builtAt": "2026-10-23T00:00:00Z"
+          },
+          "profileId": "car",
+          "engine": {
+            "provider": "valhalla",
+            "version": "3.8.3",
+            "costing": "auto",
+            "fallbackUsed": false
+          },
+          "closureRevision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+          "validUntil": "2026-10-23T12:09:00Z"
+        }
+      }
+    ],
+    "features": [
+      {
+        "id": "synthetic-arrival-0",
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              17.3831568,
+              50.1209513
+            ],
+            [
+              17.382,
+              50.1211
+            ],
+            [
+              17.381415,
+              50.121474
+            ]
+          ]
+        },
+        "properties": {
+          "routeId": "synthetic-arrival-0",
+          "knownClosures": {
+            "version": "sim-known-road-closures-v1",
+            "state": "applied",
+            "coverage": "incomplete",
+            "revision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+            "observedAt": "2026-10-23T11:59:00Z",
+            "validUntil": "2026-10-23T12:09:00Z",
+            "appliedClosureCount": 0,
+            "geometryHash": "a068654ff91ba50cc707e4980facf2fd489e3dabf7499575138bcd51145e2b80",
+            "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+            "exclusions": [],
+            "routingDataset": {
+              "version": "synthetic-contract-graph",
+              "builtAt": "2026-10-23T00:00:00Z"
+            },
+            "engine": {
+              "provider": "valhalla",
+              "version": "3.8.3",
+              "fallbackUsed": false
+            },
+            "limitations": [
+              "Synthetic contract fixture; no actual closure, entrance or legal-access verification."
+            ]
+          },
+          "arrival": {
+            "version": "sim-user-selected-arrival-v1",
+            "selection": "user_selected",
+            "target": {
+              "lat": 50.1215849,
+              "lon": 17.3810814
+            },
+            "requestedAccess": {
+              "lat": 50.1214775,
+              "lon": 17.3814008
+            },
+            "mappedEndpoint": {
+              "lat": 50.121474,
+              "lon": 17.381415
+            },
+            "distanceM": 26.790443495116186,
+            "snapDistanceM": 1.0846034126616388,
+            "remainingAccess": "unverified",
+            "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+            "geometryHash": "a068654ff91ba50cc707e4980facf2fd489e3dabf7499575138bcd51145e2b80",
+            "routeId": "synthetic-arrival-0",
+            "routingDataset": {
+              "version": "synthetic-contract-graph",
+              "builtAt": "2026-10-23T00:00:00Z"
+            },
+            "profileId": "car",
+            "engine": {
+              "provider": "valhalla",
+              "version": "3.8.3",
+              "costing": "auto",
+              "fallbackUsed": false
+            },
+            "closureRevision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+            "validUntil": "2026-10-23T12:09:00Z"
+          }
+        }
+      },
+      {
+        "id": "synthetic-arrival-1",
+        "type": "Feature",
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              17.3831568,
+              50.1209513
+            ],
+            [
+              17.38201,
+              50.1211
+            ],
+            [
+              17.381415,
+              50.121474
+            ]
+          ]
+        },
+        "properties": {
+          "routeId": "synthetic-arrival-1",
+          "knownClosures": {
+            "version": "sim-known-road-closures-v1",
+            "state": "applied",
+            "coverage": "incomplete",
+            "revision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+            "observedAt": "2026-10-23T11:59:00Z",
+            "validUntil": "2026-10-23T12:09:00Z",
+            "appliedClosureCount": 0,
+            "geometryHash": "74dc8e5aa1bf3bb1c704b180c77065566cdf66175e919b1504ed168f32851a43",
+            "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+            "exclusions": [],
+            "routingDataset": {
+              "version": "synthetic-contract-graph",
+              "builtAt": "2026-10-23T00:00:00Z"
+            },
+            "engine": {
+              "provider": "valhalla",
+              "version": "3.8.3",
+              "fallbackUsed": false
+            },
+            "limitations": [
+              "Synthetic contract fixture; no actual closure, entrance or legal-access verification."
+            ]
+          },
+          "arrival": {
+            "version": "sim-user-selected-arrival-v1",
+            "selection": "user_selected",
+            "target": {
+              "lat": 50.1215849,
+              "lon": 17.3810814
+            },
+            "requestedAccess": {
+              "lat": 50.1214775,
+              "lon": 17.3814008
+            },
+            "mappedEndpoint": {
+              "lat": 50.121474,
+              "lon": 17.381415
+            },
+            "distanceM": 26.790443495116186,
+            "snapDistanceM": 1.0846034126616388,
+            "remainingAccess": "unverified",
+            "requestHash": "b940154830ad96fb7ae705f3d0d6c096c2a2d4d4f95a44531d16682b12e16601",
+            "geometryHash": "74dc8e5aa1bf3bb1c704b180c77065566cdf66175e919b1504ed168f32851a43",
+            "routeId": "synthetic-arrival-1",
+            "routingDataset": {
+              "version": "synthetic-contract-graph",
+              "builtAt": "2026-10-23T00:00:00Z"
+            },
+            "profileId": "car",
+            "engine": {
+              "provider": "valhalla",
+              "version": "3.8.3",
+              "costing": "auto",
+              "fallbackUsed": false
+            },
+            "closureRevision": "976d9746931250d27b4853f5033855be6625b748d390e730abbdec4c644d4c12",
+            "validUntil": "2026-10-23T12:09:00Z"
+          }
+        }
+      }
+    ],
+    "generatedAt": "2026-10-23T12:00:00Z",
+    "providerId": "valhalla",
+    "warnings": [
+      "Synthetic contract fixture, not a production acceptance result."
+    ]
+  },
+  "capabilities": {
+    "version": "sim-user-selected-arrival-v1",
+    "availability": "requires_runtime_validation",
+    "selection": "user_selected_only",
+    "profileIds": [
+      "car"
+    ],
+    "maxRemainingDistanceM": 250,
+    "maxSnapDistanceM": 25,
+    "remainingAccess": "unverified",
+    "cachePolicy": "no_cache"
+  },
+  "error": {
+    "error": {
+      "code": "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED",
+      "message": "The requested route requires relaxed restrictions; no route was returned.",
+      "correlationId": "synthetic-example"
+    }
+  }
+}

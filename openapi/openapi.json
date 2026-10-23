@@ -4581,14 +4581,7 @@
     "/situation-data/api/v1/routing/route": {
       "post": {
         "summary": "Build a route between two WGS84 points",
-        "x-restrictions-relaxation-rejection": {
-          "httpStatus": 422,
-          "code": "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED",
-          "scope": "reviewed known-closure road path only",
-          "condition": "All present engine warnings have numeric code 401 and every variant passes geometry/closure validation. No returned route is accepted. Unknown or mixed warnings remain 502. The affected location is not inferred.",
-          "fallbackAllowed": false
-        },
-        "description": "Computes a server-side route. The accepted known-closure road path has no legacy-cache or provider fallback. Concurrent identical native engine computations may be shared only within the same request, graph, closure snapshot and traffic generation; every caller retains final safety checks. Engine work is bounded to 4 active and 32 queued requests per process, with 5 seconds maximum queue wait; status verification has an independent bounded budget. Saturation returns HTTP 503 with error.code ROUTING_BUSY, never a fabricated route. Non-road legacy fallback behavior is unchanged.",
+        "description": "Computes a server-side route. The accepted known-closure road path has no legacy-cache or provider fallback. Concurrent identical native engine computations may be shared only within the same request, graph, closure snapshot and traffic generation; every caller retains final safety checks. Engine work is bounded to 4 active and 32 queued requests per process, with 5 seconds maximum queue wait; status verification has an independent bounded budget. Saturation returns HTTP 503 with error.code ROUTING_BUSY, never a fabricated route. User-selected arrival opt-in bypasses completed-response and native single-flight caches. Non-road legacy fallback behavior is unchanged.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4632,7 +4625,6 @@
     "/situation-data/api/v1/routing/alternatives": {
       "post": {
         "summary": "Build one to three alternative routes",
-        "description": "Uses the same bounded engine queue and accepted-route safety checks as routing/route. HTTP 503 with error.code ROUTING_BUSY means bounded capacity or queue wait was exceeded; no immediate automatic retry or fallback is required.",
         "requestBody": {
           "required": true,
           "content": {
@@ -4670,7 +4662,8 @@
         "operationId": "situationData_post_situation_data_api_v1_routing_alternatives",
         "tags": [
           "Situation Data: Situation Data"
-        ]
+        ],
+        "description": "Uses the same bounded engine queue and accepted-route safety checks as routing/route. HTTP 503 with error.code ROUTING_BUSY means bounded capacity or queue wait was exceeded; no immediate automatic retry or fallback is required."
       }
     },
     "/situation-data/api/v1/routing/isochrone": {
@@ -13040,8 +13033,8 @@
                 "type": "integer"
               },
               "idsjmkVehiclePositions": {
-                "description": "Official IDS JMK GTFS-RT shared server cache refresh, minimum 30 seconds. Vehicle timestamps are observation times; positions or feed snapshots older than 120 seconds are stale, never live. Attribution: KORDIS JMK / IDS JMK, CC BY 4.0.",
-                "type": "integer"
+                "type": "integer",
+                "description": "Official IDS JMK GTFS-RT shared server cache refresh, minimum 30 seconds. Vehicle timestamps are observation times; positions or feed snapshots older than 120 seconds are stale, never live. Attribution: KORDIS JMK / IDS JMK, CC BY 4.0."
               },
               "spravaZeleznicTrains": {
                 "type": "integer"
@@ -16973,6 +16966,9 @@
           "capabilities": {
             "$ref": "#/components/schemas/RoadTripCapabilities"
           },
+          "userSelectedArrival": {
+            "$ref": "#/components/schemas/RoutingUserArrivalCapabilities"
+          },
           "mappedProfiles": {
             "$ref": "#/components/schemas/MappedRoadProfileCapabilities"
           }
@@ -17039,6 +17035,9 @@
           "includeDebug": {
             "type": "boolean"
           },
+          "arrival": {
+            "$ref": "#/components/schemas/RoutingUserArrivalRequest"
+          },
           "trip": {
             "$ref": "#/components/schemas/RoadTripTrip"
           },
@@ -17102,6 +17101,8 @@
                 },
                 "includeDebug": {
                 },
+                "arrival": {
+                },
                 "trip": {
                   "$ref": "#/components/schemas/RoadTripTrip"
                 }
@@ -17151,6 +17152,8 @@
                 "includeRoadAttributes": {
                 },
                 "includeDebug": {
+                },
+                "arrival": {
                 },
                 "vehicleProfile": {
                   "$ref": "#/components/schemas/MappedRoadProfileProfile"
@@ -17320,7 +17323,12 @@
           },
           "properties": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+              "arrival": {
+                "$ref": "#/components/schemas/RoutingUserArrival"
+              }
+            }
           }
         }
       },
@@ -18131,6 +18139,9 @@
           },
           "knownClosures": {
             "$ref": "#/components/schemas/SituationDataKnownRoadClosures"
+          },
+          "arrival": {
+            "$ref": "#/components/schemas/RoutingUserArrival"
           },
           "mappedProfileAssessment": {
             "$ref": "#/components/schemas/MappedRoadProfileAssessment"
@@ -25522,6 +25533,215 @@
         },
         "description": "Additive ordinary-routing evidence only; absence means unknown/not requested, never strict acceptance. observedAt is latest successful full snapshot confirmation, not event onset or physical observation. exclusions length equals appliedClosureCount and closureId values are unique. With unknown source direction, both-direction avoidance is explicitly conservative and requires individual review of an official whole-structure closure statement plus exact graph geometry. Every applied closure uses separately reviewed graph geometry and fresh full TEC membership. Coverage is always incomplete. Configured source/graph/engine/expiry failures return an error without a discarded-exclusion fallback."
       },
+      "RoutingUserArrivalPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          }
+        }
+      },
+      "RoutingUserArrivalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "selection",
+          "target"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-user-selected-arrival-v1"
+          },
+          "selection": {
+            "const": "user_selected"
+          },
+          "target": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          }
+        },
+        "description": "Opt-in ordinary car only: request.to is the explicitly user-selected road access; target is the original POI. includeSteps=true. No vehicle/trip/vehicleProfile/via/departureTime. Both request.to-to-POI and actual endpoint-to-POI distances <=250m. Road snap remains <=25m. This does not grant access."
+      },
+      "RoutingUserArrivalCapabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "availability",
+          "selection",
+          "profileIds",
+          "maxRemainingDistanceM",
+          "maxSnapDistanceM",
+          "remainingAccess",
+          "cachePolicy"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-user-selected-arrival-v1"
+          },
+          "availability": {
+            "enum": [
+              "requires_runtime_validation",
+              "disabled"
+            ]
+          },
+          "selection": {
+            "const": "user_selected_only"
+          },
+          "profileIds": {
+            "type": "array",
+            "items": {
+              "const": "car"
+            },
+            "minItems": 1,
+            "maxItems": 1
+          },
+          "maxRemainingDistanceM": {
+            "const": 250
+          },
+          "maxSnapDistanceM": {
+            "const": 25
+          },
+          "remainingAccess": {
+            "const": "unverified"
+          },
+          "cachePolicy": {
+            "const": "no_cache"
+          }
+        }
+      },
+      "RoutingUserArrival": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "selection",
+          "target",
+          "requestedAccess",
+          "mappedEndpoint",
+          "distanceM",
+          "snapDistanceM",
+          "remainingAccess",
+          "requestHash",
+          "geometryHash",
+          "routeId",
+          "routingDataset",
+          "profileId",
+          "engine",
+          "closureRevision",
+          "validUntil"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-user-selected-arrival-v1"
+          },
+          "selection": {
+            "const": "user_selected"
+          },
+          "target": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          },
+          "requestedAccess": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          },
+          "mappedEndpoint": {
+            "$ref": "#/components/schemas/RoutingUserArrivalPoint"
+          },
+          "distanceM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 250
+          },
+          "snapDistanceM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 25
+          },
+          "remainingAccess": {
+            "const": "unverified"
+          },
+          "requestHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "geometryHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "routeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "routingDataset": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "builtAt"
+            ],
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "builtAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "profileId": {
+            "const": "car"
+          },
+          "engine": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "version",
+              "costing",
+              "fallbackUsed"
+            ],
+            "properties": {
+              "provider": {
+                "const": "valhalla"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "costing": {
+                "const": "auto"
+              },
+              "fallbackUsed": {
+                "const": false
+              }
+            }
+          },
+          "closureRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Per-variant binding to knownClosures, normalized query, full rendered geometry and actual auto costing. Distances are independently computed spherical WGS84-coordinate Haversine (R=6371000m), tolerance0.01m. The remaining straight-line distance is not a walkable/navigable path or ETA. No legal access assurance. Identical object in the corresponding route feature. No object without opt-in."
+      },
       "MappedRoadProfileCoordinate": {
         "type": "object",
         "additionalProperties": false,
@@ -26181,7 +26401,7 @@
         }
       },
       "SituationDataRoutingUnprocessable": {
-        "description": "Fail-closed routing rejection, not an availability/fallback signal. In reviewed known-closure and strict road-trip paths, direct Valhalla /route HTTP 400 with numeric error_code 171 returns ROUTING_LOCATION_NOT_ROUTABLE: one or more locations cannot be correlated for the requested profile/tolerance; the engine does not identify which point. A verified returned-shape snap beyond tolerance returns ROUTING_TARGET_NOT_ROUTABLE for the destination or ROUTING_WAYPOINT_NOT_ROUTABLE for origin/via. Other unsupported safety/profile requests also use 422. No route, assessment, automatic snapping, widened tolerance, fabricated final leg, profile downgrade or provider fallback. Legacy and walking/bicycle contracts are unchanged.",
+        "description": "Fail-closed routing rejection, not an availability/fallback signal. In reviewed known-closure and strict road-trip paths, direct Valhalla /route HTTP 400 with numeric error_code 171 returns ROUTING_LOCATION_NOT_ROUTABLE: one or more locations cannot be correlated for the requested profile/tolerance; the engine does not identify which point. A verified returned-shape snap beyond tolerance returns ROUTING_TARGET_NOT_ROUTABLE for the destination or ROUTING_WAYPOINT_NOT_ROUTABLE for origin/via. Other unsupported safety/profile requests also use 422. No route, assessment, automatic snapping, widened tolerance, fabricated final leg, profile downgrade or provider fallback. Legacy and walking/bicycle contracts are unchanged. The reviewed known-closure path returns ROUTING_RESTRICTIONS_RELAXATION_REQUIRED only for isolated numeric warning 401 after geometry/closure checks. User-selected arrival opt-in requires includeSteps=true and plain car without vehicle/trip/vehicleProfile/via/departureTime: unsupported combinations return ROUTING_ARRIVAL_UNSUPPORTED; either remaining distance above 250m returns ROUTING_ARRIVAL_TOO_DISTANT. Malformed arrival returns 400 VALIDATION_ERROR and invalid proof returns 502 ROUTING_ARRIVAL_INVALID. No accepted route accompanies any rejection.",
         "content": {
           "application/json": {
             "schema": {

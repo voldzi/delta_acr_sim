@@ -1,4 +1,5 @@
 import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
+import { parseArrival, assessArrival, arrivalCapabilities, type ArrivalRequest } from "./user-selected-arrival.js";
 import { engineWork, statusWork, RoutingCapacityError, RoutingSingleFlight } from "./routing-work.js";
 import {
   parseMappedProfile,
@@ -74,6 +75,7 @@ export interface RoutingProfile {
 }
 
 export interface RoutingProfileCatalog {
+  userSelectedArrival: ReturnType<typeof arrivalCapabilities>;
   mappedProfiles: ReturnType<typeof mappedCapabilities>;
   capabilities: RoadTripCapabilities;
   contractVersion: "sim-routing-profile-catalog-v1";
@@ -90,6 +92,7 @@ export interface RoutingCoordinate {
 }
 
 export interface RoutingRouteRequest {
+  arrival?: ArrivalRequest;
   vehicleProfile?: MappedRoadProfile;
   trip?: RoadTrip;
   includeRoadAttributes?: boolean;
@@ -154,6 +157,7 @@ export interface RoutingFeature {
 }
 
 export interface RoutingRoute {
+  arrival?: ReturnType<typeof assessArrival>;
   assessment?: RoadTripAssessment;
   knownClosures?: KnownClosuresAssessment;
   routeId: string;
@@ -1002,6 +1006,7 @@ export class RoutingService {
 
   listProfiles(): RoutingProfileCatalog {
     return {
+      userSelectedArrival: arrivalCapabilities(this.knownClosures.enabled && this.shouldUseValhalla() && this.knownClosures.acceptedEngineVersions.includes("3.8.3")),
       mappedProfiles: mappedCapabilities(this.knownClosures.enabled && this.shouldUseValhalla() && this.knownClosures.acceptedEngineVersions.includes("3.8.3")),
       capabilities: roadTripCapabilities(this.safety),
       contractVersion: "sim-routing-profile-catalog-v1",
@@ -1065,8 +1070,9 @@ export class RoutingService {
   }
 
   async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
+    this.validateArrival(raw);
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 1);
-    const request = this.normalizeRouteRequest(raw, raw?.vehicleProfile ? (raw.alternatives ?? 1) : 1);
+    const request = this.normalizeRouteRequest(raw, raw?.vehicleProfile || raw?.arrival ? (raw.alternatives ?? 1) : 1);
     if (request.vehicleProfile && !this.knownClosures.enabled)
       throw new RoutingError(503, "ROUTING_PROFILE_UNAVAILABLE", "Mapped profiles require the accepted known-closure path; no legacy fallback.");
     if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
@@ -1133,6 +1139,7 @@ export class RoutingService {
   }
 
   async alternatives(raw: RoutingAlternativesRequest): Promise<RoutingRouteResponse> {
+    this.validateArrival(raw);
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 2);
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
@@ -1180,6 +1187,8 @@ export class RoutingService {
         dataset = routingDatasetFromStatus(before);
       if (!version || !this.knownClosures.acceptedEngineVersions.includes(version))
         throw new RoadTripError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "This exact engine build has not passed known-closure acceptance.");
+      if (request.arrival && version !== "3.8.3")
+        throw new RoadTripError(422, "ROUTING_ARRIVAL_UNSUPPORTED", "This arrival engine build is not accepted.");
       if (request.vehicleProfile && version !== "3.8.3")
         throw new RoadTripError(503, "ROUTING_PROFILE_UNAVAILABLE", "This exact mapped profile engine build is not accepted.");
       const age = (Date.now() - Date.parse(dataset.builtAt)) / 1000;
@@ -1191,14 +1200,15 @@ export class RoutingService {
       this.valhallaTraffic?.activate();
       let liveSpeeds = await this.valhallaTraffic?.status();
       if (liveTrafficIsUsable(liveSpeeds) && liveSpeeds!.routingDataset !== dataset.version) liveSpeeds = undefined;
-      const native = await this.acceptedNativeFlights.run(canonicalRoutingHash({
-        request, dataset, version, snapshot, trafficRevision: routingTrafficCachePolicy(liveSpeeds).revision
-      }), () => requestValhallaRoute(this.config, profile, request, undefined, {
+      const computeNative = () => requestValhallaRoute(this.config, profile, request, undefined, {
         liveSpeeds,
         maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
         rejectUnroutableLocations: true,
         excludePolygons: snapshot.closures.map((c) => c.polygon)
-      }));
+      });
+      const native = request.arrival ? await computeNative() : await this.acceptedNativeFlights.run(canonicalRoutingHash({
+        request, dataset, version, snapshot, trafficRevision: routingTrafficCachePolicy(liveSpeeds).revision
+      }), computeNative);
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
       if (!native.trip || trips.some((t) => !t))
         throw new Error("Incomplete or weakened engine request");
@@ -1287,6 +1297,7 @@ export class RoutingService {
           ]
         };
       }
+      for (const r of result.routes) if (request.arrival) r.arrival = assessArrival(request, result.query, r);
       if (result.coverage) result.coverage.routingDataset = dataset;
       result.features = result.routes.map((route) => routeFeature(route));
       return result;
@@ -2142,6 +2153,11 @@ export class RoutingService {
     };
   }
 
+  private validateArrival(raw: RoutingRouteRequest): void {
+    try { parseArrival(raw, this.knownClosures.enabled && this.shouldUseValhalla() && this.knownClosures.acceptedEngineVersions.includes("3.8.3")); }
+    catch (e) { if (e instanceof RoadTripError) throw new RoutingError(e.status, e.code, e.message); throw e; }
+  }
+
   private normalizeRouteRequest(
     raw: RoutingRouteRequest,
     alternatives: number
@@ -2702,6 +2718,7 @@ function routeFeature(route: RoutingRoute): RoutingFeature {
       navigation: route.navigation,
       traffic: route.traffic,
       ...(route.knownClosures ? { knownClosures: route.knownClosures } : {}),
+      ...(route.arrival ? { arrival: route.arrival } : {}),
       ...(route.mappedProfileAssessment ? { mappedProfileAssessment: route.mappedProfileAssessment } : {}),
       warnings: route.warnings,
       styleHint: route.rank === 1 ? "routing-primary-v1" : "routing-alternative-v1"
