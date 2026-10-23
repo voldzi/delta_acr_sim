@@ -363,3 +363,34 @@ coalescing and warning401/unknown-warning/geometry/closure precedence.
 These synthetic results do not prove a lawful real entrance or deployed
 COP-to-SIM-to-SDK/iPhone behavior. Those acceptance gates remain open.
 
+## Candidate HTTP integration helper (Mac only, never deploy)
+
+From this candidate checkout, build the service, then run:
+
+```sh
+pnpm --filter @csm-sim/situation-data-api build
+node scripts/arrival-candidate-loopback.mjs
+```
+
+First stdout line is JSON containing `endpoint`, a random `127.0.0.1` port with
+only POST `/api/v1/routing/alternatives`. Configure the actual COP test adapter
+base URL to the origin of that endpoint. The handler invokes the current
+`RoutingService.alternatives`, not a static response. It has synthetic engine
+responses (two polyline routes, start/end maneuvers), synthetic closure snapshot
+and graph timestamp; no production configuration, secrets, database or provider
+network. The launcher re-execs with a clean allowlisted environment. Outbound
+fetch permits only the synthetic Valhalla origin, answered in memory. A private
+temporary data directory is removed on normal exit. Limit: 64 requests, 64 KiB
+body, 15-second request timeout, five-minute process lifetime. No request body
+is logged. Add `--warning401` for the protective 422 fixture. Stop with Ctrl-C.
+
+Reproduce standalone HTTP smoke:
+`node --test scripts/arrival-candidate-loopback.test.mjs`.
+The test asserts both generated two-variant arrival and warning401 rejection;
+the helper's ordinary response includes actual generated route/manoeuvre data.
+Authentication is deliberately NOT supplied by this fixture: COP must exercise
+its real Fastify RS256/JWKS guard and RoutingSourceAdapter independently. SDK
+must decode/verify the resulting actual HTTP response. Label the combined proof
+candidate authenticated HTTP -> real RoutingService -> SDK, mock Valhalla and
+synthetic closures; not live production/OIDC/iPhone acceptance.
+
