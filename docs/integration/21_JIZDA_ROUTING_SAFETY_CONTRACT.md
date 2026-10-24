@@ -365,6 +365,29 @@ COP-to-SIM-to-SDK/iPhone behavior. Those acceptance gates remain open.
 
 ## Candidate HTTP integration helper (Mac only, never deploy)
 
+### SIM production receipt, 2026-10-24
+
+SIM-only image activation completed by the Root operator. Application revision
+`dd3a75b`, immutable image
+`sha256:9f0a6d789116cad19d363e79e9c8e5963861106e10ecd9c281e9f864c1d2c124`.
+Root receipt `/srv/sim/.arrival-20261023/result.json`: committed=true,
+phase=complete, realData.verified=true. Independent readback confirmed image pin,
+five-file Compose, running image and effective environment agree; healthy,
+zero restarts. A separate actual deployed API probe repeated the live public
+Penny acceptance: original address rejected with 422
+ROUTING_RESTRICTIONS_RELAXATION_REQUIRED; explicit selected access returned
+200, one engine route 177 m / 49 s, five maneuvers, remaining distance
+26.790443495116186 m, snap distance 1.0846034126616388 m. Actual engine
+Valhalla 3.8.3, auto, no fallback; graph
+sim-routing-2026-10-18-1792292102. Query/geometry/closure/graph/expiry hashes and
+feature metadata binding independently verified. Unsupported via=[] returned
+422 ROUTING_ARRIVAL_UNSUPPORTED. Capability version and runtime-validation
+availability passed. No raw shape or private position is retained here.
+
+This completes SIM's real-engine smoke only, not authenticated COP/SDK or
+physical-iPhone acceptance. Those remain coordinated downstream gates. The
+remaining distance is still unverified access, never legal access assurance.
+
 From this candidate checkout, build the service, then run:
 
 ```sh
