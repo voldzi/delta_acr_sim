@@ -95,3 +95,23 @@ This is a new review candidate, not permission to run it or substitute a worker.
 No app/profile/DB/release operation is a build side effect; actual image and fresh
 release admission remain gates. Sharing does not grant COP release authority to
 SIM, and this SIM-only memory/disk model does not automatically fit COP's image.
+
+## 2026-10-28 finite post-recreate DNS amendment
+
+Root subsequently reported one actual build and one forward recreation, followed
+by a stopped `POST_RUNTIME` check; prior proposal-state statements above describe
+their original review stage, not current deployment acceptance. Root proved the
+entire original runtime hash is recovered by only three explicit empty DNS list
+serialization changes (`Dns`, `DnsOptions`, `DnsSearch`: null to `[]`). The new
+source canonicalizes only those fields/types. This changes validation, never
+runtime DNS configuration.
+
+Original source/profile/GO/intent/failure remain immutable evidence. A separate
+protected profile/amendment/fresh GO permits only read-only acceptance of the
+fixed existing candidate and a distinct receipt, not replayed activation or
+rewritten completion. The finite original-profile bridge for any separately
+authorized image-only reverse requires that exact artifact chain, whole-runtime
+hash, same candidate/process generation, unchanged real database lineage and
+distinct acceptance receipt. No general lineage/profile migration or restore
+permission is introduced. Exact contracts and source hash are in runbook22;
+local synthetic tests do not replace Root's actual witness or execution gates.

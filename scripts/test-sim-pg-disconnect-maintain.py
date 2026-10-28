@@ -260,6 +260,84 @@ class MaintainTests(unittest.TestCase):
  def test_nonroot_cannot_run_any_command(self):
   with patch.object(m.os,'geteuid',return_value=1000),patch.object(m,'command') as run,self.assertRaises(m.Stop):m.main()
   run.assert_not_called()
+ def test_dns_normalization_is_only_three_explicit_null_or_list_fields(self):
+  _,c,_=self.critical_fixture()
+  for key in m.DNS_FIELDS:c['HostConfig'][key]=None
+  old=copy.deepcopy(c)
+  for key in m.DNS_FIELDS:old['HostConfig'][key]=[]
+  self.assertEqual(m.normalized_runtime(c),m.raw_normalized_runtime(old))
+  self.assertNotEqual(m.raw_normalized_runtime(c),m.raw_normalized_runtime(old))
+  for key in m.DNS_FIELDS:
+   for bad in ['',{},0,False,['ok',None]]:
+    changed=copy.deepcopy(c);changed['HostConfig'][key]=bad
+    with self.subTest(key=key,bad=bad),self.assertRaisesRegex(m.Stop,'DNS_SERIALIZATION_TYPE'):m.normalized_runtime(changed)
+   changed=copy.deepcopy(c);changed['HostConfig'][key]=['1.2.3.4']
+   self.assertEqual(m.normalized_runtime(changed)['HostConfig'][key],['1.2.3.4'])
+   self.assertNotEqual(m.normalized_runtime(c),m.normalized_runtime(changed))
+  for key,value in [('ExtraHosts',[]),('Binds',[]),('Privileged',True)]:
+   changed=copy.deepcopy(c);changed['HostConfig'][key]=value
+   self.assertNotEqual(m.normalized_runtime(c),m.normalized_runtime(changed))
+  missing=copy.deepcopy(c);del missing['HostConfig']['Dns']
+  self.assertNotEqual(m.normalized_runtime(c),m.normalized_runtime(missing))
+ def test_dns_lane_has_separate_go_paths_and_disallows_forward_replay(self):
+  self.assertEqual(m.approval_paths('accept-existing-dns'),(m.ROOT/'profile-dns-v1.json',m.ROOT/'go-dns-v1.json'))
+  self.assertEqual(m.approval_paths('rollback'),(m.ROOT/'profile-dns-v1.json',m.ROOT/'go-dns-rollback-v1.json'))
+  with patch.object(m.os,'geteuid',return_value=0),patch.object(m.socket,'gethostname',return_value='docker'),patch.object(m,'SOURCE',Path(m.__file__).parent),patch.object(m.sys,'argv',['script','--activate']),patch.object(m,'command') as run,self.assertRaisesRegex(m.Stop,'ACTION'):m.main()
+  run.assert_not_called()
+ def dns_fixture(self):
+  release='78a7cc8faa074cb284d6c3523f03ee38';runtime='ac363097ca5a677189897d62560e534854e1f068ba1c5d9c7b2713eff6fa03cd'
+  _,c,_=self.critical_fixture();c.update(Image='sha256:0e6b989a135cf618cd02903a54b76a272f4ed574b73005a2c502c7ce304f15cd',State={'StartedAt':'synthetic-new'},RestartCount=0)
+  for key in m.DNS_FIELDS:c['HostConfig'][key]=None
+  original={'contract':'sim-image-only-root-profile-v1','handlerSha256':'46af72cd310c509d64a1d68ab8a422caf43629c1bee4b88a98f65738840d1598','probeSha256':'unchanged','baseImage':m.BASE,'candidateImage':c['Image'],'dataFilesystem':{'synthetic':'unchanged'}}
+  profile={**original,'handlerSha256':'synthetic-new-handler'}
+  lineage={'synthetic':'unchanged'};layers={str(p):'unchanged' for p in m.LAYERS}
+  og={'action':'activate','releaseId':release,'expectedImage':m.BASE,'expectedCid':'a'*64,'profileSha256':m.sha(m.encoded(original)),'runtimeSha256':runtime,'lineage':lineage,'composeSha256':'original-compose','layerFileSha256':layers}
+  intent={'phase':'intent_not_completion','oldImage':m.BASE,'newImage':c['Image'],'baselineCid':og['expectedCid'],'profileSha256':og['profileSha256'],'lineage':lineage,'runtimeSha256':runtime,'composeSha256':og['composeSha256'],'layerFileSha256':layers}
+  failed={'exitCode':2,'automaticRetry':False,'stdout':json.dumps({'status':'stopped_requires_review','code':'POST_RUNTIME','phase':'recreate'})}
+  files={m.ROOT/'profile.json':m.encoded(original),m.ROOT/'go.json':m.encoded(og),m.ROOT/(release+'-activate.json'):m.encoded(intent),m.ROOT/'operator-invocation-result.json':m.encoded(failed),m.ROOT/'profile-dns-v1.json':m.encoded(profile),m.SOURCE/'sim-pg-disconnect-maintain.46af.py':b'synthetic-original-controller'}
+  a={'contract':'sim-empty-dns-profile-amendment-v1','originalProfileSha256':m.sha(files[m.ROOT/'profile.json']),'originalGoSha256':m.sha(files[m.ROOT/'go.json']),'originalIntentSha256':m.sha(files[m.ROOT/(release+'-activate.json')]),'originalFailedResultSha256':m.sha(files[m.ROOT/'operator-invocation-result.json']),'newProfileSha256':m.sha(files[m.ROOT/'profile-dns-v1.json']),'releaseId':release,'candidateImage':c['Image'],'runtimeSha256':runtime,'observedRawRuntimeSha256':m.digest(m.raw_normalized_runtime(c)),'acceptedCid':c['Id'],'acceptedStartedAt':c['State']['StartedAt'],'acceptedRestartCount':0,'changedFields':['HostConfig.'+k for k in m.DNS_FIELDS]}
+  go={'releaseId':release,'lineage':lineage,'runtimeSha256':runtime,'expectedImage':c['Image'],'profileSha256':a['newProfileSha256']}
+  files[m.ROOT/'dns-serialization-amendment.json']=m.encoded(a)
+  return profile,go,c,files,a
+ def test_dns_amendment_exact_artifact_chain_and_negative_scope(self):
+  p,g,c,f,a=self.dns_fixture();real_sha=m.sha;real_digest=m.digest;canonical=m.normalized_runtime(c)
+  def sha(raw):return '46af72cd310c509d64a1d68ab8a422caf43629c1bee4b88a98f65738840d1598' if raw==b'synthetic-original-controller' else real_sha(raw)
+  def digest(value):return g['runtimeSha256'] if value==canonical else real_digest(value)
+  # Synthetic unit chain only: the actual ac3630 preimage is Root evidence.
+  with patch.object(m,'sha',side_effect=sha),patch.object(m,'digest',side_effect=digest),patch.object(m,'protected',side_effect=lambda path:f[path]):
+   self.assertEqual(m.dns_amendment(p,g,c)[0],a['originalProfileSha256'])
+   for key,value in [('lineage',{'changed':True}),('runtimeSha256','wrong'),('releaseId','other')]:
+    with self.subTest(go=key),self.assertRaises(m.Stop):m.dns_amendment(p,{**g,key:value},c)
+   for key,value in [('acceptedCid','c'*64),('originalProfileSha256','wrong'),('originalGoSha256','wrong'),('originalIntentSha256','wrong'),('originalFailedResultSha256','wrong'),('newProfileSha256','wrong'),('changedFields',['HostConfig.ExtraHosts']),('unknown',True)]:
+    f[m.ROOT/'dns-serialization-amendment.json']=m.encoded({**a,key:value})
+    with self.subTest(amendment=key),self.assertRaises(m.Stop):m.dns_amendment(p,g,c)
+   f[m.ROOT/'dns-serialization-amendment.json']=m.encoded(a)
+   for mutate in [lambda x:x.update(RestartCount=1),lambda x:x['HostConfig'].update(Dns=[]),lambda x:x['HostConfig'].update(ExtraHosts=['changed']),lambda x:x.update(Image=m.BASE)]:
+    changed=copy.deepcopy(c);mutate(changed)
+    with self.assertRaises(m.Stop):m.dns_amendment(p,g,changed)
+   altered=copy.deepcopy(p);altered['dataFilesystem']={'changed':True}
+   with self.assertRaises(m.Stop):m.dns_amendment(altered,g,c)
+ def test_dns_acceptance_is_separate_read_only_receipt_and_late_failure_stops(self):
+  p,g,c,_,_=self.dns_fixture();g['layerFileSha256']={str(x):'same' for x in m.LAYERS}
+  rendered={'services':{'sim-api':{'image':p['candidateImage']}}};inverse=copy.deepcopy(rendered);inverse['services']['sim-api']['image']=m.BASE
+  raw=m.encoded({'services':{'sim-api':{'image':p['candidateImage']}}})
+  prev={'composeSha256':m.digest(inverse),'pinSha256':m.sha(m.changed_pin(raw,p['candidateImage'],m.BASE)),'layerFileSha256':g['layerFileSha256']}
+  def protected(path):return m.encoded(prev) if path.name.endswith('-activate.json') else b'profile' if path.name=='profile-dns-v1.json' else b'go'
+  for expired in [False,True]:
+   with patch.object(m,'facts',return_value=c),patch.object(m,'dns_amendment',return_value=('old-profile','amendment')),patch.object(m,'image_gate'),patch.object(m,'critical_service_gate'),patch.object(m,'command',side_effect=lambda args:m.encoded(rendered) if 'config' in args else b'[{}]') as run,patch.object(m,'protected',side_effect=protected),patch.object(m,'pin_read',return_value=(123,raw,None)),patch.object(m.os,'close'),patch.object(m,'profile_and_go',side_effect=m.Stop('GO_EXPIRED') if expired else lambda action:(p,g)),patch.object(m,'receipt') as receipt,redirect_stdout(io.StringIO()):
+    if expired:
+     with self.assertRaisesRegex(m.Stop,'GO_EXPIRED'):m.accept_existing_dns(p,g,b'profile',b'go')
+     receipt.assert_not_called()
+    else:
+     m.accept_existing_dns(p,g,b'profile',b'go');self.assertTrue(receipt.call_args.args[0].name.endswith('-dns-post-acceptance.json'));self.assertFalse(receipt.call_args.args[1]['appUpExecuted'])
+    self.assertTrue(all('up' not in x.args[0] for x in run.call_args_list))
+ def test_dns_reverse_requires_exact_distinct_acceptance_receipt(self):
+  p,g,c,_,a=self.dns_fixture()
+  accepted={'contract':'sim-empty-dns-post-acceptance-v1','completed':True,'cid':c['Id'],'startedAt':c['State']['StartedAt'],'restartCount':0,'image':c['Image'],'lineage':g['lineage'],'runtimeSha256':g['runtimeSha256'],'profileSha256':g['profileSha256'],'originalProfileSha256':'bridge','amendmentSha256':'amendment','appUpExecuted':False,'dataRestored':False}
+  with patch.object(m,'dns_amendment',return_value=('bridge','amendment')):
+   with patch.object(m,'protected',return_value=m.encoded(accepted)):self.assertEqual(m.dns_reverse_acceptance(p,g,c),'bridge')
+   for key,value in [('completed',False),('lineage',{}),('profileSha256','wrong'),('cid','wrong'),('amendmentSha256','wrong'),('appUpExecuted',True),('unknown',True)]:
+    with self.subTest(key=key),patch.object(m,'protected',return_value=m.encoded({**accepted,key:value})),self.assertRaisesRegex(m.Stop,'ROLLBACK_DNS_ACCEPTANCE'):m.dns_reverse_acceptance(p,g,c)
  def test_runtime_security_mount_and_network_drift_remain_in_hash(self):
   a={'Config':{'Env':['AUTH=on'],'Labels':copy.deepcopy(LABELS),'Cmd':['node']},'HostConfig':{'Privileged':False},'Mounts':[{'Source':'fixed','RW':False}],
      'NetworkSettings':{'Networks':{'sim_default':{'NetworkID':'fixed-network','Aliases':['sim-api']}}}}

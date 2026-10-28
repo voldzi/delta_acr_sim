@@ -1117,3 +1117,78 @@ checkout/artifact for forensic reproduction; current source no longer matches
 that historical build-input pin, and its refusal is not permission to substitute
 the corrected deploy controller into the original build operation. This stage
 adopts an existing image; it does not prepare a second build.
+
+#### Finite empty-DNS serialization amendment (Root acceptance still required)
+
+Root's single actual forward invocation `78a7cc8faa074cb284d6c3523f03ee38`
+recreated the API with candidate `0e6b989a...`, then stopped at `POST_RUNTIME`.
+The new process was reported healthy, restart count zero; strict rendered model,
+compiled modules, readiness/auth and actual TLS/database lineage passed. This
+was **not** original forward completion. Root's bounded private preimage search
+then uniquely reproduced the original full sealed runtime SHA
+`ac363097ca5a677189897d62560e534854e1f068ba1c5d9c7b2713eff6fa03cd` by
+changing only `HostConfig.Dns`, `DnsOptions`, `DnsSearch` from explicit null to
+empty arrays. No other field, order or value changed. These are Root-reported
+actual observations, not a substitute for its protected witness/receipts.
+
+The amended source normalizes only those three explicitly present fields:
+null becomes `[]`; string lists remain unchanged, including nonempty lists;
+other types fail. Missing fields remain missing. All other runtime fields keep
+their original hash semantics. The strict rendered model still rejects DNS
+configuration drift. No DNS/network configuration is changed.
+
+New controller SHA:
+`3bb3b4cb2d1c2d5ade3d8c80e28e667de4cf14efca8e4bad174911005743af91`.
+Root must preserve the original 46af source under protected
+`source/sim-pg-disconnect-maintain.46af.py`; original `profile.json`, `go.json`,
+forward intent, invocation failure and missing forward completion stay intact.
+Do not replace them, rerun activate or manufacture `*-activate-complete.json`.
+The new CLI refuses `--activate`.
+
+Root creates fresh protected O_EXCL files with file/directory fsync:
+
+- `profile-dns-v1.json`: original profile exact schema and values, changing
+  **only** `handlerSha256` to the new source above. Probe, candidate, base and
+  filesystem identity/floors remain unchanged.
+- `go-dns-v1.json`: original 18-key GO schema, action `accept-existing-dns`,
+  fixed original release ID above, expected candidate image/current CID/start/
+  restart zero, new profile SHA, original canonical runtime SHA above. Derive
+  compose/layer hashes, lineage, custody, capacity and build-owner times from
+  actual current state. Original GO expiry is historical evidence, never reused
+  as current authority; new GO must pass the existing freshness checks.
+- `dns-serialization-amendment.json`, exact contract
+  `sim-empty-dns-profile-amendment-v1`, exact keys:
+  `contract`, `originalProfileSha256`, `originalGoSha256`,
+  `originalIntentSha256`, `originalFailedResultSha256`, `newProfileSha256`,
+  `releaseId`, `candidateImage`, `runtimeSha256`, `observedRawRuntimeSha256`,
+  `acceptedCid`, `acceptedStartedAt`, `acceptedRestartCount`, `changedFields`.
+  SHA fields bind raw protected original/new files. `observedRawRuntimeSha256`
+  is the actual `digest(raw_normalized_runtime(current))`, not the canonical
+  hash. `changedFields` is exactly `["HostConfig.Dns", "HostConfig.DnsOptions",
+  "HostConfig.DnsSearch"]`; current fields must all be null. Candidate,
+  generation, original 46af source/profile, original POST_RUNTIME failure,
+  original intent/GO and unchanged lineage are checked, not merely attested.
+
+Root reviews/stages the source, then may invoke the fixed sealed controller
+with `--accept-existing-dns`. It checks the actual full image, current runtime,
+strict model, readiness/auth, modules, TLS lineage, filesystem, inverse Compose
+and pin bytes, non-pin layers and fresh final approval. It executes **no app up,
+pin write, build, database mutation or rollback**. Only a new distinct
+`78a7cc8faa074cb284d6c3523f03ee38-dns-post-acceptance.json` receipt is created.
+This receipt records amendment/profile hashes, same generation/runtime/lineage
+and `appUpExecuted:false`; it cannot rewrite the failed original attempt.
+
+Future explicit Root reverse uses a **separate** fresh protected
+`go-dns-rollback-v1.json`, action `rollback`, same release/new profile/candidate
+generation and all normal runtime, data, capacity and owner gates. The original
+profile hash is bridged only by the exact artifact chain above and the distinct
+post-acceptance receipt; both are rechecked at fresh mutation admission. No
+general profile or lineage waiver exists. Reverse remains image-only, one fixed
+Compose service up, no data restore and no automatic retry. A different process
+generation, restart, lineage, original artifact or unknown residual state stops
+this finite lane and requires a separate Root-reviewed recovery decision.
+
+`sim-maintenance-20261028-dns29.json` captures 29 local synthetic test groups;
+baseline three groups also pass. The unit fixture mocks the fixed actual
+preimage hash; therefore it is **not** independent actual production preimage
+or Root E2E proof. Production acceptance remains the Root operation above.

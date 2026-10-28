@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-sim-pg-disconnect-maintain.py",
+  "sourceSha256": "3bb3b4cb2d1c2d5ade3d8c80e28e667de4cf14efca8e4bad174911005743af91",
+  "scope": "29 synthetic local test groups; DNS preimage in unit fixture is mocked, actual full-hash witness remains Root evidence; no host execution, app up or rollback",
+  "exitCode": 0,
+  "combinedOutput": ".............................\n----------------------------------------------------------------------\nRan 29 tests in 0.255s\n\nOK\n"
+}

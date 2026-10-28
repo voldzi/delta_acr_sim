@@ -74,8 +74,12 @@ def protected(path):
 def validate_go_age(go):
  now=time.time();need(type(go['createdAt']) is int and type(go['expiresAt']) is int and 0<go['expiresAt']-go['createdAt']<=900 and go['createdAt']<=now<go['expiresAt'],'GO_EXPIRED')
  need(all(type(go[k]) is int and 0<=now-go[k]<=60 for k in ['capacityReviewedAt','buildIdleReviewedAt']),'OWNER_ACTIVITY_REVIEW_EXPIRED')
+def approval_paths(action):
+ if action=='activate':return ROOT/'profile.json',ROOT/'go.json'
+ return ROOT/'profile-dns-v1.json',ROOT/('go-dns-rollback-v1.json' if action=='rollback' else 'go-dns-v1.json')
 def profile_and_go(action):
- profile=json.loads(protected(ROOT/'profile.json'));go=json.loads(protected(ROOT/'go.json'))
+ profile_path,go_path=approval_paths(action)
+ profile=json.loads(protected(profile_path));go=json.loads(protected(go_path))
  need(set(profile)=={'contract','handlerSha256','probeSha256','candidateImage','baseImage','dataFilesystem'} and profile['contract']=='sim-image-only-root-profile-v1','PROFILE')
  need(profile['baseImage']==BASE and re.fullmatch('sha256:[0-9a-f]{64}',profile['candidateImage']) and profile['candidateImage']!=BASE,'IMAGE_SCOPE')
  need(sha(protected(SOURCE/'sim-pg-disconnect-maintain.py'))==profile['handlerSha256'],'HANDLER_CHANGED')
@@ -85,7 +89,7 @@ def profile_and_go(action):
  validate_go_age(go)
  need(re.fullmatch('[0-9a-f]{32}',go['releaseId']) and re.fullmatch('[0-9a-f]{64}',go['expectedCid']),'GO_IDENTITY')
  need(go['expectedImage']==BASE if action=='activate' else go['expectedImage'] in {BASE,profile['candidateImage']},'GO_IMAGE_ACTION')
- need(go['profileSha256']==sha(protected(ROOT/'profile.json')),'PROFILE_GO_MISMATCH')
+ need(go['profileSha256']==sha(protected(profile_path)),'PROFILE_GO_MISMATCH')
  need(set(go['lineage'])=={'contract','verified','binding','config','journal'} and go['lineage']['contract']=='sim-maintenance-readonly-lineage-v1' and go['lineage']['verified'] is True,'GO_LINEAGE')
  need(set(go['layerFileSha256'])==set(map(str,LAYERS)),'GO_LAYERS')
  validate_go_age(go) # Protected reads above can themselves consume the lease.
@@ -97,7 +101,7 @@ def compose_metadata_gate(c,versions=(COMPOSE_OLD,COMPOSE_TARGET)):
  need(labels.get(COMPOSE_VERSION_LABEL) in versions,'COMPOSE_VERSION_LABEL_DRIFT')
 def compose_cli_gate():
  need(command(['docker','--host','unix:///var/run/docker.sock','compose','version','--short']).decode().strip() in {COMPOSE_TARGET,'v'+COMPOSE_TARGET},'COMPOSE_CLI_VERSION_DRIFT')
-def normalized_runtime(c):
+def raw_normalized_runtime(c):
  compose_metadata_gate(c)
  x=copy.deepcopy({k:c.get(k) for k in ['Config','HostConfig','Mounts']})
  x['Config'].pop('Image',None)
@@ -111,6 +115,46 @@ def normalized_runtime(c):
  x['Config']['Env']=dict(pairs)
  x['networks']={k:{'NetworkID':v.get('NetworkID'),'Aliases':v.get('Aliases')} for k,v in c['NetworkSettings']['Networks'].items()}
  return x
+DNS_FIELDS=('Dns','DnsOptions','DnsSearch')
+def normalized_runtime(c):
+ x=raw_normalized_runtime(c)
+ for key in DNS_FIELDS:
+  if key not in x['HostConfig']:continue
+  value=x['HostConfig'][key]
+  need(value is None or (type(value) is list and all(type(v) is str for v in value)),'DNS_SERIALIZATION_TYPE')
+  if value is None:x['HostConfig'][key]=[]
+ return x
+def dns_amendment(profile,go,current):
+ # This finite bridge is not a general profile or lineage migration facility.
+ old_profile_raw=protected(ROOT/'profile.json');old_go_raw=protected(ROOT/'go.json')
+ old_profile=json.loads(old_profile_raw);old_go=json.loads(old_go_raw)
+ release='78a7cc8faa074cb284d6c3523f03ee38'
+ intent_raw=protected(ROOT/(release+'-activate.json'));intent=json.loads(intent_raw)
+ failed_raw=protected(ROOT/'operator-invocation-result.json');failed=json.loads(failed_raw)
+ amendment=json.loads(protected(ROOT/'dns-serialization-amendment.json'))
+ need(set(amendment)=={'contract','originalProfileSha256','originalGoSha256','originalIntentSha256','originalFailedResultSha256','newProfileSha256','releaseId','candidateImage','runtimeSha256','observedRawRuntimeSha256','acceptedCid','acceptedStartedAt','acceptedRestartCount','changedFields'},'DNS_AMENDMENT_SCHEMA')
+ need(amendment['contract']=='sim-empty-dns-profile-amendment-v1' and amendment['releaseId']==release,'DNS_AMENDMENT_SCOPE')
+ need(old_profile['handlerSha256']=='46af72cd310c509d64a1d68ab8a422caf43629c1bee4b88a98f65738840d1598','DNS_ORIGINAL_HANDLER')
+ need(sha(protected(SOURCE/'sim-pg-disconnect-maintain.46af.py'))==old_profile['handlerSha256'],'DNS_ORIGINAL_SOURCE')
+ expected_profile=copy.deepcopy(old_profile);expected_profile['handlerSha256']=profile['handlerSha256']
+ need(profile==expected_profile and profile['candidateImage']=='sha256:0e6b989a135cf618cd02903a54b76a272f4ed574b73005a2c502c7ce304f15cd','DNS_PROFILE_SCOPE')
+ for key,raw in [('originalProfileSha256',old_profile_raw),('originalGoSha256',old_go_raw),('originalIntentSha256',intent_raw),('originalFailedResultSha256',failed_raw),('newProfileSha256',protected(ROOT/'profile-dns-v1.json'))]:
+  need(amendment[key]==sha(raw),'DNS_AMENDMENT_ARTIFACT_DRIFT')
+ need(failed['exitCode']==2 and failed['automaticRetry'] is False,'DNS_ORIGINAL_FAILURE')
+ failure=json.loads(failed['stdout'])
+ need(failure.get('status')=='stopped_requires_review' and failure.get('code')=='POST_RUNTIME' and failure.get('phase')=='recreate','DNS_ORIGINAL_FAILURE')
+ need(old_go['action']=='activate' and old_go['releaseId']==release and old_go['expectedImage']==BASE and old_go['profileSha256']==sha(old_profile_raw),'DNS_ORIGINAL_GO')
+ need(intent['phase']=='intent_not_completion' and intent['oldImage']==BASE and intent['newImage']==profile['candidateImage'] and intent['baselineCid']==old_go['expectedCid'],'DNS_ORIGINAL_INTENT')
+ need(intent['profileSha256']==sha(old_profile_raw) and intent['lineage']==old_go['lineage']==go['lineage'],'DNS_LINEAGE')
+ need(intent['runtimeSha256']==old_go['runtimeSha256']==go['runtimeSha256']==amendment['runtimeSha256']=='ac363097ca5a677189897d62560e534854e1f068ba1c5d9c7b2713eff6fa03cd','DNS_PREIMAGE')
+ need(intent['composeSha256']==old_go['composeSha256'] and intent['layerFileSha256']==old_go['layerFileSha256'],'DNS_ORIGINAL_INTENT')
+ need(go['releaseId']==release and amendment['candidateImage']==profile['candidateImage']==current['Image']==go['expectedImage'],'DNS_CANDIDATE')
+ need(current['Id']!=old_go['expectedCid'],'DNS_GENERATION')
+ need(amendment['changedFields']==['HostConfig.'+k for k in DNS_FIELDS],'DNS_FIELD_SCOPE')
+ need(all(current['HostConfig'].get(k,'missing') is None for k in DNS_FIELDS),'DNS_CURRENT_SHAPE')
+ need(digest(raw_normalized_runtime(current))==amendment['observedRawRuntimeSha256'] and digest(normalized_runtime(current))==old_go['runtimeSha256'],'DNS_EXACT_PREIMAGE')
+ need((current['Id'],current['State']['StartedAt'],current['RestartCount'])==(amendment['acceptedCid'],amendment['acceptedStartedAt'],amendment['acceptedRestartCount']) and current['RestartCount']==0,'DNS_GENERATION')
+ return sha(old_profile_raw),sha(protected(ROOT/'dns-serialization-amendment.json'))
 def pin_read(go):
  # Anchored mixed-owner path; exact layout is a Root-reviewed input, not chmod.
  need(set(go['pinParentMetadata'])=={'/','/srv','/srv/sim'},'PIN_PARENT_SCOPE')
@@ -291,6 +335,7 @@ def fresh_mutation_gate(action,profile,go):
  current=inspect(NAME)
  compose_metadata_gate(current,(COMPOSE_OLD,) if action=='activate' else ((COMPOSE_TARGET,) if go['expectedImage']!=BASE else (COMPOSE_OLD,COMPOSE_TARGET)))
  filesystem_gate(profile,go,current);no_known_active_builds();compose_cli_gate()
+ if action=='rollback':dns_reverse_acceptance(profile,go,current)
  # Last operation before mutation: re-read protected approval and evaluate age
  # AFTER potentially slow filesystem/process reads, not before them.
  need(profile_and_go(action)==(profile,go),'FRESH_GO_DRIFT')
@@ -436,30 +481,60 @@ def intent_then_pin(action,profile,go,path,value,raw,replacement):
  receipt(path,value)
  fresh_mutation_gate(action,profile,go)
  replace_pin(profile,go,raw,replacement)
+def accept_existing_dns(profile,go,profile_raw,go_raw):
+ current=facts(profile,go,profile['candidateImage'])
+ bridge,amendment_sha=dns_amendment(profile,go,current)
+ image_gate(profile['candidateImage'])
+ rendered=json.loads(command(DC+['config','--format','json']))
+ critical_service_gate(rendered,current,json.loads(command(['docker','image','inspect',current['Image']]))[0])
+ previous=json.loads(protected(ROOT/(go['releaseId']+'-activate.json')))
+ inverse=copy.deepcopy(rendered);inverse['services']['sim-api']['image']=BASE
+ need(digest(inverse)==previous['composeSha256'],'DNS_INVERSE_COMPOSE')
+ fd,pin,_=pin_read(go);os.close(fd)
+ need(sha(changed_pin(pin,profile['candidateImage'],BASE))==previous['pinSha256'],'DNS_INVERSE_PIN')
+ need(all(go['layerFileSha256'][str(p)]==previous['layerFileSha256'][str(p)] for p in LAYERS[:-1]),'DNS_LAYER_DRIFT')
+ final=facts(profile,go,profile['candidateImage'])
+ need(dns_amendment(profile,go,final)==(bridge,amendment_sha),'DNS_AMENDMENT_DRIFT')
+ need(profile_and_go('accept-existing-dns')==(profile,go),'DNS_FINAL_APPROVAL')
+ pp,gp=approval_paths('accept-existing-dns')
+ need(protected(pp)==profile_raw and protected(gp)==go_raw,'DNS_FINAL_APPROVAL')
+ # Separate actual post-acceptance: never writes original forward completion.
+ receipt(ROOT/(go['releaseId']+'-dns-post-acceptance.json'),{'contract':'sim-empty-dns-post-acceptance-v1','completed':True,'cid':final['Id'],'startedAt':final['State']['StartedAt'],'restartCount':final['RestartCount'],'image':final['Image'],'lineage':go['lineage'],'runtimeSha256':go['runtimeSha256'],'profileSha256':sha(profile_raw),'originalProfileSha256':bridge,'amendmentSha256':amendment_sha,'appUpExecuted':False,'dataRestored':False})
+ print(json.dumps({'status':'existing_candidate_accepted','action':'accept-existing-dns','image':final['Image'],'cid':final['Id'],'appUpExecuted':False}))
+def dns_reverse_acceptance(profile,go,current):
+ bridge,amendment_sha=dns_amendment(profile,go,current)
+ accepted=json.loads(protected(ROOT/(go['releaseId']+'-dns-post-acceptance.json')))
+ need(accepted=={'contract':'sim-empty-dns-post-acceptance-v1','completed':True,'cid':current['Id'],'startedAt':current['State']['StartedAt'],'restartCount':current['RestartCount'],'image':current['Image'],'lineage':go['lineage'],'runtimeSha256':go['runtimeSha256'],'profileSha256':go['profileSha256'],'originalProfileSha256':bridge,'amendmentSha256':amendment_sha,'appUpExecuted':False,'dataRestored':False},'ROLLBACK_DNS_ACCEPTANCE')
+ return bridge
 def main():
  global PHASE
  need(os.geteuid()==0 and socket.gethostname().split('.')[0]=='docker','ROOT_HOST')
  need(Path(__file__)==SOURCE/'sim-pg-disconnect-maintain.py','SEALED_SOURCE_LOCATION')
- need(sys.argv[1:] in [['--activate'],['--rollback']],'ACTION')
+ need(sys.argv[1:] in [['--accept-existing-dns'],['--rollback']],'ACTION')
  action=sys.argv[1][2:]
  s=ROOT.lstat();need(stat.S_ISDIR(s.st_mode) and s.st_uid==0 and stat.S_IMODE(s.st_mode)==0o700,'STATE_DIRECTORY')
  lock=os.open(ROOT/'operation.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
  try:
   s=os.fstat(lock);need(s.st_uid==0 and s.st_nlink==1 and stat.S_IMODE(s.st_mode)==0o600,'LOCK_CUSTODY');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
   profile,go=profile_and_go(action)
-  profile_before=protected(ROOT/'profile.json');go_before=protected(ROOT/'go.json')
+  profile_path,go_path=approval_paths(action)
+  profile_before=protected(profile_path);go_before=protected(go_path)
   need(json.loads(profile_before)==profile and json.loads(go_before)==go,'APPROVAL_CHANGED_DURING_READ')
+  if action=='accept-existing-dns':
+   PHASE='existing_dns_post_acceptance';accept_existing_dns(profile,go,profile_before,go_before);return
   candidate=profile['candidateImage'];old=go['expectedImage'];new=candidate if action=='activate' else BASE
   pin_old=BASE if action=='activate' else candidate
   previous_path=ROOT/(go['releaseId']+'-activate.json')
+  current=facts(profile,go,old)
   if action=='rollback':
-   prev=json.loads(protected(previous_path));need(prev['oldImage']==BASE and prev['newImage']==candidate and prev['lineage']==go['lineage'] and prev['profileSha256']==go['profileSha256'] and prev['runtimeSha256']==go['runtimeSha256'],'ROLLBACK_CURRENT_LINEAGE')
+   bridge=dns_reverse_acceptance(profile,go,current)
+   prev=json.loads(protected(previous_path));need(prev['oldImage']==BASE and prev['newImage']==candidate and prev['lineage']==go['lineage'] and prev['profileSha256']==bridge and prev['runtimeSha256']==go['runtimeSha256'],'ROLLBACK_CURRENT_LINEAGE')
    need(all(go['layerFileSha256'][str(p)]==prev['layerFileSha256'][str(p)] for p in LAYERS[:-1]),'ROLLBACK_LAYER_DRIFT')
-  current=facts(profile,go,old);PHASE='image_gate';image_gate(candidate)
+  PHASE='image_gate';image_gate(candidate)
   need(profile_and_go(action)==(profile,go),'POST_IMAGE_GO_DRIFT')
   need(inspect(NAME)['Id']==current['Id'],'POST_IMAGE_CID_DRIFT')
   facts(profile,go,old)
-  need(protected(ROOT/'profile.json')==profile_before and protected(ROOT/'go.json')==go_before,'GO_DRIFT')
+  need(protected(profile_path)==profile_before and protected(go_path)==go_before,'GO_DRIFT')
   fd,raw,_meta=pin_read(go);os.close(fd);replacement=changed_pin(raw,pin_old,new)
   if action=='rollback':need(sha(replacement)==prev['pinSha256'],'ROLLBACK_PIN_DRIFT')
   before=json.loads(command(DC+['config','--format','json']));critical_service_gate(before,current,json.loads(command(['docker','image','inspect',old]))[0]);expected=copy.deepcopy(before);expected['services']['sim-api']['image']=new
@@ -470,7 +545,7 @@ def main():
   PHASE='pin_written'
   rendered=json.loads(command(DC+['config','--format','json']));need(rendered==expected,'RENDERED_CANDIDATE_DRIFT')
   need(lineage()==go['lineage'] and inspect(NAME)['Id']==current['Id'],'PRE_RECREATE_DRIFT')
-  need(protected(ROOT/'go.json')==go_before and time.time()<go['expiresAt'],'GO_EXPIRED_OR_CHANGED')
+  need(protected(go_path)==go_before and time.time()<go['expiresAt'],'GO_EXPIRED_OR_CHANGED')
   check=copy.deepcopy(rendered);check['services']['sim-api']['image']=old
   critical_service_gate(check,inspect(NAME),json.loads(command(['docker','image','inspect',old]))[0])
   fresh_mutation_gate(action,profile,go)
@@ -486,7 +561,7 @@ def main():
   need(c['Image']==new and c['State'].get('Running') is True and c['State'].get('Health',{}).get('Status')=='healthy' and c.get('RestartCount')==(0 if recreated else current['RestartCount']) and digest(normalized_runtime(c))==go['runtimeSha256'],'POST_RUNTIME')
   need((c['Id']!=current['Id']) if recreated else (c['Id']==current['Id'] and c['State']['StartedAt']==current['State']['StartedAt']),'POST_CID_GENERATION')
   PHASE='post_acceptance';health();runtime_files(new);filesystem_gate(profile,go,c);need(lineage()==go['lineage'],'POST_LINEAGE_DRIFT')
-  need(protected(ROOT/'profile.json')==profile_before and protected(ROOT/'go.json')==go_before and time.time()<go['expiresAt'],'POST_GO_DRIFT_OR_EXPIRY')
+  need(protected(profile_path)==profile_before and protected(go_path)==go_before and time.time()<go['expiresAt'],'POST_GO_DRIFT_OR_EXPIRY')
   receipt(ROOT/(go['releaseId']+'-'+action+'-complete.json'),{'completed':True,'cid':c['Id'],'image':new,'lineage':go['lineage'],'dataRestored':False})
   print(json.dumps({'status':'completed','action':action,'image':new,'cid':c['Id']}))
  finally:os.close(lock)
