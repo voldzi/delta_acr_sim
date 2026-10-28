@@ -96,6 +96,107 @@ To není aktivace okna, zjištění
 skutečného algoritmu ani oprava konkrétního telefonu. Detailní kontrakt a Root
 akceptace jsou v [runbooku 13](../runbooks/13_PERFORMANCE_OPERATIONS.md).
 
+### Navazující nativní plán implicitního „nyní“ — dosud neprovedený
+
+Toto je **samostatný plán**, nikoli součást diagnostického obrazu 09cd702,
+aktivace změny významu odjezdu nebo důkaz opravy soukromé trasy. Nedostupnost
+obrazu na Macu neznamená nedostupnost na serveru: Root má nejprve určit přesný
+host a již přítomné immutable ID skutečného obrazu Valhalla 3.8.3. Žádný pull.
+
+Pořadí evidence → případná oprava:
+
+1. Dokončit Rootem schválený diagnostický build a jeho container-snapshot fence.
+   Krátké provozní okno až s vyřešenou retencí a připraveným telefonem. Pokud
+   skutečný požadavek již uvádí `depart_now`, nelze implicitní nyní vydávat za
+   jeho opravu. Při chybějícím důvodu multipass zůstává konkrétní příčina unknown.
+2. Root před spuštěním schválí přesné image ID, hashe runneru/generátoru/plánu,
+   argv, mounts, rozpočty a úklid. Pracovní adresář jen jedinečný root-owned
+   0700 pod `/srv/x5-production/cache/csm-sim/`; UUID musí být
+   `2f93f595-b61b-4eea-9054-7afa9b275b5b`, samostatný mount a dost místa podle
+   čerstvého Root rozpočtu. Pokud obraz a X5 nejsou na stejném hostu, samostatně
+   schválit přesný přesun veřejného obrazu; nepoužít root disk jako tichý fallback.
+3. Použít stávající `generate-mapped-profile-test-pbf.py`,
+   `mapped-profile-engine-plan.mjs` a `assert-mapped-profile-engine.py` jako
+   základ: 52 syntetických nativních případů, nikoli mocky. Stávající shell runner
+   **nespouštět beze změny**: neověřuje X5/custody, volí jméno podle PID, maže
+   dočasná data a explicitně nastavuje chybějící admin/timezone SQLite. Tato
+   konfigurace není důkaz CET/CEST. Nový úzký testovací runner musí být předem
+   zmrazen a zkontrolován Rootem, ne privilegovaně improvizován za běhu.
+4. Dva oddělené malé syntetické grafy (stejné vymyšlené body, žádná poloha
+   telefonu): s ověřenou Europe/Prague timezone a bez ní. Existující veřejné
+   timezone/admin podklady jen po Rootem ověřeném přesném path/hash a kopii do
+   jobu; žádný široký produkční volume mount nebo zápis do živých tiles/traffic.
+   Před vyhodnocením ověřit, že importer skutečně vytvořil očekávané restriction
+   a timezone údaje; „tag nebyl importován“ nesmí být PASS.
+5. Nejprve původních 52 případů. Pak níže přesně vyjmenovaných 23 párů
+   `date_time` absent versus `{type:0}`, každý se stejným syntetickým mapped-car
+   profilem, souřadnicemi, `costing:auto`, všemi ignore flags false, shodnými
+   exclude polygony, search/snap limitem, jednou variantou a shodnými speed_types.
+   Pouze časový režim se liší. Žádný nový pokus při timeoutu nebo odmítnutí.
+
+| Skupina párových případů | Počet párů |
+| --- | ---: |
+| maxheight/maxwidth/maxlength/maxweight: menší a větší auto pro každý limit | 8 |
+| `access=private` a `motor_vehicle=no`, bez deklarované výjimky | 2 |
+| jednosměrka: směr vpřed a opačný směr | 2 |
+| vyloučená uzávěra: oba směry | 2 |
+| aktivní časový zákaz, neaktivní zákaz, omezené časové povolení | 3 |
+| conditional destination-only: lokální cíl a tranzitní průjezd | 2 |
+| destination-only v kombinaci s překročenou výškou či hmotností | 2 |
+| běžná neomezená kontrola a topologie pro diagnostiku multipass | 2 |
+
+Pro každý pár nativně ověřit skutečně použité syntetické way IDs přes
+`trace_attributes`, všechny varianty, body do 25 m a průniky uzávěr. Přijatelná
+trasa musí projít beze všech ochranných varování a bez zakázané hrany. Varování
+401 znamená ochranné odmítnutí, nikoli oprávnění přijmout výsledek. Kontrolní
+topologie nemusí reprodukovat 401; pak se zaznamená nereprodukce, ne vynucené
+PASS nebo další automatické varianty parametrů.
+
+6. Osm dalších deterministických časových případů pomocí pevného `type:1`:
+   čtyři na jednoznačných stranách přechodů CET/CEST a čtyři kolem hranic
+   podmíněného zákazu/povolení. Ověřit skutečnou timezone z nativního grafu,
+   ne jen řetězec ve vstupu. Nejasná opakovaná/neexistující místní hodina není
+   automaticky prokázaná; nevyžadovat privilegované přestavování hodin hostu.
+   `type:0` má samostatný smoke podle skutečného aktuálního času. Dva případy
+   bez timezone (absent/type0) musí odhalit nezaručené časové vyhodnocení; pokud
+   jej nelze rozpoznat a bezpečně ohradit, implicit-now kandidát nemá GO.
+7. Pevný rozpočet plné izolované sady: 52 + 46 + 8 + 2 = **108 route** a nejvýše
+   **108 trace** volání uvnitř testovacího kontejneru. Dva status a nejvýše
+   30 readiness kontrol na každou ze dvou postupných konfigurací: celkem
+   nejvýše **278 loopback HTTP volání**, žádný externí provider. Jediný build
+   či engine kontejner najednou, `--network none`, žádné veřejné porty,
+   1 CPU/768 MiB jako výchozí schvalovaný limit, konečný Root wall deadline.
+   Timeout klienta sám nedokazuje konec kontejneru: Root musí ověřit a zastavit
+   pouze vlastní přesné CID po kontrole image/job/mount identity. Nikdy daemon,
+   prune či cizí kontejner. Rozpočet nezvyšovat automaticky.
+8. Až po izolované sadě lze **samostatně** schválit nejvýše tři jednotlivá
+   veřejná diagnostická route volání: jeden pár absent/type0 stejné veřejně
+   doložené fixture a nanejvýš jednu další kontrolu. Ne tři fixtures krát dva.
+   V současném SIM mapped API nelze poslat raw native type0 ani literal `now`;
+   pár proto vyžaduje zvlášť Rootem zkontrolovaný existující interní nativní
+   adaptér, ne veřejný auth bypass. Musí zachovat schválený graf, polygony,
+   profil a stejné options; výstup jen fixture label/status/číselná varování.
+   Bez trace/úplné SIM proof kontroly jde pouze o diagnostiku, ne o přijetí
+   trasy. Žádná soukromá poloha, raw response, provider text ani retry.
+9. Teprve při doloženém přínosu připravit samostatný malý semantic patch a ADR:
+   omitted time = now jen pro výslovně vymezený běžný mapped car/single-primary
+   aktuální požadavek. Nesahat na diagnostické čtyři JS soubory jako na součást
+   jejich nynějšího releasu. Neměnit `speed_types` ani uvádět čerstvé rychlosti,
+   pokud nejsou validní. Všechny profily, uzávěry, ignore flags, 401, vzdálenosti
+   a auth zůstávají. Ověřit veřejný query/requestHash/geometryHash, graph/closure
+   vazby i COP/Jízda verifier; stabilní interní time-policy klíč nesmí vypnout
+   coalescing ani využít starý důkaz pro jiný start. Vstupní literal `now` nadále
+   nepřijímat. Změnu významu defaultu zdokumentovat, i když se wire input nemění.
+10. Samostatný Root candidate/release/rollback a poslední lidsky schválený test
+    skutečného iPhonu teprve prokáže řešení uživatelského problému. Neúspěšné
+    kontroly nebo již existující `depart_now` znamenají návrat k instrumentaci
+    skutečné příčiny, ne uvolnění omezení nebo další nasazení naslepo.
+
+Přesně chybějící příprava dnes: Root-reviewed X5 runner/custody/deadline,
+rozšířené syntetické OSM/time fixture plány a ověřené timezone podklady. Základní
+52-case harness existuje a serverový nativní obraz je dostupný podle Root/COP;
+tyto nové nativní výsledky zatím **nebyly spuštěny ani získány**.
+
 ### Repozitářové kontroly
 
 - `pnpm format:check` musí projít nad zdrojovým kódem, package konfigurací a skripty
