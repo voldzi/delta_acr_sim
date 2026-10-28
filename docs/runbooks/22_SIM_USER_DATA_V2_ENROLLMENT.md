@@ -885,3 +885,62 @@ The finite Root-reviewed sequence is:
 
 No one may copy the forward GO into reverse, treat a receipt as perpetual GO, or
 claim that source/unit acceptance proves actual image/export/start acceptance.
+
+#### Named local OCI base variant — source preparation, not build GO
+
+`python3 scripts/prepare-sim-pg-maintenance-bundle.py --oci` preserves the earlier
+bare-base bundles and emits a separate review bundle plus `build-context.tar`.
+Both files are private 0600 in a new 0700 directory. The context is exactly four
+regular files in USTAR format, uid/gid/mtime zero, mode 0644, no extensions or
+`.dockerignore`. The only build-input difference is the separately pinned
+`deploy/sim-pg-disconnect-oci.Dockerfile`: `FROM sim_reviewed_base`, followed by the
+identical three COPY instructions. No remote syntax directive, RUN, dependency
+step, environment, label or alternate application source is added.
+
+The manifest binds context SHA/length and the named `oci-layout` base context.
+Its actual path/digest and worker acceptance remain null/false: they must come
+from Root's actual evidence, not from this local package. Before any build:
+
+- Verify the existing **sim-x5** node/worker identity, builder/plugin versions,
+  definition custody/hash and current running state without bootstrap. Verify
+  its actual state/cache storage is on the independently mounted expected X5
+  UUID. A builder definition alone is not worker/storage/idle evidence. Never
+  initialize another builder, switch global defaults or silently reuse COP's.
+- Root must separately review the precise finite Docker-save-to-OCI converter
+  (including any COP utility proposed for reuse), its complete source/hash,
+  bounded export/paths/link handling and zero registry resolution. No converter
+  is implicitly trusted or installed by this package. Build-only conversion
+  must use the exact existing base ID, with OCI config blob digest equal to
+  `sha256:407606…`, original 14 ordered uncompressed rootfs diffIDs, original
+  platform and full Config. Verify every blob/manifest/index digest, order,
+  media type and allowed path under private non-symlink custody.
+- Bind the fixed name `sim_reviewed_base` explicitly to the local OCI layout by
+  its actual manifest digest (`oci-layout:///RootReviewedPath@sha256:…`). The
+  reviewed build invocation must use that binding, the exact context tar/hash,
+  existing explicitly selected sim-x5 builder, bundled Dockerfile, no cache
+  import/export to a registry, no frontend pull, no provenance/SBOM additions,
+  no dependency installation and no bootstrap/fallback. `--network none` and
+  `--pull=false` remain insufficient evidence on their own. If support, worker
+  state or local context resolution is unknown, stop before build.
+
+The OCI capacity variant deliberately budgets disk export/layout copies. For
+fresh actual base Size `B`, review bundle `C`, actual context tar `T` and Root's
+existing reserves (at least 2 GiB each), require:
+
+- root free `>= 2*B + 1 GiB + 6 MiB + C + T + Rroot`;
+- X5 free `>= 6*B + 1 GiB + 32 MiB + 6 MiB + C + T + Rx5`.
+
+This includes a combined export/layout ceiling `4*B + 32 MiB`, two further
+base-sized worker/transient allocations, 1 GiB scratch/metadata, exact context,
+COPY overhead and untouched reserves. Root must verify/bound the concrete
+converter/builder against that model before using it; unknown/unbounded behavior
+is not capacity PASS. The final candidate image export is still streamed with
+no additional disk staging. Keep the prior image and rollback evidence.
+
+The existing **full Config equality, original layers plus exactly three COPY
+layers, ordered runtime bytes and strict bounded image-export gates remain
+unchanged**. A named OCI base is not permission to rewrite Config/defaults,
+flatten layers, skip blobs, accept PAX/xattrs/sparse data, or waive a failed
+image-format check. The actual resulting image ID and all fresh profile/GO and
+forward/reverse gates remain required. Five local bundle tests prove only the
+inert context/variant byte scope, not Docker/worker/OCI conversion acceptance.

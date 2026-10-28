@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-sim-pg-maintenance-bundle.py",
+  "scope": "inert bare/OCI context preparation only; no Docker, OCI conversion, builder or production execution",
+  "exitCode": 0,
+  "wallTimeSeconds": 0.000007,
+  "combinedOutput": ".....\n----------------------------------------------------------------------\nRan 5 tests in 0.005s\n\nOK\n"
+}
