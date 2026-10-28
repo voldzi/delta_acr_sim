@@ -1,0 +1,7 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-sim-pg-disconnect-maintain.py",
+  "scope": "local synthetic handler tests; exact Compose 5.6.0-to-5.6.1 metadata transition with retained env/replace values; no host execution",
+  "exitCode": 0,
+  "combinedOutput": ".......................\n----------------------------------------------------------------------\nRan 23 tests in 0.244s\n\nOK\n"
+}

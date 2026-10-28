@@ -71,12 +71,17 @@ def file_digest(path):
         os.close(fd)
 
 def maintenance_runtime(value):
+    labels=value['Config'].get('Labels') or {}
+    need(labels.get('com.docker.compose.project.environment_file')=='/srv/sim/.env','COMPOSE_ENV_PATH_DRIFT')
+    need(labels.get('com.docker.compose.replace')=='csm-sim-api','COMPOSE_REPLACE_NAME_DRIFT')
+    need(labels.get('com.docker.compose.version') in {'5.6.0','5.6.1'},'COMPOSE_VERSION_LABEL_DRIFT')
     result=copy.deepcopy({k:value.get(k) for k in ['Config','HostConfig','Mounts']})
     result['Config'].pop('Image',None)
     if result['Config'].get('Hostname')==value.get('Id','')[:12]:
         result['Config']['Hostname']='__docker_generated_hostname__'
     for key in ['com.docker.compose.config-hash','com.docker.compose.image']:
         result['Config'].get('Labels',{}).pop(key,None)
+    result['Config']['Labels']['com.docker.compose.version']='__reviewed_compose_5_6_0_to_5_6_1__'
     pairs=[v.split('=',1) for v in result['Config'].get('Env') or []]
     need(all(len(v)==2 for v in pairs) and len({v[0] for v in pairs})==len(pairs),'ENV_STRUCTURE')
     result['Config']['Env']=dict(pairs)

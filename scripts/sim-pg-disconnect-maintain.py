@@ -39,6 +39,9 @@ FILES={'app/apps/simulator-api/dist/user-data.js':'e78d951eb538f4962542c28c8436d
 ENV={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C','HOME':'/root','DOCKER_HOST':'unix:///var/run/docker.sock'}
 PHASE='preflight'
 EXPORT_TIMEOUT=120
+COMPOSE_OLD='5.6.0'
+COMPOSE_TARGET='5.6.1'
+COMPOSE_VERSION_LABEL='com.docker.compose.version'
 DC=['docker','--host','unix:///var/run/docker.sock','compose','--project-name','sim','--project-directory','/srv/sim','--env-file','/srv/sim/.env']
 for p in LAYERS:DC+=['-f',str(p)]
 class Stop(Exception):pass
@@ -87,11 +90,22 @@ def profile_and_go(action):
  need(set(go['layerFileSha256'])==set(map(str,LAYERS)),'GO_LAYERS')
  validate_go_age(go) # Protected reads above can themselves consume the lease.
  return profile,go
+def compose_metadata_gate(c,versions=(COMPOSE_OLD,COMPOSE_TARGET)):
+ labels=c['Config'].get('Labels') or {}
+ need(labels.get('com.docker.compose.project.environment_file')=='/srv/sim/.env','COMPOSE_ENV_PATH_DRIFT')
+ need(labels.get('com.docker.compose.replace')==NAME,'COMPOSE_REPLACE_NAME_DRIFT')
+ need(labels.get(COMPOSE_VERSION_LABEL) in versions,'COMPOSE_VERSION_LABEL_DRIFT')
+def compose_cli_gate():
+ need(command(['docker','--host','unix:///var/run/docker.sock','compose','version','--short']).decode().strip() in {COMPOSE_TARGET,'v'+COMPOSE_TARGET},'COMPOSE_CLI_VERSION_DRIFT')
 def normalized_runtime(c):
+ compose_metadata_gate(c)
  x=copy.deepcopy({k:c.get(k) for k in ['Config','HostConfig','Mounts']})
  x['Config'].pop('Image',None)
  if x['Config'].get('Hostname')==c.get('Id','')[:12]:x['Config']['Hostname']='__docker_generated_hostname__'
  for k in ['com.docker.compose.config-hash','com.docker.compose.image']:x['Config'].get('Labels',{}).pop(k,None)
+ # Only the finite reviewed tool-version transition is canonicalized; env-file
+ # path, replace NAME and every other retained label remain full hash inputs.
+ x['Config']['Labels'][COMPOSE_VERSION_LABEL]='__reviewed_compose_5_6_0_to_5_6_1__'
  env=x['Config'].get('Env') or [];pairs=[v.split('=',1) for v in env]
  need(all(len(v)==2 for v in pairs) and len({v[0] for v in pairs})==len(pairs),'ENV_DUPLICATE')
  x['Config']['Env']=dict(pairs)
@@ -270,7 +284,9 @@ def filesystem_gate(profile,go,current):
  floor=expected['minimumFreeBytesX5'];need(type(floor) is int and floor>=2147483648 and shutil.disk_usage(X5).free>=floor,'X5_DISK_MARGIN')
  need(type(go['minimumFreeBytes']) is int and go['minimumFreeBytes']>=2147483648 and shutil.disk_usage('/srv/sim').free>=go['minimumFreeBytes'],'DISK_MARGIN')
 def fresh_mutation_gate(action,profile,go):
- filesystem_gate(profile,go,inspect(NAME));no_known_active_builds()
+ current=inspect(NAME)
+ compose_metadata_gate(current,(COMPOSE_OLD,) if action=='activate' else ((COMPOSE_TARGET,) if go['expectedImage']!=BASE else (COMPOSE_OLD,COMPOSE_TARGET)))
+ filesystem_gate(profile,go,current);no_known_active_builds();compose_cli_gate()
  # Last operation before mutation: re-read protected approval and evaluate age
  # AFTER potentially slow filesystem/process reads, not before them.
  need(profile_and_go(action)==(profile,go),'FRESH_GO_DRIFT')
@@ -319,6 +335,7 @@ def duration_ns(value):
  return int(sum(Decimal(n)*units[u] for n,u in parts))
 def critical_service_gate(compose,current,image):
  before_service_gate(compose,current,image)
+ compose_metadata_gate(current)
  s=compose['services']['sim-api'];h=current['HostConfig'];ic=image['Config'];cfg=current['Config']
  allowed={'build','image','container_name','environment','expose','healthcheck','restart','volumes','networks','labels',
   'command','entrypoint','user','working_dir','read_only','privileged','cap_add','cap_drop','security_opt','group_add',
@@ -394,7 +411,7 @@ def critical_service_gate(compose,current,image):
  need(cfg.get('Hostname')==current.get('Id','')[:12] and (cfg.get('Domainname') or '')==(ic.get('Domainname') or ''),'HOSTNAME_DRIFT')
  stop=s.get('stop_signal',ic.get('StopSignal'));need((cfg.get('StopSignal') or '')==(stop or ''),'STOP_SIGNAL_DRIFT')
  need((cfg.get('StopTimeout') if cfg.get('StopTimeout') is not None else 10)==duration_ns(s.get('stop_grace_period','10s'))//1000000000,'STOP_TIMEOUT_DRIFT')
- generated={'com.docker.compose.project','com.docker.compose.service','com.docker.compose.project.working_dir','com.docker.compose.project.config_files','com.docker.compose.container-number','com.docker.compose.version','com.docker.compose.config-hash','com.docker.compose.image','com.docker.compose.oneoff','com.docker.compose.depends_on'}
+ generated={'com.docker.compose.project','com.docker.compose.service','com.docker.compose.project.working_dir','com.docker.compose.project.config_files','com.docker.compose.container-number','com.docker.compose.version','com.docker.compose.config-hash','com.docker.compose.image','com.docker.compose.oneoff','com.docker.compose.depends_on','com.docker.compose.project.environment_file','com.docker.compose.replace'}
  expected_labels={**(ic.get('Labels') or {}),**(s.get('labels') or {})}
  need(not any(k.startswith('com.docker.compose.') for k in (s.get('labels') or {})),'RESERVED_COMPOSE_LABEL')
  actual_labels={k:v for k,v in (cfg.get('Labels') or {}).items() if k not in generated}
@@ -461,6 +478,7 @@ def main():
    c=inspect(NAME)
    if c['Image']==new and c['State'].get('Health',{}).get('Status')=='healthy':break
    time.sleep(1)
+  compose_metadata_gate(c,(COMPOSE_TARGET,) if recreated else (current['Config']['Labels'][COMPOSE_VERSION_LABEL],));compose_cli_gate()
   need(c['Image']==new and c['State'].get('Running') is True and c['State'].get('Health',{}).get('Status')=='healthy' and c.get('RestartCount')==(0 if recreated else current['RestartCount']) and digest(normalized_runtime(c))==go['runtimeSha256'],'POST_RUNTIME')
   need((c['Id']!=current['Id']) if recreated else (c['Id']==current['Id'] and c['State']['StartedAt']==current['State']['StartedAt']),'POST_CID_GENERATION')
   PHASE='post_acceptance';health();runtime_files(new);filesystem_gate(profile,go,c);need(lineage()==go['lineage'],'POST_LINEAGE_DRIFT')

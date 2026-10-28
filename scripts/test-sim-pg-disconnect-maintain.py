@@ -17,10 +17,11 @@ from unittest.mock import patch
 
 spec=importlib.util.spec_from_file_location('maintain',Path(__file__).with_name('sim-pg-disconnect-maintain.py'))
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+LABELS={'com.docker.compose.project.environment_file':'/srv/sim/.env','com.docker.compose.replace':m.NAME,'com.docker.compose.version':'5.6.0'}
 
 class MaintainTests(unittest.TestCase):
  def critical_fixture(self):
-  cfg={'Env':['FIXED=value'],'Cmd':['node','entry.js'],'Entrypoint':['docker-entrypoint.sh'],'User':'','WorkingDir':'/app','Hostname':'b'*12}
+  cfg={'Env':['FIXED=value'],'Cmd':['node','entry.js'],'Entrypoint':['docker-entrypoint.sh'],'User':'','WorkingDir':'/app','Hostname':'b'*12,'Labels':copy.deepcopy(LABELS)}
   h={'ShmSize':67108864,'IpcMode':'private','Runtime':'runc','CgroupnsMode':'private','ConsoleSize':[0,0],
    'MaskedPaths':['/proc/acpi','/proc/asound','/proc/interrupts','/proc/kcore','/proc/keys','/proc/latency_stats','/proc/timer_list','/proc/timer_stats','/proc/sched_debug','/proc/scsi','/sys/firmware','/sys/devices/virtual/powercap'],
    'ReadonlyPaths':['/proc/bus','/proc/fs','/proc/irq','/proc/sys','/proc/sysrq-trigger'],
@@ -29,7 +30,7 @@ class MaintainTests(unittest.TestCase):
   c={'Id':'b'*64,'Image':m.BASE,'Config':cfg,'HostConfig':h,'Mounts':[{'Source':'/srv/x5-production/data/sim','Destination':'/data','RW':True,'Type':'bind'}],
    'NetworkSettings':{'Networks':{'sim_default':{'Aliases':[m.NAME,'sim-api']}}}}
   compose={'services':{'sim-api':{'container_name':m.NAME,'image':m.BASE,'environment':{},'volumes':[{'type':'bind','source':'/srv/x5-production/data/sim','target':'/data'}],'networks':{'default':{}}}},'networks':{'default':{'name':'sim_default'}}}
-  return compose,c,{'Config':{k:v for k,v in cfg.items() if k!='Hostname'}}
+  return compose,c,{'Config':{k:v for k,v in cfg.items() if k not in {'Hostname','Labels'}}}
  def test_full_critical_parity_rejects_latent_privilege_mount_network_resource_and_unknown_fields(self):
   compose,c,image=self.critical_fixture();m.critical_service_gate(compose,c,image)
   for key,value in [('privileged',True),('read_only',True),('mem_limit',123),('cap_add',['SYS_ADMIN']),('ports',['4000:4000']),('sysctls',{}),('unknown',False),('healthcheck',{'test':['NONE']})]:
@@ -63,11 +64,11 @@ class MaintainTests(unittest.TestCase):
    with patch.object(m.os,'stat',return_value=stat_result('/')),self.assertRaises(m.Stop):m.filesystem_identity(current)
  def test_freshness_is_rechecked_after_slow_checks_and_durable_intent(self):
   events=[]
-  with patch.object(m,'inspect',return_value={}),patch.object(m,'filesystem_gate',side_effect=lambda *a:events.append('fs')),patch.object(m,'no_known_active_builds',side_effect=lambda:events.append('build')),patch.object(m,'profile_and_go',side_effect=m.Stop('GO_EXPIRED')),self.assertRaises(m.Stop):m.fresh_mutation_gate('activate',{}, {})
+  with patch.object(m,'inspect',return_value={'Config':{'Labels':LABELS}}),patch.object(m,'compose_cli_gate'),patch.object(m,'filesystem_gate',side_effect=lambda *a:events.append('fs')),patch.object(m,'no_known_active_builds',side_effect=lambda:events.append('build')),patch.object(m,'profile_and_go',side_effect=m.Stop('GO_EXPIRED')),self.assertRaises(m.Stop):m.fresh_mutation_gate('activate',{}, {})
   self.assertEqual(events,['fs','build'])
   profile,go,files=self.approval();clock=[120]
   def slow_fsync(*args):clock[0]=161 # Root capacity/build-owner review was at 100.
-  with patch.object(m,'protected',side_effect=lambda path:files[path]),patch.object(m.time,'time',side_effect=lambda:clock[0]),patch.object(m,'inspect',return_value={}),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),patch.object(m,'receipt',side_effect=slow_fsync) as receipt,patch.object(m,'replace_pin') as pin,self.assertRaises(m.Stop):
+  with patch.object(m,'protected',side_effect=lambda path:files[path]),patch.object(m.time,'time',side_effect=lambda:clock[0]),patch.object(m,'inspect',return_value={'Config':{'Labels':LABELS}}),patch.object(m,'compose_cli_gate'),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),patch.object(m,'receipt',side_effect=slow_fsync) as receipt,patch.object(m,'replace_pin') as pin,self.assertRaises(m.Stop):
    m.intent_then_pin('activate',profile,go,m.ROOT/'test-intent',{},b'old',b'new')
   receipt.assert_called_once();pin.assert_not_called()
  def test_export_rejects_extensions_before_reading_payload_and_budget_truncation(self):
@@ -125,7 +126,7 @@ class MaintainTests(unittest.TestCase):
     def slow_fsync(fd):
      real_fsync(fd)
      if slow_stage=='temp_fsync':clock[0]=161
-    with patch.object(m,'PIN',pin),patch.object(m,'pin_read',side_effect=pin_read),patch.object(m.os,'fsync',side_effect=slow_fsync),patch.object(m.os,'replace') as rename,patch.object(m,'protected',side_effect=lambda path:files[path]),patch.object(m.time,'time',side_effect=lambda:clock[0]),patch.object(m,'inspect',return_value={}),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),self.assertRaisesRegex(m.Stop,'OWNER_ACTIVITY_REVIEW_EXPIRED'):
+    with patch.object(m,'PIN',pin),patch.object(m,'pin_read',side_effect=pin_read),patch.object(m.os,'fsync',side_effect=slow_fsync),patch.object(m.os,'replace') as rename,patch.object(m,'protected',side_effect=lambda path:files[path]),patch.object(m.time,'time',side_effect=lambda:clock[0]),patch.object(m,'inspect',return_value={'Config':{'Labels':LABELS}}),patch.object(m,'compose_cli_gate'),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),self.assertRaisesRegex(m.Stop,'OWNER_ACTIVITY_REVIEW_EXPIRED'):
      m.replace_pin(profile,go,b'old',b'new')
     rename.assert_not_called();self.assertEqual(pin.read_bytes(),b'old');self.assertEqual(list(parent.iterdir()),[pin])
  def test_cli_tar_and_unicode_parser_failures_emit_only_bounded_code(self):
@@ -164,6 +165,34 @@ class MaintainTests(unittest.TestCase):
    with self.assertRaises(m.Stop):m.before_service_gate(s,c,i)
   compose['services']['sim-api']['working_dir']=None
   with self.assertRaises(m.Stop):m.before_service_gate(compose,current,image)
+ def test_finite_compose_version_transition_never_waives_other_labels(self):
+  compose,current,image=self.critical_fixture();m.critical_service_gate(compose,current,image)
+  new=copy.deepcopy(current);new['Config']['Labels'][m.COMPOSE_VERSION_LABEL]='5.6.1'
+  self.assertEqual(m.normalized_runtime(current),m.normalized_runtime(new))
+  m.compose_metadata_gate(new,('5.6.1',))
+  with self.assertRaises(m.Stop):m.compose_metadata_gate(current,('5.6.1',))
+  for key,value in [(m.COMPOSE_VERSION_LABEL,'5.6.2'),(m.COMPOSE_VERSION_LABEL,'5.5.0'),(m.COMPOSE_VERSION_LABEL,None),('com.docker.compose.project.environment_file','/other/.env'),('com.docker.compose.replace','other-name')]:
+   bad=copy.deepcopy(current);bad['Config']['Labels'][key]=value
+   with self.subTest(key=key,value=value),self.assertRaises(m.Stop):m.normalized_runtime(bad)
+   with self.assertRaises(m.Stop):m.critical_service_gate(compose,bad,image)
+  for unknown in ['com.docker.compose.future','private.extra']:
+   bad=copy.deepcopy(current);bad['Config']['Labels'][unknown]='value'
+   self.assertNotEqual(m.normalized_runtime(current),m.normalized_runtime(bad))
+   with self.assertRaises(m.Stop):m.critical_service_gate(compose,bad,image)
+  normalized=m.normalized_runtime(new)['Config']['Labels']
+  self.assertEqual(normalized['com.docker.compose.project.environment_file'],'/srv/sim/.env')
+  self.assertEqual(normalized['com.docker.compose.replace'],m.NAME)
+ def test_exact_cli_version_and_old_forward_version_are_checked_before_mutation(self):
+  for value in [b'5.6.1\n',b'v5.6.1\n']:
+   with patch.object(m,'command',return_value=value):m.compose_cli_gate()
+  for value in [b'5.6.0',b'5.6.2',b'5.6.1-extra',b'unknown',b'']:
+   with self.subTest(value=value),patch.object(m,'command',return_value=value),self.assertRaises(m.Stop):m.compose_cli_gate()
+  profile,go,_=self.approval()
+  with patch.object(m,'inspect',return_value={'Config':{'Labels':LABELS}}),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),patch.object(m,'command',return_value=b'5.6.2'),patch.object(m,'profile_and_go') as admission,self.assertRaisesRegex(m.Stop,'COMPOSE_CLI_VERSION_DRIFT'):m.fresh_mutation_gate('activate',profile,go)
+  admission.assert_not_called()
+  already_new={**LABELS,m.COMPOSE_VERSION_LABEL:'5.6.1'}
+  with patch.object(m,'inspect',return_value={'Config':{'Labels':already_new}}),patch.object(m,'command') as command,self.assertRaisesRegex(m.Stop,'COMPOSE_VERSION_LABEL_DRIFT'):m.fresh_mutation_gate('activate',profile,go)
+  command.assert_not_called()
  def approval(self):
   profile={'contract':'sim-image-only-root-profile-v1','handlerSha256':m.sha(b'handler'),'probeSha256':m.sha(b'probe'),'candidateImage':'sha256:'+'a'*64,'baseImage':m.BASE,'dataFilesystem':{'minimumFreeBytesX5':2147483648}}
   files={m.ROOT/'profile.json':m.encoded(profile),m.SOURCE/'sim-pg-disconnect-maintain.py':b'handler',m.SOURCE/'sim-maintenance-lineage-probe.mjs':b'probe'}
@@ -214,7 +243,7 @@ class MaintainTests(unittest.TestCase):
   with patch.object(m.os,'geteuid',return_value=1000),patch.object(m,'command') as run,self.assertRaises(m.Stop):m.main()
   run.assert_not_called()
  def test_runtime_security_mount_and_network_drift_remain_in_hash(self):
-  a={'Config':{'Env':['AUTH=on'],'Labels':{},'Cmd':['node']},'HostConfig':{'Privileged':False},'Mounts':[{'Source':'fixed','RW':False}],
+  a={'Config':{'Env':['AUTH=on'],'Labels':copy.deepcopy(LABELS),'Cmd':['node']},'HostConfig':{'Privileged':False},'Mounts':[{'Source':'fixed','RW':False}],
      'NetworkSettings':{'Networks':{'sim_default':{'NetworkID':'fixed-network','Aliases':['sim-api']}}}}
   h=m.digest(m.normalized_runtime(a))
   for field in ['env','privilege','mount','network']:
@@ -227,9 +256,11 @@ class MaintainTests(unittest.TestCase):
  def test_recreate_scope_is_single_fixed_service(self):
   spec=importlib.util.spec_from_file_location('baseline_peer',Path(__file__).with_name('sim-pg-disconnect-baseline.py'))
   b=importlib.util.module_from_spec(spec);spec.loader.exec_module(b)
-  c={'Config':{'Env':['FIXED=value'],'Labels':{'com.docker.compose.image':'ignored'},'Image':'old'},'HostConfig':{},'Mounts':[],
+  c={'Config':{'Env':['FIXED=value'],'Labels':{**LABELS,'com.docker.compose.image':'ignored'},'Image':'old'},'HostConfig':{},'Mounts':[],
      'NetworkSettings':{'Networks':{'sim':{'NetworkID':'network','Aliases':['sim-api']}}}}
-  self.assertEqual(m.normalized_runtime(c),b.maintenance_runtime(c))
+  for version in ['5.6.0','5.6.1']:
+   c['Config']['Labels'][m.COMPOSE_VERSION_LABEL]=version
+   self.assertEqual(m.normalized_runtime(c),b.maintenance_runtime(c))
   source=Path(m.__file__).read_text()
   self.assertIn("DC+['up','-d','--no-deps','--no-build','--pull','never','sim-api']",source)
   self.assertNotIn("DC+['down'",source)

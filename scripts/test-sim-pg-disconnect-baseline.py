@@ -17,6 +17,7 @@ class BaselineTests(unittest.TestCase):
         binding = {'source_sha256': b.FILES['packages/sim-user-data/authority.mjs']}
         current = {'Id':'synthetic-cid','Image':b.BASE,'Config':{'Labels':{
             'com.docker.compose.project.config_files':','.join(b.LAYERS),
+            'com.docker.compose.project.environment_file':'/srv/sim/.env','com.docker.compose.replace':'csm-sim-api','com.docker.compose.version':'5.6.0',
             'com.docker.compose.service':'sim-api','com.docker.compose.project':'sim'},
             'Env':['PRIVATE_SECRET=never-export-this','SIM_USER_DATA_ENABLED=true','SIM_USER_DATA_MODE=production-sim-user-data-v1',
                    'SIM_USER_DATA_CONTINUITY_BINDING='+json.dumps(binding)]},

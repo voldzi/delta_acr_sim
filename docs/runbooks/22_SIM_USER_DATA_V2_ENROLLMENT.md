@@ -769,7 +769,7 @@ current container cannot supply verified lineage (including when it is dead),
 rollback is deliberately blocked for separate Root recovery; no fallback observer
 identity/container or re-enrollment is introduced.
 
-Offline unit coverage: twenty-one handler groups, twelve probe checks, and three
+Offline unit coverage: twenty-three handler groups, twelve probe checks, and three
 baseline groups. Added negative cases cover latent Compose privilege/mount/network/
 resource drift and unknown fields, filesystem identity/root fallback/symlink and
 capacity, late GO freshness, hostile tar extensions/budgets, stalled reads and
@@ -797,6 +797,39 @@ This is not a change to the live config or the observer app payload.
 Source: [Compose services command/entrypoint specification](https://docs.docker.com/reference/compose-file/services/#command).
 The corrected current-host model still requires Root's fresh read-only check;
 new unknown defaults must stop, not automatically trigger another waiver.
+
+Root then established two exact generated-label values: environment file equals
+`/srv/sim/.env`, replace equals `csm-sim-api`; current container Compose label is
+5.6.0 and actual CLI is 5.6.1. The controller is now a **finite 5.6.0 → 5.6.1
+metadata model**, not any-version compatibility. Every mutation preflight checks
+the actual CLI short version equals 5.6.1 (optional serialized `v` prefix only).
+Forward requires old container label 5.6.0. Actual recreation, including reverse
+to the old APP image, requires new container label 5.6.1; pin-only reverse must
+retain the existing exact label. Unknown/missing versions stop. Before the
+runtime hash canonicalizes just this validated version pair to one fixed marker,
+the exact env-file path and replace name must match. Both complete values remain
+in the runtime hash. No other label/prefix is removed, and unknown generated or
+private labels still change the hash and fail strict service parity.
+
+The baseline digest uses the same finite canonicalization. Old runtime digests
+or protected GO artifacts must not be reused; Root must produce fresh facts and
+review the new source hashes. This changes no app/DB binding or production CLI.
+Primary sources verified at **both exact tags**, not merely an older release:
+
+- [5.6.0 label generation](https://github.com/docker/compose/blob/v5.6.0/pkg/compose/loader.go)
+  and [5.6.1 label generation](https://github.com/docker/compose/blob/v5.6.1/pkg/compose/loader.go):
+  `postProcessProject` records the CLI core version and supplied env-file paths.
+- [5.6.0 recreate metadata](https://github.com/docker/compose/blob/v5.6.0/pkg/compose/executor_ops.go)
+  and [5.6.1 recreate metadata](https://github.com/docker/compose/blob/v5.6.1/pkg/compose/executor_ops.go):
+  `execCreateContainer` uses the explicit service container name for replace.
+- [5.6.0 version derivation](https://github.com/docker/compose/blob/v5.6.0/pkg/api/labels.go)
+  and [5.6.1 version derivation](https://github.com/docker/compose/blob/v5.6.1/pkg/api/labels.go):
+  `ComposeVersion` is derived from the tool's core version.
+
+Two added local test groups prove finite version transition, strict new-label
+acceptance, wrong/missing-version rejection, retained env/name, unknown-label
+hash sensitivity and wrong-CLI refusal before mutation admission. This is not
+actual new-container acceptance; the current-host check remains Root's gate.
 
 ### Finite release preparation after separate human authority
 

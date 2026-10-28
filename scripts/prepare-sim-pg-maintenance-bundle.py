@@ -25,12 +25,12 @@ PINNED={
  'build/apps/simulator-api/dist/user-data.js':('apps/simulator-api/dist/user-data.js','e78d951eb538f4962542c28c8436db45713ff3ba7588d8d2c98a0f4f34ab72bd'),
  'build/packages/sim-user-data/bootstrap.mjs':('packages/sim-user-data/bootstrap.mjs','c1b44b61e7ac7902463f1d68c6fec74dccf3550b4a3d95d02544788436d11d05'),
  'build/packages/sim-user-data/pg-errors.mjs':('packages/sim-user-data/pg-errors.mjs','af3c90eec2a0702e434feb57cd7607a8d7fb7c84c8f1d10c8084b7d13b16b2fc'),
- 'source/sim-pg-disconnect-maintain.py':('scripts/sim-pg-disconnect-maintain.py','ca8eea78577ccc5da12d25c2c06342f3de2c762dacc699272a01b10bc2a1dac7'),
+ 'source/sim-pg-disconnect-maintain.py':('scripts/sim-pg-disconnect-maintain.py','9afce0c0ce37118a81e72d5f2cab8312d3820ec5801b23c826fcf51302f59301'),
  'source/sim-maintenance-lineage-probe.mjs':('scripts/sim-maintenance-lineage-probe.mjs','b3f8424c842d140335545382f81bb185a4f22295ba0ce61552ddf07c27b49aa7'),
- 'source/sim-pg-disconnect-baseline.py':('scripts/sim-pg-disconnect-baseline.py','b9b1b6fd66d37f5bcc1cc64f0cafa1b09ca90e8764385b4f96b32d0b8e9e364a'),
+ 'source/sim-pg-disconnect-baseline.py':('scripts/sim-pg-disconnect-baseline.py','63baccd5e179dd805490132e913a0749fb56d9f333d0e34ca60c09c6b735e08e'),
 }
 RECEIPTS={
- 'handler21':'af4c7464dc50cf9528ed0350bd33290a6f13e0002ce678da1768019de4c5013d',
+ 'handler23':'37c89af9206a5be49b82df899dcf97f66366b97709ad35b7f67742fd9176eab3',
  'pg29':'cc10cd08f11ba85bf4bf8ed3ce51b3833c965115030bef883ab8f3ec581cdc4a',
  'probe12':'50a42287c4d7caf87a361de03f67d8595e11d344f0c61fad8ad6ee5d34d61ae9',
 }
