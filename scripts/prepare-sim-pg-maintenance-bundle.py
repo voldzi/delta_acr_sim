@@ -23,12 +23,12 @@ PINNED={
  'build/apps/simulator-api/dist/user-data.js':('apps/simulator-api/dist/user-data.js','e78d951eb538f4962542c28c8436db45713ff3ba7588d8d2c98a0f4f34ab72bd'),
  'build/packages/sim-user-data/bootstrap.mjs':('packages/sim-user-data/bootstrap.mjs','c1b44b61e7ac7902463f1d68c6fec74dccf3550b4a3d95d02544788436d11d05'),
  'build/packages/sim-user-data/pg-errors.mjs':('packages/sim-user-data/pg-errors.mjs','af3c90eec2a0702e434feb57cd7607a8d7fb7c84c8f1d10c8084b7d13b16b2fc'),
- 'source/sim-pg-disconnect-maintain.py':('scripts/sim-pg-disconnect-maintain.py','d7a112416e98d0db322e27dacc111d91797611d74000ae313278e411b2d8b34f'),
+ 'source/sim-pg-disconnect-maintain.py':('scripts/sim-pg-disconnect-maintain.py','ca8eea78577ccc5da12d25c2c06342f3de2c762dacc699272a01b10bc2a1dac7'),
  'source/sim-maintenance-lineage-probe.mjs':('scripts/sim-maintenance-lineage-probe.mjs','b3f8424c842d140335545382f81bb185a4f22295ba0ce61552ddf07c27b49aa7'),
  'source/sim-pg-disconnect-baseline.py':('scripts/sim-pg-disconnect-baseline.py','b9b1b6fd66d37f5bcc1cc64f0cafa1b09ca90e8764385b4f96b32d0b8e9e364a'),
 }
 RECEIPTS={
- 'handler18':'5cf065a7b62aacbf32f6c6621e5292f3a1805d492e608bfba249a13450a84987',
+ 'handler21':'af4c7464dc50cf9528ed0350bd33290a6f13e0002ce678da1768019de4c5013d',
  'pg29':'cc10cd08f11ba85bf4bf8ed3ce51b3833c965115030bef883ab8f3ec581cdc4a',
  'probe12':'50a42287c4d7caf87a361de03f67d8595e11d344f0c61fad8ad6ee5d34d61ae9',
 }
@@ -46,7 +46,7 @@ def collect():
   raw=p.read_bytes();need(sha(raw)==expected);entries[target]=raw
  return entries
 def archive(entries,revision):
- manifest={'contract':'sim-pg-maintenance-inert-bundle-v1','sourceRevision':revision,'reviewedHandlerRevision':REVIEWED,
+ manifest={'contract':'sim-pg-maintenance-inert-bundle-v1','sourceRevision':revision,'priorReviewedRevision':REVIEWED,'requiresFreshSourceReview':True,
   'baseImage':BASE,'candidateImage':None,'deploymentAuthority':False,'containsSecrets':False,
   'capacityPlan':{'requiresFreshRootReview':True,'baseImageSizeBytes':None,
    'runtimeInputBytes':sum(len(raw) for p,raw in entries.items() if p.startswith('build/') and p!='build/Dockerfile'),

@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-sim-pg-disconnect-maintain.py",
+  "scope": "local synthetic handler tests including actual Compose-null and absent-user correction; no host mutation",
+  "exitCode": 0,
+  "wallTimeSeconds": 0.171187,
+  "combinedOutput": ".....................\n----------------------------------------------------------------------\nRan 21 tests in 0.227s\n\nOK\n"
+}

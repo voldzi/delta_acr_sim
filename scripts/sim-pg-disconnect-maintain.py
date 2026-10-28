@@ -297,8 +297,20 @@ def before_service_gate(compose,current,image):
  for entry in actual.get('Env') or []:
   k,sep,v=entry.partition('=');need(sep and k not in actual_env,'ENV_DUPLICATE');actual_env[k]=v
  need(expected==actual_env,'PRE_EXISTING_ENV_RENDER_DRIFT')
- for ck,ik in [('command','Cmd'),('entrypoint','Entrypoint'),('user','User'),('working_dir','WorkingDir')]:
-  need(service.get(ck,ic.get(ik))==actual.get(ik),'PRE_EXISTING_EXEC_RENDER_DRIFT')
+ # Compose null/missing inherits; []/'' deliberately clears. A non-null
+ # entrypoint also discards image CMD unless Compose supplies command itself.
+ # Never use truthiness here: that would silently erase explicit empty overrides.
+ entrypoint=service.get('entrypoint')
+ expected_entrypoint=ic.get('Entrypoint') if entrypoint is None else ([] if entrypoint=='' else entrypoint)
+ command_value=service.get('command')
+ expected_command=(ic.get('Cmd') if entrypoint is None else []) if command_value is None else ([] if command_value=='' else command_value)
+ need(expected_entrypoint==actual.get('Entrypoint') and expected_command==actual.get('Cmd'),'PRE_EXISTING_EXEC_RENDER_DRIFT')
+ for ck,ik in [('user','User'),('working_dir','WorkingDir')]:
+  expected_value=service.get(ck,ic.get(ik))
+  # The one observed Engine serialization: no user in BOTH Compose and image
+  # becomes Config.User=''. Do not generalize explicit null or other fields.
+  if ck=='user' and ck not in service and ik not in ic:expected_value=''
+  need(expected_value==actual.get(ik),'PRE_EXISTING_EXEC_RENDER_DRIFT')
 def duration_ns(value):
  if value is None:return 0
  parts=re.findall(r'([0-9]+(?:\.[0-9]+)?)(ns|us|ms|s|m|h)',str(value))

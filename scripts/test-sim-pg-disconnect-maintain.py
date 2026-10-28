@@ -135,6 +135,35 @@ class MaintainTests(unittest.TestCase):
    self.assertEqual(stopped.exception.code,2)
    self.assertEqual(json.loads(out.getvalue()),{'status':'stopped_requires_review','automaticRetry':False,'code':'SIM_MAINTAIN_FAILED_DETAILS_WITHHELD','phase':'preflight'})
    self.assertNotIn('secret',out.getvalue())
+ def test_compose_null_inherits_exec_but_changed_live_exec_is_rejected(self):
+  compose,current,image=self.critical_fixture()
+  compose['services']['sim-api'].update(command=None,entrypoint=None)
+  m.before_service_gate(compose,current,image)
+  for field in ['Cmd','Entrypoint']:
+   bad=copy.deepcopy(current);bad['Config'][field]=['different']
+   with self.subTest(field=field),self.assertRaises(m.Stop):m.before_service_gate(compose,bad,image)
+ def test_explicit_empty_overrides_and_entrypoint_cmd_cross_rule(self):
+  for field,ik in [('command','Cmd'),('entrypoint','Entrypoint')]:
+   for empty in ['',[]]:
+    compose,current,image=self.critical_fixture();compose['services']['sim-api'][field]=empty
+    with self.subTest(field=field,empty=empty),self.assertRaises(m.Stop):m.before_service_gate(compose,current,image)
+    current['Config'][ik]=[]
+    if field=='entrypoint':
+     with self.assertRaises(m.Stop):m.before_service_gate(compose,current,image) # image CMD must not survive.
+     current['Config']['Cmd']=[]
+    m.before_service_gate(compose,current,image)
+  compose,current,image=self.critical_fixture();compose['services']['sim-api']['entrypoint']=['new-entrypoint'];current['Config']['Entrypoint']=['new-entrypoint']
+  with self.assertRaises(m.Stop):m.before_service_gate(compose,current,image)
+  current['Config']['Cmd']=[];m.before_service_gate(compose,current,image)
+  compose['services']['sim-api']['command']=['explicit-command'];current['Config']['Cmd']=['explicit-command'];m.before_service_gate(compose,current,image)
+ def test_only_doubly_absent_user_canonicalizes_to_engine_empty_string(self):
+  compose,current,image=self.critical_fixture();image['Config'].pop('User')
+  m.before_service_gate(compose,current,image)
+  for mutate in [lambda s,c,i:s.update(user=None),lambda s,c,i:i.update(User=None),lambda s,c,i:c.update(User='root'),lambda s,c,i:c.update(User=None)]:
+   s,c,i=copy.deepcopy(compose),copy.deepcopy(current),copy.deepcopy(image);mutate(s['services']['sim-api'],c['Config'],i['Config'])
+   with self.assertRaises(m.Stop):m.before_service_gate(s,c,i)
+  compose['services']['sim-api']['working_dir']=None
+  with self.assertRaises(m.Stop):m.before_service_gate(compose,current,image)
  def approval(self):
   profile={'contract':'sim-image-only-root-profile-v1','handlerSha256':m.sha(b'handler'),'probeSha256':m.sha(b'probe'),'candidateImage':'sha256:'+'a'*64,'baseImage':m.BASE,'dataFilesystem':{'minimumFreeBytesX5':2147483648}}
   files={m.ROOT/'profile.json':m.encoded(profile),m.SOURCE/'sim-pg-disconnect-maintain.py':b'handler',m.SOURCE/'sim-maintenance-lineage-probe.mjs':b'probe'}

@@ -769,7 +769,7 @@ current container cannot supply verified lineage (including when it is dead),
 rollback is deliberately blocked for separate Root recovery; no fallback observer
 identity/container or re-enrollment is introduced.
 
-Offline unit coverage: eighteen handler groups, twelve probe checks, and three
+Offline unit coverage: twenty-one handler groups, twelve probe checks, and three
 baseline groups. Added negative cases cover latent Compose privilege/mount/network/
 resource drift and unknown fields, filesystem identity/root fallback/symlink and
 capacity, late GO freshness, hostile tar extensions/budgets, stalled reads and
@@ -783,6 +783,20 @@ Captured execution outputs (not just declared counts) are under
 `docs/testing/receipts/sim-maintenance-20261028-*.json`. The real PostgreSQL
 receipt includes `fixtureRemoved: true`, emitted only after cleanup verification.
 These local receipts are not signed production admission or server acceptance.
+
+Root's subsequent bounded live metadata showed Compose `command:null` and
+`entrypoint:null` both equal their inherited image/live values, and an absent
+Compose+image User serialized as live empty string. The model now implements
+only those justified semantics: null/missing command/entrypoint inherits, explicit
+`[]`/`''` clears, and non-null entrypoint removes the image CMD unless Compose
+supplies command. No truthiness fallback is used. Only the doubly-absent User
+canonicalizes to empty string; explicit user null, different user and working-dir
+null are not relaxed. The three added test groups reject real exec drift,
+inheritance in place of explicit clears, and unrelated null/default waivers.
+This is not a change to the live config or the observer app payload.
+Source: [Compose services command/entrypoint specification](https://docs.docker.com/reference/compose-file/services/#command).
+The corrected current-host model still requires Root's fresh read-only check;
+new unknown defaults must stop, not automatically trigger another waiver.
 
 ### Finite release preparation after separate human authority
 
