@@ -783,3 +783,91 @@ Captured execution outputs (not just declared counts) are under
 `docs/testing/receipts/sim-maintenance-20261028-*.json`. The real PostgreSQL
 receipt includes `fixtureRemoved: true`, emitted only after cleanup verification.
 These local receipts are not signed production admission or server acceptance.
+
+### Finite release preparation after separate human authority
+
+The human has separately approved the narrow one-off protected deployment and
+image-only reverse boundary. That approval does not manufacture an exact image,
+fresh Root GO, capacity/build-owner clearance or successful release. Root orders
+storage/COP/SIM mutations serially. No owner-side upload/build/activation is
+implied by preparing the following bundle.
+
+`python3 scripts/prepare-sim-pg-maintenance-bundle.py` is **local and inert**.
+It accepts only a clean committed descendant of `c00929e`, verifies exact reviewed
+handler/probe/baseline, three runtime bytes, Dockerfile and captured receipts,
+then creates a private 0700 random directory under `/private/tmp` with one 0600
+tar. Its manifest binds the actual source revision and all payload hashes, but
+has `candidateImage:null` and `deploymentAuthority:false`. It contains no GO,
+profile, credentials, env or production configuration. The `build/` subtree has
+exactly Dockerfile plus the three COPY inputs; the repository `.dockerignore`
+must not be substituted (it excludes dist). Three local bundle tests cover the
+exact context/inert deterministic manifest, changed bytes and dirty checkout.
+
+The finite Root-reviewed sequence is:
+
+1. **Fresh Root build gates:** verify host identity, capacity on root/X5, actual
+   X5 device, existing API identity/health, unchanged approved source hashes and
+   coordinated absence of competing storage/recovery/build work. Root issues a
+   new exact build GO. Preserve base image and original pin/config/receipts.
+   No pruning, dependency installation, package upgrades or network changes.
+   The bundle carries a capacity formula, not a forged live clearance. Let `B`
+   be the actual existing base image `Size` from fresh Docker inspect, `C` the
+   bundle byte length, and `Rroot`/`Rx5` the greater of 2 GiB and Root's existing
+   reservations for other projects. Conservatively require root free space
+   `>= 2*B + 1 GiB + 6 MiB + C + Rroot`, and X5 free `>= C + Rx5`. The base
+   image stays retained; shared layers normally make the image delta far smaller,
+   but the budget allows two full-base-sized transient allocations plus 1 GiB
+   scratch/metadata and at most three 2 MiB COPY tar layers. Runtime inputs total
+   exactly 28,467 bytes. Export streams without disk staging (up to the existing
+   4 GiB byte budget), not a second full image tar. Root must confirm the chosen
+   local builder/storage cannot exceed this model; otherwise stop and revise
+   the reviewed budget. The observed 12:25 UTC capacities are not fresh build
+   admission. `B` is currently unknown to this package; do not claim capacity PASS
+   or consume other projects' reserves from those observations alone.
+2. **Custody and build only after that GO:** verify the externally reviewed bundle
+   digest and exact tar allowlist before placing its files in Root-controlled
+   non-symlink staging. No extraction of unchecked paths as Root. The base image
+   must already exist locally under exact `407606…` ID. Use only the four-file
+   build subtree and its pinned Dockerfile, without added args/labels/steps.
+   Root must verify the chosen builder consumes that local image without a
+   registry fetch; `--network none` alone does not prevent registry resolution.
+   `--pull=false` is not permission to fetch a missing base or change builder.
+   If the local builder cannot do this, stop for Root review; no silent fallback.
+   Capture actual new image ID from the builder. Do not start any container.
+3. **Actual image evidence:** inspect exact new ID, platform and full Config;
+   require unchanged base Config, original base layers plus exactly three COPY
+   diffIDs, expected order and three byte hashes. Run the reviewed bounded
+   `image_gate` against the actual export, not a fabricated tar. Preserve its
+   receipt and reject unsupported export format rather than weakening checks.
+   No new image digest is predeclared by this source package.
+4. **Fresh profile/forward GO:** only after image evidence and current protected
+   facts pass, Root assembles its private profile and GO. The profile contains
+   exact handler/probe/base/new-image IDs and actual `/data` filesystem identity
+   plus reviewed X5 free-space floor. The GO uses a new 32-hex release ID, exact
+   current CID/image/start/restart/runtime hash, four layer-file and rendered
+   Compose hashes, current read-only DB lineage, actual parent custody, capacity
+   floor and fresh owner/build timestamps. No supplied sample/static values
+   confer authority. The schema and checks are the reviewed controller source;
+   the old live-probe receipt is evidence, not a replacement for fresh admission.
+5. **Single forward:** invoke the fixed Root-owned handler once with `--activate`.
+   It durably records intent, changes only the unique `sim-api.image` token and
+   recreates only `sim-api` without dependencies, build or pull. Preserve every
+   other field/service. A timeout, expiry, drift or missing completion means stop
+   and review, never repeat automatically. Cold start may briefly interrupt API.
+6. **Acceptance:** require actual new CID/image/module hashes, restart0, healthy,
+   stable normalized runtime and all four layers except the single pin delta,
+   readiness200, unauthenticated internal request401, actual TLS/DB lineage,
+   X5/root margins and a completion receipt. Verify authenticated application
+   behavior using separately approved synthetic requests; do not erase an account
+   or force a production PostgreSQL outage for this release test.
+7. **Separate finite reverse if required:** preserve the base image and activation
+   intent evidence. Obtain a new Root `rollback` GO for the same release, current
+   CID/process/config and **current** matching lineage. Invoke once with
+   `--rollback`; only the exact reviewed prior image/pin may return. If forward
+   never recreated and the original service is still healthy, reverse may repair
+   the pin only. If lineage cannot be verified, the container is dead or continuity
+   changed, stop for separate Root recovery. Never restore old DB/data/credentials/
+   epochs/checkpoints/journals, reset/enroll, bypass auth or retry business work.
+
+No one may copy the forward GO into reverse, treat a receipt as perpetual GO, or
+claim that source/unit acceptance proves actual image/export/start acceptance.

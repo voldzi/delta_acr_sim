@@ -2,6 +2,13 @@
 
 Status: **Proposed / offline handler prepared; blocked pending independent review and exact Root GO**. 2026-10-28.
 
+Update: Root reports separate human approval of the finite one-off protected
+deployment/image-only reverse capability, and independent local-source review
+of `c00929e`. Root also reports a successful single read-only live TLS/lineage
+probe against the unchanged old container. These facts do not approve a yet
+unbuilt candidate image or replace fresh Root capacity/build/admission gates.
+The inert bundle and exact forward/reverse sequence are mapped in runbook 22.
+
 ## Observed boundary
 
 SIM API runs the normal image entrypoint and `node apps/simulator-api/dist/index.js`,
