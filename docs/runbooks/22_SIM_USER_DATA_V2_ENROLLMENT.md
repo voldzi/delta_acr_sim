@@ -1209,3 +1209,30 @@ already-sorted current amendment rejection);
 baseline three groups also pass. The unit fixture mocks the fixed actual
 preimage hash; therefore it is **not** independent actual production preimage
 or Root E2E proof. Production acceptance remains the Root operation above.
+
+#### Root-reported actual SIM acceptance — 2026-10-28 14:41 UTC (16:41 Prague)
+
+Root infrastructure operator reported actual controller `0074f5c9...` invocation
+`--accept-existing-dns` exited 0 with `existing_candidate_accepted` and
+`appUpExecuted:false`. Actual image:
+`sha256:0e6b989a135cf618cd02903a54b76a272f4ed574b73005a2c502c7ce304f15cd`;
+CID `3d399cbc728a605a458fae526206cd9af8f2167fcf6c4fa18cb513d19d7a3649`.
+Root's exact new profile/amendment/fresh GO and actual full image, strict model,
+canonical whole-runtime hash, readiness/auth, compiled modules, TLS/database
+lineage, filesystem, inverse pin/Compose checks passed. The distinct
+`78a7cc8faa074cb284d6c3523f03ee38-dns-post-acceptance.json` was actually written.
+
+Original 46af profile/GO/intent/failed invocation bytes were preserved; original
+46af and intermediate 87a source archives retained. The first forward attempt
+remains recorded as failed; it was not rewritten as success. The sole actual app
+up started the candidate at 14:01:58 UTC; post-acceptance performed no second up.
+The separate fresh rollback GO file is absent and no reverse was executed.
+Root's final wider service-readiness/PostgreSQL checks were still in progress
+when this acceptance was reported; do not infer their completion here.
+
+This delivers the scoped SIM PostgreSQL-disconnect observer image and its actual
+deployment acceptance. It does **not** claim production fault injection, a real
+production COMMIT-ack-loss test, proof of all future database failure recovery,
+or acceptance of the separate COP release. Evidence owner is Root infrastructure
+chat `019f7987-cd92-7cf3-8503-e31bf9f8867c`; this SIM note records its report,
+not an independent replay or fabricated copy of the protected host receipt.
