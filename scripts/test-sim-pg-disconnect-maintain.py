@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 from types import SimpleNamespace
+from contextlib import redirect_stdout
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 spec=importlib.util.spec_from_file_location('maintain',Path(__file__).with_name('sim-pg-disconnect-maintain.py'))
@@ -111,6 +113,28 @@ class MaintainTests(unittest.TestCase):
   source=Path(m.__file__).read_text();main=source[source.index('def main():'):]
   self.assertLess(main.index('critical_service_gate(before,'),main.index('intent_then_pin(action,'))
   self.assertLess(main.index('critical_service_gate(check,'),main.index("PHASE='recreate';command("))
+ def test_slow_temp_pin_fsync_and_final_cas_expiry_never_rename(self):
+  for slow_stage in ['temp_fsync','final_cas']:
+   with self.subTest(stage=slow_stage),TemporaryDirectory(prefix='sim-pin-unit-') as directory:
+    parent=Path(directory);pin=parent/'pin.json';pin.write_bytes(b'old')
+    profile,go,files=self.approval();clock=[120];reads=[0];real_fsync=os.fsync
+    def pin_read(_go):
+     reads[0]+=1
+     if slow_stage=='final_cas' and reads[0]==3:clock[0]=161
+     return os.open(parent,os.O_RDONLY|os.O_DIRECTORY),pin.read_bytes(),pin.stat()
+    def slow_fsync(fd):
+     real_fsync(fd)
+     if slow_stage=='temp_fsync':clock[0]=161
+    with patch.object(m,'PIN',pin),patch.object(m,'pin_read',side_effect=pin_read),patch.object(m.os,'fsync',side_effect=slow_fsync),patch.object(m.os,'replace') as rename,patch.object(m,'protected',side_effect=lambda path:files[path]),patch.object(m.time,'time',side_effect=lambda:clock[0]),patch.object(m,'inspect',return_value={}),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),self.assertRaisesRegex(m.Stop,'OWNER_ACTIVITY_REVIEW_EXPIRED'):
+     m.replace_pin(profile,go,b'old',b'new')
+    rename.assert_not_called();self.assertEqual(pin.read_bytes(),b'old');self.assertEqual(list(parent.iterdir()),[pin])
+ def test_cli_tar_and_unicode_parser_failures_emit_only_bounded_code(self):
+  for error in [tarfile.ReadError('private tar path secret'),tarfile.HeaderError('private header secret'),UnicodeDecodeError('utf8',b'\xff',0,1,'private secret')]:
+   out=io.StringIO()
+   with self.subTest(error=type(error).__name__),patch.object(m,'main',side_effect=error),redirect_stdout(out),self.assertRaises(SystemExit) as stopped:m.run_cli()
+   self.assertEqual(stopped.exception.code,2)
+   self.assertEqual(json.loads(out.getvalue()),{'status':'stopped_requires_review','automaticRetry':False,'code':'SIM_MAINTAIN_FAILED_DETAILS_WITHHELD','phase':'preflight'})
+   self.assertNotIn('secret',out.getvalue())
  def approval(self):
   profile={'contract':'sim-image-only-root-profile-v1','handlerSha256':m.sha(b'handler'),'probeSha256':m.sha(b'probe'),'candidateImage':'sha256:'+'a'*64,'baseImage':m.BASE,'dataFilesystem':{'minimumFreeBytesX5':2147483648}}
   files={m.ROOT/'profile.json':m.encoded(profile),m.SOURCE/'sim-pg-disconnect-maintain.py':b'handler',m.SOURCE/'sim-maintenance-lineage-probe.mjs':b'probe'}

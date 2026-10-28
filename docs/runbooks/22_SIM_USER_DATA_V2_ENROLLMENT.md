@@ -747,7 +747,13 @@ differ in that field alone and raw bytes are exactly reversible. Existing pin
 owner/mode are preserved via a fixed anchored directory fd and CAS check, not
 directory chmod. A durable Root-private intent receipt precedes mutation. Fresh
 GO/build-owner review is re-evaluated after slow preflights, after receipt fsync,
-immediately before pin mutation and immediately before recreate. Only
+immediately before pin mutation and immediately before recreate. The pin writer
+also repeats the fixed protected profile/GO and capacity/activity gates **after
+temporary-pin fsync**, repeats live-pin CAS after potentially slow protected
+reads, and checks approval age immediately before the live rename. Tests for
+both slow temp fsync and slow final CAS prove zero rename and unchanged live pin.
+Tar/header/Unicode parser errors are emitted as a fixed bounded failure code,
+never as a raw traceback. Only
 the fixed `sim-api` service is recreated with no deps/build/pull; it is never
 retried. Postchecks require new image/CID, healthy state, stable runtime config,
 module bytes, readiness/auth and matching current lineage before completion.
@@ -763,7 +769,7 @@ current container cannot supply verified lineage (including when it is dead),
 rollback is deliberately blocked for separate Root recovery; no fallback observer
 identity/container or re-enrollment is introduced.
 
-Offline unit coverage: sixteen handler groups, twelve probe checks, and three
+Offline unit coverage: eighteen handler groups, twelve probe checks, and three
 baseline groups. Added negative cases cover latent Compose privilege/mount/network/
 resource drift and unknown fields, filesystem identity/root fallback/symlink and
 capacity, late GO freshness, hostile tar extensions/budgets, stalled reads and
@@ -772,3 +778,8 @@ a scaled 120ms close watchdog are tested in local children. These are not a full
 end-to-end test, not production permission, and not proof of a built image. Root
 must review the new authority, exact source SHAs and remaining gaps before a
 separate build/activation GO. No server action occurred during preparation.
+
+Captured execution outputs (not just declared counts) are under
+`docs/testing/receipts/sim-maintenance-20261028-*.json`. The real PostgreSQL
+receipt includes `fixtureRemoved: true`, emitted only after cleanup verification.
+These local receipts are not signed production admission or server acceptance.

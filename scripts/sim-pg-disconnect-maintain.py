@@ -68,6 +68,9 @@ def protected(path):
   a=os.fstat(fd);raw=os.read(fd,1048577);b=os.fstat(fd)
   need(stable_stat(a)==stable_stat(b) and len(raw)==a.st_size and os.lstat(path).st_ino==a.st_ino,'PROTECTED_FILE_CHANGED');return raw
  finally:os.close(fd)
+def validate_go_age(go):
+ now=time.time();need(type(go['createdAt']) is int and type(go['expiresAt']) is int and 0<go['expiresAt']-go['createdAt']<=900 and go['createdAt']<=now<go['expiresAt'],'GO_EXPIRED')
+ need(all(type(go[k]) is int and 0<=now-go[k]<=60 for k in ['capacityReviewedAt','buildIdleReviewedAt']),'OWNER_ACTIVITY_REVIEW_EXPIRED')
 def profile_and_go(action):
  profile=json.loads(protected(ROOT/'profile.json'));go=json.loads(protected(ROOT/'go.json'))
  need(set(profile)=={'contract','handlerSha256','probeSha256','candidateImage','baseImage','dataFilesystem'} and profile['contract']=='sim-image-only-root-profile-v1','PROFILE')
@@ -76,13 +79,13 @@ def profile_and_go(action):
  need(sha(protected(SOURCE/'sim-maintenance-lineage-probe.mjs'))==profile['probeSha256'],'PROBE_CHANGED')
  expected={'contract','action','releaseId','profileSha256','createdAt','expiresAt','expectedCid','expectedImage','expectedStartedAt','expectedRestartCount','runtimeSha256','composeSha256','layerFileSha256','lineage','pinParentMetadata','minimumFreeBytes','capacityReviewedAt','buildIdleReviewedAt'}
  need(set(go)==expected and go['contract']=='sim-image-only-root-go-v1' and go['action']==action,'GO_SCHEMA')
- now=time.time();need(isinstance(go['createdAt'],int) and isinstance(go['expiresAt'],int) and 0<go['expiresAt']-go['createdAt']<=900 and go['createdAt']<=now<go['expiresAt'],'GO_EXPIRED')
- need(all(isinstance(go[k],int) and 0<=now-go[k]<=60 for k in ['capacityReviewedAt','buildIdleReviewedAt']),'OWNER_ACTIVITY_REVIEW_EXPIRED')
+ validate_go_age(go)
  need(re.fullmatch('[0-9a-f]{32}',go['releaseId']) and re.fullmatch('[0-9a-f]{64}',go['expectedCid']),'GO_IDENTITY')
  need(go['expectedImage']==BASE if action=='activate' else go['expectedImage'] in {BASE,profile['candidateImage']},'GO_IMAGE_ACTION')
  need(go['profileSha256']==sha(protected(ROOT/'profile.json')),'PROFILE_GO_MISMATCH')
  need(set(go['lineage'])=={'contract','verified','binding','config','journal'} and go['lineage']['contract']=='sim-maintenance-readonly-lineage-v1' and go['lineage']['verified'] is True,'GO_LINEAGE')
  need(set(go['layerFileSha256'])==set(map(str,LAYERS)),'GO_LAYERS')
+ validate_go_age(go) # Protected reads above can themselves consume the lease.
  return profile,go
 def normalized_runtime(c):
  x=copy.deepcopy({k:c.get(k) for k in ['Config','HostConfig','Mounts']})
@@ -116,7 +119,7 @@ def changed_pin(raw,old,new):
  need(raw.count(old_bytes)==1,'PIN_IMAGE_NOT_UNIQUE')
  out=raw.replace(old_bytes,new_bytes,1);expected=copy.deepcopy(obj);expected['services']['sim-api']['image']=new
  need(json.loads(out)==expected,'PIN_SEMANTIC_DRIFT');return out
-def replace_pin(go,expected,replacement):
+def replace_pin(profile,go,expected,replacement):
  fd,raw,meta=pin_read(go);temp='.sim-maintain-'+uuid.uuid4().hex
  try:
   need(raw==expected,'PIN_CAS_DRIFT')
@@ -125,9 +128,19 @@ def replace_pin(go,expected,replacement):
    os.fchown(f,meta.st_uid,meta.st_gid);os.fchmod(f,meta.st_mode&0o777)
    with os.fdopen(f,'wb',closefd=False) as h:h.write(replacement);h.flush();os.fsync(f)
   finally:os.close(f)
+  # temp-file fsync can block. Re-read the actual protected profile/GO and
+  # filesystem/build gates, not a caller-provided success callback/boolean.
+  fresh_mutation_gate(go['action'],profile,go)
   fd2,again,_meta=pin_read(go)
   try:need(again==expected,'PIN_CAS_DRIFT')
   finally:os.close(fd2)
+  need(profile_and_go(go['action'])==(profile,go),'PRE_RENAME_GO_DRIFT')
+  # The protected reads above may be slow: repeat CAS after them, then perform
+  # the final in-memory age check with no intervening file/process I/O.
+  fd3,again,_meta=pin_read(go)
+  try:need(again==expected,'PIN_CAS_DRIFT')
+  finally:os.close(fd3)
+  validate_go_age(go)
   os.replace(temp,PIN.name,src_dir_fd=fd,dst_dir_fd=fd);os.fsync(fd)
  finally:
   try:os.unlink(temp,dir_fd=fd)
@@ -389,7 +402,7 @@ def intent_then_pin(action,profile,go,path,value,raw,replacement):
  fresh_mutation_gate(action,profile,go)
  receipt(path,value)
  fresh_mutation_gate(action,profile,go)
- replace_pin(go,raw,replacement)
+ replace_pin(profile,go,raw,replacement)
 def main():
  global PHASE
  need(os.geteuid()==0 and socket.gethostname().split('.')[0]=='docker','ROOT_HOST')
@@ -443,8 +456,9 @@ def main():
   receipt(ROOT/(go['releaseId']+'-'+action+'-complete.json'),{'completed':True,'cid':c['Id'],'image':new,'lineage':go['lineage'],'dataRestored':False})
   print(json.dumps({'status':'completed','action':action,'image':new,'cid':c['Id']}))
  finally:os.close(lock)
-if __name__=='__main__':
+def run_cli():
  try:main()
- except (Stop,OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError) as error:
+ except (Stop,OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError,tarfile.TarError,UnicodeError) as error:
   code=str(error) if isinstance(error,Stop) and re.fullmatch('[A-Z_]{1,80}',str(error)) else 'SIM_MAINTAIN_FAILED_DETAILS_WITHHELD'
   print(json.dumps({'status':'stopped_requires_review','automaticRetry':False,'code':code,'phase':PHASE}));sys.exit(2)
+if __name__=='__main__':run_cli()

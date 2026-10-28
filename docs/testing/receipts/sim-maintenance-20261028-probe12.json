@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "node24 scripts/test-sim-maintenance-probe.mjs",
+  "scope": "pure actual production TLS builder/options with synthetic CA string; actual 12s connect watchdog and scaled 120ms end watchdog; no production TLS wire acceptance",
+  "exitCode": 0,
+  "toolWaitWallTimeSeconds": 10.000480458,
+  "combinedOutput": "{\"offlineProbeChecks\":12,\"productionTlsWireTest\":false,\"productionWatchdogMs\":12000}\n"
+}
