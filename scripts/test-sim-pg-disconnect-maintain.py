@@ -6,14 +6,113 @@ import json
 from pathlib import Path
 import tarfile
 import unittest
+import os
+import subprocess
+import sys
+import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec=importlib.util.spec_from_file_location('maintain',Path(__file__).with_name('sim-pg-disconnect-maintain.py'))
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class MaintainTests(unittest.TestCase):
+ def critical_fixture(self):
+  cfg={'Env':['FIXED=value'],'Cmd':['node','entry.js'],'Entrypoint':['docker-entrypoint.sh'],'User':'','WorkingDir':'/app','Hostname':'b'*12}
+  h={'ShmSize':67108864,'IpcMode':'private','Runtime':'runc','CgroupnsMode':'private','ConsoleSize':[0,0],
+   'MaskedPaths':['/proc/acpi','/proc/asound','/proc/interrupts','/proc/kcore','/proc/keys','/proc/latency_stats','/proc/timer_list','/proc/timer_stats','/proc/sched_debug','/proc/scsi','/sys/firmware','/sys/devices/virtual/powercap'],
+   'ReadonlyPaths':['/proc/bus','/proc/fs','/proc/irq','/proc/sys','/proc/sysrq-trigger'],
+   'LogConfig':{'Type':'json-file','Config':{}},'RestartPolicy':{'Name':'no','MaximumRetryCount':0},'NetworkMode':'sim_default',
+   'Binds':['/srv/x5-production/data/sim:/data:rw']}
+  c={'Id':'b'*64,'Image':m.BASE,'Config':cfg,'HostConfig':h,'Mounts':[{'Source':'/srv/x5-production/data/sim','Destination':'/data','RW':True,'Type':'bind'}],
+   'NetworkSettings':{'Networks':{'sim_default':{'Aliases':[m.NAME,'sim-api']}}}}
+  compose={'services':{'sim-api':{'container_name':m.NAME,'image':m.BASE,'environment':{},'volumes':[{'type':'bind','source':'/srv/x5-production/data/sim','target':'/data'}],'networks':{'default':{}}}},'networks':{'default':{'name':'sim_default'}}}
+  return compose,c,{'Config':{k:v for k,v in cfg.items() if k!='Hostname'}}
+ def test_full_critical_parity_rejects_latent_privilege_mount_network_resource_and_unknown_fields(self):
+  compose,c,image=self.critical_fixture();m.critical_service_gate(compose,c,image)
+  for key,value in [('privileged',True),('read_only',True),('mem_limit',123),('cap_add',['SYS_ADMIN']),('ports',['4000:4000']),('sysctls',{}),('unknown',False),('healthcheck',{'test':['NONE']})]:
+   bad=copy.deepcopy(compose);bad['services']['sim-api'][key]=value
+   with self.subTest(key=key),self.assertRaises(m.Stop):m.critical_service_gate(bad,c,image)
+  for mutate in [lambda s:s['volumes'][0].update(source='/other'),lambda s:s['volumes'][0].update(read_only=True),lambda s:s.update(networks={'default':{'aliases':['extra']}})]:
+   bad=copy.deepcopy(compose);mutate(bad['services']['sim-api'])
+   with self.assertRaises(m.Stop):m.critical_service_gate(bad,c,image)
+  for key,value in [('UnknownFutureEscape',False),('Privileged',True),('NetworkMode','host'),('LogConfig',{'Type':'none','Config':{}})]:
+   bad=copy.deepcopy(c);bad['HostConfig'][key]=value
+   with self.subTest(host=key),self.assertRaises(m.Stop):m.critical_service_gate(compose,bad,image)
+ def test_filesystem_identity_and_both_capacity_floors_are_mandatory(self):
+  identity={'uuid':m.X5_UUID,'mountId':'20','sourceInode':100}
+  p={'dataFilesystem':{**identity,'minimumFreeBytesX5':2147483648}};g={'minimumFreeBytes':2147483648}
+  with patch.object(m,'filesystem_identity',return_value=identity),patch.object(m.shutil,'disk_usage',return_value=SimpleNamespace(free=3*2147483648)):
+   m.filesystem_gate(p,g,{})
+   for key,value in [('uuid','other'),('mountId','21'),('sourceInode',101)]:
+    changed={**identity,key:value}
+    with self.subTest(key=key),patch.object(m,'filesystem_identity',return_value=changed),self.assertRaises(m.Stop):m.filesystem_gate(p,g,{})
+  for path in [m.X5,'/srv/sim']:
+   with patch.object(m,'filesystem_identity',return_value=identity),patch.object(m.shutil,'disk_usage',side_effect=lambda x:SimpleNamespace(free=1 if x==path else 3*2147483648)),self.assertRaises(m.Stop):m.filesystem_gate(p,g,{})
+ def test_real_mount_identity_rejects_root_fallback_wrong_uuid_missing_mount_and_symlink(self):
+  current={'Mounts':[{'Destination':'/data','Type':'bind','Source':m.X5+'/data/sim'}]}
+  row='20 1 8:1 / '+m.X5+' rw - ext4 /dev/sdb1 rw\n'
+  def stat_result(path):return SimpleNamespace(st_dev=1 if str(path)=='/' else 2,st_mode=0o40700,st_ino=10,st_uid=0,st_gid=0)
+  with patch.object(m.Path,'is_symlink',return_value=False),patch.object(m.Path,'read_text',return_value=row),patch.object(m,'command',return_value=(m.X5_UUID+'\n').encode()),patch.object(m.os,'stat',side_effect=stat_result):
+   self.assertEqual(m.filesystem_identity(current)['mountId'],'20')
+   with patch.object(m,'command',return_value=b'wrong'),self.assertRaises(m.Stop):m.filesystem_identity(current)
+   with patch.object(m.Path,'read_text',return_value=''),self.assertRaises(m.Stop):m.filesystem_identity(current)
+   with patch.object(m.Path,'is_symlink',return_value=True),self.assertRaises(m.Stop):m.filesystem_identity(current)
+   with patch.object(m.os,'stat',return_value=stat_result('/')),self.assertRaises(m.Stop):m.filesystem_identity(current)
+ def test_freshness_is_rechecked_after_slow_checks_and_durable_intent(self):
+  events=[]
+  with patch.object(m,'inspect',return_value={}),patch.object(m,'filesystem_gate',side_effect=lambda *a:events.append('fs')),patch.object(m,'no_known_active_builds',side_effect=lambda:events.append('build')),patch.object(m,'profile_and_go',side_effect=m.Stop('GO_EXPIRED')),self.assertRaises(m.Stop):m.fresh_mutation_gate('activate',{}, {})
+  self.assertEqual(events,['fs','build'])
+  profile,go,files=self.approval();clock=[120]
+  def slow_fsync(*args):clock[0]=161 # Root capacity/build-owner review was at 100.
+  with patch.object(m,'protected',side_effect=lambda path:files[path]),patch.object(m.time,'time',side_effect=lambda:clock[0]),patch.object(m,'inspect',return_value={}),patch.object(m,'filesystem_gate'),patch.object(m,'no_known_active_builds'),patch.object(m,'receipt',side_effect=slow_fsync) as receipt,patch.object(m,'replace_pin') as pin,self.assertRaises(m.Stop):
+   m.intent_then_pin('activate',profile,go,m.ROOT/'test-intent',{},b'old',b'new')
+  receipt.assert_called_once();pin.assert_not_called()
+ def test_export_rejects_extensions_before_reading_payload_and_budget_truncation(self):
+  for kind in [tarfile.XHDTYPE,tarfile.XGLTYPE,tarfile.GNUTYPE_LONGNAME,tarfile.GNUTYPE_SPARSE]:
+   item=tarfile.TarInfo('extension');item.type=kind;item.size=2**30
+   class HeaderOnly:
+    def __init__(self):self.calls=0
+    def read(self,n):
+     self.calls+=1
+     if self.calls>1:raise AssertionError('extension payload was read')
+     return item.tobuf(format=tarfile.USTAR_FORMAT)
+   reader=HeaderOnly()
+   with self.subTest(kind=kind),self.assertRaises(m.Stop):list(m.exported_layers(reader,4096))
+   self.assertEqual(reader.calls,1)
+  for raw,budget in [(b'\0'*1024,512),(b'\0'*512,2048),(b'\0'*1024+b'x',2048)]:
+   with self.assertRaises(m.Stop):list(m.exported_layers(io.BytesIO(raw),budget))
+ def test_nested_layer_pax_and_xattr_metadata_denied(self):
+  for metadata in [{'SCHILY.xattr.user.test':'x'},{'comment':'unapproved'}]:
+   out=io.BytesIO()
+   with tarfile.open(fileobj=out,mode='w',format=tarfile.PAX_FORMAT) as archive:
+    item=tarfile.TarInfo('app');item.type=tarfile.DIRTYPE;item.mode=0o755;item.pax_headers=metadata;archive.addfile(item)
+   raw=out.getvalue()
+   with self.assertRaises(m.Stop):m.validate_tar(raw,'sha256:'+m.sha(raw),{})
+ def test_export_reader_has_wall_deadline_even_with_hung_writer(self):
+  p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],stdout=subprocess.PIPE)
+  start=time.monotonic()
+  try:
+   with self.assertRaisesRegex(m.Stop,'IMAGE_EXPORT_DEADLINE'):m.DeadlineReader(p.stdout,start+0.1).read(512)
+   self.assertLess(time.monotonic()-start,2)
+  finally:p.kill();p.wait(timeout=5);p.stdout.close()
+ def test_whole_image_gate_kills_hung_export_without_mutation(self):
+  old={'Os':'linux','Architecture':'amd64','Config':{},'RootFS':{'Layers':['base']}}
+  new={**old,'RootFS':{'Layers':['base','one','two','three']},'Size':1}
+  p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],stdout=subprocess.PIPE,start_new_session=True,bufsize=0)
+  try:
+   with patch.object(m,'command',side_effect=[json.dumps([old]).encode(),json.dumps([new]).encode()]) as command,patch.object(m.subprocess,'Popen',return_value=p),patch.object(m,'EXPORT_TIMEOUT',0.1),self.assertRaisesRegex(m.Stop,'IMAGE_EXPORT_DEADLINE'):m.image_gate('candidate')
+   self.assertIsNotNone(p.poll());self.assertLess(p.returncode,0);self.assertTrue(p.stdout.closed)
+   self.assertEqual(command.call_count,2)
+  finally:
+   if p.poll() is None:p.kill();p.wait(timeout=5)
+   p.stdout.close()
+ def test_preflight_critical_gate_precedes_any_pin_or_recreate(self):
+  source=Path(m.__file__).read_text();main=source[source.index('def main():'):]
+  self.assertLess(main.index('critical_service_gate(before,'),main.index('intent_then_pin(action,'))
+  self.assertLess(main.index('critical_service_gate(check,'),main.index("PHASE='recreate';command("))
  def approval(self):
-  profile={'contract':'sim-image-only-root-profile-v1','handlerSha256':m.sha(b'handler'),'probeSha256':m.sha(b'probe'),'candidateImage':'sha256:'+'a'*64,'baseImage':m.BASE}
+  profile={'contract':'sim-image-only-root-profile-v1','handlerSha256':m.sha(b'handler'),'probeSha256':m.sha(b'probe'),'candidateImage':'sha256:'+'a'*64,'baseImage':m.BASE,'dataFilesystem':{'minimumFreeBytesX5':2147483648}}
   files={m.ROOT/'profile.json':m.encoded(profile),m.SOURCE/'sim-pg-disconnect-maintain.py':b'handler',m.SOURCE/'sim-maintenance-lineage-probe.mjs':b'probe'}
   go={'contract':'sim-image-only-root-go-v1','action':'activate','releaseId':'a'*32,'profileSha256':m.sha(files[m.ROOT/'profile.json']),
    'createdAt':100,'expiresAt':200,'expectedCid':'b'*64,'expectedImage':m.BASE,'expectedStartedAt':'synthetic-start','expectedRestartCount':1,'runtimeSha256':'c'*64,'composeSha256':'d'*64,

@@ -73,6 +73,8 @@ def file_digest(path):
 def maintenance_runtime(value):
     result=copy.deepcopy({k:value.get(k) for k in ['Config','HostConfig','Mounts']})
     result['Config'].pop('Image',None)
+    if result['Config'].get('Hostname')==value.get('Id','')[:12]:
+        result['Config']['Hostname']='__docker_generated_hostname__'
     for key in ['com.docker.compose.config-hash','com.docker.compose.image']:
         result['Config'].get('Labels',{}).pop(key,None)
     pairs=[v.split('=',1) for v in result['Config'].get('Env') or []]

@@ -1,6 +1,6 @@
 # ADR 0048: SIM image-only maintenance — proposal, not production authority
 
-Status: **Proposed / blocked pending Root controller identification**. 2026-10-28.
+Status: **Proposed / offline handler prepared; blocked pending independent review and exact Root GO**. 2026-10-28.
 
 ## Observed boundary
 
@@ -57,8 +57,9 @@ New DB grants, identities, credentials, networks, endpoints and administrative D
 writes: **zero**. New host mutation authority: those two operations, plus only
 minimal release receipt bookkeeping explicitly reviewed by Root. No arbitrary
 command/path/image/env callback or boolean owner-acceptance substitute is allowed.
-Root must explicitly approve any new authority before a mutating handler or its
-installer exists. Reuse existing admission signatures only after identifying
+Root accepted preparation of the two-operation handler for offline source review
+only. Root must explicitly approve the new authority before installation/use.
+Reuse existing admission signatures only after identifying
 their real contract; a successful test callback is never production admission.
 
 ## Current executable gate
@@ -69,8 +70,11 @@ digests/IDs/booleans, verifies fixed baseline image/modules, rechecks stable
 identity, and flags capacity pressure without build/cleanup. Tests cover drift,
 secret suppression and denial despite matching image bytes.
 
-Only after Root supplies the real interface may a separate reviewed change bind
-it to the fresh source/image/config snapshot, resolve build activity/capacity,
-and implement the final image-layer and rollback gates in runbook 22. Until then
-the three-file Dockerfile remains unbuilt and activation blocked. Unsafe fusion
-is unrelated and must never be included.
+The new offline handler and fixed read-only lineage probe are described in
+runbook 22. Their filesystem, TLS, deadline, strict pre-recreate parity and fresh
+GO checks now have targeted local negative coverage. This is not an installed
+Root controller nor production permission. Independent frozen-source review,
+actual image-export compatibility, real current-container read-only probe and
+fresh coordinated capacity/build-owner/Root GO remain gates. The three-file
+Dockerfile remains unbuilt and activation blocked. Unsafe fusion is unrelated
+and must never be included.

@@ -4,15 +4,33 @@
  */
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+import {verifyProductionDatabaseTransport} from '/app/deploy/account-safety/database-erasure-guard.mjs';
 const {Client}=createRequire('/app/apps/simulator-api/package.json')('pg');
 const hash=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 const need=x=>{if(!x)throw Error('LINEAGE_REJECTED')};
 const fields=['guard_store_id','target_store_id','incarnation_id','environment_id','reset_epoch','checkpoint_id','restore_generation','source_sha256','identity_sha256'];
 const stable=x=>fields.map(k=>String(x[k]));
-const target=new Client({connectionString:process.env.SIM_USER_DATA_DATABASE_URL,connectionTimeoutMillis:3000,statement_timeout:5000});
-const guard=new Client({connectionString:process.env.SIM_USER_DATA_GUARD_DATABASE_URL,connectionTimeoutMillis:3000,statement_timeout:5000});
-for(const c of [target,guard])c.on('error',()=>{});
+export function maintenanceClientOptions(connectionString,database,ca){
+ // Reuse the actual PURE bootstrap validator, never factory init/replay.
+ verifyProductionDatabaseTransport(connectionString,database,{...process.env,NODE_ENV:'production'});
+ need(typeof ca==='string'&&ca.includes('-----BEGIN CERTIFICATE-----')&&ca.includes('-----END CERTIFICATE-----'));
+ const u=new URL(connectionString);
+ // Do not pass connectionString alongside ssl: pg's URI parser could overwrite
+ // explicit TLS options. Keep exact reviewed URI identity and mounted CA bytes.
+ return {host:u.hostname,port:Number(u.port),database:u.pathname.slice(1),
+  user:decodeURIComponent(u.username),password:decodeURIComponent(u.password),
+  ssl:{rejectUnauthorized:true,ca,servername:'haproxy.home.cz'},
+  connectionTimeoutMillis:3000,statement_timeout:5000};
+}
+const PROBE_DEADLINE_MS=12000;
+const watchdog=setTimeout(()=>{console.log(JSON.stringify({verified:false,code:'PROBE_DEADLINE'}));process.exit(2)},PROBE_DEADLINE_MS);
+let target,guard,result;
 try{
+ const ca=readFileSync('/etc/csm-sim/postgresql-ca.pem','utf8');
+ target=new Client(maintenanceClientOptions(process.env.SIM_USER_DATA_DATABASE_URL,'sim_user_data',ca));
+ guard=new Client(maintenanceClientOptions(process.env.SIM_USER_DATA_GUARD_DATABASE_URL,'cop_account_safety_guard',ca));
+ for(const c of [target,guard])c.on('error',()=>{});
  const expected=JSON.parse(process.env.SIM_USER_DATA_CONTINUITY_BINDING);
  await target.connect();await guard.connect();
  for(const c of [target,guard])await c.query('BEGIN READ ONLY');
@@ -38,6 +56,12 @@ try{
  };
  const before=await snapshot(),after=await snapshot();need(hash(before)===hash(after));
  for(const c of [target,guard])await c.query('COMMIT');
- console.log(JSON.stringify({contract:'sim-maintenance-readonly-lineage-v1',verified:true,...after}));
-}catch{console.log(JSON.stringify({verified:false,code:'READONLY_LINEAGE_FAILED'}));process.exitCode=2}
-finally{await target.end().catch(()=>{});await guard.end().catch(()=>{})}
+ result={contract:'sim-maintenance-readonly-lineage-v1',verified:true,...after};
+}catch{result={verified:false,code:'READONLY_LINEAGE_FAILED'};process.exitCode=2}
+finally{
+ try{await Promise.all([target,guard].filter(Boolean).map(c=>c.end()))}
+ catch{result={verified:false,code:'READONLY_LINEAGE_CLOSE_FAILED'};process.exitCode=2}
+ clearTimeout(watchdog);
+}
+// No partial success before close. The hard watchdog also bounds stalled end().
+console.log(JSON.stringify(result));

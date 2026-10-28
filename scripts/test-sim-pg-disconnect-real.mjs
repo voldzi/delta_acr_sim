@@ -126,13 +126,22 @@ try{
   const make=async(t=tr,g=gr)=>{const a=await createSimUserDataAuthority({guardPool:g,targetPool:t,component:'sim_user_data',binding:b});return new UserLedger(t,{mode:'production-sim-user-data-v1',environmentId:b.environment_id,resetEpoch:b.reset_epoch,tokensNotBefore:1},'sim_user_data',a)};
   const live=await make();await live.tx(async()=>{});check('actual production-mode factory/ledger with exact roles and two DBs',true);
   const originalProbe=await readFile(new URL('./sim-maintenance-lineage-probe.mjs',import.meta.url),'utf8');
-  const probe=originalProbe.replace("createRequire('/app/apps/simulator-api/package.json')",'createRequire('+JSON.stringify(new URL('../apps/simulator-api/package.json',import.meta.url).href)+')');
-  assert.notEqual(probe,originalProbe); // Only pg module resolution differs in the owned Mac fixture.
+  // TEST-ONLY transport adapter: real local PG uses Unix sockets, not HAProxy TLS.
+  // Every lineage query/predicate and cleanup/watchdog remains the actual source.
+  // Production TLS options are tested separately; this is NOT TLS-wire acceptance.
+  const exactReplace=(source,old,value)=>{assert.equal(source.split(old).length,2);return source.replace(old,value)};
+  let probe=exactReplace(originalProbe,"createRequire('/app/apps/simulator-api/package.json')",'createRequire('+JSON.stringify(new URL('../apps/simulator-api/package.json',import.meta.url).href)+')');
+  probe=exactReplace(probe,"from '/app/deploy/account-safety/database-erasure-guard.mjs'",'from '+JSON.stringify(new URL('../deploy/account-safety/database-erasure-guard.mjs',import.meta.url).href));
+  probe=exactReplace(probe,"const ca=readFileSync('/etc/csm-sim/postgresql-ca.pem','utf8');","const ca='test-only Unix fixture';");
+  for(const [variable,database,user] of [['target','sim_user_data','sim_user_data_runtime'],['guard','cop_account_safety_guard','sim_user_data_guard_runtime']]){
+   const envName=variable==='target'?'SIM_USER_DATA_DATABASE_URL':'SIM_USER_DATA_GUARD_DATABASE_URL';
+   probe=exactReplace(probe,variable+"=new Client(maintenanceClientOptions(process.env."+envName+",'"+database+"',ca));",variable+'=new Client('+JSON.stringify({...config,database,user})+');');
+  }
   const runProbe=async()=>JSON.parse((await exec(process.execPath,['--input-type=module','-e',probe],{env:{...env,
    SIM_USER_DATA_DATABASE_URL:'postgresql:///sim_user_data?host='+encodeURIComponent(socket)+'&user=sim_user_data_runtime',
    SIM_USER_DATA_GUARD_DATABASE_URL:'postgresql:///cop_account_safety_guard?host='+encodeURIComponent(socket)+'&user=sim_user_data_guard_runtime',
    SIM_USER_DATA_CONTINUITY_BINDING:JSON.stringify(b),SIM_USER_DATA_TOKENS_NOT_BEFORE:'1'}})).stdout);
-  const probeResult=await runProbe();check('actual read-only maintenance probe matches two DBs',probeResult.verified===true&&Object.keys(probeResult).sort().join(',')==='binding,config,contract,journal,verified');
+  const probeResult=await runProbe();check('read-only maintenance lineage predicates match two real Unix fixture DBs (not production TLS)',probeResult.verified===true&&Object.keys(probeResult).sort().join(',')==='binding,config,contract,journal,verified');
   await ga.query("UPDATE sim_erasure_guard_v2.user_data_checkpoint SET state='quarantined'");
   let admitted=0;await assert.rejects(()=>live.tx(async()=>{admitted++}));assert.equal(admitted,0);
   await assert.rejects(()=>runProbe());check('actual read-only maintenance probe rejects quarantine',true);
