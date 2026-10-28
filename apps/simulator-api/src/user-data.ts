@@ -6,6 +6,7 @@ import { mkdir, lstat, realpath, readdir, unlink, rmdir, writeFile, open, readFi
 import { join } from "node:path";
 import { UserLedger } from "../../../packages/sim-user-data/ledger.mjs";
 import { loadSimUserAuthority } from "../../../packages/sim-user-data/bootstrap.mjs";
+import { attachSimPgErrorObservers } from "../../../packages/sim-user-data/pg-errors.mjs";
 import { canonicalOwnerKey, simOwnerAlias, signSimOwner, SIM_USER_DATA_CONTRACT, SIM_USER_SCOPE } from "../../../packages/sim-user-data/claims.mjs";
 import { verifyCleanActor } from "../../../packages/clean-lifecycle/http.mjs";
 import { completedReplayEnabled } from "../../../packages/clean-lifecycle/completed-replay.mjs";
@@ -133,7 +134,7 @@ export async function createOwnedSimulatorApp(config: ApiConfig, s: SimUserDataS
     }
   }
   const pool = new pg.Pool({ connectionString: s.databaseUrl, max: 8, connectionTimeoutMillis: 1500 });
-  pool.on("error", () => {});
+  attachSimPgErrorObservers(pool, "target");
   const continuity = await loadSimUserAuthority({
     Pool: pg.Pool,
     targetPool: pool,

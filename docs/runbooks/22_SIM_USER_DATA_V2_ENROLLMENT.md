@@ -555,3 +555,37 @@ user snapshots, disable guard triggers, relax signatures or clear tombstones.
 Preserve anonymous current-month financial totals. Reverting source/images
 alone is not a safe database rollback; Root must explicitly select a compatible
 enrolled image or repair/replay under the same authority.
+## Source-only disconnect robustness candidate (2026-10-28)
+
+Branch `codex/sim-pg-client-disconnect` is **not deployed**. The candidate adds
+process-survival observers for idle-pool and checked-out `Client` errors on the
+SIM app's target pool and its independent guard pool. Router guard behavior is
+unchanged. No error object, query, connection string or values enter diagnostics:
+only a fixed event, target/guard lane, fixed kind and allowlisted SQLSTATE.
+
+The observer neither retries queries nor changes a rejected promise into success.
+The authority factory and ledger are byte-identical to the audited production
+sources. Pool ceilings, TTLs, lock/check ordering, roles, profiles, credentials,
+continuity markers and billing behavior are not changed. A failed guard commit
+can occur **after** target commit: the failed HTTP/worker operation must not be
+blindly retried. Disconnect during target COMMIT is also an uncertain outcome;
+attempted ROLLBACK does not prove the server did not commit.
+
+`node --test scripts/test-sim-pg-disconnect.mjs` exercises actual authority/ledger
+code with synthetic EventEmitter/query doubles for both pools: idle and borrowed
+client errors, rejected busy queries, commit disconnect without replay, fresh
+revalidation after recovery, quarantine/config refusal, private-error suppression
+and unchanged controlled source hashes. This is **not** an actual PostgreSQL
+socket-termination, pool-eviction or restore acceptance test.
+
+Before release: peer review, scoped compile/full application checks, an isolated
+PostgreSQL test including real borrowed sockets/commit ambiguity and pool eviction,
+and exact image/config/continuity release review remain required. This candidate
+does not authorize production restart, migration or a new outage. Wait for the
+infrastructure owner's PG GREEN and separate application release approval.
+
+Rollback proposal: retain the current pinned image/config; if this candidate is
+later approved, revert only via the existing protected application release path.
+No database, journal or continuity marker rollback is part of it. No migration or
+data restoration is necessary; reverting also restores the old disconnect-crash
+risk. This text is a source/test proposal, not a performed deployment or rollback.

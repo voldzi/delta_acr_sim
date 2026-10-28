@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { createSimUserDataAuthority } from "./authority.mjs";
+import { attachSimPgErrorObservers } from "./pg-errors.mjs";
 import { verifyProductionDatabaseTransport } from "../../deploy/account-safety/database-erasure-guard.mjs";
 export function runtimeIdentityFingerprint(component, identity) {
   const fields =
@@ -41,7 +42,8 @@ export async function loadSimUserAuthority({ Pool, targetPool, targetDatabaseUrl
   verifyProductionDatabaseTransport(url, "cop_account_safety_guard", { ...env, NODE_ENV: "production" });
   verifyProductionDatabaseTransport(targetDatabaseUrl, component === "sim_user_data" ? "sim_user_data" : "sim_ai_router", { ...env, NODE_ENV: "production" });
   const guardPool = new Pool({ connectionString: url, max: 4, connectionTimeoutMillis: 2000, statement_timeout: 10000 });
-  guardPool.on("error", () => {});
+  if (component === "sim_user_data") attachSimPgErrorObservers(guardPool, "guard");
+  else guardPool.on("error", () => {});
   try {
     const authority = await createSimUserDataAuthority({ guardPool, targetPool, component, binding });
     return { authority, close: () => guardPool.end() };
