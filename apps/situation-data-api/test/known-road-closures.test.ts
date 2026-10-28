@@ -574,6 +574,56 @@ describe("ordinary route engine fences", () => {
     expect(response.routes).toHaveLength(2);
     expect(f.payloads[0].alternates).toBe(1);
   });
+  it("primary-only mapped planning changes only native alternates, never vehicle or closure options", async () => {
+    const p = {
+      version: "sim-mapped-road-profile-v1" as const,
+      intent: "car" as const,
+      coverageAcknowledged: "mapped_restrictions_incomplete" as const,
+      vehicle: { heightM: 1.6, widthM: 1.8, lengthM: 4.2, loadedWeightKg: 1600 }
+    };
+    const payloads: any[] = [];
+    for (const alternatives of [1, 3]) {
+      const f = await fixture();
+      const input = { ...request(), alternatives, vehicleProfile: structuredClone(p) };
+      const original = structuredClone(input);
+      const result = await f.service.route(input);
+      expect(input).toEqual(original);
+      expect(result.query.vehicleProfile).toEqual(p);
+      expect(result.query.alternatives).toBe(alternatives);
+      expect(result.routes[0]!.mappedProfileAssessment!.appliedProfile).toEqual(p);
+      expect(result.routes[0]!.knownClosures!.state).toBe("applied");
+      expect(f.payloads).toHaveLength(1);
+      payloads.push(f.payloads[0]);
+    }
+    expect(payloads.map((p) => p.alternates)).toEqual([0, 2]);
+    const primaryOnly = structuredClone(payloads[0]);
+    primaryOnly.alternates = 2;
+    expect(primaryOnly).toEqual(payloads[1]);
+    expect(payloads[0].costing).toBe("auto");
+    expect(payloads[0].costing_options.auto).toMatchObject({
+      height: 1.6, width: 1.8, length: 4.2, weight: 1.6,
+      ignore_access: false, ignore_restrictions: false, ignore_oneways: false,
+      ignore_closures: false, ignore_non_vehicular_restrictions: false,
+      shortest: false, use_tracks: 0
+    });
+    expect(payloads[0].exclude_polygons).toEqual([polygon]);
+  });
+  it.each([1, 3])("mapped planning with %s requested variants still rejects warning 401 without retry or fallback", async (alternatives) => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      f.payloads.push(JSON.parse(String(init?.body)));
+      return Response.json({ ...reply(), warnings: [{ code: 401 }] });
+    });
+    const p = { version: "sim-mapped-road-profile-v1" as const, intent: "car" as const, coverageAcknowledged: "mapped_restrictions_incomplete" as const };
+    await expect(f.service.route({ ...request(), alternatives, vehicleProfile: p }))
+      .rejects.toMatchObject({ status: 422, code: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED" });
+    expect(f.payloads).toHaveLength(1);
+    expect(f.payloads[0].alternates).toBe(alternatives - 1);
+    expect(f.payloads[0].costing).toBe("auto");
+    expect(f.payloads[0].costing_options.auto.ignore_access).toBe(false);
+    expect(f.payloads[0].exclude_polygons).toEqual([polygon]);
+  });
   it("fails mapped profiles closed before engine calls when known closure path is disabled", async () => {
     const f = await fixture();
     f.options.enabled = false;
