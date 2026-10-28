@@ -25,7 +25,7 @@ class BundleTests(unittest.TestCase):
   create.assert_not_called()
  def test_oci_variant_changes_only_dockerfile_and_keeps_exact_copy_inputs(self):
   bare=b.collect();oci=b.collect('oci')
-  self.assertEqual(set(bare),set(oci))
+  self.assertEqual(set(oci)-set(bare),set(b.OCI_BUILD_ONLY))
   self.assertEqual({p for p in bare if bare[p]!=oci[p]},{'build/Dockerfile'})
   commands=[line for line in oci['build/Dockerfile'].decode().splitlines() if line and not line.startswith('#')]
   self.assertEqual(commands[0],'FROM sim_reviewed_base')
@@ -35,7 +35,9 @@ class BundleTests(unittest.TestCase):
    manifest=json.load(archive.extractfile('manifest.json'))
   base=manifest['namedBaseContext'];self.assertEqual(base['requiredConfigBlobDigest'],b.BASE)
   self.assertIsNone(base['path']);self.assertIsNone(base['manifestDigest']);self.assertFalse(base['workerIdentityAndStorageVerified']);self.assertFalse(base['bootstrapOrFallbackAllowed'])
-  self.assertIn('6*actualBaseImageSize',manifest['capacityPlan']['x5RequiredFreeFormula'])
+  self.assertIn('4*actualBaseImageSize',manifest['capacityPlan']['x5RequiredFreeFormula'])
+  self.assertIn('10737418240',manifest['capacityPlan']['x5RequiredFreeFormula'])
+  self.assertEqual(base['builderName'],'cop-x5');self.assertEqual(base['builderDriver'],'direct-existing-container-exec')
  def test_actual_build_context_is_exact_ustar_zero_mtime_and_no_extensions(self):
   context=b.build_context(b.collect('oci'))
   self.assertEqual(context[257:263],b'ustar\0')

@@ -85,3 +85,13 @@ actual image-export compatibility, real current-container read-only probe and
 fresh coordinated capacity/build-owner/Root GO remain gates. The three-file
 Dockerfile remains unbuilt and activation blocked. Unsafe fusion is unrelated
 and must never be included.
+
+The subsequent build-only source candidate uses an explicitly acknowledged,
+already-running pinned COP worker through direct buildctl exec, never implicit
+buildx bootstrap. Its finite SIM binding, streaming OCI conversion, private Root
+build GO, common lock, empty per-job auth, network-source denial, fixed 2/10 GiB
+reserve floors and timeout/unknown-completion boundary are specified in runbook22.
+This is a new review candidate, not permission to run it or substitute a worker.
+No app/profile/DB/release operation is a build side effect; actual image and fresh
+release admission remain gates. Sharing does not grant COP release authority to
+SIM, and this SIM-only memory/disk model does not automatically fit COP's image.

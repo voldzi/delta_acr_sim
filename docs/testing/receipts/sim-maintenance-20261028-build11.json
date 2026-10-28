@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-build-sim-pg-maintenance-oci.py",
+  "sourceSha256": "9af67f6a353933563c962950dfdf3c472946c18500f404ba06aa4a29c3930cf9",
+  "scope": "local synthetic tests only; no Docker/worker/production execution",
+  "exitCode": 0,
+  "combinedOutput": "...........\n----------------------------------------------------------------------\nRan 11 tests in 0.162s\n\nOK\n"
+}

@@ -18,6 +18,11 @@ REPO=Path(__file__).resolve().parents[1]
 BASE='sha256:4076069b3f8c935c0cd07ea2bf95d92703270b72197ff2b74a27d1aee8c6bdf0'
 REVIEWED='c00929ec2b5ab3e7250d260ee997d8b411a61827'
 OCI_DOCKERFILE=('deploy/sim-pg-disconnect-oci.Dockerfile','8f75ba8095d38d3ac4e696fd8ce956b9852345d5bef73fcd9ea846a6b3b29c3c')
+OCI_BUILD_ONLY={
+ 'source/build-sim-pg-maintenance-oci.py':('scripts/build-sim-pg-maintenance-oci.py','9af67f6a353933563c962950dfdf3c472946c18500f404ba06aa4a29c3930cf9'),
+ 'source/sim-pg-base-oci.py':('scripts/sim-pg-base-oci.py','3aca7fa0d61aaa01376f4411be2b5ed8f30659de80c43789396ea18418f41d94'),
+ 'evidence/sim-maintenance-20261028-build11.json':('docs/testing/receipts/sim-maintenance-20261028-build11.json','8c8bed06cbb79b207fe274e2f5c334adfe09edcdf4f82f7b8752ad101a9692a9'),
+ 'evidence/sim-maintenance-20261028-converter11.json':('docs/testing/receipts/sim-maintenance-20261028-converter11.json','6258c137793fb494f89acddc642c8be0b71cf02f7b9c6b125ca39d98496a1ab7')}
 # The build subtree has exactly Dockerfile + three COPY inputs. No full repo,
 # .env, auth files, dependency installation or alternate app features enter it.
 PINNED={
@@ -44,7 +49,7 @@ def git(*args):return subprocess.check_output(['git',*args],cwd=REPO,stderr=subp
 def collect(variant='bare'):
  need(variant in {'bare','oci'})
  pinned=dict(PINNED)
- if variant=='oci':pinned['build/Dockerfile']=OCI_DOCKERFILE
+ if variant=='oci':pinned['build/Dockerfile']=OCI_DOCKERFILE;pinned.update(OCI_BUILD_ONLY)
  entries={}
  for target,(relative,expected) in pinned.items():
   p=REPO/relative;need(p.is_file() and not any(x.is_symlink() for x in [p,*p.parents]) and p.stat().st_size<1048576)
@@ -75,12 +80,15 @@ def archive(entries,revision,variant='bare'):
  if variant=='oci':
   manifest['namedBaseContext']={'name':'sim_reviewed_base','scheme':'oci-layout','path':None,'manifestDigest':None,
    'requiredConfigBlobDigest':BASE,'requiredRootfsDiffIds':'exact original base image ordered diffIDs',
-   'requiresActualRootProof':True,'builderName':'sim-x5','builderDriver':'docker-container','workerIdentityAndStorageVerified':False,
+   'requiresActualRootProof':True,'builderName':'cop-x5','builderDriver':'direct-existing-container-exec','workerIdentityAndStorageVerified':False,
+   'clientVersion':'v0.33.1','clientSha256':'7809f0f3e4a85c880b929fa618668048a48bb23d251799f9960150ce9a8d5017',
    'remoteFrontendPullAllowed':False,'bootstrapOrFallbackAllowed':False,'provenanceAndSbom':False}
-  manifest['capacityPlan'].update(rootRequiredFreeFormula='2*actualBaseImageSize + 1073741824 + 6291456 + actualBundleBytes + actualContextBytes + max(2147483648, RootExistingReserve)',
-   x5RequiredFreeFormula='6*actualBaseImageSize + 1073741824 + 33554432 + 6291456 + actualBundleBytes + actualContextBytes + max(2147483648, RootExistingReserve)',
-   exportDiskStagingBytes=None,maximumBaseExportAndLayoutBytesFormula='4*actualBaseImageSize + 33554432',
-   candidateExportDiskStagingBytes=0,requiresReviewedOciConversion=True)
+  manifest['capacityPlan'].update(baseImageSizeBytes=203231596,
+   rootRequiredFreeFormula='4*actualBaseImageSize + 268435456 + max(2147483648, RootExistingReserve)',
+   x5RequiredFreeFormula='4*actualBaseImageSize + 268435456 + max(10737418240, RootExistingReserve)',
+   exportDiskStagingBytes=0,baseSaveArchiveStaged=False,candidateExportDiskStagingBytes=0,
+   baseOciCopyBudgetFormula='2*actualBaseImageSize + 16777216',requiresReviewedOciConversion=True,
+   fixedBuildGoContract='sim-pg-build-only-go-v1',applicationStartAllowed=False)
  payload={**entries,'manifest.json':(json.dumps(manifest,sort_keys=True,indent=2)+'\n').encode()}
  return ustar(payload)
 def main():

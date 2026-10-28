@@ -938,7 +938,10 @@ from Root's actual evidence, not from this local package. Before any build:
   definition custody/hash and current running state without bootstrap. Verify
   its actual state/cache storage is on the independently mounted expected X5
   UUID. A builder definition alone is not worker/storage/idle evidence. Never
-  initialize another builder, switch global defaults or silently reuse COP's.
+  initialize another builder or switch global defaults. The original sim-x5
+  definition did not prove a live worker. The explicit shared-worker variant
+  below is separately scoped to the already-running cop-x50 and COP owner ack;
+  it is not an automatic fallback.
 - Root must separately review the precise finite Docker-save-to-OCI converter
   (including any COP utility proposed for reuse), its complete source/hash,
   bounded export/paths/link handling and zero registry resolution. No converter
@@ -956,19 +959,17 @@ from Root's actual evidence, not from this local package. Before any build:
   `--pull=false` remain insufficient evidence on their own. If support, worker
   state or local context resolution is unknown, stop before build.
 
-The OCI capacity variant deliberately budgets disk export/layout copies. For
-fresh actual base Size `B`, review bundle `C`, actual context tar `T` and Root's
-existing reserves (at least 2 GiB each), require:
-
-- root free `>= 2*B + 1 GiB + 6 MiB + C + T + Rroot`;
-- X5 free `>= 6*B + 1 GiB + 32 MiB + 6 MiB + C + T + Rx5`.
-
-This includes a combined export/layout ceiling `4*B + 32 MiB`, two further
-base-sized worker/transient allocations, 1 GiB scratch/metadata, exact context,
-COPY overhead and untouched reserves. Root must verify/bound the concrete
-converter/builder against that model before using it; unknown/unbounded behavior
-is not capacity PASS. The final candidate image export is still streamed with
-no additional disk staging. Keep the prior image and rollback evidence.
+The original file/archive budget is superseded for the implemented streaming
+variant below. It does not stage a full Docker-save archive or a full candidate
+export archive. Its explicit floors are root **2 GiB**, X5 **10 GiB**, plus before
+preparation `4*B + 256 MiB` working allowance on each filesystem. Before solve,
+after the OCI copy exists, it requires a further `2*B + 256 MiB` above each floor.
+The OCI-copy parser itself caps input/unpacked bytes at `2*B + 16 MiB`, with
+`B=203231596` freshly verified against the exact SIM base. Space floors are
+checked again while streaming and after validation. Existing usage is never
+pruned to pass. This conservative SIM-only model is not a proven 2B-peak budget
+for the much larger COP image. Root must separately accept actual worker/cache
+behavior and any higher existing reservations; otherwise no build GO.
 
 The existing **full Config equality, original layers plus exactly three COPY
 layers, ordered runtime bytes and strict bounded image-export gates remain
@@ -977,3 +978,106 @@ flatten layers, skip blobs, accept PAX/xattrs/sparse data, or waive a failed
 image-format check. The actual resulting image ID and all fresh profile/GO and
 forward/reverse gates remain required. Five local bundle tests prove only the
 inert context/variant byte scope, not Docker/worker/OCI conversion acceptance.
+
+#### Implemented finite direct-client build-only candidate
+
+`scripts/build-sim-pg-maintenance-oci.py` and `scripts/sim-pg-base-oci.py` are
+**source-only, not installed/run on the host**. The fixed operation is a Root
+invocation of the reviewed helper at
+`python3 -I -B /var/lib/csm-sim-maintenance/build-source/build-sim-pg-maintenance-oci.py --build-only`.
+It cannot create/start/bootstrap/update a worker and never invokes buildx.
+It also cannot call app up, change Compose pins or app profiles, read `.env`, run
+application DB operations, prune or retry. Existing application Config is compared
+only in memory to prove no process/config change; it is not written/exported.
+
+The one shared-worker variant is explicitly `buildx_buildkit_cop-x50`, with the
+observed pinned BuildKit image ID `27933730…`, its cached registry digest, fixed
+buildctl v0.33.1 revision `8c91502…` and actual binary SHA `7809f0f3…`. A private
+Root GO must bind the exact current CID, start/restart generation and full worker
+Config/HostConfig/Mounts digest. It verifies both registry-image binding and
+binary bytes, denies client-covering mounts or writable client/ancestor changes,
+and verifies the existing local volume's exact physical X5 bind. The observed
+builder definition is only a provenance hash, not execution authority. A missing,
+stopped or changed worker stops; no alternate builder is selected.
+
+The GO is **build-only**, separate from release profile/GO. Its exact schema is
+the helper's `admission()` function: contract/release/time fields, current worker
+identity/digest, three exact source hashes, Docker binary hash and hashes of two
+private Root-held evidence files (`cop-worker-owner-ack.json` and
+`storage-closeout.json`). Files and ancestors require Root custody, no links and
+0600 files. Root must populate these from genuine reviewed source/current facts
+and owner/window evidence, not samples or copied prior approval. The helper
+does not generate this GO, elevate rights or make its own acknowledgement.
+GO lifetime is at most 15 minutes; capacity/build-owner reviews must be <=60s old
+before each mutating phase. A shared Root `cop-sim-build.lock` serializes the
+operation; it is not proof that unrelated builders are globally idle. Root's
+coordinated owner/window review remains necessary in addition to actual recorded
+history checks.
+
+Only a new private job is created under the approved **existing** worker bind
+`/srv/x5-production/cache/cop/buildkit/sim-pg-maintenance-<releaseId>`; its exact
+container view is `/var/lib/buildkit/sim-pg-maintenance-<releaseId>`. This is a
+temporary, explicitly shared build job, not relocation of SIM runtime data into
+COP storage. Existing daemon cache databases/Docker internals, mounts, networking,
+permissions and other services are not directly edited. Enclosing job is 0700;
+its exact four context files are uid/gid0, 0644 and mtime0, with exact required
+parent directories uid/gid0, 0755, mtime0. All context/policy/auth bytes and OCI
+blobs/index hashes are rechecked before and after solve.
+
+The implemented converter consumes a bounded `docker image save` pipe directly
+into one digest-addressed OCI layout. It never extracts archive paths. Every
+outer header, including unreferenced members, is checked before payload parsing:
+PAX/GNU extensions, links, devices, duplicate/traversal paths and oversized input
+are rejected. Only actual pinned config bytes and verified raw/gzip layer blobs
+are retained. Config digest must equal SIM base ID, full Config/platform and
+14 ordered uncompressed diffIDs must match actual image inspect, and inherited
+OnBuild must be empty. Unknown/corrupt format is a stop, not a PAX waiver. The
+owned-file adapter exists for local fixtures only; production uses the streaming
+function. No complete archive is persisted by the driver.
+
+The solve directly execs the exact worker **CID**, with fixed socket
+`unix:///run/buildkit/buildkitd.sock`, builtin `dockerfile.v0`, the four-file
+context and one named OCI store. Each job provides its own empty Docker auth
+directory (`config.json` is exactly `{}`), supplied via explicit HOME and
+DOCKER_CONFIG. No existing Docker auth, SSH/secret/session forwarding or remote
+cache flags are supplied. A **per-solve**, not global, source policy denies
+docker-image/http/https/git sources. Named source syntax is source-backed:
+
+- [v0.33.1 OCI provider parser](https://github.com/moby/buildkit/blob/v0.33.1/cmd/buildctl/build/ocilayout.go):
+  `--oci-layout simbase=<container-job>/base-oci`;
+- [v0.33.1 named context resolver](https://github.com/moby/buildkit/blob/v0.33.1/frontend/dockerui/namedcontext.go):
+  `--opt context:sim_reviewed_base=oci-layout://simbase@sha256:<actual-manifest>`;
+- [v0.33.1 build client](https://github.com/moby/buildkit/blob/v0.33.1/cmd/buildctl/build.go)
+  and [policy schema](https://github.com/moby/buildkit/blob/v0.33.1/sourcepolicy/pb/policy.proto)
+  establish provider, builtin frontend and per-solve policy options.
+
+Root observed `/usr/bin/timeout` as cached BusyBox1.37.0, binary SHA `f3547b3d…`.
+The driver verifies it and wraps the single buildctl process with TERM at 300s,
+KILL grace15s; host stream deadline is 330s. Buildctl `--timeout5` is only a
+connection timeout. **Neither killing the host exec client nor timing out proves
+backend completion.** A failure after solve starts reports remote completion
+unknown, preserves its job and requires actual Root history/PID review. No retry,
+worker restart, prune or automatic cleanup follows. Actual recorded solves must
+be COMPLETE with valid CreatedAt/CompletedAt pairs; unknown/missing rows fail.
+
+Docker output streams only to the existing Docker image store, under a new
+non-preexisting `csm-sim-pg-observer:root-<releaseId>` candidate tag. No app starts.
+An image is not declared ready until the original reviewed controller's actual
+image-export gate confirms exact full Config, base layers plus exactly three
+allowlisted COPY layers and content hashes. Unsupported export format fails
+closed. The immutable image ID, exact sources/GO/context/OCI digests and unchanged
+app identity enter a durable private completion receipt; `releaseAuthorized`
+remains false. A failed/partial image is not release acceptance and is not pruned
+automatically. Forward/reverse admission and real application acceptance are
+still distinct subsequent stages.
+
+Local evidence: `test-sim-pg-base-oci.py` has eleven synthetic fixture groups,
+including the actual-observed style of hybrid OCI Docker-save with 35 outer
+headers and 30 blobs plus index/layout/manifest metadata; Config/Layers paths
+need not be legacy filenames. This is a synthetic format fixture, not acceptance
+of Root's actual exported bytes.
+`test-build-sim-pg-maintenance-oci.py` has eleven groups including actual local
+pipe streaming/deadline cleanup, wrong idle schema/CLI context, no-bootstrap and
+no-app-operation paths. Captured outputs are in `docs/testing/receipts/`.
+These are not privileged host E2E, actual worker/OCI-export compatibility,
+per-solve policy runtime acceptance or production deployment evidence.

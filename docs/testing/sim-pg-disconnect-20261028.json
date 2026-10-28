@@ -37,6 +37,21 @@
   "unchangedLedgerSha256": "61a4dc6d62b45819274a271fdb36c90c92a6fa724e121af7a72c8db96481603b",
   "automaticBusinessRetry": false,
   "candidateImageBuilt": false,
+  "buildOnlySourceCandidate": {
+    "driver": "scripts/build-sim-pg-maintenance-oci.py",
+    "driverSha256": "9af67f6a353933563c962950dfdf3c472946c18500f404ba06aa4a29c3930cf9",
+    "converter": "scripts/sim-pg-base-oci.py",
+    "converterSha256": "3aca7fa0d61aaa01376f4411be2b5ed8f30659de80c43789396ea18418f41d94",
+    "syntheticBuildGroups": 11,
+    "syntheticConversionGroups": 11,
+    "executionReceipts": ["docs/testing/receipts/sim-maintenance-20261028-build11.json", "docs/testing/receipts/sim-maintenance-20261028-converter11.json"],
+    "actualWorkerOrDockerImageE2E": false,
+    "privilegedOrProductionExecution": false,
+    "saveOrCandidateFullArchiveStaged": false,
+    "minimumRootReserveGiB": 2,
+    "minimumX5ReserveGiB": 10,
+    "remoteTimeoutCompletionNotAssumed": true
+  },
   "compiledModuleParity": {
     "observedDeployedUserDataSha256": "bb34e391f98985da89dc5bedfb2352a0155d2a3e241c30f51d2b2491f8039749",
     "candidateMinusExactObserverImportAndCallMatchesObservedDeployedBytes": true,
