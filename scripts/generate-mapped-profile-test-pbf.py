@@ -25,6 +25,9 @@ for ci,(name,restriction,value) in enumerate([('height','maxheight','2.5'),('wid
     way(wi,[ids[0],ids[1]],tags);way(wi+1,[ids[1],ids[2]],{**tags,**({restriction:value} if restriction else {})});way(wi+2,[ids[2],ids[3]],tags);way(wi+3,[ids[1],ids[4],ids[5],ids[2]],tags)
     way(wi+4,[ids[3],ids[6]],{'highway':'track','surface':'gravel','motor_vehicle':'yes','access':'yes','maxspeed':'20'})
     cases.append({'name':name,'from':{'lon':x+.0002,'lat':y},'to':{'lon':x+(.0038 if name=='unpavedFinal' else .0028),'lat':y},'restrictedWay':wi+1,'finalWay':wi+4})
+if '--routing-time-cases' in sys.argv[2:]:
+    from routing_time_fixtures import add_time_fixtures
+    cases.extend(add_time_fixtures(nodes, way, signed))
 table=b''.join(blob(1,s.encode()) for s in strings)
 primitives=blob(1,table)+blob(2,b''.join(blob(1,n) for n in nodes))+blob(2,b''.join(blob(3,w) for w in ways))
 header=blob(4,b'OsmSchema-V0.6')+blob(16,b'CSM SIM synthetic profile test')+blob(17,b'GENERATED SYNTHETIC, not real OSM data')+scalar(32,1791090671)

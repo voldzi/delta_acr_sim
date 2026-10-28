@@ -202,3 +202,30 @@ tyto nové nativní výsledky zatím **nebyly spuštěny ani získány**.
 - `pnpm format:check` musí projít nad zdrojovým kódem, package konfigurací a skripty
 - `pnpm verify` musí projít před produkčním nasazením nebo musí být výslovně popsán blokující důvod
 - generované a archivní artefakty zůstávají mimo Prettier gate přes `.prettierignore`
+## Izolované podmíněné restrikce – zdrojový plán, nikoli nativní důkaz
+
+Volitelný přepínač `--routing-time-cases` generátoru
+`scripts/generate-mapped-profile-test-pbf.py` doplní vlastní syntetickou mapu
+o deset oddělených komponent: soukromý vjezd, jednosměrku, explicitní zákaz,
+časově povolený/zakázaný vjezd, destination-only a kombinace s maxheight.
+Výchozích osm komponent a původní plán 52 případů zůstávají beze změny.
+
+`scripts/routing-time-engine-plan.mjs` vytvoří **pouze JSON plán** 160 požadavků
+(10 komponent × 2 výšky × 2 směry × 4 časové režimy). Žádný požadavek neodesílá.
+`none` a nativní `date_time.type=0` jsou oddělené od fixních lokálních časů
+12:00/22:00 dne 28.10.2026. Nejde o změnu HTTP kontraktu SIM ani implicitního
+času produkční trasy. Nejvýše dalších 160 trace požadavků je pouze návrh
+samostatného izolovaného běhu, nikoli rozšíření již schváleného provozního limitu.
+
+Před spuštěním musí Root zvlášť ověřit import conditional tagů a timezone
+Europe/Prague; samotný zápis tagu do PBF nic nedokazuje. Plán bez ověřené
+materializace není test časových restrikcí. Neobsahuje zatím DST přechody ani
+assertion runner a nesupluje dřívější kompletní nativní akceptační plán.
+Explicitní/rozměrová omezení jsou povinností v každém časovém režimu.
+Destination-only a multipass jsou pozorování, **ne oprávnění přijmout warning401**.
+Zákaz `motor_vehicle=no` zde znamená statickou mapovou fixture, nikoli ověření
+živého dopravního překryvu nebo schvalování uzávěr.
+
+Lokální test `python3 scripts/test_routing_time_fixtures.py` ověřuje pouze
+deterministickou strukturu, zachování původního plánu a zákaz relaxací profilu.
+Neprokazuje skutečné nativní routování, legálnost trasy ani opravu incidentu.
