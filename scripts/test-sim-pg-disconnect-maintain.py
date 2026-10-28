@@ -323,8 +323,8 @@ class MaintainTests(unittest.TestCase):
   raw=m.encoded({'services':{'sim-api':{'image':p['candidateImage']}}})
   prev={'composeSha256':m.digest(inverse),'pinSha256':m.sha(m.changed_pin(raw,p['candidateImage'],m.BASE)),'layerFileSha256':g['layerFileSha256']}
   def protected(path):return m.encoded(prev) if path.name.endswith('-activate.json') else b'profile' if path.name=='profile-dns-v1.json' else b'go'
-  for expired in [False,True]:
-   with patch.object(m,'facts',return_value=c),patch.object(m,'dns_amendment',return_value=('old-profile','amendment')),patch.object(m,'image_gate'),patch.object(m,'critical_service_gate'),patch.object(m,'command',side_effect=lambda args:m.encoded(rendered) if 'config' in args else b'[{}]') as run,patch.object(m,'protected',side_effect=protected),patch.object(m,'pin_read',return_value=(123,raw,None)),patch.object(m.os,'close'),patch.object(m,'profile_and_go',side_effect=m.Stop('GO_EXPIRED') if expired else lambda action:(p,g)),patch.object(m,'receipt') as receipt,redirect_stdout(io.StringIO()):
+  for expired in [False,'profile','final_readback']:
+   with patch.object(m,'facts',return_value=c),patch.object(m,'dns_amendment',return_value=('old-profile','amendment')),patch.object(m,'image_gate'),patch.object(m,'critical_service_gate'),patch.object(m,'command',side_effect=lambda args:m.encoded(rendered) if 'config' in args else b'[{}]') as run,patch.object(m,'protected',side_effect=protected),patch.object(m,'pin_read',return_value=(123,raw,None)),patch.object(m.os,'close'),patch.object(m,'profile_and_go',side_effect=m.Stop('GO_EXPIRED') if expired=='profile' else lambda action:(p,g)),patch.object(m,'validate_go_age',side_effect=m.Stop('GO_EXPIRED') if expired=='final_readback' else None),patch.object(m,'receipt') as receipt,redirect_stdout(io.StringIO()):
     if expired:
      with self.assertRaisesRegex(m.Stop,'GO_EXPIRED'):m.accept_existing_dns(p,g,b'profile',b'go')
      receipt.assert_not_called()

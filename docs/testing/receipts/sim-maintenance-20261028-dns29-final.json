@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-sim-pg-disconnect-maintain.py",
+  "sourceSha256": "87a822a98e7bdac5548d34dc893102786d6ab8c7bc0921e6683495202f509c56",
+  "scope": "29 synthetic local groups including expiry after final protected profile/GO readback; actual fixed preimage mocked in unit fixture; no host execution/app up/rollback",
+  "exitCode": 0,
+  "combinedOutput": ".............................\n----------------------------------------------------------------------\nRan 29 tests in 0.247s\n\nOK\n"
+}

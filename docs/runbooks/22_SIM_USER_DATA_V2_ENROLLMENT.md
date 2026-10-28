@@ -1138,7 +1138,7 @@ their original hash semantics. The strict rendered model still rejects DNS
 configuration drift. No DNS/network configuration is changed.
 
 New controller SHA:
-`3bb3b4cb2d1c2d5ade3d8c80e28e667de4cf14efca8e4bad174911005743af91`.
+`87a822a98e7bdac5548d34dc893102786d6ab8c7bc0921e6683495202f509c56`.
 Root must preserve the original 46af source under protected
 `source/sim-pg-disconnect-maintain.46af.py`; original `profile.json`, `go.json`,
 forward intent, invocation failure and missing forward completion stay intact.
@@ -1177,6 +1177,8 @@ pin write, build, database mutation or rollback**. Only a new distinct
 `78a7cc8faa074cb284d6c3523f03ee38-dns-post-acceptance.json` receipt is created.
 This receipt records amendment/profile hashes, same generation/runtime/lineage
 and `appUpExecuted:false`; it cannot rewrite the failed original attempt.
+GO age is checked again after the final exact protected profile/GO readback,
+immediately before receipt creation; a slow read cannot authorize stale acceptance.
 
 Future explicit Root reverse uses a **separate** fresh protected
 `go-dns-rollback-v1.json`, action `rollback`, same release/new profile/candidate
@@ -1188,7 +1190,9 @@ Compose service up, no data restore and no automatic retry. A different process
 generation, restart, lineage, original artifact or unknown residual state stops
 this finite lane and requires a separate Root-reviewed recovery decision.
 
-`sim-maintenance-20261028-dns29.json` captures 29 local synthetic test groups;
+`sim-maintenance-20261028-dns29-final.json` captures 29 local synthetic test groups,
+including expiry after that final protected readback (the earlier receipt remains
+historical evidence for its prior source hash);
 baseline three groups also pass. The unit fixture mocks the fixed actual
 preimage hash; therefore it is **not** independent actual production preimage
 or Root E2E proof. Production acceptance remains the Root operation above.

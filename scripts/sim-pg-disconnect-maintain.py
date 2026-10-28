@@ -498,6 +498,7 @@ def accept_existing_dns(profile,go,profile_raw,go_raw):
  need(profile_and_go('accept-existing-dns')==(profile,go),'DNS_FINAL_APPROVAL')
  pp,gp=approval_paths('accept-existing-dns')
  need(protected(pp)==profile_raw and protected(gp)==go_raw,'DNS_FINAL_APPROVAL')
+ validate_go_age(go) # Protected readback may itself consume the fresh approval.
  # Separate actual post-acceptance: never writes original forward completion.
  receipt(ROOT/(go['releaseId']+'-dns-post-acceptance.json'),{'contract':'sim-empty-dns-post-acceptance-v1','completed':True,'cid':final['Id'],'startedAt':final['State']['StartedAt'],'restartCount':final['RestartCount'],'image':final['Image'],'lineage':go['lineage'],'runtimeSha256':go['runtimeSha256'],'profileSha256':sha(profile_raw),'originalProfileSha256':bridge,'amendmentSha256':amendment_sha,'appUpExecuted':False,'dataRestored':False})
  print(json.dumps({'status':'existing_candidate_accepted','action':'accept-existing-dns','image':final['Image'],'cid':final['Id'],'appUpExecuted':False}))
