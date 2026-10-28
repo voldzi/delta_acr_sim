@@ -22,6 +22,8 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [ADR 0048: proposed SIM image-only maintenance boundary](adr/0048_SIM_IMAGE_ONLY_MAINTENANCE_PROPOSAL.md) — read-only baseline only; activation blocked pending real controller review.
+
 - [ADR 0045: explicitní opakovaný úklid obnoveného obsahu, pouze zdroj a izolované testy](adr/0045_SAME_EPOCH_COMPLETED_CONTENT_REPLAY.md)
 
 - [Nová clean whole SIM kompozice: 106 skutečných lokálních PG/HTTP kontrol, nikoliv celková akceptace COP](archive/2026-10-17_SIM_CLEAN_WHOLE_COMPONENT.json)

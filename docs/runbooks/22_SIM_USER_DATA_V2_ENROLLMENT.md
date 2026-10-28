@@ -650,3 +650,29 @@ configuration, data and journal lineage. Never restore old database/files/marker
 or bypass a controller refusal. If a current erasure or pending operation makes
 reversion unsafe, stop for that controller's recovery instead of automatic reset.
 No installer or privileged activation command is provided by this proposal.
+
+### Executable read-only baseline (controller discovery pending)
+
+`python3 scripts/sim-pg-disconnect-baseline.py --baseline` is a host-only,
+read-only helper. It never builds, uploads, changes Compose, runs SQL or activates
+anything. It captures CID/image, five runtime module hashes, full runtime/image
+configuration digests (values stay in RAM), actual four Compose-layer digests,
+configured binding digest, disk capacity and X5 mount UUID match. It rechecks
+stable runtime/config identity across the read window. A configured binding is
+explicitly **not** database/controller acceptance. Secret values and raw inspect
+or file contents are never printed. Local negative/privacy tests are in
+`scripts/test-sim-pg-disconnect-baseline.py`.
+
+The helper deliberately exits 2 with `activationAllowed=false`: the existing
+SIM-maintain controller/interface and protected profile/marker/journal checks
+have not yet been identified and accepted. Names of old bootstrap/enrollment
+tools do not confer maintain authority; the COP-only release broker must not be
+repurposed for SIM. No generic shell/plugin/controller callback or raw Compose
+activation is substituted for this missing proof. Read-only discovery observed
+96% usage on both root and X5; this is a capacity-review flag, not permission to
+prune or build. Build-owner activity remains unknown, not falsely idle.
+
+The next executable activation/build stage can be finalized only after Root
+provides the exact existing controller inspection/maintain/rollback contract,
+approved capacity/activity gate and exact-image GO. Until then no production
+helper upload, image build, service change or operational GO is performed.
