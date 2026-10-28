@@ -9,7 +9,10 @@
   "scopedTypecheck": "passed",
   "openapiValidation": "passed (163 paths, 286 schemas)",
   "skeleton": "passed",
-  "realPgChecks": 27,
+  "realPgChecks": 29,
+  "offlineMaintenanceUnitGroups": 7,
+  "readOnlyBaselineUnitGroups": 3,
+  "offlineMaintenanceExecuted": false,
   "postgresVersion": "18.3 Homebrew",
   "realFixture": {
     "boundary": "owned random /private/tmp/sim-pgdisc-* directory, 0700, Unix sockets only including acknowledgement-loss proxies",
@@ -40,5 +43,5 @@
   },
   "productionDeployment": false,
   "productionReleaseApproved": false,
-  "remainingGates": ["independent source/fixture review", "reviewed build/toolchain and exact minimal image diff", "protected config/data/journal/marker continuity proof", "single separately approved SIM API release and post-release acceptance"]
+  "remainingGates": ["independent offline maintenance authority/handler/probe review", "actual AKB recovery terminal and fresh Root GO (HOLD is not time-based)", "reviewed build/toolchain and exact minimal three-layer image diff", "protected config/data/journal/marker continuity proof", "single separately approved SIM API release and post-release acceptance"]
 }

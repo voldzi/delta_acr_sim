@@ -7,6 +7,7 @@ Exit 2 intentionally until the existing SIM maintain controller and protected
 profile/marker/journal evidence are verified through its real interface.
 """
 import hashlib
+import copy
 import json
 import os
 from pathlib import Path
@@ -41,7 +42,8 @@ def digest(value):
 
 def run(args):
     try:
-        return subprocess.check_output(args, timeout=30, stderr=subprocess.PIPE, text=True)
+        return subprocess.check_output(args, timeout=30, stderr=subprocess.PIPE, text=True,
+            env={'PATH':'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','HOME':'/root','LANG':'C','DOCKER_HOST':'unix:///var/run/docker.sock'})
     except (OSError, subprocess.SubprocessError):
         raise Stop('READ_COMMAND_FAILED_OUTPUT_WITHHELD') from None
 
@@ -68,6 +70,17 @@ def file_digest(path):
     finally:
         os.close(fd)
 
+def maintenance_runtime(value):
+    result=copy.deepcopy({k:value.get(k) for k in ['Config','HostConfig','Mounts']})
+    result['Config'].pop('Image',None)
+    for key in ['com.docker.compose.config-hash','com.docker.compose.image']:
+        result['Config'].get('Labels',{}).pop(key,None)
+    pairs=[v.split('=',1) for v in result['Config'].get('Env') or []]
+    need(all(len(v)==2 for v in pairs) and len({v[0] for v in pairs})==len(pairs),'ENV_STRUCTURE')
+    result['Config']['Env']=dict(pairs)
+    result['networks']={k:{'NetworkID':v.get('NetworkID'),'Aliases':v.get('Aliases')} for k,v in value.get('NetworkSettings',{}).get('Networks',{}).items()}
+    return result
+
 def inspect_facts(current, image, modules):
     need(current['Image'] == BASE and image['Id'] == BASE, 'BASE_IMAGE_CHANGED')
     labels = current['Config'].get('Labels') or {}
@@ -89,8 +102,10 @@ def inspect_facts(current, image, modules):
         'cid': current['Id'], 'image': current['Image'],
         'healthy': current['State'].get('Health', {}).get('Status') == 'healthy',
         'restartCount': current['RestartCount'],
+        'startedAt': current['State'].get('StartedAt'),
         'moduleSha256': modules['hashes'],
         'runtimeConfigSha256': digest({k: current.get(k) for k in ['Config', 'HostConfig', 'Mounts', 'NetworkSettings']}),
+        'maintenanceRuntimeSha256': hashlib.sha256((json.dumps(maintenance_runtime(current),sort_keys=True,separators=(',',':'))+'\n').encode()).hexdigest(),
         'imageConfigSha256': digest(image['Config']), 'imageLayerSha256': digest(image['RootFS']),
         'imageLayerCount': len(image['RootFS'].get('Layers', [])),
         'activeBindingSha256': digest(binding), 'authoritySourceMatches': True,
@@ -117,6 +132,10 @@ def main():
     modules = json.loads(run(['docker', 'exec', NAME, 'node', '-e', SOURCE_PROBE]))
     result = inspect_facts(current, image, modules)
     result['composeSha256'] = {p: file_digest(p) for p in LAYERS}
+    dc=['docker','compose','--project-name','sim','--project-directory','/srv/sim','--env-file','/srv/sim/.env']
+    for path in LAYERS:dc+=['-f',path]
+    rendered=json.loads(run(dc+['config','--format','json']))
+    result['maintenanceComposeSha256']=hashlib.sha256((json.dumps(rendered,sort_keys=True,separators=(',',':'))+'\n').encode()).hexdigest()
     result['capacity'] = {}
     for path in ['/srv/sim', '/srv/x5-production']:
         usage = shutil.disk_usage(path)

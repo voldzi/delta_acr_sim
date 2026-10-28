@@ -49,6 +49,7 @@ class BaselineTests(unittest.TestCase):
             if args[:2]==['docker','inspect']:return json.dumps([c])
             if args[:3]==['docker','image','inspect']:return json.dumps([i])
             if args[:2]==['docker','exec']:return json.dumps(m)
+            if args[:2]==['docker','compose']:return json.dumps({'services':{'sim-api':{'image':b.BASE}}})
             if args[0]=='findmnt':return '2f93f595-b61b-4eea-9054-7afa9b275b5b'
             self.fail('Unexpected command')
         out=StringIO()

@@ -42,8 +42,9 @@ record is a separately reviewed bookkeeping mutation, not a DB binding update.
 
 ## If no existing controller is found
 
-The following is a proposal for **new host release authority**, NOT implemented,
-installed or implicitly approved. Only two operational capabilities are proposed:
+The following is a proposal for **new host release authority**, implemented only
+as an offline review candidate, NOT installed or implicitly approved. Only two
+operational capabilities are proposed:
 
 1. Replace only the `sim-api` image pin under existing exact Compose layering and
    recreate only `csm-sim-api`, under a genuine Root-held exact image/source/

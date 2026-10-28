@@ -125,8 +125,17 @@ try{
   const tr=pool('target',{database:'sim_user_data',user:'sim_user_data_runtime'}),gr=pool('guard',{database:'cop_account_safety_guard',user:'sim_user_data_guard_runtime'});
   const make=async(t=tr,g=gr)=>{const a=await createSimUserDataAuthority({guardPool:g,targetPool:t,component:'sim_user_data',binding:b});return new UserLedger(t,{mode:'production-sim-user-data-v1',environmentId:b.environment_id,resetEpoch:b.reset_epoch,tokensNotBefore:1},'sim_user_data',a)};
   const live=await make();await live.tx(async()=>{});check('actual production-mode factory/ledger with exact roles and two DBs',true);
+  const originalProbe=await readFile(new URL('./sim-maintenance-lineage-probe.mjs',import.meta.url),'utf8');
+  const probe=originalProbe.replace("createRequire('/app/apps/simulator-api/package.json')",'createRequire('+JSON.stringify(new URL('../apps/simulator-api/package.json',import.meta.url).href)+')');
+  assert.notEqual(probe,originalProbe); // Only pg module resolution differs in the owned Mac fixture.
+  const runProbe=async()=>JSON.parse((await exec(process.execPath,['--input-type=module','-e',probe],{env:{...env,
+   SIM_USER_DATA_DATABASE_URL:'postgresql:///sim_user_data?host='+encodeURIComponent(socket)+'&user=sim_user_data_runtime',
+   SIM_USER_DATA_GUARD_DATABASE_URL:'postgresql:///cop_account_safety_guard?host='+encodeURIComponent(socket)+'&user=sim_user_data_guard_runtime',
+   SIM_USER_DATA_CONTINUITY_BINDING:JSON.stringify(b),SIM_USER_DATA_TOKENS_NOT_BEFORE:'1'}})).stdout);
+  const probeResult=await runProbe();check('actual read-only maintenance probe matches two DBs',probeResult.verified===true&&Object.keys(probeResult).sort().join(',')==='binding,config,contract,journal,verified');
   await ga.query("UPDATE sim_erasure_guard_v2.user_data_checkpoint SET state='quarantined'");
   let admitted=0;await assert.rejects(()=>live.tx(async()=>{admitted++}));assert.equal(admitted,0);
+  await assert.rejects(()=>runProbe());check('actual read-only maintenance probe rejects quarantine',true);
   await assert.rejects(()=>make());check('actual quarantine blocks existing and new authority',true);
   await ga.query("UPDATE sim_erasure_guard_v2.user_data_checkpoint SET state='ready',restore_generation=2");
   await assert.rejects(()=>live.tx(async()=>{admitted++}));assert.equal(admitted,0);check('actual changed restore generation blocks admission',true);

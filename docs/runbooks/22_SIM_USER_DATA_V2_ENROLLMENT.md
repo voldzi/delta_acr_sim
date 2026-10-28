@@ -676,3 +676,76 @@ The next executable activation/build stage can be finalized only after Root
 provides the exact existing controller inspection/maintain/rollback contract,
 approved capacity/activity gate and exact-image GO. Until then no production
 helper upload, image build, service change or operational GO is performed.
+
+### New offline maintenance handler — NOT INSTALLED / NOT GO
+
+Root accepted ADR0048's two-operation boundary for **source review only**.
+`scripts/sim-pg-disconnect-maintain.py` implements that new Root-only one-off
+boundary; it is not an existing enrollment controller and must not be passed off
+as one. There is no sudoers/account/key/port/daemon/service installation. Neither
+the handler nor its probe has been installed or run on the production host.
+The unrelated AKB recovery HOLD remains effective until an actual recovery
+terminal and fresh Root GO, not merely a clock time.
+
+The eventual fixed private custody layout would be `/var/lib/csm-sim-maintenance`
+(Root 0700), with Root-only `profile.json`, fresh `go.json`, a single operation
+lock, private attempt/completion receipts and pinned source files in `source/`.
+No provisioning command or populated GO is supplied. Those are new host control
+artifacts, **not** DB continuity markers. Root review/approval is still mandatory.
+
+The profile binds the exact base/candidate image, handler SHA and read-only probe
+SHA. GO binds action, one release ID, CID/image/process generation, full normalized
+runtime digest, rendered Compose digest, exact four layer-file digests, exact DB
+lineage digest, fixed parent-directory custody and disk margin. GO lifetime is at
+most 15 minutes; capacity/build-owner reviews must be <=60 seconds old before
+mutation. A known-process build scan supplements, but does **not replace or prove**,
+Root's coordinated build-owner idle review; it cannot establish remote/daemon
+builder inactivity. Unknown activity is not silently treated as idle.
+
+`scripts/sim-maintenance-lineage-probe.mjs` uses the existing app's restricted
+runtime credentials only inside that container. It executes two **READ ONLY**
+transactions, verifies role/binding/config/checkpoint and exact tombstone
+projections twice, and returns only digests. It never initializes the factory,
+replays data, or runs administrative SQL. The actual unchanged app may perform
+its normal startup replay after recreation. The probe's real disposable fixture
+tests pass (29 total PG checks), including quarantine refusal. Test-only pg module
+resolution is adapted to the Mac path; admission predicates are unchanged.
+
+Before the first pin mutation the handler requires the exact original base,
+runtime module hashes (including unchanged authority/ledger), fresh identity and
+lineage, consistent full Compose rendering and no existing environment/command/
+entrypoint/user/working-dir drift. The candidate must preserve base image config
+and all base layers and append exactly **three COPY layers**, one per allowlisted
+runtime file in Dockerfile order. Each tar digest, path, content, owner, mode,
+duplicate/link/whiteout/extra-path condition is checked without extraction.
+Image scanning streams locally; it does not stage all base layers onto disk.
+Actual Docker image build/export interoperability remains untested: no image
+exists yet. The inherited base OCI revision is not relabelled as the new source;
+the exact digest plus three-file source manifest are required provenance.
+
+Only the unique quoted `sim-api.image` token is replaced; JSON semantics must
+differ in that field alone and raw bytes are exactly reversible. Existing pin
+owner/mode are preserved via a fixed anchored directory fd and CAS check, not
+directory chmod. A durable Root-private intent receipt precedes mutation. Only
+the fixed `sim-api` service is recreated with no deps/build/pull; it is never
+retried. Postchecks require new image/CID, healthy state, stable runtime config,
+module bytes, readiness/auth and matching current lineage before completion.
+
+Failure stops with a bounded stage/code; there is no automatic reset or rollback.
+An intent without completion is not success and must be reviewed, not retried.
+Fresh explicit `--rollback` approval must match the original Root profile,
+current CID/process/config/lineage, unchanged other layers and exactly reversible
+pin/Compose digest. It can restore the prior image only, or restore only the pin
+if recreation never happened and the old service is still healthy. It does not
+restore old data, credentials, epoch, checkpoint, journal or DB marker. If the
+current container cannot supply verified lineage (including when it is dead),
+rollback is deliberately blocked for separate Root recovery; no fallback observer
+identity/container or re-enrollment is introduced.
+
+Offline unit coverage: seven handler groups (negative GO/time/scope, exact
+reversible pin, allowlisted layer bytes and hostile paths, env/exec drift, nonroot
+denial, runtime-security hashing and baseline/activation digest compatibility),
+plus three baseline groups. These are not a full privileged activation/rollback
+end-to-end test, not production permission, and not proof of a built image. Root
+must review the new authority, exact source SHAs and remaining gaps before a
+separate build/activation GO. No server action occurred during preparation.
