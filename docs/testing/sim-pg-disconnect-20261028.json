@@ -1,0 +1,44 @@
+{
+  "contract": "sim-pg-disconnect-source-acceptance-v1",
+  "date": "2026-10-28",
+  "baseCandidate": "ac60c734277dead6065ccf3492750b55fd6d6d2a",
+  "baseProductionImage": "sha256:4076069b3f8c935c0cd07ea2bf95d92703270b72197ff2b74a27d1aee8c6bdf0",
+  "syntheticTests": 10,
+  "simApiRegressionTests": 35,
+  "localSimApiAndDependencyBuild": "passed",
+  "scopedTypecheck": "passed",
+  "openapiValidation": "passed (163 paths, 286 schemas)",
+  "skeleton": "passed",
+  "realPgChecks": 27,
+  "postgresVersion": "18.3 Homebrew",
+  "realFixture": {
+    "boundary": "owned random /private/tmp/sim-pgdisc-* directory, 0700, Unix sockets only including acknowledgement-loss proxies",
+    "clusterIdentity": "sim_pg_disconnect_fixture_v1",
+    "newSyntheticRoles": ["sim_user_data_runtime", "sim_user_data_guard_runtime"],
+    "databases": ["postgres (fixture admin and transport tests)", "sim_user_data", "cop_account_safety_guard"],
+    "migrations": ["001_app_schema.sql", "003_independent_checkpoint.sql", "004_app_continuity.sql"],
+    "productionMode": "actual unchanged createSimUserDataAuthority and UserLedger; NOT production TLS/bootstrap or deployed acceptance",
+    "commitAmbiguity": "proxy closes the private Unix stream on actual PostgreSQL COMMIT CommandComplete before forwarding acknowledgement; separate admin sees one committed business row and rejected caller executes work exactly once",
+    "productionAccess": false,
+    "productionCredentialsOrRolesCopied": false,
+    "existingRolesChanged": false,
+    "fixtureRemovedAfterSuccess": true
+  },
+  "unchangedAuthoritySha256": "a0b3fd882baff5ee24401af035ff99134b8ea1f5cc362c88c909cb9bd67ad3d2",
+  "unchangedLedgerSha256": "61a4dc6d62b45819274a271fdb36c90c92a6fa724e121af7a72c8db96481603b",
+  "automaticBusinessRetry": false,
+  "candidateImageBuilt": false,
+  "compiledModuleParity": {
+    "observedDeployedUserDataSha256": "bb34e391f98985da89dc5bedfb2352a0155d2a3e241c30f51d2b2491f8039749",
+    "candidateMinusExactObserverImportAndCallMatchesObservedDeployedBytes": true,
+    "freshProductionImageConfigGateStillRequired": true
+  },
+  "candidateRuntimeFileSha256": {
+    "apps/simulator-api/dist/user-data.js": "e78d951eb538f4962542c28c8436db45713ff3ba7588d8d2c98a0f4f34ab72bd",
+    "packages/sim-user-data/bootstrap.mjs": "c1b44b61e7ac7902463f1d68c6fec74dccf3550b4a3d95d02544788436d11d05",
+    "packages/sim-user-data/pg-errors.mjs": "af3c90eec2a0702e434feb57cd7607a8d7fb7c84c8f1d10c8084b7d13b16b2fc"
+  },
+  "productionDeployment": false,
+  "productionReleaseApproved": false,
+  "remainingGates": ["independent source/fixture review", "reviewed build/toolchain and exact minimal image diff", "protected config/data/journal/marker continuity proof", "single separately approved SIM API release and post-release acceptance"]
+}

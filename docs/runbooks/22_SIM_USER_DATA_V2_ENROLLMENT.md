@@ -578,9 +578,9 @@ revalidation after recovery, quarantine/config refusal, private-error suppressio
 and unchanged controlled source hashes. This is **not** an actual PostgreSQL
 socket-termination, pool-eviction or restore acceptance test.
 
-Before release: peer review, scoped compile/full application checks, an isolated
-PostgreSQL test including real borrowed sockets/commit ambiguity and pool eviction,
-and exact image/config/continuity release review remain required. This candidate
+Before release: peer review and exact image/config/continuity release review
+remain required. The initial synthetic evidence is extended by actual PostgreSQL
+socket tests and local scoped build/regression checks below. This candidate
 does not authorize production restart, migration or a new outage. Wait for the
 infrastructure owner's PG GREEN and separate application release approval.
 
@@ -589,3 +589,64 @@ later approved, revert only via the existing protected application release path.
 No database, journal or continuity marker rollback is part of it. No migration or
 data restoration is necessary; reverting also restores the old disconnect-crash
 risk. This text is a source/test proposal, not a performed deployment or rollback.
+
+### Real isolated PostgreSQL evidence and exact proposed rollout
+
+`node scripts/test-sim-pg-disconnect-real.mjs --run` now passed **27 real PG18.3
+checks**, in addition to the 10 synthetic tests. The script creates its own 0700
+random temporary cluster; PostgreSQL and acknowledgement-loss proxies use private
+Unix sockets only. Exact synthetic role names and two dedicated databases exist
+only inside that fixture; versioned migrations 001/003/004 are applied there.
+It executes the unchanged production-mode authority and ledger, not a substitute
+admission callback. Quarantine, changed generation, missing tombstone projection,
+actual restart replay, RLS refusal, pool eviction, busy-query termination and
+both target/guard COMMIT acknowledgement-loss paths pass. The target row is
+actually visible while the caller rejects, with work executed once. A guard
+failure after target commit is explicitly not treated as rollback of the target.
+The entire cluster is stopped and removed before success is reported. Production
+TLS/bootstrap, deployed HTTP behavior and full application acceptance remain
+separate gates. Bounded evidence: `docs/testing/sim-pg-disconnect-20261028.json`.
+Local simulator API plus dependencies build, API typecheck, all 35 simulator API
+regression tests, skeleton and OpenAPI validation passed. The entire monorepo
+suite was not run; no candidate container image has been built or deployed.
+One idle socket failure can emit both `client` and `idle_client` events because
+the persistent client observer and the pool listener both see it. These are
+observations, not independently countable incidents; do not sum them as outages.
+
+Proposed release is **only `sim-api` / `csm-sim-api`**, not Router, situation API,
+Docker daemon or other projects. `deploy/sim-pg-disconnect.Dockerfile` is unbuilt:
+it derives from exact production image `4076069b...` (full digest in the file)
+and replaces only compiled `user-data.js`, `bootstrap.mjs`, `pg-errors.mjs`.
+No dependency install, new command/user/environment, port, mount or profile is
+introduced. Build is a later reviewed step; do not invent a candidate image ID.
+
+Before a single rollout, the protected application release owner must capture
+private consistent baseline evidence and assert:
+
+1. Actual current CID/image and active protected release still match the intended
+   baseline. Abort on drift; preserve current authoritative Compose layering.
+2. Candidate base layers and effective image config equal baseline except the
+   allowlisted final file layer and reviewed source labels. Compare complete
+   resolved runtime configuration in memory; emit match booleans only. Especially
+   preserve user, command, env, networks, mounts, readonly/security/resource and
+   health settings. No diagnostic may dump interpolated secrets.
+3. Immutable guard/target binding, source witness, reset/restore generation and
+   existing active marker/journal lineage match. Authority and ledger hashes
+   remain unchanged; no enrollment, reset, projection adoption or marker rewrite.
+4. Data mounts and account ownership are unchanged. Installer performs no SQL,
+   data copy/delete or journal mutation. Normal concurrent account/worker changes
+   must be reconciled through the existing controller's consistent receipts, not
+   falsely treated as arbitrary file-hash parity or rolled back to older data.
+5. Independent review approves the candidate and continuity evidence, followed
+   by explicit approval of the exact image/service operation. PG GREEN alone is
+   not application release approval. Then replace only this service through the
+   current protected release mechanism, draining it normally and preserving data.
+6. Verify readiness, unauthenticated 401, exact image/config/binding/marker
+   continuity, stable restart count, and the approved DB-dependent functionality.
+   Do not induce another production outage for testing or retry uncertain writes.
+
+Rollback is only the reviewed prior application image under the **same current**
+configuration, data and journal lineage. Never restore old database/files/markers,
+or bypass a controller refusal. If a current erasure or pending operation makes
+reversion unsafe, stop for that controller's recovery instead of automatic reset.
+No installer or privileged activation command is provided by this proposal.
