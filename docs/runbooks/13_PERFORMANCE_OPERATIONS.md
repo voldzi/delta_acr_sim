@@ -15,6 +15,92 @@ external storage, not in Git.
 
 ## Primary Hot Paths
 
+### Bounded private routing diagnostics (source candidate, not activated)
+
+`SITUATION_DATA_ROUTING_DIAGNOSTICS_UNTIL` is empty/off by default. An explicit
+UTC ISO expiry must be in the future and no more than ten minutes from service
+construction; invalid, expired or overlong values disable diagnostics. Both
+wall-clock and monotonic expiry latch emission off, even if clocks later move
+back. Maximum sixteen rejected-call
+events **total per process**, no replenishment. Logging failures cannot alter
+the route, error, retry or fallback behavior. No new provider request is issued.
+
+Internal event `routing_guard_diagnostic_v1` has only: `event`, `correlationId`,
+`stage`, `outcomeCode`, `costing`, `requestedDateTimeMode`,
+`requestedVariantCount`, `returnedVariantCount`, `returnedVariantCountTruncated`,
+`nativeWarningCodes`, `warningCounts` (root/primary/alternate/malformed),
+`nativeWarningsTruncated`, `algorithm`, `multipassCondition`,
+`snapClassification`, `closureGeometryValidated`. Existing request UUID header
+is validated as exactly 36 characters and preserved including case;
+missing/invalid/non-string UUID means no event.
+COP must supply its fresh request-scoped `X-Correlation-ID`; never use an account
+or vehicle identifier. Caller context is not put in request bodies, flight/cache
+keys or outbound Valhalla headers. Public error envelopes are unchanged.
+
+Stages are finite preflight/native request/warning/geometry-closure/waypoint-
+snap/final validation stages. Codes use a fixed SIM allowlist; unknown code or
+text becomes `OTHER_PROTECTIVE_FAILURE`. Native codes are integers 0–9999,
+at most sixteen unique codes; each scope count is capped at 64. Returned variant
+count is capped at three with a truncation flag. No coordinates, body, labels,
+profile/account IDs or values, provider prose, authorization headers or secrets
+are logged. Native failure without a successful response has no warning/body
+evidence: zero reported counts do not prove the engine had no warnings.
+
+`requestedDateTimeMode` is only the outgoing `none|depart_now|depart_at|unknown`
+mode, never an assertion of the algorithm used. Standard Valhalla JSON does not
+identify the actual algorithm or reason for multipass, so both fields are
+`not_reported`. A 401 rejection leaves affected point `unknown`. Existing
+WAYPOINT errors can include the origin and do not prove a via failure. Only an
+existing typed TARGET error at/after snap validation may yield `destination`.
+`closureGeometryValidated` records completion of the initial all-native-variant
+geometry/closure check, not final route acceptance or legal access.
+
+SingleFlight still makes one native compute and clones every caller's result;
+safe facts travel in a private wrapper alongside that result, never in the
+native response body or public route. Each rejected caller gets its own UUID.
+Success, disabled windows and validation outside the known-closure branch may
+produce no event; absence of a log is not proof of a successful route.
+
+Before activation: review a narrow situation-data image/config diff with Root,
+preserve all current lifecycle/database/auth/resource/rollback guards, obtain a
+fresh explicit <=10-minute UTC expiry, coordinate COP UUID forwarding, run one
+human-authorized request, and read only the matching allowlisted event. Never
+automatically replay a private route or force provider/traffic refresh. Clear
+the variable after the window in the next reviewed deployment; expiry already
+stops logs. Rollback is the prior pinned situation-data image and unchanged
+production data; no new ports, secrets, DB rights or Valhalla configuration.
+This source change is not approval to deploy or to relax warning 401.
+
+Mapped `departureTime` remains unsupported, including literal `now`. Existing
+native `date_time.type=0` depends on usable current traffic; do not send a new
+client time override or infer an algorithm from that dependency. If the bounded
+facts do not explain the failure, report unknown and separately review isolated
+engine instrumentation instead of widening snap/access/closure permissions.
+
+Local baseline closure proof, 2026-10-28: clean pre-diagnostic source
+`6a82e5034cda2164d7eccb786fdda3ba93f618d6` was compiled with Node24/tsc and
+compared with Root's fresh read-only manifest of running situation-data parent
+`sha256:9f0a6d789116cad19d363e79e9c8e5963861106e10ecd9c281e9f864c1d2c124`.
+All **57 filenames, byte counts and SHA-256 hashes** matched, with no extras or
+missing files. Only compiled `app.js`, `config.js`, `routing-service.js` change;
+`routing-diagnostics.js` is the sole added compiled file, no maps/dependencies
+or unrelated PG/cache/performance changes. Exact hashes/provenance are in
+[`sim-routing-diagnostics-baseline-20261028.json`](../testing/receipts/sim-routing-diagnostics-baseline-20261028.json).
+This is a source/compiled-baseline proof, not an image build or deployment.
+Root must refresh actual identity/guards before any candidate operation and
+must not reuse the separate simulator-api PG maintenance controller for this
+different target. A broad Dockerfile rebuild/install is not this four-file
+overlay. If no existing Root-reviewed narrow operation covers this target and
+config custody, stop and review that operation rather than inventing a GO.
+
+Independent COP source/module peer review passed after exact UUID case, aggregate
+truncation and nonthrowing capture fixes. Local whole-service tests: 774 passed,
+six PostgreSQL opt-in tests skipped (no dedicated fixture URL configured).
+Scoped build/typecheck and binding OpenAPI checks passed. No production routing
+call, provider refresh, image build/upload or activation was performed by SIM
+for these proofs. The bounded event still cannot reveal an unreported native
+multipass reason; report that limitation after a human-authorized diagnostic.
+
 ### IDS JMK official GTFS-RT
 
 Map and detail requests share one in-memory producer per service process. The

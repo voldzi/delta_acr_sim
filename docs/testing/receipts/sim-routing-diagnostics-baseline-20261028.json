@@ -1,0 +1,36 @@
+{
+  "contract": "sim-routing-diagnostics-baseline-comparison-v1",
+  "sourceBaseline": "6a82e5034cda2164d7eccb786fdda3ba93f618d6",
+  "rootReportSha256": "ccc2b7cce0a09764f592924e4c24e7214546c58d0452d66f49f9c015b758d146",
+  "rootCheckedAt": "2026-10-28T21:01:54.196090+00:00",
+  "parentImage": "sha256:9f0a6d789116cad19d363e79e9c8e5963861106e10ecd9c281e9f864c1d2c124",
+  "parentCid": "5b64f9ff0a75dd0256b877e9eeaba724b0a63a8ce0d91cda0c3b384d146ae3c6",
+  "parentRestartCount": 0,
+  "rootCompiledKeys": [
+    "files",
+    "routingDiagnosticsPresent"
+  ],
+  "rootFileCount": 57,
+  "localFileCount": 57,
+  "mismatches": [],
+  "extra": [],
+  "all57NamesBytesAndHashesMatch": true,
+  "changed": [
+    "app.js",
+    "config.js",
+    "routing-service.js"
+  ],
+  "added": [
+    "routing-diagnostics.js"
+  ],
+  "removed": [],
+  "candidateOverlay": {
+    "app.js": "d963c5bd5485f18552eaf531245b53c0492620f37991e1e843ca4940fa044141",
+    "config.js": "ce4e1d7966d97ca182a1934a8bf870442c5bd700b35178e3fb264ed3d436ded7",
+    "routing-service.js": "ecebafa99832de679fbe31923f2d7a9219c1d7a0d162c0712b35afa97e1c0ee5",
+    "routing-diagnostics.js": "1aa9932771e35b4145d4c70070eeea6ec7b563a340968bb8f87c5bd7d811f19a"
+  },
+  "sourceOnly": true,
+  "noImageBuild": true,
+  "noDeployment": true
+}

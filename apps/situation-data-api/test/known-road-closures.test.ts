@@ -120,6 +120,35 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("accepted route concurrency", () => {
+  it("keeps one native flight and distinct caller UUID diagnostics without changing the payload or 401 rejection", async () => {
+    vi.stubEnv("SITUATION_DATA_ROUTING_DIAGNOSTICS_UNTIL", new Date(now + 600_000).toISOString());
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const f = await fixture(); let release!: (value: Response) => void; let nativeCalls = 0;
+      f.fetchMock.mockImplementation(async (url: string | URL, init?: RequestInit) => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        nativeCalls++; f.payloads.push(JSON.parse(String(init?.body)));
+        return new Promise<Response>(r => { release = r; });
+      });
+      const ids = ["f0000000-0000-4000-8000-000000000001", "f0000000-0000-4000-8000-000000000002"];
+      const input = { ...request(), vehicleProfile: { version: "sim-mapped-road-profile-v1" as const, intent: "car" as const, coverageAcknowledged: "mapped_restrictions_incomplete" as const } };
+      const pending = Promise.allSettled(ids.map(correlationId => f.service.route(input, { correlationId })));
+      for (let i = 0; i < 100 && nativeCalls === 0; i++) await Promise.resolve();
+      expect(nativeCalls).toBe(1);
+      release(Response.json({ ...reply(), warnings: [{ code: 401, text: "PRIVATE_PROVIDER_TEXT_CANARY" }] }));
+      const results = await pending;
+      for (const result of results) {
+        expect(result.status).toBe("rejected");
+        if (result.status === "rejected") expect(result.reason).toMatchObject({ status: 422, code: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED" });
+      }
+      expect(nativeCalls).toBe(1);
+      const events = log.mock.calls.map(([line]) => JSON.parse(String(line))).filter(e => e.event === "routing_guard_diagnostic_v1");
+      expect(events).toHaveLength(2); expect(events.map(e => e.correlationId).sort()).toEqual(ids);
+      for (const e of events) expect(e).toMatchObject({ stage: "native_warning_validation", outcomeCode: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED", requestedDateTimeMode: "none", requestedVariantCount: 2, returnedVariantCount: 2, nativeWarningCodes: [401], warningCounts: { root: 1, primary: 0, alternate: 0, malformed: 0 }, closureGeometryValidated: true, snapClassification: "unknown", algorithm: "not_reported", multipassCondition: "not_reported" });
+      expect(JSON.stringify(log.mock.calls)).not.toContain("PRIVATE_PROVIDER_TEXT_CANARY");
+      for (const id of ids) expect(JSON.stringify(f.payloads)).not.toContain(id);
+    } finally { log.mockRestore(); }
+  });
   it("shares an identical in-flight engine route but validates every caller", async () => {
     const f = await fixture();
     let release!: (value: Response) => void;
@@ -332,6 +361,47 @@ describe("ordinary route engine fences", () => {
     } finally {
       await context.driverMeasurements.close();
     }
+  });
+  it.each(["route", "alternatives"] as const)("correlates bounded private diagnostics through HTTP %s without changing the error envelope", async endpoint => {
+    vi.stubEnv("SITUATION_DATA_ROUTING_DIAGNOSTICS_UNTIL", new Date(now + 600_000).toISOString());
+    const log = vi.spyOn(console, "info").mockImplementation(() => {}), f = await fixture();
+    const { app, context } = await createApp({ ...(await loadConfig()), enabledSources: [], sharedCacheRedisUrl: undefined });
+    context.routing = f.service;
+    f.fetchMock.mockImplementation(async url => String(url).endsWith("/status")
+      ? Response.json({ version: "3.8.3", tileset_last_modified: tileset })
+      : Response.json({ ...reply(), warnings: [{ code: 401, text: "PRIVATE_HTTP_PROVIDER_CANARY" }] }));
+    const cid = "F0000000-0000-4000-8000-000000000001";
+    try {
+      const response = await supertest(app).post(`/api/v1/routing/${endpoint}`).set("x-correlation-id", cid)
+        .send({ ...request(), from: { ...request().from, label: "PRIVATE_ORIGIN_LABEL_CANARY" } });
+      expect(response.status).toBe(422);
+      expect(Object.keys(response.body)).toEqual(["error"]);
+      expect(response.body.error).toMatchObject({ code: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED", correlationId: cid });
+      const events = log.mock.calls.map(([line]) => JSON.parse(String(line))).filter(e => e.event === "routing_guard_diagnostic_v1");
+      expect(events).toHaveLength(1); expect(events[0].correlationId).toBe(cid);
+      expect(events[0].nativeWarningCodes).toEqual([401]);
+      const exported = JSON.stringify([response.body, log.mock.calls]);
+      expect(exported).not.toContain("PRIVATE_HTTP_PROVIDER_CANARY");
+      expect(exported).not.toContain("PRIVATE_ORIGIN_LABEL_CANARY");
+      expect(JSON.stringify(response.body)).not.toContain("nativeWarningCodes");
+    } finally { log.mockRestore(); await context.driverMeasurements.close(); }
+  });
+  it.each(["invalid_geometry", "closure_crossing"])("diagnostic never marks geometry/closures validated after %s", async fault => {
+    vi.stubEnv("SITUATION_DATA_ROUTING_DIAGNOSTICS_UNTIL", new Date(now + 600_000).toISOString());
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const f = await fixture();
+      f.fetchMock.mockImplementation(async url => {
+        if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+        const data: any = reply();
+        data.trip = trip(fault === "invalid_geometry" ? [[1, 1]] : [[14.48, 50.1], [14.52, 50.1]]);
+        data.trip.warnings = [{ code: 401 }]; return Response.json(data);
+      });
+      await expect(f.service.route(request(), { correlationId: "f0000000-0000-4000-8000-000000000001" }))
+        .rejects.toMatchObject({ status: 502, code: "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED" });
+      const event = JSON.parse(String(log.mock.calls[0][0]));
+      expect(event).toMatchObject({ closureGeometryValidated: false, stage: "geometry_closure_validation", nativeWarningCodes: [401], snapClassification: "unknown" });
+    } finally { log.mockRestore(); }
   });
   it.each(["start", "target", "surplus-start", "surplus-target"])(
     "classifies a proven %s shape snap outside 25m without accepting any variant",

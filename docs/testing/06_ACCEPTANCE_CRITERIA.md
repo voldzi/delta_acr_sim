@@ -77,6 +77,27 @@ samo neurčuje porušený zákaz ani původ/cíl. Viz přesný upstream
 
 ## Kvalita verze 1.0
 
+### Omezená diagnostika routování — kandidát zdroje
+
+`routing-diagnostics.test.ts` ověřuje vypnutý/expirující režim, maximálně deset
+minut, šestnáct chyb celkem, nezávislé monotónní vypršení, přesné UUID, numerické
+kódy a stropy, negativní canary pro soukromý text i extra pole a neovlivnění
+chyby selháním loggeru. `known-road-closures.test.ts` navíc ověřuje dvě různá
+UUID při jediném sdíleném výpočtu s nezměněným payloadem, korelaci HTTP obou
+endpointů bez změny veřejné chyby a `closureGeometryValidated:false` při vadné
+geometrii nebo průniku uzávěrou. Společně s mapped-profile testy: 136 lokálních
+syntetických kontrol, upstream nahrazený mocky. Celá sada služby: 774 prošlo,
+šest PostgreSQL opt-in kontrol přeskočeno bez samostatné testovací DB URL.
+Čistý zdroj před změnou byl také zkompilován a shoduje se se všemi 57 soubory
+aktuálního obrazu 9f0a (jména, velikosti, SHA); kandidát mění jen tři JS soubory
+a přidává jediný diagnostický JS modul. Přesný důkaz je v
+[baseline receipt](receipts/sim-routing-diagnostics-baseline-20261028.json).
+To není aktivace okna, zjištění
+skutečného algoritmu ani oprava konkrétního telefonu. Detailní kontrakt a Root
+akceptace jsou v [runbooku 13](../runbooks/13_PERFORMANCE_OPERATIONS.md).
+
+### Repozitářové kontroly
+
 - `pnpm format:check` musí projít nad zdrojovým kódem, package konfigurací a skripty
 - `pnpm verify` musí projít před produkčním nasazením nebo musí být výslovně popsán blokující důvod
 - generované a archivní artefakty zůstávají mimo Prettier gate přes `.prettierignore`

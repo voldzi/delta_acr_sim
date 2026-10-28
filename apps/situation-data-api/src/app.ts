@@ -18,6 +18,7 @@ import { MobileCoverageSource } from "./mobile-coverage-source.js";
 import { ChmiWeatherRadarFrameCatalog } from "./radar-frames.js";
 import { RadioPlanningError, RadioPlanningService } from "./radio-planning.js";
 import { RoutingError, RoutingService } from "./routing-service.js";
+import { routingRequestContext } from "./routing-diagnostics.js";
 import { knownClosureOptionsFromEnv } from "./known-road-closures.js";
 import { SearchDataService, type SearchEntityType, type SearchQueryRequest } from "./search-data.js";
 import { createSharedResponseCacheStore } from "./shared-cache.js";
@@ -784,7 +785,7 @@ function registerRoutingRoutes(app: Express, context: SituationDataAppContext): 
 
   app.post("/api/v1/routing/route", async (req, res) => {
     try {
-      res.json(await context.routing.route(req.body));
+      res.json(await context.routing.route(req.body, routingRequestContext(req.headers["x-correlation-id"])));
     } catch (error) {
       return routingProblem(req, res, error, "Routing route failed.");
     }
@@ -792,7 +793,7 @@ function registerRoutingRoutes(app: Express, context: SituationDataAppContext): 
 
   app.post("/api/v1/routing/alternatives", async (req, res) => {
     try {
-      res.json(await context.routing.alternatives(req.body));
+      res.json(await context.routing.alternatives(req.body, routingRequestContext(req.headers["x-correlation-id"])));
     } catch (error) {
       return routingProblem(req, res, error, "Routing alternatives failed.");
     }

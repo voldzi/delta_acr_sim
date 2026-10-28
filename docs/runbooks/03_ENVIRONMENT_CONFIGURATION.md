@@ -182,6 +182,10 @@ automatickou expiraci; vyžaduje kontrolovanou údržbu podle runbooku20.
 - `SITUATION_DATA_RADIO_PLANNING_CACHE_MAX_ENTRIES`
 - `SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS`
 - `SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES`
+- `SITUATION_DATA_ROUTING_DIAGNOSTICS_UNTIL`: off/empty by default; explicit UTC
+  ISO expiry at most ten minutes from service construction, sixteen error-only
+  private events total per process. Invalid/expired values disable it. See
+  [bounded diagnostic contract and Root gates](13_PERFORMANCE_OPERATIONS.md).
 - `ROUTING_ENGINE`
 - `VALHALLA_BASE_URL`
 - `GEO_ROUTING_SERVICE_TOKENS`

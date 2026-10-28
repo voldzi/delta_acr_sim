@@ -47,3 +47,21 @@ oddělený audit změn bez hodnot klíčů. SIM/IZS proxy vyžaduje
 `SIM_IZS_ANALYST` a zapisuje `ai.izs.summary.request`; samotný text souhrnu
 ani vstupní fakta se do rozpočtové knihy neukládají. Při nejistém výsledku
 provider volání zůstává rezervace pro následné vyrovnání.
+
+## Dočasná interní diagnostika routování
+
+`routing_guard_diagnostic_v1` je provozní diagnostika, nikoli audit oprávnění
+k vjezdu. Výchozí stav je vypnutý. Samostatně schválená konfigurace omezí okno
+na nejvýše deset minut a šestnáct chybných požadavků na proces. Korelace je jen
+validní požadavkové UUID dodané COP, nikdy ID účtu nebo auta. Nezapisují se
+polohy, těla, štítky, hodnoty profilu, identifikátory uživatelů, hlavičky
+oprávnění, tajemství ani volný text poskytovatele. Výstup má pevný seznam polí
+a číselné limity v [provozním kontraktu](../runbooks/13_PERFORMANCE_OPERATIONS.md).
+Pole algoritmu a důvodu druhého průchodu jsou výslovně `not_reported`.
+
+Události zůstávají pouze v existujícím interním provozním logu; nevzniká nová DB,
+veřejný diagnostický endpoint ani export soukromých požadavků. Expirace ukončí
+nové záznamy, **nemaže již zapsané logy**. Jejich existující infrastrukturní
+retenci a oprávnění musí Root ověřit před aktivací; tento zdroj neurčuje novou
+nekonečnou retenci. Čtěte pouze konkrétní korelovanou allowlist událost. Veřejná
+chyba ani ochranné rozhodnutí se zapnutím diagnostiky nemění.

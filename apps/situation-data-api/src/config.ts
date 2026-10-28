@@ -126,6 +126,7 @@ export interface SituationDataConfig {
   searchDataMaxLimit: number;
   routingCacheTtlSeconds: number;
   routingCacheMaxEntries: number;
+  routingDiagnosticsUntil?: string;
   routingEngine: "auto" | "valhalla" | "osm_postgis";
   valhallaBaseUrl?: string;
   routingOsmRoadsTable: string;
@@ -278,6 +279,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     searchDataMaxLimit: parseInteger(process.env.SEARCH_DATA_MAX_LIMIT, 5000),
     routingCacheTtlSeconds: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_TTL_SECONDS, 300),
     routingCacheMaxEntries: parseInteger(process.env.SITUATION_DATA_ROUTING_CACHE_MAX_ENTRIES, 512),
+    routingDiagnosticsUntil: emptyToUndefined(process.env.SITUATION_DATA_ROUTING_DIAGNOSTICS_UNTIL),
     routingEngine: parseRoutingEngine(process.env.ROUTING_ENGINE),
     valhallaBaseUrl: emptyToUndefined(process.env.VALHALLA_BASE_URL),
     routingOsmRoadsTable: process.env.ROUTING_OSM_ROADS_TABLE ?? "public.osm_roads",

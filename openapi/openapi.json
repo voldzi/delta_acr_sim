@@ -4619,6 +4619,17 @@
         "operationId": "situationData_post_situation_data_api_v1_routing_route",
         "tags": [
           "Situation Data: Situation Data"
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Existing request correlation, not an account or vehicle identifier. Only a single exact UUID qualifies for optional short-lived internal error diagnostics; missing or invalid values produce no diagnostic event. Public error envelope and legacy correlation echo remain unchanged. No coordinates, profile values or provider prose are added to diagnostics or responses; caller context never changes routing payloads, cache/flight keys or outbound Valhalla headers."
+          }
         ]
       }
     },
@@ -4663,7 +4674,18 @@
         "tags": [
           "Situation Data: Situation Data"
         ],
-        "description": "Uses the same bounded engine queue and accepted-route safety checks as routing/route. HTTP 503 with error.code ROUTING_BUSY means bounded capacity or queue wait was exceeded; no immediate automatic retry or fallback is required."
+        "description": "Uses the same bounded engine queue and accepted-route safety checks as routing/route. HTTP 503 with error.code ROUTING_BUSY means bounded capacity or queue wait was exceeded; no immediate automatic retry or fallback is required.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Existing request correlation, not an account or vehicle identifier. Only a single exact UUID qualifies for optional short-lived internal error diagnostics; missing or invalid values produce no diagnostic event. Public error envelope and legacy correlation echo remain unchanged. No coordinates, profile values or provider prose are added to diagnostics or responses; caller context never changes routing payloads, cache/flight keys or outbound Valhalla headers."
+          }
+        ]
       }
     },
     "/situation-data/api/v1/routing/isochrone": {

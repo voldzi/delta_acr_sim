@@ -1,4 +1,6 @@
 import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
+import { BoundedRoutingDiagnostics, rememberNativeRoutingFacts, recalledNativeRoutingFacts,
+  type RoutingRequestContext, type RoutingDiagnosticStage, type NativeRoutingDiagnosticFacts } from "./routing-diagnostics.js";
 import { parseArrival, assessArrival, arrivalCapabilities, type ArrivalRequest } from "./user-selected-arrival.js";
 import { engineWork, statusWork, RoutingCapacityError, RoutingSingleFlight } from "./routing-work.js";
 import {
@@ -963,7 +965,8 @@ const BASE_SPEED_KPH_BY_HIGHWAY: Record<string, number> = {
 };
 
 export class RoutingService {
-  private readonly acceptedNativeFlights = new RoutingSingleFlight<ValhallaRouteResponse>();
+  private readonly diagnostics: BoundedRoutingDiagnostics;
+  private readonly acceptedNativeFlights = new RoutingSingleFlight<{ native: ValhallaRouteResponse; diagnosticFacts?: NativeRoutingDiagnosticFacts }>();
   workStats() { return { engine: engineWork.stats(), status: statusWork.stats(), acceptedNative: this.acceptedNativeFlights.stats() }; }
   private pool?: Pool;
   private readonly routeCache: ManagedResponseCache<RoutingRouteResponse>;
@@ -979,6 +982,7 @@ export class RoutingService {
     private readonly safety: RoutingSafetyOptions = routingSafetyFromEnv(),
     private readonly knownClosures: KnownClosureOptions = knownClosureOptionsFromEnv()
   ) {
+    this.diagnostics = new BoundedRoutingDiagnostics(config.routingDiagnosticsUntil);
     this.routeCache = new ManagedResponseCache<RoutingRouteResponse>({
       ttlMs: Math.max(10, config.routingCacheTtlSeconds) * 1000,
       staleIfErrorMs: Math.max(config.routingCacheTtlSeconds, config.staleIfErrorSeconds) * 1000,
@@ -1069,13 +1073,13 @@ export class RoutingService {
     }
   }
 
-  async route(raw: RoutingRouteRequest): Promise<RoutingRouteResponse> {
+  async route(raw: RoutingRouteRequest, context?: RoutingRequestContext): Promise<RoutingRouteResponse> {
     this.validateArrival(raw);
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 1);
     const request = this.normalizeRouteRequest(raw, raw?.vehicleProfile || raw?.arrival ? (raw.alternatives ?? 1) : 1);
     if (request.vehicleProfile && !this.knownClosures.enabled)
       throw new RoutingError(503, "ROUTING_PROFILE_UNAVAILABLE", "Mapped profiles require the accepted known-closure path; no legacy fallback.");
-    if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
+    if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request), context);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
     const cache = routingTrafficCachePolicy(traffic);
@@ -1138,14 +1142,14 @@ export class RoutingService {
     }
   }
 
-  async alternatives(raw: RoutingAlternativesRequest): Promise<RoutingRouteResponse> {
+  async alternatives(raw: RoutingAlternativesRequest, context?: RoutingRequestContext): Promise<RoutingRouteResponse> {
     this.validateArrival(raw);
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 2);
     const requestedAlternatives = integerInRange(raw.alternatives, 2, 1, 3);
     const request = this.normalizeRouteRequest(raw, requestedAlternatives);
     if (request.vehicleProfile && !this.knownClosures.enabled)
       throw new RoutingError(503, "ROUTING_PROFILE_UNAVAILABLE", "Mapped profiles require the accepted known-closure path; no legacy fallback.");
-    if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request));
+    if (this.knownClosures.enabled && getRoutingProfile(request.profileId).transportMode === "road") return this.knownClosureRoute(structuredClone(request), context);
     if (getRoutingProfile(request.profileId).transportMode === "road") this.valhallaTraffic?.activate();
     const traffic = getRoutingProfile(request.profileId).transportMode === "road" ? await this.valhallaTraffic?.status() : undefined;
     const cache = routingTrafficCachePolicy(traffic);
@@ -1173,8 +1177,12 @@ export class RoutingService {
   }
 
   private async knownClosureRoute(
-    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest
+    request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
+    context?: RoutingRequestContext
   ): Promise<RoutingRouteResponse> {
+    let diagnosticStage: RoutingDiagnosticStage = "known_closure_preflight";
+    let diagnosticFacts: NativeRoutingDiagnosticFacts | undefined;
+    let closureGeometryValidated = false;
     // Deliberately outside the legacy route cache and fallback catch. A strict
     // trip reaches strictRoadTrip first and can NEVER be downgraded here.
     try {
@@ -1200,15 +1208,24 @@ export class RoutingService {
       this.valhallaTraffic?.activate();
       let liveSpeeds = await this.valhallaTraffic?.status();
       if (liveTrafficIsUsable(liveSpeeds) && liveSpeeds!.routingDataset !== dataset.version) liveSpeeds = undefined;
-      const computeNative = () => requestValhallaRoute(this.config, profile, request, undefined, {
-        liveSpeeds,
-        maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
-        rejectUnroutableLocations: true,
-        excludePolygons: snapshot.closures.map((c) => c.polygon)
-      });
-      const native = request.arrival ? await computeNative() : await this.acceptedNativeFlights.run(canonicalRoutingHash({
+      const computeNative = async () => {
+        const native = await requestValhallaRoute(this.config, profile, request, undefined, {
+          liveSpeeds,
+          maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
+          rejectUnroutableLocations: true,
+          excludePolygons: snapshot.closures.map((c) => c.polygon)
+        });
+        // SingleFlight clones every result. Carry only safe facts alongside the
+        // native object; never add caller context to its key, payload or body.
+        return { native, diagnosticFacts: recalledNativeRoutingFacts(native) };
+      };
+      diagnosticStage = "native_request";
+      const computed = request.arrival ? await computeNative() : await this.acceptedNativeFlights.run(canonicalRoutingHash({
         request, dataset, version, snapshot, trafficRevision: routingTrafficCachePolicy(liveSpeeds).revision
       }), computeNative);
+      const native = computed.native;
+      diagnosticFacts = computed.diagnosticFacts;
+      diagnosticStage = "native_warning_validation";
       const trips = [native.trip, ...(native.alternates ?? []).map((a) => a.trip)];
       if (!native.trip || trips.some((t) => !t))
         throw new Error("Incomplete or weakened engine request");
@@ -1218,6 +1235,7 @@ export class RoutingService {
       if (engineWarnings.some((w) => typeof w !== "object" || w === null || w.code !== 401)) throw new Error("Incomplete or weakened engine request");
       // Invalid geometry or a breached closure is not a client location error.
       // Verify every variant before classifying any waypoint snap.
+      diagnosticStage = "geometry_closure_validation";
       for (const t of trips) {
         if (!t?.legs?.length) throw new Error("Missing engine legs");
         for (const leg of t.legs) {
@@ -1226,9 +1244,12 @@ export class RoutingService {
           verifyKnownClosureGeometry(shape, snapshot);
         }
       }
+      closureGeometryValidated = true;
+      diagnosticStage = "native_warning_validation";
       if (engineWarnings.length > 0)
         throw new RoadTripError(422, "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED",
           "The engine could produce this route only after relaxing restrictions; the route was rejected. No affected location or lawful access is inferred.");
+      diagnosticStage = "waypoint_snap_validation";
       for (const t of trips) {
         assertValhallaRouteWaypointSnaps(
           { trip: t },
@@ -1237,6 +1258,7 @@ export class RoutingService {
           true
         );
       }
+      diagnosticStage = "route_final_validation";
       let routes = valhallaRoutes(profile, request, native, request.alternatives);
       if (
         routes.length !== trips.slice(0, request.alternatives).length ||
@@ -1302,6 +1324,9 @@ export class RoutingService {
       result.features = result.routes.map((route) => routeFeature(route));
       return result;
     } catch (error) {
+      this.diagnostics.rejected(context, diagnosticStage,
+        error instanceof RoutingCapacityError ? "ROUTING_BUSY" : error instanceof RoadTripError || error instanceof RoutingError ? error.code : "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED",
+        diagnosticFacts ?? recalledNativeRoutingFacts(error), closureGeometryValidated);
       if (error instanceof RoutingCapacityError) throw new RoutingError(503, "ROUTING_BUSY", error.message);
       if (error instanceof RoadTripError) throw new RoutingError(error.status, error.code, error.message);
       if (error instanceof RoutingError) throw error;
@@ -3528,7 +3553,14 @@ async function requestValhallaRoute(
   // error. Auxiliary cost-factor points and legacy/geo routing keep their
   // existing error contracts. No extra locate, retry or fallback is performed.
   const rejectUnroutableLocations = options.rejectUnroutableLocations === true && !options.linearCostFactors?.length;
-  const body = await requestValhallaJson<ValhallaRouteResponse>(config, "/route", payload, "POST", rejectUnroutableLocations);
+  let body: ValhallaRouteResponse;
+  try {
+    body = await requestValhallaJson<ValhallaRouteResponse>(config, "/route", payload, "POST", rejectUnroutableLocations);
+    rememberNativeRoutingFacts(body, payload, body);
+  } catch (error) {
+    rememberNativeRoutingFacts(error, payload, undefined);
+    throw error;
+  }
   if (body.error || body.status_message === "No route found") {
     throw new Error(body.error ?? body.status_message ?? "Valhalla did not return a route.");
   }
