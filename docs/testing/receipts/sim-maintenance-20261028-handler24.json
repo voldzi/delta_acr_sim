@@ -1,0 +1,8 @@
+{
+  "contract": "sim-local-execution-receipt-v1",
+  "command": "python3 scripts/test-sim-pg-disconnect-maintain.py",
+  "sourceSha256": "46af72cd310c509d64a1d68ab8a422caf43629c1bee4b88a98f65738840d1598",
+  "scope": "local narrow inherited-directory metadata test; no host execution, no rebuild, existing candidate adoption remains Root-only",
+  "exitCode": 0,
+  "combinedOutput": "........................\n----------------------------------------------------------------------\nRan 24 tests in 0.247s\n\nOK\n"
+}

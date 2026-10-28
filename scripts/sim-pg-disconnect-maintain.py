@@ -178,6 +178,10 @@ def health():
  need(json.loads(command(['docker','exec','-i',NAME,'node'],script))==[200,401],'READINESS_OR_AUTH')
 def validate_tar(raw,expected_sha,expected_files=None):
  expected_files=FILES if expected_files is None else expected_files
+ # Root proved immutable BASE4076's existing directory is root:root 0775 and
+ # current Docker diff changes neither it nor ancestors (2026-10-28). Permit
+ # exactly that inherited metadata in these two single-file COPY layers only.
+ inherited775=any(expected_files=={p:FILES[p]} for p in ['app/packages/sim-user-data/bootstrap.mjs','app/packages/sim-user-data/pg-errors.mjs'])
  need(len(raw)<=2097152 and 'sha256:'+sha(raw)==expected_sha,'LAYER_DIGEST')
  dirs={'app','app/apps','app/apps/simulator-api','app/apps/simulator-api/dist','app/packages','app/packages/sim-user-data'}
  seen=set()
@@ -187,7 +191,7 @@ def validate_tar(raw,expected_sha,expected_files=None):
    need(not m.pax_headers and not getattr(m,'sparse',None) and m.type in {tarfile.REGTYPE,tarfile.AREGTYPE,tarfile.DIRTYPE} and m.offset_data==m.offset+512,'LAYER_EXTENDED_METADATA')
    name=m.name.rstrip('/');need(name not in seen,'DUPLICATE_LAYER_PATH');seen.add(name)
    need(m.uid==0 and m.gid==0 and not m.linkname,'LAYER_CUSTODY')
-   if m.isdir():need(name in dirs and m.mode==0o755,'LAYER_DIR')
+   if m.isdir():need(name in dirs and m.mode==(0o775 if name=='app/packages/sim-user-data' and inherited775 else 0o755),'LAYER_DIR')
    else:
     need(m.isfile() and name in expected_files and m.mode==0o644 and m.size<1048576,'LAYER_FILE')
     need(sha(archive.extractfile(m).read())==expected_files[name],'LAYER_CONTENT')

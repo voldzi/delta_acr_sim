@@ -232,6 +232,24 @@ class MaintainTests(unittest.TestCase):
    with self.subTest(extra=extra),self.assertRaises(m.Stop):m.validate_tar(raw,'sha256:'+m.sha(raw))
   raw=self.make_tar(corrupt=True)
   with self.assertRaises(m.Stop):m.validate_tar(raw,'sha256:'+m.sha(raw))
+ def test_only_two_single_file_layers_inherit_exact_base_directory_775(self):
+  def layer(path,directory,mode,gid=0):
+   out=io.BytesIO();payload=(Path(__file__).resolve().parents[1]/path.removeprefix('app/')).read_bytes()
+   with tarfile.open(fileobj=out,mode='w',format=tarfile.USTAR_FORMAT) as archive:
+    item=tarfile.TarInfo(directory);item.type=tarfile.DIRTYPE;item.mode=mode;item.gid=gid;archive.addfile(item)
+    item=tarfile.TarInfo(path);item.mode=0o644;item.size=len(payload);archive.addfile(item,io.BytesIO(payload))
+   return out.getvalue()
+  for path in ['app/packages/sim-user-data/bootstrap.mjs','app/packages/sim-user-data/pg-errors.mjs']:
+   expected={path:m.FILES[path]};raw=layer(path,'app/packages/sim-user-data',0o775);m.validate_tar(raw,'sha256:'+m.sha(raw),expected)
+   for mode in [0o755,0o770,0o777,0o2775]:
+    bad=layer(path,'app/packages/sim-user-data',mode)
+    with self.subTest(path=path,mode=mode),self.assertRaises(m.Stop):m.validate_tar(bad,'sha256:'+m.sha(bad),expected)
+   for directory,mode,gid in [('app/packages',0o775,0),('app/unknown',0o775,0),('app/packages/sim-user-data',0o775,1)]:
+    bad=layer(path,directory,mode,gid)
+    with self.subTest(directory=directory,gid=gid),self.assertRaises(m.Stop):m.validate_tar(bad,'sha256:'+m.sha(bad),expected)
+   normal=layer(path,'app/packages',0o755);m.validate_tar(normal,'sha256:'+m.sha(normal),expected)
+  path='app/apps/simulator-api/dist/user-data.js';bad=layer(path,'app/packages/sim-user-data',0o775)
+  with self.assertRaises(m.Stop):m.validate_tar(bad,'sha256:'+m.sha(bad),{path:m.FILES[path]})
  def test_preexisting_env_or_exec_render_drift_refused(self):
   current={'Config':{'Env':['FIXED=value'],'Cmd':['node','entry.js'],'Entrypoint':['docker-entrypoint.sh'],'User':'','WorkingDir':'/app'}}
   image={'Config':copy.deepcopy(current['Config'])};compose={'services':{'sim-api':{'environment':{}}}}

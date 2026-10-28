@@ -1081,3 +1081,39 @@ pipe streaming/deadline cleanup, wrong idle schema/CLI context, no-bootstrap and
 no-app-operation paths. Captured outputs are in `docs/testing/receipts/`.
 These are not privileged host E2E, actual worker/OCI-export compatibility,
 per-solve policy runtime acceptance or production deployment evidence.
+
+#### Existing candidate adoption after actual inherited-directory evidence
+
+Root reports one actual solve/export/load produced immutable candidate
+`sha256:0e6b989a135cf618cd02903a54b76a272f4ed574b73005a2c502c7ce304f15cd`.
+Its original 9af-controller build result is **failed at LAYER_DIR**, not a success
+receipt. Full Config equality and 14 base-prefix + 3 new layers matched; actual
+file bytes require the separately corrected gate's complete check. No app up
+occurred and no rebuild is authorized by the correction.
+
+Root then proved current old runtime is exact BASE4076, directory
+`/app/packages/sim-user-data` is root:root 0775 and Docker diff changes neither
+that directory nor ancestors. This binds the inherited metadata to the immutable
+base, rather than treating 0775 as a general acceptable permission. The narrow
+validator now requires exactly 0775 for `app/packages/sim-user-data` **only** in
+the single-file bootstrap.mjs or pg-errors.mjs COPY layer with its pinned content
+hash. All other known directory cases still require 0755; unknown modes, paths,
+UIDs/GIDs and even 0755 instead of that exact inherited 0775 are rejected. All
+other image/config/content/export/freshness/lineage gates are unchanged.
+
+The new controller SHA is
+`46af72cd310c509d64a1d68ab8a422caf43629c1bee4b88a98f65738840d1598`.
+The new local receipt is `sim-maintenance-20261028-handler24.json`. Root must run
+a **distinct read-only actual acceptance** of the same existing candidate under
+this exact new source; preserve the original failed build/GO/source evidence.
+Do not fabricate or rewrite its missing completion file as PASS. Deployment
+profile changes only its handler source hash (probe and app bytes unchanged),
+then freshly derives all normal GO fields/lineage from actual current state.
+
+The build-only source, input bundles and build GO remain frozen at their
+historical versions. Their pinned 9af controller is deliberately not rewritten
+or rerun. The old build-bundle generator must be used only from its frozen build
+checkout/artifact for forensic reproduction; current source no longer matches
+that historical build-input pin, and its refusal is not permission to substitute
+the corrected deploy controller into the original build operation. This stage
+adopts an existing image; it does not prepare a second build.
