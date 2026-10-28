@@ -101,10 +101,13 @@ SIM, and this SIM-only memory/disk model does not automatically fit COP's image.
 Root subsequently reported one actual build and one forward recreation, followed
 by a stopped `POST_RUNTIME` check; prior proposal-state statements above describe
 their original review stage, not current deployment acceptance. Root proved the
-entire original runtime hash is recovered by only three explicit empty DNS list
-serialization changes (`Dns`, `DnsOptions`, `DnsSearch`: null to `[]`). The new
-source canonicalizes only those fields/types. This changes validation, never
-runtime DNS configuration.
+entire original runtime hash is recovered by three explicit empty DNS list
+serialization changes (`Dns`, `DnsOptions`, `DnsSearch`: null to `[]`) **and**
+unique-Target sorting of `HostConfig.Mounts`, with full entries unchanged.
+The earlier DNS-only explanation omitted order changes in its search and is
+withdrawn; that source's preflight correctly stopped without new acceptance
+artifacts. The new source canonicalizes only those proven fields/order/types.
+This changes validation, never runtime DNS or mount configuration.
 
 Original source/profile/GO/intent/failure remain immutable evidence. A separate
 protected profile/amendment/fresh GO permits only read-only acceptance of the

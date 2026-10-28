@@ -123,6 +123,17 @@ def normalized_runtime(c):
   value=x['HostConfig'][key]
   need(value is None or (type(value) is list and all(type(v) is str for v in value)),'DNS_SERIALIZATION_TYPE')
   if value is None:x['HostConfig'][key]=[]
+ if 'Mounts' in x['HostConfig'] and x['HostConfig']['Mounts'] is not None:
+  mounts=x['HostConfig']['Mounts'];need(type(mounts) is list,'HOST_MOUNTS_SERIALIZATION_TYPE')
+  for v in mounts:
+   need(type(v) is dict and {'Type','Source','Target'}<=set(v)<={'Type','Source','Target','ReadOnly','BindOptions'},'HOST_MOUNTS_SERIALIZATION_TYPE')
+   need(v['Type']=='bind' and all(type(v[k]) is str and v[k].startswith('/') for k in ['Source','Target']),'HOST_MOUNTS_SERIALIZATION_TYPE')
+   need('ReadOnly' not in v or type(v['ReadOnly']) is bool,'HOST_MOUNTS_SERIALIZATION_TYPE')
+   if 'BindOptions' in v:
+    bo=v['BindOptions'];need(type(bo) is dict and set(bo)<={'Propagation','CreateMountpoint'},'HOST_MOUNTS_SERIALIZATION_TYPE')
+    need(('Propagation' not in bo or type(bo['Propagation']) is str) and ('CreateMountpoint' not in bo or type(bo['CreateMountpoint']) is bool),'HOST_MOUNTS_SERIALIZATION_TYPE')
+  need(len({v['Target'] for v in mounts})==len(mounts),'DUPLICATE_HOST_MOUNT_TARGET')
+  x['HostConfig']['Mounts']=sorted(mounts,key=lambda v:v['Target'])
  return x
 def dns_amendment(profile,go,current):
  # This finite bridge is not a general profile or lineage migration facility.
@@ -150,8 +161,10 @@ def dns_amendment(profile,go,current):
  need(intent['composeSha256']==old_go['composeSha256'] and intent['layerFileSha256']==old_go['layerFileSha256'],'DNS_ORIGINAL_INTENT')
  need(go['releaseId']==release and amendment['candidateImage']==profile['candidateImage']==current['Image']==go['expectedImage'],'DNS_CANDIDATE')
  need(current['Id']!=old_go['expectedCid'],'DNS_GENERATION')
- need(amendment['changedFields']==['HostConfig.'+k for k in DNS_FIELDS],'DNS_FIELD_SCOPE')
+ need(amendment['changedFields']==['HostConfig.Mounts.order']+['HostConfig.'+k for k in DNS_FIELDS],'DNS_FIELD_SCOPE')
  need(all(current['HostConfig'].get(k,'missing') is None for k in DNS_FIELDS),'DNS_CURRENT_SHAPE')
+ mounts=current['HostConfig'].get('Mounts')
+ need(type(mounts) is list and len(mounts)==2 and mounts!=normalized_runtime(current)['HostConfig']['Mounts'],'DNS_CURRENT_MOUNT_ORDER')
  need(digest(raw_normalized_runtime(current))==amendment['observedRawRuntimeSha256'] and digest(normalized_runtime(current))==old_go['runtimeSha256'],'DNS_EXACT_PREIMAGE')
  need((current['Id'],current['State']['StartedAt'],current['RestartCount'])==(amendment['acceptedCid'],amendment['acceptedStartedAt'],amendment['acceptedRestartCount']) and current['RestartCount']==0,'DNS_GENERATION')
  return sha(old_profile_raw),sha(protected(ROOT/'dns-serialization-amendment.json'))

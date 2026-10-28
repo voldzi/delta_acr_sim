@@ -1125,20 +1125,30 @@ recreated the API with candidate `0e6b989a...`, then stopped at `POST_RUNTIME`.
 The new process was reported healthy, restart count zero; strict rendered model,
 compiled modules, readiness/auth and actual TLS/database lineage passed. This
 was **not** original forward completion. Root's bounded private preimage search
-then uniquely reproduced the original full sealed runtime SHA
+initially reported an incomplete preimage explanation (only three DNS fields).
+That explanation was withdrawn: its search also permuted mount order, but the
+first receipt omitted that changed path. Source `87a822...` correctly failed
+Root's canonical-hash preflight before any new profile/GO/acceptance receipt was
+created; preserve that failed preflight and source, never relabel them success.
+Root's corrected complete witness uniquely reproduced the full original SHA
 `ac363097ca5a677189897d62560e534854e1f068ba1c5d9c7b2713eff6fa03cd` by
-changing only `HostConfig.Dns`, `DnsOptions`, `DnsSearch` from explicit null to
-empty arrays. No other field, order or value changed. These are Root-reported
+by changing `HostConfig.Dns`, `DnsOptions`, `DnsSearch` from explicit null to
+empty arrays **and sorting `HostConfig.Mounts` by unique Target**. The original
+two-entry API-bind list was already Target-sorted. No legacy bind assignment,
+live mount Mode/order, alias, other field/order or entry value changed. These are Root-reported
 actual observations, not a substitute for its protected witness/receipts.
 
-The amended source normalizes only those three explicitly present fields:
+The amended source normalizes those three explicitly present DNS fields:
 null becomes `[]`; string lists remain unchanged, including nonempty lists;
-other types fail. Missing fields remain missing. All other runtime fields keep
-their original hash semantics. The strict rendered model still rejects DNS
+other types fail. Missing fields remain missing. It additionally sorts only
+`HostConfig.Mounts` by unique Target, retaining every complete entry unchanged.
+Missing/null host mount lists stay missing/null; unknown shapes/keys/types and
+duplicate Targets fail. Live `Mounts`, aliases and all other lists are untouched.
+All other runtime fields retain their original hash semantics. The strict rendered model still rejects DNS
 configuration drift. No DNS/network configuration is changed.
 
 New controller SHA:
-`87a822a98e7bdac5548d34dc893102786d6ab8c7bc0921e6683495202f509c56`.
+`0074f5c9685c289f3af835da42951f07b066e7105c9e7e22854c8a26c399229e`.
 Root must preserve the original 46af source under protected
 `source/sim-pg-disconnect-maintain.46af.py`; original `profile.json`, `go.json`,
 forward intent, invocation failure and missing forward completion stay intact.
@@ -1164,8 +1174,9 @@ Root creates fresh protected O_EXCL files with file/directory fsync:
   `acceptedCid`, `acceptedStartedAt`, `acceptedRestartCount`, `changedFields`.
   SHA fields bind raw protected original/new files. `observedRawRuntimeSha256`
   is the actual `digest(raw_normalized_runtime(current))`, not the canonical
-  hash. `changedFields` is exactly `["HostConfig.Dns", "HostConfig.DnsOptions",
-  "HostConfig.DnsSearch"]`; current fields must all be null. Candidate,
+  hash. `changedFields` is exactly `["HostConfig.Mounts.order", "HostConfig.Dns",
+  "HostConfig.DnsOptions", "HostConfig.DnsSearch"]`; current DNS fields must all
+  be null, and the two-entry host mount list must be unsorted. Candidate,
   generation, original 46af source/profile, original POST_RUNTIME failure,
   original intent/GO and unchanged lineage are checked, not merely attested.
 
@@ -1190,9 +1201,11 @@ Compose service up, no data restore and no automatic retry. A different process
 generation, restart, lineage, original artifact or unknown residual state stops
 this finite lane and requires a separate Root-reviewed recovery decision.
 
-`sim-maintenance-20261028-dns29-final.json` captures 29 local synthetic test groups,
+`sim-maintenance-20261028-dns-mount30.json` captures 30 local synthetic test groups,
 including expiry after that final protected readback (the earlier receipt remains
-historical evidence for its prior source hash);
+historical evidence for its prior source hash; the 30-group receipt additionally
+covers exact unique-Target sorting, immutable full entries, unknown shapes and
+already-sorted current amendment rejection);
 baseline three groups also pass. The unit fixture mocks the fixed actual
 preimage hash; therefore it is **not** independent actual production preimage
 or Root E2E proof. Production acceptance remains the Root operation above.

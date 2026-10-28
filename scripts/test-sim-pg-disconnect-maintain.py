@@ -284,10 +284,28 @@ class MaintainTests(unittest.TestCase):
   self.assertEqual(m.approval_paths('rollback'),(m.ROOT/'profile-dns-v1.json',m.ROOT/'go-dns-rollback-v1.json'))
   with patch.object(m.os,'geteuid',return_value=0),patch.object(m.socket,'gethostname',return_value='docker'),patch.object(m,'SOURCE',Path(m.__file__).parent),patch.object(m.sys,'argv',['script','--activate']),patch.object(m,'command') as run,self.assertRaisesRegex(m.Stop,'ACTION'):m.main()
   run.assert_not_called()
+ def test_only_hostconfig_mounts_sorted_by_unique_target_full_entries_preserved(self):
+  _,c,_=self.critical_fixture()
+  mounts=[{'Type':'bind','Source':'/synthetic/z','Target':'/z','ReadOnly':True,'BindOptions':{}},{'Type':'bind','Source':'/synthetic/a','Target':'/a','ReadOnly':False,'BindOptions':{'CreateMountpoint':True}}]
+  c['HostConfig']['Mounts']=copy.deepcopy(mounts);before=copy.deepcopy(c)
+  normalized=m.normalized_runtime(c)
+  self.assertEqual(normalized['HostConfig']['Mounts'],[mounts[1],mounts[0]])
+  self.assertEqual(c,before);self.assertEqual(normalized['Mounts'],m.raw_normalized_runtime(c)['Mounts'])
+  for value in [None,[]]:
+   changed=copy.deepcopy(c);changed['HostConfig']['Mounts']=value
+   self.assertEqual(m.normalized_runtime(changed)['HostConfig']['Mounts'],value)
+  missing=copy.deepcopy(c);del missing['HostConfig']['Mounts'];self.assertNotIn('Mounts',m.normalized_runtime(missing)['HostConfig'])
+  for value in [{},'',False,[mounts[0],mounts[0]],[{'Target':'/a'}],[{**mounts[0],'Unknown':False}],[{**mounts[0],'ReadOnly':None}],[{**mounts[0],'BindOptions':None}],[{**mounts[0],'BindOptions':{'Unknown':True}}],[{**mounts[0],'Type':'volume'}]]:
+   changed=copy.deepcopy(c);changed['HostConfig']['Mounts']=value
+   with self.subTest(value=value),self.assertRaises(m.Stop):m.normalized_runtime(changed)
+  for key,value in [('Source','/different'),('ReadOnly',False),('BindOptions',{'Propagation':'rshared'})]:
+   changed=copy.deepcopy(c);changed['HostConfig']['Mounts'][0][key]=value
+   self.assertNotEqual(m.normalized_runtime(c),m.normalized_runtime(changed))
  def dns_fixture(self):
   release='78a7cc8faa074cb284d6c3523f03ee38';runtime='ac363097ca5a677189897d62560e534854e1f068ba1c5d9c7b2713eff6fa03cd'
   _,c,_=self.critical_fixture();c.update(Image='sha256:0e6b989a135cf618cd02903a54b76a272f4ed574b73005a2c502c7ce304f15cd',State={'StartedAt':'synthetic-new'},RestartCount=0)
   for key in m.DNS_FIELDS:c['HostConfig'][key]=None
+  c['HostConfig']['Mounts']=[{'Type':'bind','Source':'/synthetic/z','Target':'/z'},{'Type':'bind','Source':'/synthetic/a','Target':'/a'}]
   original={'contract':'sim-image-only-root-profile-v1','handlerSha256':'46af72cd310c509d64a1d68ab8a422caf43629c1bee4b88a98f65738840d1598','probeSha256':'unchanged','baseImage':m.BASE,'candidateImage':c['Image'],'dataFilesystem':{'synthetic':'unchanged'}}
   profile={**original,'handlerSha256':'synthetic-new-handler'}
   lineage={'synthetic':'unchanged'};layers={str(p):'unchanged' for p in m.LAYERS}
@@ -295,7 +313,7 @@ class MaintainTests(unittest.TestCase):
   intent={'phase':'intent_not_completion','oldImage':m.BASE,'newImage':c['Image'],'baselineCid':og['expectedCid'],'profileSha256':og['profileSha256'],'lineage':lineage,'runtimeSha256':runtime,'composeSha256':og['composeSha256'],'layerFileSha256':layers}
   failed={'exitCode':2,'automaticRetry':False,'stdout':json.dumps({'status':'stopped_requires_review','code':'POST_RUNTIME','phase':'recreate'})}
   files={m.ROOT/'profile.json':m.encoded(original),m.ROOT/'go.json':m.encoded(og),m.ROOT/(release+'-activate.json'):m.encoded(intent),m.ROOT/'operator-invocation-result.json':m.encoded(failed),m.ROOT/'profile-dns-v1.json':m.encoded(profile),m.SOURCE/'sim-pg-disconnect-maintain.46af.py':b'synthetic-original-controller'}
-  a={'contract':'sim-empty-dns-profile-amendment-v1','originalProfileSha256':m.sha(files[m.ROOT/'profile.json']),'originalGoSha256':m.sha(files[m.ROOT/'go.json']),'originalIntentSha256':m.sha(files[m.ROOT/(release+'-activate.json')]),'originalFailedResultSha256':m.sha(files[m.ROOT/'operator-invocation-result.json']),'newProfileSha256':m.sha(files[m.ROOT/'profile-dns-v1.json']),'releaseId':release,'candidateImage':c['Image'],'runtimeSha256':runtime,'observedRawRuntimeSha256':m.digest(m.raw_normalized_runtime(c)),'acceptedCid':c['Id'],'acceptedStartedAt':c['State']['StartedAt'],'acceptedRestartCount':0,'changedFields':['HostConfig.'+k for k in m.DNS_FIELDS]}
+  a={'contract':'sim-empty-dns-profile-amendment-v1','originalProfileSha256':m.sha(files[m.ROOT/'profile.json']),'originalGoSha256':m.sha(files[m.ROOT/'go.json']),'originalIntentSha256':m.sha(files[m.ROOT/(release+'-activate.json')]),'originalFailedResultSha256':m.sha(files[m.ROOT/'operator-invocation-result.json']),'newProfileSha256':m.sha(files[m.ROOT/'profile-dns-v1.json']),'releaseId':release,'candidateImage':c['Image'],'runtimeSha256':runtime,'observedRawRuntimeSha256':m.digest(m.raw_normalized_runtime(c)),'acceptedCid':c['Id'],'acceptedStartedAt':c['State']['StartedAt'],'acceptedRestartCount':0,'changedFields':['HostConfig.Mounts.order']+['HostConfig.'+k for k in m.DNS_FIELDS]}
   go={'releaseId':release,'lineage':lineage,'runtimeSha256':runtime,'expectedImage':c['Image'],'profileSha256':a['newProfileSha256']}
   files[m.ROOT/'dns-serialization-amendment.json']=m.encoded(a)
   return profile,go,c,files,a
@@ -312,7 +330,7 @@ class MaintainTests(unittest.TestCase):
     f[m.ROOT/'dns-serialization-amendment.json']=m.encoded({**a,key:value})
     with self.subTest(amendment=key),self.assertRaises(m.Stop):m.dns_amendment(p,g,c)
    f[m.ROOT/'dns-serialization-amendment.json']=m.encoded(a)
-   for mutate in [lambda x:x.update(RestartCount=1),lambda x:x['HostConfig'].update(Dns=[]),lambda x:x['HostConfig'].update(ExtraHosts=['changed']),lambda x:x.update(Image=m.BASE)]:
+   for mutate in [lambda x:x.update(RestartCount=1),lambda x:x['HostConfig'].update(Dns=[]),lambda x:x['HostConfig'].update(ExtraHosts=['changed']),lambda x:x['HostConfig'].update(Mounts=sorted(x['HostConfig']['Mounts'],key=lambda v:v['Target'])),lambda x:x.update(Image=m.BASE)]:
     changed=copy.deepcopy(c);mutate(changed)
     with self.assertRaises(m.Stop):m.dns_amendment(p,g,changed)
    altered=copy.deepcopy(p);altered['dataFilesystem']={'changed':True}
