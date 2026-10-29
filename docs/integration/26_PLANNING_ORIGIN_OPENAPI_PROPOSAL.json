@@ -1,0 +1,823 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SIM assisted planning origin — joint contract proposal",
+    "version": "0.1.0-proposal",
+    "description": "NOT part of binding production OpenAPI until joint freeze and implementation. No production endpoint created."
+  },
+  "x-status": "joint-review-not-implemented",
+  "x-limits": {
+    "candidateLocateRequests": 1,
+    "candidateSearchRadiusM": 500,
+    "candidateCount": 3,
+    "previewRouteComputations": 1,
+    "implicitRetries": 0
+  },
+  "x-authority": "Existing authenticated COP service and trusted user identity; no client-selected account, token or new secret.",
+  "paths": {
+    "/api/v1/routing/planning-origin/candidates": {
+      "post": {
+        "operationId": "planningOriginCandidates",
+        "summary": "PROPOSAL ONLY: not implemented or activated",
+        "security": [
+          {
+            "ExistingCopServiceAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Correlation-ID",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidatesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Candidate suggestions or accepted preview; never navigation authority",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidatesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Existing scoped service authentication failed before any engine request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Context/dataset/selection binding changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Context expired or unchanged route guards rejected result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing service/user rate budget exhausted; no fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity, graph, closure or engine unavailable; no fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/routing/planning-origin/preview": {
+      "post": {
+        "operationId": "planningOriginPreview",
+        "summary": "PROPOSAL ONLY: not implemented or activated",
+        "security": [
+          {
+            "ExistingCopServiceAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Correlation-ID",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Candidate suggestions or accepted preview; never navigation authority",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Strict validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Existing scoped service authentication failed before any engine request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Context/dataset/selection binding changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Context expired or unchanged route guards rejected result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing service/user rate budget exhausted; no fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity, graph, closure or engine unavailable; no fallback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ExistingCopServiceAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Reuse existing service identity/scoping; credentials must not be transmitted in this proposal. Trusted account context is supplied only by the existing verified COP service identity mechanism, not a new userId request field."
+      }
+    },
+    "schemas": {
+      "Coordinate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "properties": {
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          }
+        }
+      },
+      "PhoneOrigin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "coordinate",
+          "horizontalAccuracyM",
+          "observedAt",
+          "accuracyAuthorization"
+        ],
+        "properties": {
+          "kind": {
+            "const": "phone_measured"
+          },
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "horizontalAccuracyM": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 5000
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accuracyAuthorization": {
+            "enum": [
+              "full",
+              "reduced"
+            ]
+          }
+        }
+      },
+      "ManualOrigin": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "coordinate",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "const": "manual_point"
+          },
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "source": {
+            "enum": [
+              "user_map_selection",
+              "user_selected_last_known",
+              "address_selection"
+            ]
+          }
+        }
+      },
+      "OriginContext": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PhoneOrigin"
+          },
+          {
+            "$ref": "#/components/schemas/ManualOrigin"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind"
+        }
+      },
+      "Context": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "purpose",
+          "contextId",
+          "originContext",
+          "destination",
+          "vehicleProfile"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-planning-origin-v1"
+          },
+          "purpose": {
+            "const": "planning_preview"
+          },
+          "contextId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originContext": {
+            "$ref": "#/components/schemas/OriginContext"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "vehicleProfile": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileProfile"
+          }
+        }
+      },
+      "Dataset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "builtAt"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "builtAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Binding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contextId",
+          "requestHash",
+          "contextHash",
+          "profileHash",
+          "destinationHash",
+          "routingDataset"
+        ],
+        "properties": {
+          "contextId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "contextHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "profileHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "destinationHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "routingDataset": {
+            "$ref": "#/components/schemas/Dataset"
+          }
+        }
+      },
+      "Candidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "candidateId",
+          "coordinate",
+          "offsetDistanceM",
+          "profileValidation",
+          "legalAccess",
+          "directionValidation"
+        ],
+        "properties": {
+          "candidateId": {
+            "type": "string",
+            "pattern": "^candidate:[a-f0-9]{64}$"
+          },
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "offsetDistanceM": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 500
+          },
+          "headingDeg": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 360
+          },
+          "profileValidation": {
+            "const": "not_checked"
+          },
+          "legalAccess": {
+            "const": "not_verified"
+          },
+          "directionValidation": {
+            "const": "graph_candidate_only"
+          }
+        }
+      },
+      "CandidatesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context"
+        ],
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          }
+        }
+      },
+      "CandidatesResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "purpose",
+          "state",
+          "binding",
+          "observedAt",
+          "validUntil",
+          "candidates",
+          "navigationEligible",
+          "measurementEligible"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-planning-origin-candidates-v1"
+          },
+          "purpose": {
+            "const": "planning_preview"
+          },
+          "state": {
+            "enum": [
+              "choices_available",
+              "no_candidates"
+            ]
+          },
+          "binding": {
+            "$ref": "#/components/schemas/Binding"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "candidates": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            }
+          },
+          "navigationEligible": {
+            "const": false
+          },
+          "measurementEligible": {
+            "const": false
+          }
+        }
+      },
+      "Selection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "coordinate",
+          "source",
+          "confirmed"
+        ],
+        "properties": {
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "source": {
+            "enum": [
+              "candidate_selection",
+              "user_map_selection"
+            ]
+          },
+          "confirmed": {
+            "const": true
+          },
+          "candidateId": {
+            "type": "string",
+            "pattern": "^candidate:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "PreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context",
+          "expectedDataset",
+          "selection"
+        ],
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
+          "expectedDataset": {
+            "$ref": "#/components/schemas/Dataset"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/Selection"
+          }
+        }
+      },
+      "PreviewAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "purpose",
+          "binding",
+          "selectionHash",
+          "geometryHash",
+          "validUntil",
+          "navigationEligible",
+          "measurementEligible",
+          "guards"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-planning-origin-assessment-v1"
+          },
+          "purpose": {
+            "const": "planning_preview"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/Binding"
+          },
+          "selectionHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "geometryHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "navigationEligible": {
+            "const": false
+          },
+          "measurementEligible": {
+            "const": false
+          },
+          "guards": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mappedProfile",
+              "knownClosures",
+              "closureRevision",
+              "snapToleranceM",
+              "nativeWarningCount",
+              "allVariantsValidated",
+              "fallbackUsed"
+            ],
+            "properties": {
+              "mappedProfile": {
+                "const": "applied_incomplete_coverage"
+              },
+              "knownClosures": {
+                "const": "applied_reviewed_snapshot"
+              },
+              "closureRevision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "snapToleranceM": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 25
+              },
+              "nativeWarningCount": {
+                "const": 0
+              },
+              "allVariantsValidated": {
+                "const": true
+              },
+              "fallbackUsed": {
+                "const": false
+              }
+            }
+          }
+        }
+      },
+      "PreviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "purpose",
+          "context",
+          "planningOrigin",
+          "offsetDistanceM",
+          "connector",
+          "navigationEligible",
+          "measurementEligible",
+          "assessment",
+          "route"
+        ],
+        "properties": {
+          "version": {
+            "const": "sim-planning-origin-preview-v1"
+          },
+          "purpose": {
+            "const": "planning_preview"
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
+          "planningOrigin": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "offsetDistanceM": {
+            "type": "number",
+            "minimum": 0
+          },
+          "connector": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "navigable"
+            ],
+            "properties": {
+              "state": {
+                "const": "unknown"
+              },
+              "navigable": {
+                "const": false
+              }
+            }
+          },
+          "navigationEligible": {
+            "const": false
+          },
+          "measurementEligible": {
+            "const": false
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/PreviewAssessment"
+          },
+          "route": {
+            "$ref": "#/components/schemas/PreviewPath"
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "correlationId",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "enum": [
+              "UNAUTHORIZED",
+              "VALIDATION_ERROR",
+              "PLANNING_ORIGIN_CONTEXT_EXPIRED",
+              "PLANNING_ORIGIN_DATASET_CHANGED",
+              "PLANNING_ORIGIN_SELECTION_INVALID",
+              "ROUTING_LOCATION_NOT_ROUTABLE",
+              "ROUTING_TARGET_NOT_ROUTABLE",
+              "ROUTING_WAYPOINT_NOT_ROUTABLE",
+              "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED",
+              "PLANNING_ORIGIN_LIMIT_EXCEEDED",
+              "ROUTING_BUSY",
+              "PLANNING_ORIGIN_UNAVAILABLE",
+              "ROUTING_KNOWN_CLOSURES_UNAVAILABLE",
+              "ROUTING_KNOWN_CLOSURES_CHANGED",
+              "ROUTING_GRAPH_STALE",
+              "ROUTING_PROFILE_UNAVAILABLE",
+              "ROUTING_KNOWN_CLOSURES_ENGINE_FAILED"
+            ]
+          },
+          "correlationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 512
+          }
+        }
+      },
+      "PreviewPath": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "previewPathId",
+          "geometry",
+          "distanceM",
+          "durationSeconds",
+          "warnings"
+        ],
+        "properties": {
+          "previewPathId": {
+            "type": "string",
+            "pattern": "^preview:[a-f0-9]{64}$"
+          },
+          "geometry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "coordinates"
+            ],
+            "properties": {
+              "type": {
+                "const": "LineString"
+              },
+              "coordinates": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": -180,
+                      "maximum": 180
+                    },
+                    {
+                      "type": "number",
+                      "minimum": -90,
+                      "maximum": 90
+                    }
+                  ],
+                  "items": false
+                }
+              }
+            }
+          },
+          "distanceM": {
+            "type": "number",
+            "minimum": 0
+          },
+          "durationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "warnings": {
+            "type": "array",
+            "maxItems": 0,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}
