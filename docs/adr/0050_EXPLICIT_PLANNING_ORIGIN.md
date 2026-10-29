@@ -1,6 +1,9 @@
 # ADR 0050: explicitní plánovací začátek mimo nepřesnou GPS
 
-Status: **návrh ke společné revizi SIM–COP–Jízda**, neimplementováno, nenasazeno.
+Status: **společně revidovaný zdrojový kontrakt, implementační kandidát**;
+nenasazeno, bez nativní/telefonní akceptace. Aktivní source fragment je
+`openapi/fragments/planning-origin-v1.openapi.json`; historický návrh 7d959…
+zůstává zachovaný. Úplná closure evidence je společně potvrzený aditivní doplněk.
 Neopravňuje k dalším soukromým dotazům, změně snap tolerance ani zapnutí navigace.
 
 ## Důvod a doložená hranice

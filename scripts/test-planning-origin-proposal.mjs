@@ -86,5 +86,5 @@ valid('PreviewPath', { previewPathId: `preview:${'b'.repeat(64)}`, geometry: { t
 invalid('PreviewPath', { previewPathId: `preview:${'b'.repeat(64)}`, geometry: { type: 'LineString', coordinates: [[14, 50], [14.01, 50.01]] }, distanceM: 100, durationSeconds: 30, warnings: [], mappedProfileAssessment: {} });
 assert.equal(Object.keys(proposal.paths).length, 2);
 for (const path of Object.keys(proposal.paths)) assert.equal(production.paths[path], undefined);
-console.log(JSON.stringify({ schemaChecks: checks, compiledSchemas: Object.keys(validators).length, productionOpenApiUnchanged: true, engineRequests: 0,
+console.log(JSON.stringify({ schemaChecks: checks, compiledSchemas: Object.keys(validators).length, historicalProposalShapeOnly: true, engineRequests: 0,
   freshnessOrAuthOrRouteGuardsTested: false, proposalOnly: true }));

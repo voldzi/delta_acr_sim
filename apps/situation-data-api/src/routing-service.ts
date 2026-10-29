@@ -1,4 +1,5 @@
 import { selectDirectedRoadMatch, type RoadMatchEvidence } from "./road-match.js";
+import { planningOrdinaryQuery } from "./planning-origin-query.js";
 import { BoundedRoutingDiagnostics, rememberNativeRoutingFacts, recalledNativeRoutingFacts,
   type RoutingRequestContext, type RoutingDiagnosticStage, type NativeRoutingDiagnosticFacts } from "./routing-diagnostics.js";
 import { parseArrival, assessArrival, arrivalCapabilities, type ArrivalRequest } from "./user-selected-arrival.js";
@@ -1073,6 +1074,31 @@ export class RoutingService {
     }
   }
 
+  async planningDataset(): Promise<ExactRoutingDataset> {
+    if (!this.shouldUseValhalla() || !this.knownClosures.enabled) throw new RoutingError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "Planning requires the accepted known-closure engine.");
+    const status = await requestValhallaStatus(this.config);
+    if (status.version !== "3.8.3" || !this.knownClosures.acceptedEngineVersions.includes(status.version))
+      throw new RoutingError(503, "ROUTING_PROFILE_UNAVAILABLE", "Planning engine version is not accepted.");
+    return routingDatasetFromStatus(status);
+  }
+
+  async planningLocate(context: import("./planning-origin.js").PlanningContext): Promise<unknown> {
+    const profile = getRoutingProfile("car"), costing = effectiveValhallaCosting(profile, undefined, undefined, context.vehicleProfile);
+    return requestValhallaJson(this.config, "/locate", {
+      verbose: true,
+      locations: [{ lat: context.originContext.coordinate.lat, lon: context.originContext.coordinate.lon, radius: 500, search_cutoff: 500 }],
+      costing, costing_options: valhallaCostingOptions(profile, [], undefined, undefined, context.vehicleProfile)
+    }, "POST", false, 2 * 1024 * 1024);
+  }
+
+  async planningPreview(context: import("./planning-origin.js").PlanningContext, coordinate: RoutingCoordinate): Promise<RoutingRouteResponse> {
+    if (!this.knownClosures.enabled) throw new RoutingError(503, "ROUTING_KNOWN_CLOSURES_UNAVAILABLE", "Planning requires known-closure guards.");
+    const request = this.normalizeRouteRequest(planningOrdinaryQuery(context, coordinate), 1);
+    // Only the new purpose-separated preview bypasses result reuse. Ordinary
+    // route callers retain their existing accepted single-flight behavior.
+    return this.knownClosureRoute(structuredClone(request), undefined, true);
+  }
+
   async route(raw: RoutingRouteRequest, context?: RoutingRequestContext): Promise<RoutingRouteResponse> {
     this.validateArrival(raw);
     if (raw && typeof raw === "object" && "trip" in raw) return this.strictRoadTrip(raw, 1);
@@ -1178,7 +1204,8 @@ export class RoutingService {
 
   private async knownClosureRoute(
     request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
-    context?: RoutingRequestContext
+    context?: RoutingRequestContext,
+    bypassSingleFlight = false
   ): Promise<RoutingRouteResponse> {
     let diagnosticStage: RoutingDiagnosticStage = "known_closure_preflight";
     let diagnosticFacts: NativeRoutingDiagnosticFacts | undefined;
@@ -1220,7 +1247,7 @@ export class RoutingService {
         return { native, diagnosticFacts: recalledNativeRoutingFacts(native) };
       };
       diagnosticStage = "native_request";
-      const computed = request.arrival ? await computeNative() : await this.acceptedNativeFlights.run(canonicalRoutingHash({
+      const computed = request.arrival || bypassSingleFlight ? await computeNative() : await this.acceptedNativeFlights.run(canonicalRoutingHash({
         request, dataset, version, snapshot, trafficRevision: routingTrafficCachePolicy(liveSpeeds).revision
       }), computeNative);
       const native = computed.native;
@@ -3911,13 +3938,15 @@ async function requestValhallaJson<T>(
   endpoint: string,
   payload?: unknown,
   method: "GET" | "POST" = "POST",
-  rejectUnroutableLocations = false
+  rejectUnroutableLocations = false,
+  maxResponseBytes?: number
 ): Promise<T> {
   const baseUrl = config.valhallaBaseUrl;
   if (!baseUrl) {
     throw new Error("VALHALLA_BASE_URL is not configured.");
   }
-  const perform = () => fetch(new URL(endpoint, withTrailingSlash(baseUrl)), {
+  const perform = async () => {
+    const response = await fetch(new URL(endpoint, withTrailingSlash(baseUrl)), {
     method,
     headers: {
       accept: "application/json",
@@ -3925,8 +3954,23 @@ async function requestValhallaJson<T>(
       "user-agent": "csm-sim-situation-data/0.1"
     },
     body: payload === undefined ? undefined : JSON.stringify(payload),
-    signal: AbortSignal.timeout(config.requestTimeoutMs)
-  });
+    signal: AbortSignal.timeout(config.requestTimeoutMs),
+    ...(maxResponseBytes === undefined ? {} : { redirect: "error" as const })
+    });
+    if (maxResponseBytes === undefined || !response.body) return response;
+    if (Number(response.headers.get("content-length")) > maxResponseBytes) { await response.body.cancel(); throw new Error("Planning response exceeds limit."); }
+    const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break;
+        size += value.byteLength;
+        if (size > maxResponseBytes) { await reader.cancel(); throw new Error("Planning response exceeds limit."); }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    // Keep the existing engine concurrency lease through the bounded body read.
+    return new Response(Buffer.concat(chunks), { status: response.status, headers: response.headers });
+  };
   let response: Response;
   try {
     response = await (endpoint === "/status" ? statusWork : engineWork).run(perform);

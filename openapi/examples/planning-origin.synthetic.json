@@ -1,0 +1,367 @@
+{
+  "syntheticOnly": true,
+  "notLiveCoordinateEvidence": true,
+  "notNativeEngineAcceptance": true,
+  "engineRequests": 0,
+  "nowUtc": "2026-10-29T12:00:00.000Z",
+  "nowUnixMs": 1793275200000,
+  "actorIsSyntheticNotCredential": true,
+  "actor": {
+    "serviceActor": "cop",
+    "opaquePlanningActor": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "candidatesRequest": {
+    "context": {
+      "version": "sim-planning-origin-v1",
+      "purpose": "planning_preview",
+      "contextId": "11111111-1111-4111-8111-111111111111",
+      "originContext": {
+        "kind": "phone_measured",
+        "coordinate": {
+          "lat": 50,
+          "lon": 14
+        },
+        "horizontalAccuracyM": 3,
+        "observedAt": "2026-10-29T12:00:00Z",
+        "accuracyAuthorization": "reduced"
+      },
+      "destination": {
+        "lat": 50,
+        "lon": 14.01
+      },
+      "vehicleProfile": {
+        "version": "sim-mapped-road-profile-v1",
+        "intent": "car",
+        "coverageAcknowledged": "mapped_restrictions_incomplete",
+        "vehicle": {
+          "heightM": 2,
+          "widthM": 2,
+          "lengthM": 5,
+          "loadedWeightKg": 3000
+        }
+      }
+    }
+  },
+  "candidatesResponse": {
+    "version": "sim-planning-origin-candidates-v1",
+    "purpose": "planning_preview",
+    "state": "choices_available",
+    "binding": {
+      "contextId": "11111111-1111-4111-8111-111111111111",
+      "requestHash": "29a2f7bc773306ec71f6b725eba3ef963bb0500eb23197022ee2cfd430a3e872",
+      "contextHash": "375150bbf468d9e78725a512e754e1dd24c63d2ba654f2cf95df08e54fba9d14",
+      "profileHash": "2917c1a0ab342d93aa02ad74cce8b8e9a9311af6aad47a1ca49f75357c74d500",
+      "destinationHash": "447533d05dff61d6c4f240383305d559ed4438d59e342d0f758b1738df26732b",
+      "routingDataset": {
+        "version": "synthetic-graph",
+        "builtAt": "2026-10-29T00:00:00Z"
+      }
+    },
+    "observedAt": "2026-10-29T12:00:00.000Z",
+    "validUntil": "2026-10-29T12:02:00.000Z",
+    "candidates": [
+      {
+        "candidateId": "candidate:14d70b810f5dc9c9ef41ecbd166cf9f7dc90004d3f370f506ffb45a4a0da4024",
+        "coordinate": {
+          "lat": 50,
+          "lon": 14.0005
+        },
+        "offsetDistanceM": 35.73736055354012,
+        "directions": [
+          {
+            "directionId": "direction:90eb507a9488ffdccbf3cba9becc171b230bd446e54c1f2fe02242f982b9189e",
+            "headingDeg": 90,
+            "validation": "graph_candidate_only"
+          },
+          {
+            "directionId": "direction:d9847f026cbdccc5e7f56105d2b50cc517fb34c51b16604bb56677ce701f8a41",
+            "headingDeg": 270,
+            "validation": "graph_candidate_only"
+          }
+        ],
+        "directionsTruncated": false,
+        "profileValidation": "not_checked",
+        "legalAccess": "not_verified",
+        "directionValidation": "graph_candidate_only"
+      }
+    ],
+    "navigationEligible": false,
+    "measurementEligible": false
+  },
+  "previewRequest": {
+    "context": {
+      "version": "sim-planning-origin-v1",
+      "purpose": "planning_preview",
+      "contextId": "11111111-1111-4111-8111-111111111111",
+      "originContext": {
+        "kind": "phone_measured",
+        "coordinate": {
+          "lat": 50,
+          "lon": 14
+        },
+        "horizontalAccuracyM": 3,
+        "observedAt": "2026-10-29T12:00:00Z",
+        "accuracyAuthorization": "reduced"
+      },
+      "destination": {
+        "lat": 50,
+        "lon": 14.01
+      },
+      "vehicleProfile": {
+        "version": "sim-mapped-road-profile-v1",
+        "intent": "car",
+        "coverageAcknowledged": "mapped_restrictions_incomplete",
+        "vehicle": {
+          "heightM": 2,
+          "widthM": 2,
+          "lengthM": 5,
+          "loadedWeightKg": 3000
+        }
+      }
+    },
+    "expectedDataset": {
+      "version": "synthetic-graph",
+      "builtAt": "2026-10-29T00:00:00Z"
+    },
+    "discoveryBinding": {
+      "contextId": "11111111-1111-4111-8111-111111111111",
+      "requestHash": "29a2f7bc773306ec71f6b725eba3ef963bb0500eb23197022ee2cfd430a3e872",
+      "contextHash": "375150bbf468d9e78725a512e754e1dd24c63d2ba654f2cf95df08e54fba9d14",
+      "profileHash": "2917c1a0ab342d93aa02ad74cce8b8e9a9311af6aad47a1ca49f75357c74d500",
+      "destinationHash": "447533d05dff61d6c4f240383305d559ed4438d59e342d0f758b1738df26732b",
+      "routingDataset": {
+        "version": "synthetic-graph",
+        "builtAt": "2026-10-29T00:00:00Z"
+      }
+    },
+    "selection": {
+      "coordinate": {
+        "lat": 50,
+        "lon": 14.0005
+      },
+      "source": "candidate_selection",
+      "confirmed": true,
+      "candidateId": "candidate:14d70b810f5dc9c9ef41ecbd166cf9f7dc90004d3f370f506ffb45a4a0da4024",
+      "directions": [
+        {
+          "directionId": "direction:90eb507a9488ffdccbf3cba9becc171b230bd446e54c1f2fe02242f982b9189e",
+          "headingDeg": 90,
+          "validation": "graph_candidate_only"
+        },
+        {
+          "directionId": "direction:d9847f026cbdccc5e7f56105d2b50cc517fb34c51b16604bb56677ce701f8a41",
+          "headingDeg": 270,
+          "validation": "graph_candidate_only"
+        }
+      ],
+      "directionsTruncated": false
+    }
+  },
+  "previewResponse": {
+    "version": "sim-planning-origin-preview-v1",
+    "purpose": "planning_preview",
+    "context": {
+      "version": "sim-planning-origin-v1",
+      "purpose": "planning_preview",
+      "contextId": "11111111-1111-4111-8111-111111111111",
+      "originContext": {
+        "kind": "phone_measured",
+        "coordinate": {
+          "lat": 50,
+          "lon": 14
+        },
+        "horizontalAccuracyM": 3,
+        "observedAt": "2026-10-29T12:00:00Z",
+        "accuracyAuthorization": "reduced"
+      },
+      "destination": {
+        "lat": 50,
+        "lon": 14.01
+      },
+      "vehicleProfile": {
+        "version": "sim-mapped-road-profile-v1",
+        "intent": "car",
+        "coverageAcknowledged": "mapped_restrictions_incomplete",
+        "vehicle": {
+          "heightM": 2,
+          "widthM": 2,
+          "lengthM": 5,
+          "loadedWeightKg": 3000
+        }
+      }
+    },
+    "planningOrigin": {
+      "lat": 50,
+      "lon": 14.0005
+    },
+    "offsetDistanceM": 35.73736055354012,
+    "connector": {
+      "state": "unknown",
+      "navigable": false
+    },
+    "navigationEligible": false,
+    "measurementEligible": false,
+    "route": {
+      "previewPathId": "preview:96741148cc800922179ea33a10846fb4ce36607448bf351d895c62ebf27b7220",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            14.0005,
+            50
+          ],
+          [
+            14.01,
+            50
+          ]
+        ]
+      },
+      "distanceM": 1000,
+      "durationSeconds": 100,
+      "warnings": []
+    },
+    "assessment": {
+      "version": "sim-planning-origin-assessment-v1",
+      "state": "applied",
+      "coverage": "mapped_restrictions_incomplete",
+      "appliedProfile": {
+        "version": "sim-mapped-road-profile-v1",
+        "intent": "car",
+        "coverageAcknowledged": "mapped_restrictions_incomplete",
+        "vehicle": {
+          "heightM": 2,
+          "widthM": 2,
+          "lengthM": 5,
+          "loadedWeightKg": 3000
+        }
+      },
+      "profileHash": "2917c1a0ab342d93aa02ad74cce8b8e9a9311af6aad47a1ca49f75357c74d500",
+      "requestHash": "f078d1c83cf2dfbe231902b70bcdef709973f5066c9dcc8a697bd865eea2c7d1",
+      "geometryHash": "c40f40736796434cd24688c1d2e92aa10158f3bd7150893111a82720ff0791d3",
+      "engine": {
+        "provider": "valhalla",
+        "version": "3.8.3",
+        "costing": "auto",
+        "fallbackUsed": false
+      },
+      "routingDataset": {
+        "version": "synthetic-graph",
+        "builtAt": "2026-10-29T00:00:00Z"
+      },
+      "appliedFields": [
+        "heightM",
+        "widthM",
+        "lengthM",
+        "loadedWeightKg"
+      ],
+      "validUntil": "2026-10-29T12:01:00.000Z",
+      "lastMile": {
+        "state": "mapped_target",
+        "target": {
+          "lon": 14.01,
+          "lat": 50
+        },
+        "mappedEndpoint": {
+          "lon": 14.01,
+          "lat": 50
+        },
+        "distanceM": 0
+      },
+      "limitations": [
+        "Mapped vehicle restrictions are incomplete; legal access, physical passability and current signage remain the driver's responsibility."
+      ],
+      "purpose": "planning_preview",
+      "binding": {
+        "contextId": "11111111-1111-4111-8111-111111111111",
+        "requestHash": "f078d1c83cf2dfbe231902b70bcdef709973f5066c9dcc8a697bd865eea2c7d1",
+        "contextHash": "375150bbf468d9e78725a512e754e1dd24c63d2ba654f2cf95df08e54fba9d14",
+        "profileHash": "2917c1a0ab342d93aa02ad74cce8b8e9a9311af6aad47a1ca49f75357c74d500",
+        "destinationHash": "447533d05dff61d6c4f240383305d559ed4438d59e342d0f758b1738df26732b",
+        "routingDataset": {
+          "version": "synthetic-graph",
+          "builtAt": "2026-10-29T00:00:00Z"
+        }
+      },
+      "knownClosuresEvidence": {
+        "version": "sim-known-road-closures-v1",
+        "state": "applied",
+        "coverage": "incomplete",
+        "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "observedAt": "2026-10-29T12:00:00.000Z",
+        "validUntil": "2026-10-29T12:01:00.000Z",
+        "appliedClosureCount": 0,
+        "geometryHash": "c40f40736796434cd24688c1d2e92aa10158f3bd7150893111a82720ff0791d3",
+        "requestHash": "15f4dcd90a4b7a79e42e38ec000d9a4cc9a326d7cd766696463522bd7cbfd0df",
+        "exclusions": [],
+        "routingDataset": {
+          "version": "synthetic-graph",
+          "builtAt": "2026-10-29T00:00:00Z"
+        },
+        "engine": {
+          "provider": "valhalla",
+          "version": "3.8.3",
+          "fallbackUsed": false
+        },
+        "limitations": [
+          "SYNTHETIC reviewed closure fixture, not live evidence."
+        ]
+      },
+      "selectionHash": "a1441df8e880f7a6ce375913f9946d2efabb66c8a19cc60039c89ef2829366ab",
+      "navigationEligible": false,
+      "measurementEligible": false,
+      "guards": {
+        "mappedProfile": "applied_incomplete_coverage",
+        "knownClosures": "applied_reviewed_snapshot",
+        "closureRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "snapToleranceM": 25,
+        "nativeWarningCount": 0,
+        "allVariantsValidated": true,
+        "fallbackUsed": false
+      }
+    }
+  },
+  "ordinaryQuery": {
+    "profileId": "car",
+    "from": {
+      "lon": 14.0005,
+      "lat": 50
+    },
+    "to": {
+      "lon": 14.01,
+      "lat": 50
+    },
+    "vehicleProfile": {
+      "version": "sim-mapped-road-profile-v1",
+      "intent": "car",
+      "coverageAcknowledged": "mapped_restrictions_incomplete",
+      "vehicle": {
+        "heightM": 2,
+        "widthM": 2,
+        "lengthM": 5,
+        "loadedWeightKg": 3000
+      }
+    },
+    "via": [],
+    "avoid": [],
+    "alternatives": 1,
+    "includeSteps": false,
+    "includeRoadAttributes": false,
+    "includeElevationProfile": false,
+    "includeWeatherOnRoute": false,
+    "includeHazardsOnRoute": false,
+    "includeTraffic": false
+  },
+  "canonicalPublicVectors": {
+    "contextHash": "375150bbf468d9e78725a512e754e1dd24c63d2ba654f2cf95df08e54fba9d14",
+    "profileHash": "2917c1a0ab342d93aa02ad74cce8b8e9a9311af6aad47a1ca49f75357c74d500",
+    "destinationHash": "447533d05dff61d6c4f240383305d559ed4438d59e342d0f758b1738df26732b",
+    "selectionHash": "a1441df8e880f7a6ce375913f9946d2efabb66c8a19cc60039c89ef2829366ab",
+    "geometryHash": "c40f40736796434cd24688c1d2e92aa10158f3bd7150893111a82720ff0791d3",
+    "ordinaryQueryHash": "15f4dcd90a4b7a79e42e38ec000d9a4cc9a326d7cd766696463522bd7cbfd0df",
+    "candidateId": "candidate:14d70b810f5dc9c9ef41ecbd166cf9f7dc90004d3f370f506ffb45a4a0da4024"
+  },
+  "actorBoundVectorsCopOnly": {
+    "discoveryRequestHash": "29a2f7bc773306ec71f6b725eba3ef963bb0500eb23197022ee2cfd430a3e872",
+    "previewRequestHash": "f078d1c83cf2dfbe231902b70bcdef709973f5066c9dcc8a697bd865eea2c7d1"
+  }
+}

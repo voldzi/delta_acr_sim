@@ -5,6 +5,8 @@ import supertest from "supertest";
 import { createApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { RoutingService, encodeValhallaPolyline6 } from "../src/routing-service.js";
+import { PlanningOriginService, planningBinding, type PlanningContext } from "../src/planning-origin.js";
+import { planningOrdinaryQuery } from "../src/planning-origin-query.js";
 import { canonicalRoutingHash } from "../src/routing-safety.js";
 import { parseTpeg2Tec } from "../src/tpeg2-source.js";
 import {
@@ -118,6 +120,55 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+describe("planning uses actual unchanged closure route guards", () => {
+  const context = (): PlanningContext => ({ version: "sim-planning-origin-v1", purpose: "planning_preview", contextId: "11111111-1111-4111-8111-111111111111",
+    originContext: { kind: "manual_point", coordinate: request().from, source: "user_map_selection" }, destination: request().to,
+    vehicleProfile: { version: "sim-mapped-road-profile-v1", intent: "car", coverageAcknowledged: "mapped_restrictions_incomplete", vehicle: { heightM: 2, widthM: 2, lengthM: 5, loadedWeightKg: 3000 } } });
+  it("retains complete real closure/mapped evidence and exact normalized query", async () => {
+    const f = await fixture(), c = context();
+    const r = await f.service.planningPreview(c, c.originContext.coordinate);
+    expect(r.query).toEqual(planningOrdinaryQuery(c, c.originContext.coordinate));
+    expect(r.routes[0]!.mappedProfileAssessment?.requestHash).toBe(canonicalRoutingHash(r.query));
+    expect(r.routes[0]!.knownClosures?.requestHash).toBe(canonicalRoutingHash(r.query));
+    expect(f.payloads).toHaveLength(1); expect(f.payloads[0].locations.map((p: any) => p.radius)).toEqual([25, 25]);
+    expect(f.payloads[0].exclude_polygons).toEqual([polygon]);
+    expect(f.payloads[0].costing_options.auto).toMatchObject({ height: 2, ignore_access: false, ignore_restrictions: false });
+    const actor = { serviceActor: "cop", opaquePlanningActor: "a".repeat(64) };
+    const preview = await new PlanningOriginService(f.service).preview({ context: c, expectedDataset: dataset,
+      discoveryBinding: planningBinding(actor, c, dataset), selection: { source: "user_map_selection", coordinate: c.originContext.coordinate, confirmed: true } }, actor);
+    expect(preview.assessment.knownClosuresEvidence.exclusions).toEqual(r.routes[0]!.knownClosures!.exclusions);
+    expect(preview.assessment.requestHash).not.toBe(preview.assessment.knownClosuresEvidence.requestHash);
+  });
+  it("does not use single-flight for two planning previews", async () => {
+    const f = await fixture(), c = context();
+    await Promise.all([f.service.planningPreview(c, c.originContext.coordinate), f.service.planningPreview(c, c.originContext.coordinate)]);
+    expect(f.payloads).toHaveLength(2);
+  });
+  it.each([171, 401])("keeps actual native %s rejection without retry or snap/profile relaxation", async code => {
+    const f = await fixture(), c = context();
+    f.fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/status")) return Response.json({ version: "3.8.3", tileset_last_modified: tileset });
+      f.payloads.push(JSON.parse(String(init?.body)));
+      return code === 171 ? Response.json({ error_code: 171 }, { status: 400 }) : Response.json({ ...reply(), warnings: [{ code: 401 }] });
+    });
+    await expect(f.service.planningPreview(c, c.originContext.coordinate)).rejects.toMatchObject({ status: 422,
+      code: code === 171 ? "ROUTING_LOCATION_NOT_ROUTABLE" : "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED" });
+    expect(f.payloads).toHaveLength(1);
+  });
+  it("performs exactly one bounded mapped locate without substituting routing or enabling ignore flags", async () => {
+    const f = await fixture();
+    f.fetchMock.mockImplementation(async (url, init) => { expect(String(url)).toMatch(/\/locate$/); f.payloads.push(JSON.parse(String(init?.body))); return Response.json([{ edges: [] }]); });
+    await f.service.planningLocate(context()); expect(f.payloads).toHaveLength(1);
+    expect(f.payloads[0].locations).toEqual([{ lat: 50.08, lon: 14.42, radius: 500, search_cutoff: 500 }]);
+    expect(f.payloads[0].costing_options.auto).toMatchObject({ height: 2, weight: 3, ignore_access: false });
+  });
+  it("bounds the actual native locate body without retry", async () => {
+    const f = await fixture();
+    f.fetchMock.mockResolvedValue(new Response('x'.repeat(2 * 1024 * 1024 + 1)));
+    await expect(f.service.planningLocate(context())).rejects.toThrow('Planning response exceeds limit.');
+    expect(f.fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 describe("accepted route concurrency", () => {
   it("keeps one native flight and distinct caller UUID diagnostics without changing the payload or 401 rejection", async () => {

@@ -134,6 +134,7 @@ export interface SituationDataConfig {
   routingMaxSearchRadiusM: number;
   routingMaxSnapDistanceM: number;
   geoRoutingPrincipals: GeoRoutingPrincipalConfig[];
+  planningOriginAllowedServiceActors?: string[];
   geoRoutingAudience: string;
   geoRoutingMaxWaypoints: number;
   geoRoutingMaxTotalDistanceM: number;
@@ -287,6 +288,7 @@ export async function loadConfig(): Promise<SituationDataConfig> {
     routingMaxSearchRadiusM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SEARCH_RADIUS_M, 800000),
     routingMaxSnapDistanceM: parseInteger(process.env.SITUATION_DATA_ROUTING_MAX_SNAP_DISTANCE_M, 2500),
     geoRoutingPrincipals: parseGeoRoutingPrincipals(process.env.GEO_ROUTING_SERVICE_TOKENS),
+    planningOriginAllowedServiceActors: parseStringList(process.env.PLANNING_ORIGIN_ALLOWED_SERVICE_ACTORS),
     geoRoutingAudience: process.env.GEO_ROUTING_AUDIENCE ?? "csm-sim-geo-routing-v1",
     geoRoutingMaxWaypoints: Math.max(2, parseInteger(process.env.GEO_ROUTING_MAX_WAYPOINTS, 25)),
     geoRoutingMaxTotalDistanceM: Math.max(1, parseInteger(process.env.GEO_ROUTING_MAX_TOTAL_DISTANCE_M, 1_000_000)),

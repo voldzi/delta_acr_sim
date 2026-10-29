@@ -502,3 +502,33 @@ flight JSON response compressed from 624,781 bytes to 49,592 bytes. All SIM
 containers were healthy with zero restarts after the benchmark, and an
 authenticated COP query for mobile-network plus communication-tower layers
 returned 40 features with `ONLINE` source health in 5 ms.
+
+## Assisted planning source candidate — no production acceptance
+
+Planning candidates use exactly one bounded locate computation (500m maximum,
+at most three unverified suggestions). Preview uses exactly one ordinary guarded
+route computation after explicit selection. There is no automatic retry, result
+cache, single-flight, database or forced provider refresh. Preview retains the
+ordinary guarded route's normal on-demand traffic lease; it does not bypass
+provider polling/cache limits. Two callers remain two bounded
+requests; the existing process-wide engine FIFO (4 active, 32 queued, 5s wait)
+still applies, with its separate existing status budget. Locate additionally caps
+the response at 2MiB and holds its engine lease through the body read; fetch uses
+the existing request deadline and forbids redirects. At most 256 native candidate
+edges are parsed; raw verbose records are not returned or logged.
+
+Service and opaque-user rate windows share the configured geo service per-minute
+limit and expire in memory after one minute (maximum 10,000 active window keys).
+This is quota state, not a GPS/candidate cache. Graph/context freshness and exact
+request/profile/closure proof bindings are checked after asynchronous work. The
+manual selection in a preview must be within the same 500m planning-context
+budget; another manual reference requires a new explicit discovery action. This
+does not change the existing ordinary manual route endpoint.
+
+Activation remains a separate Root-only image/config operation, preserving all
+other services, DB/account-safety guards, networks, secrets and original pins.
+Require COP/SDK verification, synthetic native fixtures and physical acceptance;
+the current tests stub the native engine and are not evidence of real suitability.
+No routing probe, private payload or provider replay is authorized by this text.
+Rollback: first empty the planning allowlist, then restore the accepted prior
+image/pin if needed; no database restore and no removal of existing geo tokens.

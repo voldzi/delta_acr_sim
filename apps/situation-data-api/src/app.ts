@@ -10,6 +10,7 @@ import { ChmiWeatherWebcamCatalog } from "./chmi-webcams.js";
 import type { SituationDataConfig } from "./config.js";
 import { DemCatalog } from "./dem-catalog.js";
 import { registerGeoRoutingRoutes } from "./geo-routing.js";
+import { registerPlanningOriginRoutes, planningBodyErrorHandler } from "./planning-origin.js";
 import { registerDriverMeasurementRoutes, type DriverMeasurementDependencies } from "./driver-measurements.js";
 import { createProductionDriverRetentionLifecycle, type DriverRetentionControl } from "./driver-retention-lifecycle.js";
 import { problem } from "./http.js";
@@ -110,13 +111,14 @@ export async function createApp(
   const traceRequest = createHttpRequestTracingMiddleware("csm-sim-situation-data-api");
   // This privacy-sensitive route exports no caller headers, IP or query string.
   app.use((req, res, next) =>
-    req.path.startsWith("/api/v1/internal/driver-measurements/") || req.path.startsWith("/api/v1/internal/user-lifecycle/")
+    req.path.startsWith("/api/v1/internal/driver-measurements/") || req.path.startsWith("/api/v1/internal/user-lifecycle/") || req.path.startsWith("/api/v1/routing/planning-origin/")
       ? next()
       : traceRequest(req, res, next)
   );
   app.use(cors(createCorsOptions(config.corsOrigins)));
   registerSimUserDataRelay(app);
   app.use(express.json({ limit: "1mb" }));
+  app.use(planningBodyErrorHandler);
   if (dependencies?.cleanLifecycle) registerCleanLifecycle(app, dependencies.cleanLifecycle);
   // Scope only carries the two exact typed mutations in memory. The fixed
   // production module excludes batch/GPS bodies and does not replace handler
@@ -130,6 +132,7 @@ export async function createApp(
   registerRoutingRoutes(app, context);
   registerValhallaTrafficRoutes(app, context);
   registerGeoRoutingRoutes(app, config, routing);
+  registerPlanningOriginRoutes(app, config, routing);
   context.driverMeasurements = registerDriverMeasurementRoutes(app, config, undefined, dependencies?.driverMeasurements);
   // A missing accepted Root maintenance consumer blocks before init/SQL. The
   // other APIs remain independent; a guarded deployment has no legacy fallback.

@@ -968,6 +968,21 @@ SAFETY_DATA_BASE_URL=http://safety-data-api:4030
 SITUATION_DATA_SAFETY_CACHE_TTL_SECONDS=300
 ```
 
+## Assisted planning origin scope (default denied)
+
+`PLANNING_ORIGIN_ALLOWED_SERVICE_ACTORS` is an empty-by-default allowlist for the
+new planning candidate/preview operations only. The source implementation also
+requires the exact service actor `cop`, authenticated using the existing
+`GEO_ROUTING_SERVICE_TOKENS` principal lookup. This does not widen the old
+geo-routing endpoint's audience or enable ordinary anonymous routing authority.
+An empty value denies the new endpoints with 401 before any engine request.
+No user actor is accepted from the JSON body. `X-COP-Planning-Actor` must be
+derived and overwritten by COP from its verified session; it is a trusted service
+assertion, not a user JWT. No new signing key, AI/erasure key reuse or anonymous
+fallback is introduced. Root must separately provision/review COP's dedicated
+server configuration after source tests and joint acceptance; no credentials are
+included in this source change. See integration 26 and ADR 0050.
+
 ## Source-only completed content replay
 
 `SIM_CLEAN_COMPLETED_REPLAY_MODE`, `SIM_USER_DATA_COMPLETED_REPLAY_MODE` and

@@ -7,6 +7,32 @@ produkční specifikace. Návrh pro společné zmrazení je v
 Po společném freeze musí implementace stejný schválený kontrakt vložit do
 závazného OpenAPI; nelze publikovat tyto cesty jen na základě návrhu.
 
+### Následná source implementace 29.10.2026
+
+COP/Jízda potvrdily historický návrh SHA256
+`7d959d96e336fdf5be58de7ad1da857fa64ddb77dbebcbb652b483fd5c946dd6`.
+Následující self-contained aktivní fragment v `openapi/fragments/` má SHA256
+`82c81759ab8b59b3ead1a311d401029492c72e00b6770c4fc598c1ccb943c08e` a plné
+`knownClosuresEvidence` v novém assessmentu. Je vložen do závazného source OpenAPI
+s prefixem `/situation-data`; nejde o tvrzení, že endpointy už běží v produkci.
+Historický návrhový JSON se zpětně nepřepisuje. Aktuální implementace má default
+deny, nulovou result cache i single-flight a žádné provisionování tajemství.
+
+Přesná vnitřní query pro původní closure/mapped proof je exportovaná čistá funkce
+`planning-origin-query.ts`: profileId car, from=selection.coordinate, to=cíl,
+vehicleProfile úplný, via/avoid prázdné, alternatives 1, includeSteps,
+includeRoadAttributes, includeElevationProfile, includeWeatherOnRoute,
+includeHazardsOnRoute, includeTraffic vše false. Žádné departureTime/legacy
+vehicle/label klíče. Její canonical hash se ověřuje proti closure evidence;
+není to actor-bound requestHash nové preview obálky. Původní route pipeline se
+projde celá s těmito parametry, jen nový preview interně nezapojuje single-flight.
+
+Sdílená vlastní syntetická wire/hash fixture je
+`openapi/examples/planning-origin.synthetic.json`; generátor
+`scripts/export-planning-origin-fixtures.mjs` nevolá engine ani síť. Má pevné
+now, actor-test-value, obě request/response dvojice a public/actor-only vektory.
+Nejde o soukromé souřadnice, reálný vjezd nebo nativní routovací důkaz.
+
 ## Přesné navržené operace
 
 - `POST /api/v1/routing/planning-origin/candidates`

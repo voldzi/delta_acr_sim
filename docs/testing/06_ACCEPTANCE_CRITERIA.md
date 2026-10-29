@@ -229,3 +229,31 @@ Zákaz `motor_vehicle=no` zde znamená statickou mapovou fixture, nikoli ověře
 Lokální test `python3 scripts/test_routing_time_fixtures.py` ověřuje pouze
 deterministickou strukturu, zachování původního plánu a zákaz relaxací profilu.
 Neprokazuje skutečné nativní routování, legálnost trasy ani opravu incidentu.
+
+## Assisted planning source implementation (29.10.2026)
+
+Aktivní source fragment `planning-origin-v1.openapi.json` a binding OpenAPI mají
+dvě nové oddělené operace. Původních 163 cest a jejich původní schémata se
+sémanticky nezměnily (porovnání parsed JSON před/po). Nové scope default deny,
+žádná změna produkce ani tajemství. Nejde o akceptaci skutečné trasy nebo enginu.
+
+Lokálně na Node24: situation typecheck/build PASS, všech 808 testů PASS,
+6 explicitních PostgreSQL opt-in SKIP. Nový soubor planning-origin má 28 testů:
+actor/service boundary, 400/401/429/503, bez cache/SF, shodné hashové fixture,
+oddělené směry a souřadnice, immutable snapshot/freshness po await, vazby grafu,
+výslovný výběr, sanitizace JSON/provider prose, žádná ordinary assessment
+promoce. Další actual service tests ověřují normální native payload s profilem,
+25m snap/uzávěrami a nezměněné odmítnutí 171/401; fetch je syntetický stub.
+Nativní HTTP ani soukromý telefonní dotaz se v této sadě neprovádí.
+
+První spuštění HTTP testů narazilo na omezený lokální listen (EPERM), nikoli
+produkční chybu. Stejné testy po schválení lokálního testovacího portu prošly;
+žádné bezpečnostní pravidlo aplikace nebylo kvůli tomu vypnuto.
+
+Zbývá: nezávislá source revize COP/SDK, shoda Swift/JS a samostatně schválený
+izolovaný native fixture job. Potom samostatný Root image/config rollout
+nejprve s default OFF a přesná autorizace provisionování existujícího COP geo
+service tokenu; následný řízený pilot umožní společnou iPhone akceptaci skutečné
+asistence před obecným uvolněním. Fyzická akceptace tedy není zaměněná za unit
+test ani požadovaná před dostupným pilotem. Žádné nové klíče, síťové změny,
+TestFlight ani automatické nasazení tento záznam nepovoluje.

@@ -48,6 +48,22 @@ oddělený audit změn bez hodnot klíčů. SIM/IZS proxy vyžaduje
 ani vstupní fakta se do rozpočtové knihy neukládají. Při nejistém výsledku
 provider volání zůstává rezervace pro následné vyrovnání.
 
+## Účelově oddělená plánovací asistence (source candidate)
+
+Nové operace používají pouze výslovně povolený COP service principal a jeho
+serverově odvozenou pseudonymní actor assertion. Nejde o samostatné ověření
+uživatelského JWT nebo nové oprávnění k vjezdu. Candidate ID/source/directions
+jsou UX korelace, ne podepsaná historie nabídky. Ani podvržený, tvarově správný
+kandidát nemůže určit nativní hranu nebo obejít úplné route guardy.
+
+Souřadnice/context, bearer, actor assertion, raw verbose data a provider prose se
+neukládají do logů. Pro nové planning cesty se nepoužije obecný request tracer;
+malformed/oversized JSON chyby mají pouze pevný kód a correlationId, bez těla.
+V paměti zůstává jen krátké quota okno, žádná GPS historie nebo kandidátní cache.
+Úspěšný preview má odlišný typ/verzi, ne ordinary route assessment. Samostatný
+GPS záznam bez navigace zůstává nezměněný. Viz ADR 0050 a integrační kontrakt 26.
+Nasazení a přenos existujícího service tokenu nejsou součástí této source změny.
+
 ## Dočasná interní diagnostika routování
 
 `routing_guard_diagnostic_v1` je provozní diagnostika, nikoli audit oprávnění
