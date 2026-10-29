@@ -146,6 +146,16 @@ není serverová atestace. Zdroj candidate_selection je UX informace, ne zvýše
 oprávnění. Chce-li společná revize historickou membership jako bezpečnostní
 podmínku, musí výslovně změnit stateless/cache0 nebo zvolit již přijatý signed
 proof; samotným hashem ani novým neodsouhlaseným klíčem se mezera nepřekryje.
+Společná revize COP tuto stateless variantu přijala bez požadavku historické
+membership. SDK ponechá skutečně přijatou nabídku v paměti pro zobrazení/volbu,
+ne jako serverovou access autoritu. Candidate ID/source/directions nesmí určit
+nativní edge ID, costing options, soukromé oprávnění, větší radius, retry nebo
+promoci do navigace. Provider payload preview vychází pouze ze zvolené
+souřadnice a původního plného profilu; směrové/ID echo se do něj nepřenáší.
+Povinný implementační negativní test: i tvarově správný podvržený candidate ID
+se shodnými veřejnými hashy musí pořád projít identickým full-route guardem
+jako ručně zvolený bod a při 171/401/uzávěře/rozměrovém zákazu skončit odmítnutím.
+Tento runtime negativní test zatím neproběhl; schema test není jeho náhradou.
 Nejvýše **1 běžný full-guarded route computation**, žádné alternativní pokusy
 po chybě. Nativní transport s neměnným profilem, variant count 1, snap<=25 m,
 stejné známé uzávěry/dataset/geometrie/všechna warning401 pravidla.

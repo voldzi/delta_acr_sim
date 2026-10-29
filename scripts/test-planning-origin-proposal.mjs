@@ -54,6 +54,9 @@ invalid('Candidate', { ...candidate, rawEdge: { name: 'must not escape' } });
 const candidateSelection = { coordinate: candidate.coordinate, source: 'candidate_selection', confirmed: true,
   candidateId: candidate.candidateId, directions: candidate.directions, directionsTruncated: false };
 valid('Selection', candidateSelection);
+valid('Selection', { ...candidateSelection, candidateId: `candidate:${'f'.repeat(64)}` }); // Shape is NOT issuance proof.
+invalid('Selection', { ...candidateSelection, edge_id: 12345 });
+invalid('Selection', { ...candidateSelection, costing_options: { auto: { ignore_access: true } } });
 const missingId = structuredClone(candidateSelection); delete missingId.candidateId;
 invalid('Selection', missingId);
 invalid('Selection', { ...preview.selection, candidateId: candidate.candidateId });
