@@ -25,9 +25,10 @@ zlepšení a explicitní ruční workaround, nikoli doložené splnění cíle �
 z domu“. Skutečná pomoc s přístupovým bodem zůstává neimplementovaná a schopnost
 profile/direction-aware discovery není ověřená. Ani její návrh nesmí být vydáván
 za nativní vyřešení chyby171/401. Před integrací musí společná revize výslovně
-rozhodnout, zda přijímá tuto omezenou první etapu, nebo požaduje nejprve asistenci
-s doloženými kandidáty a syntetickou/zařízení akceptací. Dosavadní neúspěšný pokus
-zůstává neúspěšným pokusem.
+rozhodnout o omezené mezietapě. Společná produktová revize COP/Jízda následně
+požaduje **asistované discovery jako povinnou podmínku splnění původního cíle**;
+manual-only endpoint se nyní neimplementuje jako domnělá oprava. Dosavadní
+neúspěšný pokus zůstává neúspěšným pokusem.
 
 ## Rozhodnutí navržené pro společnou revizi
 
@@ -48,7 +49,7 @@ souřadnice jsou povinné. COP přenese existující službově ověřenou ident
 request-scoped UUID a nezměněný úplný `sim-mapped-road-profile-v1`.
 Klient nesmí nastavit `ignore_*`, serverové limity, dokazující token ani graph ID.
 
-### Minimální první etapa: `planningOrigin.preview` (zatím bez HTTP cesty)
+### Společný kontext: `planningOrigin.preview` (zatím bez HTTP cesty)
 
 | Pole | Přesná navržená hodnota / typ |
 | --- | --- |
@@ -84,16 +85,19 @@ JSON/OpenAPI revize, nikoli tiché přijetí dalších polí stávajícím endpo
 Také starou poslední známou polohu lze použít výhradně po výslovné volbě jako
 `manual_point` s původem `user_selected_last_known`, nikoli jako čerstvý měřený
 anchor. Jde o plánovací bod, ne o důkaz aktuální přítomnosti telefonu.
-První etapa nemá discovery ani výběrový token. Uživatel již může zvolit ruční
-bod; explicitní preview z toho nesmí vytvořit nové přístupové oprávnění.
+Samotný ruční preview je pouze možná mezietapa, ne splnění původního cíle.
+Uživatel již může zvolit ruční bod; explicitní preview z toho nesmí vytvořit
+nové přístupové oprávnění. Discovery nepotřebuje výběrový token.
 Použije se existující autentizované serverové spojení, bez nového tajemství.
 
-### Pozdější volitelná etapa: `planningOrigin.candidates`
+### Povinná asistence pro původní cíl: `planningOrigin.candidates`
 
-Tato operace **není podmínkou první etapy**. Bez konkrétní ověřené implementace
-nelze slibovat discovery kompatibilní s profilem a směrem. Před případnou
-implementací musí source/fixture důkaz doložit, že daná metoda umí filtrovat
-právě tento profil i směr na stejném grafu, nikoli jen obecný costing.
+Tato operace je **povinnou podmínkou akceptace původního cíle**, ne hotová služba.
+Kritická cesta: primární source evidence → společně revidované čistě syntetické
+či veřejné fixture → omezená asistence → společná akceptace telefonu.
+Bez konkrétní ověřené implementace nelze slibovat kompatibilitu kandidáta
+s celým profilem. Kandidát nemusí být právním/trasovým proof; musí mít pravdivý
+stav neověření a po explicitním výběru projít celým původním routovacím guardem.
 Navržený rozpočet: nejvýše jeden omezený serverový průzkum kandidátů na požadavek,
 nejvýše tři výsledky, žádné automatické routovací pokusy přes všechny kandidáty.
 Průzkum nejvýše 500 m od plánovacího referenčního bodu, nezávisle na přesnosti
@@ -112,6 +116,39 @@ služba nejsou předpokladem návrhu. Výběr kandidáta **není road/closure/le
 Neznámé přístupové oprávnění se označí výslovně, ne jako ověřený veřejný vjezd.
 Existující `nearest-access` není pro tuto roli akceptovaný bez nové implementace
 a testů profilu, směru, dostupnosti a vazeb na stejný dataset.
+
+### Ověřená source capability Valhalla 3.8.3 (nikoli nativní test)
+
+Primární [locate_action.cc](https://raw.githubusercontent.com/valhalla/valhalla/3.8.3/src/loki/locate_action.cc)
+ř.15/40 načte costing a předá jej kandidátnímu vyhledávání. To je podklad pro
+novou větev s plnými mapped costing options; současný SIM `requestValhallaLocate`
+posílá pouze základní profil a není možné jej slepě převzít.
+
+[search.cc](https://raw.githubusercontent.com/valhalla/valhalla/3.8.3/src/loki/search.cc)
+ř.330/361/467 zpracovává protisměrné hrany odděleně a používá lehké
+`Allowed(edge,tile,mask)`; heading/side filtrování přesouvá kandidáty do
+`filtered_edges`. Bez měřeného relevantního směru se nevymýšlí heading ze směru
+k cíli. Do nabídky se nepřebírají `filtered_edges` jako přijaté hrany.
+
+[autocost.cc](https://raw.githubusercontent.com/valhalla/valhalla/3.8.3/src/sif/autocost.cc)
+ř.313–319 ukazuje rozdíl oproti plnému route `Allowed` ř.385–449: kandidátní
+filtr neprokazuje rozměrová/časová omezení celého profilu. Přijetí options není
+důkaz jejich kompletního vyhodnocení. Nabídka proto výslovně nese
+`profileValidation:not_checked`, `legalAccess:not_verified`, bez tvrzení průjezdu.
+Po výběru se žádné z původních úplných routovacích kontrol nevypouští.
+
+[locate_serializer.cc](https://raw.githubusercontent.com/valhalla/valhalla/3.8.3/src/tyr/locate_serializer.cc)
+ř.175–205 vrací promítnutou souřadnici, vzdálenost, heading, dosah a directed
+edge ID; lean ř.229–238 má projekci, ale ne všechna tato metadata. Nový SIM
+parser musí z odpovědi vybrat jen nezbytná pole, ověřit čísla, vzdálenost,
+deduplikaci a dataset; žádný surový verbose objekt, partner traffic či incident
+se nepředává. Nejvýše tři seřazené plánovací body nejsou ověřené právní vjezdy.
+
+Zdroje tedy podporují proveditelnost kandidátní asistence bez výměny enginu,
+nikoli její hotovou funkčnost. Zatím neproběhl žádný nový locate/native request.
+Fixture musí ověřit projekci do 500 m, směr, filtrování/nespolehlivé položky,
+profile-preserving payload a následné odmítnutí rozměrových zákazů při plné trase.
+Samostatný nový proof kandidáta není předpokladem; nevzniká tím autorita vjezdu.
 
 ### Zpracování `planningOrigin.preview`
 
