@@ -134,6 +134,11 @@ describe("planning uses actual unchanged closure route guards", () => {
     expect(f.payloads).toHaveLength(1); expect(f.payloads[0].locations.map((p: any) => p.radius)).toEqual([25, 25]);
     expect(f.payloads[0].exclude_polygons).toEqual([polygon]);
     expect(f.payloads[0].costing_options.auto).toMatchObject({ height: 2, ignore_access: false, ignore_restrictions: false });
+    expect(f.payloads[0].date_time).toEqual({ type: 0 });
+    expect(f.payloads[0]).not.toHaveProperty("prioritize_bidirectional");
+    expect(f.payloads[0].costing_options.auto.speed_types).toEqual(["freeflow", "constrained", "predicted"]);
+    for (const key of ["ignore_access", "ignore_restrictions", "ignore_oneways", "ignore_closures", "ignore_non_vehicular_restrictions", "shortest"])
+      expect(f.payloads[0].costing_options.auto[key]).toBe(false);
     const actor = { serviceActor: "cop", opaquePlanningActor: "a".repeat(64) };
     const preview = await new PlanningOriginService(f.service).preview({ context: c, expectedDataset: dataset,
       discoveryBinding: planningBinding(actor, c, dataset), selection: { source: "user_map_selection", coordinate: c.originContext.coordinate, confirmed: true } }, actor);
@@ -145,6 +150,28 @@ describe("planning uses actual unchanged closure route guards", () => {
     await Promise.all([f.service.planningPreview(c, c.originContext.coordinate), f.service.planningPreview(c, c.originContext.coordinate)]);
     expect(f.payloads).toHaveLength(2);
   });
+  it("does not carry planning's implicit now into an ordinary route or accept a client flag", async () => {
+    const f = await fixture(), c = context();
+    await f.service.planningPreview(c, c.originContext.coordinate);
+    const ordinary = await f.service.route({ ...request(), planningCurrentDeparture: true } as any);
+    expect(f.payloads).toHaveLength(2);
+    expect(f.payloads[0].date_time).toEqual({ type: 0 });
+    expect(f.payloads[1]).not.toHaveProperty("date_time");
+    expect(f.payloads[1]).not.toHaveProperty("planningCurrentDeparture");
+    expect(ordinary.query).not.toHaveProperty("departureTime");
+  });
+  it.each(["now", "not-a-date"])("retains generic invalid departure rejection for %s", async departureTime => {
+    const f = await fixture();
+    await expect(f.service.route({ ...request(), departureTime })).rejects.toMatchObject({ status: 400 });
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
+  it("does not replace a generic explicit future departure or arrival with implicit now", async () => {
+    const f = await fixture();
+    await expect(f.service.route({ ...request(), departureTime: "2026-10-04T12:00:00Z" })).rejects.toMatchObject({ status: 422 });
+    expect(f.fetchMock).not.toHaveBeenCalled();
+    await expect(f.service.route({ ...request(), arrival: { arbitrary: "invalid" } } as any)).rejects.toBeDefined();
+    expect(f.fetchMock).not.toHaveBeenCalled();
+  });
   it.each([171, 401])("keeps actual native %s rejection without retry or snap/profile relaxation", async code => {
     const f = await fixture(), c = context();
     f.fetchMock.mockImplementation(async (url, init) => {
@@ -155,6 +182,7 @@ describe("planning uses actual unchanged closure route guards", () => {
     await expect(f.service.planningPreview(c, c.originContext.coordinate)).rejects.toMatchObject({ status: 422,
       code: code === 171 ? "ROUTING_LOCATION_NOT_ROUTABLE" : "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED" });
     expect(f.payloads).toHaveLength(1);
+    expect(f.payloads[0].date_time).toEqual({ type: 0 });
   });
   it("performs exactly one bounded mapped locate without substituting routing or enabling ignore flags", async () => {
     const f = await fixture();
