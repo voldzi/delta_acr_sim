@@ -232,6 +232,9 @@ Neprokazuje skutečné nativní routování, legálnost trasy ani opravu inciden
 
 ## Assisted planning source implementation (29.10.2026)
 
+Přesná source revize, hashe a oddělené zbývající gates jsou v
+[receipt](receipts/planning-origin-source-20261029.json).
+
 Aktivní source fragment `planning-origin-v1.openapi.json` a binding OpenAPI mají
 dvě nové oddělené operace. Původních 163 cest a jejich původní schémata se
 sémanticky nezměnily (porovnání parsed JSON před/po). Nové scope default deny,

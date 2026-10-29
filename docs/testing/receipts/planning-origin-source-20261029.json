@@ -1,0 +1,58 @@
+{
+  "contract": "sim-planning-origin-source-receipt-v1",
+  "date": "2026-10-29",
+  "scope": "source-only-not-production-or-native-acceptance",
+  "sourceRevision": "780241282ae9e9f4a019768d619a45a11124480e",
+  "activeFragmentSha256": "82c81759ab8b59b3ead1a311d401029492c72e00b6770c4fc598c1ccb943c08e",
+  "syntheticWireFixtureSha256": "b3f9556c89e4d08e60e2f6c99c6cb82cfb3396e0ed993502b9d4baed4bd688bb",
+  "runtimeSourceSha256": "ad41c1b2f46992c7390bec29b02abbc7c562bfcfeceb9d6d59774a4ca3612f5b",
+  "checks": {
+    "runtimeMajor": 24,
+    "situationTypecheck": "passed",
+    "situationBuild": "passed",
+    "situationTestsPassed": 808,
+    "situationPostgresOptInSkipped": 6,
+    "planningOriginFileTestsPassed": 28,
+    "openApiValidation": "passed",
+    "openApiPaths": 165,
+    "openApiSchemas": 311,
+    "openApiBuildCheck": "passed",
+    "original163PathsAndOriginalSchemasSemanticallyUnchanged": true,
+    "skeleton": "passed",
+    "diffWhitespace": "passed",
+    "initialLocalHttpAttempt": "listen EPERM; rerun with approved local test port passed"
+  },
+  "bounds": {
+    "serviceActor": "cop",
+    "allowlistDefault": "empty-deny",
+    "resultCache": false,
+    "singleFlightForPlanning": false,
+    "candidateLocateComputationMax": 1,
+    "candidateRadiusM": 500,
+    "candidateCountMax": 3,
+    "candidateNativeBodyBytesMax": 2097152,
+    "candidateNativeEdgesParsedMax": 256,
+    "previewRouteComputationMax": 1,
+    "automaticRetry": false,
+    "ordinarySnapToleranceChanged": false,
+    "ordinaryRouteGuardsRelaxed": false
+  },
+  "notPerformed": [
+    "production deployment",
+    "credential provisioning or transfer",
+    "new secret generation",
+    "native Valhalla fixture execution",
+    "private route replay",
+    "physical iPhone acceptance",
+    "TestFlight publication"
+  ],
+  "remaining": [
+    "independent COP backend source peer review",
+    "COP and Swift SDK hash/verifier interoperability",
+    "separately reviewed bounded native synthetic fixture job",
+    "Root-controlled default-OFF image/config delivery",
+    "reviewed reuse/provisioning of existing cop geo service credential",
+    "controlled pilot and physical iPhone acceptance before general release"
+  ],
+  "retrieval": "Recall unavailable; CLI refused current unselected app project; no managed index reset or rebuild"
+}
