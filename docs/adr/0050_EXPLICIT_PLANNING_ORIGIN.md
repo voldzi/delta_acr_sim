@@ -35,21 +35,50 @@ souřadnice jsou povinné. COP přenese existující službově ověřenou ident
 request-scoped UUID a nezměněný úplný `sim-mapped-road-profile-v1`.
 Klient nesmí nastavit `ignore_*`, serverové limity, dokazující token ani graph ID.
 
-### 1. `planningOrigin.candidates` (název operace, zatím bez HTTP cesty)
+### Minimální první etapa: `planningOrigin.preview` (zatím bez HTTP cesty)
 
 | Pole | Přesná navržená hodnota / typ |
 | --- | --- |
 | `version` | `sim-planning-origin-v1` |
 | `purpose` | pouze `planning_preview` |
 | `measuredAnchor.coordinate` | `{lat:number, lon:number}`; původní měření |
-| `measuredAnchor.horizontalAccuracyM` | konečné číslo `>0`, nejvýše 3000 m |
-| `measuredAnchor.observedAt` | UTC ISO; stáří 0–300 s, budoucí čas odmítnout |
+| `measuredAnchor.horizontalAccuracyM` | konečné číslo `>0`, nejvýše 5000 m pro telefonní kontext; není snap radius |
+| `measuredAnchor.observedAt` | UTC ISO; stáří 0–900 s pro telefonní kontext, budoucí čas odmítnout |
 | `measuredAnchor.accuracyAuthorization` | `full` nebo `reduced`; není oprávnění k vjezdu |
 | `destination` | původní cílový bod; bez změny po výběru kandidáta |
 | `vehicleProfile` | úplný aktuálně podporovaný mapped profil auta |
+| `selection.coordinate` | uživatelem ručně zvolený plánovací bod `{lat,lon}` |
+| `selection.source` | pouze `user_map_selection` |
+| `selection.confirmed` | přesně `true`; vyjádření klientské volby, ne serverová atestace člověka |
 
 Číselné hranice jsou **návrh**, musí projít společnou produktovou a výkonovou
-akceptací. Nejvýše jeden omezený serverový průzkum kandidátů na požadavek,
+akceptací a aktuálními fakty klienta. Přesnost i čas GPS jsou klientská tvrzení,
+nikoli serverem ověřená poloha. Serverový rozpočet musí být nezávisle omezený.
+Jízda doložila současnou klientskou politiku 0–900 s a do 5000 m a zachování
+původního CLLocation; nynější wire převádí pouze souřadnice a ztrácí stáří/přesnost.
+`approximate` může znamenat stáří NEBO hrubou přesnost, proto z bool nelze
+rekonstruovat, který důvod nastal při incidentu. Nový kontext je zachycený
+neměnný snapshot původního měření, nikoli nové měření vyvolané serverem.
+Chybí-li či překročí-li metadata meze, nabídnout ruční volbu nebo uživatelsky
+vyžádané nové měření, nikdy potichu spustit GPS. Užší budoucí limit musí mít
+výslovnou kompatibilní chybu/reselection flow; nejde jej změnit jen na serveru.
+
+Telefonní metadata smí nést pouze varianta `originContext.kind=phone_measured`.
+Ruční/adresní původ je oddělená varianta `manual_point`, bez measuredAnchor
+a bez smyšlené přesnosti/času GPS. Tato preview obálka nenahrazuje existující
+normální požadavek z ručního bodu. Konkrétní discriminator/názvy doladí společná
+JSON/OpenAPI revize, nikoli tiché přijetí dalších polí stávajícím endpointem.
+První etapa nemá discovery ani výběrový token. Uživatel již může zvolit ruční
+bod; explicitní preview z toho nesmí vytvořit nové přístupové oprávnění.
+Použije se existující autentizované serverové spojení, bez nového tajemství.
+
+### Pozdější volitelná etapa: `planningOrigin.candidates`
+
+Tato operace **není podmínkou první etapy**. Bez konkrétní ověřené implementace
+nelze slibovat discovery kompatibilní s profilem a směrem. Před případnou
+implementací musí source/fixture důkaz doložit, že daná metoda umí filtrovat
+právě tento profil i směr na stejném grafu, nikoli jen obecný costing.
+Navržený rozpočet: nejvýše jeden omezený serverový průzkum kandidátů na požadavek,
 nejvýše tři výsledky, žádné automatické routovací pokusy přes všechny kandidáty.
 Průzkum nejvýše 500 m od anchoru a nikdy více než deklarovaná přesnost.
 Nepokrývá-li tento rozpočet nejistotu, odpověď požaduje ruční výběr začátku nebo
@@ -57,19 +86,24 @@ Nepokrývá-li tento rozpočet nejistotu, odpověď požaduje ruční výběr za
 Zastaralý nebo mimo-limitní anchor se neinterpretuje jako platná aktuální GPS.
 
 Kandidát obsahuje pouze `candidateId`, souřadnici plánovacího bodu, odchylku
-od anchoru, graph version, čas platnosti a podepsaný krátkodobý výběrový token.
-Token je svázán se službou/uživatelem, hashem celého vstupu, úplným profilem,
-konkrétním bodem a datasetem. Výběr kandidáta **není road/closure/legal proof**.
+od anchoru, graph version a čas platnosti. Identifikátor slouží k UX korelaci,
+není oprávnění. Je-li později nutné zabránit změně nabídky, použije se explicitní
+vazba celého vstupu/profilu/grafu ve stávajícím mechanismu; nový klíč ani podpisová
+služba nejsou předpokladem návrhu. Výběr kandidáta **není road/closure/legal proof**.
 Neznámé přístupové oprávnění se označí výslovně, ne jako ověřený veřejný vjezd.
 Existující `nearest-access` není pro tuto roli akceptovaný bez nové implementace
 a testů profilu, směru, dostupnosti a vazeb na stejný dataset.
 
-### 2. `planningOrigin.preview`
+### Zpracování `planningOrigin.preview`
 
-Stejný vstup jako výše + přesně `selection:{candidateId, selectionToken,
-confirmed:true}`. Žádná klientská změna souřadnice, profilu, cíle ani grafu
-bez nového výběru. Výběrový token nejvýše 120 s, samostatné serverové tajemství
-a distribuce tajemství nejsou tímto návrhem schváleny.
+Každý požadavek obsahuje celý aktuální vstup včetně explicitního výběru, profilu
+a cíle. Změna vstupu znamená nový výpočet; žádné navázání na starou nabídku nebo
+starý proof. Ruční souřadnice zůstává nedůvěryhodný vstup, nikoli serverový pokyn.
+Před prvním await se pořídí nezávislý snapshot kontextu a celého vstupu.
+Identita účtu/služby pochází pouze z ověřeného spojení COP, ne klientského userId.
+Po každém asynchronním výpočtu se znovu ověří stáří, platnost, dataset a uzávěry;
+COP/SDK po await ověří nezměněný request/account/profile/destination/context.
+Změněný nebo mezitím prošlý kontext se nezobrazí jako aktuální preview.
 
 Po výslovném potvrzení uživatelem server provede nejvýše jeden routovací výpočet
 z plánovacího bodu, s původním profilem, stejnými guardy uzávěr, grafu, času,
@@ -80,9 +114,16 @@ Změna datasetu/uzávěr během výpočtu výsledek zneplatní.
 Odpověď nese odděleně `measuredAnchor`, `planningOrigin`, `offsetDistanceM`,
 `originUncertaintyM`, `connector:{state:unknown,navigable:false}` a výhradně
 `purpose:planning_preview`, `navigationEligible:false`, `recordingEligible:false`.
-Obsahuje původ/proof běžné ověřené části trasy, nikoli proof neznámého konektoru.
+Obsahuje původ/assessment ověřené části trasy, nikoli proof neznámého konektoru.
 Nesmí se stát běžnou navigační trasou od GPS jen odstraněním těchto příznaků.
 SDK/COP musí mít samostatný typ výsledku a odmítnout jej ve start-navigation API.
+Existující SIM `mappedAssessment` používá `canonicalRoutingHash`, ne kryptografický
+podpis. Hash není atestace původu. Nová obálka musí oddělenou verzí a doménou
+vázat `purpose:planning_preview`, measured anchor, vybraný bod, úplný profil,
+cíl, dataset, geometrii a platnost. Existující assessment v1 se nesmí vydávat
+samostatně jako běžný navigační výsledek; COP/SDK verifier vyžaduje obálku a účel.
+Pokud COP používá vlastní podepisování, změna musí účel přenést do jeho již
+schváleného doménově odděleného proof; SIM nezavede ani nevypůjčí erasure/HMAC klíče.
 
 ## Přechod k navigaci, soukromí a provoz
 
@@ -90,24 +131,29 @@ Start navigace/záznamu vyžaduje obvyklý čerstvý přesný měřený anchor a
 normální routovací požadavek. Preview se nerecykluje do proof navigace.
 Ruční bod na mapě je další výslovná uživatelská volba, ne změna GPS autority.
 
-Anchor, token a souřadnice jsou citlivý obsah: jen v paměti pro požadavek,
-bez logování těla, query, tokenu, GPS nebo uživatelských ID. Žádná historie pohybu.
+Anchor a souřadnice jsou citlivý obsah: jen v paměti pro požadavek,
+bez logování těla, query, GPS nebo uživatelských ID. Žádná historie pohybu.
 Pokud cache, pouze krátká privátní a uživatelsky oddělená, se stejnými vstupy
 v klíči a podporou odvolání; žádná sdílená cache soukromých kandidátů.
-Konkrétní kryptografická implementace, výkonové limity a správa klíčů zůstávají
-samostatně ke schválení. Žádné nové provider/GPS/OpenAI volání tento ADR neprovádí.
+Výkonové limity a přesná vazba existujícího assessment/verifieru zůstávají
+ke společné revizi. Žádné nové provider/GPS/OpenAI volání tento ADR neprovádí.
 
 ## Povinné negativní a integrační případy (dosud NEPROVEDENÉ)
 
-- Chybějící souhlas/výběr, podvržený token, jiný uživatel/služba/profil/cíl/bod.
-- Expirovaný token, změna grafu/uzávěr, replay po změně či smazání účtu.
+- Chybějící souhlas/výběr, jiný uživatel/služba/profil/cíl/bod; klientský výběr
+  nikdy neobchází existující ověření přístupu a celé trasy.
+- Změna grafu/uzávěr, replay assessmentu po změně vstupu či smazání účtu.
 - NaN/Infinity, neznámé klíče, neplatné souřadnice, záporná/0/nadlimitní přesnost,
   budoucí/stará GPS, neznámá accuracyAuthorization, klientský graph/ignore flag.
 - Žádný kandidát v rozpočtu; soukromý/zakázaný vjezd; rozměrový zákaz,
   uzávěra, špatný směr, warning401, upstream171, smíšená/poškozená odpověď.
-- Klientská změna cíle či profilu po nabídnutí kandidátů nesmí použít starý token.
+- Klientská změna cíle či profilu nesmí použít starý assessment; případné budoucí
+  kandidátní ID neuděluje přístup ani nedovoluje vynechat nový výpočet.
 - Žádný tichý retry při 429/503, vyčerpaném rozpočtu nebo výpadku engine/DB.
 - Žádná záměna preview za navigation/recording; GPS anchor zůstane bitově stejný.
+- Původní klientské meze 900 s/5000 m, hranice a překročení po await; rozdíl
+  staré a hrubé GPS, manual/address bez měřených metadat; změna účtu/profilu/
+  cíle/kontextu během await a žádné skryté vyžádání nové GPS.
 - Souběh více aplikací: uživatelská izolace, centralizované engine limity,
   cancellation, expirace a žádný násobný provider polling.
 - Syntetické geometrierestrikční testy, poté společná fyzická akceptace iPhonu.
