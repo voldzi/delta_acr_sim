@@ -16,6 +16,19 @@ Aktuální známé uzávěry omezují radius/search_cutoff i následný snap na 
 25 m pro všechny body. Přibližná GPS není příslibem přítomnosti řidiče na silnici.
 Samotné zvětšení tolerance, nearestAccess nebo přesunutí GPS není přijatelné řešení.
 
+**Produktová mez první etapy:** ruční výběr již v Jízdě existuje a dřívější
+ručně vybraný bod také skončil odmítnutím warning401. Samotná nová preview obálka
+tedy není opravou routovatelnosti původní telefonní polohy ani veřejného vjezdu.
+Její konkrétní přínos je zachování dosud ztracených metadat měření a vynucené
+oddělení plánovacího účelu od navigační autority. To je bezpečnostní/kontraktní
+zlepšení a explicitní ruční workaround, nikoli doložené splnění cíle „naplánovat
+z domu“. Skutečná pomoc s přístupovým bodem zůstává neimplementovaná a schopnost
+profile/direction-aware discovery není ověřená. Ani její návrh nesmí být vydáván
+za nativní vyřešení chyby171/401. Před integrací musí společná revize výslovně
+rozhodnout, zda přijímá tuto omezenou první etapu, nebo požaduje nejprve asistenci
+s doloženými kandidáty a syntetickou/zařízení akceptací. Dosavadní neúspěšný pokus
+zůstává neúspěšným pokusem.
+
 ## Rozhodnutí navržené pro společnou revizi
 
 Zavést oddělený kontrakt `sim-planning-origin-v1`, nikoli skrytou změnu existující
