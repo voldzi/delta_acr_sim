@@ -232,6 +232,14 @@ Neprokazuje skutečné nativní routování, legálnost trasy ani opravu inciden
 
 ## Assisted planning source implementation (29.10.2026)
 
+Následná cílená kontrola balení odhalila chybějící explicitní Docker COPY
+nového planning fragmentu a dřívějšího `user-selected-arrival-v1.schemas.json`.
+Oba import-on-load soubory se nyní kopírují přesně do build stage a stávající
+`COPY --from=build /app/openapi ./openapi` je přenese do runtime. Nové tři
+statické packaging testy (včetně negativního odstranění COPY) a 28 planning testů
+prošly společně 31/31. To ještě není skutečný build/start obrazu; ten musí
+nezávisle ověřit Root před nasazením. Wire/hash fixture se neopravou nemění.
+
 Přesná source revize, hashe a oddělené zbývající gates jsou v
 [receipt](receipts/planning-origin-source-20261029.json).
 

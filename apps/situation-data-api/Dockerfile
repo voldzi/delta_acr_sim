@@ -11,6 +11,8 @@ COPY deploy/account-safety/database-erasure-guard.mjs deploy/account-safety/data
 COPY openapi/fragments/road-trip-v1.schemas.json ./openapi/fragments/road-trip-v1.schemas.json
 COPY openapi/fragments/known-road-closures.schema.json ./openapi/fragments/known-road-closures.schema.json
 COPY openapi/fragments/mapped-road-profile-v1.schemas.json ./openapi/fragments/mapped-road-profile-v1.schemas.json
+COPY openapi/fragments/planning-origin-v1.openapi.json ./openapi/fragments/planning-origin-v1.openapi.json
+COPY openapi/fragments/user-selected-arrival-v1.schemas.json ./openapi/fragments/user-selected-arrival-v1.schemas.json
 RUN --mount=type=cache,id=csm-sim-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked pnpm install --frozen-lockfile
 RUN pnpm --filter @csm-sim/situation-data-api... build
 
