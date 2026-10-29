@@ -68,6 +68,9 @@ Ruční/adresní původ je oddělená varianta `manual_point`, bez measuredAncho
 a bez smyšlené přesnosti/času GPS. Tato preview obálka nenahrazuje existující
 normální požadavek z ručního bodu. Konkrétní discriminator/názvy doladí společná
 JSON/OpenAPI revize, nikoli tiché přijetí dalších polí stávajícím endpointem.
+Také starou poslední známou polohu lze použít výhradně po výslovné volbě jako
+`manual_point` s původem `user_selected_last_known`, nikoli jako čerstvý měřený
+anchor. Jde o plánovací bod, ne o důkaz aktuální přítomnosti telefonu.
 První etapa nemá discovery ani výběrový token. Uživatel již může zvolit ruční
 bod; explicitní preview z toho nesmí vytvořit nové přístupové oprávnění.
 Použije se existující autentizované serverové spojení, bez nového tajemství.
@@ -80,8 +83,11 @@ implementací musí source/fixture důkaz doložit, že daná metoda umí filtro
 právě tento profil i směr na stejném grafu, nikoli jen obecný costing.
 Navržený rozpočet: nejvýše jeden omezený serverový průzkum kandidátů na požadavek,
 nejvýše tři výsledky, žádné automatické routovací pokusy přes všechny kandidáty.
-Průzkum nejvýše 500 m od anchoru a nikdy více než deklarovaná přesnost.
-Nepokrývá-li tento rozpočet nejistotu, odpověď požaduje ruční výběr začátku nebo
+Průzkum nejvýše 500 m od plánovacího referenčního bodu, nezávisle na přesnosti
+GPS. Přesnost 3 m na soukromém dvoře nesmí znemožnit nabídku silnice vzdálené
+60 m; nejistota měření a uživatelem zvolená odchylka jsou dvě různé veličiny.
+Tato mez omezuje jen serverové discovery, nikoli existující ruční volbu bodu
+na mapě nebo snap následné trasy. Nepokrývá-li rozpočet situaci, nabídne ruční výběr nebo
 čerstvější/přesnější měření; nesmí předstírat, že nejbližší bod je skutečná poloha.
 Zastaralý nebo mimo-limitní anchor se neinterpretuje jako platná aktuální GPS.
 
@@ -110,6 +116,9 @@ z plánovacího bodu, s původním profilem, stejnými guardy uzávěr, grafu, �
 geometrie, všech variant, 25m snapem, warning401 a limity jako běžná přijatá trasa.
 Při neúspěchu žádná změna profilu, druhý kandidát ani přímý engine fallback.
 Změna datasetu/uzávěr během výpočtu výsledek zneplatní.
+Zákaz druhého kandidáta znamená zákaz automatické smyčky v jednom požadavku.
+Uživatel smí po chybě výslovně vybrat jiný bod a odeslat nový omezený požadavek,
+se zachováním celkových rate/concurrency limitů. Nesmí se skrytě vyžádat nová GPS.
 
 Odpověď nese odděleně `measuredAnchor`, `planningOrigin`, `offsetDistanceM`,
 `originUncertaintyM`, `connector:{state:unknown,navigable:false}` a výhradně
@@ -127,9 +136,16 @@ schváleného doménově odděleného proof; SIM nezavede ani nevypůjčí erasu
 
 ## Přechod k navigaci, soukromí a provoz
 
-Start navigace/záznamu vyžaduje obvyklý čerstvý přesný měřený anchor a nový
-normální routovací požadavek. Preview se nerecykluje do proof navigace.
+Start navigace vyžaduje obvyklý čerstvý přesný měřený anchor a nový normální
+routovací požadavek. Preview se nerecykluje do proof navigace.
+**Samostatné GPS nahrávání bez navigace se nemění a nevyžaduje trasu.**
+`recordingEligible:false` zde pouze zakazuje použít preview geometrii nebo
+plánovací bod jako naměřené GPS/dobrovolné měření; neblokuje nezávislou funkci
+nahrávání s jejími dosavadními oprávněními a pravidly kvality.
 Ruční bod na mapě je další výslovná uživatelská volba, ne změna GPS autority.
+Uložený plán uchovává plánovací bod, cíl, referenci auta a plánovací čas, ne
+expirující proof či token jako autoritu k pozdější jízdě. Při odjezdu se znovu
+ověří aktuální profil/oprávnění a spočítá nová trasa podle aktuálního měření.
 
 Anchor a souřadnice jsou citlivý obsah: jen v paměti pro požadavek,
 bez logování těla, query, GPS nebo uživatelských ID. Žádná historie pohybu.
@@ -151,6 +167,9 @@ ke společné revizi. Žádné nové provider/GPS/OpenAI volání tento ADR nepr
   kandidátní ID neuděluje přístup ani nedovoluje vynechat nový výpočet.
 - Žádný tichý retry při 429/503, vyčerpaném rozpočtu nebo výpadku engine/DB.
 - Žádná záměna preview za navigation/recording; GPS anchor zůstane bitově stejný.
+- Přesná GPS na soukromém pozemku a veřejný začátek mimo její uncertainty circle;
+  uživatelská další volba po chybě versus zakázaná automatická smyčka;
+  nezávislé nahrávání bez navigace; uložený plán bez zachované routovací autority.
 - Původní klientské meze 900 s/5000 m, hranice a překročení po await; rozdíl
   staré a hrubé GPS, manual/address bez měřených metadat; změna účtu/profilu/
   cíle/kontextu během await a žádné skryté vyžádání nové GPS.
