@@ -750,8 +750,8 @@ interface ValhallaManeuver {
 }
 
 interface ValhallaRouteRequestOptions {
-  // Internal planning-preview semantics, never read from client request fields.
-  planningCurrentDeparture?: boolean;
+  // Internal current-only guarded road semantics, never a client field.
+  knownClosureCurrentDeparture?: boolean;
   maxSnapDistanceM?: number;
   rejectUnroutableLocations?: boolean;
   excludePolygons?: Array<Array<[number, number]>>;
@@ -1098,7 +1098,7 @@ export class RoutingService {
     const request = this.normalizeRouteRequest(planningOrdinaryQuery(context, coordinate), 1);
     // Only the new purpose-separated preview bypasses result reuse. Ordinary
     // route callers retain their existing accepted single-flight behavior.
-    return this.knownClosureRoute(structuredClone(request), undefined, true, true);
+    return this.knownClosureRoute(structuredClone(request), undefined, true);
   }
 
   async route(raw: RoutingRouteRequest, context?: RoutingRequestContext): Promise<RoutingRouteResponse> {
@@ -1207,8 +1207,7 @@ export class RoutingService {
   private async knownClosureRoute(
     request: Required<Pick<RoutingRouteRequest, "profileId" | "from" | "to" | "avoid" | "alternatives">> & RoutingRouteRequest,
     context?: RoutingRequestContext,
-    bypassSingleFlight = false,
-    planningCurrentDeparture = false
+    bypassSingleFlight = false
   ): Promise<RoutingRouteResponse> {
     let diagnosticStage: RoutingDiagnosticStage = "known_closure_preflight";
     let diagnosticFacts: NativeRoutingDiagnosticFacts | undefined;
@@ -1241,7 +1240,8 @@ export class RoutingService {
       const computeNative = async () => {
         const native = await requestValhallaRoute(this.config, profile, request, undefined, {
           liveSpeeds,
-          planningCurrentDeparture,
+          // This path has already rejected non-current departures above.
+          knownClosureCurrentDeparture: true,
           maxSnapDistanceM: Math.min(25, this.config.routingMaxSnapDistanceM),
           rejectUnroutableLocations: true,
           excludePolygons: snapshot.closures.map((c) => c.polygon)
@@ -3540,10 +3540,10 @@ async function requestValhallaRoute(
   const costing = effectiveValhallaCosting(profile, request.vehicle, request.trip, request.vehicleProfile);
   const recostings = valhallaRecostings(costing);
   const currentTrafficEnabled = config.valhallaTrafficEnabled && profile.transportMode === "road" && liveTrafficIsUsable(options.liveSpeeds);
-  // Planning means depart now even when a live overlay is not available.
+  // The guarded current-only road path means depart now without a live overlay.
   // This affects time semantics only: speed_types still independently require
   // usable live evidence for "current". Explicit departure always takes priority.
-  const departureTime = valhallaDepartureTimePayload(request.departureTime, currentTrafficEnabled || options.planningCurrentDeparture === true);
+  const departureTime = valhallaDepartureTimePayload(request.departureTime, currentTrafficEnabled || options.knownClosureCurrentDeparture === true);
   const costingOptions = valhallaCostingOptions(profile, request.avoid, request.vehicle, request.trip, request.vehicleProfile);
   if (costing === "auto" || costing === "truck") {
     costingOptions[costing] = { ...costingOptions[costing], speed_types: valhallaTrafficSpeedTypes(options.liveSpeeds) };

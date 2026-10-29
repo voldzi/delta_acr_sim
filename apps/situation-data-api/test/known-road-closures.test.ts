@@ -150,15 +150,33 @@ describe("planning uses actual unchanged closure route guards", () => {
     await Promise.all([f.service.planningPreview(c, c.originContext.coordinate), f.service.planningPreview(c, c.originContext.coordinate)]);
     expect(f.payloads).toHaveLength(2);
   });
-  it("does not carry planning's implicit now into an ordinary route or accept a client flag", async () => {
+  it("uses current departure on both guarded ordinary and planning paths, never a client field", async () => {
     const f = await fixture(), c = context();
     await f.service.planningPreview(c, c.originContext.coordinate);
-    const ordinary = await f.service.route({ ...request(), planningCurrentDeparture: true } as any);
+    const ordinary = await f.service.route({ ...request(), knownClosureCurrentDeparture: false } as any);
     expect(f.payloads).toHaveLength(2);
     expect(f.payloads[0].date_time).toEqual({ type: 0 });
-    expect(f.payloads[1]).not.toHaveProperty("date_time");
-    expect(f.payloads[1]).not.toHaveProperty("planningCurrentDeparture");
+    expect(f.payloads[1].date_time).toEqual({ type: 0 });
+    expect(f.payloads[1]).not.toHaveProperty("knownClosureCurrentDeparture");
+    expect(f.payloads[1].costing_options.auto.speed_types).not.toContain("current");
     expect(ordinary.query).not.toHaveProperty("departureTime");
+  });
+  it("preserves absent time in legacy routing even if a client supplies the private flag", async () => {
+    const f = await fixture();
+    f.options.enabled = false;
+    await f.service.route({ ...request(), knownClosureCurrentDeparture: true } as any);
+    expect(f.payloads).toHaveLength(1);
+    expect(f.payloads[0]).not.toHaveProperty("date_time");
+    expect(f.payloads[0]).not.toHaveProperty("knownClosureCurrentDeparture");
+  });
+  it("uses current departure for guarded ordinary mapped alternatives without live speeds", async () => {
+    const f = await fixture(), c = context();
+    await f.service.alternatives({ ...request(), vehicleProfile: c.vehicleProfile });
+    expect(f.payloads).toHaveLength(1);
+    expect(f.payloads[0].date_time).toEqual({ type: 0 });
+    expect(f.payloads[0].costing_options.auto.speed_types).toEqual(["freeflow", "constrained", "predicted"]);
+    expect(f.payloads[0].costing_options.auto.ignore_access).toBe(false);
+    expect(f.payloads[0].exclude_polygons).toEqual([polygon]);
   });
   it.each(["now", "not-a-date"])("retains generic invalid departure rejection for %s", async departureTime => {
     const f = await fixture();
@@ -223,7 +241,7 @@ describe("accepted route concurrency", () => {
       expect(nativeCalls).toBe(1);
       const events = log.mock.calls.map(([line]) => JSON.parse(String(line))).filter(e => e.event === "routing_guard_diagnostic_v1");
       expect(events).toHaveLength(2); expect(events.map(e => e.correlationId).sort()).toEqual(ids);
-      for (const e of events) expect(e).toMatchObject({ stage: "native_warning_validation", outcomeCode: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED", requestedDateTimeMode: "none", requestedVariantCount: 2, returnedVariantCount: 2, nativeWarningCodes: [401], warningCounts: { root: 1, primary: 0, alternate: 0, malformed: 0 }, closureGeometryValidated: true, snapClassification: "unknown", algorithm: "not_reported", multipassCondition: "not_reported" });
+      for (const e of events) expect(e).toMatchObject({ stage: "native_warning_validation", outcomeCode: "ROUTING_RESTRICTIONS_RELAXATION_REQUIRED", requestedDateTimeMode: "depart_now", requestedVariantCount: 2, returnedVariantCount: 2, nativeWarningCodes: [401], warningCounts: { root: 1, primary: 0, alternate: 0, malformed: 0 }, closureGeometryValidated: true, snapClassification: "unknown", algorithm: "not_reported", multipassCondition: "not_reported" });
       expect(JSON.stringify(log.mock.calls)).not.toContain("PRIVATE_PROVIDER_TEXT_CANARY");
       for (const id of ids) expect(JSON.stringify(f.payloads)).not.toContain(id);
     } finally { log.mockRestore(); }

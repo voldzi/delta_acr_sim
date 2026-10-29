@@ -12,14 +12,21 @@ historical 6f replay, proof of closure/TEC handling, or production acceptance.
 
 ## Narrow behavior
 
-Only `planningPreview` supplies the private `planningCurrentDeparture` option
-through the guarded closure route. It serializes native `date_time:{type:0}`
+The current-only `knownClosureRoute` supplies private `knownClosureCurrentDeparture`
+for ordinary road routes, alternatives and assisted planning. It serializes native `date_time:{type:0}`
 even without usable live flow. It does not supply `prioritize_bidirectional`.
-The public normalized query and canonical hashes remain unchanged: planning's
+The public normalized query and canonical hashes remain unchanged: the current-only path's
 implicit current departure becomes explicit only at the native adapter boundary.
 The generic parser still rejects the string `now`; a caller cannot select the
-private option through HTTP fields. Ordinary absent and explicit future/arrival
-behavior is preserved. This does not add scheduled or arrive-by routing support.
+private option through HTTP fields. Legacy/non-known-closure absent time and
+explicit future/arrival rejection behavior are preserved. This does not add
+scheduled or arrive-by routing support. This scope supersedes preview-only
+commit `3c27fbc`: Jizda's normal preview uses the ordinary route endpoint.
+The current-only guard rejects explicit non-current departure before status or
+native work. Its single-flight coalesces only in-flight identical requests (no
+retained result), with the existing request/dataset/version/snapshot/traffic
+revision key unchanged. Every caller retains all final validation.
+This does not claim that a separate native 171 unlocatable-origin error is fixed.
 
 Live `current` speed types still independently require usable overlay evidence.
 No changes to warning 401 rejection, malformed/geometry checks, vehicle/access
