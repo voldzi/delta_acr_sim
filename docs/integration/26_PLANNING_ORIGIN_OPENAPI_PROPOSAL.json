@@ -33,6 +33,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "X-COP-Planning-Actor",
+            "in": "header",
+            "required": true,
+            "description": "NEW service assertion: only accepted after authorized COP service-principal authentication. COP overwrites it from verified session, never copies client values. Opaque quota/request binding, not a user access grant.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
           }
         ],
         "requestBody": {
@@ -137,6 +147,16 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "X-COP-Planning-Actor",
+            "in": "header",
+            "required": true,
+            "description": "NEW service assertion: only accepted after authorized COP service-principal authentication. COP overwrites it from verified session, never copies client values. Opaque quota/request binding, not a user access grant.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
           }
         ],
         "requestBody": {
@@ -229,7 +249,7 @@
       "ExistingCopServiceAuth": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Reuse existing service identity/scoping; credentials must not be transmitted in this proposal. Trusted account context is supplied only by the existing verified COP service identity mechanism, not a new userId request field."
+        "description": "PROPOSED scope extension of existing geo-routing Bearer-to-service-principal lookup; NOT existing ordinary routing auth. New planning-service actor allowlist defaults deny. Reuse a legitimate existing server credential only after scoped review; no new secret or transfer authorized by this proposal."
       }
     },
     "schemas": {
@@ -422,7 +442,9 @@
           "offsetDistanceM",
           "profileValidation",
           "legalAccess",
-          "directionValidation"
+          "directionValidation",
+          "directions",
+          "directionsTruncated"
         ],
         "properties": {
           "candidateId": {
@@ -437,11 +459,6 @@
             "minimum": 0,
             "maximum": 500
           },
-          "headingDeg": {
-            "type": "number",
-            "minimum": 0,
-            "exclusiveMaximum": 360
-          },
           "profileValidation": {
             "const": "not_checked"
           },
@@ -450,6 +467,17 @@
           },
           "directionValidation": {
             "const": "graph_candidate_only"
+          },
+          "directions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/CandidateDirection"
+            }
+          },
+          "directionsTruncated": {
+            "type": "boolean"
           }
         }
       },
@@ -815,6 +843,28 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "CandidateDirection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "directionId",
+          "validation"
+        ],
+        "properties": {
+          "directionId": {
+            "type": "string",
+            "pattern": "^direction:[a-f0-9]{64}$"
+          },
+          "headingDeg": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 360
+          },
+          "validation": {
+            "const": "graph_candidate_only"
           }
         }
       }

@@ -41,7 +41,9 @@ invalid('PreviewRequest', { ...preview, selection: { ...preview.selection, confi
 invalid('PreviewRequest', { ...preview, userId: 'spoofed' });
 invalid('PreviewRequest', { ...preview, selection: { ...preview.selection, ignore_closures: true } });
 const candidate = { candidateId: `candidate:${'a'.repeat(64)}`, coordinate: { lon: 14, lat: 50 }, offsetDistanceM: 60,
-  profileValidation: 'not_checked', legalAccess: 'not_verified', directionValidation: 'graph_candidate_only' };
+  profileValidation: 'not_checked', legalAccess: 'not_verified', directionValidation: 'graph_candidate_only',
+  directions: [{ directionId: `direction:${'c'.repeat(64)}`, headingDeg: 90, validation: 'graph_candidate_only' },
+    { directionId: `direction:${'d'.repeat(64)}`, headingDeg: 270, validation: 'graph_candidate_only' }], directionsTruncated: false };
 valid('Candidate', candidate); // 60m offset is independent of 3m accuracy.
 invalid('Candidate', { ...candidate, legalAccess: 'verified' });
 invalid('Candidate', { ...candidate, offsetDistanceM: 501 });

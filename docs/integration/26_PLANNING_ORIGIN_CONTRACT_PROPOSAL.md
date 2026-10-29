@@ -14,14 +14,34 @@ závazného OpenAPI; nelze publikovat tyto cesty jen na základě návrhu.
 - `POST /api/v1/routing/planning-origin/preview`
   (`planningOriginPreview`): `PreviewRequest` → `PreviewResponse`.
 
-Obě vyžadují stávající autentizovanou službu COP a validní request-scoped
+Obě budou vyžadovat explicitně oprávněnou službu COP a validní request-scoped
 `X-Correlation-ID` UUID. Hlavička je korelace, nikoli autorita. Tělo neobsahuje
 klientem volitelné userId, službu, signing klíč nebo účet. Důvěryhodnou identitu
-účtu dodá pouze serverový resolver COP/SIM, před jakýmkoli engine voláním.
-**Freeze gate:** COP/SIM musí konkrétně doložit tento již přijatý mechanismus
-přenosu identity a scope pro nové operace. Pokud neexistuje, nelze si identitu
-vymyslet z body/headeru; implementace zůstává zavřená. Návrh neuděluje oprávnění
-vytvářet nové klíče nebo znovupoužívat klíče pro mazání účtů.
+účtu dodá pouze nově vymezená službová delegace, před jakýmkoli engine voláním.
+**Skutečný výchozí stav:** běžný SIM routing nemá tento actor resolver; COP
+routing adapter podle source neposílá ani předpokládaný service bearer.
+SIM `geo-routing.ts:98–105` má oddělený constant-time Bearer lookup do
+`config.geoRoutingPrincipals`, naplněný `GEO_ROUTING_SERVICE_TOKENS`.
+Není to uživatelský resolver a jeho existence neznamená aktivní propojení COP.
+
+Návrh konkrétní extension: planning endpoint použije tento service-principal
+lookup a nový explicitní `planningOriginAllowedServiceActors` allowlist,
+výchozí prázdný/deny. Všem geo principals nelze automaticky rozšířit scope.
+COP vytvoří `X-COP-Planning-Actor` jako lowerhex SHA256 UTF8 řetězce
+`cop-planning-actor-v1` + NUL + ověřený OIDC issuer + NUL + ověřený subject.
+Každý dotaz jej nově odvodí z aktuálně ověřené session a **přepíše**, nikdy
+nekopíruje klientské body/hlavičky. Neznámá/neověřená session se odmítne.
+SIM jej přijme jen po ověření allowlisted COP service bearer. Jde o důvěru
+službové delegaci pro quota/request vazby, nikoli uživatelský access token,
+nezávislé ověření OIDC nebo nové oprávnění přístupu k datům. Hlavička sama
+bez služby žádnou autoritu nemá; hodnotu ani surový subject/issuer nelogovat.
+
+**Freeze/deployment gate:** potvrdit jméno existujícího legitimate service
+principalu a schválený planning scope i serverovou konfiguraci COP. Reuse
+existujícího tokenu se schválí pro tento scope, nikoli předpokládá. Návrh
+neprovádí přenos/zobrazení tokenu, nevytváří nový klíč, nepoužívá AI/erasure HMAC.
+MVP je stateless bez cache kandidátů, přístup k historickým uživatelským datům
+se nezavádí. Body userId nebo externí header bez autentizované delegace odmítnout.
 
 ## Kontext a jeho vazby
 
@@ -47,8 +67,13 @@ nejvýše 500 m nezávisle na GPS accuracy, žádný automatický retry. Použí
 mapped costing/options, ale pravdivě nezaručit, že lehký locate filtr vyhodnotil
 rozměry/časové restrikce. Nejvýše 3 deduplikované plánovací souřadnice, seřazené
 deterministicky podle vzdálenosti a stabilního graph klíče vázaného na dataset.
-Stejný promítnutý bod obou směrů nemá zaplnit dvě pozice; směr je jen grafová
-informace. Bez relevantního směru měření se nevymýšlí heading k cíli.
+Tentýž prokazatelný fyzický bod protisměrných hran může být jedna nabídka,
+ale směry se nezahazují: `directions` uchová opaque directionId a případný
+heading zvlášť, každý `validation:graph_candidate_only`. Proti sobě oddělené
+jízdní pásy ani různé komunikace se neslučují jen podle blízkosti. Nejde o
+výběr nebo vynucení směru výsledné trasy. Nejvýše osm směrů s explicitním
+`directionsTruncated`; při nejasné fyzické identitě body neslučovat. Bez
+relevantního směru měření se nevymýšlí heading k cíli.
 
 Přijmout pouze validní projekce z `edges`, nikdy `filtered_edges` nebo raw verbose
 body, incidenty či traffic. Vzdálenost spočítat nezávisle, čísla/souřadnice
@@ -100,7 +125,8 @@ jsou vlastní syntetická geometrie, ne soukromá poloha nebo skutečný vjezd.
 ADR0050 uvádí primární source evidence locate a úplnou negativní matici.
 
 Před implementačním freeze: prověřit discriminator/wire names s COP/SDK, výše
-uvedený actor resolver, serverovou kontrolu purpose/assessment a chybové kódy.
+uvedenou novou minimální actor delegaci/scope, serverovou kontrolu
+purpose/assessment a chybové kódy.
 Před nativním během: společně schválit přesné syntetické fixture, počet dotazů,
 image/dataset, izolaci a resourcelimit; zatím **žádný nový locate/route neběžel**.
 Před nasazením: reálná schema/HTTP/auth/age/concurrency/guard test evidence a
