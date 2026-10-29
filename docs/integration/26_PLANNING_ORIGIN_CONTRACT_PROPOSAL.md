@@ -27,6 +27,19 @@ Není to uživatelský resolver a jeho existence neznamená aktivní propojení 
 Návrh konkrétní extension: planning endpoint použije tento service-principal
 lookup a nový explicitní `planningOriginAllowedServiceActors` allowlist,
 výchozí prázdný/deny. Všem geo principals nelze automaticky rozšířit scope.
+Konkrétní navržené config mapování: existující `GEO_ROUTING_SERVICE_TOKENS`
+zůstává seznam `actor:opaque-token` oddělený čárkami (`config.ts:309–319`), nový
+`PLANNING_ORIGIN_ALLOWED_SERVICE_ACTORS` je pouze seznam povolených názvů actorů,
+žádné tajemství. Nové operace budou mít pevný audience label
+`csm-sim-planning-origin-v1` a scope label `planning-origin:read`; tyto labely
+nejsou kryptografické JWT audience ověření. Existující `GEO_ROUTING_AUDIENCE`
+(default `csm-sim-geo-routing-v1`, config.ts290) se nezmění pro starý endpoint.
+Opaque bearer nemá podepsané claims; účel nových operací vynutí jejich router
+spolu s explicitním actor allowlistem, nikoli samotný text audience.
+Prostý token match bez tohoto nového scope checku není dostatečná implementace.
+Ve zkoumaném situation source nebyl nalezen obecný JWKS/user-JWT verifier pro
+routing; návrh jej nepředpokládá ani nově nezavádí. Stávající COP adaptér nemá
+geo credential konfiguraci, takže případné provisionování není hotový fakt.
 COP vytvoří `X-COP-Planning-Actor` jako lowerhex SHA256 UTF8 řetězce
 `cop-planning-actor-v1` + NUL + ověřený OIDC issuer + NUL + ověřený subject.
 Každý dotaz jej nově odvodí z aktuálně ověřené session a **přepíše**, nikdy
