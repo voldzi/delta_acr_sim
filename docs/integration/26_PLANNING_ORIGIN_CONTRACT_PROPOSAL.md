@@ -55,6 +55,12 @@ existujícího tokenu se schválí pro tento scope, nikoli předpokládá. Návr
 neprovádí přenos/zobrazení tokenu, nevytváří nový klíč, nepoužívá AI/erasure HMAC.
 MVP je stateless bez cache kandidátů, přístup k historickým uživatelským datům
 se nezavádí. Body userId nebo externí header bez autentizované delegace odmítnout.
+Root následnou úzce omezenou inventurou potvrdil existující SIM service actor
+`cop`; žádná hodnota tokenu nebyla předána. COP zatím odpovídající konfiguraci
+nemá. Konkrétní budoucí COP secret key je `COP_ROUTING_PLANNING_SERVICE_TOKEN`;
+SIM nový allowlist bude výslovně jen `cop`. Provisionování kopie existujícího
+legitimate geo tokenu do tohoto COP klíče je až samostatný produkční krok po
+implementaci/testech, nikoli součást návrhu nebo zde provedená změna.
 
 ## Kontext a jeho vazby
 
@@ -72,6 +78,20 @@ Hashy používají existující canonicalRoutingHash, s odlišnou doménou
 contextId, nesmí do odpovědi přenést skutečné ID účtu. Jde o vazbu obsahu, nikoli
 podpis či ochranu proti nedůvěryhodnému serveru. Po await znovu ověřit stáří,
 dataset, uzávěry a v COP/Jízda i nezměněný účet/request/profile/destination/context.
+
+Přesný návrh hash preimage (canonicalRoutingHash, bez string concatenation):
+`contextHash=H({domain:"sim-planning-origin-v1/context",context})`,
+`profileHash=H(context.vehicleProfile)`, `destinationHash=H(context.destination)`,
+`selectionHash=H(selection)`, `geometryHash=H(previewPath.geometry)`.
+`requestHash=H({domain:"sim-planning-origin-v1/request",serviceActor,
+opaquePlanningActor,context,selection,routingDataset})`, přičemž kandidátní
+operace má `selection:null`. Preview `discoveryBinding` musí souhlasit se
+znovu vypočtenou kandidátní vazbou; assessment má novou requestHash s výběrem.
+Stejné duplicitní hash/dataset hodnoty v binding/assessment musí být totožné.
+COP zná serverový actor a kontroluje requestHash; **SDK jej nereprodukuje**.
+SDK ověřuje veřejné context/profile/destination/selection/geometry hash,
+purpose/contextId a post-await account/profile epoch pod důvěryhodným COP HTTPS.
+Jde o obsahovou kontrolu a delegaci služby, ne nový kryptografický podpis.
 
 ## Kandidáti: bounded assistance, nikoli průjezdnost
 
@@ -97,6 +117,11 @@ s dosavadním engine limiterem. Tři výsledky neznamenají tři routing request
 Každý kandidát: `profileValidation:not_checked`, `legalAccess:not_verified`,
 `directionValidation:graph_candidate_only`. Nejde o potvrzený veřejný vjezd.
 `choices_available` vyžaduje 1–3 položky, `no_candidates` přesně 0 (runtime invariant).
+Totéž nyní vynucuje i JSON Schema podmínka state/count. Candidate ID se navrhuje
+jako `candidate:` + H({domain:"sim-planning-origin-v1/candidate",contextHash,
+routingDataset,coordinate,directions,directionsTruncated}); žádný raw graph ID
+nesmí opustit provider parser. Směrová ID jsou doménově oddělené hashe graphu
+a directed edge, ne důkaz směrové navigace.
 `validUntil` nejvýše 120 s a nikdy za graph/snapshot validity; po změně grafu
 nová nabídka. Žádné další dotazy za účelem automatického zkoušení kandidátů.
 
@@ -105,7 +130,22 @@ nová nabídka. Žádné další dotazy za účelem automatického zkoušení ka
 Uživatel výslovně zvolí souřadnici; `confirmed:true` je deklarace klientské volby,
 nikoli důkaz skutečného kliknutí člověka. Volba bodu je stejně nedůvěryhodný
 vstup jako dosavadní ruční from. Chybí-li volba nebo nesedí dataset, odmítnout.
+`Selection` je oneOf: `candidate_selection` vyžaduje candidateId a zobrazené
+directions/truncation; `user_map_selection` je výslovně zakazuje. Oba nesou
+coordinate a confirmed:true. **Také manuální volba nejprve absolvuje explicitní
+candidates request** a převezme `binding.routingDataset`, třeba při no_candidates.
+Nový manual originContext znamená novou výslovnou search akci v celkovém budgetu,
+ne skrytý retry. `expectedDataset` není klientem vymyšlená verze grafu a SIM ji
+vždy ověří proti aktuálnímu statusu.
 Odeslané candidateId nikdy neopravňuje přeskočit výpočet nebo jiné kontroly.
+Při stateless/cache0 návrhu a nepodepsaných canonical hashích lze ověřit
+deterministickou obsahovou shodu candidateId, **nikoli kryptograficky dokázat
+historické členství ve skutečně dříve vrácené nabídce**. COP ověří odpověď
+v okamžiku přijetí, SDK její vazbu na svůj snapshot; pozdější klientský echo
+není serverová atestace. Zdroj candidate_selection je UX informace, ne zvýšení
+oprávnění. Chce-li společná revize historickou membership jako bezpečnostní
+podmínku, musí výslovně změnit stateless/cache0 nebo zvolit již přijatý signed
+proof; samotným hashem ani novým neodsouhlaseným klíčem se mezera nepřekryje.
 Nejvýše **1 běžný full-guarded route computation**, žádné alternativní pokusy
 po chybě. Nativní transport s neměnným profilem, variant count 1, snap<=25 m,
 stejné známé uzávěry/dataset/geometrie/všechna warning401 pravidla.
@@ -120,6 +160,13 @@ To vyžaduje novou cestu ve verifieru COP/SDK; prostá booleans nejsou ochrana.
 Celá obálka má navigationEligible=false a measurementEligible=false; connector
 z measured anchoru k bodu je unknown/nonnavigable a nesmí se stát částí trasy.
 Samostatné nahrávání GPS bez navigace tím není blokované.
+Nový PreviewAssessment nese kromě purpose/binding stejné konkrétní facts jako
+dosavadní mapped verifier: state, coverage, appliedProfile, profileHash,
+requestHash, engine, routingDataset, appliedFields, lastMile a limitations.
+Jejich schema se odkazuje na stejné jednotlivé field definice, ale nemá ordinary
+assessment version ani vložený promotovatelný ordinary assessment. COP/SDK musí
+znovu použít úplnou sémantickou kontrolu těchto facts pod novým účelem; samotné
+`guards` booleans ji nenahrazují. Schema pouze zajišťuje tvar, ne správnost faktů.
 
 ## Chyby a provoz
 

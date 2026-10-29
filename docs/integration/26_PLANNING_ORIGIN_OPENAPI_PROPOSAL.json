@@ -544,33 +544,47 @@
           "measurementEligible": {
             "const": false
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "choices_available"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "candidates": {
+                  "minItems": 1
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "candidates": {
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        ]
       },
       "Selection": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "coordinate",
-          "source",
-          "confirmed"
-        ],
-        "properties": {
-          "coordinate": {
-            "$ref": "#/components/schemas/Coordinate"
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CandidateSelection"
           },
-          "source": {
-            "enum": [
-              "candidate_selection",
-              "user_map_selection"
-            ]
-          },
-          "confirmed": {
-            "const": true
-          },
-          "candidateId": {
-            "type": "string",
-            "pattern": "^candidate:[a-f0-9]{64}$"
+          {
+            "$ref": "#/components/schemas/ManualSelection"
           }
+        ],
+        "discriminator": {
+          "propertyName": "source"
         }
       },
       "PreviewRequest": {
@@ -579,7 +593,8 @@
         "required": [
           "context",
           "expectedDataset",
-          "selection"
+          "selection",
+          "discoveryBinding"
         ],
         "properties": {
           "context": {
@@ -590,6 +605,9 @@
           },
           "selection": {
             "$ref": "#/components/schemas/Selection"
+          },
+          "discoveryBinding": {
+            "$ref": "#/components/schemas/Binding"
           }
         }
       },
@@ -605,7 +623,17 @@
           "validUntil",
           "navigationEligible",
           "measurementEligible",
-          "guards"
+          "guards",
+          "state",
+          "coverage",
+          "appliedProfile",
+          "profileHash",
+          "requestHash",
+          "engine",
+          "routingDataset",
+          "appliedFields",
+          "lastMile",
+          "limitations"
         ],
         "properties": {
           "version": {
@@ -674,6 +702,36 @@
                 "const": false
               }
             }
+          },
+          "state": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/state"
+          },
+          "coverage": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/coverage"
+          },
+          "appliedProfile": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/appliedProfile"
+          },
+          "profileHash": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/profileHash"
+          },
+          "requestHash": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/requestHash"
+          },
+          "engine": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/engine"
+          },
+          "routingDataset": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/routingDataset"
+          },
+          "appliedFields": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/appliedFields"
+          },
+          "lastMile": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/lastMile"
+          },
+          "limitations": {
+            "$ref": "../../openapi/openapi.json#/components/schemas/MappedRoadProfileAssessment/properties/limitations"
           }
         }
       },
@@ -865,6 +923,64 @@
           },
           "validation": {
             "const": "graph_candidate_only"
+          }
+        }
+      },
+      "CandidateSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "coordinate",
+          "source",
+          "confirmed",
+          "candidateId",
+          "directions",
+          "directionsTruncated"
+        ],
+        "properties": {
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "confirmed": {
+            "const": true
+          },
+          "source": {
+            "const": "candidate_selection"
+          },
+          "candidateId": {
+            "type": "string",
+            "pattern": "^candidate:[a-f0-9]{64}$"
+          },
+          "directions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/CandidateDirection"
+            }
+          },
+          "directionsTruncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ManualSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "coordinate",
+          "source",
+          "confirmed"
+        ],
+        "properties": {
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "confirmed": {
+            "const": true
+          },
+          "source": {
+            "const": "user_map_selection"
           }
         }
       }
