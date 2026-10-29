@@ -22,6 +22,7 @@ documents instead of duplicating flat files. The decision is recorded in
 
 ## Active Documentation Indexes
 
+- [ADR 0050: explicit planning origin](adr/0050_EXPLICIT_PLANNING_ORIGIN.md) — joint-review proposal only; measured GPS kept distinct from an explicitly selected preview start, no navigation authority or production changes.
 - [ADR 0049: bounded private routing diagnostics](adr/0049_BOUNDED_PRIVATE_ROUTING_DIAGNOSTICS.md) — off-by-default source candidate; existing UUID, no coordinates/profile values, finite error-only window, separate Root activation.
 
 - [ADR 0048: SIM image-only maintenance boundary](adr/0048_SIM_IMAGE_ONLY_MAINTENANCE_PROPOSAL.md) — reviewed local controller/probe and inert bundle; actual image, fresh Root gates and deployment acceptance remain separate (runbook 22).
