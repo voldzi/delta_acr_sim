@@ -12,6 +12,25 @@ The source set is CZ, DE, PL, SK, AT and HU. Full extracts are needed for a
 complete administrative database. The routable graph is clipped to the Czech
 Republic plus a 75 km buffer; it is not full-country coverage of all inputs.
 
+## Geofabrik country-directory migration (2026-11-25)
+
+The 2026-11-22 refresh failed closed with `Unexpected CZ Geofabrik redirect
+target`: the official endpoint now redirects to
+`https://download.geofabrik.de/europe/czech-republic/czech-republic-latest.osm.pbf`,
+then to a dated file in that directory. The resolver accepts only the exact
+configured country's directory/basename on `download.geofabrik.de`, alongside
+the previously supported dated paths and exact GWDG mirror. HTTPS-only transfers,
+same-node checksum checks, 35 GiB build reserve, isolated candidate validation,
+atomic activation and rollback remain mandatory. Never disable graph-age checks
+to compensate for a failed refresh. Run `python3 deploy/valhalla/test-geofabrik-redirect.py`
+before installation, compare the installed updater hash, preserve the previous
+updater, and verify no build is active before starting the normal service once.
+
+Existing SIM operational monitoring polls every five minutes. Update failure is
+critical immediately; graph age warns at eight days and becomes critical at nine
+days, ahead of the routing hard stop at ten days. Verify the fresh published
+`valhallaUpdates` report and scheduler, not merely monitor source defaults.
+
 ## Host layout
 
 ```text

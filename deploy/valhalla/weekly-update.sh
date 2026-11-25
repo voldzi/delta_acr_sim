@@ -344,6 +344,12 @@ resolve_geofabrik_redirect() {
   source_name=${source_url##*/}
   source_stem=${source_name%-latest.osm.pbf}
   case "${redirect_url}" in
+    "https://download.geofabrik.de/europe/${source_stem}/${source_stem}-latest.osm.pbf")
+      # Geofabrik's country-directory layout (November 2026). Exact origin,
+      # directory and basename only; no arbitrary redirect host/path is accepted.
+      printf '%s\n' "${redirect_url}"
+      return 0
+      ;;
     "https://ftp5.gwdg.de/pub/misc/openstreetmap/download.geofabrik.de/${source_stem}-latest.osm.pbf")
       # Exact Geofabrik-selected HTTPS mirror; PBF and checksums use the SAME node.
       printf '%s\n' "${redirect_url}"
@@ -352,6 +358,11 @@ resolve_geofabrik_redirect() {
     "/europe/${source_stem}-"*.osm.pbf|"http://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf|"https://download.geofabrik.de/europe/${source_stem}-"*.osm.pbf)
       [[ "${redirect_url##*/}" =~ ^${source_stem}-[0-9]{6}\.osm\.pbf$ ]] || return 1
       printf 'https://download.geofabrik.de/europe/%s\n' "${redirect_url##*/}"
+      return 0
+      ;;
+    "https://download.geofabrik.de/europe/${source_stem}/${source_stem}-"*.osm.pbf|"/europe/${source_stem}/${source_stem}-"*.osm.pbf)
+      [[ "${redirect_url##*/}" =~ ^${source_stem}-[0-9]{6}\.osm\.pbf$ ]] || return 1
+      printf 'https://download.geofabrik.de/europe/%s/%s\n' "${source_stem}" "${redirect_url##*/}"
       return 0
       ;;
     *) return 1 ;;
